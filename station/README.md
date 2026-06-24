@@ -167,7 +167,7 @@ Run the Station app and verify:
 - the terminal enters a full-screen OpenTUI view
 - on a cold boot the Welcome screen renders; `Enter`/`Space` drops into the pane grid
 - at least one bordered terminal pane renders with a shell process id in the title
-- the Station button (a `⌘` corner indicator) renders
+- the Station button renders the overlapping-square Station mark in the corner
 - typed shell commands echo and render output in the focused pane
 - `Ctrl-O` toggles the read-only dashboard overlay; `Ctrl-C` is delivered to the shell process
 - `Ctrl-Q` exits back to the shell
