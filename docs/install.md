@@ -2,6 +2,18 @@
 
 This setup path is for a local development checkout. station remains a private workspace package for this milestone; there is no public npm package or publish flow yet.
 
+## Quick start (macOS)
+
+From a fresh clone, one script installs the system dependencies via Homebrew, builds the workspace, and links the `stn` command:
+
+```bash
+./scripts/setup/bootstrap.sh
+stn setup
+stn
+```
+
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, and `pnpm link --global`. If you manage your own runtimes, the manual steps below are equivalent. (A single prebuilt binary is the post-alpha goal — it needs the runtime unification tracked in `docs/`.)
+
 ## Requirements
 
 - Node.js 24.x

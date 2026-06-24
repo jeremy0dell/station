@@ -1,3 +1,8 @@
+# Runtimes — Station runs the CLI/observer on Node and the OpenTUI workspace on Bun.
+brew "node@24"
+brew "bun"
+
+# External tools
 tap "dlvhdr/formulae"
 brew "worktrunk"
 brew "tmux"
