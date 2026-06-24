@@ -1,9 +1,4 @@
-import type {
-  EnsureAgentWorkspaceIntent,
-  ProviderProjectConfig,
-  WorktreeObservation,
-  WorktreeRow,
-} from "@station/contracts";
+import type { ProviderProjectConfig } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverPersistence } from "../../persistence/index.js";
@@ -12,22 +7,23 @@ import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
-import { worktreeMissingError } from "../errors.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
   assertNoCurrentAgent,
+  buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
   deleteSessionTitleSeedBestEffort,
   findProjectOrThrow,
+  lookupWorktree,
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
-  runProviderMutation,
   type SessionCommandIdFactory,
   seedSessionTitle,
   throwIfAborted,
+  validateSnapshotRow,
   worktreeObservationFromRow,
 } from "./shared.js";
 
@@ -106,7 +102,7 @@ export function createSessionStartAgentHandler(
       throwIfAborted(context.signal);
 
       const receipt = await options.providers.terminalIntentRunner.submitIntent(
-        ensureAgentWorkspaceIntent({
+        buildEnsureAgentWorkspaceIntent({
           commandId: context.commandId,
           project,
           worktree,
@@ -157,107 +153,4 @@ export function createSessionStartAgentHandler(
       clock: options.clock,
     });
   };
-}
-
-function ensureAgentWorkspaceIntent(input: {
-  commandId: string;
-  project: ProviderProjectConfig;
-  worktree: WorktreeObservation;
-  sessionId: string;
-  terminalProvider: string;
-  harnessProvider: string;
-  harness:
-    | {
-        mode?: "interactive" | "exec" | undefined;
-        profile?: string | undefined;
-      }
-    | undefined;
-  layout: string;
-  focus?: boolean | undefined;
-  origin?: EnsureAgentWorkspaceIntent["origin"] | undefined;
-  initialPrompt?: string | undefined;
-}): EnsureAgentWorkspaceIntent {
-  const intent: EnsureAgentWorkspaceIntent = {
-    type: "session.ensureAgentWorkspace",
-    commandId: input.commandId,
-    terminalProvider: input.terminalProvider,
-    project: input.project,
-    worktree: input.worktree,
-    sessionId: input.sessionId,
-    harness: {
-      provider: input.harnessProvider,
-    },
-    layout: input.layout,
-  };
-  if (input.harness?.mode !== undefined) intent.harness.mode = input.harness.mode;
-  if (input.harness?.profile !== undefined) intent.harness.profile = input.harness.profile;
-  if (input.focus !== undefined) intent.focus = input.focus;
-  if (input.origin !== undefined) intent.origin = input.origin;
-  if (input.initialPrompt !== undefined) intent.initialPrompt = input.initialPrompt;
-  return intent;
-}
-
-function validateSnapshotRow(row: WorktreeRow | undefined, projectId: string): void {
-  if (row === undefined || row.projectId === projectId) {
-    return;
-  }
-  throw {
-    tag: "CommandValidationError",
-    code: "WORKTREE_PROJECT_MISMATCH",
-    message: "The requested worktree belongs to a different configured project.",
-    projectId,
-    worktreeId: row.id,
-  };
-}
-
-async function lookupWorktree(input: {
-  providers: ProviderRegistry;
-  projectId: string;
-  worktreeId: string;
-  runtime: {
-    clock?: RuntimeClock | undefined;
-    commandTimeoutMs?: number | undefined;
-    signal?: AbortSignal | undefined;
-    trace?:
-      | {
-          traceId?: string | undefined;
-          spanId?: string | undefined;
-          operation?: string | undefined;
-        }
-      | undefined;
-  };
-}): Promise<WorktreeObservation> {
-  if (input.providers.worktree.getWorktree === undefined) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-
-  const worktree = await runProviderMutation(
-    {
-      ...input.runtime,
-      operation: `provider.${input.providers.worktree.id}.getWorktree`,
-      fallback: {
-        tag: "WorktreeProviderError",
-        code: "WORKTREE_LOOKUP_FAILED",
-        message: "The worktree provider failed to look up the worktree.",
-        provider: input.providers.worktree.id,
-      },
-    },
-    () =>
-      input.providers.worktree.getWorktree?.({
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      }) as Promise<WorktreeObservation | null>,
-  );
-  if (worktree === null) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-  return worktree;
 }

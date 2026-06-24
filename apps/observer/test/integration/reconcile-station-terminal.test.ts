@@ -18,15 +18,8 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  createCommandQueue,
-  createObserverApi,
-  createObserverCore,
-  createObserverEventBus,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-} from "../../src/internal";
+import { createObserverCore, ProviderRegistry } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-06-11T12:00:00.000Z";
 const clock = { now: () => new Date(now) };
@@ -240,9 +233,6 @@ describe("observer reconcile with a station-hosted target", () => {
   });
 
   it("promotes a station session's row to working on a harness hook event", async () => {
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids() });
-    const eventBus = createObserverEventBus();
     const station = new StationTerminalProvider({ clock });
     await station.openWorkspace({
       project,
@@ -252,17 +242,7 @@ describe("observer reconcile with a station-hosted target", () => {
       sessionId: "ses_station",
     });
     const registry = providers(station);
-    const core = createObserverCore({ config, providers: registry, persistence, sqlite, clock });
-    const api = createObserverApi({
-      core,
-      providers: registry,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      config,
-      hookReconcileDebounceMs: 0,
-    });
+    const { sqlite, core, api } = createTestObserver({ config, providers: registry, clock });
 
     // Before any hook the station session exists only at discovery confidence.
     await core.reconcile("station-initial");
@@ -297,19 +277,6 @@ describe("observer reconcile with a station-hosted target", () => {
     sqlite.close();
   });
 });
-
-function ids() {
-  let command = 0;
-  let event = 0;
-  let observation = 0;
-  let breadcrumb = 0;
-  return {
-    commandId: () => `cmd_${++command}`,
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-    breadcrumbId: () => `crumb_${++breadcrumb}`,
-  };
-}
 
 function stationClaudeReport(
   reportId: string,

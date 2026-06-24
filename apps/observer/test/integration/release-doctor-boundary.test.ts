@@ -5,13 +5,8 @@ import type { StationConfig } from "@station/config";
 import type { ProviderDoctorCheck } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  createObserverCore,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-  runDoctor,
-} from "../../src/internal";
+import { ProviderRegistry, runDoctor } from "../../src/internal";
+import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-22T12:00:00.000Z";
 
@@ -19,19 +14,16 @@ describe("release doctor boundaries", () => {
   it("bounds provider doctor checks and returns typed diagnostic evidence", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-release-doctor-"));
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids() });
     const providers = new ProviderRegistry({
       worktree: new SlowDoctorWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers,
-      persistence,
-      sqlite,
       clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
     });
 
     const report = await runDoctor({
@@ -85,12 +77,3 @@ const config: StationConfig = {
   },
   projects: [],
 };
-
-function ids() {
-  let event = 0;
-  let observation = 0;
-  return {
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-  };
-}

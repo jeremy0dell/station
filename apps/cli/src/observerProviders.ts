@@ -197,43 +197,20 @@ function createHarnessProvider(
     if (providerConfig?.resume !== undefined) {
       options.resume = providerConfig.resume;
     }
-    const observerPaths = resolveObserverPaths(config);
-    options.observerSocketPath = observerPaths.socketPath;
-    options.stateDir = observerPaths.stateDir;
-    options.hookSpoolDir = observerPaths.hookSpoolDir;
-    options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
+    applyObserverPaths(options, config, true);
     return new ClaudeHarnessProvider(options);
   }
 
   if (id === "codex") {
     const options: ConstructorParameters<typeof CodexHarnessProvider>[0] = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
+    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
     if (providerConfig?.profile !== undefined) {
       options.profile = providerConfig.profile;
-    }
-    const permissionMode = resolveHarnessPermissionMode(config, id);
-    if (permissionMode !== undefined) {
-      options.permissionMode = permissionMode;
-    }
-    if (providerConfig?.approvalPolicy !== undefined) {
-      options.approvalPolicy = providerConfig.approvalPolicy;
-    }
-    if (providerConfig?.sandboxMode !== undefined) {
-      options.sandboxMode = providerConfig.sandboxMode;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
     }
     if (providerConfig?.resume !== undefined) {
       options.resume = providerConfig.resume;
     }
-    const observerPaths = resolveObserverPaths(config);
-    options.observerSocketPath = observerPaths.socketPath;
-    options.stateDir = observerPaths.stateDir;
-    options.hookSpoolDir = observerPaths.hookSpoolDir;
-    options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
+    applyObserverPaths(options, config, true);
     return new CodexHarnessProvider(options);
   }
 
@@ -251,63 +228,25 @@ function createHarnessProvider(
     if (registryOptions.configPath !== undefined) {
       options.configPath = registryOptions.configPath;
     }
-    const observerPaths = resolveObserverPaths(config);
-    options.observerSocketPath = observerPaths.socketPath;
-    options.stateDir = observerPaths.stateDir;
-    options.hookSpoolDir = observerPaths.hookSpoolDir;
-    options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
+    applyObserverPaths(options, config, true);
     return new CursorHarnessProvider(options);
   }
 
   if (id === "crush") {
     const options: ConstructorParameters<typeof CrushHarnessProvider>[0] = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    const permissionMode = resolveHarnessPermissionMode(config, id);
-    if (permissionMode !== undefined) {
-      options.permissionMode = permissionMode;
-    }
-    if (providerConfig?.approvalPolicy !== undefined) {
-      options.approvalPolicy = providerConfig.approvalPolicy;
-    }
-    if (providerConfig?.sandboxMode !== undefined) {
-      options.sandboxMode = providerConfig.sandboxMode;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
-    }
+    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
     if (registryOptions.configPath !== undefined) {
       options.configPath = registryOptions.configPath;
     }
-    const observerPaths = resolveObserverPaths(config);
-    options.observerSocketPath = observerPaths.socketPath;
-    options.stateDir = observerPaths.stateDir;
-    options.hookSpoolDir = observerPaths.hookSpoolDir;
-    options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
+    applyObserverPaths(options, config, true);
     return new CrushHarnessProvider(options);
   }
 
   if (id === "opencode") {
     const options: ConstructorParameters<typeof OpenCodeHarnessProvider>[0] = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
+    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
     if (providerConfig?.profile !== undefined) {
       options.profile = providerConfig.profile;
-    }
-    const permissionMode = resolveHarnessPermissionMode(config, id);
-    if (permissionMode !== undefined) {
-      options.permissionMode = permissionMode;
-    }
-    if (providerConfig?.approvalPolicy !== undefined) {
-      options.approvalPolicy = providerConfig.approvalPolicy;
-    }
-    if (providerConfig?.sandboxMode !== undefined) {
-      options.sandboxMode = providerConfig.sandboxMode;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
     }
     if (providerConfig?.resume !== undefined) {
       options.resume = providerConfig.resume;
@@ -315,10 +254,7 @@ function createHarnessProvider(
     if (registryOptions.configPath !== undefined) {
       options.configPath = registryOptions.configPath;
     }
-    const observerPaths = resolveObserverPaths(config);
-    options.observerSocketPath = observerPaths.socketPath;
-    options.stateDir = observerPaths.stateDir;
-    options.hookSpoolDir = observerPaths.hookSpoolDir;
+    applyObserverPaths(options, config, false);
     return new OpenCodeHarnessProvider(options);
   }
 
@@ -333,10 +269,7 @@ function createHarnessProvider(
     if (registryOptions.configPath !== undefined) {
       options.configPath = registryOptions.configPath;
     }
-    const observerPaths = resolveObserverPaths(config);
-    options.observerSocketPath = observerPaths.socketPath;
-    options.stateDir = observerPaths.stateDir;
-    options.hookSpoolDir = observerPaths.hookSpoolDir;
+    applyObserverPaths(options, config, false);
     return new PiHarnessProvider(options);
   }
 
@@ -394,6 +327,48 @@ function resolveHarnessPermissionMode(
     return config.defaults.harnessPermissionMode;
   }
   return undefined;
+}
+
+/** Observer socket/state/spool paths are wired identically into every harness adapter. */
+function applyObserverPaths(
+  options: {
+    observerSocketPath?: string;
+    stateDir?: string;
+    hookSpoolDir?: string;
+    autoStartFromHooks?: boolean;
+  },
+  config: StationConfig,
+  withAutoStart: boolean,
+): void {
+  const observerPaths = resolveObserverPaths(config);
+  options.observerSocketPath = observerPaths.socketPath;
+  options.stateDir = observerPaths.stateDir;
+  options.hookSpoolDir = observerPaths.hookSpoolDir;
+  if (withAutoStart) {
+    options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
+  }
+}
+
+/** Permission/approval/sandbox/hook fields shared by the codex, crush, and opencode adapters. */
+function applyHarnessAgentOptions(
+  options: {
+    command?: string;
+    permissionMode?: HarnessPermissionMode;
+    approvalPolicy?: string;
+    sandboxMode?: string;
+    installHooks?: boolean;
+  },
+  providerConfig: HarnessProviderConfig | undefined,
+  permissionMode: HarnessPermissionMode | undefined,
+): void {
+  if (providerConfig?.command !== undefined) options.command = providerConfig.command;
+  if (permissionMode !== undefined) options.permissionMode = permissionMode;
+  if (providerConfig?.approvalPolicy !== undefined) {
+    options.approvalPolicy = providerConfig.approvalPolicy;
+  }
+  if (providerConfig?.sandboxMode !== undefined) options.sandboxMode = providerConfig.sandboxMode;
+  if (providerConfig?.installHooks !== undefined)
+    options.installHooks = providerConfig.installHooks;
 }
 
 function health(providerId: string, providerType: ProviderHealth["providerType"]): ProviderHealth {
