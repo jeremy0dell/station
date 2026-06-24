@@ -4,6 +4,11 @@
 // empty stdout so Crush treats it as "no opinion" (never blocks a tool call).
 import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import {
+  expectedIngressHookScript,
+  type IngressHookScriptOptions,
+  ingressHookScriptOptions,
+} from "@station/harness-shared";
 import { z } from "zod";
 
 export const CRUSH_HOOK_EVENT_NAMES = ["PreToolUse"] as const;
@@ -98,7 +103,7 @@ export async function planCrushHooks(options: CrushHookPlanOptions = {}): Promis
   const commands = expectedCrushHookCommands({ hookScriptPath });
   const afterDocument = installCrushHookCommands(document, commands);
   const after = stringifyCrushConfigDocument(afterDocument);
-  const script = expectedCrushHookScript(scriptOptions(hookScriptPath, options));
+  const script = expectedCrushHookScript(ingressHookScriptOptions(hookScriptPath, options));
   const scriptBefore = await readOptionalFile(hookScriptPath);
   const configChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
@@ -128,7 +133,7 @@ export async function installCrushHooks(
   if (plan.scriptChanged) {
     await writeHookScript(
       plan.hookScriptPath,
-      expectedCrushHookScript(scriptOptions(plan.hookScriptPath, options)),
+      expectedCrushHookScript(ingressHookScriptOptions(plan.hookScriptPath, options)),
     );
   }
   const result: CrushHookInstallResult = {
@@ -236,69 +241,12 @@ export function expectedCrushHookCommands(input: {
 }
 
 export function expectedCrushHookScript(input: CrushHookScriptOptions): string {
-  const hookArgs = [input.hookBin ?? "stn-ingress"];
-  if (input.observerSocketPath !== undefined) {
-    hookArgs.push("--socket", input.observerSocketPath);
-  }
-  if (input.stateDir !== undefined) {
-    hookArgs.push("--state-dir", input.stateDir);
-  }
-  if (input.hookSpoolDir !== undefined) {
-    hookArgs.push("--spool-dir", input.hookSpoolDir);
-  }
-  if (input.stationConfigPath !== undefined) {
-    hookArgs.push("--config", input.stationConfigPath);
-  }
-  if (input.autoStartFromHooks === false) {
-    hookArgs.push("--no-auto-start");
-  }
-  hookArgs.push("crush");
-  return [
-    "#!/usr/bin/env bash",
-    "set -euo pipefail",
-    `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    "  exit 0",
-    "fi",
-    `${commandLine(hookArgs)} > /dev/null 2>&1 || true`,
-    "",
-  ].join("\n");
+  return expectedIngressHookScript({ ...input, provider: "crush", swallowErrors: true });
 }
 
-type CrushHookScriptOptions = {
+type CrushHookScriptOptions = IngressHookScriptOptions & {
   hookScriptPath: string;
-  stationConfigPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
-  hookBin?: string;
 };
-
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    CrushHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): CrushHookScriptOptions {
-  const input: CrushHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) input.stationConfigPath = options.stationConfigPath;
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) input.stateDir = options.stateDir;
-  if (options.hookSpoolDir !== undefined) input.hookSpoolDir = options.hookSpoolDir;
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) input.hookBin = options.hookBin;
-  return input;
-}
 
 function parseCrushConfigDocument(source: string): CrushConfigDocument {
   if (source.trim().length === 0) {
@@ -489,12 +437,4 @@ function cloneHooks(
     next[eventName] = entries.map((entry) => ({ ...entry }));
   }
   return next;
-}
-
-function commandLine(args: string[]): string {
-  return args.map(shellQuote).join(" ");
-}
-
-function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }

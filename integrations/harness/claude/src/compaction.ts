@@ -1,15 +1,6 @@
-export type ClaudePayloadCompactionResult = {
-  payload: unknown;
-  compacted: boolean;
-  originalByteCount: number | null;
-  compactedByteCount: number | null;
-  omittedFieldNames: string[];
-};
+import { compactPayloadByFieldNames, type PayloadCompactionResult } from "@station/harness-shared";
 
-type CompactFieldMetadata = {
-  compacted: true;
-  originalBytes: number | null;
-};
+export type ClaudePayloadCompactionResult = PayloadCompactionResult;
 
 const commonFieldNames = [
   "session_id",
@@ -24,85 +15,6 @@ const commonFieldNames = [
   "station_terminal_provider",
   "station_terminal_target_id",
 ] as const;
-
-const compactedFieldNames = new Set([
-  "tool_input",
-  "tool_response",
-  "permission_suggestions",
-  "prompt",
-  "message",
-  "last_assistant_message",
-]);
-
-function jsonByteCount(value: unknown): number | null {
-  try {
-    const serialized = JSON.stringify(value);
-    if (serialized === undefined) {
-      return null;
-    }
-    return Buffer.byteLength(serialized, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-function compactObjectField(
-  input: Record<string, unknown>,
-  output: Record<string, unknown>,
-  copiedFields: Set<string>,
-  omittedFieldNames: Set<string>,
-  fieldName: "tool_input" | "tool_response" | "permission_suggestions",
-) {
-  if (!hasOwn(input, fieldName)) {
-    return;
-  }
-  output[fieldName] = compactFieldMetadata(input[fieldName]);
-  copiedFields.add(fieldName);
-  omittedFieldNames.add(fieldName);
-}
-
-function compactStringField(
-  input: Record<string, unknown>,
-  output: Record<string, unknown>,
-  copiedFields: Set<string>,
-  omittedFieldNames: Set<string>,
-  fieldName: "prompt" | "message",
-) {
-  if (!hasOwn(input, fieldName)) {
-    return;
-  }
-  output[fieldName] = compactedTextPlaceholder(fieldName, jsonByteCount(input[fieldName]));
-  copiedFields.add(fieldName);
-  omittedFieldNames.add(fieldName);
-}
-
-function compactAssistantMessage(
-  input: Record<string, unknown>,
-  output: Record<string, unknown>,
-  copiedFields: Set<string>,
-  omittedFieldNames: Set<string>,
-) {
-  if (!hasOwn(input, "last_assistant_message")) {
-    return;
-  }
-  output.last_assistant_message = null;
-  copiedFields.add("last_assistant_message");
-  if (input.last_assistant_message !== null) {
-    omittedFieldNames.add("last_assistant_message");
-  }
-}
-
-function compactFieldMetadata(value: unknown): CompactFieldMetadata {
-  return {
-    compacted: true,
-    originalBytes: jsonByteCount(value),
-  };
-}
-
-function compactedTextPlaceholder(fieldName: string, byteCount: number | null): string {
-  const bytes = byteCount === null ? "unknown" : String(byteCount);
-  return `[station compacted ${fieldName}: ${bytes} bytes]`;
-}
 
 function fieldNamesForEvent(eventName: string): string[] {
   const fields: string[] = [...commonFieldNames];
@@ -135,7 +47,6 @@ function fieldNamesForEvent(eventName: string): string[] {
     return fields;
   }
   if (eventName === "Stop") {
-    // background_tasks and session_crons are deliberately not copied.
     fields.push("stop_hook_active", "last_assistant_message");
     return fields;
   }
@@ -147,59 +58,12 @@ function fieldNamesForEvent(eventName: string): string[] {
   return fields;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasOwn(value: Record<string, unknown>, key: string): boolean {
-  return Object.hasOwn(value, key);
-}
-
 export function compactClaudeHookPayload(payload: unknown): ClaudePayloadCompactionResult {
-  const originalByteCount = jsonByteCount(payload);
-  if (!isRecord(payload)) {
-    return {
-      payload,
-      compacted: false,
-      originalByteCount,
-      compactedByteCount: originalByteCount,
-      omittedFieldNames: [],
-    };
-  }
-
-  const output: Record<string, unknown> = {};
-  const copiedFields = new Set<string>();
-  const omittedFieldNames = new Set<string>();
-  const eventName = typeof payload.hook_event_name === "string" ? payload.hook_event_name : "";
-
-  for (const fieldName of fieldNamesForEvent(eventName)) {
-    if (!hasOwn(payload, fieldName) || compactedFieldNames.has(fieldName)) {
-      continue;
-    }
-    output[fieldName] = payload[fieldName];
-    copiedFields.add(fieldName);
-  }
-
-  compactObjectField(payload, output, copiedFields, omittedFieldNames, "tool_input");
-  compactObjectField(payload, output, copiedFields, omittedFieldNames, "tool_response");
-  compactObjectField(payload, output, copiedFields, omittedFieldNames, "permission_suggestions");
-  compactStringField(payload, output, copiedFields, omittedFieldNames, "prompt");
-  compactStringField(payload, output, copiedFields, omittedFieldNames, "message");
-  compactAssistantMessage(payload, output, copiedFields, omittedFieldNames);
-
-  for (const fieldName of Object.keys(payload)) {
-    if (copiedFields.has(fieldName)) {
-      continue;
-    }
-    omittedFieldNames.add(fieldName);
-  }
-
-  const compacted = omittedFieldNames.size > 0;
-  return {
-    payload: output,
-    compacted,
-    originalByteCount,
-    compactedByteCount: jsonByteCount(output),
-    omittedFieldNames: [...omittedFieldNames].sort(),
-  };
+  return compactPayloadByFieldNames(payload, {
+    retainedFieldNames: (record) =>
+      fieldNamesForEvent(typeof record.hook_event_name === "string" ? record.hook_event_name : ""),
+    compactObjectFieldNames: ["tool_input", "tool_response", "permission_suggestions"],
+    compactStringFieldNames: ["prompt", "message"],
+    nullWhenPresentFieldNames: ["last_assistant_message"],
+  });
 }

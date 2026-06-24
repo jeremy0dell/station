@@ -1,6 +1,7 @@
 // Installs/uninstalls the STATION hook into Codex's hook config.
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import { ingressHookScriptOptions } from "@station/harness-shared";
 import {
   documentContainsCommand,
   generatedStationHookEvents,
@@ -23,11 +24,7 @@ import {
   resolveCodexConfigPath,
   resolveCodexHookScriptPath,
 } from "./hooks/hookPaths.js";
-import {
-  type CodexHookScriptOptions,
-  expectedCodexHookCommands,
-  expectedCodexHookScript,
-} from "./hooks/hookScript.js";
+import { expectedCodexHookCommands, expectedCodexHookScript } from "./hooks/hookScript.js";
 
 export { CODEX_HOOK_EVENT_NAMES, type CodexHookEventName } from "./hooks/hookConstants.js";
 export { CodexHookSetupError, type CodexHookSetupErrorCode } from "./hooks/hookErrors.js";
@@ -112,7 +109,7 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
   const commands = expectedCodexHookCommands({ hookScriptPath });
   const afterDocument = installCodexHookCommands(document, commands);
   const after = stringifyTomlDocument(afterDocument);
-  const script = expectedCodexHookScript(scriptOptions(hookScriptPath, options));
+  const script = expectedCodexHookScript(ingressHookScriptOptions(hookScriptPath, options));
   const scriptBefore = await readOptionalFile(hookScriptPath);
   const configChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
@@ -159,7 +156,7 @@ export async function installCodexHooks(
   if (plan.scriptChanged) {
     await writeHookScript(
       plan.hookScriptPath,
-      expectedCodexHookScript(scriptOptions(plan.hookScriptPath, options)),
+      expectedCodexHookScript(ingressHookScriptOptions(plan.hookScriptPath, options)),
     );
   }
 
@@ -261,40 +258,6 @@ export async function doctorCodexHooks(
     generatedGlobalCleanup: plan.generatedGlobalCleanup,
     message: doctorMessage({ installed, generatedGlobalInstalled, plan }),
   };
-}
-
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    CodexHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): CodexHookScriptOptions {
-  const input: CodexHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) {
-    input.stationConfigPath = options.stationConfigPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    input.stateDir = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    input.hookSpoolDir = options.hookSpoolDir;
-  }
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) {
-    input.hookBin = options.hookBin;
-  }
-  return input;
 }
 
 function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHookInstallResult {

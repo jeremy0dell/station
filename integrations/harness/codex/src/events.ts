@@ -7,15 +7,14 @@ import type {
   HarnessEventReport,
   ObservedStatus,
   RawHarnessEvent,
-  TerminalTargetObservation,
-  WorktreeObservation,
 } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  observedPathIsSameOrInside,
-  STATION_SCHEMA_VERSION,
-  sameObservedPath,
-} from "@station/contracts";
+  applyCorrelation,
+  correlateTerminalBoundHarnessEvent,
+  harnessEventDiagnostics,
+  reportCorrelation,
+} from "@station/harness-shared";
 import { z } from "zod";
 import { codexHarnessError } from "./errors.js";
 
@@ -191,7 +190,12 @@ export function normalizeCodexRawEvent(
 ): HarnessEventObservation[] {
   const event = parseCodexHookEvent(raw.event);
   const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateCodexEvent(event, context);
+  const correlation = correlateTerminalBoundHarnessEvent({
+    provider: "codex",
+    identity: event,
+    context,
+    cwd: event.cwd,
+  });
   const observation: HarnessEventObservation = {
     provider: "codex",
     rawEventType: event.hook_event_name,
@@ -203,15 +207,7 @@ export function normalizeCodexRawEvent(
   if (turn !== undefined) {
     observation.turn = turn;
   }
-  if (correlation.sessionId !== undefined) {
-    observation.sessionId = correlation.sessionId;
-  }
-  if (correlation.worktreeId !== undefined) {
-    observation.worktreeId = correlation.worktreeId;
-  }
-  if (correlation.harnessRunId !== undefined) {
-    observation.harnessRunId = correlation.harnessRunId;
-  }
+  applyCorrelation(observation, correlation);
   observation.nativeSessionId = event.session_id;
   return [observation];
 }
@@ -237,10 +233,7 @@ export function codexHookPayloadToHarnessEventReport(
   if (correlation !== undefined) {
     report.correlation = correlation;
   }
-  const diagnostics = reportDiagnosticsFromCodexEvent(event, input.diagnostics);
-  if (diagnostics !== undefined) {
-    report.diagnostics = diagnostics;
-  }
+  report.diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
   const coalesceKey = reportCoalesceKeyFromCodexEvent(event);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;
@@ -414,48 +407,14 @@ function providerDataFromCodexEvent(event: CodexHookEvent): Record<string, unkno
 function reportCorrelationFromCodexEvent(
   event: CodexHookEvent,
 ): HarnessEventReport["correlation"] | undefined {
-  const correlation: NonNullable<HarnessEventReport["correlation"]> = {
+  return reportCorrelation({
     cwd: event.cwd,
     nativeSessionId: event.session_id,
-  };
-  if (event.station_project_id !== undefined) {
-    correlation.projectId = event.station_project_id;
-  }
-  if (event.station_worktree_id !== undefined) {
-    correlation.worktreeId = event.station_worktree_id;
-  }
-  if (event.station_session_id !== undefined) {
-    correlation.sessionId = event.station_session_id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    correlation.terminalTargetId = event.station_terminal_target_id;
-  }
-  return correlation;
-}
-
-function reportDiagnosticsFromCodexEvent(
-  event: CodexHookEvent,
-  input: CodexHarnessEventReportInput["diagnostics"],
-): HarnessEventReport["diagnostics"] | undefined {
-  const diagnostics: NonNullable<HarnessEventReport["diagnostics"]> = {
-    rawEventType: event.hook_event_name,
-  };
-  if (typeof input?.payloadBytes === "number") {
-    diagnostics.payloadBytes = input.payloadBytes;
-  }
-  if (typeof input?.compactedBytes === "number") {
-    diagnostics.compactedBytes = input.compactedBytes;
-  }
-  if (input?.compacted !== undefined) {
-    diagnostics.compacted = input.compacted;
-  }
-  if (input?.truncated !== undefined) {
-    diagnostics.truncated = input.truncated;
-  }
-  if (input?.omittedFieldNames !== undefined && input.omittedFieldNames.length > 0) {
-    diagnostics.omittedFieldNames = input.omittedFieldNames;
-  }
-  return diagnostics;
+    projectId: event.station_project_id,
+    worktreeId: event.station_worktree_id,
+    sessionId: event.station_session_id,
+    terminalTargetId: event.station_terminal_target_id,
+  });
 }
 
 function reportCoalesceKeyFromCodexEvent(event: CodexHookEvent): string | undefined {
@@ -491,96 +450,4 @@ function codexHookEventReportId(event: CodexHookEvent): string {
     parts.push(`source:${event.source}`);
   }
   return parts.map((part) => encodeURIComponent(part)).join(":");
-}
-
-function correlateCodexEvent(
-  event: CodexHookEvent,
-  context: HarnessEventContext,
-): {
-  sessionId?: string;
-  worktreeId?: string;
-  harnessRunId?: string;
-} {
-  const terminal =
-    terminalForId(event.station_terminal_target_id, context.terminalTargets) ??
-    terminalForCwd(event.cwd, context.terminalTargets);
-  const worktree =
-    worktreeForId(event.station_worktree_id, context.worktrees) ??
-    worktreeForPath(event.station_worktree_path, context.worktrees) ??
-    worktreeForCwd(event.cwd, context.worktrees);
-  const result: {
-    sessionId?: string;
-    worktreeId?: string;
-    harnessRunId?: string;
-  } = {};
-  if (event.station_session_id !== undefined) {
-    result.sessionId = event.station_session_id;
-  } else if (terminal?.sessionId !== undefined) {
-    result.sessionId = terminal.sessionId;
-  }
-  if (event.station_worktree_id !== undefined) {
-    result.worktreeId = event.station_worktree_id;
-  } else if (terminal?.worktreeId !== undefined) {
-    result.worktreeId = terminal.worktreeId;
-  } else if (worktree !== undefined) {
-    result.worktreeId = worktree.id;
-  }
-  if (terminal?.harnessRunId !== undefined) {
-    result.harnessRunId = terminal.harnessRunId;
-  } else if (terminal !== undefined) {
-    result.harnessRunId = `codex:${terminal.id}`;
-  }
-  return result;
-}
-
-function terminalForId(
-  terminalTargetId: string | undefined,
-  targets: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  if (terminalTargetId === undefined) {
-    return undefined;
-  }
-  return targets.find((target) => target.id === terminalTargetId);
-}
-
-function terminalForCwd(
-  cwd: string,
-  targets: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  return (
-    targets.find((target) => target.cwd !== undefined && sameObservedPath(target.cwd, cwd)) ??
-    targets.find(
-      (target) => target.cwd !== undefined && observedPathIsSameOrInside(cwd, target.cwd),
-    )
-  );
-}
-
-function worktreeForId(
-  worktreeId: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (worktreeId === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => worktree.id === worktreeId);
-}
-
-function worktreeForPath(
-  path: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (path === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => sameObservedPath(worktree.path, path));
-}
-
-function worktreeForCwd(
-  cwd: string,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  return (
-    worktrees.find((worktree) => sameObservedPath(worktree.path, cwd)) ??
-    worktrees.find((worktree) => observedPathIsSameOrInside(cwd, worktree.path))
-  );
 }

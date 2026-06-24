@@ -1,47 +1,31 @@
 import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
-  HarnessClassificationContext,
-  HarnessDiscoveryContext,
-  HarnessEventContext,
-  HarnessEventObservation,
   HarnessLaunchPlan,
   HarnessPermissionMode,
-  HarnessProvider,
   HarnessRunObservation,
   HarnessStatusObservation,
-  ProviderDoctorCheck,
-  ProviderDoctorContext,
-  ProviderHealth,
-  RawHarnessEvent,
   SafeError,
 } from "@station/contracts";
-import { discoverTerminalBoundHarnessRuns } from "@station/contracts";
 import {
-  type ExternalCommandRunner,
-  runExternalCommand,
-  runRuntimeBoundary,
-  safeErrorFromUnknown,
-  systemClock,
-  toIsoTimestamp,
-} from "@station/runtime";
+  type CommonHarnessProviderOptions,
+  type CommonProviderDataInput,
+  commonProviderData,
+  harnessLaunchEnv,
+  hookOptions,
+  isYoloPermissionMode,
+  TerminalBoundHarnessProvider,
+  type TerminalBoundHarnessProviderSpec,
+  terminalProviderData,
+} from "@station/harness-shared";
 import { normalizeCrushRawEvent } from "./events.js";
 import { doctorCrushHooks } from "./hooks.js";
 
-export type CrushHarnessProviderOptions = {
-  command?: string;
+export type CrushHarnessProviderOptions = Omit<CommonHarnessProviderOptions, "resume"> & {
   permissionMode?: HarnessPermissionMode;
   approvalPolicy?: string;
   sandboxMode?: string;
-  installHooks?: boolean;
   configPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
-  now?: () => Date | string;
-  timeoutMs?: number;
-  runner?: ExternalCommandRunner;
 };
 
 export type CrushLaunchOptions = {
@@ -68,169 +52,75 @@ const capabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-export class CrushHarnessProvider implements HarnessProvider {
-  readonly id = "crush";
+type CrushHookOptions = Parameters<typeof doctorCrushHooks>[0];
+type CrushHookResult = Awaited<ReturnType<typeof doctorCrushHooks>>;
 
-  readonly #options: CrushHarnessProviderOptions;
+const crushProviderSpec = {
+  id: "crush",
+  displayName: "Crush",
+  command: {
+    envVar: "STATION_CRUSH_BIN",
+    fallback: "crush",
+  },
+  baseCapabilities: capabilities,
+  health: {
+    args: ["--version"],
+    unavailable: {
+      code: "HARNESS_CRUSH_UNAVAILABLE",
+      message: "Crush is not available.",
+      hint: "Install Crush or configure [harness.crush].command.",
+    },
+    diagnostics: () => ({
+      command: "crush --version succeeded",
+    }),
+  },
+  hooks: {
+    doctor: doctorCrushHooks,
+    buildOptions: (options, context) => hookOptions(options, context),
+    checkName: "crush-hooks",
+    failure: {
+      tag: "CrushHookSetupError",
+      code: "CRUSH_HOOK_DIAGNOSTIC_FAILED",
+      message: "Crush hook diagnostics failed.",
+    },
+    formatCheckMessage: (result) =>
+      `${result.message} Hooks: ${result.configPath}. Script: ${result.hookScriptPath}.`,
+  },
+  buildLaunchOptions: (options, command) => {
+    const launchOptions: CrushLaunchOptions = { command };
+    if (options.permissionMode !== undefined) {
+      launchOptions.defaultPermissionMode = options.permissionMode;
+    }
+    if (options.approvalPolicy !== undefined) {
+      launchOptions.defaultApprovalPolicy = options.approvalPolicy;
+    }
+    if (options.sandboxMode !== undefined) launchOptions.defaultSandboxMode = options.sandboxMode;
+    if (options.configPath !== undefined) launchOptions.configPath = options.configPath;
+    if (options.observerSocketPath !== undefined) {
+      launchOptions.observerSocketPath = options.observerSocketPath;
+    }
+    if (options.stateDir !== undefined) launchOptions.stateDir = options.stateDir;
+    if (options.hookSpoolDir !== undefined) launchOptions.hookSpoolDir = options.hookSpoolDir;
+    return launchOptions;
+  },
+  buildLaunch: buildCrushLaunchPlan,
+  classifyRun: (run) => classifyCrushRunStatus(run),
+  normalizeEvent: normalizeCrushRawEvent,
+} satisfies TerminalBoundHarnessProviderSpec<
+  CrushHarnessProviderOptions,
+  CrushLaunchOptions,
+  CrushHookOptions,
+  CrushHookResult
+>;
 
+export class CrushHarnessProvider extends TerminalBoundHarnessProvider<
+  CrushHarnessProviderOptions,
+  CrushLaunchOptions,
+  CrushHookOptions,
+  CrushHookResult
+> {
   constructor(options: CrushHarnessProviderOptions = {}) {
-    this.#options = options;
-  }
-
-  capabilities(): HarnessCapabilities {
-    return capabilities;
-  }
-
-  async health(): Promise<ProviderHealth> {
-    const checkedAt = now(this.#options);
-    try {
-      await runExternalCommand(
-        {
-          command: command(this.#options),
-          args: ["--version"],
-          timeoutMs: this.#options.timeoutMs ?? 5000,
-          maxOutputChars: 4096,
-        },
-        this.#options.runner,
-      );
-      return {
-        providerId: this.id,
-        providerType: "harness",
-        status: "healthy",
-        lastCheckedAt: checkedAt,
-        capabilities,
-        diagnostics: {
-          command: "crush --version succeeded",
-        },
-      };
-    } catch (error) {
-      return {
-        providerId: this.id,
-        providerType: "harness",
-        status: "unavailable",
-        lastCheckedAt: checkedAt,
-        lastError: safeErrorFromUnknown(error, {
-          tag: "HarnessProviderError",
-          code: "HARNESS_CRUSH_UNAVAILABLE",
-          message: "Crush is not available.",
-          hint: "Install Crush or configure [harness.crush].command.",
-          provider: this.id,
-        }),
-        capabilities,
-      };
-    }
-  }
-
-  async doctorChecks(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]> {
-    try {
-      const hookOptions: Parameters<typeof doctorCrushHooks>[0] = {
-        enabled: this.#options.installHooks === true,
-      };
-      if (this.#options.observerSocketPath !== undefined) {
-        hookOptions.observerSocketPath = this.#options.observerSocketPath;
-      }
-      if (this.#options.stateDir !== undefined) {
-        hookOptions.stateDir = this.#options.stateDir;
-      }
-      if (this.#options.hookSpoolDir !== undefined) {
-        hookOptions.hookSpoolDir = this.#options.hookSpoolDir;
-      }
-      if (this.#options.autoStartFromHooks !== undefined) {
-        hookOptions.autoStartFromHooks = this.#options.autoStartFromHooks;
-      }
-      if (context?.stationConfigPath !== undefined) {
-        hookOptions.stationConfigPath = context.stationConfigPath;
-      } else if (this.#options.configPath !== undefined) {
-        hookOptions.stationConfigPath = this.#options.configPath;
-      }
-      const hookResult = await doctorCrushHooks(hookOptions);
-      return [
-        {
-          name: "crush-hooks",
-          status: hookResult.status,
-          message: `${hookResult.message} Hooks: ${hookResult.configPath}. Script: ${hookResult.hookScriptPath}.`,
-        },
-      ];
-    } catch (cause) {
-      return [
-        {
-          name: "crush-hooks",
-          status: "error",
-          message: "Crush hook diagnostics failed.",
-          error: safeErrorFromUnknown(cause, {
-            tag: "CrushHookSetupError",
-            code: "CRUSH_HOOK_DIAGNOSTIC_FAILED",
-            message: "Crush hook diagnostics failed.",
-            provider: this.id,
-          }),
-        },
-      ];
-    }
-  }
-
-  async buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan> {
-    const options: CrushLaunchOptions = {
-      command: command(this.#options),
-    };
-    if (this.#options.permissionMode !== undefined) {
-      options.defaultPermissionMode = this.#options.permissionMode;
-    }
-    if (this.#options.approvalPolicy !== undefined) {
-      options.defaultApprovalPolicy = this.#options.approvalPolicy;
-    }
-    if (this.#options.sandboxMode !== undefined) {
-      options.defaultSandboxMode = this.#options.sandboxMode;
-    }
-    if (this.#options.configPath !== undefined) {
-      options.configPath = this.#options.configPath;
-    }
-    if (this.#options.observerSocketPath !== undefined) {
-      options.observerSocketPath = this.#options.observerSocketPath;
-    }
-    if (this.#options.stateDir !== undefined) {
-      options.stateDir = this.#options.stateDir;
-    }
-    if (this.#options.hookSpoolDir !== undefined) {
-      options.hookSpoolDir = this.#options.hookSpoolDir;
-    }
-    return buildCrushLaunchPlan(request, options);
-  }
-
-  async discoverRuns(context: HarnessDiscoveryContext): Promise<HarnessRunObservation[]> {
-    return discoverTerminalBoundHarnessRuns(context, {
-      harnessProvider: this.id,
-      displayName: "Crush",
-      role: "main-agent",
-    });
-  }
-
-  async classifyRun(
-    run: HarnessRunObservation,
-    _context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation> {
-    return classifyCrushRunStatus(run);
-  }
-
-  async ingestEvent(
-    event: RawHarnessEvent,
-    context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]> {
-    const result = await runRuntimeBoundary(
-      {
-        operation: "provider.crush.ingestEvent",
-        error: {
-          tag: "HarnessProviderError",
-          code: "HARNESS_CRUSH_EVENT_INGEST_FAILED",
-          message: "The Crush harness provider failed to ingest an event.",
-          provider: this.id,
-        },
-      },
-      async () => normalizeCrushRawEvent(event, context),
-    );
-    if (!result.ok) {
-      throw result.error;
-    }
-    return result.value;
+    super(crushProviderSpec, options);
   }
 }
 
@@ -267,9 +157,10 @@ export function buildCrushLaunchPlan(
     args.unshift("--yolo");
   }
 
-  const providerDataInput: CrushProviderDataInput = {
+  const providerDataInput: CommonProviderDataInput = {
     mode,
     initialPromptProvided: request.initialPrompt !== undefined,
+    ...terminalProviderData(request),
   };
   if (providerPermissionMode !== undefined) {
     providerDataInput.permissionMode = providerPermissionMode;
@@ -280,20 +171,16 @@ export function buildCrushLaunchPlan(
   if (options.observerSocketPath !== undefined) {
     providerDataInput.observerSocketPathProvided = true;
   }
-  if (request.terminalTarget !== undefined) {
-    providerDataInput.terminalProvider = request.terminalTarget.provider;
-    providerDataInput.terminalTargetId = request.terminalTarget.id;
-  }
 
   return {
     provider: "crush",
     command: options.command ?? "crush",
     args,
     cwd: request.worktree.path,
-    env: crushLaunchEnv(request, options),
+    env: harnessLaunchEnv("crush", request, options),
     mode,
     displayTitle: `${request.project.label} Crush`,
-    providerData: crushProviderData(providerDataInput),
+    providerData: commonProviderData(providerDataInput),
   };
 }
 
@@ -339,93 +226,6 @@ function classifyCrushRunStatus(run: HarnessRunObservation): HarnessStatusObserv
   return output;
 }
 
-function crushLaunchEnv(
-  request: BuildHarnessLaunchRequest,
-  options: CrushLaunchOptions,
-): Record<string, string> {
-  const env: Record<string, string> = {
-    STATION_PROJECT_ID: request.project.id,
-    STATION_WORKTREE_ID: request.worktree.id,
-    STATION_WORKTREE_PATH: request.worktree.path,
-    STATION_HARNESS_PROVIDER: "crush",
-  };
-  if (request.sessionId !== undefined) {
-    env.STATION_SESSION_ID = request.sessionId;
-  }
-  if (request.terminalTarget !== undefined) {
-    env.STATION_TERMINAL_PROVIDER = request.terminalTarget.provider;
-    env.STATION_TERMINAL_TARGET_ID = request.terminalTarget.id;
-  }
-  if (options.configPath !== undefined) {
-    env.STATION_CONFIG_PATH = options.configPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    env.STATION_OBSERVER_SOCKET_PATH = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    env.STATION_OBSERVER_STATE_DIR = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    env.STATION_HOOK_SPOOL_DIR = options.hookSpoolDir;
-  }
-  return env;
-}
-
-function crushProviderData(input: CrushProviderDataInput): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {
-    interactive: input.mode === "interactive",
-  };
-  if (input.initialPromptProvided) {
-    providerData.initialPromptProvided = true;
-  }
-  if (input.permissionMode !== undefined) {
-    providerData.permissionMode = input.permissionMode;
-  }
-  if (input.configPathProvided === true) {
-    providerData.configPathProvided = true;
-  }
-  if (input.observerSocketPathProvided === true) {
-    providerData.observerSocketPathProvided = true;
-  }
-  if (input.terminalProvider !== undefined) {
-    providerData.terminalProvider = input.terminalProvider;
-  }
-  if (input.terminalTargetId !== undefined) {
-    providerData.terminalTargetId = input.terminalTargetId;
-  }
-  return providerData;
-}
-
-function isYoloPermissionMode(input: {
-  permissionMode?: HarnessPermissionMode | undefined;
-  approvalPolicy?: string | undefined;
-  sandboxMode?: string | undefined;
-}): boolean {
-  if (input.permissionMode !== undefined) {
-    return input.permissionMode === "yolo";
-  }
-  return input.approvalPolicy === "never" && input.sandboxMode === "danger-full-access";
-}
-
-function command(options: CrushHarnessProviderOptions): string {
-  return options.command ?? process.env.STATION_CRUSH_BIN ?? "crush";
-}
-
-function now(options: CrushHarnessProviderOptions): string {
-  const value = options.now?.() ?? systemClock.now();
-  return toIsoTimestamp(value instanceof Date ? value : new Date(value));
-}
-
 function safeError(error: SafeError): SafeError {
   return error;
 }
-
-type CrushProviderDataInput = {
-  mode: "interactive" | "exec";
-  initialPromptProvided: boolean;
-  permissionMode?: HarnessPermissionMode | undefined;
-  configPathProvided?: boolean | undefined;
-  observerSocketPathProvided?: boolean | undefined;
-  terminalProvider?: string | undefined;
-  terminalTargetId?: string | undefined;
-};

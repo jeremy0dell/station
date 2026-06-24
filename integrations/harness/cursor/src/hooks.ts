@@ -1,6 +1,7 @@
 // Installs/uninstalls the STATION hook into Cursor's .cursor/hooks.json.
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import { ingressHookScriptOptions } from "@station/harness-shared";
 import {
   documentContainsCommand,
   installCursorHookCommands,
@@ -18,11 +19,7 @@ import {
   writeHookScript,
 } from "./hooks/hookFiles.js";
 import { resolveCursorHookScriptPath, resolveCursorHooksPath } from "./hooks/hookPaths.js";
-import {
-  type CursorHookScriptOptions,
-  expectedCursorHookCommands,
-  expectedCursorHookScript,
-} from "./hooks/hookScript.js";
+import { expectedCursorHookCommands, expectedCursorHookScript } from "./hooks/hookScript.js";
 
 export { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hooks/hookConstants.js";
 export { CursorHookSetupError, type CursorHookSetupErrorCode } from "./hooks/hookErrors.js";
@@ -73,40 +70,6 @@ export type CursorHookDoctorResult = {
   message: string;
 };
 
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    CursorHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): CursorHookScriptOptions {
-  const input: CursorHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) {
-    input.stationConfigPath = options.stationConfigPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    input.stateDir = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    input.hookSpoolDir = options.hookSpoolDir;
-  }
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) {
-    input.hookBin = options.hookBin;
-  }
-  return input;
-}
-
 function installResultFromPlan(plan: CursorHookPlan, installed: boolean): CursorHookInstallResult {
   return {
     provider: plan.provider,
@@ -144,7 +107,7 @@ export async function planCursorHooks(
   const commands = expectedCursorHookCommands({ hookScriptPath });
   const afterDocument = installCursorHookCommands(document, commands);
   const after = stringifyJsonDocument(afterDocument);
-  const script = expectedCursorHookScript(scriptOptions(hookScriptPath, options));
+  const script = expectedCursorHookScript(ingressHookScriptOptions(hookScriptPath, options));
   const scriptBefore = await readOptionalFile(hookScriptPath);
   const configChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
@@ -176,7 +139,7 @@ export async function installCursorHooks(
   if (plan.scriptChanged) {
     await writeHookScript(
       plan.hookScriptPath,
-      expectedCursorHookScript(scriptOptions(plan.hookScriptPath, options)),
+      expectedCursorHookScript(ingressHookScriptOptions(plan.hookScriptPath, options)),
     );
   }
 

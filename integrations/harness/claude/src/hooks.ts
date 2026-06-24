@@ -1,6 +1,7 @@
 // Installs/uninstalls the STATION hook into Claude Code's settings.json hooks.
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import { ingressHookScriptOptions } from "@station/harness-shared";
 import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
 import {
   backupIfPresent,
@@ -14,7 +15,7 @@ import {
   resolveClaudeSettingsArtifactPath,
   resolveClaudeUserSettingsPath,
 } from "./hooks/hookPaths.js";
-import { type ClaudeHookScriptOptions, expectedClaudeHookScript } from "./hooks/hookScript.js";
+import { expectedClaudeHookScript } from "./hooks/hookScript.js";
 import {
   type ClaudeSettingsDocument,
   expectedClaudeHookSettings,
@@ -99,40 +100,6 @@ export type ClaudeHookDoctorResult = {
   userSettingsCleanup: ClaudeUserSettingsCleanup;
   message: string;
 };
-
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    ClaudeHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): ClaudeHookScriptOptions {
-  const input: ClaudeHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) {
-    input.stationConfigPath = options.stationConfigPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    input.stateDir = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    input.hookSpoolDir = options.hookSpoolDir;
-  }
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) {
-    input.hookBin = options.hookBin;
-  }
-  return input;
-}
 
 function parseArtifactDocument(contents: string): {
   document: ClaudeSettingsDocument;
@@ -220,7 +187,7 @@ export async function planClaudeHooks(
   const before = await readOptionalFile(settingsPath);
   const { document, invalid } = parseArtifactDocument(before);
   const after = stringifyClaudeSettings(expectedClaudeHookSettings({ hookScriptPath }));
-  const script = expectedClaudeHookScript(scriptOptions(hookScriptPath, options));
+  const script = expectedClaudeHookScript(ingressHookScriptOptions(hookScriptPath, options));
   const scriptBefore = await readOptionalFile(hookScriptPath);
   const settingsChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
@@ -261,7 +228,7 @@ export async function installClaudeHooks(
   if (plan.scriptChanged) {
     await writeHookScript(
       plan.hookScriptPath,
-      expectedClaudeHookScript(scriptOptions(plan.hookScriptPath, options)),
+      expectedClaudeHookScript(ingressHookScriptOptions(plan.hookScriptPath, options)),
     );
   }
 

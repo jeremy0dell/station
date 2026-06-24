@@ -1,56 +1,20 @@
+import {
+  expectedHookCommands,
+  expectedIngressHookScript,
+  type IngressHookScriptOptions,
+} from "@station/harness-shared";
 import { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hookConstants.js";
 
-export type CursorHookScriptOptions = {
+export type CursorHookScriptOptions = IngressHookScriptOptions & {
   hookScriptPath: string;
-  stationConfigPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
-  hookBin?: string;
 };
-
-function commandLine(args: string[]): string {
-  return args.map(shellQuote).join(" ");
-}
-
-function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-}
 
 export function expectedCursorHookCommands(input: {
   hookScriptPath: string;
 }): Record<CursorHookEventName, string> {
-  return Object.fromEntries(
-    CURSOR_HOOK_EVENT_NAMES.map((eventName) => [eventName, input.hookScriptPath]),
-  ) as Record<CursorHookEventName, string>;
+  return expectedHookCommands(CURSOR_HOOK_EVENT_NAMES, input.hookScriptPath);
 }
 
 export function expectedCursorHookScript(input: CursorHookScriptOptions): string {
-  const hookArgs = [input.hookBin ?? "stn-ingress"];
-  if (input.observerSocketPath !== undefined) {
-    hookArgs.push("--socket", input.observerSocketPath);
-  }
-  if (input.stateDir !== undefined) {
-    hookArgs.push("--state-dir", input.stateDir);
-  }
-  if (input.hookSpoolDir !== undefined) {
-    hookArgs.push("--spool-dir", input.hookSpoolDir);
-  }
-  if (input.stationConfigPath !== undefined) {
-    hookArgs.push("--config", input.stationConfigPath);
-  }
-  if (input.autoStartFromHooks === false) {
-    hookArgs.push("--no-auto-start");
-  }
-  hookArgs.push("cursor");
-  return [
-    "#!/usr/bin/env bash",
-    "set -euo pipefail",
-    `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    "  exit 0",
-    "fi",
-    `${commandLine(hookArgs)} > /dev/null`,
-    "",
-  ].join("\n");
+  return expectedIngressHookScript({ ...input, provider: "cursor" });
 }

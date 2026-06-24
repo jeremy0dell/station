@@ -7,14 +7,15 @@ import type {
   HarnessEventReport,
   ObservedStatus,
   RawHarnessEvent,
-  TerminalTargetObservation,
-  WorktreeObservation,
 } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  observedPathIsSameOrInside,
-  STATION_SCHEMA_VERSION,
-} from "@station/contracts";
+  applyCorrelation,
+  assignDefined,
+  correlateTerminalBoundHarnessEvent,
+  harnessEventDiagnostics,
+  reportCorrelation,
+} from "@station/harness-shared";
 import { piHarnessError } from "../errors.js";
 import { normalizePiEventType, type PiCompactEvent, parsePiCompactEvent } from "./compactEvent.js";
 
@@ -38,7 +39,14 @@ export function normalizePiRawEvent(
 ): HarnessEventObservation[] {
   const event = parsePiCompactEvent(raw.event);
   const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlatePiEvent(event, context);
+  const correlation = correlateTerminalBoundHarnessEvent({
+    provider: "pi",
+    identity: event,
+    context,
+    cwd: event.cwd,
+    nativeSessionId: event.pi_session_id,
+    nativeSessionFile: event.pi_session_file,
+  });
   const observation: HarnessEventObservation = {
     provider: "pi",
     rawEventType: event.event_type,
@@ -46,21 +54,7 @@ export function normalizePiRawEvent(
     observedAt,
     providerData: providerDataFromPiEvent(event),
   };
-  if (correlation.sessionId !== undefined) {
-    observation.sessionId = correlation.sessionId;
-  }
-  if (correlation.worktreeId !== undefined) {
-    observation.worktreeId = correlation.worktreeId;
-  }
-  if (correlation.harnessRunId !== undefined) {
-    observation.harnessRunId = correlation.harnessRunId;
-  }
-  if (event.pi_session_id !== undefined) {
-    observation.nativeSessionId = event.pi_session_id;
-  }
-  if (event.pi_session_file !== undefined) {
-    observation.nativeSessionFile = event.pi_session_file;
-  }
+  applyCorrelation(observation, correlation);
   return [observation];
 }
 
@@ -89,10 +83,7 @@ export function piHookPayloadToHarnessEventReport(
   if (correlation !== undefined) {
     report.correlation = correlation;
   }
-  const diagnostics = reportDiagnosticsFromPiEvent(event, input.diagnostics);
-  if (diagnostics !== undefined) {
-    report.diagnostics = diagnostics;
-  }
+  report.diagnostics = harnessEventDiagnostics(event.event_type, input.diagnostics);
   const coalesceKey = reportCoalesceKeyFromPiEvent(event);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;
@@ -254,56 +245,20 @@ function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown>
 function reportCorrelationFromPiEvent(
   event: PiCompactEvent,
 ): HarnessEventReport["correlation"] | undefined {
-  const correlation: NonNullable<HarnessEventReport["correlation"]> = {
+  return reportCorrelation({
     cwd: event.cwd,
-  };
-  if (event.station_project_id !== undefined) {
-    correlation.projectId = event.station_project_id;
-  }
-  if (event.station_worktree_id !== undefined) {
-    correlation.worktreeId = event.station_worktree_id;
-  }
-  if (event.station_session_id !== undefined) {
-    correlation.sessionId = event.station_session_id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    correlation.terminalTargetId = event.station_terminal_target_id;
-    correlation.harnessRunId = `pi:${event.station_terminal_target_id}`;
-  }
-  if (event.pi_session_file !== undefined) {
-    correlation.nativeSessionFile = event.pi_session_file;
-  } else if (event.pi_session_id !== undefined) {
-    correlation.nativeSessionId = event.pi_session_id;
-  }
-  if (event.pid !== undefined) {
-    correlation.pid = event.pid;
-  }
-  return correlation;
-}
-
-function reportDiagnosticsFromPiEvent(
-  event: PiCompactEvent,
-  input: PiHarnessEventReportInput["diagnostics"],
-): HarnessEventReport["diagnostics"] | undefined {
-  const diagnostics: NonNullable<HarnessEventReport["diagnostics"]> = {
-    rawEventType: event.event_type,
-  };
-  if (typeof input?.payloadBytes === "number") {
-    diagnostics.payloadBytes = input.payloadBytes;
-  }
-  if (typeof input?.compactedBytes === "number") {
-    diagnostics.compactedBytes = input.compactedBytes;
-  }
-  if (input?.compacted !== undefined) {
-    diagnostics.compacted = input.compacted;
-  }
-  if (input?.truncated !== undefined) {
-    diagnostics.truncated = input.truncated;
-  }
-  if (input?.omittedFieldNames !== undefined && input.omittedFieldNames.length > 0) {
-    diagnostics.omittedFieldNames = input.omittedFieldNames;
-  }
-  return diagnostics;
+    nativeSessionFile: event.pi_session_file,
+    nativeSessionId: event.pi_session_file === undefined ? event.pi_session_id : undefined,
+    pid: event.pid,
+    projectId: event.station_project_id,
+    worktreeId: event.station_worktree_id,
+    sessionId: event.station_session_id,
+    terminalTargetId: event.station_terminal_target_id,
+    harnessRunId:
+      event.station_terminal_target_id === undefined
+        ? undefined
+        : `pi:${event.station_terminal_target_id}`,
+  });
 }
 
 function reportCoalesceKeyFromPiEvent(event: PiCompactEvent): string | undefined {
@@ -321,101 +276,8 @@ function reportCoalesceKeyFromPiEvent(event: PiCompactEvent): string | undefined
   return parts.length === 0 ? undefined : parts.join(":");
 }
 
-function correlatePiEvent(
-  event: PiCompactEvent,
-  context: HarnessEventContext,
-): {
-  sessionId?: string;
-  worktreeId?: string;
-  harnessRunId?: string;
-} {
-  const terminal =
-    terminalForId(event.station_terminal_target_id, context.terminalTargets) ??
-    terminalForCwd(event.cwd, context.terminalTargets);
-  const worktree =
-    worktreeForId(event.station_worktree_id, context.worktrees) ??
-    worktreeForPath(event.station_worktree_path, context.worktrees) ??
-    worktreeForCwd(event.cwd, context.worktrees);
-  const result: {
-    sessionId?: string;
-    worktreeId?: string;
-    harnessRunId?: string;
-  } = {};
-  if (event.station_session_id !== undefined) {
-    result.sessionId = event.station_session_id;
-  } else if (terminal?.sessionId !== undefined) {
-    result.sessionId = terminal.sessionId;
-  }
-  if (event.station_worktree_id !== undefined) {
-    result.worktreeId = event.station_worktree_id;
-  } else if (terminal?.worktreeId !== undefined) {
-    result.worktreeId = terminal.worktreeId;
-  } else if (worktree !== undefined) {
-    result.worktreeId = worktree.id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    result.harnessRunId = `pi:${event.station_terminal_target_id}`;
-  } else if (terminal?.harnessRunId !== undefined) {
-    result.harnessRunId = terminal.harnessRunId;
-  } else if (terminal !== undefined) {
-    result.harnessRunId = `pi:${terminal.id}`;
-  }
-  return result;
-}
-
-function terminalForId(
-  id: string | undefined,
-  terminals: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  if (id === undefined) {
-    return undefined;
-  }
-  return terminals.find((terminal) => terminal.id === id);
-}
-
-function terminalForCwd(
-  cwd: string,
-  terminals: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  return terminals.find((terminal) => {
-    if (terminal.cwd === undefined) {
-      return false;
-    }
-    return observedPathIsSameOrInside(cwd, terminal.cwd);
-  });
-}
-
-function worktreeForId(
-  id: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (id === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => worktree.id === id);
-}
-
-function worktreeForPath(
-  path: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (path === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => observedPathIsSameOrInside(path, worktree.path));
-}
-
-function worktreeForCwd(
-  cwd: string,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  return worktrees.find((worktree) => observedPathIsSameOrInside(cwd, worktree.path));
-}
-
 function assignProviderData(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (value !== undefined) {
-    target[key] = value;
-  }
+  assignDefined(target, key, value);
 }
 
 function assertNever(value: never): never {
