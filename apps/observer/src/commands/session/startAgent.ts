@@ -82,6 +82,7 @@ export function createSessionStartAgentHandler(
     throwIfAborted(context.signal);
     const harnessProviderId =
       payload.harness?.provider ??
+      configuredHarnessProviderForWorktree(project, worktree) ??
       (await rememberedHarnessProviderForWorktree({
         persistence: options.persistence,
         projectId: payload.projectId,
@@ -208,6 +209,14 @@ function validateSnapshotRow(row: WorktreeRow | undefined, projectId: string): v
     projectId,
     worktreeId: row.id,
   };
+}
+
+function configuredHarnessProviderForWorktree(
+  project: ProviderProjectConfig,
+  worktree: WorktreeObservation,
+): string | undefined {
+  return project.worktreeLaunches?.find((candidate) => candidate.branch === worktree.branch)
+    ?.harness;
 }
 
 async function lookupWorktree(input: {

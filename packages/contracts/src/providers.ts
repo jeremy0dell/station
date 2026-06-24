@@ -125,6 +125,13 @@ export const ProviderProjectRecoveryBreadcrumbsSchema = z
   })
   .strict();
 
+export const ProviderProjectWorktreeLaunchSchema = z
+  .object({
+    branch: nonEmptyStringSchema,
+    harness: ProviderIdSchema,
+  })
+  .strict();
+
 export const ProviderProjectConfigSchema = z
   .object({
     id: ProjectIdSchema,
@@ -134,6 +141,7 @@ export const ProviderProjectConfigSchema = z
     defaults: ProviderProjectDefaultsSchema,
     worktrunk: ProviderProjectWorktrunkConfigSchema,
     recoveryBreadcrumbs: ProviderProjectRecoveryBreadcrumbsSchema.optional(),
+    worktreeLaunches: z.array(ProviderProjectWorktreeLaunchSchema).optional(),
   })
   .strict();
 

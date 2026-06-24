@@ -335,6 +335,9 @@ export function providerProjectsFromConfig(config: StationConfig): ProviderProje
         providerProject.recoveryBreadcrumbs.path = project.recoveryBreadcrumbs.path;
       }
     }
+    if (project.worktreeLaunches !== undefined) {
+      providerProject.worktreeLaunches = project.worktreeLaunches;
+    }
     return ProviderProjectConfigSchema.parse(providerProject);
   });
 }

@@ -7,7 +7,7 @@ overview, and the live interactions staged by `scripts/demo/stage.sh`.
 ## Setup
 
 - **Act 1 (mock):** nothing to stage.
-- **Act 2 (live):** `scripts/demo/stage.sh` → launch `stn --config ~/.station-demo/config.toml` → tear down with `scripts/demo/reset.sh`.
+- **Act 2 (live):** `scripts/demo/stage.sh` clones the showcase repos, seeds one `t3-code` monorepo with ten branch worktrees, installs local provider hooks, and starts the isolated observer → launch `~/.station-demo/run.sh` → tear down with `scripts/demo/reset.sh`.
 
 Everything in Act 2 is isolated under `~/.station-demo`; it never touches your real `~/.config/station` or observer state.
 
@@ -22,10 +22,10 @@ Everything in Act 2 is isolated under `~/.station-demo`; it never touches your r
 | # | Shot | How | README spot |
 |---|------|-----|-------------|
 | 1 | **Hero — overview** | `cd station && STATION_SOURCE=mock STATION_SCENARIO=showcase bun run station` → wait for first frame (throbber shows `⠋`) → capture → `Ctrl-Q` | top, under the tagline |
-| 2 | **New session (any harness)** | `N` → name → project → **pick agent: claude / codex** → agent launches into a pane | "What it does" |
+| 2 | **New session (any harness)** | `N` → name → project → **pick agent: claude / codex / opencode / pi / cursor / crush** → agent launches into a pane | "What it does" |
 | 3 | **Add project** | `A` → folder picker → `~/.station-demo/repos/web` → review → success → `N` to start a session there | "What it does" |
-| 4 | **Split + run a command** | open `is-even` (`[+sh]` or a session) → split (`Ctrl-\`) → run `./check.sh` | optional |
-| 5 | **Split + see diff** | focus the `is-even` worktree → right-click → **See diff (split right)** → `diffnav` renders the planted O(n)→O(1) diff | the automations money shot |
+| 4 | **Split + run a command** | after adding `web`, open it (`[+sh]` or a session) → split (`Ctrl-\`) → run `./check.sh` | optional |
+| 5 | **Split + see diff** | focus the added `web` project → right-click → **See diff (split right)** → `diffnav` renders the planted O(n)→O(1) diff | the automations money shot |
 
 Shot 1 is the reliable hero — zero setup, no real data. The others are live.
 
@@ -44,7 +44,7 @@ Set FontSize 16
 Set Width 1200
 Set Height 720
 Set Shell bash
-Type "stn --config ~/.station-demo/config.toml" Enter
+Type "~/.station-demo/run.sh" Enter
 Sleep 4s
 # …drive the keys for the flow here (Type/Enter/Ctrl+… /Sleep)…
 Sleep 2s
@@ -56,7 +56,7 @@ VHS runs Station in its own PTY; the dual-runtime renderer usually records fine,
 
 - Commit to `docs/images/` and embed: `![Station — live worktree dashboard](docs/images/overview.png)`. Works in private and public; GitHub serves them.
 - Keep GIFs lean (<~5 MB) or upload to a GitHub release/issue to get a CDN URL and avoid repo bloat.
-- **No-real-data guarantee:** Act 1 is mock (famous repos, no real data); Act 2 uses the isolated `is-even`/`web` repos. Never capture against your real observer.
+- **No-real-data guarantee:** Act 1 is mock (famous repos, no real data); Act 2 uses isolated showcase clones plus local `t3-code` and `web` fixtures. Never capture against your real observer.
 - Suggested layout: hero PNG at the top, one "it works" GIF (see-diff or new session) in "What it does".
 
 ## Optional: make the command split a one-tap automation
