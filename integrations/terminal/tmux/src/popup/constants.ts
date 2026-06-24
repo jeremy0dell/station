@@ -1,0 +1,12 @@
+export const activePopupClientOption = "@station_popup_client";
+export const focusPopupClientOption = "@station_popup_focus_client";
+export const persistentUiSignatureOption = "@station_popup_ui_signature";
+export const registeredPopupExpectedSignatureOption = "@station_popup_ui_expected_signature";
+export const registeredPopupRootOption = "@station_popup_ui_root";
+export const registeredPopupSessionNameOption = "@station_popup_ui_session_name";
+export const registeredDevPopupCommandOption = "@station_tui_dev_command";
+export const registeredDevPopupOwnerOption = "@station_tui_dev_owner";
+export const registeredDevPopupRootOption = "@station_tui_dev_root";
+export const registeredDevPopupSessionNameOption = "@station_tui_dev_session_name";
+export const defaultPersistentPopupSessionName = "_station-ui";
+export const defaultPersistentPopupTuiCommand = "stn tui --popup --persistent";

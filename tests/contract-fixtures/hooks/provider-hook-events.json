@@ -1,0 +1,29 @@
+{
+  "worktrunkWorktreeCreated": {
+    "schemaVersion": "0.5.0",
+    "hookId": "hook_worktrunk_1",
+    "provider": "worktrunk",
+    "kind": "worktree",
+    "event": "worktree.created",
+    "receivedAt": "2026-05-20T12:02:00.000Z",
+    "projectId": "web",
+    "worktreeId": "wt_web_feature_auth",
+    "payload": {
+      "branch": "feature/auth"
+    }
+  },
+  "codexRunUpdated": {
+    "schemaVersion": "0.5.0",
+    "hookId": "hook_codex_1",
+    "provider": "codex",
+    "kind": "harness",
+    "event": "run.updated",
+    "receivedAt": "2026-05-20T12:03:00.000Z",
+    "projectId": "web",
+    "worktreeId": "wt_web_feature_auth",
+    "sessionId": "ses_web_feature_auth",
+    "payload": {
+      "state": "idle"
+    }
+  }
+}

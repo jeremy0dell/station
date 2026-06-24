@@ -1,0 +1,21 @@
+{
+  "cwd": "/work/project",
+  "duration_ms": 201,
+  "hook_event_name": "PostToolUse",
+  "permission_mode": "default",
+  "session_id": "0b43511f-e55e-40c7-b2f7-5a733cf7cfd0",
+  "tool_input": {
+    "command": "echo hello-spike",
+    "description": "Echo the string hello-spike"
+  },
+  "tool_name": "Bash",
+  "tool_response": {
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false,
+    "stderr": "",
+    "stdout": "hello-spike"
+  },
+  "tool_use_id": "toolu_015kVCWU4aHZpi1xEX5cN8VG",
+  "transcript_path": "/home/user/.claude/projects/-work-project/0b43511f-e55e-40c7-b2f7-5a733cf7cfd0.jsonl"
+}

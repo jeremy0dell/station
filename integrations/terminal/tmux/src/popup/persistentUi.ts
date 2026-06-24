@@ -1,0 +1,253 @@
+import type { TmuxCommandInput } from "../command.js";
+import { buildPersistentPopupTuiCommand } from "./args.js";
+import {
+  hasTmuxSession,
+  popupCommandInput,
+  resolveTmuxGlobalOption,
+  resolveTmuxOption,
+  runTmuxPopupCommand,
+  setTmuxGlobalOption,
+} from "./command.js";
+import {
+  defaultPersistentPopupSessionName,
+  defaultPersistentPopupTuiCommand,
+  persistentUiSignatureOption,
+  registeredDevPopupCommandOption,
+  registeredDevPopupOwnerOption,
+  registeredDevPopupRootOption,
+  registeredDevPopupSessionNameOption,
+  registeredPopupExpectedSignatureOption,
+  registeredPopupRootOption,
+  registeredPopupSessionNameOption,
+} from "./constants.js";
+import type {
+  ResolvePersistentPopupUiOptions,
+  TmuxPersistentPopupSessionOptions,
+  TmuxPersistentPopupSessionResult,
+  TmuxPersistentPopupUi,
+  TmuxRegisteredDevPopupOptions,
+  TmuxRegisteredDevPopupUi,
+} from "./types.js";
+
+type RegisteredDevPopupResultInput = {
+  command: string;
+  owner?: string;
+  root?: string;
+  sessionName: string;
+};
+
+function persistentPopupSignature(tuiCommand: string): string {
+  return `v1:${tuiCommand}`;
+}
+
+function registeredDevPopupResult(
+  options: RegisteredDevPopupResultInput,
+): TmuxRegisteredDevPopupUi {
+  const result: TmuxRegisteredDevPopupUi = {
+    command: options.command,
+    sessionName: options.sessionName,
+  };
+  if (options.owner !== undefined) {
+    result.owner = options.owner;
+  }
+  if (options.root !== undefined) {
+    result.root = options.root;
+  }
+  return result;
+}
+
+function isRegisteredDevPopupOwnerAlive(owner: string): boolean {
+  const [pidText] = owner.split(":");
+  const pid = Number(pidText);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return true;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    return !isDeadProcessSignalError(error);
+  }
+}
+
+function isDeadProcessSignalError(error: unknown): boolean {
+  // Node exposes process.kill lookup failures as ErrnoException; this is a provider boundary.
+  const candidate = error as NodeJS.ErrnoException;
+  return candidate.code === "ESRCH" || candidate.code === "EINVAL";
+}
+
+function persistentSessionOptions(
+  options: TmuxPersistentPopupSessionOptions,
+  command: string,
+): TmuxCommandInput {
+  return popupCommandInput(options, command);
+}
+
+async function resolvePersistentPopupSessionSignature(
+  input: TmuxCommandInput,
+  sessionName: string,
+): Promise<string | undefined> {
+  return resolveTmuxOption(input, {
+    args: ["show-options", "-t", sessionName, "-qv", persistentUiSignatureOption],
+    operation: "provider.tmux.popup.persistentUiSignature",
+    message: "tmux failed to resolve the persistent station popup UI signature.",
+    timeoutMessage: "tmux persistent popup UI signature lookup timed out.",
+  });
+}
+
+async function setPersistentPopupSessionSignature(
+  input: TmuxCommandInput,
+  options: { sessionName: string; signature: string },
+): Promise<void> {
+  await runTmuxPopupCommand(input, {
+    args: [
+      "set-option",
+      "-t",
+      options.sessionName,
+      "-q",
+      persistentUiSignatureOption,
+      options.signature,
+    ],
+    operation: "provider.tmux.popup.setPersistentUiSignature",
+    message: "tmux failed to record the persistent station popup UI signature.",
+    timeoutMessage: "tmux persistent popup UI signature update timed out.",
+  });
+}
+
+async function killPersistentPopupSession(
+  input: TmuxCommandInput,
+  sessionName: string,
+): Promise<void> {
+  await runTmuxPopupCommand(input, {
+    args: ["kill-session", "-t", sessionName],
+    operation: "provider.tmux.popup.killPersistentUi",
+    message: "tmux failed to replace the persistent station popup UI.",
+    timeoutMessage: "tmux persistent popup UI replacement timed out.",
+  });
+}
+
+async function enablePersistentPopupSessionMouse(
+  input: TmuxCommandInput,
+  sessionName: string,
+): Promise<void> {
+  await runTmuxPopupCommand(input, {
+    args: ["set-option", "-t", sessionName, "mouse", "on"],
+    operation: "provider.tmux.popup.enableMouse",
+    message: "tmux failed to enable mouse support for the persistent station popup UI.",
+    timeoutMessage: "tmux persistent popup UI mouse setup timed out.",
+  });
+}
+
+export async function ensurePersistentPopupSession(
+  options: TmuxPersistentPopupSessionOptions = {},
+): Promise<TmuxPersistentPopupSessionResult> {
+  const command = options.command ?? process.env.STATION_TMUX_BIN ?? "tmux";
+  const input = persistentSessionOptions(options, command);
+  const sessionName = options.uiSessionName ?? defaultPersistentPopupSessionName;
+  const tuiCommand = options.tuiCommand ?? defaultPersistentPopupTuiCommand;
+  const signature = persistentPopupSignature(tuiCommand);
+  if (await hasTmuxSession(input, sessionName)) {
+    const currentSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
+    if (currentSignature === signature) {
+      await enablePersistentPopupSessionMouse(input, sessionName);
+      return { sessionName, created: false };
+    }
+    await killPersistentPopupSession(input, sessionName);
+  }
+
+  await runTmuxPopupCommand(input, {
+    args: [
+      "new-session",
+      "-d",
+      "-s",
+      sessionName,
+      "-n",
+      "station-ui",
+      buildPersistentPopupTuiCommand(tuiCommand),
+    ],
+    operation: "provider.tmux.popup.createPersistentUi",
+    message: "tmux failed to create the persistent station popup UI.",
+    timeoutMessage: "tmux persistent popup UI creation timed out.",
+  });
+  await setPersistentPopupSessionSignature(input, {
+    sessionName,
+    signature,
+  });
+  await enablePersistentPopupSessionMouse(input, sessionName);
+  return { sessionName, created: true };
+}
+
+export async function resolveRegisteredDevPopupUi(
+  options: TmuxRegisteredDevPopupOptions = {},
+): Promise<TmuxRegisteredDevPopupUi | undefined> {
+  const command = options.command ?? process.env.STATION_TMUX_BIN ?? "tmux";
+  const input = popupCommandInput(options, command);
+  const sessionName = await resolveTmuxGlobalOption(input, registeredDevPopupSessionNameOption);
+  const devCommand = await resolveTmuxGlobalOption(input, registeredDevPopupCommandOption);
+  if (sessionName === undefined || devCommand === undefined) {
+    return undefined;
+  }
+
+  const owner = await resolveTmuxGlobalOption(input, registeredDevPopupOwnerOption);
+  if (owner !== undefined && !isRegisteredDevPopupOwnerAlive(owner)) {
+    return undefined;
+  }
+
+  const root = await resolveTmuxGlobalOption(input, registeredDevPopupRootOption);
+  const resultInput: RegisteredDevPopupResultInput = {
+    command: devCommand,
+    sessionName,
+  };
+  if (owner !== undefined) {
+    resultInput.owner = owner;
+  }
+  if (root !== undefined) {
+    resultInput.root = root;
+  }
+  return registeredDevPopupResult(resultInput);
+}
+
+export async function resolvePersistentPopupUi(
+  options: ResolvePersistentPopupUiOptions,
+  input: TmuxCommandInput,
+): Promise<TmuxPersistentPopupUi> {
+  const checkoutRoot = options.checkoutRoot ?? options.registeredDevPopupRoot;
+  if (options.preferRegisteredDevPopup === true) {
+    const registered = await resolveRegisteredDevPopupUi(input);
+    if (
+      registered !== undefined &&
+      registered.root !== undefined &&
+      registered.root === checkoutRoot
+    ) {
+      return {
+        command: registered.command,
+        registerFastPopup: false,
+        sessionName: registered.sessionName,
+      };
+    }
+  }
+  const result: TmuxPersistentPopupUi = {
+    command: options.tuiCommand ?? defaultPersistentPopupTuiCommand,
+    registerFastPopup: true,
+    sessionName: options.uiSessionName ?? defaultPersistentPopupSessionName,
+  };
+  if (checkoutRoot !== undefined) {
+    result.root = checkoutRoot;
+  }
+  return result;
+}
+
+export async function registerFastPopupUi(
+  input: TmuxCommandInput,
+  ui: TmuxPersistentPopupUi,
+): Promise<void> {
+  await setTmuxGlobalOption(input, registeredPopupSessionNameOption, ui.sessionName);
+  await setTmuxGlobalOption(
+    input,
+    registeredPopupExpectedSignatureOption,
+    persistentPopupSignature(ui.command),
+  );
+  if (ui.root !== undefined) {
+    await setTmuxGlobalOption(input, registeredPopupRootOption, ui.root);
+  }
+}

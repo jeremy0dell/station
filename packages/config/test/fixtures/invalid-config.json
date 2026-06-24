@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "worktreeProvider": "worktrunk",
+    "terminal": "tmux",
+    "harness": "codex",
+    "layout": "agent-build-shell"
+  },
+  "projects": [
+    {
+      "id": "",
+      "label": "web",
+      "root": "~/projects/web",
+      "defaults": {
+        "harness": "codex",
+        "terminal": "tmux",
+        "layout": "agent-build-shell"
+      },
+      "worktrunk": {
+        "enabled": true
+      }
+    }
+  ]
+}

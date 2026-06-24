@@ -1,0 +1,38 @@
+{
+  "name": "missing-worktrunk-binary",
+  "expectedRootCause": "MISSING_WORKTRUNK_BINARY",
+  "evidenceIndex": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-22T12:00:00.000Z",
+    "summary": {
+      "status": "degraded",
+      "rootCauseCodes": ["MISSING_WORKTRUNK_BINARY"],
+      "providers": ["worktrunk"],
+      "commandIds": ["cmd_1"],
+      "diagnosticIds": ["err_1"],
+      "redaction": "redacted"
+    },
+    "items": [
+      {
+        "id": "provider-worktrunk",
+        "category": "provider",
+        "severity": "error",
+        "code": "WORKTRUNK_UNAVAILABLE",
+        "message": "Worktrunk is not available.",
+        "provider": "worktrunk",
+        "diagnosticId": "err_1"
+      }
+    ],
+    "rootCauses": [
+      {
+        "code": "MISSING_WORKTRUNK_BINARY",
+        "confidence": "high",
+        "summary": "Worktrunk binary is missing.",
+        "itemIds": ["provider-worktrunk"],
+        "provider": "worktrunk",
+        "diagnosticId": "err_1"
+      }
+    ],
+    "questions": []
+  }
+}

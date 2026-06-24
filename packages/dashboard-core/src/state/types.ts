@@ -1,0 +1,95 @@
+import type {
+  SafeError,
+  SessionId,
+  StationSnapshot,
+  TerminalFocusOrigin,
+  WorktreeId,
+} from "@station/contracts";
+import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
+import type { AddProjectFlowState } from "../flows/addProject/types.js";
+import type { NewSessionFlowState } from "../flows/newSession.js";
+import type { TuiToast } from "../services/types.js";
+import type { TuiLocalRows } from "./localRows.js";
+
+export type TuiRuntimeState = {
+  persistentPopup: boolean;
+  canDismissPopup: boolean;
+  exitOnFocusSuccess: boolean;
+  canResolveFocusOrigin: boolean;
+  hasFocusSuccessCallback: boolean;
+  focusOrigin?: TerminalFocusOrigin;
+};
+
+export type TuiViewState = {
+  searchQuery: string;
+  collapsedProjectIds: ReadonlySet<string>;
+  scrollOffset: number;
+  terminalRows: number;
+  localRows: TuiLocalRows;
+};
+
+export type TuiState = TuiViewState & {
+  snapshot?: StationSnapshot;
+  loading: boolean;
+  screen: TuiScreen;
+  toasts: TuiToastEntry[];
+  observerConnectionStatus: TuiObserverConnectionStatus;
+  runtime: TuiRuntimeState;
+};
+
+export type TuiToastEntry = {
+  id: string;
+  toast: TuiToast;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt?: number;
+};
+
+export type TuiObserverConnectionStatus =
+  | { state: "connected" }
+  | { state: "reconnecting"; since: number; lastError?: SafeError }
+  | { state: "displayOnly"; since: number; lastError?: SafeError };
+
+export type TuiScreen =
+  | { name: "dashboard" }
+  | { name: "help" }
+  | { name: "search"; value: string }
+  | { name: "projectCollapse"; value: string }
+  | { name: "removeWorktree"; step: "chooseSlot" }
+  | {
+      name: "removeWorktree";
+      step: "confirm";
+      rowId: WorktreeId;
+      forceRequired: boolean;
+      label: string;
+    }
+  | {
+      name: "removeSession";
+      rowId: WorktreeId;
+      sessionId: SessionId;
+      forceRequired: boolean;
+      label: string;
+    }
+  | { name: "renameSession"; step: "chooseSlot" }
+  | {
+      name: "renameSession";
+      step: "editName";
+      rowId: WorktreeId;
+      sessionId: SessionId;
+      currentTitle: string;
+      draftTitle: EditableTextInputState;
+      returnTo?: "dashboard";
+      validationError?: string;
+    }
+  | { name: "addProject"; flow: AddProjectFlowState }
+  | { name: "newSession"; flow: NewSessionFlowState };
+
+export type CreateInitialTuiStateOptions = {
+  initialSnapshot?: StationSnapshot;
+  searchQuery?: string;
+  collapsedProjectIds?: Iterable<string>;
+  scrollOffset?: number;
+  terminalRows?: number;
+  localRows?: TuiLocalRows;
+  runtime?: Partial<TuiRuntimeState>;
+};

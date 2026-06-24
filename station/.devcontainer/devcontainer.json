@@ -1,0 +1,19 @@
+{
+  "name": "STATION Station Experiment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace/station",
+  "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspace,type=bind,consistency=cached",
+  "mounts": [
+    "source=station-station-node-modules,target=/workspace/station/node_modules,type=volume",
+    "source=station-station-bun-cache,target=/home/bun/.bun/install/cache,type=volume"
+  ],
+  "postCreateCommand": "bun install --frozen-lockfile || bun install",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}

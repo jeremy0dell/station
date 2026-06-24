@@ -1,0 +1,36 @@
+{
+  "name": "invalid-config",
+  "expectedRootCause": "INVALID_CONFIG",
+  "evidenceIndex": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-22T12:00:00.000Z",
+    "summary": {
+      "status": "unavailable",
+      "rootCauseCodes": ["INVALID_CONFIG"],
+      "providers": [],
+      "commandIds": [],
+      "diagnosticIds": ["config-error"],
+      "redaction": "redacted"
+    },
+    "items": [
+      {
+        "id": "config-error",
+        "category": "config",
+        "severity": "error",
+        "code": "CONFIG_VALIDATION_FAILED",
+        "message": "Station config is invalid.",
+        "diagnosticId": "config-error"
+      }
+    ],
+    "rootCauses": [
+      {
+        "code": "INVALID_CONFIG",
+        "confidence": "high",
+        "summary": "The config cannot be loaded.",
+        "itemIds": ["config-error"],
+        "diagnosticId": "config-error"
+      }
+    ],
+    "questions": []
+  }
+}

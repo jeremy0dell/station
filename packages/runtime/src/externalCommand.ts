@@ -1,0 +1,517 @@
+import { execFile, spawn } from "node:child_process";
+import { access as defaultAccess, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { promisify } from "node:util";
+import { runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "./boundary.js";
+import {
+  type ExternalCommandError,
+  isSafeError,
+  type RuntimeSafeError,
+  type RuntimeSafeErrorFallback,
+  safeErrorFromUnknown,
+} from "./errors.js";
+
+const execFileAsync = promisify(execFile);
+const outputSnippetMaxChars = 2000;
+const redactedValue = "[REDACTED]";
+const redactedSecret = "[REDACTED_SECRET]";
+
+const secretAssignmentKeyPattern =
+  /(?:token|secret|password|passwd|api[-_]?key|access[-_]?key|auth|credential|private[-_]?key)/i;
+
+export type ExternalCommandResult = {
+  command: string;
+  args: string[];
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+
+export type ExternalCommandRunner = (input: ExternalCommandInput) => Promise<ExternalCommandResult>;
+
+export type ExternalCommandInput = {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  timeoutMs?: number;
+  maxOutputChars?: number;
+  stdin?: string;
+  signal?: AbortSignal;
+  allowedExitCodes?: number[];
+  stdio?: "pipe" | "inherit";
+};
+
+export type ResolveExecutablePathOptions = {
+  pathEnv?: string;
+  access?: (path: string) => Promise<void>;
+};
+
+type ExternalCommandErrorLike = {
+  code?: unknown;
+  exitCode?: unknown;
+  name?: unknown;
+  signal?: unknown;
+  stderr?: unknown;
+  stderrSnippet?: unknown;
+  stdout?: unknown;
+  stdoutSnippet?: unknown;
+};
+
+export async function runExternalCommand(
+  input: ExternalCommandInput,
+  runner: ExternalCommandRunner = nodeExternalCommandRunner,
+): Promise<ExternalCommandResult> {
+  const task = async ({ signal }: { signal: AbortSignal }) => {
+    // Merge caller cancellation with the runtime timeout signal so execFile aborts on either.
+    const linked = linkAbortSignals(input.signal, signal);
+    try {
+      try {
+        return await runner({
+          ...input,
+          ...(linked.signal === undefined ? {} : { signal: linked.signal }),
+        });
+      } catch (error) {
+        const allowedResult = allowedExitCodeResultFromUnknown(error, input);
+        if (allowedResult !== undefined) {
+          return allowedResult;
+        }
+        throw externalCommandErrorFromUnknown(error, input);
+      }
+    } finally {
+      linked.cleanup();
+    }
+  };
+
+  const result =
+    input.timeoutMs === undefined
+      ? await runRuntimeBoundary(
+          {
+            operation: `externalCommand.${input.command}`,
+            error: externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed."),
+          },
+          task,
+        )
+      : await runRuntimeBoundaryWithTimeout(
+          {
+            operation: `externalCommand.${input.command}`,
+            timeoutMs: input.timeoutMs,
+            error: externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed."),
+            timeoutError: externalCommandFallback(
+              "EXTERNAL_COMMAND_TIMEOUT",
+              "External command timed out.",
+            ),
+          },
+          task,
+        );
+
+  if (result.ok) {
+    return result.value;
+  }
+
+  throw externalCommandErrorFromUnknown(result.error, input);
+}
+
+export async function nodeExternalCommandRunner(
+  input: ExternalCommandInput,
+): Promise<ExternalCommandResult> {
+  if (input.stdio === "inherit") {
+    return nodeExternalCommandRunnerWithInheritedStdio(input);
+  }
+  if (input.stdin !== undefined) {
+    return nodeExternalCommandRunnerWithStdin(input);
+  }
+  const args = input.args ?? [];
+  const result = await execFileAsync(input.command, args, {
+    cwd: input.cwd,
+    env: input.env === undefined ? process.env : { ...process.env, ...input.env },
+    maxBuffer: input.maxOutputChars ?? 64 * 1024,
+    signal: input.signal,
+  });
+  return {
+    command: input.command,
+    args,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: 0,
+  };
+}
+
+async function nodeExternalCommandRunnerWithInheritedStdio(
+  input: ExternalCommandInput,
+): Promise<ExternalCommandResult> {
+  if (input.stdin !== undefined) {
+    throw new Error("External command inherited stdio runner does not support stdin input.");
+  }
+  const args = input.args ?? [];
+  return new Promise((resolve, reject) => {
+    const child = spawn(input.command, args, {
+      cwd: input.cwd,
+      env: input.env === undefined ? process.env : { ...process.env, ...input.env },
+      signal: input.signal,
+      stdio: "inherit",
+    });
+
+    let settled = false;
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+
+    child.on("error", (error) => {
+      settle(() => reject(error));
+    });
+    child.on("close", (exitCode, signal) => {
+      settle(() => {
+        if (exitCode === 0) {
+          resolve({
+            command: input.command,
+            args,
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+          });
+          return;
+        }
+        const error = Object.assign(new Error("External command failed."), {
+          ...(exitCode === null ? {} : { exitCode }),
+          ...(signal === null ? {} : { signal }),
+          stdout: "",
+          stderr: "",
+        });
+        reject(error);
+      });
+    });
+  });
+}
+
+async function nodeExternalCommandRunnerWithStdin(
+  input: ExternalCommandInput,
+): Promise<ExternalCommandResult> {
+  const args = input.args ?? [];
+  const stdin = input.stdin;
+  if (stdin === undefined) {
+    throw new Error("External command stdin runner requires stdin input.");
+  }
+  const tempDir = await mkdtemp(join(tmpdir(), "station-command-stdin-"));
+  const stdinPath = join(tempDir, "stdin");
+  await writeFile(stdinPath, stdin, "utf8");
+  try {
+    const result = await execFileAsync(
+      "sh",
+      [
+        "-c",
+        'stdin_path=$1; shift; exec "$@" < "$stdin_path"',
+        "sh",
+        stdinPath,
+        input.command,
+        ...args,
+      ],
+      {
+        cwd: input.cwd,
+        env: input.env === undefined ? process.env : { ...process.env, ...input.env },
+        maxBuffer: input.maxOutputChars ?? 64 * 1024,
+        signal: input.signal,
+      },
+    );
+    return {
+      command: input.command,
+      args,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: 0,
+    };
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+export function createFakeExternalCommandRunner(
+  handler: (input: ExternalCommandInput) => ExternalCommandResult | Promise<ExternalCommandResult>,
+): ExternalCommandRunner {
+  return async (input) => handler(input);
+}
+
+export async function resolveExecutablePath(
+  command: string,
+  options: ResolveExecutablePathOptions = {},
+): Promise<string | undefined> {
+  const access = options.access ?? defaultAccess;
+  if (isPathLikeCommand(command)) {
+    return (await canAccess(command, access)) ? command : undefined;
+  }
+
+  const pathEnv = options.pathEnv ?? process.env.PATH ?? "";
+  for (const directory of pathEnv.split(delimiter).filter((part) => part.length > 0)) {
+    const candidate = join(directory, command);
+    if (await canAccess(candidate, access)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+export function externalCommandErrorFromUnknown(
+  error: unknown,
+  input: Pick<ExternalCommandInput, "command" | "args" | "cwd">,
+): ExternalCommandError {
+  const fallback = externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed.");
+  const safeError = safeErrorFromUnknown(error, fallback);
+  const cause = externalCommandErrorLike(error);
+  const normalized: ExternalCommandError = {
+    tag: "ExternalCommandError",
+    code: externalCommandCode(error, cause, safeError),
+    message: externalCommandMessage(error, safeError),
+    command: formatCommandForError(input),
+  };
+
+  copySafeErrorContext(normalized, safeError);
+
+  if (input.cwd !== undefined) {
+    normalized.cwd = input.cwd;
+  }
+
+  const exitCode = numericField(cause, "exitCode") ?? numericField(cause, "code");
+  if (exitCode !== undefined) {
+    normalized.exitCode = exitCode;
+  }
+
+  const signal = externalCommandStringValue(cause, "signal");
+  if (signal !== undefined) {
+    normalized.signal = signal;
+  }
+
+  const stdoutSnippet = outputSnippet(cause, "stdout", "stdoutSnippet");
+  if (stdoutSnippet !== undefined) {
+    normalized.stdoutSnippet = stdoutSnippet;
+  }
+
+  const stderrSnippet = outputSnippet(cause, "stderr", "stderrSnippet");
+  if (stderrSnippet !== undefined) {
+    normalized.stderrSnippet = stderrSnippet;
+  }
+
+  normalized.diagnosticDetails = [externalCommandDiagnosticDetail(normalized)];
+
+  return normalized;
+}
+
+function externalCommandFallback(code: string, message: string): RuntimeSafeErrorFallback {
+  return {
+    tag: "ExternalCommandError",
+    code,
+    message,
+  };
+}
+
+function externalCommandCode(
+  error: unknown,
+  cause: ExternalCommandErrorLike,
+  safeError: RuntimeSafeError,
+): string {
+  if (isAbortLikeError(error)) {
+    return "EXTERNAL_COMMAND_ABORTED";
+  }
+  return externalCommandStringValue(cause, "code") ?? safeError.code;
+}
+
+function externalCommandMessage(error: unknown, safeError: RuntimeSafeError): string {
+  return isAbortLikeError(error) ? "External command was aborted." : safeError.message;
+}
+
+function formatCommandForError(input: Pick<ExternalCommandInput, "command" | "args">): string {
+  const parts = [input.command, ...(input.args ?? [])];
+  const redacted: string[] = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const previous = parts[index - 1];
+    const part = parts[index] ?? "";
+    if (previous !== undefined && !previous.includes("=") && isSecretFlag(previous)) {
+      redacted.push(redactedValue);
+      continue;
+    }
+    redacted.push(redactCommandPart(part));
+  }
+
+  return redacted.join(" ");
+}
+
+function numericField(
+  record: ExternalCommandErrorLike,
+  key: "exitCode" | "code",
+): number | undefined {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function externalCommandStringValue(
+  record: ExternalCommandErrorLike,
+  key: keyof ExternalCommandErrorLike,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function outputSnippet(
+  cause: ExternalCommandErrorLike,
+  rawKey: "stdout" | "stderr",
+  snippetKey: "stdoutSnippet" | "stderrSnippet",
+): string | undefined {
+  const value =
+    externalCommandStringValue(cause, rawKey) ?? externalCommandStringValue(cause, snippetKey);
+  if (value === undefined) {
+    return undefined;
+  }
+  const redacted = redactCommandOutput(value).slice(0, outputSnippetMaxChars);
+  return redacted.length === 0 ? undefined : redacted;
+}
+
+function allowedExitCodeResultFromUnknown(
+  error: unknown,
+  input: Pick<ExternalCommandInput, "allowedExitCodes" | "args" | "command">,
+): ExternalCommandResult | undefined {
+  if (isAbortLikeError(error)) {
+    return undefined;
+  }
+  const cause = externalCommandErrorLike(error);
+
+  const exitCode = numericField(cause, "exitCode") ?? numericField(cause, "code");
+  if (exitCode === undefined || input.allowedExitCodes?.includes(exitCode) !== true) {
+    return undefined;
+  }
+
+  return {
+    command: input.command,
+    args: input.args ?? [],
+    stdout: externalCommandStringValue(cause, "stdout") ?? "",
+    stderr: externalCommandStringValue(cause, "stderr") ?? "",
+    exitCode,
+  };
+}
+
+function copySafeErrorContext(target: ExternalCommandError, safeError: RuntimeSafeError): void {
+  if (safeError.hint !== undefined) target.hint = safeError.hint;
+  if (safeError.commandId !== undefined) target.commandId = safeError.commandId;
+  if (safeError.projectId !== undefined) target.projectId = safeError.projectId;
+  if (safeError.worktreeId !== undefined) target.worktreeId = safeError.worktreeId;
+  if (safeError.sessionId !== undefined) target.sessionId = safeError.sessionId;
+  if (safeError.provider !== undefined) target.provider = safeError.provider;
+  if (safeError.traceId !== undefined) target.traceId = safeError.traceId;
+  if (safeError.diagnosticId !== undefined) target.diagnosticId = safeError.diagnosticId;
+}
+
+function externalCommandDiagnosticDetail(error: ExternalCommandError) {
+  const detail: NonNullable<RuntimeSafeError["diagnosticDetails"]>[number] = {
+    type: "external_command",
+    operation: `externalCommand.${error.command.split(" ")[0] ?? "command"}`,
+    command: error.command,
+  };
+  if (error.provider !== undefined) detail.provider = error.provider;
+  if (error.cwd !== undefined) detail.cwd = error.cwd;
+  if (error.exitCode !== undefined) detail.exitCode = error.exitCode;
+  if (error.signal !== undefined) detail.signal = error.signal;
+  if (error.stdoutSnippet !== undefined) detail.stdoutSnippet = error.stdoutSnippet;
+  if (error.stderrSnippet !== undefined) detail.stderrSnippet = error.stderrSnippet;
+  return detail;
+}
+
+function redactCommandPart(value: string): string {
+  const assignment = value.match(/^([^=]+)=(.*)$/);
+  if (assignment !== null) {
+    const key = assignment[1] ?? "";
+    if (isSecretAssignmentKey(key)) {
+      return `${key}=${redactedValue}`;
+    }
+  }
+  return redactCommandOutput(value);
+}
+
+function isSecretFlag(value: string): boolean {
+  const key = value.split("=")[0] ?? value;
+  return key.startsWith("-") && isSecretAssignmentKey(key);
+}
+
+function isSecretAssignmentKey(value: string): boolean {
+  return secretAssignmentKeyPattern.test(value);
+}
+
+async function canAccess(path: string, access: (path: string) => Promise<void>): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPathLikeCommand(command: string): boolean {
+  return command.includes("/") || command.includes("\\");
+}
+
+function linkAbortSignals(...signals: Array<AbortSignal | undefined>): {
+  signal: AbortSignal | undefined;
+  cleanup(): void;
+} {
+  // Reuse a single source signal when possible; allocate a controller only to merge sources.
+  const activeSignals = signals.filter((signal): signal is AbortSignal => signal !== undefined);
+  if (activeSignals.length === 0) {
+    return { signal: undefined, cleanup: () => undefined };
+  }
+  if (activeSignals.length === 1) {
+    return { signal: activeSignals[0], cleanup: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const listeners: Array<() => void> = [];
+  const abort = (signal: AbortSignal) => {
+    if (!controller.signal.aborted) {
+      controller.abort(signal.reason);
+    }
+  };
+
+  for (const signal of activeSignals) {
+    if (signal.aborted) {
+      abort(signal);
+      continue;
+    }
+    const listener = () => abort(signal);
+    signal.addEventListener("abort", listener, { once: true });
+    listeners.push(() => signal.removeEventListener("abort", listener));
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+  };
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (isSafeError(error)) {
+    return error.tag === "CancellationError" || error.code === "EXTERNAL_COMMAND_ABORTED";
+  }
+  const cause = externalCommandErrorLike(error);
+  return cause.name === "AbortError" || cause.code === "ABORT_ERR";
+}
+
+export function redactCommandOutput(value: string): string {
+  return value
+    .replace(
+      /([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*)=([^\s]+)/gi,
+      `$1=${redactedValue}`,
+    )
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${redactedValue}`)
+    .replace(
+      /\b(?:sk-[A-Za-z0-9_-]{8,}|sk_[A-Za-z0-9_]{8,}|ghp_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,})\b/g,
+      redactedSecret,
+    );
+}
+
+function externalCommandErrorLike(error: unknown): ExternalCommandErrorLike {
+  return error === null || error === undefined ? {} : (Object(error) as ExternalCommandErrorLike);
+}

@@ -1,0 +1,212 @@
+{
+  "worktreeCapabilities": {
+    "canCreate": true,
+    "canRemove": true,
+    "canList": true,
+    "canEmitLifecycleEvents": true,
+    "canExposeDirtyState": true
+  },
+  "terminalCapabilities": {
+    "canOpenWorkspace": true,
+    "canFocusTarget": true,
+    "canCloseTarget": true,
+    "canCaptureOutput": true,
+    "canSendInput": false,
+    "canPersistIdentityBinding": true,
+    "canDisplayPopup": true
+  },
+  "harnessCapabilities": {
+    "canLaunch": true,
+    "canDiscoverRuns": true,
+    "canEmitEvents": true,
+    "canClassifyStatus": true,
+    "canReceivePrompt": false,
+    "canResume": true,
+    "canStop": true,
+    "canRunNonInteractive": true,
+    "canExposeApprovalState": true,
+    "supportsModifiedEnterSoftNewline": true
+  },
+  "providerHealth": {
+    "providerId": "codex",
+    "providerType": "harness",
+    "status": "degraded",
+    "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+    "lastError": {
+      "tag": "HarnessProviderError",
+      "code": "HARNESS_STATUS_UNCERTAIN",
+      "message": "The harness provider could not classify the latest run state.",
+      "hint": "Run doctor for provider diagnostics.",
+      "provider": "codex",
+      "traceId": "trc_harness_status"
+    },
+    "latencyMs": 22,
+    "capabilities": {
+      "canDiscoverRuns": true,
+      "canClassifyStatus": true
+    }
+  },
+  "harnessLaunchPlan": {
+    "provider": "scripted",
+    "command": "/usr/local/bin/node",
+    "args": [
+      "/tmp/station-fixtures/scripted-agent.mjs",
+      "--run-id",
+      "run_web_feature_auth",
+      "--state-dir",
+      "/tmp/station-fixtures/state/scripted",
+      "--scenario",
+      "/tmp/station-fixtures/scenarios/complete-file-task.json"
+    ],
+    "cwd": "/tmp/station-fixtures/web/worktrees/feature-auth",
+    "env": {
+      "STATION_PROJECT_ID": "web",
+      "STATION_WORKTREE_ID": "wt_web_feature_auth",
+      "STATION_WORKTREE_PATH": "/tmp/station-fixtures/web/worktrees/feature-auth",
+      "STATION_HARNESS_PROVIDER": "scripted",
+      "STATION_SCRIPTED_RUN_ID": "run_web_feature_auth",
+      "STATION_SCRIPTED_STATE_DIR": "/tmp/station-fixtures/state/scripted"
+    },
+    "mode": "interactive",
+    "providerData": {
+      "runner": "scripted-agent",
+      "stateDir": "/tmp/station-fixtures/state/scripted"
+    }
+  },
+  "worktreeObservations": [
+    {
+      "id": "wt_web_feature_auth",
+      "provider": "worktrunk",
+      "projectId": "web",
+      "branch": "feature/auth",
+      "path": "/tmp/station-fixtures/web/worktrees/feature-auth",
+      "state": "exists",
+      "source": "worktrunk",
+      "dirty": false,
+      "ahead": 1,
+      "behind": 0,
+      "confidence": "high",
+      "reason": "Provider listed the worktree.",
+      "observedAt": "2026-05-20T12:00:00.000Z",
+      "providerData": {
+        "providerRecordId": "wt-fixture-web-auth"
+      }
+    }
+  ],
+  "terminalTargetObservations": [
+    {
+      "id": "term_web_feature_auth_agent",
+      "provider": "tmux",
+      "projectId": "web",
+      "worktreeId": "wt_web_feature_auth",
+      "sessionId": "ses_web_feature_auth",
+      "harnessRunId": "run_web_feature_auth",
+      "state": "open",
+      "cwd": "/tmp/station-fixtures/web/worktrees/feature-auth",
+      "pid": 5012,
+      "title": "web feature/auth agent",
+      "confidence": "high",
+      "reason": "Identity binding matched station environment hints.",
+      "observedAt": "2026-05-20T12:00:00.000Z",
+      "harnessBinding": {
+        "role": "main-agent",
+        "harnessProvider": "codex",
+        "worktreePath": "/tmp/station-fixtures/web/worktrees/feature-auth",
+        "currentCommand": "codex"
+      },
+      "providerData": {
+        "paneId": "%45"
+      }
+    },
+    {
+      "id": "term_orphan_agent",
+      "provider": "tmux",
+      "state": "open",
+      "title": "orphan agent",
+      "confidence": "low",
+      "reason": "Target had no matching configured project.",
+      "observedAt": "2026-05-20T12:00:00.000Z",
+      "providerData": {
+        "paneId": "%99"
+      }
+    }
+  ],
+  "harnessRunObservations": [
+    {
+      "id": "run_web_feature_auth",
+      "provider": "codex",
+      "projectId": "web",
+      "worktreeId": "wt_web_feature_auth",
+      "sessionId": "ses_web_feature_auth",
+      "pid": 5012,
+      "cwd": "/tmp/station-fixtures/web/worktrees/feature-auth",
+      "state": "working",
+      "confidence": "high",
+      "reason": "Harness reported active tool use.",
+      "observedAt": "2026-05-20T12:00:00.000Z",
+      "providerData": {
+        "profile": "default"
+      }
+    }
+  ],
+  "harnessStatusObservations": [
+    {
+      "provider": "codex",
+      "runId": "run_web_feature_auth",
+      "projectId": "web",
+      "worktreeId": "wt_web_feature_auth",
+      "sessionId": "ses_web_feature_auth",
+      "status": {
+        "value": "working",
+        "confidence": "high",
+        "reason": "Harness reported active tool use.",
+        "source": "harness_process",
+        "updatedAt": "2026-05-20T12:00:00.000Z"
+      },
+      "observedAt": "2026-05-20T12:00:00.000Z",
+      "providerData": {
+        "classifier": "fixture"
+      }
+    }
+  ],
+  "harnessEventObservations": [
+    {
+      "provider": "codex",
+      "sessionId": "ses_web_feature_auth",
+      "worktreeId": "wt_web_feature_auth",
+      "harnessRunId": "run_web_feature_auth",
+      "status": {
+        "value": "needs_attention",
+        "confidence": "high",
+        "reason": "Harness reported approval requested.",
+        "source": "harness_event",
+        "updatedAt": "2026-05-20T12:00:00.000Z"
+      },
+      "rawEventType": "approval_requested",
+      "providerData": {
+        "eventId": "evt_fixture_approval"
+      },
+      "observedAt": "2026-05-20T12:00:00.000Z"
+    }
+  ],
+  "terminalIdentityBindings": [
+    {
+      "provider": "tmux",
+      "targetId": "term_web_feature_auth_agent",
+      "projectId": "web",
+      "worktreeId": "wt_web_feature_auth",
+      "sessionId": "ses_web_feature_auth",
+      "harnessRunId": "run_web_feature_auth",
+      "harnessBinding": {
+        "role": "main-agent",
+        "harnessProvider": "codex",
+        "worktreePath": "/tmp/station-fixtures/web/worktrees/feature-auth"
+      },
+      "providerData": {
+        "paneId": "%45"
+      },
+      "confidence": "high",
+      "reason": "Provider-local identity binding matched."
+    }
+  ]
+}

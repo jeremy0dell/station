@@ -1,0 +1,32 @@
+import { type ResolveExecutablePathOptions, resolveExecutablePath } from "@station/runtime";
+import type { SetupDependencyFact } from "../model.js";
+import { setupEnv } from "./env.js";
+import type { SetupDependencyCheckOptions } from "./system.js";
+
+export const defaultDiffnavCommand = "diffnav";
+
+export function diffnavInstallHint(command = defaultDiffnavCommand): string {
+  return [
+    "Optional: install diffnav with brew install dlvhdr/formulae/diffnav for the station 'See diff' automation.",
+    `station tried ${command}.`,
+  ].join(" ");
+}
+
+/**
+ * Optional diffnav probe for Station's "See diff" automation. Presence of the
+ * literal command on PATH is enough; absence is not a setup blocker.
+ */
+export async function checkSetupDiffnav(
+  options: SetupDependencyCheckOptions = {},
+): Promise<SetupDependencyFact> {
+  const env = setupEnv(options.env);
+  const command = defaultDiffnavCommand;
+  const resolveOptions: ResolveExecutablePathOptions = {};
+  if (env.PATH !== undefined) resolveOptions.pathEnv = env.PATH;
+  if (options.access !== undefined) resolveOptions.access = options.access;
+  const resolvedPath = await resolveExecutablePath(command, resolveOptions);
+  if (resolvedPath !== undefined) {
+    return { status: "ok", command, resolvedPath };
+  }
+  return { status: "missing", command, message: diffnavInstallHint(command) };
+}

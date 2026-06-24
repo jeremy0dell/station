@@ -1,0 +1,11 @@
+{
+  "background_tasks": [],
+  "cwd": "/work/project",
+  "hook_event_name": "Stop",
+  "last_assistant_message": "DONE",
+  "permission_mode": "default",
+  "session_crons": [],
+  "session_id": "0b43511f-e55e-40c7-b2f7-5a733cf7cfd0",
+  "stop_hook_active": false,
+  "transcript_path": "/home/user/.claude/projects/-work-project/0b43511f-e55e-40c7-b2f7-5a733cf7cfd0.jsonl"
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "0.5.0",
+  "generatedAt": "not-a-date",
+  "observer": {
+    "pid": 0,
+    "startedAt": "2026-05-20T11:55:00.000Z",
+    "version": "0.0.0",
+    "healthy": true
+  },
+  "providerHealth": {},
+  "projects": [],
+  "rows": [],
+  "sessions": [],
+  "counts": {
+    "projects": 0,
+    "worktrees": 0,
+    "agents": 0,
+    "working": 0,
+    "idle": 0,
+    "attention": 0,
+    "unknown": 0
+  },
+  "alerts": []
+}

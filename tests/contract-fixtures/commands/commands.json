@@ -1,0 +1,157 @@
+{
+  "worktreeCreate": {
+    "type": "worktree.create",
+    "payload": {
+      "projectId": "web",
+      "branch": "feature/auth",
+      "base": "main",
+      "source": {
+        "kind": "branch",
+        "value": "feature/auth"
+      }
+    }
+  },
+  "worktreeRemove": {
+    "type": "worktree.remove",
+    "payload": {
+      "projectId": "web",
+      "worktreeId": "wt_web_feature_auth",
+      "force": false
+    }
+  },
+  "sessionCreate": {
+    "type": "session.create",
+    "payload": {
+      "projectId": "api",
+      "branch": "feature/cache",
+      "base": "main",
+      "source": {
+        "kind": "manual",
+        "value": "feature/cache"
+      },
+      "harness": {
+        "provider": "codex",
+        "mode": "interactive",
+        "profile": "default",
+        "approvalPolicy": "on-request",
+        "sandboxMode": "workspace-write"
+      },
+      "terminal": {
+        "provider": "tmux",
+        "layout": "agent-build-shell",
+        "focus": true
+      },
+      "initialPrompt": "Implement the cache contract tests."
+    }
+  },
+  "sessionStartAgent": {
+    "type": "session.startAgent",
+    "payload": {
+      "projectId": "api",
+      "worktreeId": "wt_api_cache",
+      "harness": {
+        "provider": "codex",
+        "mode": "interactive",
+        "profile": "default"
+      },
+      "terminal": {
+        "provider": "tmux",
+        "layout": "default",
+        "focus": false
+      },
+      "initialPrompt": "Continue the current task."
+    }
+  },
+  "sessionResumeAgent": {
+    "type": "session.resumeAgent",
+    "payload": {
+      "projectId": "api",
+      "worktreeId": "wt_api_cache",
+      "recoveryHandleId": "rec_codex_123",
+      "terminal": {
+        "provider": "tmux",
+        "layout": "default",
+        "focus": false
+      },
+      "initialPrompt": "Continue the recovered task."
+    }
+  },
+  "terminalFocus": {
+    "type": "terminal.focus",
+    "payload": {
+      "sessionId": "ses_api_cache"
+    }
+  },
+  "terminalClose": {
+    "type": "terminal.close",
+    "payload": {
+      "sessionId": "ses_api_cache",
+      "force": true
+    }
+  },
+  "sessionClose": {
+    "type": "session.close",
+    "payload": {
+      "sessionId": "ses_api_cache",
+      "mode": "all",
+      "force": true
+    }
+  },
+  "sessionRemove": {
+    "type": "session.remove",
+    "payload": {
+      "sessionId": "ses_api_cache",
+      "removeWorktree": false,
+      "force": false
+    }
+  },
+  "sessionSendPrompt": {
+    "type": "session.sendPrompt",
+    "payload": {
+      "sessionId": "ses_api_cache",
+      "prompt": "Summarize current status.",
+      "delivery": "harness-native"
+    }
+  },
+  "sessionRename": {
+    "type": "session.rename",
+    "payload": {
+      "sessionId": "ses_api_cache",
+      "title": "Cache Investigation"
+    }
+  },
+  "sessionAcknowledgeTurn": {
+    "type": "session.acknowledgeTurn",
+    "payload": {
+      "sessionId": "ses_api_cache",
+      "token": "report_codex_stop_1"
+    }
+  },
+  "observerReconcile": {
+    "type": "observer.reconcile",
+    "payload": {
+      "reason": "contract-fixture"
+    }
+  },
+  "projectAdd": {
+    "type": "project.add",
+    "payload": {
+      "path": "/tmp/station/web",
+      "id": "web",
+      "label": "web",
+      "allowNonGit": false
+    }
+  },
+  "projectRemove": {
+    "type": "project.remove",
+    "payload": {
+      "projectId": "web"
+    }
+  },
+  "hooksInstall": {
+    "type": "hooks.install",
+    "payload": {
+      "provider": "worktrunk"
+    }
+  }
+}

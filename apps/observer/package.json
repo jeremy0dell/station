@@ -1,0 +1,28 @@
+{
+  "name": "@station/observer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@station/config": "workspace:*",
+    "@station/contracts": "workspace:*",
+    "@station/observability": "workspace:*",
+    "@station/protocol": "workspace:*",
+    "@station/runtime": "workspace:*",
+    "zod": "^4.1.12"
+  }
+}

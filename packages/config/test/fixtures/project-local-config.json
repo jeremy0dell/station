@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "layout": "agent-build-shell",
+    "harness": "codex"
+  },
+  "commands": {
+    "dev": "pnpm dev",
+    "test": "pnpm test",
+    "typecheck": "pnpm typecheck"
+  },
+  "display": {
+    "group": "work",
+    "sortOrder": 10
+  }
+}

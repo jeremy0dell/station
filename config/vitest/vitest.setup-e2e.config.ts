@@ -1,0 +1,12 @@
+import { defineConfig } from "vitest/config";
+import { commonResolveConfig, commonTestConfig } from "./vitest.config.shared";
+
+export default defineConfig({
+  ...commonResolveConfig,
+  test: {
+    ...commonTestConfig,
+    include: ["tests/e2e/setup-core-flow.test.ts", "tests/e2e/setup-guided-feedback.test.ts"],
+    fileParallelism: false,
+    testTimeout: 60_000,
+  },
+});

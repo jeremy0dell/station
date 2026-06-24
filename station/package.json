@@ -1,0 +1,46 @@
+{
+  "name": "@station/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run link:station && bun run repair:node-pty && bun --hot src/main.tsx",
+    "link:station": "./scripts/link-station-packages.sh",
+    "repair:node-pty": "./scripts/repair-node-pty.sh",
+    "station": "bun run link:station && bun run repair:node-pty && bun src/main.tsx",
+    "dashboard": "bun run link:station && bun src/dashboardRenderer/main.tsx",
+    "doctor": "./scripts/doctor.sh",
+    "station:profile": "bun run link:station && bun run repair:node-pty && STATION_PROFILE=1 bun src/main.tsx",
+    "station:devtools": "bun run link:station && bun run repair:node-pty && DEV=true bun src/main.tsx",
+    "station:isolated": "bun run link:station && bun run repair:node-pty && ./scripts/station-isolated.sh",
+    "station:isolated:stop": "./scripts/station-isolated.sh stop",
+    "test": "bun run link:station && bun test",
+    "e2e:persist": "bun run link:station && bun run repair:node-pty && bun src/host/e2eReattachDemo.ts",
+    "host:dev": "bun run link:station && bun run repair:node-pty && bun src/host/e2eReattachDemo.ts --dev --hold",
+    "host:list": "bun run link:station && bun src/host/listHostAgents.ts",
+    "test:agents": "bun run repair:node-pty && STATION_PTY_SMOKE=1 STATION_PTY_SMOKE_TUI=1 bun test src/input/stationInput.e2e.test.tsx src/terminal/ptyPipeline.smoke.test.ts",
+    "test:pty": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/terminal/pty/nodePtyTerminal.test.ts src/terminal/ptyPipeline.smoke.test.ts src/terminal/pty/bridgeHardening.test.ts src/input/stationInput.e2e.test.tsx",
+    "test:stress": "STATION_VT_STRESS=1 bun test src/terminal/vt/screen.stress.test.ts",
+    "test:vt": "bun test src/terminal",
+    "typecheck": "bun run link:station && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@opentui/core": "0.4.1",
+    "@opentui/react": "0.4.1",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/headless": "6.0.0",
+    "node-pty": "^1.1.0",
+    "react": "19.2.7",
+    "react-devtools-core": "7.0.1",
+    "smol-toml": "^1.6.1",
+    "string-width": "^8.2.1",
+    "ws": "8.21.0",
+    "zod": "^4.1.12",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "19.2.17",
+    "typescript": "5.9.3"
+  }
+}

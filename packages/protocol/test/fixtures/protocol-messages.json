@@ -1,0 +1,59 @@
+{
+  "request": {
+    "schemaVersion": "0.5.0",
+    "jsonrpc": "2.0",
+    "id": "req_1",
+    "method": "observer.health"
+  },
+  "successResponse": {
+    "schemaVersion": "0.5.0",
+    "jsonrpc": "2.0",
+    "id": "req_1",
+    "result": {
+      "schemaVersion": "0.5.0",
+      "status": "healthy",
+      "pid": 1234,
+      "startedAt": "2026-05-20T12:00:00.000Z",
+      "version": "0.0.0"
+    }
+  },
+  "errorResponse": {
+    "schemaVersion": "0.5.0",
+    "jsonrpc": "2.0",
+    "id": "req_1",
+    "error": {
+      "tag": "ProtocolError",
+      "code": "PROTOCOL_ERROR",
+      "message": "Invalid protocol request."
+    }
+  },
+  "eventEnvelope": {
+    "schemaVersion": "0.5.0",
+    "event": {
+      "type": "providerHook.ingested",
+      "at": "2026-05-20T12:02:00.000Z",
+      "hookId": "hook_1",
+      "provider": "worktrunk",
+      "event": "worktree.created"
+    }
+  },
+  "doctorRequest": {
+    "schemaVersion": "0.5.0",
+    "jsonrpc": "2.0",
+    "id": "req_doctor",
+    "method": "doctor.run",
+    "params": {
+      "projectId": "web"
+    }
+  },
+  "diagnosticsRequest": {
+    "schemaVersion": "0.5.0",
+    "jsonrpc": "2.0",
+    "id": "req_diag",
+    "method": "diagnostics.collect",
+    "params": {
+      "commandId": "cmd_1",
+      "includeLogs": true
+    }
+  }
+}

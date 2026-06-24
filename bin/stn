@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+script=$0
+while [ -h "$script" ]; do
+  script_dir=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd)
+  link=$(readlink "$script")
+  case "$link" in
+    /*) script=$link ;;
+    *) script=$script_dir/$link ;;
+  esac
+done
+
+root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd)
+tmux_popup=$root/integrations/terminal/tmux/bin/stn-popup
+entry=$root/apps/cli/dist/main.js
+
+# Keep popup toggle pre-Node, but leave tmux behavior in the tmux integration launcher.
+if [ -x "$tmux_popup" ] && STATION_FAST_POPUP_NO_FALLBACK=1 "$tmux_popup" "$@"; then
+  exit 0
+fi
+
+if [ ! -f "$entry" ]; then
+  printf '%s\n' "stn has not been built. Run: pnpm build" >&2
+  exit 1
+fi
+
+exec node "$entry" "$@"

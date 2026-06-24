@@ -1,0 +1,406 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { openCodeForwardedEventTypes } from "./ingressRules.js";
+
+export const OPENCODE_STATION_PLUGIN_NAME = "station-agent-state.js";
+export const OPENCODE_STATION_PLUGIN_MARKER = "station-opencode-observer-plugin:v1";
+
+export type OpenCodePluginPlanOptions = {
+  opencodeConfigDir?: string;
+  pluginPath?: string;
+  observerSocketPath?: string;
+  stateDir?: string;
+  hookSpoolDir?: string;
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+};
+
+export type OpenCodePluginPlan = {
+  provider: "opencode";
+  configDir: string;
+  pluginPath: string;
+  changed: boolean;
+  installed: boolean;
+  before: string;
+  after: string;
+};
+
+export type OpenCodePluginInstallResult = OpenCodePluginPlan & {
+  installed: boolean;
+  backupPath?: string;
+  removed?: boolean;
+};
+
+export type OpenCodePluginDoctorResult = {
+  provider: "opencode";
+  configDir: string;
+  pluginPath: string;
+  status: "ok" | "warn";
+  installed: boolean;
+  changed: boolean;
+  message: string;
+};
+
+export async function planOpenCodePlugin(
+  options: OpenCodePluginPlanOptions = {},
+): Promise<OpenCodePluginPlan> {
+  const configDir = resolveOpenCodeConfigDir(options);
+  const pluginPath = resolveOpenCodePluginPath(options);
+  const before = await readOptionalFile(pluginPath);
+  const after = expectedOpenCodePluginScript(options);
+  const changed = before !== after;
+  return {
+    provider: "opencode",
+    configDir,
+    pluginPath,
+    changed,
+    installed: before.includes(OPENCODE_STATION_PLUGIN_MARKER),
+    before,
+    after,
+  };
+}
+
+export async function installOpenCodePlugin(
+  options: OpenCodePluginPlanOptions = {},
+): Promise<OpenCodePluginInstallResult> {
+  const plan = await planOpenCodePlugin(options);
+  let backupPath: string | undefined;
+  if (plan.changed) {
+    backupPath = await backupIfPresent(plan.pluginPath);
+    await mkdir(dirname(plan.pluginPath), { recursive: true, mode: 0o700 });
+    await writeFile(plan.pluginPath, plan.after, { mode: 0o600 });
+  }
+  const result: OpenCodePluginInstallResult = {
+    ...plan,
+    installed: true,
+  };
+  if (backupPath !== undefined) {
+    result.backupPath = backupPath;
+  }
+  return result;
+}
+
+export async function uninstallOpenCodePlugin(
+  options: OpenCodePluginPlanOptions = {},
+): Promise<OpenCodePluginInstallResult> {
+  const plan = await planOpenCodePlugin(options);
+  let removed = false;
+  if (plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER)) {
+    await rm(plan.pluginPath, { force: true });
+    removed = true;
+  }
+  return {
+    ...plan,
+    changed: removed,
+    installed: false,
+    removed,
+  };
+}
+
+export async function doctorOpenCodePlugin(
+  options: OpenCodePluginPlanOptions & { enabled?: boolean } = {},
+): Promise<OpenCodePluginDoctorResult> {
+  const plan = await planOpenCodePlugin(options);
+  const installed = plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER);
+  if (!installed && options.enabled === true) {
+    return {
+      provider: "opencode",
+      configDir: plan.configDir,
+      pluginPath: plan.pluginPath,
+      status: "warn",
+      installed,
+      changed: true,
+      message: "OpenCode event plugin is not installed.",
+    };
+  }
+  if (installed && plan.changed) {
+    return {
+      provider: "opencode",
+      configDir: plan.configDir,
+      pluginPath: plan.pluginPath,
+      status: "warn",
+      installed,
+      changed: true,
+      message: "OpenCode event plugin is installed but differs from the expected STATION plugin.",
+    };
+  }
+  return {
+    provider: "opencode",
+    configDir: plan.configDir,
+    pluginPath: plan.pluginPath,
+    status: "ok",
+    installed,
+    changed: false,
+    message: installed
+      ? "OpenCode event plugin is installed."
+      : "OpenCode event plugin is not requested.",
+  };
+}
+
+export function resolveOpenCodeConfigDir(options: OpenCodePluginPlanOptions = {}): string {
+  if (options.opencodeConfigDir !== undefined) {
+    return options.opencodeConfigDir;
+  }
+  if (
+    options.env?.OPENCODE_CONFIG_DIR !== undefined &&
+    options.env.OPENCODE_CONFIG_DIR.length > 0
+  ) {
+    return options.env.OPENCODE_CONFIG_DIR;
+  }
+  return join(options.homeDir ?? homedir(), ".config", "opencode");
+}
+
+export function resolveOpenCodePluginPath(options: OpenCodePluginPlanOptions = {}): string {
+  return (
+    options.pluginPath ??
+    join(resolveOpenCodeConfigDir(options), "plugins", OPENCODE_STATION_PLUGIN_NAME)
+  );
+}
+
+export function expectedOpenCodePluginScript(options: OpenCodePluginPlanOptions = {}): string {
+  const observerSocketPath = options.observerSocketPath ?? "";
+  const stateDir = options.stateDir ?? "";
+  const hookSpoolDir = options.hookSpoolDir ?? "";
+  return `// ${OPENCODE_STATION_PLUGIN_MARKER}
+// Generated by STATION. Do not edit by hand.
+import { randomUUID } from "node:crypto";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import net from "node:net";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const schemaVersion = ${JSON.stringify(STATION_SCHEMA_VERSION)};
+const fallbackSocketPath = ${JSON.stringify(observerSocketPath)};
+const fallbackStateDir = ${JSON.stringify(stateDir)};
+const fallbackSpoolDir = ${JSON.stringify(hookSpoolDir)};
+const sentOpenCodeEventTypes = new Set(${JSON.stringify(openCodeForwardedEventTypes)});
+
+export const StationObserverPlugin = async ({ directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      if (!isStationOpenCodeSession(process.env)) return;
+      if (!shouldSendOpenCodeEvent(event)) return;
+      const receivedAt = new Date().toISOString();
+      const payload = compactOpenCodeEvent(event, { directory, worktree, receivedAt });
+      const hookEvent = hookEventFromPayload(payload, receivedAt);
+      try {
+        await sendHookEvent(hookEvent, observerSocketPath(process.env));
+      } catch (error) {
+        await spoolHookEvent(hookEvent, error).catch(() => undefined);
+      }
+    },
+  };
+};
+
+function isStationOpenCodeSession(env) {
+  return env.STATION_HARNESS_PROVIDER === "opencode" && stringValue(env.STATION_WORKTREE_ID) !== undefined;
+}
+
+function shouldSendOpenCodeEvent(event) {
+  const eventType = stringValue(event?.type);
+  return eventType !== undefined && sentOpenCodeEventTypes.has(eventType);
+}
+
+function compactOpenCodeEvent(event, context) {
+  const properties = recordValue(event?.properties);
+  const eventType = stringValue(event?.type) ?? "unknown";
+  const payload = {
+    event_type: eventType,
+    observed_at: context.receivedAt,
+    cwd:
+      stringValue(process.env.STATION_WORKTREE_PATH) ??
+      stringValue(properties?.cwd) ??
+      stringValue(event?.cwd) ??
+      stringValue(context.worktree) ??
+      stringValue(context.directory) ??
+      process.cwd(),
+    pid: process.pid,
+  };
+  assign(payload, "event_id", stringValue(event?.id));
+  assign(payload, "opencode_session_id", openCodeSessionId(properties));
+  assign(payload, "status_type", statusType(properties?.status));
+  if (eventType === "permission.replied") assign(payload, "permission_reply", stringValue(properties?.reply));
+  if (eventType === "question.replied") {
+    assign(payload, "question_reply", properties?.answers === undefined ? stringValue(properties?.reply) : "answered");
+  }
+  assign(payload, "request_id", stringValue(properties?.requestID) ?? stringValue(properties?.id));
+  assign(payload, "message_id", stringValue(properties?.messageID) ?? toolMessageId(properties?.tool));
+  assign(payload, "part_id", stringValue(properties?.partID));
+  assign(payload, "tool_call_id", stringValue(properties?.callID) ?? toolCallId(properties?.tool));
+  assign(payload, "tool_name", toolName(properties));
+  assign(payload, "command_name", stringValue(properties?.command) ?? (eventType === "command.executed" ? stringValue(properties?.name) : undefined));
+  assign(payload, "file_path", stringValue(properties?.file) ?? stringValue(properties?.path));
+  assign(payload, "error_name", stringValue(recordValue(properties?.error)?.name));
+  if (properties !== undefined) payload.property_keys = Object.keys(properties).sort().slice(0, 128);
+  assignEnv(payload, "station_project_id", "STATION_PROJECT_ID");
+  assignEnv(payload, "station_worktree_id", "STATION_WORKTREE_ID");
+  assignEnv(payload, "station_worktree_path", "STATION_WORKTREE_PATH");
+  assignEnv(payload, "station_session_id", "STATION_SESSION_ID");
+  assignEnv(payload, "station_terminal_provider", "STATION_TERMINAL_PROVIDER");
+  assignEnv(payload, "station_terminal_target_id", "STATION_TERMINAL_TARGET_ID");
+  payload.station_integration_id = "opencode";
+  payload.station_integration_version = "1";
+  return payload;
+}
+
+function hookEventFromPayload(payload, receivedAt) {
+  const event = {
+    schemaVersion,
+    hookId: \`hook_\${Date.now()}_\${randomUUID()}\`,
+    provider: "opencode",
+    kind: "harness",
+    event: payload.event_type,
+    receivedAt,
+    payload,
+  };
+  assign(event, "projectId", stringValue(process.env.STATION_PROJECT_ID));
+  assign(event, "worktreeId", stringValue(process.env.STATION_WORKTREE_ID));
+  assign(event, "sessionId", stringValue(process.env.STATION_SESSION_ID));
+  return event;
+}
+
+function sendHookEvent(event, socketPath) {
+  return new Promise((resolve, reject) => {
+    const id = \`req_\${Date.now()}_\${randomUUID()}\`;
+    const socket = net.createConnection(socketPath);
+    let buffer = "";
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(\`Timed out sending OpenCode event to \${socketPath}.\`));
+    }, 2000);
+    const cleanup = () => clearTimeout(timer);
+    socket.setEncoding("utf8");
+    socket.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      for (;;) {
+        const newline = buffer.indexOf("\\n");
+        if (newline < 0) return;
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (line.trim().length === 0) continue;
+        const response = JSON.parse(line);
+        if (response.id !== id) continue;
+        cleanup();
+        socket.end();
+        if (response.error !== undefined) reject(new Error(response.error.message ?? "Observer rejected OpenCode event."));
+        else resolve(response.result);
+        return;
+      }
+    });
+    socket.once("connect", () => {
+      socket.write(JSON.stringify({
+        schemaVersion,
+        jsonrpc: "2.0",
+        id,
+        method: "observer.ingestProviderHookEvent",
+        params: { event },
+      }) + "\\n");
+    });
+  });
+}
+
+async function spoolHookEvent(event, error) {
+  const spoolDir = hookSpoolDir(process.env);
+  await mkdir(spoolDir, { recursive: true, mode: 0o700 });
+  await chmod(spoolDir, 0o700);
+  const spoolId = \`spool_\${Date.now()}_\${randomUUID()}\`;
+  const record = {
+    schemaVersion,
+    spoolId,
+    createdAt: new Date().toISOString(),
+    event,
+    attempts: 0,
+    lastError: {
+      tag: "HookDeliveryError",
+      code: "HOOK_DELIVERY_FAILED",
+      message: error instanceof Error ? error.message : "OpenCode hook event could not be delivered to the observer.",
+      provider: "opencode",
+    },
+  };
+  await writeFile(join(spoolDir, \`\${spoolId}.json\`), JSON.stringify(record, null, 2), {
+    mode: 0o600,
+    flag: "wx",
+  });
+}
+
+function observerSocketPath(env) {
+  return (stringValue(env.STATION_OBSERVER_SOCKET_PATH) ?? fallbackSocketPath) || join(observerStateDir(env), "run", "observer.sock");
+}
+
+function hookSpoolDir(env) {
+  return (stringValue(env.STATION_HOOK_SPOOL_DIR) ?? fallbackSpoolDir) || join(observerStateDir(env), "spool", "hooks");
+}
+
+function observerStateDir(env) {
+  return (stringValue(env.STATION_OBSERVER_STATE_DIR) ?? fallbackStateDir) || join(homedir(), ".local", "state", "station");
+}
+
+function openCodeSessionId(properties) {
+  return stringValue(properties?.sessionID) ?? stringValue(properties?.sessionId) ?? stringValue(recordValue(properties?.info)?.id);
+}
+
+function statusType(status) {
+  if (typeof status === "string" && status.length > 0) return status;
+  return stringValue(recordValue(status)?.type);
+}
+
+function toolMessageId(tool) {
+  return stringValue(recordValue(tool)?.messageID);
+}
+
+function toolCallId(tool) {
+  return stringValue(recordValue(tool)?.callID);
+}
+
+function toolName(properties) {
+  if (typeof properties?.tool === "string" && properties.tool.length > 0) return properties.tool;
+  return stringValue(properties?.name) ?? stringValue(properties?.permission);
+}
+
+function assign(target, key, value) {
+  if (value !== undefined) target[key] = value;
+}
+
+function assignEnv(target, key, envKey) {
+  assign(target, key, stringValue(process.env[envKey]));
+}
+
+function stringValue(value) {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function recordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
+}
+`;
+}
+
+async function readOptionalFile(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+async function backupIfPresent(path: string): Promise<string | undefined> {
+  try {
+    const stats = await stat(path);
+    if (!stats.isFile()) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  const backupPath = `${path}.bak.${Date.now()}-${randomUUID()}`;
+  await mkdir(dirname(backupPath), { recursive: true, mode: 0o700 });
+  await writeFile(backupPath, await readFile(path, "utf8"), { mode: 0o600, flag: "wx" });
+  return backupPath;
+}

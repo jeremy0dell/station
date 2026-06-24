@@ -1,0 +1,27 @@
+{
+  "name": "@station/pi",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./piExtension": {
+      "types": "./dist/piExtension.d.ts",
+      "import": "./dist/piExtension.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@station/contracts": "workspace:*",
+    "@station/harness-shared": "workspace:*",
+    "@station/protocol": "workspace:*",
+    "@station/runtime": "workspace:*",
+    "zod": "^4.1.12"
+  }
+}

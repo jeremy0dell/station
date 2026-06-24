@@ -1,0 +1,182 @@
+#!/bin/sh
+set -eu
+
+quote_shell() {
+  printf "'"
+  printf "%s" "$1" | sed "s/'/'\\\\''/g"
+  printf "'"
+}
+
+script=$0
+while [ -h "$script" ]; do
+  script_dir=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd)
+  link=$(readlink "$script")
+  case "$link" in
+    /*) script=$link ;;
+    *) script=$script_dir/$link ;;
+  esac
+done
+root=$(CDPATH= cd -- "$(dirname -- "$script")/../../../.." 2>/dev/null && pwd || true)
+
+clear_popup_client_if_current() {
+  tmux_bin=$1
+  client_id=$2
+  current=$("$tmux_bin" show-options -gqv @station_popup_client 2>/dev/null || true)
+  if [ "$current" = "$client_id" ]; then
+    "$tmux_bin" set-option -gq -u @station_popup_client 2>/dev/null || true
+  fi
+  current_focus=$("$tmux_bin" show-options -gqv @station_popup_focus_client 2>/dev/null || true)
+  if [ "$current_focus" = "$client_id" ]; then
+    "$tmux_bin" set-option -gq -u @station_popup_focus_client 2>/dev/null || true
+  fi
+}
+
+clear_normal_fast_popup_registration() {
+  "$tmux_bin" set-option -gq -u @station_popup_ui_session_name 2>/dev/null || true
+  "$tmux_bin" set-option -gq -u @station_popup_ui_expected_signature 2>/dev/null || true
+  "$tmux_bin" set-option -gq -u @station_popup_ui_root 2>/dev/null || true
+}
+
+fallback_or_exit() {
+  case "${STATION_FAST_POPUP_NO_FALLBACK:-}" in
+    1|true|yes) exit 1 ;;
+  esac
+  if [ -n "${STATION_POPUP_FALLBACK_COMMAND:-}" ]; then
+    exec sh -lc "$STATION_POPUP_FALLBACK_COMMAND"
+  fi
+  if [ -n "$root" ] && [ -x "$root/bin/stn" ]; then
+    exec "$root/bin/stn" popup
+  fi
+  command -v stn >/dev/null 2>&1 || exit 1
+  exec stn popup
+}
+
+owner_is_alive() {
+  owner=$1
+  pid=${owner%%:*}
+  case "$pid" in
+    ""|*[!0-9]*) return 0 ;;
+  esac
+  kill -0 "$pid" 2>/dev/null
+}
+
+signature_matches_expected() {
+  session_name=$1
+  expected_signature=$2
+  signature=$("$tmux_bin" show-options -t "$session_name" -qv @station_popup_ui_signature 2>/dev/null || true)
+  [ "$signature" = "$expected_signature" ]
+}
+
+try_ui_candidate() {
+  candidate_session=$1
+  candidate_signature=$2
+  candidate_owner=$3
+  [ -n "$candidate_session" ] || return 1
+  [ -n "$candidate_signature" ] || return 1
+  if [ -n "$candidate_owner" ] && ! owner_is_alive "$candidate_owner"; then
+    return 1
+  fi
+  "$tmux_bin" has-session -t "$candidate_session" >/dev/null 2>&1 || return 1
+  signature_matches_expected "$candidate_session" "$candidate_signature" || return 1
+  session_name=$candidate_session
+  return 0
+}
+
+try_registered_dev_ui() {
+  candidate_session=$("$tmux_bin" show-options -gqv @station_tui_dev_session_name 2>/dev/null || true)
+  candidate_command=$("$tmux_bin" show-options -gqv @station_tui_dev_command 2>/dev/null || true)
+  [ -n "$candidate_session" ] || return 1
+  [ -n "$candidate_command" ] || return 1
+  candidate_owner=$("$tmux_bin" show-options -gqv @station_tui_dev_owner 2>/dev/null || true)
+  candidate_root=$("$tmux_bin" show-options -gqv @station_tui_dev_root 2>/dev/null || true)
+  [ "$candidate_root" = "$root" ] || return 1
+  try_ui_candidate "$candidate_session" "v1:$candidate_command" "$candidate_owner"
+}
+
+try_registered_normal_ui() {
+  candidate_session=$("$tmux_bin" show-options -gqv @station_popup_ui_session_name 2>/dev/null || true)
+  candidate_signature=$("$tmux_bin" show-options -gqv @station_popup_ui_expected_signature 2>/dev/null || true)
+  candidate_root=$("$tmux_bin" show-options -gqv @station_popup_ui_root 2>/dev/null || true)
+  if [ -z "$candidate_session" ] || [ -z "$candidate_signature" ] || [ -z "$candidate_root" ]; then
+    clear_normal_fast_popup_registration
+    return 1
+  fi
+  if [ "$candidate_root" != "$root" ]; then
+    clear_normal_fast_popup_registration
+    return 1
+  fi
+  if ! "$tmux_bin" has-session -t "$candidate_session" >/dev/null 2>&1; then
+    clear_normal_fast_popup_registration
+    return 1
+  fi
+  if ! signature_matches_expected "$candidate_session" "$candidate_signature"; then
+    clear_normal_fast_popup_registration
+    return 1
+  fi
+  session_name=$candidate_session
+  return 0
+}
+
+select_registered_ui() {
+  try_registered_dev_ui && return 0
+  try_registered_normal_ui && return 0
+  return 1
+}
+
+case "${STATION_DISABLE_FAST_POPUP:-}" in
+  1|true|yes) fallback_or_exit ;;
+esac
+
+[ -n "${TMUX:-}${STATION_FOCUS_CLIENT_ID:-}" ] || fallback_or_exit
+if [ "$#" -eq 0 ]; then
+  :
+elif [ "$#" -eq 1 ] && [ "$1" = "popup" ]; then
+  :
+else
+  exit 1
+fi
+
+tmux_bin=${STATION_TMUX_BIN:-tmux}
+command -v "$tmux_bin" >/dev/null 2>&1 || fallback_or_exit
+
+select_registered_ui || fallback_or_exit
+
+client_id=${STATION_FOCUS_CLIENT_ID:-}
+if [ -z "$client_id" ]; then
+  client_id=$("$tmux_bin" display-message -p "#{client_name}" 2>/dev/null || true)
+fi
+[ -n "$client_id" ] || fallback_or_exit
+
+active_client=$("$tmux_bin" show-options -gqv @station_popup_client 2>/dev/null || true)
+if [ "$active_client" = "$client_id" ]; then
+  "$tmux_bin" display-popup -c "$client_id" -C >/dev/null 2>&1 || true
+  clear_popup_client_if_current "$tmux_bin" "$client_id"
+  exit 0
+fi
+if [ -n "$active_client" ]; then
+  "$tmux_bin" display-popup -c "$active_client" -C >/dev/null 2>&1 || true
+fi
+
+"$tmux_bin" set-option -gq @station_popup_client "$client_id" || exit 1
+"$tmux_bin" set-option -gq @station_popup_focus_client "$client_id" || exit 1
+"$tmux_bin" set-option -t "$session_name" mouse on >/dev/null 2>&1 || true
+
+width=${STATION_POPUP_WIDTH:-50%}
+height=${STATION_POPUP_HEIGHT:-50%}
+position=${STATION_POPUP_POSITION:-C}
+attach_command="env -u TMUX $(quote_shell "$tmux_bin") -T hyperlinks attach-session -t $(quote_shell "$session_name")"
+
+set +e
+if [ -n "$position" ] && [ "$position" != "C" ]; then
+  "$tmux_bin" display-popup -c "$client_id" -w "$width" -h "$height" -x "$position" -E "$attach_command"
+else
+  "$tmux_bin" display-popup -c "$client_id" -w "$width" -h "$height" -E "$attach_command"
+fi
+popup_status=$?
+set -e
+
+clear_popup_client_if_current "$tmux_bin" "$client_id"
+case "$popup_status" in
+  0|129) exit 0 ;;
+  *) exit 1 ;;
+esac

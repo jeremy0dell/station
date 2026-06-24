@@ -1,0 +1,195 @@
+{
+  "observerStarted": {
+    "type": "observer.started",
+    "at": "2026-05-20T12:00:00.000Z"
+  },
+  "observerReconciled": {
+    "type": "observer.reconciled",
+    "at": "2026-05-20T12:00:01.000Z",
+    "changed": 2
+  },
+  "projectUpdated": {
+    "type": "project.updated",
+    "projectId": "web"
+  },
+  "worktreeAdded": {
+    "type": "worktree.added",
+    "row": {
+      "id": "wt_web_feature_auth",
+      "projectId": "web",
+      "projectLabel": "web",
+      "branch": "feature/auth",
+      "path": "/tmp/station-fixtures/web/worktrees/feature-auth",
+      "worktree": {
+        "state": "exists",
+        "source": "worktrunk"
+      },
+      "display": {
+        "statusLabel": "no agent",
+        "sortPriority": 70,
+        "alert": false
+      }
+    }
+  },
+  "worktreeUpdated": {
+    "type": "worktree.updated",
+    "worktreeId": "wt_web_feature_auth",
+    "patch": {
+      "display": {
+        "statusLabel": "working",
+        "sortPriority": 30,
+        "alert": false
+      }
+    }
+  },
+  "worktreeRemoved": {
+    "type": "worktree.removed",
+    "worktreeId": "wt_web_feature_auth"
+  },
+  "worktreeAgentStateChanged": {
+    "type": "worktree.agentStateChanged",
+    "worktreeId": "wt_web_feature_auth",
+    "agent": {
+      "harness": "codex",
+      "state": "working",
+      "runId": "run_web_feature_auth",
+      "sessionId": "ses_web_feature_auth",
+      "confidence": "high",
+      "reason": "Harness reported active generation.",
+      "updatedAt": "2026-05-20T12:00:00.000Z"
+    }
+  },
+  "sessionCreated": {
+    "type": "session.created",
+    "session": {
+      "id": "ses_web_feature_auth",
+      "projectId": "web",
+      "worktreeId": "wt_web_feature_auth",
+      "createdAt": "2026-05-20T11:59:00.000Z",
+      "updatedAt": "2026-05-20T12:00:00.000Z",
+      "harness": {
+        "provider": "codex",
+        "mode": "interactive",
+        "runId": "run_web_feature_auth",
+        "capabilities": {
+          "canLaunch": true,
+          "canDiscoverRuns": true,
+          "canEmitEvents": true,
+          "canClassifyStatus": true,
+          "canReceivePrompt": false,
+          "canResume": true,
+          "canStop": true,
+          "canRunNonInteractive": true,
+          "canExposeApprovalState": true,
+          "supportsModifiedEnterSoftNewline": true
+        }
+      },
+      "terminal": {
+        "provider": "tmux",
+        "state": "open",
+        "focusable": true,
+        "closeable": true,
+        "hasWorkspace": true,
+        "hasPrimaryAgentEndpoint": true
+      },
+      "status": {
+        "value": "working",
+        "confidence": "high",
+        "reason": "Harness reported active generation.",
+        "source": "harness_event",
+        "updatedAt": "2026-05-20T12:00:00.000Z"
+      },
+      "title": "web feature/auth",
+      "tags": ["codex", "tmux"]
+    }
+  },
+  "sessionUpdated": {
+    "type": "session.updated",
+    "sessionId": "ses_web_feature_auth",
+    "patch": {
+      "status": {
+        "value": "idle",
+        "confidence": "high",
+        "reason": "Harness reported the turn completed.",
+        "source": "harness_event",
+        "updatedAt": "2026-05-20T12:01:00.000Z"
+      }
+    }
+  },
+  "sessionRemoved": {
+    "type": "session.removed",
+    "sessionId": "ses_web_feature_auth"
+  },
+  "commandAccepted": {
+    "type": "command.accepted",
+    "commandId": "cmd_reconcile_1",
+    "command": {
+      "type": "observer.reconcile",
+      "payload": {
+        "reason": "event-fixture"
+      }
+    }
+  },
+  "commandStarted": {
+    "type": "command.started",
+    "commandId": "cmd_reconcile_1",
+    "command": {
+      "type": "observer.reconcile",
+      "payload": {
+        "reason": "event-fixture"
+      }
+    }
+  },
+  "commandSucceeded": {
+    "type": "command.succeeded",
+    "commandId": "cmd_reconcile_1"
+  },
+  "commandFailed": {
+    "type": "command.failed",
+    "commandId": "cmd_terminal_focus_1",
+    "error": {
+      "tag": "TerminalProviderError",
+      "code": "TERMINAL_TARGET_MISSING",
+      "message": "The terminal target for this worktree no longer exists.",
+      "hint": "Refresh the dashboard or reopen the worktree.",
+      "provider": "tmux",
+      "traceId": "trc_terminal_missing",
+      "diagnosticId": "diag_terminal_missing"
+    }
+  },
+  "providerHealthChanged": {
+    "type": "provider.healthChanged",
+    "provider": "tmux",
+    "health": {
+      "providerId": "tmux",
+      "providerType": "terminal",
+      "status": "healthy",
+      "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+      "latencyMs": 8,
+      "capabilities": {
+        "canFocusTarget": true,
+        "canOpenWorkspace": true
+      }
+    }
+  },
+  "providerHookIngested": {
+    "type": "providerHook.ingested",
+    "at": "2026-05-20T12:02:00.000Z",
+    "hookId": "hook_worktrunk_1",
+    "provider": "worktrunk",
+    "event": "worktree.created"
+  },
+  "harnessEventReported": {
+    "type": "harness.eventReported",
+    "at": "2026-05-20T12:03:00.000Z",
+    "reportId": "report_codex_1",
+    "provider": "codex",
+    "eventType": "PreToolUse"
+  },
+  "providerHookSpoolDrained": {
+    "type": "providerHook.spoolDrained",
+    "at": "2026-05-20T12:04:00.000Z",
+    "drained": 2,
+    "failed": 0
+  }
+}

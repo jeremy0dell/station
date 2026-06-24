@@ -1,0 +1,71 @@
+{
+  "name": "@station/dashboard-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components/*": {
+      "types": "./dist/components/*.d.ts",
+      "import": "./dist/components/*.js"
+    },
+    "./flows/*": {
+      "types": "./dist/flows/*.d.ts",
+      "import": "./dist/flows/*.js"
+    },
+    "./selectors/*": {
+      "types": "./dist/selectors/*.d.ts",
+      "import": "./dist/selectors/*.js"
+    },
+    "./services/*": {
+      "types": "./dist/services/*.d.ts",
+      "import": "./dist/services/*.js"
+    },
+    "./state/*": {
+      "types": "./dist/state/*.d.ts",
+      "import": "./dist/state/*.js"
+    },
+    "./widgets/time": {
+      "types": "./dist/widgets/time.d.ts",
+      "import": "./dist/widgets/time.js"
+    },
+    "./widgets/types": {
+      "types": "./dist/widgets/types.d.ts",
+      "import": "./dist/widgets/types.js"
+    },
+    "./widgets/useTopRowWidgets": {
+      "types": "./dist/widgets/useTopRowWidgets.d.ts",
+      "import": "./dist/widgets/useTopRowWidgets.js"
+    },
+    "./widgets/weather": {
+      "types": "./dist/widgets/weather.d.ts",
+      "import": "./dist/widgets/weather.js"
+    },
+    "./widgets/weatherClient": {
+      "types": "./dist/widgets/weatherClient.d.ts",
+      "import": "./dist/widgets/weatherClient.js"
+    },
+    "./widgets/weatherEmoji": {
+      "types": "./dist/widgets/weatherEmoji.d.ts",
+      "import": "./dist/widgets/weatherEmoji.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@station/client": "workspace:*",
+    "@station/contracts": "workspace:*",
+    "@station/runtime": "workspace:*",
+    "string-width": "^8.2.1",
+    "zod": "^4.1.12",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@station/config": "workspace:*"
+  }
+}

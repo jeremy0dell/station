@@ -1,0 +1,325 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`dashboard golden frames renders many-projects at 80x24 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-overlay              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
+ [b] - old-experiment               -         no agent                    [+sh] 
+                                                                                
+▼ empty-project - 0 worktrees | codex                                     [+sh] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`dashboard golden frames renders many-projects at 120x40 1`] = `
+"station                                                                                                                 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+                                                                                                                        
+▼ station - 5 worktrees | codex                                                                                   [+sh] 
+ [1] ○ cli-help-man                      codex     idle                                              +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                      -         no agent                                                       [+sh] 
+ [3] ○ pty-buffer                        codex     idle                                                     #73 ✓ [+sh] 
+ [4] + session-resume                    codex     starting                                                       [+sh] 
+ [5] ⠋ station-overlay                   codex     working                                         +412 -96 #76 … [+sh] 
+                                                                                                                        
+▼ observer - 3 worktrees | opencode                                                                               [+sh] 
+ [6] x batch-export                      opencode  exited                                                    #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks                    opencode  working                                           +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                      opencode  idle                                                +1 -1 #4 ✓ [+sh] 
+                                                                                                                        
+▼ scripts - 3 worktrees | opencode                                                                                [+sh] 
+ [9] ○ api-cache                         opencode  idle                                              +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh                  opencode  unknown                                              +3 -1 #10 [+sh] 
+ [b] - old-experiment                    -         no agent                                                       [+sh] 
+                                                                                                                        
+▼ empty-project - 0 worktrees | codex                                                                             [+sh] 
+ 0 worktrees                                                                                                            
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm /:search C:fold H:help Q/esc:close                                     
+"
+`;
+
+exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
+"station                                                     
+─────────────────────────────────────────────────────────── 
+                                                            
+▼ station - 5 worktrees | codex                       [+sh] 
+ [1] ○ cli-he…  codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-c…  -         no agent                    [+sh] 
+ [3] ○ pty-bu…  codex     idle                  #73 ✓ [+sh] 
+ [4] + sessio…  codex     starting                    [+sh] 
+ [5] ⠋ statio…  codex     working      +412 -96 #76 … [+sh] 
+                                                            
+▼ observer - 3 worktrees | opencode                   [+sh] 
+ [6] x batch-…  opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provid…  opencode  working        +32 -8 #16 … [+sh] 
+↓ 9 hidden                                                  
+─────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:… 
+"
+`;
+
+exports[`dashboard golden frames renders many-projects at 40x12 1`] = `
+"station                                 
+─────────────────────────────────────── 
+                                        
+▼ station - 5 worktrees | codex   [+sh] 
+ [1] ○ cli-help-m…   +14 -6 #70 ✓ [+sh] 
+ [2] - docs-clean…                [+sh] 
+ [3] ○ pty-buffer           #73 ✓ [+sh] 
+ [4] + session-re…                [+sh] 
+ [5] ⠋ station-ov… +412 -96 #76 … [+sh] 
+↓ 13 hidden                             
+─────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/… 
+"
+`;
+
+exports[`dashboard golden frames renders attention-and-failures at 80x24 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 4 worktrees | codex                                           [+sh] 
+ [1] ! hook-scope               codex     Agent needs app…   +8 -2 #12 x2 [+sh] 
+ [2] ? metadata-refresh         codex     unknown                   +3 -1 [+sh] 
+ [3] ! popup-latency            codex     No progress was… +120 -44 #13 … [+sh] 
+ [4] ⠋ pr-info                  codex     working                   #11 ✓ [+sh] 
+                                                                                
+▼ observer - 2 worktrees | opencode                                       [+sh] 
+ [5] x done-run                 opencode  exited                          [+sh] 
+ [6] ! sqlite-cleanup           opencode  Agent needs app…   +19 -2 #6 x1 [+sh] 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`dashboard golden frames renders attention-and-failures at 120x40 1`] = `
+"station                                                                                                                 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+                                                                                                                        
+▼ station - 4 worktrees | codex                                                                                   [+sh] 
+ [1] ! hook-scope                        codex     Agent needs app…                                  +8 -2 #12 x2 [+sh] 
+ [2] ? metadata-refresh                  codex     unknown                                                  +3 -1 [+sh] 
+ [3] ! popup-latency                     codex     No progress was…                                +120 -44 #13 … [+sh] 
+ [4] ⠋ pr-info                           codex     working                                                  #11 ✓ [+sh] 
+                                                                                                                        
+▼ observer - 2 worktrees | opencode                                                                               [+sh] 
+ [5] x done-run                          opencode  exited                                                         [+sh] 
+ [6] ! sqlite-cleanup                    opencode  Agent needs app…                                  +19 -2 #6 x1 [+sh] 
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm /:search C:fold H:help Q/esc:close                                     
+"
+`;
+
+exports[`dashboard golden frames renders attention-and-failures at 60x16 1`] = `
+"station                                                     
+─────────────────────────────────────────────────────────── 
+                                                            
+▼ station - 4 worktrees | codex                       [+sh] 
+ [1] ! ho…  codex     Agent needs app…   +8 -2 #12 x2 [+sh] 
+ [2] ? me…  codex     unknown                   +3 -1 [+sh] 
+ [3] ! po…  codex     No progress was… +120 -44 #13 … [+sh] 
+ [4] ⠋ pr…  codex     working                   #11 ✓ [+sh] 
+                                                            
+▼ observer - 2 worktrees | opencode                   [+sh] 
+ [5] x do…  opencode  exited                          [+sh] 
+ [6] ! sq…  opencode  Agent needs app…   +19 -2 #6 x1 [+sh] 
+                                                            
+                                                            
+─────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:… 
+"
+`;
+
+exports[`dashboard golden frames renders attention-and-failures at 40x12 1`] = `
+"station                                 
+─────────────────────────────────────── 
+                                        
+▼ station - 4 worktrees | codex   [+sh] 
+ [1] ! hook-scope    +8 -2 #12 x2 [+sh] 
+ [2] ? metadata-r…          +3 -1 [+sh] 
+ [3] ! popup-late… +120 -44 #13 … [+sh] 
+ [4] ⠋ pr-info              #11 ✓ [+sh] 
+                                        
+↓ 3 hidden                              
+─────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/… 
+"
+`;
+
+exports[`dashboard golden frames renders no-projects at 80x24 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+No projects configured yet.                                                     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+A:Add Project Q/esc:close                                                       
+"
+`;
+
+exports[`dashboard golden frames renders no-projects at 120x40 1`] = `
+"station                                                                                                                 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+                                                                                                                        
+No projects configured yet.                                                                                             
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+A:Add Project Q/esc:close                                                                                               
+"
+`;
+
+exports[`dashboard golden frames renders no-projects at 60x16 1`] = `
+"station                                                     
+─────────────────────────────────────────────────────────── 
+                                                            
+No projects configured yet.                                 
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+─────────────────────────────────────────────────────────── 
+A:Add Project Q/esc:close                                   
+"
+`;
+
+exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
+"station                                 
+─────────────────────────────────────── 
+                                        
+No projects configured yet.             
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+─────────────────────────────────────── 
+A:Add Project Q/esc:close               
+"
+`;

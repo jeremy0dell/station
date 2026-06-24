@@ -1,0 +1,365 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`modal flow golden frames renders the help overlay 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+        ╭──────────────────────────────────────────────────────────────╮        
+▼ statio│                         station help                         │  [+sh] 
+ [1] ○ c│                                                              │✓ [+sh] 
+ [2] - d│  Ctrl-O     open/close project view                          │  [+sh] 
+ [3] ○ p│  Ctrl-Q     quit Station                                     │✓ [+sh] 
+ [4] + s│  Ctrl-\\     split pane right                                 │  [+sh] 
+ [5] ⠋ s│  Ctrl-^     split pane below (Ctrl-6)                        │… [+sh] 
+        │  Ctrl-]     focus next pane                                  │        
+▼ observ│  Ctrl-/     close split pane (Ctrl-_)                        │  [+sh] 
+ [6] x b│  Enter/Sp   open project view on welcome                     │✓ [+sh] 
+ [7] ⠋ p│  Esc/↑↓     context menu close/move                          │… [+sh] 
+ [8] ○ t│  Enter/Sp   context menu select                              │✓ [+sh] 
+        │                     station project view                     │        
+▼ script│  ↑/↓ wheel  scroll project list                              │  [+sh] 
+ [9] ○ a│  1-9/a-z    start or focus row                               │1 [+sh] 
+ [a] ? m│  N/A/R/X/C  new/add/rename/remove/fold                       │0 [+sh] 
+ [b] - o│  /, Z       search / refresh snapshot                        │  [+sh] 
+        │  H/?        help                                             │        
+▼ empty-│  Q/Esc      close/back/cancel                                │  [+sh] 
+↓ 1 hidd╰──────────────────────────────────────────────────────────────╯        
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`modal flow golden frames renders the search prompt 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
+ [b] - old-experiment               -         no agent                    [+sh] 
+                                                                                
+search: apiject - 0 worktrees | codex                                     [+sh] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`modal flow golden frames renders the collapse prompt 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
+ [b] - old-experiment               -         no agent                    [+sh] 
+                                                                                
+collapse project: 1:station 2:observer 3:scripts 4:empty-project          [+sh] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`modal flow golden frames renders the remove slot prompt 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
+ [b] - old-experiment               -         no agent                    [+sh] 
+                                                                                
+remove slot: ct - 0 worktrees | codex                                     [+sh] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`modal flow golden frames renders the remove confirm prompt 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
+ [b] - old-experiment               -         no agent                    [+sh] 
+                                                                                
+confirm remove cli-help-man? Y/Ncodex                                     [+sh] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`modal flow golden frames renders the remove session confirm prompt 1`] = `
+"station
+───────────────────────────────────────────────────────────────────────────────
+
+▼ station - 5 worktrees | codex                                           [+sh]
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh]
+ [2] - docs-cleanup                 -         no agent                    [+sh]
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh]
+ [4] + session-resume               codex     starting                    [+sh]
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh]
+
+▼ observer - 3 worktrees | opencode                                       [+sh]
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh]
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh]
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh]
+
+▼ scripts - 3 worktrees | opencode                                        [+sh]
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh]
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh]
+ [b] - old-experiment               -         no agent                    [+sh]
+
+confirm remove session pty-buffer? Y/N                                    [+sh]
+↓ 1 hidden
+───────────────────────────────────────────────────────────────────────────────
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help
+"
+`;
+
+exports[`modal flow golden frames renders the rename slot prompt 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+ [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
+ [b] - old-experiment               -         no agent                    [+sh] 
+                                                                                
+Choose the slot to rename: 1-9/a-zdex                                     [+sh] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+"
+`;
+
+exports[`modal flow golden frames renders the rename sheet 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 4 worktrees | codex                                           [+sh] 
+ [1] ! hook-scope               codex     Agent needs app…   +8 -2 #12 x2 [+sh] 
+ [2] ? metadata-refresh         codex     unknown                   +3 -1 [+sh] 
+ [3] ! popup-latency            codex     No progress was… +120 -44 #13 … [+sh] 
+ [4] ⠋ pr-info                  codex     working                   #11 ✓ [+sh] 
+                                                                                
+▼ observer - 2 worktrees | opencode                                       [+sh] 
+ [5] x done-run                 opencode  exited                          [+sh] 
+ [6] ! sqlite-cleanup           opencode  Agent needs app…   +19 -2 #6 x1 [+sh] 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Rename Session                                                               │
+│                                                                              │
+│ Name       hook-scope|                                                       │
+│ Enter:rename   Esc:back                                                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session review 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Create Session                                                               │
+│                                                                              │
+│ Project    station                                                           │
+│ Name       station-XXXXXX                                                    │
+│ Agent      codex unknown                                                     │
+│                                                                              │
+│ Enter:create N:name P:project A:agent Esc:cancel                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session edit name 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Set Session Name                                                             │
+│                                                                              │
+│ Project    station                                                           │
+│ Name       |station-XXXXXX                                                   │
+│                                                                              │
+│ Enter:save   Esc:back                                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session pick project 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Choose Project                                                               │
+│                                                                              │
+│ 1 station healthy                                                            │
+│ 2 observer healthy                                                           │
+│ 3 scripts healthy                                                            │
+│ 4 empty-project healthy                                                      │
+│                                                                              │
+│ 1-9/a-z:select   Esc:back                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session pick agent 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+ [3] ○ pty-buffer                   codex     idle                  #73 ✓ [+sh] 
+ [4] + session-resume               codex     starting                    [+sh] 
+ [5] ⠋ station-XXXXXXy              codex     working      +412 -96 #76 … [+sh] 
+                                                                                
+▼ observer - 3 worktrees | opencode                                       [+sh] 
+ [6] x batch-export                 opencode  exited                 #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
+                                                                                
+▼ scripts - 3 worktrees | opencode                                        [+sh] 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Choose Agent                                                                 │
+│                                                                              │
+│ 1 codex unknown                                                              │
+│ 2 opencode unknown                                                           │
+│                                                                              │
+│ 1-9/a-z:select   Esc:back                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the add project sheet 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees | codex                                           [+sh] 
+ [1] ○ cli-help-man                 codex     idle           +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                 -         no agent                    [+sh] 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Add Project                                                                  │
+│ Start location                                                               │
+│                                                                              │
+│ > current directory                          /Users/example/Developer/station│
+│   ~                                                                      home│
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│ Enter:open Right:open Esc:cancel                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;

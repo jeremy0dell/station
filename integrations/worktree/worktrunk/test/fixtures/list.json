@@ -1,0 +1,39 @@
+[
+  {
+    "path": "/tmp/station/web/feature-auth",
+    "branch": "feature/auth",
+    "worktree": {
+      "modified": 1,
+      "untracked": 0
+    },
+    "main": {
+      "ahead": 2,
+      "behind": 1
+    },
+    "sha": "cb7f4d35eaa8e63255250cb61412ce160d0e8604",
+    "repo": {
+      "url": "https://github.com/example/web",
+      "provider": "github",
+      "host": "github.com",
+      "owner": "example",
+      "name": "web",
+      "remote": "origin"
+    },
+    "vars": {
+      "station": {
+        "project_id": "web",
+        "worktree_id": "wt_provider_feature_auth"
+      }
+    }
+  },
+  {
+    "path": "/tmp/station/web/detached",
+    "git": {
+      "short_sha": "abc1234"
+    },
+    "worktree": {
+      "modified": 0,
+      "untracked": 0
+    }
+  }
+]

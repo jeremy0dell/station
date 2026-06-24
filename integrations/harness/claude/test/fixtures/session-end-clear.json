@@ -1,0 +1,7 @@
+{
+  "cwd": "/work/project",
+  "hook_event_name": "SessionEnd",
+  "reason": "clear",
+  "session_id": "b97830b1-155a-4eb1-be06-8c497fcbb2a9",
+  "transcript_path": "/home/user/.claude/projects/-work-project/b97830b1-155a-4eb1-be06-8c497fcbb2a9.jsonl"
+}

@@ -1,0 +1,14 @@
+schema_version = 1
+
+[defaults]
+harness = "codex"
+layout = "agent-build-shell"
+
+[commands]
+dev = "pnpm dev"
+test = "pnpm test"
+typecheck = "pnpm typecheck"
+
+[display]
+group = "work"
+sort_order = 10

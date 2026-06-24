@@ -1,0 +1,22 @@
+{
+  "taskFile": "task.txt",
+  "taskContent": "scripted agent completed the file task\n",
+  "events": [
+    {
+      "type": "started",
+      "message": "Scripted agent started."
+    },
+    {
+      "type": "activity",
+      "message": "Editing task.txt."
+    },
+    {
+      "type": "idle",
+      "message": "Scripted agent completed the requested file edit."
+    },
+    {
+      "type": "exit",
+      "exitCode": 0
+    }
+  ]
+}

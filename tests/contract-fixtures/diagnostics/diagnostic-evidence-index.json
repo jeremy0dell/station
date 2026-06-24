@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "0.5.0",
+  "generatedAt": "2026-05-22T12:00:00.000Z",
+  "source": {
+    "collectedAt": "2026-05-22T11:59:59.000Z",
+    "bundleId": "diag_fixture"
+  },
+  "summary": {
+    "status": "degraded",
+    "rootCauseCodes": ["MISSING_WORKTRUNK_BINARY"],
+    "providers": ["worktrunk"],
+    "commandIds": ["cmd_1"],
+    "diagnosticIds": ["err_1"],
+    "redaction": "redacted"
+  },
+  "items": [
+    {
+      "id": "provider-worktrunk",
+      "category": "provider",
+      "severity": "error",
+      "code": "WORKTRUNK_UNAVAILABLE",
+      "message": "Worktrunk is not available.",
+      "provider": "worktrunk",
+      "diagnosticId": "err_1",
+      "evidence": {
+        "attemptedCommand": "wt",
+        "installHint": "brew install worktrunk"
+      }
+    },
+    {
+      "id": "command-cmd_1",
+      "category": "command",
+      "severity": "error",
+      "code": "WORKTRUNK_UNAVAILABLE",
+      "message": "session.create failed because Worktrunk is not available.",
+      "provider": "worktrunk",
+      "commandId": "cmd_1",
+      "traceId": "trc_1",
+      "spanId": "spn_1",
+      "diagnosticId": "err_1"
+    }
+  ],
+  "rootCauses": [
+    {
+      "code": "MISSING_WORKTRUNK_BINARY",
+      "confidence": "high",
+      "summary": "Worktrunk binary is missing or not executable.",
+      "itemIds": ["provider-worktrunk", "command-cmd_1"],
+      "provider": "worktrunk",
+      "commandId": "cmd_1",
+      "diagnosticId": "err_1"
+    }
+  ],
+  "questions": [
+    {
+      "id": "provider-worktrunk-health",
+      "question": "What is the failing provider?",
+      "answer": "worktrunk is unavailable because Worktrunk is not available.",
+      "itemIds": ["provider-worktrunk"]
+    }
+  ]
+}

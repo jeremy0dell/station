@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
+    "paths": {
+      "@station/config": ["../../packages/config/dist/index.d.ts"],
+      "@station/contracts": ["../../packages/contracts/dist/index.d.ts"],
+      "@station/observability": ["../../packages/observability/dist/index.d.ts"],
+      "@station/protocol": ["../../packages/protocol/dist/index.d.ts"],
+      "@station/runtime": ["../../packages/runtime/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

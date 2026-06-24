@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "worktreeProvider": "worktrunk",
+    "terminal": "tmux",
+    "harness": "codex",
+    "layout": "agent-build-shell"
+  },
+  "observability": {
+    "retention": {
+      "maxDays": 7,
+      "maxTotalMb": 128,
+      "maxFileMb": 5,
+      "maxFilesPerComponent": 3,
+      "components": {
+        "observerMaxMb": 50,
+        "cliMaxMb": 10
+      },
+      "sqlite": {
+        "eventsMaxDays": 14,
+        "commandsMaxDays": 30,
+        "errorsMaxDays": 30,
+        "providerObservationsMaxDays": 7
+      },
+      "debugBundles": {
+        "maxBundles": 5,
+        "maxDays": 14
+      },
+      "hookSpool": {
+        "deliveredDeleteImmediately": true,
+        "failedMaxDays": 3,
+        "failedMaxItems": 100
+      }
+    }
+  },
+  "projects": []
+}

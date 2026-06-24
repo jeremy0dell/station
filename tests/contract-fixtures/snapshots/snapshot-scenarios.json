@@ -1,0 +1,894 @@
+{
+  "noProjects": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [],
+    "rows": [],
+    "sessions": [],
+    "counts": {
+      "projects": 0,
+      "worktrees": 0,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "multipleProjects": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {
+      "worktrunk": {
+        "providerId": "worktrunk",
+        "providerType": "worktree",
+        "status": "healthy",
+        "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+        "latencyMs": 14,
+        "capabilities": {
+          "canList": true,
+          "canCreate": true
+        }
+      }
+    },
+    "projects": [
+      {
+        "id": "web",
+        "label": "web",
+        "root": "/tmp/station-fixtures/web",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-build-shell"
+        },
+        "health": {
+          "providerId": "worktrunk",
+          "providerType": "worktree",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 0,
+          "agents": 0,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      },
+      {
+        "id": "api",
+        "label": "api",
+        "root": "/tmp/station-fixtures/api",
+        "defaults": {
+          "harness": "opencode",
+          "terminal": "tmux",
+          "layout": "agent-shell"
+        },
+        "health": {
+          "providerId": "worktrunk",
+          "providerType": "worktree",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 0,
+          "agents": 0,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [],
+    "sessions": [],
+    "counts": {
+      "projects": 2,
+      "worktrees": 0,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "zeroWorktreeProject": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "mobile",
+        "label": "mobile",
+        "root": "/tmp/station-fixtures/mobile",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-shell"
+        },
+        "health": {
+          "providerId": "worktrunk",
+          "providerType": "worktree",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 0,
+          "agents": 0,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 0,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "noAgentWorktree": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "web",
+        "label": "web",
+        "root": "/tmp/station-fixtures/web",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-build-shell"
+        },
+        "health": {
+          "providerId": "worktrunk",
+          "providerType": "worktree",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 0,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_web_feature_auth",
+        "projectId": "web",
+        "projectLabel": "web",
+        "branch": "feature/auth",
+        "path": "/tmp/station-fixtures/web/worktrees/feature-auth",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk",
+          "dirty": false,
+          "ahead": 1,
+          "behind": 0
+        },
+        "display": {
+          "statusLabel": "no agent",
+          "sortPriority": 70,
+          "alert": false,
+          "reason": "No harness run is associated with this worktree."
+        }
+      }
+    ],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "idleAgent": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "web",
+        "label": "web",
+        "root": "/tmp/station-fixtures/web",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-build-shell"
+        },
+        "health": {
+          "providerId": "codex",
+          "providerType": "harness",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 1,
+          "working": 0,
+          "idle": 1,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_web_idle",
+        "projectId": "web",
+        "projectLabel": "web",
+        "branch": "idle-agent",
+        "path": "/tmp/station-fixtures/web/worktrees/idle-agent",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk"
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "open",
+          "focusable": true,
+          "closeable": true,
+          "hasWorkspace": true,
+          "hasPrimaryAgentEndpoint": true
+        },
+        "agent": {
+          "harness": "codex",
+          "state": "idle",
+          "pid": 5012,
+          "runId": "run_web_idle",
+          "sessionId": "ses_web_idle",
+          "confidence": "high",
+          "reason": "Harness reported the last turn completed.",
+          "updatedAt": "2026-05-20T11:59:35.000Z"
+        },
+        "display": {
+          "statusLabel": "idle",
+          "sortPriority": 40,
+          "alert": false
+        }
+      }
+    ],
+    "sessions": [
+      {
+        "id": "ses_web_idle",
+        "projectId": "web",
+        "worktreeId": "wt_web_idle",
+        "createdAt": "2026-05-20T11:40:00.000Z",
+        "updatedAt": "2026-05-20T11:59:35.000Z",
+        "harness": {
+          "provider": "codex",
+          "mode": "interactive",
+          "pid": 5012,
+          "runId": "run_web_idle",
+          "capabilities": {
+            "canLaunch": true,
+            "canDiscoverRuns": true,
+            "canEmitEvents": true,
+            "canClassifyStatus": true,
+            "canReceivePrompt": false,
+            "canResume": true,
+            "canStop": true,
+            "canRunNonInteractive": true,
+            "canExposeApprovalState": true,
+            "supportsModifiedEnterSoftNewline": true
+          }
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "open",
+          "focusable": true,
+          "closeable": true,
+          "hasWorkspace": true,
+          "hasPrimaryAgentEndpoint": true
+        },
+        "status": {
+          "value": "idle",
+          "confidence": "high",
+          "reason": "Harness reported the last turn completed.",
+          "source": "harness_event",
+          "updatedAt": "2026-05-20T11:59:35.000Z"
+        },
+        "title": "web idle-agent",
+        "tags": ["codex", "tmux"]
+      }
+    ],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 1,
+      "working": 0,
+      "idle": 1,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "workingAgent": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "api",
+        "label": "api",
+        "root": "/tmp/station-fixtures/api",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-shell"
+        },
+        "health": {
+          "providerId": "codex",
+          "providerType": "harness",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 1,
+          "working": 1,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_api_cache",
+        "projectId": "api",
+        "projectLabel": "api",
+        "branch": "feature/cache",
+        "path": "/tmp/station-fixtures/api/worktrees/feature-cache",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk",
+          "dirty": true
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "open",
+          "focusable": true,
+          "closeable": true,
+          "hasWorkspace": true,
+          "hasPrimaryAgentEndpoint": true
+        },
+        "agent": {
+          "harness": "codex",
+          "state": "working",
+          "pid": 5110,
+          "runId": "run_api_cache",
+          "sessionId": "ses_api_cache",
+          "confidence": "high",
+          "reason": "Harness reported active tool use.",
+          "updatedAt": "2026-05-20T11:59:58.000Z"
+        },
+        "display": {
+          "statusLabel": "working",
+          "sortPriority": 30,
+          "alert": false
+        }
+      }
+    ],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 1,
+      "working": 1,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "needsAttentionAgent": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "web",
+        "label": "web",
+        "root": "/tmp/station-fixtures/web",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-build-shell"
+        },
+        "health": {
+          "providerId": "codex",
+          "providerType": "harness",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 1,
+          "working": 0,
+          "idle": 0,
+          "attention": 1,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_web_payments",
+        "projectId": "web",
+        "projectLabel": "web",
+        "branch": "feature/payments",
+        "path": "/tmp/station-fixtures/web/worktrees/feature-payments",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk"
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "open",
+          "focusable": true,
+          "closeable": true,
+          "hasWorkspace": true,
+          "hasPrimaryAgentEndpoint": true
+        },
+        "agent": {
+          "harness": "codex",
+          "state": "needs_attention",
+          "runId": "run_web_payments",
+          "sessionId": "ses_web_payments",
+          "confidence": "high",
+          "reason": "Harness reported approval requested.",
+          "updatedAt": "2026-05-20T11:58:30.000Z"
+        },
+        "display": {
+          "statusLabel": "needs attention",
+          "sortPriority": 10,
+          "alert": true,
+          "reason": "Approval requested."
+        }
+      }
+    ],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 1,
+      "working": 0,
+      "idle": 0,
+      "attention": 1,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "stuckAgent": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "api",
+        "label": "api",
+        "root": "/tmp/station-fixtures/api",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-shell"
+        },
+        "health": {
+          "providerId": "codex",
+          "providerType": "harness",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 1,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_api_stuck",
+        "projectId": "api",
+        "projectLabel": "api",
+        "branch": "debug/stuck-agent",
+        "path": "/tmp/station-fixtures/api/worktrees/debug-stuck-agent",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk"
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "open",
+          "focusable": true,
+          "closeable": true,
+          "hasWorkspace": true,
+          "hasPrimaryAgentEndpoint": true
+        },
+        "agent": {
+          "harness": "codex",
+          "state": "stuck",
+          "runId": "run_api_stuck",
+          "sessionId": "ses_api_stuck",
+          "confidence": "medium",
+          "reason": "Process is alive but no main pane output changed recently.",
+          "updatedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "display": {
+          "statusLabel": "stuck",
+          "sortPriority": 20,
+          "alert": true,
+          "warning": true,
+          "reason": "No activity has been observed recently."
+        }
+      }
+    ],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 1,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "exitedAgent": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "web",
+        "label": "web",
+        "root": "/tmp/station-fixtures/web",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-build-shell"
+        },
+        "health": {
+          "providerId": "codex",
+          "providerType": "harness",
+          "status": "healthy",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 1,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_web_exited",
+        "projectId": "web",
+        "projectLabel": "web",
+        "branch": "bugfix/exited-agent",
+        "path": "/tmp/station-fixtures/web/worktrees/bugfix-exited-agent",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk"
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "stale",
+          "closeable": true,
+          "hasWorkspace": true,
+          "hasPrimaryAgentEndpoint": true
+        },
+        "agent": {
+          "harness": "codex",
+          "state": "exited",
+          "runId": "run_web_exited",
+          "sessionId": "ses_web_exited",
+          "confidence": "medium",
+          "reason": "Recorded process no longer exists.",
+          "updatedAt": "2026-05-20T11:50:00.000Z"
+        },
+        "display": {
+          "statusLabel": "exited",
+          "sortPriority": 60,
+          "alert": false
+        }
+      }
+    ],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 1,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "unknownLowConfidence": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [
+      {
+        "id": "mobile",
+        "label": "mobile",
+        "root": "/tmp/station-fixtures/mobile",
+        "defaults": {
+          "harness": "opencode",
+          "terminal": "tmux",
+          "layout": "agent-shell"
+        },
+        "health": {
+          "providerId": "opencode",
+          "providerType": "harness",
+          "status": "degraded",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "counts": {
+          "worktrees": 1,
+          "agents": 1,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 1
+        }
+      }
+    ],
+    "rows": [
+      {
+        "id": "wt_mobile_unknown",
+        "projectId": "mobile",
+        "projectLabel": "mobile",
+        "branch": "feature/offline-mode",
+        "path": "/tmp/station-fixtures/mobile/worktrees/feature-offline-mode",
+        "worktree": {
+          "state": "exists",
+          "source": "worktrunk"
+        },
+        "terminal": {
+          "provider": "tmux",
+          "state": "unknown",
+          "focusable": true,
+          "closeable": true,
+          "hasWorkspace": true
+        },
+        "agent": {
+          "harness": "opencode",
+          "state": "unknown",
+          "runId": "run_mobile_unknown",
+          "sessionId": "ses_mobile_unknown",
+          "confidence": "low",
+          "reason": "Harness and terminal observations conflict.",
+          "updatedAt": "2026-05-20T12:00:00.000Z"
+        },
+        "display": {
+          "statusLabel": "unknown",
+          "sortPriority": 50,
+          "alert": false,
+          "warning": true,
+          "reason": "Conflicting provider observations."
+        }
+      }
+    ],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 1,
+      "agents": 1,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 1
+    },
+    "alerts": []
+  },
+  "orphanedTerminalTarget": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": true
+    },
+    "providerHealth": {},
+    "projects": [],
+    "rows": [],
+    "sessions": [],
+    "counts": {
+      "projects": 0,
+      "worktrees": 0,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": [],
+    "orphans": [
+      {
+        "id": "orphan_term_1",
+        "kind": "terminal_target",
+        "provider": "tmux",
+        "terminalTargetId": "term_orphan_agent",
+        "reason": "Terminal target has no matching configured project or worktree.",
+        "observedAt": "2026-05-20T12:00:00.000Z"
+      }
+    ]
+  },
+  "providerFailure": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 4242,
+      "startedAt": "2026-05-20T11:55:00.000Z",
+      "version": "0.0.0",
+      "healthy": false
+    },
+    "providerHealth": {
+      "worktrunk": {
+        "providerId": "worktrunk",
+        "providerType": "worktree",
+        "status": "unavailable",
+        "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+        "lastError": {
+          "tag": "ProviderUnavailableError",
+          "code": "WT_PROVIDER_UNAVAILABLE",
+          "message": "The worktree provider is not available.",
+          "hint": "Install the provider or update the configured command.",
+          "provider": "worktrunk",
+          "traceId": "trc_provider_failure",
+          "diagnosticId": "diag_provider_failure"
+        }
+      }
+    },
+    "projects": [
+      {
+        "id": "web",
+        "label": "web",
+        "root": "/tmp/station-fixtures/web",
+        "defaults": {
+          "harness": "codex",
+          "terminal": "tmux",
+          "layout": "agent-build-shell"
+        },
+        "health": {
+          "providerId": "worktrunk",
+          "providerType": "worktree",
+          "status": "unavailable",
+          "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+          "lastError": {
+            "tag": "ProviderUnavailableError",
+            "code": "WT_PROVIDER_UNAVAILABLE",
+            "message": "The worktree provider is not available.",
+            "hint": "Install the provider or update the configured command.",
+            "provider": "worktrunk",
+            "traceId": "trc_provider_failure",
+            "diagnosticId": "diag_provider_failure"
+          }
+        },
+        "counts": {
+          "worktrees": 0,
+          "agents": 0,
+          "working": 0,
+          "idle": 0,
+          "attention": 0,
+          "unknown": 0
+        }
+      }
+    ],
+    "rows": [],
+    "sessions": [],
+    "counts": {
+      "projects": 1,
+      "worktrees": 0,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": [
+      {
+        "id": "alert_provider_failure",
+        "severity": "error",
+        "message": "The worktree provider is unavailable.",
+        "code": "WT_PROVIDER_UNAVAILABLE",
+        "provider": "worktrunk",
+        "createdAt": "2026-05-20T12:00:00.000Z"
+      }
+    ]
+  }
+}

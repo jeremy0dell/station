@@ -1,0 +1,4 @@
+pre-commit:
+  commands:
+    biome:
+      run: pnpm lint

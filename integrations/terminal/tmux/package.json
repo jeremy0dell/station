@@ -1,0 +1,26 @@
+{
+  "name": "@station/tmux",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "stn-tmux-popup": "./bin/stn-popup"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@station/config": "workspace:*",
+    "@station/contracts": "workspace:*",
+    "@station/observability": "workspace:*",
+    "@station/runtime": "workspace:*",
+    "zod": "^4.1.12"
+  }
+}

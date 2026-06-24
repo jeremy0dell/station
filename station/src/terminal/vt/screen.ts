@@ -1,0 +1,500 @@
+import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { type IMarker, Terminal } from "@xterm/headless";
+import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
+import type { StationTerminalSize } from "../types.js";
+import { buildVisibleRows, type VtRow } from "./rows.js";
+import { type StationVtTheme, stationVtTheme } from "./theme.js";
+import { DecMode } from "../protocol/decset.js";
+import {
+  MouseEncoding,
+  MouseTracking,
+  type MouseEncodingValue,
+  type MouseTrackingValue,
+} from "../protocol/mouse.js";
+
+const DEFAULT_FLUSH_INTERVAL_MS = 33;
+// Scrollback is now viewable (wheel + copy-mode), but a modest buffer still
+// keeps resize reflow cheap; the depth is intentionally not yet configurable.
+const DEFAULT_SCROLLBACK_LINES = 1000;
+const DEFAULT_SCROLL_ON_OUTPUT: ScrollOnOutputMode = "freeze";
+// Match xterm's internal resize clamp (and the bridge's) so the PTY and the
+// screen model can never disagree on dimensions.
+const MIN_COLS = 2;
+const MIN_ROWS = 1;
+
+export type StationVtScreenOptions = {
+  size: StationTerminalSize;
+  scrollback?: number;
+  /** How the scroll position reacts to new output; defaults to `freeze`. */
+  scrollOnOutput?: ScrollOnOutputMode;
+  /** Injectable for deterministic coalescing tests. */
+  flushIntervalMs?: number;
+  theme?: StationVtTheme;
+  /**
+   * Terminal query replies (DA1/DA2/DSR/CPR/DECRQM from xterm, OSC 10/11 from
+   * this store). These must be written back to the PTY verbatim: TUIs block
+   * on them at startup.
+   */
+  onResponse?: (data: string) => void;
+};
+
+export type VtCursor = {
+  /** Raw column; equals cols while a wrap is pending (DECAWM deferred wrap). */
+  x: number;
+  /** Viewport-relative row. */
+  y: number;
+};
+
+/**
+ * The child app's active mouse tracking flavor and report encoding. xterm
+ * tracks the flavor (which DECSET of 9/1000/1002/1003 is on) but not the
+ * encoding, so the SGR (1006) bit is tracked here alongside it.
+ */
+export type MouseProtocol = {
+  /** DECSET flavor: x10=9, vt200=1000, drag=1002, any=1003. */
+  tracking: MouseTrackingValue;
+  /** SGR (DECSET 1006) vs the legacy X10 byte encoding. */
+  encoding: MouseEncodingValue;
+};
+
+// xterm hands us tracking as one of a closed set of raw strings; translate it
+// into the catalog at this seam (and null for "none") so no downstream file is
+// coupled to xterm's vocabulary. Typed against xterm's union via `satisfies` so
+// dropping or renaming a mode is a compile error and the lookup stays total (no
+// undefined slipping past the null guard). Values match the engine's, so
+// behavior is unchanged.
+type XtermTrackingMode = "none" | "x10" | "vt200" | "drag" | "any";
+const XTERM_TRACKING = {
+  none: null,
+  x10: MouseTracking.X10,
+  vt200: MouseTracking.Vt200,
+  drag: MouseTracking.Drag,
+  any: MouseTracking.Any,
+} as const satisfies Record<XtermTrackingMode, MouseTrackingValue | null>;
+
+export type VtBufferStats = {
+  cols: number;
+  rows: number;
+  /** Lines pushed into scrollback (0 = none). */
+  baseY: number;
+  /** Total buffer lines including scrollback. */
+  length: number;
+};
+
+// The engine (xterm) must not escape this type: everything above vt/ consumes
+// this view, which is what keeps the conformance catalog and the renderer
+// engine-agnostic if the engine is ever swapped.
+export type StationVtScreen = {
+  feed(data: string): void;
+  resize(size: StationTerminalSize): void;
+  /**
+   * Style-merged spans for the rows currently in view (the live viewport, or
+   * scrolled-back history when `getScrollOffset() > 0`). The cursor is only
+   * composited at the live bottom.
+   */
+  buildRows(options?: { cursorVisible?: boolean }): VtRow[];
+  /**
+   * Scroll the viewport by `deltaLines` over scrollback; positive scrolls up
+   * into history, negative back toward the live bottom. Clamped to the
+   * available scrollback. Returns whether the position changed.
+   */
+  scrollBy(deltaLines: number): boolean;
+  /** Jump back to the live bottom (offset 0). Returns whether it moved. */
+  scrollToBottom(): boolean;
+  /** Lines currently scrolled up from the live bottom (0 = at the bottom). */
+  getScrollOffset(): number;
+  /**
+   * Plain text of an in-view row (honoring the scroll offset), optionally a
+   * half-open column slice `[startCol, endCol)`. Wide chars are resolved by the
+   * engine, so columns line up with the rendered grid. Powers selection/copy.
+   */
+  viewRowText(viewRow: number, startCol?: number, endCol?: number): string;
+  isCursorVisible(): boolean;
+  /** DECSET 2004 state; decides paste wrapping. */
+  isBracketedPasteEnabled(): boolean;
+  /** Any DECSET mouse tracking mode is on (vim/htop want the wheel themselves). */
+  isMouseReportingEnabled(): boolean;
+  /**
+   * The active mouse tracking flavor + report encoding, or null when the app
+   * isn't requesting mouse events. Drives click/hover forwarding the way
+   * isMouseReportingEnabled() drives wheel forwarding.
+   */
+  mouseProtocol(): MouseProtocol | null;
+  /** DECCKM: arrow keys should be sent in application form (ESC O A vs ESC [ A). */
+  isApplicationCursorKeys(): boolean;
+  /** Kitty keyboard protocol state requested by the child app. */
+  isKittyKeyboardEnabled(): boolean;
+  /** Right-trimmed text of a visible row. */
+  rowText(index: number): string;
+  cursor(): VtCursor;
+  isAltScreen(): boolean;
+  bufferStats(): VtBufferStats;
+  subscribe(listener: () => void): () => void;
+  /**
+   * The latest OSC 0/2 window title the child app set (trimmed, non-empty), or
+   * undefined when no app has set one. This is the same signal terminal
+   * emulators derive tab titles from: shells set it from precmd/PROMPT_COMMAND
+   * and apps like vim/ssh/htop set it directly.
+   */
+  getTitle(): string | undefined;
+  /** Subscribe to OSC title changes only (not per-frame screen updates). */
+  onTitleChange(listener: () => void): () => void;
+  /** Monotonic version bumped on each coalesced screen update. */
+  getVersion(): number;
+  /** Resolves after everything fed so far has been parsed. */
+  whenIdle(): Promise<void>;
+  /**
+   * Test/diagnostic-only escape hatch to the underlying engine. Production
+   * code must consume the view methods above instead.
+   */
+  readonly unsafeEngine: Terminal;
+  dispose(): void;
+};
+
+export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
+  const theme = options.theme ?? stationVtTheme;
+  const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
+  const terminal = new Terminal({
+    cols: Math.max(options.size.cols, MIN_COLS),
+    rows: Math.max(options.size.rows, MIN_ROWS),
+    scrollback: options.scrollback ?? DEFAULT_SCROLLBACK_LINES,
+    allowProposedApi: true,
+  });
+  // Headless xterm defaults to Unicode 6 widths; OpenTUI measures with modern
+  // tables. Without this, every cell after an emoji drifts one column.
+  terminal.loadAddon(new Unicode11Addon());
+  terminal.unicode.activeVersion = "11";
+
+  const scrollOnOutput = options.scrollOnOutput ?? DEFAULT_SCROLL_ON_OUTPUT;
+  let version = 0;
+  let cursorVisible = true;
+  // DECSET 1006 (SGR mouse encoding). xterm parses it but doesn't expose it via
+  // `modes`, so track it ourselves the same way ?25 cursor visibility is.
+  let sgrMouse = false;
+  let disposed = false;
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastFlushAt = 0;
+  // Lines scrolled up from the live bottom (0 = at the bottom).
+  let scrollOffset = 0;
+  let kittyKeyboardFlags = 0;
+  // The most recent OSC 0/2 title; mirrors xterm's onTitleChange so the pane
+  // border can show it without reaching into the engine.
+  let oscTitle: string | undefined;
+  const titleListeners = new Set<() => void>();
+  const kittyKeyboardFlagStack: number[] = [];
+  // For freeze/follow: a marker pinned to the top visible buffer line. It moves
+  // with scrollback eviction, so it tracks how far content has scrolled even at
+  // the scrollback cap where baseY plateaus. `shift` never anchors (it slides).
+  let scrollAnchor: IMarker | undefined;
+  const listeners = new Set<() => void>();
+
+  const notifyListeners = (): void => {
+    version += 1;
+    for (const listener of [...listeners]) {
+      listener();
+    }
+  };
+
+  const clampScrollOffset = (): void => {
+    const baseY = terminal.buffer.active.baseY;
+    if (scrollOffset > baseY) {
+      scrollOffset = baseY;
+    } else if (scrollOffset < 0) {
+      scrollOffset = 0;
+    }
+  };
+
+  const disposeScrollAnchor = (): void => {
+    scrollAnchor?.dispose();
+    scrollAnchor = undefined;
+  };
+
+  // Re-pin the anchor to the current top visible line after a manual scroll or
+  // a resize. registerMarker is relative to the cursor, hence the offset math.
+  const reanchorScroll = (): void => {
+    disposeScrollAnchor();
+    if (scrollOffset <= 0 || scrollOnOutput === "shift") {
+      return;
+    }
+    const buffer = terminal.buffer.active;
+    const topLine = buffer.baseY - scrollOffset;
+    scrollAnchor = terminal.registerMarker(topLine - buffer.baseY - buffer.cursorY) ?? undefined;
+  };
+
+  // On new output while scrolled up, keep freeze pinned to the anchored line and
+  // snap follow to the bottom. Correct even at the scrollback cap: baseY stops
+  // growing, but the marker still moves as old lines are evicted.
+  const applyScrollOnOutput = (): void => {
+    if (scrollOffset <= 0 || scrollOnOutput === "shift" || scrollAnchor === undefined) {
+      return;
+    }
+    if (scrollAnchor.line < 0) {
+      // The anchored line was evicted past the start of scrollback; let the
+      // clamp pin the view to the oldest line still held.
+      disposeScrollAnchor();
+      return;
+    }
+    const heldOffset = terminal.buffer.active.baseY - scrollAnchor.line;
+    if (heldOffset <= scrollOffset) {
+      return; // nothing new scrolled since we anchored
+    }
+    if (scrollOnOutput === "follow") {
+      scrollOffset = 0;
+      disposeScrollAnchor();
+    } else {
+      scrollOffset = heldOffset;
+    }
+  };
+
+  const emitResponse = (data: string): void => {
+    if (!disposed) {
+      options.onResponse?.(data);
+    }
+  };
+
+  // xterm answers DA1/DA2/DSR/CPR/DECRQM/DECRQSS internally; in headless the
+  // replies surface only on onData and are dropped unless forwarded.
+  terminal.onData(emitResponse);
+
+  // xterm parses OSC 0/2 and emits the title here; coalesce blank titles to
+  // undefined so the pane falls back rather than showing an empty border.
+  terminal.onTitleChange((next) => {
+    const trimmed = next.trim();
+    const value = trimmed.length > 0 ? trimmed : undefined;
+    if (value === oscTitle) {
+      return;
+    }
+    oscTitle = value;
+    for (const listener of [...titleListeners]) {
+      listener();
+    }
+  });
+
+  // Headless xterm does NOT answer OSC 10/11 color queries (the replying
+  // ThemeService is browser-only), but termenv/lipgloss-based TUIs wait on
+  // them for background detection. Answer with Station's theme; non-query
+  // payloads fall through to xterm's own color tracking.
+  terminal.parser.registerOscHandler(10, (data) => {
+    if (data !== "?") {
+      return false;
+    }
+    emitResponse(`\x1b]10;${toOscRgb(theme.foreground)}\x07`);
+    return true;
+  });
+  terminal.parser.registerOscHandler(11, (data) => {
+    if (data !== "?") {
+      return false;
+    }
+    emitResponse(`\x1b]11;${toOscRgb(theme.background)}\x07`);
+    return true;
+  });
+
+  // The headless buffer API does not expose DECTCEM cursor visibility, so
+  // track ?25h/?25l ourselves; returning false keeps default processing.
+  terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+    if (paramListIncludes(params, DecMode.CursorVisible)) {
+      cursorVisible = true;
+    }
+    if (paramListIncludes(params, DecMode.SgrMouse)) {
+      sgrMouse = true;
+    }
+    return false;
+  });
+  terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+    if (paramListIncludes(params, DecMode.CursorVisible)) {
+      cursorVisible = false;
+    }
+    if (paramListIncludes(params, DecMode.SgrMouse)) {
+      sgrMouse = false;
+    }
+    return false;
+  });
+  // RIS and DECSTR both restore a visible cursor; without these a `reset`
+  // after a cursor-hiding app leaves the pane cursorless forever. RIS also
+  // clears mouse modes (xterm resets the flavor; clear our SGR bit to match).
+  terminal.parser.registerEscHandler({ final: "c" }, () => {
+    cursorVisible = true;
+    sgrMouse = false;
+    return false;
+  });
+  terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+    cursorVisible = true;
+    return false;
+  });
+  terminal.parser.registerCsiHandler({ prefix: ">", final: "u" }, (params) => {
+    kittyKeyboardFlagStack.push(kittyKeyboardFlags);
+    const flags = params[0];
+    if (typeof flags === "number") {
+      kittyKeyboardFlags = flags;
+    }
+    return true;
+  });
+  terminal.parser.registerCsiHandler({ prefix: "=", final: "u" }, (params) => {
+    const flags = params[0];
+    kittyKeyboardFlags = typeof flags === "number" ? flags : 0;
+    return true;
+  });
+  terminal.parser.registerCsiHandler({ prefix: "<", final: "u" }, () => {
+    kittyKeyboardFlags = kittyKeyboardFlagStack.pop() ?? 0;
+    return true;
+  });
+  terminal.parser.registerCsiHandler({ prefix: "?", final: "u" }, () => {
+    emitResponse(`\x1b[?${kittyKeyboardFlags}u`);
+    return true;
+  });
+
+  const flush = (): void => {
+    flushTimer = undefined;
+    if (disposed) {
+      return;
+    }
+    lastFlushAt = Date.now();
+    applyScrollOnOutput();
+    clampScrollOffset();
+    notifyListeners();
+  };
+
+  const scheduleFlush = (): void => {
+    if (disposed || flushTimer !== undefined) {
+      return;
+    }
+    const elapsed = Date.now() - lastFlushAt;
+    flushTimer = setTimeout(flush, elapsed >= flushIntervalMs ? 0 : flushIntervalMs - elapsed);
+  };
+
+  terminal.onWriteParsed(scheduleFlush);
+
+  return {
+    feed: (data) => {
+      if (disposed) {
+        return;
+      }
+      terminal.write(data);
+    },
+    resize: (size) => {
+      if (disposed) {
+        return;
+      }
+      terminal.resize(Math.max(size.cols, MIN_COLS), Math.max(size.rows, MIN_ROWS));
+      // Reflow moves line indices; keep the offset in range and re-pin the
+      // anchor to the (possibly shifted) current top line.
+      clampScrollOffset();
+      reanchorScroll();
+      scheduleFlush();
+    },
+    buildRows: (rowOptions) =>
+      buildVisibleRows(terminal, {
+        cursorVisible: rowOptions?.cursorVisible ?? cursorVisible,
+        offset: scrollOffset,
+      }),
+    scrollBy: (deltaLines) => {
+      if (disposed || deltaLines === 0) {
+        return false;
+      }
+      const baseY = terminal.buffer.active.baseY;
+      const next = Math.max(0, Math.min(baseY, scrollOffset + deltaLines));
+      if (next === scrollOffset) {
+        return false;
+      }
+      scrollOffset = next;
+      reanchorScroll();
+      notifyListeners();
+      return true;
+    },
+    scrollToBottom: () => {
+      if (disposed || scrollOffset === 0) {
+        return false;
+      }
+      scrollOffset = 0;
+      disposeScrollAnchor();
+      notifyListeners();
+      return true;
+    },
+    getScrollOffset: () => scrollOffset,
+    viewRowText: (viewRow, startCol, endCol) => {
+      const buffer = terminal.buffer.active;
+      const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
+      return line?.translateToString(false, startCol, endCol) ?? "";
+    },
+    isCursorVisible: () => cursorVisible,
+    isBracketedPasteEnabled: () => terminal.modes.bracketedPasteMode,
+    isMouseReportingEnabled: () => terminal.modes.mouseTrackingMode !== "none",
+    mouseProtocol: () => {
+      const tracking = XTERM_TRACKING[terminal.modes.mouseTrackingMode];
+      if (tracking === null) {
+        return null;
+      }
+      return { tracking, encoding: sgrMouse ? MouseEncoding.Sgr : MouseEncoding.Legacy };
+    },
+    isApplicationCursorKeys: () => terminal.modes.applicationCursorKeysMode,
+    isKittyKeyboardEnabled: () => kittyKeyboardFlags !== 0,
+    rowText: (index) => {
+      const buffer = terminal.buffer.active;
+      return buffer.getLine(buffer.baseY + index)?.translateToString(true) ?? "";
+    },
+    cursor: () => {
+      const buffer = terminal.buffer.active;
+      return { x: buffer.cursorX, y: buffer.cursorY };
+    },
+    isAltScreen: () => terminal.buffer.active.type === "alternate",
+    bufferStats: () => ({
+      cols: terminal.cols,
+      rows: terminal.rows,
+      baseY: terminal.buffer.active.baseY,
+      length: terminal.buffer.active.length,
+    }),
+    get unsafeEngine() {
+      return terminal;
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    getTitle: () => oscTitle,
+    onTitleChange: (listener) => {
+      titleListeners.add(listener);
+      return () => {
+        titleListeners.delete(listener);
+      };
+    },
+    getVersion: () => version,
+    whenIdle: () => {
+      if (disposed) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        terminal.write("", resolve);
+      });
+    },
+    dispose: () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      if (flushTimer !== undefined) {
+        clearTimeout(flushTimer);
+        flushTimer = undefined;
+      }
+      disposeScrollAnchor();
+      listeners.clear();
+      titleListeners.clear();
+      terminal.dispose();
+    },
+  };
+}
+
+function paramListIncludes(params: (number | number[])[], target: number): boolean {
+  return params.some((param) =>
+    Array.isArray(param) ? param.includes(target) : param === target,
+  );
+}
+
+/** "#d4d4d8" -> "rgb:d4d4/d4d4/d8d8" (xterm's 16-bit-per-channel reply form). */
+function toOscRgb(hexColor: string): string {
+  const r = hexColor.slice(1, 3);
+  const g = hexColor.slice(3, 5);
+  const b = hexColor.slice(5, 7);
+  return `rgb:${r}${r}/${g}${g}/${b}${b}`;
+}

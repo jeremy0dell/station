@@ -1,0 +1,36 @@
+{
+  "name": "provider-timeout",
+  "expectedRootCause": "PROVIDER_TIMEOUT",
+  "evidenceIndex": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-22T12:00:00.000Z",
+    "summary": {
+      "status": "degraded",
+      "rootCauseCodes": ["PROVIDER_TIMEOUT"],
+      "providers": ["fake-worktree"],
+      "commandIds": [],
+      "diagnosticIds": [],
+      "redaction": "redacted"
+    },
+    "items": [
+      {
+        "id": "provider-fake-worktree",
+        "category": "provider",
+        "severity": "error",
+        "code": "PROVIDER_TIMEOUT",
+        "message": "Provider operation timed out.",
+        "provider": "fake-worktree"
+      }
+    ],
+    "rootCauses": [
+      {
+        "code": "PROVIDER_TIMEOUT",
+        "confidence": "high",
+        "summary": "A provider operation timed out.",
+        "itemIds": ["provider-fake-worktree"],
+        "provider": "fake-worktree"
+      }
+    ],
+    "questions": []
+  }
+}

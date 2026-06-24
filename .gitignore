@@ -1,0 +1,29 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+.pnpm-store/
+pnpm-lock.*.yaml
+.DS_Store
+.worktrees/
+*.tsbuildinfo
+
+# Worktree-local runtime state for the Station persistence dev tooling.
+.dev-state/
+.env
+.env.*
+!.env.example
+
+# TypeScript build output belongs in dist/, never beside source files.
+apps/*/src/**/*.js
+apps/*/src/**/*.js.map
+apps/*/src/**/*.d.ts
+apps/*/src/**/*.d.ts.map
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+integrations/*/*/src/**/*.js
+integrations/*/*/src/**/*.js.map
+integrations/*/*/src/**/*.d.ts
+integrations/*/*/src/**/*.d.ts.map

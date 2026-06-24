@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "observer": {
+    "autoStart": true,
+    "autoStartFromHooks": true,
+    "idleShutdownMinutes": 30,
+    "reconcileIntervalMs": 2000,
+    "socketPath": "~/.local/state/station/observer.sock",
+    "stateDir": "~/.local/state/station"
+  },
+  "defaults": {
+    "worktreeProvider": "worktrunk",
+    "terminal": "tmux",
+    "harness": "codex",
+    "layout": "agent-build-shell"
+  },
+  "worktree": {
+    "worktrunk": {
+      "command": "wt",
+      "configPath": "~/.config/worktrunk/config.toml",
+      "useLifecycleHooks": true,
+      "hookMode": "required-for-mvp",
+      "breadcrumbLocation": "external"
+    }
+  },
+  "terminal": {
+    "tmux": {
+      "sessionPrefix": "station",
+      "topology": "workbench",
+      "workbenchSession": "station",
+      "windowNaming": "project-branch",
+      "primaryAgentPane": true,
+      "popupWidth": "50%",
+      "popupHeight": "50%",
+      "popupPosition": "C"
+    }
+  },
+  "harness": {
+    "codex": {
+      "enabled": true,
+      "command": "codex",
+      "profile": "default",
+      "sandboxMode": "workspace-write",
+      "approvalPolicy": "on-request",
+      "installHooks": true
+    },
+    "opencode": {
+      "enabled": true,
+      "command": "opencode",
+      "profile": "default",
+      "installHooks": true
+    }
+  },
+  "observability": {
+    "retention": {
+      "maxDays": 14,
+      "maxTotalMb": 250,
+      "maxFileMb": 10,
+      "maxFilesPerComponent": 5,
+      "components": {
+        "observerMaxMb": 100,
+        "cliMaxMb": 25,
+        "tuiMaxMb": 25,
+        "hookRunnerMaxMb": 25,
+        "providerMaxMb": 75
+      },
+      "sqlite": {
+        "eventsMaxDays": 30,
+        "commandsMaxDays": 60,
+        "errorsMaxDays": 60,
+        "providerObservationsMaxDays": 14
+      },
+      "debugBundles": {
+        "maxBundles": 10,
+        "maxDays": 30
+      },
+      "hookSpool": {
+        "deliveredDeleteImmediately": true,
+        "failedMaxDays": 7,
+        "failedMaxItems": 1000
+      }
+    }
+  },
+  "projects": [
+    {
+      "id": "web",
+      "label": "web",
+      "aliases": ["frontend", "site"],
+      "root": "~/projects/web",
+      "repo": "github.com/example/web",
+      "defaultBranch": "main",
+      "defaults": {
+        "harness": "codex",
+        "terminal": "tmux",
+        "layout": "agent-build-shell"
+      },
+      "worktrunk": {
+        "enabled": true,
+        "base": "main"
+      },
+      "commands": {
+        "dev": "pnpm dev",
+        "test": "pnpm test",
+        "typecheck": "pnpm typecheck"
+      },
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "display": {
+        "group": "work",
+        "sortOrder": 10
+      },
+      "localConfig": {
+        "enabled": true,
+        "path": ".station/config.toml",
+        "trust": "explicit"
+      },
+      "recoveryBreadcrumbs": {
+        "location": "external"
+      }
+    },
+    {
+      "id": "api",
+      "label": "api",
+      "aliases": ["backend"],
+      "root": "~/projects/api",
+      "repo": "github.com/example/api",
+      "defaultBranch": "main",
+      "defaults": {
+        "harness": "opencode",
+        "terminal": "tmux",
+        "layout": "agent-shell"
+      },
+      "worktrunk": {
+        "enabled": true,
+        "base": "main"
+      },
+      "commands": {
+        "dev": "cargo run",
+        "test": "cargo test"
+      },
+      "display": {
+        "group": "work",
+        "sortOrder": 20
+      }
+    }
+  ]
+}

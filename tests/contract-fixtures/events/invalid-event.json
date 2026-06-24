@@ -1,0 +1,10 @@
+{
+  "type": "command.failed",
+  "commandId": "cmd_bad",
+  "error": {
+    "tag": "CommandExecutionError",
+    "code": "COMMAND_FAILED",
+    "message": "Command failed.",
+    "stack": "Error: Command failed\n    at run (/tmp/internal.ts:10:1)"
+  }
+}

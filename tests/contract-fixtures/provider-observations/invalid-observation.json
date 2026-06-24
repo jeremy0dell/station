@@ -1,0 +1,8 @@
+{
+  "id": "term_invalid",
+  "provider": "tmux",
+  "state": "active",
+  "confidence": "high",
+  "reason": "Invalid state should fail.",
+  "observedAt": "2026-05-20T12:00:00.000Z"
+}

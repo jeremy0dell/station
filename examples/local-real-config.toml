@@ -1,0 +1,75 @@
+schema_version = 1
+
+[observer]
+auto_start = true
+auto_start_from_hooks = true
+idle_shutdown_minutes = 30
+reconcile_interval_ms = 2000
+socket_path = "~/.local/state/station/observer.sock"
+state_dir = "~/.local/state/station"
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-shell"
+default_branch = "main"
+harness_permission_mode = "yolo"
+
+[worktree.worktrunk]
+command = "wt"
+managed_root = "~/.worktrees"
+base = "main"
+include_main = false
+include_external = false
+use_lifecycle_hooks = true
+hook_mode = "required-for-mvp"
+breadcrumb_location = "external"
+
+[terminal.tmux]
+session_prefix = "station"
+topology = "workbench"
+workbench_session = "station"
+window_naming = "project-branch"
+primary_agent_pane = true
+popup_width = "50%"
+popup_height = "50%"
+popup_position = "C"
+
+[harness.claude]
+enabled = true
+command = "claude"
+install_hooks = true
+# permission_mode = "auto"  # Claude-only native mode; "auto" is rejected for other harnesses and as a global default
+
+[harness.codex]
+enabled = true
+command = "codex"
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+install_hooks = true
+
+[[hooks.event]]
+id = "notify-agent-idle"
+events = ["worktree.agentStateChanged"]
+command = "stn"
+args = ["notify", "turn-completion"]
+timeout_ms = 3000
+
+[[projects]]
+id = "station"
+label = "station"
+root = "~/Developer/station"
+
+[projects.commands]
+test = "pnpm test"
+typecheck = "pnpm typecheck"
+lint = "pnpm lint"
+
+[projects.display]
+group = "local-real"
+sort_order = 10
+
+[projects.local_config]
+enabled = false
+path = ".station/config.toml"

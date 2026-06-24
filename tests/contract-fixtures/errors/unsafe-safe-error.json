@@ -1,0 +1,14 @@
+{
+  "tag": "ExternalCommandError",
+  "code": "EXTERNAL_COMMAND_FAILED",
+  "message": "External command failed.",
+  "stack": "ExternalCommandError: failed\n    at run (/tmp/station/internal/process.ts:10:1)",
+  "cause": {
+    "stderr": "raw internal detail"
+  },
+  "raw": {
+    "env": {
+      "SECRET_TOKEN": "not-a-real-token"
+    }
+  }
+}

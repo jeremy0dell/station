@@ -1,0 +1,36 @@
+{
+  "name": "sqlite-write-failure",
+  "expectedRootCause": "SQLITE_WRITE_FAILURE",
+  "evidenceIndex": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-22T12:00:00.000Z",
+    "summary": {
+      "status": "degraded",
+      "rootCauseCodes": ["SQLITE_WRITE_FAILURE"],
+      "providers": [],
+      "commandIds": [],
+      "diagnosticIds": ["err_sqlite"],
+      "redaction": "redacted"
+    },
+    "items": [
+      {
+        "id": "sqlite-health",
+        "category": "sqlite",
+        "severity": "error",
+        "code": "PERSISTENCE_TRANSACTION_FAILED",
+        "message": "Observer SQLite transaction failed.",
+        "diagnosticId": "err_sqlite"
+      }
+    ],
+    "rootCauses": [
+      {
+        "code": "SQLITE_WRITE_FAILURE",
+        "confidence": "high",
+        "summary": "Observer SQLite write failed.",
+        "itemIds": ["sqlite-health"],
+        "diagnosticId": "err_sqlite"
+      }
+    ],
+    "questions": []
+  }
+}

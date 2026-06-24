@@ -1,0 +1,13 @@
+{
+  "agent_id": "a3d3b571611195177",
+  "agent_transcript_path": "/Users/jeremyodell/.claude/projects/-private-tmp-station-claude-spike-proj-c/b97830b1-155a-4eb1-be06-8c497fcbb2a9/subagents/agent-a3d3b571611195177.jsonl",
+  "agent_type": "",
+  "background_tasks": [],
+  "cwd": "/work/project",
+  "hook_event_name": "SubagentStop",
+  "permission_mode": "default",
+  "session_crons": [],
+  "session_id": "b97830b1-155a-4eb1-be06-8c497fcbb2a9",
+  "stop_hook_active": false,
+  "transcript_path": "/home/user/.claude/projects/-work-project/b97830b1-155a-4eb1-be06-8c497fcbb2a9.jsonl"
+}

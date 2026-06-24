@@ -1,0 +1,8 @@
+{
+  "cwd": "/work/project",
+  "hook_event_name": "UserPromptSubmit",
+  "permission_mode": "default",
+  "prompt": "Run the bash command: echo hello-spike. Then reply DONE.",
+  "session_id": "0b43511f-e55e-40c7-b2f7-5a733cf7cfd0",
+  "transcript_path": "/home/user/.claude/projects/-work-project/0b43511f-e55e-40c7-b2f7-5a733cf7cfd0.jsonl"
+}

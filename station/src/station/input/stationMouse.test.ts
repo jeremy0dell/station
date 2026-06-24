@@ -1,0 +1,391 @@
+// Pins the mouse router's modal guards to keyboard modality (the screen ×
+// target matrix) and mouse/keyboard equivalence: a row click must produce
+// exactly the state the row's slot key produces, in every mode where rows
+// are interactive.
+import { describe, expect, it } from "bun:test";
+import type { StoreApi } from "zustand/vanilla";
+import type { ProviderId, StationSnapshot } from "@station/contracts";
+import { selectDashboardViewport } from "@station/dashboard-core";
+import { addTuiToast } from "@station/dashboard-core";
+import type { TuiStore } from "@station/dashboard-core";
+import { agentWorktreePaneId } from "../../state/types.js";
+import type { StationMouseEvent } from "../../input/mouse.js";
+import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
+import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { resolveKeyRowAgentTarget, resolveRowAgentTarget } from "./stationActions.js";
+import { routeStationMouse } from "./stationMouse.js";
+
+const LEFT_DOWN: StationMouseEvent = {
+  type: "down",
+  button: "left",
+  rawButton: 0,
+  x: 10,
+  y: 5,
+  modifiers: { shift: false, alt: false, ctrl: false },
+};
+
+const RIGHT_DOWN: StationMouseEvent = {
+  ...LEFT_DOWN,
+  button: "right",
+  rawButton: 2,
+};
+
+const SCROLL_DOWN: StationMouseEvent = {
+  ...LEFT_DOWN,
+  type: "scroll",
+  button: "wheel-down",
+  rawButton: 5,
+  scrollDirection: "down",
+};
+
+const SCROLL_UP: StationMouseEvent = {
+  ...LEFT_DOWN,
+  type: "scroll",
+  button: "wheel-up",
+  rawButton: 4,
+  scrollDirection: "up",
+};
+
+function makeStore(snapshot?: StationSnapshot): StoreApi<TuiStore> {
+  return makeStationTestStore({ terminalRows: 12, ...(snapshot === undefined ? {} : { snapshot }) })
+    .store;
+}
+
+// A clone of the fixture with one project's default harness overridden. The
+// managed launch no longer resolves the harness locally, so any harness id
+// still produces a launch-managed outcome (the observer resolves it).
+function snapshotWithHarness(projectId: string, harness: string): StationSnapshot {
+  const base = manyProjectsSnapshot();
+  return {
+    ...base,
+    projects: base.projects.map((project) =>
+      project.id === projectId
+        ? { ...project, defaults: { ...project.defaults, harness: harness as ProviderId } }
+        : project,
+    ),
+  };
+}
+
+describe("routeStationMouse", () => {
+  it("launches the row's primary agent (managed) on a dashboard row click", () => {
+    const store = makeStore();
+    const rowId = "wt_station_idle";
+
+    const outcome = routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({
+      kind: "launch-managed",
+      rowId,
+      projectId: "station",
+      worktreeId: rowId,
+      paneId: agentWorktreePaneId(rowId),
+      cwd: rowPath(rowId),
+    });
+    // The dashboard click no longer dispatches the start-or-focus slot key, so
+    // no pending-start row is queued.
+    expect(pendingStartIds(store)).toEqual([]);
+  });
+
+  it("emits launch-managed regardless of harness (the observer resolves it)", () => {
+    const store = makeStore(snapshotWithHarness("station", "ghost"));
+
+    const outcome = routeStationMouse({ kind: "row", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+
+    expect(outcome).toMatchObject({ kind: "launch-managed", worktreeId: "wt_station_idle" });
+    // No local toast: harness resolution (and any failure) is the observer's job now.
+    expect(store.getState().toasts).toEqual([]);
+  });
+
+  it("treats a dashboard click on a stale row as an inert click with no toast", () => {
+    const store = makeStore();
+
+    const outcome = routeStationMouse({ kind: "row", rowId: "wt_nope" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().toasts).toEqual([]);
+  });
+
+  it("chooses the clicked row in remove mode, same as the slot key", () => {
+    const clicked = makeStore();
+    const keyed = makeStore();
+    const rowId = "wt_station_working";
+    clicked.getState().handleKey({ input: "X" });
+    keyed.getState().handleKey({ input: "X" });
+    const slot = slotForRow(keyed, rowId);
+
+    routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
+    keyed.getState().handleKey({ input: slot });
+
+    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
+    expect(clicked.getState().screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
+  });
+
+  it("ignores row clicks in text-input modes", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "/" });
+    const before = store.getState();
+
+    const outcome = routeStationMouse({ kind: "row", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual(before.screen);
+    expect(store.getState().searchQuery).toBe(before.searchQuery);
+  });
+
+  it("toggles project collapse on header click, dashboard mode only", () => {
+    const store = makeStore();
+
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect([...store.getState().collapsedProjectIds]).toEqual(["station"]);
+
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect([...store.getState().collapsedProjectIds]).toEqual([]);
+
+    store.getState().handleKey({ input: "H" });
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect([...store.getState().collapsedProjectIds]).toEqual([]);
+  });
+
+  it("scrolls on wheel in row-interactive modes and nowhere else", () => {
+    const store = makeStore();
+
+    routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
+    expect(store.getState().scrollOffset).toBe(1);
+    routeStationMouse({ kind: "body" }, SCROLL_UP, store);
+    expect(store.getState().scrollOffset).toBe(0);
+
+    store.getState().handleKey({ input: "H" });
+    routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
+    expect(store.getState().scrollOffset).toBe(0);
+  });
+
+  it("never scrolls the dashboard under a sheet backdrop", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().scrollOffset).toBe(0);
+  });
+
+  it("pages on scroll-indicator clicks", () => {
+    const store = makeStore();
+    routeStationMouse({ kind: "scrollIndicator", direction: "down" }, LEFT_DOWN, store);
+    expect(store.getState().scrollOffset).toBe(5);
+    routeStationMouse({ kind: "scrollIndicator", direction: "up" }, LEFT_DOWN, store);
+    expect(store.getState().scrollOffset).toBe(0);
+  });
+
+  it("dismisses toasts on click in any mode", () => {
+    const store = makeStore();
+    store.setState(addTuiToast(store.getState(), { kind: "info", message: "hello" }));
+    store.getState().handleKey({ input: "H" });
+
+    routeStationMouse({ kind: "toast" }, LEFT_DOWN, store);
+
+    expect(store.getState().toasts).toEqual([]);
+  });
+
+  it("selects sheet choices by their slot key in picker modes only", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "N" });
+    store.getState().handleKey({ input: "P" });
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "pickProject" },
+    });
+
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review" },
+    });
+
+    // Outside picker modes a stray choice click is inert (no text injection).
+    store.getState().handleKey({ input: "", escape: true });
+    store.getState().handleKey({ input: "/" });
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    expect(store.getState().screen).toMatchObject({ name: "search", value: "" });
+  });
+
+  it("dispatches footer hints as their binding's key, active mode only", () => {
+    const store = makeStore();
+
+    const helpClick = routeStationMouse(
+      { kind: "footerHint", bindingId: "station.dashboard.help" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(helpClick).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({ name: "help" });
+
+    // The dashboard hint is stale while help is open: it must not fire.
+    const stale = routeStationMouse(
+      { kind: "footerHint", bindingId: "station.dashboard.search" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(stale).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({ name: "help" });
+  });
+
+  it("reports close-overlay for dismiss hints so the router can close STATION mode", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse(
+      { kind: "footerHint", bindingId: "station.dashboard.dismiss" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(outcome).toEqual({ kind: "close-overlay" });
+  });
+
+  it("treats right-click as inert at the STATION router layer", () => {
+    const store = makeStore();
+    const before = store.getState().screen;
+
+    const outcome = routeStationMouse({ kind: "projectHeader", projectId: "station" }, RIGHT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toBe(before);
+    expect([...store.getState().collapsedProjectIds]).toEqual([]);
+  });
+
+  it("opens PR links on plain left click in dashboard mode", () => {
+    const store = makeStore();
+    const url = "https://github.com/example/station/pull/12";
+
+    expect(routeStationMouse({ kind: "link", url }, LEFT_DOWN, store)).toEqual({
+      kind: "open-url",
+      url,
+    });
+
+    store.getState().handleKey({ input: "/" });
+    expect(routeStationMouse({ kind: "link", url }, LEFT_DOWN, store)).toEqual({ kind: "handled" });
+  });
+
+  it("opens a shell pane for a row click at the worktree path", () => {
+    const store = makeStore();
+    // Derive cwd from the live snapshot, not a duplicated path literal, so the
+    // assertion proves the resolver reads row.path (not some equivalent format).
+    const outcome = routeStationMouse({ kind: "openShellForRow", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+    expect(outcome).toEqual({
+      kind: "open-pane",
+      paneId: "pane-wt-wt_station_idle",
+      cwd: rowPath("wt_station_idle"),
+      role: "shell",
+      worktreeId: "wt_station_idle",
+    });
+  });
+
+  it("opens a shell pane for a project header click at the project root", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse({ kind: "openShellForProject", projectId: "station" }, LEFT_DOWN, store);
+    expect(outcome).toEqual({
+      kind: "open-pane",
+      paneId: "pane-proj-station",
+      cwd: projectRoot("station"),
+      role: "shell",
+    });
+  });
+
+  it("keeps [+sh] live on a worktree that has a pending agent start", () => {
+    const store = makeStore();
+    const rowId = "wt_station_none";
+    // Put the row into a pending-start (transient) state via the start-or-focus
+    // slot key: it drops out of rowChoices but still renders a clickable [+sh].
+    // Opening a shell is orthogonal to agent activation, so the affordance must
+    // still resolve against snapshot.rows. (The dashboard *mouse* row-click now
+    // opens the primary agent, so the pending-start is driven by the keyboard.)
+    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    const outcome = routeStationMouse({ kind: "openShellForRow", rowId }, LEFT_DOWN, store);
+    expect(outcome).toEqual({
+      kind: "open-pane",
+      paneId: `pane-wt-${rowId}`,
+      cwd: rowPath(rowId),
+      role: "shell",
+      worktreeId: rowId,
+    });
+  });
+
+  it("gates the open-shell affordance to dashboard mode", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "/" }); // enter search (non-dashboard) mode
+
+    expect(routeStationMouse({ kind: "openShellForRow", rowId: "wt_station_idle" }, LEFT_DOWN, store)).toEqual({
+      kind: "handled",
+    });
+    expect(
+      routeStationMouse({ kind: "openShellForProject", projectId: "station" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+  });
+
+  it("treats an unresolvable row or project as an inert click", () => {
+    const store = makeStore();
+    expect(routeStationMouse({ kind: "openShellForRow", rowId: "wt_nope" }, LEFT_DOWN, store)).toEqual({
+      kind: "handled",
+    });
+    expect(
+      routeStationMouse({ kind: "openShellForProject", projectId: "ghost" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+  });
+});
+
+describe("resolveKeyRowAgentTarget", () => {
+  it("resolves a row's slot key to the exact launch its click resolves", () => {
+    // The keyboard "open" and the click are one path: the key resolves to the
+    // same target a click on that row resolves.
+    const store = makeStore();
+    const rowId = "wt_station_idle";
+
+    expect(resolveKeyRowAgentTarget(store, slotForRow(store, rowId))).toEqual(
+      resolveRowAgentTarget(store, rowId),
+    );
+  });
+
+  it("does not launch outside dashboard mode (choose-slot keeps slot meaning)", () => {
+    // The same slot key that opens an agent in dashboard mode must instead
+    // select the row for removal here — so it defers to the machine, not launch.
+    const store = makeStore();
+    const slot = slotForRow(store, "wt_station_idle");
+    store.getState().handleKey({ input: "X" }); // enter remove choose-slot mode
+
+    expect(resolveKeyRowAgentTarget(store, slot)).toEqual({ kind: "none" });
+  });
+});
+
+function pendingStartIds(store: StoreApi<TuiStore>): string[] {
+  return store.getState().localRows.pendingStart.map((row) => row.localId);
+}
+
+// The fixture's worktree path / project root, read back from a fresh snapshot
+// (deterministic builder) so tests assert equivalence to the data the resolver
+// reads rather than duplicating the fixture's path format.
+function rowPath(rowId: string): string {
+  const path = manyProjectsSnapshot().rows.find((row) => row.id === rowId)?.path;
+  if (path === undefined) {
+    throw new Error(`no fixture row ${rowId}`);
+  }
+  return path;
+}
+
+function projectRoot(projectId: string): string {
+  const root = manyProjectsSnapshot().projects.find((project) => project.id === projectId)?.root;
+  if (root === undefined) {
+    throw new Error(`no fixture project ${projectId}`);
+  }
+  return root;
+}
+
+function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
+  const state = store.getState();
+  if (state.snapshot === undefined) {
+    throw new Error("store has no snapshot");
+  }
+  // Mirrors the viewport selector the actions module uses; resolved through
+  // the store so the slot reflects current scroll/search state.
+  const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
+    (candidate) => candidate.value.id === rowId,
+  );
+  if (choice === undefined) {
+    throw new Error(`no slot for row ${rowId}`);
+  }
+  return choice.key;
+}

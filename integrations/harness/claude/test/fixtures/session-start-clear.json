@@ -1,0 +1,7 @@
+{
+  "cwd": "/work/project",
+  "hook_event_name": "SessionStart",
+  "session_id": "7f5e92b4-a84f-495e-9b55-d5bb11d95571",
+  "source": "clear",
+  "transcript_path": "/home/user/.claude/projects/-work-project/7f5e92b4-a84f-495e-9b55-d5bb11d95571.jsonl"
+}

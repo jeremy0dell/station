@@ -1,0 +1,5 @@
+[post-create]
+existing = "echo existing"
+
+[pre-remove]
+cleanup = "echo cleanup"

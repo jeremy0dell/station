@@ -1,0 +1,40 @@
+{
+  "name": "stale-terminal-target",
+  "expectedRootCause": "STALE_TERMINAL_TARGET",
+  "evidenceIndex": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-22T12:00:00.000Z",
+    "summary": {
+      "status": "degraded",
+      "rootCauseCodes": ["STALE_TERMINAL_TARGET"],
+      "providers": ["tmux"],
+      "commandIds": ["cmd_focus_1"],
+      "diagnosticIds": ["err_terminal"],
+      "redaction": "redacted"
+    },
+    "items": [
+      {
+        "id": "command-cmd_focus_1",
+        "category": "command",
+        "severity": "error",
+        "code": "TERMINAL_TARGET_STALE",
+        "message": "The terminal target is stale.",
+        "provider": "tmux",
+        "commandId": "cmd_focus_1",
+        "diagnosticId": "err_terminal"
+      }
+    ],
+    "rootCauses": [
+      {
+        "code": "STALE_TERMINAL_TARGET",
+        "confidence": "high",
+        "summary": "The terminal target no longer exists.",
+        "itemIds": ["command-cmd_focus_1"],
+        "provider": "tmux",
+        "commandId": "cmd_focus_1",
+        "diagnosticId": "err_terminal"
+      }
+    ],
+    "questions": []
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "policyVersion": "station-redaction-v1",
+  "generatedAt": "2026-05-20T12:00:00.000Z",
+  "redactedFields": ["env.OPENAI_API_KEY", "headers.authorization"],
+  "redactedPatterns": ["bearer-token", "openai-key"],
+  "replacements": 2,
+  "suspiciousSecretsFound": 2
+}

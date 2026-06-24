@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "0.5.0",
+  "generatedAt": "2026-05-20T12:00:00.000Z",
+  "status": "degraded",
+  "checks": [
+    {
+      "name": "observer",
+      "status": "ok",
+      "message": "Observer is healthy."
+    },
+    {
+      "name": "providers",
+      "status": "warn",
+      "message": "1 provider(s) reported health."
+    }
+  ],
+  "observer": {
+    "schemaVersion": "0.5.0",
+    "status": "healthy",
+    "pid": 1234,
+    "startedAt": "2026-05-20T12:00:00.000Z",
+    "version": "0.0.0",
+    "socketPath": "/tmp/station/run/observer.sock",
+    "stateDir": "/tmp/station/state",
+    "uptimeMs": 0,
+    "hookSpoolDepth": 0,
+    "providerHealth": {
+      "fake-worktree": {
+        "providerId": "fake-worktree",
+        "providerType": "worktree",
+        "status": "unavailable",
+        "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+        "lastError": {
+          "tag": "WorktreeProviderError",
+          "code": "FAKE_WORKTREE_LIST_FAILED",
+          "message": "The fake worktree provider failed to list worktrees.",
+          "provider": "fake-worktree",
+          "traceId": "trc_1"
+        },
+        "latencyMs": 0,
+        "capabilities": {
+          "canList": true
+        }
+      }
+    }
+  },
+  "config": {
+    "configPath": "/tmp/station/config.toml",
+    "projectCount": 1,
+    "diagnostics": []
+  },
+  "providers": {
+    "fake-worktree": {
+      "providerId": "fake-worktree",
+      "providerType": "worktree",
+      "status": "unavailable",
+      "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+      "lastError": {
+        "tag": "WorktreeProviderError",
+        "code": "FAKE_WORKTREE_LIST_FAILED",
+        "message": "The fake worktree provider failed to list worktrees.",
+        "provider": "fake-worktree"
+      },
+      "latencyMs": 0,
+      "capabilities": {
+        "canList": true
+      }
+    }
+  },
+  "snapshot": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-20T12:00:00.000Z",
+    "observer": {
+      "pid": 1234,
+      "startedAt": "2026-05-20T12:00:00.000Z",
+      "version": "0.0.0",
+      "healthy": false
+    },
+    "providerHealth": {
+      "fake-worktree": {
+        "providerId": "fake-worktree",
+        "providerType": "worktree",
+        "status": "unavailable",
+        "lastCheckedAt": "2026-05-20T12:00:00.000Z",
+        "lastError": {
+          "tag": "WorktreeProviderError",
+          "code": "FAKE_WORKTREE_LIST_FAILED",
+          "message": "The fake worktree provider failed to list worktrees.",
+          "provider": "fake-worktree"
+        }
+      }
+    },
+    "projects": [],
+    "rows": [],
+    "sessions": [],
+    "counts": {
+      "projects": 0,
+      "worktrees": 0,
+      "agents": 0,
+      "working": 0,
+      "idle": 0,
+      "attention": 0,
+      "unknown": 0
+    },
+    "alerts": []
+  },
+  "logs": {
+    "paths": ["/tmp/station/state/logs/observer.jsonl"],
+    "recent": [
+      {
+        "timestamp": "2026-05-20T12:00:00.000Z",
+        "level": "error",
+        "component": "observer",
+        "message": "Worktree provider list failed.",
+        "traceId": "trc_1",
+        "spanId": "spn_1",
+        "provider": "fake-worktree",
+        "attributes": {
+          "code": "FAKE_WORKTREE_LIST_FAILED"
+        }
+      }
+    ]
+  },
+  "localState": {
+    "stateDir": "/tmp/station/state",
+    "totalBytes": 42,
+    "limitBytes": 262144000,
+    "overLimit": false,
+    "entries": [
+      {
+        "kind": "logs",
+        "path": "/tmp/station/state/logs",
+        "sizeBytes": 42,
+        "fileCount": 1,
+        "limitBytes": 26214400,
+        "overLimit": false
+      }
+    ]
+  },
+  "retention": {
+    "maxDays": 14,
+    "maxTotalMb": 250,
+    "maxFileMb": 10,
+    "maxFilesPerComponent": 5,
+    "components": {
+      "observerMaxMb": 100,
+      "cliMaxMb": 25,
+      "tuiMaxMb": 25,
+      "hookRunnerMaxMb": 25,
+      "providerMaxMb": 75
+    },
+    "sqlite": {
+      "eventsMaxDays": 30,
+      "commandsMaxDays": 60,
+      "errorsMaxDays": 60,
+      "providerObservationsMaxDays": 14
+    },
+    "debugBundles": {
+      "maxBundles": 10,
+      "maxDays": 30
+    },
+    "hookSpool": {
+      "deliveredDeleteImmediately": true,
+      "failedMaxDays": 7,
+      "failedMaxItems": 1000
+    }
+  },
+  "recentErrors": [
+    {
+      "tag": "WorktreeProviderError",
+      "code": "FAKE_WORKTREE_LIST_FAILED",
+      "message": "The fake worktree provider failed to list worktrees.",
+      "provider": "fake-worktree",
+      "traceId": "trc_1",
+      "diagnosticId": "err_1"
+    }
+  ],
+  "debugBundle": {
+    "available": true,
+    "diagnosticsDir": "/tmp/station/state/diagnostics"
+  }
+}

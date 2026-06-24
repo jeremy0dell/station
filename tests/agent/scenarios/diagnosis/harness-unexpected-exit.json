@@ -1,0 +1,38 @@
+{
+  "name": "harness-unexpected-exit",
+  "expectedRootCause": "HARNESS_UNEXPECTED_EXIT",
+  "evidenceIndex": {
+    "schemaVersion": "0.5.0",
+    "generatedAt": "2026-05-22T12:00:00.000Z",
+    "summary": {
+      "status": "degraded",
+      "rootCauseCodes": ["HARNESS_UNEXPECTED_EXIT"],
+      "providers": ["scripted"],
+      "commandIds": [],
+      "diagnosticIds": ["err_exit"],
+      "redaction": "redacted"
+    },
+    "items": [
+      {
+        "id": "error-err_exit",
+        "category": "error",
+        "severity": "error",
+        "code": "HARNESS_UNEXPECTED_EXIT",
+        "message": "Harness process exited unexpectedly.",
+        "provider": "scripted",
+        "diagnosticId": "err_exit"
+      }
+    ],
+    "rootCauses": [
+      {
+        "code": "HARNESS_UNEXPECTED_EXIT",
+        "confidence": "high",
+        "summary": "Harness process exited unexpectedly.",
+        "itemIds": ["error-err_exit"],
+        "provider": "scripted",
+        "diagnosticId": "err_exit"
+      }
+    ],
+    "questions": []
+  }
+}

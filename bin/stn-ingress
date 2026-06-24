@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+script=$0
+while [ -h "$script" ]; do
+  script_dir=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd)
+  link=$(readlink "$script")
+  case "$link" in
+    /*) script=$link ;;
+    *) script=$script_dir/$link ;;
+  esac
+done
+
+root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd)
+entry=$root/packages/provider-hooks/dist/main.js
+
+if [ ! -f "$entry" ]; then
+  printf '%s\n' "stn-ingress has not been built. Run: pnpm build" >&2
+  exit 1
+fi
+
+exec node "$entry" "$@"

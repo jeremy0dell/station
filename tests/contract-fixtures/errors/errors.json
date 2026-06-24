@@ -1,0 +1,50 @@
+{
+  "safeError": {
+    "tag": "TerminalProviderError",
+    "code": "TERMINAL_TARGET_MISSING",
+    "message": "The terminal target for this worktree no longer exists.",
+    "hint": "Refresh the dashboard or reopen the worktree.",
+    "commandId": "cmd_terminal_focus_1",
+    "projectId": "web",
+    "worktreeId": "wt_web_feature_auth",
+    "sessionId": "ses_web_feature_auth",
+    "provider": "tmux",
+    "traceId": "trc_terminal_missing",
+    "diagnosticId": "diag_terminal_missing"
+  },
+  "errorEnvelope": {
+    "id": "err_terminal_missing",
+    "tag": "TerminalProviderError",
+    "code": "TERMINAL_TARGET_MISSING",
+    "message": "The terminal target for this worktree no longer exists.",
+    "severity": "error",
+    "commandId": "cmd_terminal_focus_1",
+    "traceId": "trc_terminal_missing",
+    "spanId": "spn_terminal_focus",
+    "projectId": "web",
+    "worktreeId": "wt_web_feature_auth",
+    "sessionId": "ses_web_feature_auth",
+    "provider": "tmux",
+    "cause": {
+      "name": "TargetMissingError"
+    },
+    "stack": "TerminalProviderError: target missing\n    at focusTarget (/tmp/station/internal/terminal.ts:10:1)",
+    "raw": {
+      "stderr": "target not found: %45"
+    },
+    "diagnostics": [
+      {
+        "type": "external_command",
+        "provider": "tmux",
+        "operation": "provider.tmux.focusTarget",
+        "command": "tmux select-pane -t %45",
+        "cwd": "/tmp/station/web",
+        "exitCode": 1,
+        "stderrSnippet": "target not found: %45",
+        "durationMs": 12
+      }
+    ],
+    "redacted": true,
+    "createdAt": "2026-05-20T12:00:00.000Z"
+  }
+}

@@ -1,0 +1,148 @@
+// Golden frames for the modal flows: every overlay/prompt/sheet view from
+// the parity checklist, reached by driving the real machine with real keys,
+// rendered over the dashboard at 80x24. Snapshots live in __snapshots__.
+import { afterEach, describe, expect, it } from "bun:test";
+import { testRender } from "@opentui/react/test-utils";
+import type { StoreApi } from "zustand/vanilla";
+import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
+import type { TuiKey } from "@station/dashboard-core";
+import { openRemoveSessionConfirmForRow } from "@station/dashboard-core";
+import type { TuiStore } from "@station/dashboard-core";
+import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { DashboardRoot } from "./DashboardRoot.js";
+
+const SIZE = { width: 80, height: 24 };
+
+type ModalCase = {
+  name: string;
+  keys: TuiKey[];
+  snapshot?: () => ReturnType<typeof manyProjectsSnapshot>;
+  prepare?: (store: StoreApi<TuiStore>) => void;
+  trimSnapshotTrailingWhitespace?: true;
+  expect: string[];
+};
+
+const CASES: ModalCase[] = [
+  {
+    name: "help overlay",
+    keys: [{ input: "H" }],
+    expect: ["station help", "Ctrl-\\", "split pane right", "1-9/a-z", "start or focus row", "╭", "╰"],
+  },
+  {
+    name: "search prompt",
+    keys: [{ input: "/" }, { input: "api" }],
+    expect: ["search: api"],
+  },
+  {
+    name: "collapse prompt",
+    keys: [{ input: "C" }],
+    expect: ["collapse project:"],
+  },
+  {
+    name: "remove slot prompt",
+    keys: [{ input: "X" }],
+    expect: ["remove slot:"],
+  },
+  {
+    name: "remove confirm prompt",
+    keys: [{ input: "X" }, { input: "1" }],
+    expect: ["confirm remove", "Y/N"],
+  },
+  {
+    name: "remove session confirm prompt",
+    keys: [],
+    prepare: (store) => {
+      store.setState(openRemoveSessionConfirmForRow(store.getState(), "wt_station_idle"));
+    },
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["confirm remove session pty-buffer? Y/N"],
+  },
+  {
+    name: "rename slot prompt",
+    keys: [{ input: "R" }],
+    expect: ["Choose the slot to rename: 1-9/a-z"],
+  },
+  {
+    name: "rename sheet",
+    keys: [{ input: "R" }, { input: "1" }],
+    snapshot: attentionAndFailuresSnapshot,
+    expect: ["Rename Session", "Name", "Enter:rename   Esc:back"],
+  },
+  {
+    name: "new session review",
+    keys: [{ input: "N" }],
+    expect: ["Create Session", "Project", "Agent", "Enter:create N:name P:project A:agent Esc:cancel"],
+  },
+  {
+    name: "new session edit name",
+    keys: [{ input: "N" }, { input: "N" }],
+    expect: ["Set Session Name", "Enter:save   Esc:back"],
+  },
+  {
+    name: "new session pick project",
+    keys: [{ input: "N" }, { input: "P" }],
+    expect: ["Choose Project", "1-9/a-z:select   Esc:back", "station", "observer"],
+  },
+  {
+    name: "new session pick agent",
+    keys: [{ input: "N" }, { input: "A" }],
+    expect: ["Choose Agent", "1-9/a-z:select   Esc:back", "codex"],
+  },
+  {
+    name: "add project sheet",
+    keys: [{ input: "A" }],
+    expect: ["Add Project", "Start location", "Enter:open Right:open Esc:cancel"],
+  },
+];
+
+describe("modal flow golden frames", () => {
+  const teardowns: Array<() => void> = [];
+  afterEach(() => {
+    for (const teardown of teardowns.splice(0)) {
+      teardown();
+    }
+  });
+
+  function makeStore(snapshot = manyProjectsSnapshot()): StoreApi<TuiStore> {
+    return makeStationTestStore({
+      snapshot,
+      folderService: {
+        cwd: () => "/Users/example/Developer/station",
+        homeDir: () => "/Users/example",
+        parent: (path) => path.split("/").slice(0, -1).join("/") || "/",
+        readDirectory: async (path) => ({ path, entries: [] }),
+        searchDirectories: async (query) => ({ query, truncated: false, entries: [] }),
+        reviewFolder: async (path) => ({ selectedPath: path, id: "p", label: "p" }),
+      },
+    }).store;
+  }
+
+  for (const modal of CASES) {
+    it(`renders the ${modal.name}`, async () => {
+      const store = makeStore(modal.snapshot?.());
+      for (const key of modal.keys) {
+        store.getState().handleKey(key);
+      }
+      modal.prepare?.(store);
+      const setup = await testRender(
+        <DashboardRoot store={store} columns={SIZE.width} rows={SIZE.height} />,
+        SIZE,
+      );
+      teardowns.push(() => {
+        setup.renderer.destroy();
+      });
+      await setup.renderOnce();
+      // The generated session name is uuid-seeded (stableNameHash over a
+      // random token); scrub it so the goldens stay deterministic.
+      const capturedFrame = setup.captureCharFrame().replace(/station-[0-9a-z]{6}/g, "station-XXXXXX");
+      const frame =
+        modal.trimSnapshotTrailingWhitespace === true
+          ? capturedFrame.replace(/[ \t]+$/gm, "")
+          : capturedFrame;
+      for (const expected of modal.expect) {
+        expect(frame).toContain(expected);
+      }
+      expect(frame).toMatchSnapshot();
+    });
+  }
+});
