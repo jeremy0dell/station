@@ -1,6 +1,6 @@
 import type { HostAttachAck, HostAttachment, HostFrame, StationHostClient } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { createHostBackedTerminal } from "./hostBackedTerminal.js";
+import { createHostAttachedTerminal } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -75,7 +75,7 @@ function ack(overrides: Partial<HostAttachAck> = {}): HostAttachAck {
 
 function terminalFor(attachment: HostAttachment) {
   let clientDisposed = false;
-  const terminal = createHostBackedTerminal({
+  const terminal = createHostAttachedTerminal({
     hostSocketPath: "/tmp/unused.sock",
     ptyId: "pty-1",
     size: { cols: 80, rows: 24 },
@@ -97,7 +97,7 @@ function terminalFor(attachment: HostAttachment) {
   return { terminal, clientDisposed: () => clientDisposed };
 }
 
-describe("createHostBackedTerminal", () => {
+describe("createHostAttachedTerminal", () => {
   it("replays the scrollback snapshot through onData, then streams live frames", async () => {
     const ctrl = controllableAttachment(ack({ scrollback: ["scroll-"] }));
     const { terminal } = terminalFor(ctrl.attachment);
@@ -181,11 +181,11 @@ const auxSpawn = {
   rows: 24,
 };
 
-describe("createHostBackedTerminal (Station-owned aux)", () => {
+describe("createHostAttachedTerminal (Station-owned aux)", () => {
   it("spawn mode: spawns a host PTY at the laid-out size, then attaches to it", async () => {
     const ctrl = controllableAttachment(ack({ ptyId: "pty-spawned" }));
     const tracking: Tracking = { spawns: [], closes: [], spawnPtyId: "pty-spawned" };
-    const terminal = createHostBackedTerminal({
+    const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
       size: { cols: 120, rows: 40 },
       spawn: auxSpawn,
@@ -205,7 +205,7 @@ describe("createHostBackedTerminal (Station-owned aux)", () => {
   it("kill() closes an owned (spawned) aux PTY on the host", async () => {
     const ctrl = controllableAttachment(ack({ ptyId: "pty-spawned" }));
     const tracking: Tracking = { spawns: [], closes: [], spawnPtyId: "pty-spawned" };
-    const terminal = createHostBackedTerminal({
+    const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
       size: { cols: 80, rows: 24 },
       spawn: auxSpawn,
@@ -220,7 +220,7 @@ describe("createHostBackedTerminal (Station-owned aux)", () => {
   it("kill() closes an owned REATTACH (owned:true) PTY on the host", async () => {
     const ctrl = controllableAttachment(ack({ ptyId: "pty-reattach" }));
     const tracking: Tracking = { spawns: [], closes: [], spawnPtyId: "unused" };
-    const terminal = createHostBackedTerminal({
+    const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
       ptyId: "pty-reattach",
       owned: true,
@@ -236,7 +236,7 @@ describe("createHostBackedTerminal (Station-owned aux)", () => {
   it("kill() is a no-op for an attach-only (agent) terminal", async () => {
     const ctrl = controllableAttachment(ack({ ptyId: "pty-agent" }));
     const tracking: Tracking = { spawns: [], closes: [], spawnPtyId: "unused" };
-    const terminal = createHostBackedTerminal({
+    const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
       ptyId: "pty-agent",
       size: { cols: 80, rows: 24 },
@@ -256,7 +256,7 @@ describe("createHostBackedTerminal (Station-owned aux)", () => {
     const gate = new Promise<void>((resolve) => {
       releaseSpawn = resolve;
     });
-    const terminal = createHostBackedTerminal({
+    const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
       size: { cols: 80, rows: 24 },
       spawn: auxSpawn,

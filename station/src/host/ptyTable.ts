@@ -9,7 +9,7 @@ import {
   type HostSpawnResult,
   StationHostProviderError,
 } from "@station/host";
-import { createNodePtyTerminal } from "../terminal/pty/nodePtyTerminal.js";
+import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
 import type {
   StationTerminalDisposable,
   StationTerminalProcess,
@@ -74,7 +74,7 @@ type PtyEntry = {
 };
 
 export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
-  const createTerminal = options.createTerminal ?? createNodePtyTerminal;
+  const createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   const maxScrollbackBytes = options.maxScrollbackBytes ?? DEFAULT_SCROLLBACK_BYTES;
   const emit = options.onEvent ?? (() => undefined);
   const entries = new Map<string, PtyEntry>();

@@ -12,8 +12,8 @@ import {
 
 /**
  * One restored pane's registry seed: its spawn cwd plus, when its PTY is still
- * live in the host, the host-backed override factory that reattaches to it. With
- * no override the pane respawns a fresh local shell at `cwd`.
+ * live in the host, the host-attached terminal creator that reattaches to it.
+ * Without one, the pane respawns a fresh local shell at `cwd`.
  */
 export type RestoreSeed = {
   paneId: PaneId;
@@ -77,8 +77,7 @@ export function applyRestoreSeeds(registry: PtyRegistry, seeds: readonly Restore
 
 /**
  * What the boot gate needs to reattach panes to live PTYs: the live `host.list`
- * keyed by `terminalTargetId`, plus a factory that builds the host-backed override
- * for a given live entry (`createHostBackedTerminal` in production, a fake in tests).
+ * keyed by `terminalTargetId`, plus a terminal creator for a given live entry.
  */
 export type WarmRestoreDeps = {
   liveByTarget: ReadonlyMap<string, HostListEntry>;
@@ -90,7 +89,7 @@ export type WarmRestoreDeps = {
    * so it persists again going forward. Returns `undefined` when the host is
    * unavailable, in which case the shell respawns locally. Absent ⇒ always local.
    */
-  makeFreshAuxTerminal?: (
+  resolveAuxShellPlacement?: (
     paneId: PaneId,
   ) => ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
 } & RestoreCwdOptions;
@@ -138,7 +137,7 @@ export function planLayoutRestoreWarm(
       panes.push({ id: pane.id, split: reanchor(pane, keptIds), role: "shell" });
       keptIds.add(pane.id);
       const seed: RestoreSeed = { paneId: pane.id, cwd: snapshot.cwdByPane[pane.id] };
-      const freshOverride = deps.makeFreshAuxTerminal?.(pane.id);
+      const freshOverride = deps.resolveAuxShellPlacement?.(pane.id);
       if (freshOverride !== undefined) {
         seed.createTerminalOverride = freshOverride;
       }

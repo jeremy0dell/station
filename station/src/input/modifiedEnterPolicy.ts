@@ -6,7 +6,7 @@ import type { ProviderId } from "@station/contracts";
 export type ModifiedEnterSupport = (providerId: ProviderId) => boolean;
 
 /**
- * Preserving modified Enter is normally negotiated by the child app. Host-backed
+ * Preserving modified Enter is normally negotiated by the child app. Host-attached
  * panes can be warm-attached after that negotiation already happened, so the
  * Station-owned pane identity and provider capability are the compatibility fallback.
  */

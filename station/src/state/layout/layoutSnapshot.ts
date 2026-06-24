@@ -24,7 +24,7 @@ const paneRecordSchema = z
     id: paneIdSchema,
     split: paneSplitSchema.nullable(),
     role: z.enum(["primary-agent", "shell"]),
-    // A host-backed pane's PTY identity, used on the next boot to reattach it to
+    // A host-attached pane's PTY identity, used on the next boot to reattach it to
     // its live host PTY (and re-validated against the live host, never trusted blindly).
     terminalTargetId: z.string().min(1).optional(),
   })

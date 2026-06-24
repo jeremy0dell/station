@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createNodePtyTerminal } from "./pty/nodePtyTerminal.js";
+import { createLocalPtyTerminal } from "./pty/localPtyTerminal.js";
 import { spanAtColumn, visibleRowText } from "./testing/vtAssert.js";
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalProcess } from "./types.js";
@@ -27,7 +27,7 @@ function startPipeline(command: string, size = { cols: 80, rows: 24 }): Pipeline
       terminal.write(data);
     },
   });
-  const terminal = createNodePtyTerminal({
+  const terminal = createLocalPtyTerminal({
     command: "/bin/sh",
     args: ["-c", command],
     size,

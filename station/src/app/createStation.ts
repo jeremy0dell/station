@@ -20,7 +20,7 @@ import { selectPaneRecord } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import type { PaneId } from "../state/types.js";
 import type { StationClient } from "../sources/types.js";
-import { createAuxHostTerminalFactory } from "../terminal/pty/auxHostTerminal.js";
+import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { createStationViewStore } from "../station/store/stationViewStore.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
@@ -121,7 +121,7 @@ function setupRegistry(
       ...(options.scrollOnOutput === undefined ? {} : { scrollOnOutput: options.scrollOnOutput }),
     });
   // Refresh a (possibly HMR-reused) registry to this boot's config; createTerminal
-  // is left untouched when omitted, so a reused registry keeps its live factory.
+  // is left untouched when omitted, so a reused registry keeps its live terminal creator.
   registry.setRuntimeOptions({
     ...(options.createTerminal === undefined ? {} : { createTerminal: options.createTerminal }),
     scrollOnOutput: options.scrollOnOutput,
@@ -165,7 +165,7 @@ function createLayoutPersistence(
   if (layout === undefined) {
     return undefined;
   }
-  // A host-backed pane's terminalTargetId rides on its primary-agent record;
+  // A host-attached pane's terminalTargetId rides on its primary-agent record;
   // plain local shells have none.
   const targetForPane = (paneId: PaneId): string | undefined =>
     selectPaneRecord(store.getState(), paneId)?.agentIdentity?.terminalTargetId;
@@ -255,7 +255,7 @@ function createLifecycle(deps: {
   };
 }
 
-/** Build the input runtime; aux shells go host-backed when a socket is set. */
+/** Build the input runtime; aux shell placement uses the host when a socket is set. */
 function createInputRuntime(
   options: CreateStationOptions,
   deps: {
@@ -267,12 +267,12 @@ function createInputRuntime(
     onShutdown: () => void;
   },
 ): StationInputRuntime {
-  // Aux shells spawn into the persistent host when a socket is configured; the
-  // factory decides local-vs-host per spawn based on whether the daemon is up.
-  const createAuxHostOverride =
+  // Aux shells land in the persistent host when a socket is configured; the
+  // placement resolver still falls back to local per spawn when the daemon is down.
+  const auxShellPlacement =
     options.hostSocketPath === undefined
       ? undefined
-      : createAuxHostTerminalFactory(options.hostSocketPath);
+      : resolveAuxShellPlacement(options.hostSocketPath);
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
@@ -285,8 +285,8 @@ function createInputRuntime(
   if (options.openExternalUrl !== undefined) {
     inputOptions.openExternalUrl = options.openExternalUrl;
   }
-  if (createAuxHostOverride !== undefined) {
-    inputOptions.createAuxHostOverride = createAuxHostOverride;
+  if (auxShellPlacement !== undefined) {
+    inputOptions.resolveAuxShellPlacement = auxShellPlacement;
   }
   return createStationInputRuntime(inputOptions);
 }
