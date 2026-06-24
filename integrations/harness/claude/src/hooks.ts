@@ -1,20 +1,20 @@
 // Installs/uninstalls the STATION hook into Claude Code's settings.json hooks.
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
-import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
 import {
-  backupIfPresent,
-  readOptionalFile,
-  removeHookFileIfPresent,
-  writeHookConfig,
-  writeHookScript,
-} from "./hooks/hookFiles.js";
+  createHookSetupFileOps,
+  expectedProviderHookScript,
+  installConfigScriptHook,
+  type ProviderHookScriptOptions,
+  providerHookScriptOptions,
+} from "@station/runtime";
+import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
+import { ClaudeHookSetupError } from "./hooks/hookErrors.js";
 import {
   resolveClaudeHookScriptPath,
   resolveClaudeSettingsArtifactPath,
   resolveClaudeUserSettingsPath,
 } from "./hooks/hookPaths.js";
-import { type ClaudeHookScriptOptions, expectedClaudeHookScript } from "./hooks/hookScript.js";
 import {
   type ClaudeSettingsDocument,
   expectedClaudeHookSettings,
@@ -33,12 +33,12 @@ export {
   resolveClaudeSettingsArtifactPath,
   resolveClaudeUserSettingsPath,
 } from "./hooks/hookPaths.js";
-export { expectedClaudeHookScript } from "./hooks/hookScript.js";
 export {
   expectedClaudeHookSettings,
   generatedClaudeHookEvents,
   parseClaudeSettingsDocument,
 } from "./hooks/hookSettings.js";
+export { expectedClaudeHookScript };
 
 export type ClaudeHookPlanOptions = {
   claudeSettingsPath?: string;
@@ -100,39 +100,32 @@ export type ClaudeHookDoctorResult = {
   message: string;
 };
 
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    ClaudeHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): ClaudeHookScriptOptions {
-  const input: ClaudeHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) {
-    input.stationConfigPath = options.stationConfigPath;
+export type ClaudeHookScriptOptions = ProviderHookScriptOptions & {
+  hookScriptPath: string;
+};
+
+const fileOps = createHookSetupFileOps(({ operation, cause }) => {
+  if (operation === "read" || operation === "metadata") {
+    return new ClaudeHookSetupError(
+      "CLAUDE_HOOK_CONFIG_UNREADABLE",
+      operation === "read"
+        ? "Claude hook config could not be read."
+        : "Claude hook config metadata could not be read.",
+      { cause },
+    );
   }
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    input.stateDir = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    input.hookSpoolDir = options.hookSpoolDir;
-  }
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) {
-    input.hookBin = options.hookBin;
-  }
-  return input;
-}
+  return new ClaudeHookSetupError(
+    "CLAUDE_HOOK_WRITE_FAILED",
+    operation === "remove"
+      ? "Claude hook file could not be removed."
+      : operation === "writeScript"
+        ? "Claude hook script could not be written."
+        : operation === "backup"
+          ? "Claude hook config backup could not be written."
+          : "Claude hook config could not be written.",
+    { cause },
+  );
+});
 
 function parseArtifactDocument(contents: string): {
   document: ClaudeSettingsDocument;
@@ -151,7 +144,7 @@ async function buildUserSettingsCleanup(userSettingsPath: string): Promise<{
   cleanup: ClaudeUserSettingsCleanup;
   document: ClaudeSettingsDocument;
 }> {
-  const before = await readOptionalFile(userSettingsPath);
+  const before = await fileOps.readOptionalFile(userSettingsPath);
   const { document } = parseArtifactDocument(before);
   const stale = generatedClaudeHookEvents(document);
   const afterDocument = removeGeneratedClaudeHookEntries(document);
@@ -211,17 +204,26 @@ function doctorMessage(input: {
   return `Claude hooks are missing or stale in the station settings artifact: ${description}.`;
 }
 
+function expectedClaudeHookScript(input: ClaudeHookScriptOptions): string {
+  return expectedProviderHookScript({
+    provider: "claude",
+    options: input,
+    ignoreFailure: true,
+    redirectStderr: true,
+  });
+}
+
 export async function planClaudeHooks(
   options: ClaudeHookPlanOptions = {},
 ): Promise<ClaudeHookPlan> {
   const settingsPath = resolveClaudeSettingsArtifactPath(options);
   const userSettingsPath = resolveClaudeUserSettingsPath(options);
   const hookScriptPath = resolveClaudeHookScriptPath(options);
-  const before = await readOptionalFile(settingsPath);
+  const before = await fileOps.readOptionalFile(settingsPath);
   const { document, invalid } = parseArtifactDocument(before);
   const after = stringifyClaudeSettings(expectedClaudeHookSettings({ hookScriptPath }));
-  const script = expectedClaudeHookScript(scriptOptions(hookScriptPath, options));
-  const scriptBefore = await readOptionalFile(hookScriptPath);
+  const script = expectedClaudeHookScript(providerHookScriptOptions(hookScriptPath, options));
+  const scriptBefore = await fileOps.readOptionalFile(hookScriptPath);
   const settingsChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
   const { cleanup } = await buildUserSettingsCleanup(userSettingsPath);
@@ -247,22 +249,22 @@ export async function installClaudeHooks(
   options: ClaudeHookPlanOptions = {},
 ): Promise<ClaudeHookInstallResult> {
   const plan = await planClaudeHooks(options);
-  let backupPath: string | undefined;
+  const backupPath = await installConfigScriptHook({
+    configPath: plan.settingsPath,
+    hookScriptPath: plan.hookScriptPath,
+    after: plan.after,
+    expectedScript: expectedClaudeHookScript(
+      providerHookScriptOptions(plan.hookScriptPath, options),
+    ),
+    configChanged: plan.settingsChanged,
+    scriptChanged: plan.scriptChanged,
+    fileOps,
+  });
   let userSettingsBackupPath: string | undefined;
 
-  if (plan.settingsChanged) {
-    backupPath = await backupIfPresent(plan.settingsPath);
-    await writeHookConfig(plan.settingsPath, plan.after);
-  }
   if (plan.userSettingsCleanup.changed) {
-    userSettingsBackupPath = await backupIfPresent(plan.userSettingsPath);
-    await writeHookConfig(plan.userSettingsPath, plan.userSettingsCleanup.after);
-  }
-  if (plan.scriptChanged) {
-    await writeHookScript(
-      plan.hookScriptPath,
-      expectedClaudeHookScript(scriptOptions(plan.hookScriptPath, options)),
-    );
+    userSettingsBackupPath = await fileOps.backupIfPresent(plan.userSettingsPath);
+    await fileOps.writeHookConfig(plan.userSettingsPath, plan.userSettingsCleanup.after);
   }
 
   const result = installResultFromPlan({ ...plan, missing: [], artifactInvalid: false }, true);
@@ -287,18 +289,20 @@ export async function uninstallClaudeHooks(
   const settingsPath = resolveClaudeSettingsArtifactPath(options);
   const userSettingsPath = resolveClaudeUserSettingsPath(options);
   const hookScriptPath = resolveClaudeHookScriptPath(options);
-  const before = await readOptionalFile(settingsPath);
+  const before = await fileOps.readOptionalFile(settingsPath);
   const { cleanup, document: cleanedUserDocument } =
     await buildUserSettingsCleanup(userSettingsPath);
   let userSettingsBackupPath: string | undefined;
 
-  const settingsRemoved = await removeHookFileIfPresent(settingsPath);
+  const settingsRemoved = await fileOps.removeHookFileIfPresent(settingsPath);
   if (cleanup.changed) {
-    userSettingsBackupPath = await backupIfPresent(userSettingsPath);
-    await writeHookConfig(userSettingsPath, cleanup.after);
+    userSettingsBackupPath = await fileOps.backupIfPresent(userSettingsPath);
+    await fileOps.writeHookConfig(userSettingsPath, cleanup.after);
   }
   const scriptStillNeeded = settingsDocumentContainsCommand(cleanedUserDocument, hookScriptPath);
-  const scriptRemoved = scriptStillNeeded ? false : await removeHookFileIfPresent(hookScriptPath);
+  const scriptRemoved = scriptStillNeeded
+    ? false
+    : await fileOps.removeHookFileIfPresent(hookScriptPath);
 
   const result: ClaudeHookInstallResult = {
     provider: "claude",

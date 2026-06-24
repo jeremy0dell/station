@@ -1,6 +1,6 @@
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { createHookSetupFileOps, providerHookCommandLine } from "@station/runtime";
 import { parse, stringify } from "smol-toml";
 
 export const WORKTRUNK_HOOK_NAMES = [
@@ -75,12 +75,30 @@ export class WorktrunkHookSetupError extends Error {
 }
 
 const generatedCommandKey = "station";
+const fileOps = createHookSetupFileOps(({ operation, cause }) => {
+  if (operation === "read" || operation === "metadata") {
+    return new WorktrunkHookSetupError(
+      "WORKTRUNK_HOOK_CONFIG_UNREADABLE",
+      operation === "read"
+        ? "Worktrunk hook config could not be read."
+        : "Worktrunk hook config metadata could not be read.",
+      { cause },
+    );
+  }
+  return new WorktrunkHookSetupError(
+    "WORKTRUNK_HOOK_WRITE_FAILED",
+    operation === "backup"
+      ? "Worktrunk hook config backup could not be written."
+      : "Worktrunk hook config could not be written.",
+    { cause },
+  );
+});
 
 export async function planWorktrunkHooks(
   options: WorktrunkHookPlanOptions = {},
 ): Promise<WorktrunkHookPlan> {
   const configPath = resolveWorktrunkConfigPath(options);
-  const before = await readOptionalFile(configPath);
+  const before = await fileOps.readOptionalFile(configPath);
   const commands = expectedWorktrunkHookCommands(options);
   const document = parseTomlDocument(before);
   const missing = WORKTRUNK_HOOK_NAMES.filter(
@@ -111,8 +129,8 @@ export async function installWorktrunkHooks(
     };
   }
 
-  const backupPath = await backupIfPresent(plan.configPath);
-  await writeHookConfig(plan.configPath, plan.after);
+  const backupPath = await fileOps.backupIfPresent(plan.configPath);
+  await fileOps.writeHookConfig(plan.configPath, plan.after);
   return {
     ...plan,
     installed: true,
@@ -124,7 +142,7 @@ export async function uninstallWorktrunkHooks(
   options: WorktrunkHookPlanOptions = {},
 ): Promise<WorktrunkHookInstallResult> {
   const configPath = resolveWorktrunkConfigPath(options);
-  const before = await readOptionalFile(configPath);
+  const before = await fileOps.readOptionalFile(configPath);
   const commands = expectedWorktrunkHookCommands(options);
   const document = parseTomlDocument(before);
   const afterDocument = uninstallCommands(document, commands);
@@ -135,8 +153,8 @@ export async function uninstallWorktrunkHooks(
   const changed = before.trim() !== after.trim();
 
   if (changed) {
-    const backupPath = await backupIfPresent(configPath);
-    await writeHookConfig(configPath, after);
+    const backupPath = await fileOps.backupIfPresent(configPath);
+    await fileOps.writeHookConfig(configPath, after);
     return {
       provider: "worktrunk",
       configPath,
@@ -218,18 +236,7 @@ export function expectedWorktrunkHookCommands(
   return Object.fromEntries(
     WORKTRUNK_HOOK_NAMES.map((hookName) => [
       hookName,
-      commandLine([
-        hookBin,
-        ...(options.observerSocketPath === undefined
-          ? []
-          : ["--socket", options.observerSocketPath]),
-        ...(options.stateDir === undefined ? [] : ["--state-dir", options.stateDir]),
-        ...(options.hookSpoolDir === undefined ? [] : ["--spool-dir", options.hookSpoolDir]),
-        ...(options.stationConfigPath === undefined ? [] : ["--config", options.stationConfigPath]),
-        ...(options.autoStartFromHooks === false ? ["--no-auto-start"] : []),
-        "worktrunk",
-        hookName,
-      ]),
+      providerHookCommandLine("worktrunk", { ...options, hookBin }, hookName),
     ]),
   ) as Record<WorktrunkHookName, string>;
 }
@@ -352,72 +359,6 @@ function parseTomlDocument(source: string): Record<string, unknown> {
 function stringifyTomlDocument(document: Record<string, unknown>): string {
   const result = stringify(document);
   return result.endsWith("\n") ? result : `${result}\n`;
-}
-
-async function readOptionalFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch (cause) {
-    if (isNodeError(cause) && cause.code === "ENOENT") {
-      return "";
-    }
-    throw new WorktrunkHookSetupError(
-      "WORKTRUNK_HOOK_CONFIG_UNREADABLE",
-      "Worktrunk hook config could not be read.",
-      { cause },
-    );
-  }
-}
-
-async function writeHookConfig(path: string, contents: string): Promise<void> {
-  try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(path, contents, { mode: 0o600 });
-  } catch (cause) {
-    throw new WorktrunkHookSetupError(
-      "WORKTRUNK_HOOK_WRITE_FAILED",
-      "Worktrunk hook config could not be written.",
-      { cause },
-    );
-  }
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "code" in error;
-}
-
-async function backupIfPresent(path: string): Promise<string | undefined> {
-  try {
-    await stat(path);
-  } catch (cause) {
-    if (isNodeError(cause) && cause.code === "ENOENT") {
-      return undefined;
-    }
-    throw new WorktrunkHookSetupError(
-      "WORKTRUNK_HOOK_CONFIG_UNREADABLE",
-      "Worktrunk hook config metadata could not be read.",
-      { cause },
-    );
-  }
-  const backupPath = `${path}.bak.${new Date().toISOString().replaceAll(/[^0-9]/g, "")}`;
-  try {
-    await copyFile(path, backupPath);
-  } catch (cause) {
-    throw new WorktrunkHookSetupError(
-      "WORKTRUNK_HOOK_WRITE_FAILED",
-      "Worktrunk hook config backup could not be written.",
-      { cause },
-    );
-  }
-  return backupPath;
-}
-
-function commandLine(args: string[]): string {
-  return args.map(shellQuote).join(" ");
-}
-
-function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function resolvePath(input: string, homeDir: string): string {
