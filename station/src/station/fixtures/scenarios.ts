@@ -19,13 +19,15 @@ export type StationScenarioName =
   | "baseline"
   | "many-projects"
   | "attention-and-failures"
-  | "disconnected";
+  | "disconnected"
+  | "showcase";
 
 export const STATION_SCENARIO_NAMES: readonly StationScenarioName[] = [
   "baseline",
   "many-projects",
   "attention-and-failures",
   "disconnected",
+  "showcase",
 ];
 
 /** A scenario is exactly what a StationStateSource serves. */
@@ -59,6 +61,12 @@ export function scenarioState(name: StationScenarioName): StationState {
             message: "Could not connect to observer socket /tmp/station-station.sock.",
           },
         },
+      };
+    case "showcase":
+      // Curated demo: agents working across famous repos at once.
+      return {
+        snapshot: showcaseSnapshot(),
+        connection: { state: "connected", since: SCENARIO_NOW_MS },
       };
   }
 }
@@ -135,16 +143,49 @@ export function attentionAndFailuresSnapshot(): StationSnapshot {
   );
 }
 
+export function showcaseSnapshot(): StationSnapshot {
+  return snapshotFromRows(
+    [
+      // The flex: agents working across famous OSS repos at the same time.
+      scenarioRow({ id: "wt_linux_sched", project: LINUX, branch: "sched/eevdf-latency", state: "working", additions: 284, deletions: 91, pr: { number: 4821, state: "open" }, checks: "running" }),
+      scenarioRow({ id: "wt_linux_cifs", project: LINUX, branch: "fix/cifs-null-deref", state: "needs_attention", additions: 12, deletions: 3, pr: { number: 4810, state: "open" }, checks: { state: "fail", failed: 1 } }),
+      scenarioRow({ id: "wt_ghostty_kitty", project: GHOSTTY, branch: "feat/kitty-graphics", state: "working", additions: 517, deletions: 64, pr: { number: 2203, state: "open" }, checks: "running" }),
+      scenarioRow({ id: "wt_ghostty_atlas", project: GHOSTTY, branch: "perf/glyph-atlas-cache", state: "idle", additions: 88, deletions: 12, pr: { number: 2199, state: "merged" }, checks: "pass" }),
+      scenarioRow({ id: "wt_svelte_runes", project: SVELTE, branch: "runes/fine-grained-deps", state: "working", additions: 143, deletions: 77, pr: { number: 13007, state: "open" }, checks: "pass" }),
+      scenarioRow({ id: "wt_svelte_ssr", project: SVELTE, branch: "compiler/ssr-hydration", state: "stuck", additions: 402, deletions: 210, pr: { number: 12990, state: "open" }, checks: "running" }),
+      // The bit: an agent heroically optimizing a one-line package.
+      scenarioRow({ id: "wt_iseven_o1", project: IS_EVEN, branch: "perf/constant-time-evenness", state: "working", additions: 2, deletions: 1, pr: { number: 42, state: "open" }, checks: "pass" }),
+    ],
+    {
+      projects: [LINUX, GHOSTTY, SVELTE, IS_EVEN],
+      alerts: [
+        {
+          id: "alert_showcase_mock",
+          severity: "info",
+          message: "Showcase fixture — not live observer data.",
+          createdAt: SCENARIO_NOW,
+        },
+      ],
+    },
+  );
+}
+
 type ScenarioProject = {
   id: string;
   label: string;
-  harness: "codex" | "opencode";
+  harness: "claude" | "codex" | "opencode";
 };
 
 const STATION: ScenarioProject = { id: "station", label: "station", harness: "codex" };
 const OBSERVER: ScenarioProject = { id: "observer", label: "observer", harness: "opencode" };
 const SCRIPTS: ScenarioProject = { id: "scripts", label: "scripts", harness: "opencode" };
 const EMPTY: ScenarioProject = { id: "empty-project", label: "empty-project", harness: "codex" };
+
+// Showcase roster: recognizable OSS repos for the demo overview shot.
+const LINUX: ScenarioProject = { id: "linux", label: "linux", harness: "codex" };
+const GHOSTTY: ScenarioProject = { id: "ghostty", label: "ghostty", harness: "claude" };
+const SVELTE: ScenarioProject = { id: "svelte", label: "svelte", harness: "codex" };
+const IS_EVEN: ScenarioProject = { id: "is-even", label: "is-even", harness: "claude" };
 
 type AgentScenarioState =
   | "none"
