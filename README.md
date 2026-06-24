@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./station/assets/station-icon.svg" alt="Station logo" width="64" height="64">
+</p>
+
 # station
 
 **A terminal-native control plane for AI-agent worktree sessions.**

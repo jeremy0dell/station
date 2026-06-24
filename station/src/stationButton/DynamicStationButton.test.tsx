@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { DynamicStationButton } from "./DynamicStationButton.js";
-import { ANIM_MS } from "./layout.js";
+import { ANIM_MS, STATION_ICON } from "./layout.js";
 
 // OpenTUI's reconciler commits async layout updates outside React's act(),
 // matching the StationApp integration test's stance for these render checks.
@@ -24,7 +24,7 @@ describe("DynamicStationButton", () => {
     const frame = await captureFrame(
       <DynamicStationButton attention={false} workingCount={2} idleCount={14} />,
     );
-    expect(frame).toContain("⧉");
+    expect(frame).toContain(STATION_ICON);
     expect(frame).not.toContain("session");
   });
 
@@ -32,7 +32,7 @@ describe("DynamicStationButton", () => {
     const frame = await captureFrame(
       <DynamicStationButton attention={true} workingCount={0} idleCount={0} sessionName="hook-scope" />,
     );
-    expect(frame).toContain("⧉");
+    expect(frame).toContain(STATION_ICON);
     // Framed alert: solid "!" rows top and bottom around the centered icon.
     expect(frame).toContain("!!!!");
     expect(frame).not.toContain("needs user");
@@ -42,7 +42,7 @@ describe("DynamicStationButton", () => {
     const frame = await captureFrame(
       <DynamicStationButton attention={false} workingCount={2} idleCount={14} hovered />,
     );
-    expect(frame).toContain("⧉");
+    expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("2 sessions working");
     expect(frame).toContain("14 sessions idle");
   });
@@ -65,7 +65,7 @@ describe("DynamicStationButton", () => {
     const [topBorder, iconRow, titleRow] = lines;
     const buttonLeft = topBorder.indexOf("╭");
     expect(buttonLeft).toBeGreaterThanOrEqual(0);
-    expect(iconRow.slice(buttonLeft)).toContain("⧉");
+    expect(iconRow.slice(buttonLeft)).toContain(STATION_ICON);
     expect(iconRow.slice(buttonLeft)).not.toContain("hook-scope");
     expect(titleRow.slice(buttonLeft)).toContain("hook-scope");
     const bottomBorder = lines.findIndex((line) => line.slice(buttonLeft).startsWith("╰"));
