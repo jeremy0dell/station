@@ -7,15 +7,14 @@ import type {
   HarnessEventReport,
   ObservedStatus,
   RawHarnessEvent,
-  TerminalTargetObservation,
-  WorktreeObservation,
 } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  observedPathIsSameOrInside,
-  STATION_SCHEMA_VERSION,
-  sameObservedPath,
-} from "@station/contracts";
+  applyCorrelation,
+  correlateTerminalBoundHarnessEvent,
+  harnessEventDiagnostics,
+  reportCorrelation,
+} from "@station/harness-shared";
 import { z } from "zod";
 import { compactCursorProviderHookPayload } from "./compaction.js";
 import { cursorHarnessError } from "./errors.js";
@@ -142,36 +141,20 @@ function providerDataFromCursorEvent(event: CursorProviderHookPayload): Record<s
 function reportCorrelationFromCursorEvent(
   event: CursorProviderHookPayload,
 ): HarnessEventReport["correlation"] | undefined {
-  const correlation: NonNullable<HarnessEventReport["correlation"]> = {};
   const cwd = cursorEventCwd(event);
-  if (cwd !== undefined) correlation.cwd = cwd;
-  if (event.station_project_id !== undefined) correlation.projectId = event.station_project_id;
-  if (event.station_worktree_id !== undefined) correlation.worktreeId = event.station_worktree_id;
-  if (event.station_session_id !== undefined) correlation.sessionId = event.station_session_id;
-  if (event.station_terminal_target_id !== undefined) {
-    correlation.terminalTargetId = event.station_terminal_target_id;
-    correlation.harnessRunId = `cursor:${event.station_terminal_target_id}`;
-  }
   const nativeSessionId = cursorNativeSessionId(event);
-  if (nativeSessionId !== undefined) correlation.nativeSessionId = nativeSessionId;
-  return Object.keys(correlation).length === 0 ? undefined : correlation;
-}
-
-function reportDiagnosticsFromCursorEvent(
-  event: CursorProviderHookPayload,
-  input: CursorProviderHookPayloadReportInput["diagnostics"],
-): HarnessEventReport["diagnostics"] | undefined {
-  const diagnostics: NonNullable<HarnessEventReport["diagnostics"]> = {
-    rawEventType: event.hook_event_name,
-  };
-  if (typeof input?.payloadBytes === "number") diagnostics.payloadBytes = input.payloadBytes;
-  if (typeof input?.compactedBytes === "number") diagnostics.compactedBytes = input.compactedBytes;
-  if (input?.compacted !== undefined) diagnostics.compacted = input.compacted;
-  if (input?.truncated !== undefined) diagnostics.truncated = input.truncated;
-  if (input?.omittedFieldNames !== undefined && input.omittedFieldNames.length > 0) {
-    diagnostics.omittedFieldNames = input.omittedFieldNames;
-  }
-  return diagnostics;
+  return reportCorrelation({
+    cwd,
+    nativeSessionId,
+    projectId: event.station_project_id,
+    worktreeId: event.station_worktree_id,
+    sessionId: event.station_session_id,
+    terminalTargetId: event.station_terminal_target_id,
+    harnessRunId:
+      event.station_terminal_target_id === undefined
+        ? undefined
+        : `cursor:${event.station_terminal_target_id}`,
+  });
 }
 
 function reportCoalesceKeyFromCursorEvent(event: CursorProviderHookPayload): string | undefined {
@@ -187,131 +170,12 @@ function reportCoalesceKeyFromCursorEvent(event: CursorProviderHookPayload): str
   return parts.length === 0 ? undefined : parts.join(":");
 }
 
-function correlateCursorEvent(
-  event: CursorProviderHookPayload,
-  context: HarnessEventContext,
-): {
-  projectId?: string;
-  sessionId?: string;
-  worktreeId?: string;
-  terminalTargetId?: string;
-  harnessRunId?: string;
-  nativeSessionId?: string;
-  cwd?: string;
-} {
-  const cwd = cursorEventCwd(event);
-  const terminal =
-    terminalForId(event.station_terminal_target_id, context.terminalTargets) ??
-    terminalForCwd(cwd, context.terminalTargets);
-  const worktree =
-    worktreeForId(event.station_worktree_id, context.worktrees) ??
-    worktreeForPath(event.station_worktree_path, context.worktrees) ??
-    worktreeForCwd(cwd, context.worktrees);
-  const result: {
-    projectId?: string;
-    sessionId?: string;
-    worktreeId?: string;
-    terminalTargetId?: string;
-    harnessRunId?: string;
-    nativeSessionId?: string;
-    cwd?: string;
-  } = {};
-  if (event.station_project_id !== undefined) {
-    result.projectId = event.station_project_id;
-  } else if (terminal?.projectId !== undefined) {
-    result.projectId = terminal.projectId;
-  } else if (worktree?.projectId !== undefined) {
-    result.projectId = worktree.projectId;
-  }
-  if (event.station_session_id !== undefined) {
-    result.sessionId = event.station_session_id;
-  } else if (terminal?.sessionId !== undefined) {
-    result.sessionId = terminal.sessionId;
-  }
-  if (event.station_worktree_id !== undefined) {
-    result.worktreeId = event.station_worktree_id;
-  } else if (terminal?.worktreeId !== undefined) {
-    result.worktreeId = terminal.worktreeId;
-  } else if (worktree !== undefined) {
-    result.worktreeId = worktree.id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    result.terminalTargetId = event.station_terminal_target_id;
-    result.harnessRunId = `cursor:${event.station_terminal_target_id}`;
-  } else if (terminal?.harnessRunId !== undefined) {
-    result.terminalTargetId = terminal.id;
-    result.harnessRunId = terminal.harnessRunId;
-  } else if (terminal !== undefined) {
-    result.terminalTargetId = terminal.id;
-    result.harnessRunId = `cursor:${terminal.id}`;
-  }
-  const nativeSessionId = cursorNativeSessionId(event);
-  if (nativeSessionId !== undefined) result.nativeSessionId = nativeSessionId;
-  if (cwd !== undefined) result.cwd = cwd;
-  return result;
-}
-
 function cursorEventCwd(event: CursorProviderHookPayload): string | undefined {
   return event.cwd ?? event.station_worktree_path ?? event.workspace_roots?.[0];
 }
 
 function cursorNativeSessionId(event: CursorProviderHookPayload): string | undefined {
   return event.session_id ?? event.conversation_id;
-}
-
-function terminalForId(
-  terminalTargetId: string | undefined,
-  targets: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  if (terminalTargetId === undefined) {
-    return undefined;
-  }
-  return targets.find((target) => target.id === terminalTargetId);
-}
-
-function terminalForCwd(
-  cwd: string | undefined,
-  targets: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  if (cwd === undefined) {
-    return undefined;
-  }
-  return (
-    targets.find((target) => target.cwd !== undefined && sameObservedPath(target.cwd, cwd)) ??
-    targets.find(
-      (target) => target.cwd !== undefined && observedPathIsSameOrInside(cwd, target.cwd),
-    )
-  );
-}
-
-function worktreeForId(
-  worktreeId: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (worktreeId === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => worktree.id === worktreeId);
-}
-
-function worktreeForPath(
-  worktreePath: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (worktreePath === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => sameObservedPath(worktree.path, worktreePath));
-}
-
-function worktreeForCwd(
-  cwd: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (cwd === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => observedPathIsSameOrInside(cwd, worktree.path));
 }
 
 export function parseCursorProviderHookPayload(input: unknown): CursorProviderHookPayload {
@@ -333,7 +197,16 @@ export function normalizeCursorRawEvent(
 ): HarnessEventObservation[] {
   const event = parseCursorProviderHookPayload(raw.event);
   const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateCursorEvent(event, context);
+  const correlation = correlateTerminalBoundHarnessEvent({
+    provider: "cursor",
+    identity: event,
+    context,
+    cwd: cursorEventCwd(event),
+    nativeSessionId: cursorNativeSessionId(event),
+    includeProjectId: true,
+    includeTerminalTargetId: true,
+    includeCwd: true,
+  });
   const observation: HarnessEventObservation = {
     provider: "cursor",
     rawEventType: event.hook_event_name,
@@ -341,17 +214,7 @@ export function normalizeCursorRawEvent(
     observedAt,
     providerData: providerDataFromCursorEvent(event),
   };
-  if (correlation.projectId !== undefined) observation.projectId = correlation.projectId;
-  if (correlation.sessionId !== undefined) observation.sessionId = correlation.sessionId;
-  if (correlation.worktreeId !== undefined) observation.worktreeId = correlation.worktreeId;
-  if (correlation.terminalTargetId !== undefined) {
-    observation.terminalTargetId = correlation.terminalTargetId;
-  }
-  if (correlation.harnessRunId !== undefined) observation.harnessRunId = correlation.harnessRunId;
-  if (correlation.nativeSessionId !== undefined) {
-    observation.nativeSessionId = correlation.nativeSessionId;
-  }
-  if (correlation.cwd !== undefined) observation.cwd = correlation.cwd;
+  applyCorrelation(observation, correlation);
   return [observation];
 }
 
@@ -373,10 +236,7 @@ export function cursorProviderHookPayloadToHarnessEventReport(
   if (correlation !== undefined) {
     report.correlation = correlation;
   }
-  const diagnostics = reportDiagnosticsFromCursorEvent(event, input.diagnostics);
-  if (diagnostics !== undefined) {
-    report.diagnostics = diagnostics;
-  }
+  report.diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
   const coalesceKey = reportCoalesceKeyFromCursorEvent(event);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;

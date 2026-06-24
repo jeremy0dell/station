@@ -3,6 +3,13 @@ import type {
   HarnessLaunchPlan,
   HarnessPermissionMode,
 } from "@station/contracts";
+import {
+  type CommonProviderDataInput,
+  commonProviderData,
+  harnessLaunchEnv,
+  isYoloPermissionMode,
+  terminalProviderData,
+} from "@station/harness-shared";
 import { OpenCodeHarnessProviderError } from "./errors.js";
 
 export type OpenCodeLaunchOptions = {
@@ -39,9 +46,12 @@ export function buildOpenCodeLaunchPlan(
     initialPrompt: request.initialPrompt,
   });
 
-  const providerDataInput: OpenCodeProviderDataInput = {
+  const providerDataInput: CommonProviderDataInput = {
     mode,
     initialPromptProvided: request.initialPrompt !== undefined,
+    configPathProvided: options.configPath !== undefined,
+    observerSocketPathProvided: options.observerSocketPath !== undefined,
+    ...terminalProviderData(request),
   };
   if (profile !== undefined) {
     providerDataInput.profile = profile;
@@ -55,26 +65,16 @@ export function buildOpenCodeLaunchPlan(
   if (!yolo && sandboxMode !== undefined) {
     providerDataInput.sandboxMode = sandboxMode;
   }
-  if (options.configPath !== undefined) {
-    providerDataInput.configPathProvided = true;
-  }
-  if (options.observerSocketPath !== undefined) {
-    providerDataInput.observerSocketPathProvided = true;
-  }
-  if (request.terminalTarget !== undefined) {
-    providerDataInput.terminalProvider = request.terminalTarget.provider;
-    providerDataInput.terminalTargetId = request.terminalTarget.id;
-  }
 
   return {
     provider: "opencode",
     command: options.command ?? "opencode",
     args,
     cwd: request.worktree.path,
-    env: openCodeLaunchEnv(request, options),
+    env: harnessLaunchEnv("opencode", request, options),
     mode,
     displayTitle: `${request.project.label} OpenCode`,
-    providerData: openCodeProviderData(providerDataInput),
+    providerData: commonProviderData(providerDataInput),
   };
 }
 
@@ -109,10 +109,10 @@ function buildOpenCodeResumeLaunchPlan(
     command: options.command ?? "opencode",
     args,
     cwd: request.worktree.path,
-    env: openCodeLaunchEnv(request, options),
+    env: harnessLaunchEnv("opencode", request, options),
     mode,
     displayTitle: `${request.project.label} OpenCode`,
-    providerData: openCodeProviderData({
+    providerData: commonProviderData({
       mode,
       initialPromptProvided: request.initialPrompt !== undefined,
       resume: true,
@@ -151,102 +151,4 @@ function appendOpenCodeOptions(
       args.push(options.initialPrompt);
     }
   }
-}
-
-function openCodeLaunchEnv(
-  request: BuildHarnessLaunchRequest,
-  options: OpenCodeLaunchOptions,
-): Record<string, string> {
-  const env: Record<string, string> = {
-    STATION_PROJECT_ID: request.project.id,
-    STATION_WORKTREE_ID: request.worktree.id,
-    STATION_WORKTREE_PATH: request.worktree.path,
-    STATION_HARNESS_PROVIDER: "opencode",
-  };
-  if (request.sessionId !== undefined) {
-    env.STATION_SESSION_ID = request.sessionId;
-  }
-  if (request.terminalTarget !== undefined) {
-    env.STATION_TERMINAL_PROVIDER = request.terminalTarget.provider;
-    env.STATION_TERMINAL_TARGET_ID = request.terminalTarget.id;
-  }
-  if (options.configPath !== undefined) {
-    env.STATION_CONFIG_PATH = options.configPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    env.STATION_OBSERVER_SOCKET_PATH = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    env.STATION_OBSERVER_STATE_DIR = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    env.STATION_HOOK_SPOOL_DIR = options.hookSpoolDir;
-  }
-  return env;
-}
-
-function isYoloPermissionMode(input: {
-  permissionMode?: HarnessPermissionMode | undefined;
-  approvalPolicy?: string | undefined;
-  sandboxMode?: string | undefined;
-}): boolean {
-  if (input.permissionMode !== undefined) {
-    return input.permissionMode === "yolo";
-  }
-  return input.approvalPolicy === "never" && input.sandboxMode === "danger-full-access";
-}
-
-type OpenCodeProviderDataInput = {
-  mode: "interactive" | "exec";
-  profile?: string | undefined;
-  permissionMode?: HarnessPermissionMode | undefined;
-  approvalPolicy?: string | undefined;
-  sandboxMode?: string | undefined;
-  initialPromptProvided: boolean;
-  configPathProvided?: boolean | undefined;
-  observerSocketPathProvided?: boolean | undefined;
-  terminalProvider?: string | undefined;
-  terminalTargetId?: string | undefined;
-  resume?: boolean | undefined;
-  resumeTargetKind?: string | undefined;
-};
-
-function openCodeProviderData(input: OpenCodeProviderDataInput): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {
-    interactive: input.mode === "interactive",
-  };
-  if (input.initialPromptProvided) {
-    providerData.initialPromptProvided = true;
-  }
-  if (input.profile !== undefined) {
-    providerData.profile = input.profile;
-  }
-  if (input.permissionMode !== undefined) {
-    providerData.permissionMode = input.permissionMode;
-  }
-  if (input.approvalPolicy !== undefined) {
-    providerData.approvalPolicy = input.approvalPolicy;
-  }
-  if (input.sandboxMode !== undefined) {
-    providerData.sandboxMode = input.sandboxMode;
-  }
-  if (input.configPathProvided === true) {
-    providerData.configPathProvided = true;
-  }
-  if (input.observerSocketPathProvided === true) {
-    providerData.observerSocketPathProvided = true;
-  }
-  if (input.terminalProvider !== undefined) {
-    providerData.terminalProvider = input.terminalProvider;
-  }
-  if (input.terminalTargetId !== undefined) {
-    providerData.terminalTargetId = input.terminalTargetId;
-  }
-  if (input.resume === true) {
-    providerData.resume = true;
-  }
-  if (input.resumeTargetKind !== undefined) {
-    providerData.resumeTargetKind = input.resumeTargetKind;
-  }
-  return providerData;
 }

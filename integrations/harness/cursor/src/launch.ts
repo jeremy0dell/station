@@ -1,55 +1,15 @@
 import type { BuildHarnessLaunchRequest, HarnessLaunchPlan } from "@station/contracts";
+import {
+  type CommonProviderDataInput,
+  commonProviderData,
+  harnessLaunchEnv,
+  terminalProviderData,
+} from "@station/harness-shared";
 import { CursorHarnessProviderError } from "./errors.js";
 
 export type CursorLaunchOptions = {
   command?: string;
 };
-
-function cursorLaunchEnv(request: BuildHarnessLaunchRequest): Record<string, string> {
-  const env: Record<string, string> = {
-    STATION_PROJECT_ID: request.project.id,
-    STATION_WORKTREE_ID: request.worktree.id,
-    STATION_WORKTREE_PATH: request.worktree.path,
-    STATION_HARNESS_PROVIDER: "cursor",
-  };
-  if (request.sessionId !== undefined) {
-    env.STATION_SESSION_ID = request.sessionId;
-  }
-  if (request.terminalTarget !== undefined) {
-    env.STATION_TERMINAL_PROVIDER = request.terminalTarget.provider;
-    env.STATION_TERMINAL_TARGET_ID = request.terminalTarget.id;
-  }
-  return env;
-}
-
-function cursorProviderData(input: {
-  initialPromptProvided: boolean;
-  terminalProvider?: string;
-  terminalTargetId?: string;
-  resume?: boolean;
-  resumeTargetKind?: string;
-}): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {
-    interactive: true,
-    observation: "hooks",
-  };
-  if (input.initialPromptProvided) {
-    providerData.initialPromptProvided = true;
-  }
-  if (input.terminalProvider !== undefined) {
-    providerData.terminalProvider = input.terminalProvider;
-  }
-  if (input.terminalTargetId !== undefined) {
-    providerData.terminalTargetId = input.terminalTargetId;
-  }
-  if (input.resume === true) {
-    providerData.resume = true;
-  }
-  if (input.resumeTargetKind !== undefined) {
-    providerData.resumeTargetKind = input.resumeTargetKind;
-  }
-  return providerData;
-}
 
 export function buildCursorLaunchPlan(
   request: BuildHarnessLaunchRequest,
@@ -86,26 +46,26 @@ export function buildCursorLaunchPlan(
     args.push(request.initialPrompt);
   }
 
-  const providerDataInput: Parameters<typeof cursorProviderData>[0] = {
+  const providerDataInput: CommonProviderDataInput = {
+    mode,
     initialPromptProvided: request.initialPrompt !== undefined,
+    ...terminalProviderData(request),
   };
   if (request.resume !== undefined) {
     providerDataInput.resume = true;
     providerDataInput.resumeTargetKind = request.resume.target.kind;
   }
-  if (request.terminalTarget !== undefined) {
-    providerDataInput.terminalProvider = request.terminalTarget.provider;
-    providerDataInput.terminalTargetId = request.terminalTarget.id;
-  }
+  const providerData = commonProviderData(providerDataInput);
+  providerData.observation = "hooks";
 
   return {
     provider: "cursor",
     command: options.command ?? "agent",
     args,
     cwd: request.worktree.path,
-    env: cursorLaunchEnv(request),
+    env: harnessLaunchEnv("cursor", request),
     mode,
     displayTitle: `${request.project.label} Cursor`,
-    providerData: cursorProviderData(providerDataInput),
+    providerData,
   };
 }
