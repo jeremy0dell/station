@@ -8,14 +8,11 @@ import {
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
-  createCommandQueue,
-  createObserverApi,
   createObserverCore,
-  createObserverEventBus,
-  createObserverPersistence,
-  openObserverSqlite,
+  type createObserverEventBus,
   ProviderRegistry,
 } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-27T12:00:00.000Z";
 
@@ -50,32 +47,12 @@ describe("observer reconcile with Pi harness", () => {
 
   it("uses correlated Pi harness event reports to update live row state", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers: piProviders(),
       clock,
-      idFactory: ids(),
     });
-    const eventBus = createObserverEventBus();
     const reconciled = nextObserverReconciled(eventBus);
-    const providers = piProviders();
-    const core = createObserverCore({
-      config,
-      providers,
-      persistence,
-      sqlite,
-      clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      config,
-      hookReconcileDebounceMs: 0,
-    });
     await core.reconcile("initial-pi-context");
     const stateEvents = eventBus
       .subscribe({ type: ["worktree.agentStateChanged", "session.updated"] })
@@ -202,19 +179,6 @@ function piProviders(): ProviderRegistry {
       }),
     ],
   });
-}
-
-function ids() {
-  let command = 0;
-  let event = 0;
-  let observation = 0;
-  let breadcrumb = 0;
-  return {
-    commandId: () => `cmd_${++command}`,
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-    breadcrumbId: () => `crumb_${++breadcrumb}`,
-  };
 }
 
 const config: StationConfig = {

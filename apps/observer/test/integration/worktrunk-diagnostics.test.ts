@@ -5,13 +5,8 @@ import type { StationConfig } from "@station/config";
 import { FakeHarnessProvider, FakeTerminalProvider } from "@station/testing";
 import { WorktrunkProvider } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
-import {
-  createObserverCore,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-  runDoctor,
-} from "../../src/internal";
+import { ProviderRegistry, runDoctor } from "../../src/internal";
+import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-21T12:00:00.000Z";
 
@@ -19,8 +14,6 @@ describe("Worktrunk diagnostics", () => {
   it("reports provider failures and missing hook setup in doctor data", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-wt-diag-"));
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids() });
     const providers = new ProviderRegistry({
       worktree: new WorktrunkProvider({
         command: "missing-wt",
@@ -32,12 +25,11 @@ describe("Worktrunk diagnostics", () => {
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config: config(stateDir),
       providers,
-      persistence,
-      sqlite,
       clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
     });
 
     await core.reconcile("diagnostics");
@@ -95,14 +87,5 @@ function config(stateDir: string): StationConfig {
       },
     },
     projects: [],
-  };
-}
-
-function ids() {
-  let event = 0;
-  let observation = 0;
-  return {
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
   };
 }

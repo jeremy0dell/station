@@ -5,14 +5,8 @@ import type { StationConfig } from "@station/config";
 import { createCursorHarnessProvider } from "@station/cursor";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  collectDiagnosticSnapshot,
-  createObserverCore,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-  runDoctor,
-} from "../../src/internal";
+import { collectDiagnosticSnapshot, ProviderRegistry, runDoctor } from "../../src/internal";
+import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -20,26 +14,16 @@ describe("observer diagnostics collector", () => {
   it("collects doctor and diagnostic snapshot data from fake providers", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-"));
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({
-      path: join(stateDir, "observer.sqlite"),
-      clock,
-    });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
     const providers = new ProviderRegistry({
       worktree: new ProviderDiagnosticWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers,
-      persistence,
-      sqlite,
       clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
     });
 
     await core.reconcile("diagnostics-test");
@@ -79,15 +63,6 @@ describe("observer diagnostics collector", () => {
   it("includes Cursor hook diagnostics in doctor data", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-cursor-diag-"));
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({
-      path: join(stateDir, "observer.sqlite"),
-      clock,
-    });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
@@ -105,12 +80,11 @@ describe("observer diagnostics collector", () => {
         }),
       ],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers,
-      persistence,
-      sqlite,
       clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
     });
     const previousHome = process.env.HOME;
     process.env.HOME = stateDir;
@@ -145,26 +119,16 @@ describe("observer diagnostics collector", () => {
   it("filters command-specific diagnostics and prioritizes matching logs", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-filter-"));
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({
-      path: join(stateDir, "observer.sqlite"),
-      clock,
-    });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
     const providers = new ProviderRegistry({
       worktree: new ProviderDiagnosticWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers,
-      persistence,
-      sqlite,
       clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
     });
     await persistence.recordCommandAccepted({
       commandId: "cmd_match",
@@ -240,26 +204,16 @@ describe("observer diagnostics collector", () => {
   it("includes uncorrelated hook report events in unfiltered diagnostics", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-events-"));
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({
-      path: join(stateDir, "observer.sqlite"),
-      clock,
-    });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
     const providers = new ProviderRegistry({
       worktree: new ProviderDiagnosticWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers,
-      persistence,
-      sqlite,
       clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
     });
     await persistence.recordCommandAccepted({
       commandId: "cmd_match",
@@ -335,12 +289,3 @@ const config: StationConfig = {
   },
   projects: [],
 };
-
-function ids() {
-  let event = 0;
-  let observation = 0;
-  return {
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-  };
-}

@@ -20,40 +20,21 @@ import {
   openObserverSqlite,
   ProviderRegistry,
 } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("observer provider hook ingress", () => {
   it("persists a provider hook event, publishes it, and schedules reconciliation", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
     });
-    const eventBus = createObserverEventBus();
+    const { sqlite, persistence, eventBus, api } = createTestObserver({ config, providers, clock });
     const events = eventBus.subscribe()[Symbol.asyncIterator]();
     const reconciled = nextObserverReconciled(eventBus);
-    const core = createObserverCore({
-      config,
-      providers: new ProviderRegistry({
-        worktree: new FakeWorktreeProvider({ now }),
-        terminal: new FakeTerminalProvider({ now }),
-        harnesses: [new FakeHarnessProvider({ now })],
-      }),
-      persistence,
-      sqlite,
-      clock,
-    });
-    const api = createObserverApi({
-      core,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      hookReconcileDebounceMs: 0,
-    });
     const nextEvent = events.next();
 
     const receipt = await api.ingestProviderHookEvent({
@@ -86,34 +67,14 @@ describe("observer provider hook ingress", () => {
 
   it("persists provider-neutral harness event reports and schedules reconciliation", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
     });
-    const eventBus = createObserverEventBus();
+    const { sqlite, persistence, eventBus, api } = createTestObserver({ config, providers, clock });
     const events = eventBus.subscribe({ type: "harness.eventReported" })[Symbol.asyncIterator]();
     const reconciled = nextObserverReconciled(eventBus);
-    const core = createObserverCore({
-      config,
-      providers: new ProviderRegistry({
-        worktree: new FakeWorktreeProvider({ now }),
-        terminal: new FakeTerminalProvider({ now }),
-        harnesses: [new FakeHarnessProvider({ now })],
-      }),
-      persistence,
-      sqlite,
-      clock,
-    });
-    const api = createObserverApi({
-      core,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      hookReconcileDebounceMs: 0,
-    });
 
     const receipt = await api.reportHarnessEvent({
       schemaVersion: STATION_SCHEMA_VERSION,
@@ -316,36 +277,14 @@ describe("observer provider hook ingress", () => {
 
   it("deduplicates hook ids before provider dispatch and persistence", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
-    const eventBus = createObserverEventBus();
-    const reconciled = nextObserverReconciled(eventBus);
     const harness = new RecordingHarnessProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [harness],
     });
-    const core = createObserverCore({
-      config,
-      providers,
-      persistence,
-      sqlite,
-      clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      hookReconcileDebounceMs: 0,
-    });
+    const { sqlite, persistence, eventBus, api } = createTestObserver({ config, providers, clock });
+    const reconciled = nextObserverReconciled(eventBus);
     const event = {
       schemaVersion: STATION_SCHEMA_VERSION,
       hookId: "hook_dedupe_1",
@@ -402,36 +341,14 @@ describe("observer provider hook ingress", () => {
 
   it("routes harness provider hook events through provider ingress and stores normalized observations", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
-    const eventBus = createObserverEventBus();
-    const reconciled = nextObserverReconciled(eventBus);
     const harness = new RecordingHarnessProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [harness],
     });
-    const core = createObserverCore({
-      config,
-      providers,
-      persistence,
-      sqlite,
-      clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      hookReconcileDebounceMs: 0,
-    });
+    const { sqlite, persistence, eventBus, api } = createTestObserver({ config, providers, clock });
+    const reconciled = nextObserverReconciled(eventBus);
 
     const receipt = await api.ingestProviderHookEvent({
       schemaVersion: STATION_SCHEMA_VERSION,
@@ -475,13 +392,17 @@ describe("observer provider hook ingress", () => {
 
   it("passes persisted worktree and terminal context to harness provider hook ingress", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
+    const harness = new ContextRecordingHarnessProvider({ now });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [harness],
     });
-    const eventBus = createObserverEventBus();
+    const { sqlite, persistence, eventBus, api } = createTestObserver({
+      config: projectConfig,
+      providers,
+      clock,
+    });
     const reconciled = nextObserverReconciled(eventBus);
     const worktree = createFakeWorktree({
       id: "wt_web_feature_auth",
@@ -508,30 +429,6 @@ describe("observer provider hook ingress", () => {
       terminalTargets: [terminal],
       harnessRuns: [],
       observedAt: now,
-    });
-
-    const harness = new ContextRecordingHarnessProvider({ now });
-    const providers = new ProviderRegistry({
-      worktree: new FakeWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [harness],
-    });
-    const core = createObserverCore({
-      config: projectConfig,
-      providers,
-      persistence,
-      sqlite,
-      clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      config: projectConfig,
-      hookReconcileDebounceMs: 0,
     });
 
     await api.ingestProviderHookEvent({

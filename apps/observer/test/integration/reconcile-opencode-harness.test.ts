@@ -8,15 +8,8 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  createCommandQueue,
-  createObserverApi,
-  createObserverCore,
-  createObserverEventBus,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-} from "../../src/internal";
+import { createObserverCore, ProviderRegistry } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -51,30 +44,10 @@ describe("observer reconcile with OpenCode harness", () => {
 
   it("uses correlated OpenCode plugin hook events to update live row state", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
-    const eventBus = createObserverEventBus();
-    const providers = opencodeProviders();
-    const core = createObserverCore({
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
       config,
-      providers,
-      persistence,
-      sqlite,
+      providers: opencodeProviders(),
       clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      config,
-      hookReconcileDebounceMs: 0,
     });
     await core.reconcile("initial-opencode-context");
 
@@ -226,19 +199,6 @@ function opencodeProviders(): ProviderRegistry {
       }),
     ],
   });
-}
-
-function ids() {
-  let command = 0;
-  let event = 0;
-  let observation = 0;
-  let breadcrumb = 0;
-  return {
-    commandId: () => `cmd_${++command}`,
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-    breadcrumbId: () => `crumb_${++breadcrumb}`,
-  };
 }
 
 const config: StationConfig = {
