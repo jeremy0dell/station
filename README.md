@@ -8,6 +8,12 @@
 
 When you run more than one AI agent at a time, things get messy fast: worktrees multiply, tmux panes lose their names, you forget which branch has the agent that's been running for twenty minutes. station solves this. It keeps your projects, worktrees, terminal workspaces, and agent harnesses connected — and shows you the live picture in a single TUI.
 
+<p align="center">
+  <img src="./station/assets/screenshots/fleet-overview.png" alt="Station TUI listing projects, worktrees, and live agent sessions, with a session-create dialog open" width="820">
+  <br>
+  <em>One live view of every project, worktree, and agent session — and a new session is a keypress away.</em>
+</p>
+
 ---
 
 ## What it does
@@ -20,6 +26,12 @@ station tracks the runtime state of your agent workflow and makes it visible:
 - **Session creation** — start a new agent session from the TUI with project, branch, and harness already wired up
 - **Hook ingress** — Claude Code, Codex, Cursor, Pi, and OpenCode emit structured events that station receives and records
 - **Diagnostics** — trace IDs, debug bundles, bounded log retention, and provider health checks built in from day one
+
+<p align="center">
+  <img src="./station/assets/screenshots/agent-session-diff.png" alt="Split view: an agent session's transcript on the left, its live diff and working tree on the right" width="880">
+  <br>
+  <em>Follow a session's work on the left and review its live diff against the worktree on the right.</em>
+</p>
 
 ---
 
@@ -80,6 +92,12 @@ The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the 
 **`@station/cli`** — the `stn` command. Setup, reconciliation, snapshots, live event observation, hooks, diagnostics, and TUI launch. Use `pnpm stn <cmd>` during development.
 
 **The Station workspace** — the terminal UI is the OpenTUI renderer in `station/` (on the Bun lane). It connects to the observer, refreshes from live events and snapshots, and shows a provider-neutral view of projects, worktrees, sessions, terminal targets, and agent status. `stn` (no subcommand) starts the observer and, in a bare terminal, launches the native Station workspace (real PTY panes with host-backed persistence); inside tmux it opens the read-only dashboard in a tmux popup, since tmux owns the panes there. A mock-data dashboard preview is available for development via `--dev-fake-dashboard`.
+
+<p align="center">
+  <img src="./station/assets/screenshots/diff-navigator.png" alt="Station's diff navigator showing a filterable file list and inline add/remove hunks for a session's changes" width="880">
+  <br>
+  <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
+</p>
 
 **`@station/provider-hooks`** — the `stn-ingress` sender used by generated hook commands. Delivers compact provider reports to the observer socket with bounded delivery and local spooling when the observer is unavailable.
 
