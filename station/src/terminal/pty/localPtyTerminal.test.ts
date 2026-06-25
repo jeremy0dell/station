@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createNodePtyTerminal,
+  createLocalPtyTerminal,
   type StationTerminalProcess,
 } from "../index.js";
-import { createPtyEnv } from "./nodePtyTerminal.js";
+import { createPtyEnv } from "./localPtyTerminal.js";
 
 declare const Bun: {
   env: Record<string, string | undefined>;
@@ -43,7 +43,7 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 }
 
-describe("createNodePtyTerminal", () => {
+describe("createLocalPtyTerminal", () => {
   it("spawns a command in a pty when the smoke probe is enabled", async () => {
     if (Bun.env.STATION_PTY_SMOKE !== "1") {
       expect(true).toEqual(true);
@@ -85,7 +85,7 @@ describe("createNodePtyTerminal", () => {
           fail(new Error("Timed out waiting for node-pty output."));
         }, 2_000);
 
-        terminal = createNodePtyTerminal({
+        terminal = createLocalPtyTerminal({
           args: ["-lc", `printf ${expected}`],
           command: "/bin/sh",
           size: {

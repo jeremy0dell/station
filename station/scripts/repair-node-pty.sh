@@ -2,7 +2,10 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-helpers=("${root}"/node_modules/.bun/node-pty@*/node_modules/node-pty/prebuilds/*/spawn-helper)
+helpers=(
+  "${root}"/node_modules/.bun/node-pty@*/node_modules/node-pty/prebuilds/*/spawn-helper
+  "${root}"/node_modules/node-pty/prebuilds/*/spawn-helper
+)
 found=0
 
 for helper in "${helpers[@]}"; do

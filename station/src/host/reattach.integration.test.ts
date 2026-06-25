@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createStationHostClient } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import { createHostBackedTerminal } from "../terminal/pty/hostBackedTerminal.js";
+import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
 import { type StationHostInstance, startStationHost } from "./startHost.js";
 
@@ -42,7 +42,7 @@ function screenText(screen: ReturnType<typeof createStationVtScreen>): string {
   return rows.map((row) => row.spans.map((span) => span.text).join("")).join("\n");
 }
 
-describe("data-plane reattach (host PTY → host-backed terminal → VT screen)", () => {
+describe("data-plane reattach (host PTY → host-attached terminal → VT screen)", () => {
   it("replays scrollback then streams live output into a fresh screen, and detach keeps the PTY", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startHostWith(scripted);
@@ -59,8 +59,8 @@ describe("data-plane reattach (host PTY → host-backed terminal → VT screen)"
     });
     scripted.helpers.emitData("hello-scrollback");
 
-    // A reattaching client: host-backed terminal feeding a brand-new screen.
-    const terminal = createHostBackedTerminal({
+    // A reattaching client: host-attached terminal feeding a brand-new screen.
+    const terminal = createHostAttachedTerminal({
       hostSocketPath: socketPath,
       ptyId,
       size: { cols: 80, rows: 24 },

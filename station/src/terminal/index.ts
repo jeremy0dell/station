@@ -20,7 +20,7 @@ export {
   type PaneTerminal,
 } from "./registry/paneTerminalContext.js";
 export { StationTerminalSpawnError } from "./pty/errors.js";
-export { createNodePtyTerminal } from "./pty/nodePtyTerminal.js";
+export { createLocalPtyTerminal } from "./pty/localPtyTerminal.js";
 export type { VtRow, VtSpan } from "./vt/rows.js";
 export {
   createStationVtScreen,

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HostAttachment, HostFrame, StationHostClient } from "@station/host";
-import { createAuxHostTerminalFactory } from "./auxHostTerminal.js";
+import { resolveAuxShellPlacement } from "./auxShellPlacement.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -43,20 +43,21 @@ function fakeClient(spawns: unknown[]): StationHostClient {
   } satisfies StationHostClient;
 }
 
-describe("createAuxHostTerminalFactory", () => {
+describe("resolveAuxShellPlacement", () => {
   it("returns undefined for a pane when no host socket is present (→ local shell)", () => {
-    const factory = createAuxHostTerminalFactory("/no/such/station-host.sock");
-    expect(factory("pane-split-0")).toBeUndefined();
+    const placeShell = resolveAuxShellPlacement("/no/such/station-host.sock");
+    expect(placeShell("pane-split-0")).toBeUndefined();
   });
 
   it("spawns a kind:'aux' PTY with the derived target id and the laid-out cwd/size", async () => {
-    const { dir, path } = tempSocketPath();
+      const { dir, path } = tempSocketPath();
     try {
       const spawns: unknown[] = [];
-      const override = createAuxHostTerminalFactory(path, () => fakeClient(spawns))("pane-split-0");
-      expect(override).toBeDefined();
+      const placeShell = resolveAuxShellPlacement(path, () => fakeClient(spawns));
+      const createTerminal = placeShell("pane-split-0");
+      expect(createTerminal).toBeDefined();
 
-      const terminal = override!({ cwd: "/work/sub", size: { cols: 120, rows: 40 } });
+      const terminal = createTerminal!({ cwd: "/work/sub", size: { cols: 120, rows: 40 } });
       await flush();
 
       expect(spawns).toHaveLength(1);

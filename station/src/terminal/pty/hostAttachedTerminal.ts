@@ -24,7 +24,7 @@ const HOST_DATA_PLANE_FALLBACK: SafeErrorFallback = {
   provider: STATION_HOST_PROVIDER_ID,
 };
 
-export type HostBackedTerminalOptions = {
+export type HostAttachedTerminalOptions = {
   hostSocketPath: string;
   /** Attach to this existing host PTY. Required unless `spawn` is supplied. */
   ptyId?: string;
@@ -45,12 +45,12 @@ export type HostBackedTerminalOptions = {
 };
 
 /**
- * Host-backed `StationTerminalProcess`: attach, replay scrollback, then stream
+ * Host-attached `StationTerminalProcess`: attach, replay scrollback, then stream
  * live frames. `dispose()` only detaches, so the host keeps the PTY alive for the
  * next reattach and PtyRegistry needs no persistent-agent special case.
  */
-export function createHostBackedTerminal(
-  options: HostBackedTerminalOptions,
+export function createHostAttachedTerminal(
+  options: HostAttachedTerminalOptions,
 ): StationTerminalProcess {
   const makeClient =
     options.clientFactory ?? ((path) => createStationHostClient({ socketPath: path }));

@@ -1,7 +1,7 @@
 import { kittySequenceToLegacy } from "../terminal/index.js";
 import { stripTerminalReplies } from "../terminal/input/terminalReplies.js";
-import { createHostBackedTerminal } from "../terminal/pty/hostBackedTerminal.js";
-import type { AuxHostTerminalFactory } from "../terminal/pty/auxHostTerminal.js";
+import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
+import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { buildWheelForwardSequence } from "../terminal/input/wheelForward.js";
 import { cursorKeyBytes } from "../terminal/protocol/cursorKeys.js";
 import type { PtyRegistry, PtyRegistryView } from "../terminal/registry/ptyRegistry.js";
@@ -501,12 +501,11 @@ export type StationInputRuntimeOptions = {
   /** Runtime PTY resources; terminal writes/pastes resolve through it. */
   registry?: PtyRegistry;
   /**
-   * Per-pane factory that spawns an aux shell (split / `[+sh]`) into the
-   * persistent host so it survives a UI restart. Returns `undefined` for a pane
-   * when no host is up, so the registry spawns an ordinary local shell instead.
+   * Per-pane shell placement. Returns a host-attached terminal creator when the
+   * host is up; returns `undefined` so the registry opens an ordinary local shell.
    * Absent in tests/mock mode ⇒ aux shells are always local.
    */
-  createAuxHostOverride?: AuxHostTerminalFactory;
+  resolveAuxShellPlacement?: AuxShellPlacement;
   /** Observer service for managed primary-agent launches; absent in mock mode. */
   observerService?: ObserverService;
   openExternalUrl?: (url: string) => void;
@@ -622,13 +621,13 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
         if (args !== undefined) {
           spawnOptions.args = args;
         }
-        // A plain shell (no explicit command) becomes host-backed when the daemon is up so it
+        // A plain shell (no explicit command) lands in the host when the daemon is up so it
         // persists across a restart; a pane carrying its own command stays local.
-        const override =
+        const createTerminal =
           command === undefined && role === "shell"
-            ? options.createAuxHostOverride?.(paneId)
+            ? options.resolveAuxShellPlacement?.(paneId)
             : undefined;
-        registry?.ensure(paneId, spawnOptions, override);
+        registry?.ensure(paneId, spawnOptions, createTerminal);
         const createOptions: CreatePaneOptions = { role };
         // Tile the shell beside the worktree's agent pane when it exists, else split off the active
         // pane; rooting its own session stacked a full-screen pane over the current one.
@@ -648,9 +647,9 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       // worktree path. Threaded only when present so an undefined cwd stays absent under
       // exactOptionalPropertyTypes. Ensure-before-createPane (see openPane) keeps the spawn options.
       const cwd = registry?.get(anchorPaneId)?.cwd ?? splitCwdForAnchor(anchorPaneId);
-      // Host-backed when the daemon is up (survives a UI restart), else local.
-      const override = options.createAuxHostOverride?.(newId);
-      registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, override);
+      // Host-placed when the daemon is up (survives a UI restart), else local.
+      const createTerminal = options.resolveAuxShellPlacement?.(newId);
+      registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, createTerminal);
       options.store.actions.createPane(newId, { split: { anchorPaneId, direction } });
     },
     runAutomation: (automationId, anchorPaneId) => {
@@ -666,9 +665,9 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       for (const step of automation.steps) {
         const stepAnchor = step.anchor === "origin" ? anchorPaneId : previousPaneId;
         const newId: PaneId = `${SPLIT_PANE_ID_PREFIX}${splitSeq++}`;
-        // Host-backed when the daemon is up (survives a UI restart), like splitPane.
-        const override = options.createAuxHostOverride?.(newId);
-        registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, override);
+        // Host-placed when the daemon is up (survives a UI restart), like splitPane.
+        const createTerminal = options.resolveAuxShellPlacement?.(newId);
+        registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, createTerminal);
         // Ensure-before-createPane (see openPane); a prior step's anchor already exists, so the chained split resolves.
         options.store.actions.createPane(newId, {
           split: { anchorPaneId: stepAnchor, direction: step.split },
@@ -892,7 +891,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       if (prepared.reattachHandle !== undefined) {
         const handle = prepared.reattachHandle;
         registry?.ensure(paneId, { cwd: target.cwd }, (spawn) =>
-          createHostBackedTerminal({
+          createHostAttachedTerminal({
             hostSocketPath: handle.hostSocketPath,
             ptyId: handle.ptyId,
             size: { cols: spawn.size?.cols ?? 80, rows: spawn.size?.rows ?? 24 },

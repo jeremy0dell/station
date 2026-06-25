@@ -19,7 +19,7 @@
     "host:dev": "bun run link:station && bun run repair:node-pty && bun src/host/e2eReattachDemo.ts --dev --hold",
     "host:list": "bun run link:station && bun src/host/listHostAgents.ts",
     "test:agents": "bun run repair:node-pty && STATION_PTY_SMOKE=1 STATION_PTY_SMOKE_TUI=1 bun test src/input/stationInput.e2e.test.tsx src/terminal/ptyPipeline.smoke.test.ts",
-    "test:pty": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/terminal/pty/nodePtyTerminal.test.ts src/terminal/ptyPipeline.smoke.test.ts src/terminal/pty/bridgeHardening.test.ts src/input/stationInput.e2e.test.tsx",
+    "test:pty": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/terminal/pty/localPtyTerminal.test.ts src/terminal/ptyPipeline.smoke.test.ts src/terminal/pty/localPtyBridgeHardening.test.ts src/input/stationInput.e2e.test.tsx",
     "test:stress": "STATION_VT_STRESS=1 bun test src/terminal/vt/screen.stress.test.ts",
     "test:vt": "bun test src/terminal",
     "typecheck": "bun run link:station && tsc -p tsconfig.json --noEmit"

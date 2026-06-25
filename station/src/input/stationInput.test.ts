@@ -1290,7 +1290,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
-  it("attaches to a host-backed agent: seeds cwd only and records the handle's target", async () => {
+  it("attaches to a host-attached agent: seeds cwd only and records the handle's target", async () => {
     // A persistent host PTY already backs this worktree, so prepare returns a
     // reattach handle. Station attaches (no local launch command/args) and the
     // primary-agent identity is the HANDLE's terminalTargetId, not the row's.
@@ -1328,7 +1328,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     });
   });
 
-  it("records the provider when reattaching to an existing host-backed agent", async () => {
+  it("records the provider when reattaching to an existing host-attached agent", async () => {
     const handle = {
       ptyId: "pty_host_1",
       terminalTargetId: `${TERMINAL_TARGET_ID}-host`,

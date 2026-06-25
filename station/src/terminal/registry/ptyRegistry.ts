@@ -1,6 +1,6 @@
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
-import { createNodePtyTerminal } from "../pty/nodePtyTerminal.js";
+import { createLocalPtyTerminal } from "../pty/localPtyTerminal.js";
 import type {
   StationTerminalExit,
   StationTerminalProcess,
@@ -41,7 +41,7 @@ export type PtyRegistry = {
     paneId: PaneId,
     spawnOptions?: StationTerminalSpawnOptions,
     /**
-     * Per-entry terminal factory (e.g. a host-backed attachment) used instead of
+     * Per-entry terminal creator (e.g. a host-attached terminal) used instead of
      * the registry default on the lazy first-resize spawn. Set on first `ensure`.
      */
     createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
@@ -79,14 +79,14 @@ export type PtyRegistryView = Pick<
 >;
 
 export type PtyRegistryRuntimeOptions = {
-  /** Default terminal factory for entries that do not supply an override. */
+  /** Default terminal creator for entries that do not supply an override. */
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
   /** Required so HMR can intentionally clear or change the default. */
   scrollOnOutput: ScrollOnOutputMode | undefined;
 };
 
 export type PtyRegistryOptions = {
-  /** Test seam; production uses the node-pty bridge factory. */
+  /** Test seam; production uses the local PTY bridge. */
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
   /** Injectable for deterministic resize-debounce tests. */
   resizeDebounceMs?: number;
@@ -122,7 +122,7 @@ type InternalEntry = {
  * records; process handles and terminal buffers live here by pane id.
  */
 export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry {
-  let createTerminal = options.createTerminal ?? createNodePtyTerminal;
+  let createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   let scrollOnOutput = options.scrollOnOutput;
   const resizeDebounceMs = options.resizeDebounceMs ?? DEFAULT_RESIZE_DEBOUNCE_MS;
   const entries = new Map<PaneId, InternalEntry>();
