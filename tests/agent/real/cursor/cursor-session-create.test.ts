@@ -1,22 +1,29 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { StationConfig } from "@station/config";
-import { CursorHarnessProvider } from "@station/cursor";
+import { CursorHarnessProvider, installCursorHooks } from "@station/cursor";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
+  createObserverApi,
   createObserverCore,
   createObserverEventBus,
   createObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
+  startObserverServer,
 } from "@station/observer/internal";
-import { FakeWorktreeProvider } from "@station/testing";
+import {
+  createFakeTerminalTarget,
+  createFakeWorktree,
+  FakeTerminalProvider,
+  FakeWorktreeProvider,
+} from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -179,6 +186,174 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       throw error;
     }
   }, 180_000);
+
+  it("routes a generated Cursor hook through real stn-ingress to the active observer config", async () => {
+    const cursorBin = process.env.STATION_CURSOR_AGENT_BIN ?? "agent";
+    await execFileAsync(cursorBin, ["--version"], { timeout: 15_000 });
+
+    const root = await mkdtemp(join(tmpdir(), "station-real-cursor-hook-"));
+    const stateDir = join(root, "state");
+    const diagnosticsDir = join(stateDir, "diagnostics");
+    const hookSpoolDir = join(stateDir, "spool", "hooks");
+    const worktreePath = join(root, "worktree");
+    const runDir = join(root, "run");
+    const socketPath = join(runDir, "observer.sock");
+    const configPath = join(root, "station.config.toml");
+    const hooksPath = join(root, "cursor", "hooks.json");
+    const hookScriptPath = join(root, "hooks", "station-cursor-hook.sh");
+    const ingressBin = join(process.cwd(), "bin", "stn-ingress");
+    await mkdir(stateDir, { recursive: true });
+    await mkdir(hookSpoolDir, { recursive: true });
+    await mkdir(worktreePath, { recursive: true });
+    await mkdir(runDir, { recursive: true });
+    await execFileAsync("git", ["init"], { cwd: worktreePath, timeout: 10_000 });
+    await writeStationConfigToml({ configPath, root, stateDir, socketPath });
+    await installCursorHooks({
+      cursorHooksPath: hooksPath,
+      hookScriptPath,
+      stationConfigPath: join(root, "stale.config.toml"),
+      observerSocketPath: join(root, "stale.sock"),
+      stateDir: join(root, "stale-state"),
+      hookSpoolDir: join(root, "stale-spool"),
+      hookBin: ingressBin,
+    });
+
+    if (process.env.STATION_REAL_CURSOR_KEEP_TEMP !== "1") {
+      cleanupTasks.push(async () => {
+        await rm(root, { recursive: true, force: true });
+      });
+    } else {
+      process.stderr.write(`Keeping real Cursor hook temp root: ${root}\n`);
+    }
+
+    const clock = { now: () => new Date(now) };
+    const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
+    cleanupTasks.push(async () => sqlite.close());
+    const idFactory = ids();
+    const persistence = createObserverPersistence({ sqlite, clock, idFactory });
+    const eventBus = createObserverEventBus();
+    const queue = createCommandQueue({ persistence, idFactory, clock, eventBus });
+    const testConfig = config(root, stateDir);
+    testConfig.observer.socketPath = socketPath;
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({
+        now,
+        worktrees: [
+          createFakeWorktree({
+            id: "wt_real_cursor_hook",
+            projectId: "web",
+            branch: "cursor-hook-real",
+            path: worktreePath,
+            now,
+          }),
+        ],
+      }),
+      terminal: new FakeTerminalProvider({
+        now,
+        targets: [
+          createFakeTerminalTarget({
+            id: "real-cursor-hook-target",
+            provider: "tmux",
+            projectId: "web",
+            worktreeId: "wt_real_cursor_hook",
+            sessionId: "ses_real_cursor_hook",
+            now,
+            harnessBinding: {
+              role: "main-agent",
+              harnessProvider: "cursor",
+              currentCommand: "agent",
+            },
+          }),
+        ],
+      }),
+      harnesses: [new CursorHarnessProvider({ command: cursorBin, now: () => new Date(now) })],
+    });
+    const core = createObserverCore({
+      config: testConfig,
+      providers,
+      persistence,
+      sqlite,
+      clock,
+      providerTimeoutMs: 20_000,
+    });
+    const api = createObserverApi({
+      core,
+      providers,
+      persistence,
+      commandQueue: queue,
+      eventBus,
+      clock,
+      config: testConfig,
+      socketPath,
+      stateDir,
+      hookSpoolDir,
+      hookReconcileDebounceMs: 0,
+    });
+    const server = await startObserverServer({ socketPath, api, clock, drainOnStart: false });
+    cleanupTasks.push(async () => {
+      await server.close();
+    });
+
+    try {
+      await core.reconcile("real-cursor-hook-initial");
+      const result = await runHookScript(
+        hookScriptPath,
+        JSON.stringify({
+          hook_event_name: "stop",
+          status: "completed",
+          cwd: worktreePath,
+          session_id: "cursor_session_real",
+        }),
+        {
+          STATION_PROJECT_ID: "web",
+          STATION_WORKTREE_ID: "wt_real_cursor_hook",
+          STATION_WORKTREE_PATH: worktreePath,
+          STATION_SESSION_ID: "ses_real_cursor_hook",
+          STATION_HARNESS_PROVIDER: "cursor",
+          STATION_TERMINAL_PROVIDER: "tmux",
+          STATION_TERMINAL_TARGET_ID: "real-cursor-hook-target",
+          STATION_CONFIG_PATH: configPath,
+          STATION_OBSERVER_SOCKET_PATH: socketPath,
+          STATION_HOOK_SPOOL_DIR: hookSpoolDir,
+        },
+      );
+
+      expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+      const snapshot = await core.reconcile("real-cursor-hook-observed");
+      expect(snapshot.rows[0]?.agent).toMatchObject({
+        harness: "cursor",
+        sessionId: "ses_real_cursor_hook",
+        state: "idle",
+        confidence: "high",
+      });
+      await expect(persistence.listProviderObservations()).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            provider: "cursor",
+            providerType: "harness",
+            payload: expect.objectContaining({
+              provider: "cursor",
+              projectId: "web",
+              worktreeId: "wt_real_cursor_hook",
+              sessionId: "ses_real_cursor_hook",
+              status: expect.objectContaining({
+                value: "idle",
+              }),
+            }),
+          }),
+        ]),
+      );
+    } catch (error) {
+      await writeFailureBundle({
+        config: testConfig,
+        core,
+        persistence,
+        stateDir,
+        diagnosticsDir,
+      });
+      throw error;
+    }
+  }, 120_000);
 });
 
 async function writeCursorShim(input: {
@@ -201,6 +376,82 @@ exec ${JSON.stringify(input.realCursorBin)} "$@"
 `;
   await writeFile(input.shimPath, script, "utf8");
   await chmod(input.shimPath, 0o755);
+}
+
+async function writeStationConfigToml(input: {
+  configPath: string;
+  root: string;
+  stateDir: string;
+  socketPath: string;
+}): Promise<void> {
+  await writeFile(
+    input.configPath,
+    [
+      "schema_version = 1",
+      "",
+      "[observer]",
+      `socket_path = ${JSON.stringify(input.socketPath)}`,
+      `state_dir = ${JSON.stringify(input.stateDir)}`,
+      "",
+      "[defaults]",
+      'worktree_provider = "fake-worktree"',
+      'terminal = "tmux"',
+      'harness = "cursor"',
+      'layout = "agent-shell"',
+      "",
+      "[harness.cursor]",
+      "enabled = true",
+      "",
+      "[[projects]]",
+      'id = "web"',
+      'label = "web"',
+      `root = ${JSON.stringify(input.root)}`,
+      "",
+      "[projects.defaults]",
+      'harness = "cursor"',
+      'terminal = "tmux"',
+      'layout = "agent-shell"',
+      "",
+      "[projects.worktrunk]",
+      "enabled = true",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+type HookScriptResult = {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+};
+
+async function runHookScript(
+  scriptPath: string,
+  stdin: string,
+  env: Record<string, string>,
+): Promise<HookScriptResult> {
+  return new Promise((resolve) => {
+    const child = spawn(scriptPath, [], {
+      env: {
+        ...process.env,
+        ...env,
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("close", (code) => {
+      resolve({
+        code,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      });
+    });
+    child.stdin.end(stdin);
+  });
 }
 
 async function waitForCursorLaunchLog(path: string): Promise<string> {

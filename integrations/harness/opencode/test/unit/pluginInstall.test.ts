@@ -154,6 +154,67 @@ describe("OpenCode plugin setup", () => {
     }
   });
 
+  it("synchronously spools completion events before async delivery settles", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
+    const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
+    const spoolDir = join(root, "spool");
+    await installOpenCodePlugin({
+      pluginPath,
+      observerSocketPath: join(root, "missing.sock"),
+      stateDir: join(root, "state"),
+      hookSpoolDir: spoolDir,
+    });
+
+    const previousEnv = { ...process.env };
+    try {
+      process.env.STATION_HARNESS_PROVIDER = "opencode";
+      process.env.STATION_WORKTREE_ID = "wt_1";
+      process.env.STATION_SESSION_ID = "ses_1";
+      process.env.STATION_HOOK_SPOOL_DIR = spoolDir;
+      process.env.STATION_OBSERVER_SOCKET_PATH = join(root, "missing.sock");
+      const moduleUrl = pathToFileURL(pluginPath);
+      moduleUrl.search = `v=${Date.now()}`;
+      const pluginModule = (await import(moduleUrl.href)) as {
+        StationObserverPlugin: (input: { directory: string; worktree: string }) => Promise<{
+          event: (input: { event: unknown }) => Promise<void>;
+        }>;
+      };
+
+      const plugin = await pluginModule.StationObserverPlugin({ directory: root, worktree: root });
+      const pending = plugin.event({
+        event: {
+          type: "session.status",
+          properties: {
+            sessionID: "opencode_session_1",
+            status: {
+              type: "idle",
+            },
+          },
+        },
+      });
+
+      const files = await readdir(spoolDir);
+      expect(files).toHaveLength(1);
+      const record = JSON.parse(await readFile(join(spoolDir, files[0] ?? ""), "utf8"));
+      expect(record).toMatchObject({
+        event: {
+          provider: "opencode",
+          kind: "harness",
+          event: "session.status",
+          sessionId: "ses_1",
+          payload: {
+            event_type: "session.status",
+            opencode_session_id: "opencode_session_1",
+            status_type: "idle",
+          },
+        },
+      });
+      await pending;
+    } finally {
+      process.env = previousEnv;
+    }
+  });
+
   it("resolves OpenCode config directory from environment", () => {
     expect(
       resolveOpenCodePluginPath({
