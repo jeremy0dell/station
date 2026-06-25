@@ -66,10 +66,13 @@ function snapshotWith(rows: WorktreeRow[]): StationSnapshot {
   return { rows } as unknown as StationSnapshot;
 }
 
-function fakeCore(rows: WorktreeRow[]): ObserverCore {
+function fakeCore(
+  rows: WorktreeRow[],
+  projects: readonly ProviderProjectConfig[] = [project],
+): ObserverCore {
   const snapshot = snapshotWith(rows);
   return {
-    getProjects: () => [project],
+    getProjects: () => projects,
     getSnapshot: () => snapshot,
     reconcile: async () => snapshot,
     projectHarnessEventStatus: async () => ({}) as never,
@@ -119,9 +122,14 @@ function registryWith(
   });
 }
 
-function deps(rows: WorktreeRow[], station: StationTerminalProvider, harnesses?: Harnesses) {
+function deps(
+  rows: WorktreeRow[],
+  station: StationTerminalProvider,
+  harnesses?: Harnesses,
+  projects: readonly ProviderProjectConfig[] = [project],
+) {
   return {
-    core: fakeCore(rows),
+    core: fakeCore(rows, projects),
     providers: registryWith(station, harnesses),
     persistence: fakePersistence,
     clock: { now: () => new Date(now) },
@@ -169,6 +177,33 @@ describe("prepareExternalLaunch", () => {
       prepareParams,
     );
     expect(result.outcome.kind).toBe("prepared");
+  });
+
+  it("uses the configured branch harness for a new external launch", async () => {
+    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const configuredProject: ProviderProjectConfig = {
+      ...project,
+      worktreeLaunches: [{ branch: "feature/login", harness: "configured-harness" }],
+    };
+    const result = await prepareExternalLaunch(
+      deps(
+        [row()],
+        station,
+        [
+          new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) }),
+          new FakeHarnessProvider({ id: "configured-harness", now: () => new Date(now) }),
+        ],
+        [configuredProject],
+      ),
+      prepareParams,
+    );
+
+    expect(result.outcome.kind).toBe("prepared");
+    if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
+    expect(result.outcome.launchPlan.provider).toBe("configured-harness");
+    expect((await station.listTargets())[0]?.harnessBinding?.harnessProvider).toBe(
+      "configured-harness",
+    );
   });
 
   it("guides the user to the config flag when hooks are not requested", async () => {

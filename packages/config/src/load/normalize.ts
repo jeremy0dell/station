@@ -251,6 +251,7 @@ function normalizeProjectConfig(value: unknown): unknown {
       display: normalizeDisplayConfig,
       localConfig: normalizeProjectLocalConfigRef,
       recoveryBreadcrumbs: normalizeProjectRecoveryBreadcrumbsConfig,
+      worktreeLaunches: normalizeProjectWorktreeLaunchConfigs,
     },
   );
 }
@@ -275,6 +276,13 @@ function normalizeProjectLocalConfigRef(value: unknown): unknown {
 
 function normalizeProjectRecoveryBreadcrumbsConfig(value: unknown): unknown {
   return normalizeObject(value);
+}
+
+function normalizeProjectWorktreeLaunchConfigs(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((entry) => normalizeObject(entry));
 }
 
 function normalizeObject(

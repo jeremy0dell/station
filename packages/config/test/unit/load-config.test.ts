@@ -132,6 +132,36 @@ ${projectToml("station", roots.station)}
     expect(loaded.diagnostics).toEqual([]);
   });
 
+  it("loads per-worktree launch harness defaults", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+    const loaded = await loadConfigFromToml(
+      baseToml(`
+[[projects]]
+id = "web"
+label = "web"
+root = "${root}"
+
+[projects.worktrunk]
+enabled = true
+
+[[projects.worktree_launches]]
+branch = "a11y/playbook-refresh"
+harness = "cursor"
+
+[[projects.worktree_launches]]
+branch = "feat/server-actions"
+harness = "claude"
+`),
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.projects[0]?.worktreeLaunches).toEqual([
+      { branch: "a11y/playbook-refresh", harness: "cursor" },
+      { branch: "feat/server-actions", harness: "claude" },
+    ]);
+  });
+
   it("normalizes managed Worktrunk root policy for a project", async () => {
     const tempDir = await makeTempDir();
     const root = await makeProjectRoot(tempDir, "web");

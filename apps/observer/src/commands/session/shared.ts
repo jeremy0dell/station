@@ -256,9 +256,16 @@ export function buildEnsureAgentWorkspaceIntent(input: {
   return intent;
 }
 
+export function configuredHarnessProviderForWorktree(
+  project: ProviderProjectConfig,
+  worktree: WorktreeObservation,
+): ProviderId | undefined {
+  return project.worktreeLaunches?.find((candidate) => candidate.branch === worktree.branch)
+    ?.harness;
+}
+
 /**
- * Reuse the worktree's last observed harness before project default; shared by
- * session.startAgent and external launch so both choose identically.
+ * Reuse the worktree's last observed harness before project default.
  */
 export async function rememberedHarnessProviderForWorktree(input: {
   persistence: ObserverPersistence;

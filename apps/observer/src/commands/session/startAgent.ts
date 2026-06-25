@@ -12,6 +12,7 @@ import { reconcileAndPublish } from "../reconcile.js";
 import {
   assertNoCurrentAgent,
   buildEnsureAgentWorkspaceIntent,
+  configuredHarnessProviderForWorktree,
   defaultSessionCommandIdFactory,
   deleteSessionTitleSeedBestEffort,
   findProjectOrThrow,
@@ -78,6 +79,7 @@ export function createSessionStartAgentHandler(
     throwIfAborted(context.signal);
     const harnessProviderId =
       payload.harness?.provider ??
+      configuredHarnessProviderForWorktree(project, worktree) ??
       (await rememberedHarnessProviderForWorktree({
         persistence: options.persistence,
         projectId: payload.projectId,

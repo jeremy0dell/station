@@ -68,6 +68,15 @@ export const ProjectRecoveryBreadcrumbsSchema = z
 
 export type ProjectRecoveryBreadcrumbs = z.infer<typeof ProjectRecoveryBreadcrumbsSchema>;
 
+export const ProjectWorktreeLaunchConfigSchema = z
+  .object({
+    branch: nonEmptyStringSchema,
+    harness: providerIdSchema,
+  })
+  .strict();
+
+export type ProjectWorktreeLaunchConfig = z.infer<typeof ProjectWorktreeLaunchConfigSchema>;
+
 export const ProjectConfigSchema = z
   .object({
     id: projectIdSchema,
@@ -83,6 +92,7 @@ export const ProjectConfigSchema = z
     display: ProjectDisplayConfigSchema.optional(),
     localConfig: ProjectLocalConfigRefSchema.optional(),
     recoveryBreadcrumbs: ProjectRecoveryBreadcrumbsSchema.optional(),
+    worktreeLaunches: z.array(ProjectWorktreeLaunchConfigSchema).optional(),
   })
   .strict();
 

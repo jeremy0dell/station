@@ -19,6 +19,7 @@ import {
   resolveHarnessProviderOrThrow,
 } from "../commands/providers.js";
 import {
+  configuredHarnessProviderForWorktree,
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   rememberedHarnessProviderForWorktree,
@@ -140,6 +141,7 @@ export async function prepareExternalLaunch(
 
   const harnessProviderId =
     params.harness ??
+    configuredHarnessProviderForWorktree(project, worktree) ??
     (await rememberedHarnessProviderForWorktree({
       persistence: deps.persistence,
       projectId: params.projectId,
