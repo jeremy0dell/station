@@ -1,7 +1,7 @@
 import {
-  ClaudeHarnessProvider,
   claudeHookPayloadToHarnessEventReport,
   compactClaudeHookPayload,
+  createClaudeHarnessProvider,
 } from "@station/claude";
 import type { StationConfig } from "@station/config";
 import {
@@ -237,7 +237,7 @@ function claudeProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new ClaudeHarnessProvider({
+      createClaudeHarnessProvider({
         now: () => new Date(now),
         runner: async (input) => ({
           command: input.command,

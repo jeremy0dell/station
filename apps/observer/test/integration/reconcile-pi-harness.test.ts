@@ -1,5 +1,5 @@
 import type { StationConfig } from "@station/config";
-import { PiHarnessProvider, piHookPayloadToHarnessEventReport } from "@station/pi";
+import { createPiHarnessProvider, piHookPayloadToHarnessEventReport } from "@station/pi";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -190,7 +190,7 @@ function piProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new PiHarnessProvider({
+      createPiHarnessProvider({
         now: () => new Date(now),
         runner: async (input) => ({
           command: input.command,

@@ -36,3 +36,16 @@ export {
   isYoloPermissionMode,
   terminalProviderData,
 } from "./launch.js";
+export {
+  type CommonHarnessProviderOptions,
+  type CommonHookDoctorOptions,
+  createTerminalBoundHarnessProvider,
+  type HarnessHealthSpec,
+  type HarnessHookDoctorOptionsInput,
+  type HarnessIngestSpec,
+  harnessCommand,
+  harnessHealth,
+  harnessHookDoctorOptions,
+  harnessHooksStatusFrom,
+  type TerminalBoundHarnessProviderSpec,
+} from "./provider.js";

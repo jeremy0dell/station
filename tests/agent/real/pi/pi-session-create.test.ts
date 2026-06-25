@@ -15,7 +15,7 @@ import {
   ProviderRegistry,
   registerObserverCommandHandlers,
 } from "@station/observer/internal";
-import { PiHarnessProvider } from "@station/pi";
+import { createPiHarnessProvider } from "@station/pi";
 import { FakeWorktreeProvider } from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
@@ -108,7 +108,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       }),
       terminal,
       harnesses: [
-        new PiHarnessProvider({
+        createPiHarnessProvider({
           command: piWrapper.wrapperPath,
           configPath,
           now: () => new Date(now),

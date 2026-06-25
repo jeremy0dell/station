@@ -5,13 +5,13 @@ import type {
 } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { PiHarnessProvider } from "../../src/provider";
+import { createPiHarnessProvider } from "../../src/provider";
 
 const now = "2026-05-27T12:00:00.000Z";
 
 describe("PiHarnessProvider", () => {
   it("declares interactive Pi v1 capabilities", () => {
-    const provider = new PiHarnessProvider();
+    const provider = createPiHarnessProvider();
 
     expect(provider.capabilities()).toEqual({
       canLaunch: true,
@@ -28,13 +28,13 @@ describe("PiHarnessProvider", () => {
   });
 
   it("advertises resume only when configured", () => {
-    expect(new PiHarnessProvider().capabilities().canResume).toBe(false);
-    expect(new PiHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
+    expect(createPiHarnessProvider().capabilities().canResume).toBe(false);
+    expect(createPiHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
   });
 
   it("checks pi --version for provider health without requiring auth", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new PiHarnessProvider({
+    const provider = createPiHarnessProvider({
       command: "pi-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -59,7 +59,7 @@ describe("PiHarnessProvider", () => {
     const previous = process.env.STATION_PI_BIN;
     process.env.STATION_PI_BIN = "pi-from-env";
     try {
-      const provider = new PiHarnessProvider({ now: () => new Date(now) });
+      const provider = createPiHarnessProvider({ now: () => new Date(now) });
 
       await expect(provider.buildLaunch(request())).resolves.toMatchObject({
         command: "pi-from-env",
@@ -74,7 +74,7 @@ describe("PiHarnessProvider", () => {
   });
 
   it("maps health failures to typed harness provider health", async () => {
-    const provider = new PiHarnessProvider({
+    const provider = createPiHarnessProvider({
       command: "missing-pi",
       now: () => new Date(now),
       runner: async () => {
@@ -98,7 +98,7 @@ describe("PiHarnessProvider", () => {
   });
 
   it("applies provider launch defaults and discovers terminal-bound runs", async () => {
-    const provider = new PiHarnessProvider({
+    const provider = createPiHarnessProvider({
       command: "pi-test",
       extensionPath: "/tmp/station/piExtension.js",
       configPath: "/tmp/station/config.toml",
@@ -150,7 +150,7 @@ describe("PiHarnessProvider", () => {
   });
 
   it("classifies and ingests Pi observations through provider-local parsing", async () => {
-    const provider = new PiHarnessProvider({ now: () => new Date(now) });
+    const provider = createPiHarnessProvider({ now: () => new Date(now) });
 
     await expect(
       provider.classifyRun(run(), {

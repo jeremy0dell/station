@@ -1,6 +1,6 @@
 import type { StationConfig } from "@station/config";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { OpenCodeHarnessProvider } from "@station/opencode";
+import { createOpenCodeHarnessProvider } from "@station/opencode";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -214,7 +214,7 @@ function opencodeProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new OpenCodeHarnessProvider({
+      createOpenCodeHarnessProvider({
         now: () => new Date(now),
         runner: async (input) => ({
           command: input.command,

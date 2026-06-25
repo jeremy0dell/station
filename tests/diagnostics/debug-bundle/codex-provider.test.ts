@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CodexHarnessProvider } from "@station/codex";
+import { createCodexHarnessProvider } from "@station/codex";
 import type { StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
@@ -36,7 +36,7 @@ describe("Codex provider debug bundle diagnostics", () => {
         worktree: new FakeWorktreeProvider({ now }),
         terminal: new FakeTerminalProvider({ now }),
         harnesses: [
-          new CodexHarnessProvider({
+          createCodexHarnessProvider({
             command: "codex-missing",
             now: () => new Date(now),
             runner: async () => {

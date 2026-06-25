@@ -9,13 +9,13 @@ import type {
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installCursorHooks } from "../../src/hooks";
-import { CursorHarnessProvider } from "../../src/provider";
+import { createCursorHarnessProvider } from "../../src/provider";
 
 const now = "2026-06-03T12:00:00.000Z";
 
 describe("CursorHarnessProvider", () => {
   it("declares hook-only Cursor capabilities", () => {
-    const provider = new CursorHarnessProvider();
+    const provider = createCursorHarnessProvider();
 
     expect(provider.capabilities()).toEqual({
       canLaunch: true,
@@ -32,13 +32,13 @@ describe("CursorHarnessProvider", () => {
   });
 
   it("advertises resume only when configured", () => {
-    expect(new CursorHarnessProvider().capabilities().canResume).toBe(false);
-    expect(new CursorHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
+    expect(createCursorHarnessProvider().capabilities().canResume).toBe(false);
+    expect(createCursorHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
   });
 
   it("checks agent --version for provider health", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new CursorHarnessProvider({
+    const provider = createCursorHarnessProvider({
       command: "agent-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -81,7 +81,7 @@ describe("CursorHarnessProvider", () => {
     const previousHome = process.env.HOME;
     process.env.HOME = root;
     try {
-      const provider = new CursorHarnessProvider({
+      const provider = createCursorHarnessProvider({
         installHooks: true,
         configPath: stationConfigPath,
         observerSocketPath,
@@ -106,7 +106,7 @@ describe("CursorHarnessProvider", () => {
   });
 
   it("launches interactive Cursor agent with STATION correlation env", async () => {
-    const provider = new CursorHarnessProvider({
+    const provider = createCursorHarnessProvider({
       command: "agent-test",
     });
 
@@ -133,7 +133,7 @@ describe("CursorHarnessProvider", () => {
   });
 
   it("launches interactive Cursor resume with the native session id", async () => {
-    const provider = new CursorHarnessProvider({
+    const provider = createCursorHarnessProvider({
       command: "agent-test",
       resume: true,
     });
@@ -157,7 +157,7 @@ describe("CursorHarnessProvider", () => {
   });
 
   it("discovers terminal-bound Cursor runs", async () => {
-    const provider = new CursorHarnessProvider();
+    const provider = createCursorHarnessProvider();
 
     await expect(
       provider.discoverRuns({
@@ -196,7 +196,7 @@ describe("CursorHarnessProvider", () => {
   });
 
   it("classifies and ingests Cursor observations through provider-local parsing", async () => {
-    const provider = new CursorHarnessProvider({ now: () => new Date(now) });
+    const provider = createCursorHarnessProvider({ now: () => new Date(now) });
 
     await expect(
       provider.classifyRun(run(), {
@@ -224,7 +224,7 @@ describe("CursorHarnessProvider", () => {
   });
 
   it("reports a high-confidence exit as a harness_event (Cursor source override)", async () => {
-    const provider = new CursorHarnessProvider({ now: () => new Date(now) });
+    const provider = createCursorHarnessProvider({ now: () => new Date(now) });
 
     await expect(
       provider.classifyRun(
