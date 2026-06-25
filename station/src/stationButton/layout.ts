@@ -1,5 +1,6 @@
 // Geometry and sizing math for the station button (no React, no colors).
 
+// Terminal glyph form of the black vector mark in station/assets/station-icon.svg.
 export const STATION_ICON = "⧉";
 export const ATTENTION_MARK = "!";
 

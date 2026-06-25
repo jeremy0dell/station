@@ -16,7 +16,7 @@ export type BootRestoreDeps = {
    * warm-reattach.
    */
   listHost?: () => Promise<readonly HostListEntry[] | undefined>;
-  /** Build the host-backed override for a live entry (createHostBackedTerminal). */
+  /** Build the host-attached terminal creator for a live entry. */
   makeHostTerminal: (
     entry: HostListEntry,
   ) => (options: StationTerminalSpawnOptions) => StationTerminalProcess;
@@ -24,7 +24,7 @@ export type BootRestoreDeps = {
    * Spawn a fresh aux shell into the host (for a warm boot's dead shell panes, so
    * they persist again). Returns `undefined` when no host socket is present.
    */
-  makeFreshAuxTerminal?: (
+  resolveAuxShellPlacement?: (
     paneId: PaneId,
   ) => ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
 } & RestoreCwdOptions;
@@ -44,9 +44,9 @@ export async function buildBootRestorePlan(
   return planLayoutRestoreWarm(snapshot, {
     liveByTarget: new Map(live.map((entry) => [entry.terminalTargetId, entry])),
     makeHostTerminal: deps.makeHostTerminal,
-    ...(deps.makeFreshAuxTerminal === undefined
+    ...(deps.resolveAuxShellPlacement === undefined
       ? {}
-      : { makeFreshAuxTerminal: deps.makeFreshAuxTerminal }),
+      : { resolveAuxShellPlacement: deps.resolveAuxShellPlacement }),
     ...(deps.cwdExists === undefined ? {} : { cwdExists: deps.cwdExists }),
   });
 }

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createNodePtyTerminal } from "./nodePtyTerminal.js";
+import { createLocalPtyTerminal } from "./localPtyTerminal.js";
 import { waitFor } from "../testing/waitFor.js";
 import type { StationTerminalExit, StationTerminalProcess } from "../types.js";
 
-const BRIDGE_PATH = fileURLToPath(new URL("./nodePtyBridge.cjs", import.meta.url));
+const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
 
 const gated = (): boolean => {
   if (Bun.env.STATION_PTY_SMOKE !== "1") {
@@ -30,13 +30,13 @@ function encodeBridgeOptions(command: string, args: string[]): string {
   ).toString("base64url");
 }
 
-describe("nodePtyBridge hardening", () => {
+describe("localPtyBridge hardening", () => {
   it("survives a degenerate resize and keeps serving the shell", async () => {
     if (gated()) return;
     let terminal: StationTerminalProcess | undefined;
     try {
       let received = "";
-      terminal = createNodePtyTerminal({
+      terminal = createLocalPtyTerminal({
         command: "/bin/sh",
         args: ["-c", "read line; echo got-$line"],
         size: { cols: 80, rows: 24 },
@@ -57,7 +57,7 @@ describe("nodePtyBridge hardening", () => {
     let terminal: StationTerminalProcess | undefined;
     try {
       let exited = false;
-      terminal = createNodePtyTerminal({
+      terminal = createLocalPtyTerminal({
         command: "/bin/sh",
         args: ["-c", "exit 0"],
         size: { cols: 80, rows: 24 },
@@ -80,7 +80,7 @@ describe("nodePtyBridge hardening", () => {
     try {
       let received = "";
       let exit: StationTerminalExit | undefined;
-      terminal = createNodePtyTerminal({
+      terminal = createLocalPtyTerminal({
         command: "/bin/sh",
         args: ["-c", "head -c 100000 /dev/zero | base64; exit 7"],
         size: { cols: 80, rows: 24 },

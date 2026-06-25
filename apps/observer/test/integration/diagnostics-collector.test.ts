@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
-import { CursorHarnessProvider } from "@station/cursor";
+import { createCursorHarnessProvider } from "@station/cursor";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { collectDiagnosticSnapshot, ProviderRegistry, runDoctor } from "../../src/internal";
@@ -67,7 +67,7 @@ describe("observer diagnostics collector", () => {
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
       harnesses: [
-        new CursorHarnessProvider({
+        createCursorHarnessProvider({
           command: "agent-test",
           installHooks: false,
           runner: async (input) => ({

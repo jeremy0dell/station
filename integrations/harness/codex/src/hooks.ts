@@ -2,6 +2,16 @@
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import {
+  createHookSetupFileOps,
+  expectedProviderHookScript,
+  hookCommandsForEvents,
+  installConfigScriptHook,
+  type ProviderHookScriptOptions,
+  planConfigScriptHook,
+  providerHookScriptOptions,
+  uninstallConfigScriptHook,
+} from "@station/runtime";
+import {
   documentContainsCommand,
   generatedStationHookEvents,
   installCodexHookCommands,
@@ -10,24 +20,17 @@ import {
   removeGeneratedCodexHookCommands,
   stringifyTomlDocument,
 } from "./hooks/hookConfigEditor.js";
-import { CODEX_STATION_PROFILE_NAME, type CodexHookEventName } from "./hooks/hookConstants.js";
 import {
-  backupIfPresent,
-  readOptionalFile,
-  removeHookScriptIfPresent,
-  writeHookConfig,
-  writeHookScript,
-} from "./hooks/hookFiles.js";
+  CODEX_HOOK_EVENT_NAMES,
+  CODEX_STATION_PROFILE_NAME,
+  type CodexHookEventName,
+} from "./hooks/hookConstants.js";
+import { CodexHookSetupError } from "./hooks/hookErrors.js";
 import {
   resolveCodexBaseConfigPath,
   resolveCodexConfigPath,
   resolveCodexHookScriptPath,
 } from "./hooks/hookPaths.js";
-import {
-  type CodexHookScriptOptions,
-  expectedCodexHookCommands,
-  expectedCodexHookScript,
-} from "./hooks/hookScript.js";
 
 export { CODEX_HOOK_EVENT_NAMES, type CodexHookEventName } from "./hooks/hookConstants.js";
 export { CodexHookSetupError, type CodexHookSetupErrorCode } from "./hooks/hookErrors.js";
@@ -36,7 +39,7 @@ export {
   resolveCodexConfigPath,
   resolveCodexHookScriptPath,
 } from "./hooks/hookPaths.js";
-export { expectedCodexHookCommands, expectedCodexHookScript } from "./hooks/hookScript.js";
+export { expectedCodexHookCommands, expectedCodexHookScript };
 
 export type CodexHookPlanOptions = {
   codexConfigPath?: string;
@@ -103,23 +106,55 @@ export type CodexHookDoctorResult = {
   message: string;
 };
 
+export type CodexHookScriptOptions = ProviderHookScriptOptions & {
+  hookScriptPath: string;
+};
+
+const fileOps = createHookSetupFileOps(({ operation, cause }) => {
+  if (operation === "read" || operation === "metadata") {
+    return new CodexHookSetupError(
+      "CODEX_HOOK_CONFIG_UNREADABLE",
+      operation === "read"
+        ? "Codex hook config could not be read."
+        : "Codex hook config metadata could not be read.",
+      { cause },
+    );
+  }
+  return new CodexHookSetupError(
+    "CODEX_HOOK_WRITE_FAILED",
+    operation === "remove"
+      ? "Codex hook script could not be removed."
+      : operation === "writeScript"
+        ? "Codex hook script could not be written."
+        : operation === "backup"
+          ? "Codex hook config backup could not be written."
+          : "Codex hook config could not be written.",
+    { cause },
+  );
+});
+
 export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promise<CodexHookPlan> {
   const configPath = resolveCodexConfigPath(options);
   const baseConfigPath = resolveCodexBaseConfigPath(options);
   const hookScriptPath = resolveCodexHookScriptPath(options);
-  const before = await readOptionalFile(configPath);
-  const document = parseTomlDocument(before);
+  const script = expectedCodexHookScript(providerHookScriptOptions(hookScriptPath, options));
   const commands = expectedCodexHookCommands({ hookScriptPath });
-  const afterDocument = installCodexHookCommands(document, commands);
-  const after = stringifyTomlDocument(afterDocument);
-  const script = expectedCodexHookScript(scriptOptions(hookScriptPath, options));
-  const scriptBefore = await readOptionalFile(hookScriptPath);
-  const configChanged = before.trim() !== after.trim();
-  const scriptChanged = scriptBefore !== script;
   const generatedGlobalCleanup = await buildGeneratedGlobalHookCleanup({
     baseConfigPath,
     profileConfigPath: configPath,
     commands,
+  });
+  const plan = await planConfigScriptHook({
+    readOptionalFile: fileOps.readOptionalFile,
+    configPath,
+    hookScriptPath,
+    parseDocument: parseTomlDocument,
+    installCommands: installCodexHookCommands,
+    stringifyDocument: stringifyTomlDocument,
+    missingEvents: missingCodexHookEvents,
+    expectedCommands: (path) => expectedCodexHookCommands({ hookScriptPath: path }),
+    expectedScript: script,
+    extraChanged: generatedGlobalCleanup.changed,
   });
 
   return {
@@ -129,15 +164,15 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
     profileConfigPath: configPath,
     baseConfigPath,
     hookScriptPath,
-    commands,
-    missing: missingCodexHookEvents(document, commands),
-    changed: configChanged || scriptChanged || generatedGlobalCleanup.changed,
-    configChanged,
+    commands: plan.commands,
+    missing: plan.missing,
+    changed: plan.changed,
+    configChanged: plan.configChanged,
     generatedGlobalChanged: generatedGlobalCleanup.changed,
-    scriptChanged,
+    scriptChanged: plan.scriptChanged,
     generatedGlobalCleanup,
-    before,
-    after,
+    before: plan.before,
+    after: plan.after,
   };
 }
 
@@ -145,22 +180,21 @@ export async function installCodexHooks(
   options: CodexHookPlanOptions = {},
 ): Promise<CodexHookInstallResult> {
   const plan = await planCodexHooks(options);
-  let profileBackupPath: string | undefined;
+  const profileBackupPath = await installConfigScriptHook({
+    configPath: plan.configPath,
+    hookScriptPath: plan.hookScriptPath,
+    after: plan.after,
+    expectedScript: expectedCodexHookScript(
+      providerHookScriptOptions(plan.hookScriptPath, options),
+    ),
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptChanged,
+    fileOps,
+  });
   let baseBackupPath: string | undefined;
-
-  if (plan.configChanged) {
-    profileBackupPath = await backupIfPresent(plan.configPath);
-    await writeHookConfig(plan.configPath, plan.after);
-  }
   if (plan.generatedGlobalCleanup.changed) {
-    baseBackupPath = await backupIfPresent(plan.baseConfigPath);
-    await writeHookConfig(plan.baseConfigPath, plan.generatedGlobalCleanup.after);
-  }
-  if (plan.scriptChanged) {
-    await writeHookScript(
-      plan.hookScriptPath,
-      expectedCodexHookScript(scriptOptions(plan.hookScriptPath, options)),
-    );
+    baseBackupPath = await fileOps.backupIfPresent(plan.baseConfigPath);
+    await fileOps.writeHookConfig(plan.baseConfigPath, plan.generatedGlobalCleanup.after);
   }
 
   const result = installResultFromPlan(plan, true);
@@ -174,31 +208,30 @@ export async function uninstallCodexHooks(
   const configPath = resolveCodexConfigPath(options);
   const baseConfigPath = resolveCodexBaseConfigPath(options);
   const hookScriptPath = resolveCodexHookScriptPath(options);
-  const before = await readOptionalFile(configPath);
-  const document = parseTomlDocument(before);
   const commands = expectedCodexHookCommands({ hookScriptPath });
-  const afterDocument = removeGeneratedCodexHookCommands(document, commands);
-  const after = stringifyTomlDocument(afterDocument);
   const generatedGlobalCleanup = await buildGeneratedGlobalHookCleanup({
     baseConfigPath,
     profileConfigPath: configPath,
     commands,
   });
-  const configChanged = before.trim() !== after.trim();
-  let profileBackupPath: string | undefined;
+  const plan = await uninstallConfigScriptHook({
+    readOptionalFile: fileOps.readOptionalFile,
+    configPath,
+    hookScriptPath,
+    parseDocument: parseTomlDocument,
+    removeCommands: removeGeneratedCodexHookCommands,
+    stringifyDocument: stringifyTomlDocument,
+    missingEvents: missingCodexHookEvents,
+    documentContainsCommand,
+    expectedCommands: (path) => expectedCodexHookCommands({ hookScriptPath: path }),
+    fileOps,
+  });
   let baseBackupPath: string | undefined;
-
-  if (configChanged) {
-    profileBackupPath = await backupIfPresent(configPath);
-    await writeHookConfig(configPath, after);
-  }
   if (generatedGlobalCleanup.changed) {
-    baseBackupPath = await backupIfPresent(baseConfigPath);
-    await writeHookConfig(baseConfigPath, generatedGlobalCleanup.after);
+    baseBackupPath = await fileOps.backupIfPresent(baseConfigPath);
+    await fileOps.writeHookConfig(baseConfigPath, generatedGlobalCleanup.after);
   }
 
-  const scriptStillNeeded = documentContainsCommand(afterDocument, hookScriptPath);
-  const scriptRemoved = scriptStillNeeded ? false : await removeHookScriptIfPresent(hookScriptPath);
   const result: CodexHookInstallResult = {
     provider: "codex",
     configPath,
@@ -206,19 +239,19 @@ export async function uninstallCodexHooks(
     profileConfigPath: configPath,
     baseConfigPath,
     hookScriptPath,
-    commands,
-    missing: missingCodexHookEvents(afterDocument, commands),
-    changed: configChanged || generatedGlobalCleanup.changed || scriptRemoved,
-    configChanged,
+    commands: plan.commands,
+    missing: plan.missing,
+    changed: plan.changed || generatedGlobalCleanup.changed,
+    configChanged: plan.configChanged,
     generatedGlobalChanged: generatedGlobalCleanup.changed,
-    scriptChanged: scriptRemoved,
+    scriptChanged: plan.scriptRemoved,
     generatedGlobalCleanup,
-    before,
-    after,
+    before: plan.before,
+    after: plan.after,
     installed: false,
-    scriptRemoved,
+    scriptRemoved: plan.scriptRemoved,
   };
-  assignBackupPaths(result, { profileBackupPath, baseBackupPath });
+  assignBackupPaths(result, { profileBackupPath: plan.backupPath, baseBackupPath });
   return result;
 }
 
@@ -263,38 +296,14 @@ export async function doctorCodexHooks(
   };
 }
 
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    CodexHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): CodexHookScriptOptions {
-  const input: CodexHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) {
-    input.stationConfigPath = options.stationConfigPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    input.stateDir = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    input.hookSpoolDir = options.hookSpoolDir;
-  }
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) {
-    input.hookBin = options.hookBin;
-  }
-  return input;
+function expectedCodexHookCommands(input: {
+  hookScriptPath: string;
+}): Record<CodexHookEventName, string> {
+  return hookCommandsForEvents(CODEX_HOOK_EVENT_NAMES, input.hookScriptPath);
+}
+
+function expectedCodexHookScript(input: CodexHookScriptOptions): string {
+  return expectedProviderHookScript({ provider: "codex", options: input });
 }
 
 function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHookInstallResult {
@@ -335,7 +344,7 @@ async function buildGeneratedGlobalHookCleanup(input: {
     };
   }
 
-  const before = await readOptionalFile(input.baseConfigPath);
+  const before = await fileOps.readOptionalFile(input.baseConfigPath);
   const document = parseTomlDocument(before);
   const stale = generatedStationHookEvents(document, input.commands);
   const afterDocument = removeGeneratedCodexHookCommands(document, input.commands);

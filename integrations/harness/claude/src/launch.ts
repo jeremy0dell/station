@@ -3,6 +3,13 @@ import type {
   HarnessLaunchPlan,
   HarnessPermissionMode,
 } from "@station/contracts";
+import {
+  type CommonProviderDataInput,
+  commonProviderData,
+  harnessLaunchEnv,
+  isYoloPermissionMode,
+  terminalProviderData,
+} from "@station/harness-shared";
 import { ClaudeHarnessProviderError } from "./errors.js";
 
 export type ClaudePermissionMode = HarnessPermissionMode | "auto";
@@ -16,79 +23,8 @@ export type ClaudeLaunchOptions = {
   hookSettingsPath?: string;
 };
 
-type ClaudeProviderDataInput = {
-  mode: "interactive" | "exec";
-  initialPromptProvided: boolean;
-  profile?: string | undefined;
-  permissionMode?: ClaudePermissionMode | undefined;
-  settingsInjected?: boolean | undefined;
-  terminalProvider?: string | undefined;
-  terminalTargetId?: string | undefined;
-  resume?: boolean | undefined;
-  resumeTargetKind?: string | undefined;
-};
-
 const CLAUDE_YOLO_FLAG = "--dangerously-skip-permissions";
 const CLAUDE_PERMISSION_MODE_FLAG = "--permission-mode";
-
-function isYoloPermissionMode(input: {
-  permissionMode?: ClaudePermissionMode | undefined;
-  approvalPolicy?: string | undefined;
-  sandboxMode?: string | undefined;
-}): boolean {
-  if (input.permissionMode !== undefined) {
-    return input.permissionMode === "yolo";
-  }
-  return input.approvalPolicy === "never" && input.sandboxMode === "danger-full-access";
-}
-
-function claudeLaunchEnv(request: BuildHarnessLaunchRequest): Record<string, string> {
-  const env: Record<string, string> = {
-    STATION_PROJECT_ID: request.project.id,
-    STATION_WORKTREE_ID: request.worktree.id,
-    STATION_WORKTREE_PATH: request.worktree.path,
-    STATION_HARNESS_PROVIDER: "claude",
-  };
-  if (request.sessionId !== undefined) {
-    env.STATION_SESSION_ID = request.sessionId;
-  }
-  if (request.terminalTarget !== undefined) {
-    env.STATION_TERMINAL_PROVIDER = request.terminalTarget.provider;
-    env.STATION_TERMINAL_TARGET_ID = request.terminalTarget.id;
-  }
-  return env;
-}
-
-function claudeProviderData(input: ClaudeProviderDataInput): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {
-    interactive: input.mode === "interactive",
-  };
-  if (input.initialPromptProvided) {
-    providerData.initialPromptProvided = true;
-  }
-  if (input.profile !== undefined) {
-    providerData.profile = input.profile;
-  }
-  if (input.permissionMode !== undefined) {
-    providerData.permissionMode = input.permissionMode;
-  }
-  if (input.settingsInjected === true) {
-    providerData.settingsInjected = true;
-  }
-  if (input.terminalProvider !== undefined) {
-    providerData.terminalProvider = input.terminalProvider;
-  }
-  if (input.terminalTargetId !== undefined) {
-    providerData.terminalTargetId = input.terminalTargetId;
-  }
-  if (input.resume === true) {
-    providerData.resume = true;
-  }
-  if (input.resumeTargetKind !== undefined) {
-    providerData.resumeTargetKind = input.resumeTargetKind;
-  }
-  return providerData;
-}
 
 function buildClaudeResumeLaunchPlan(
   request: BuildHarnessLaunchRequest,
@@ -121,14 +57,15 @@ function buildClaudeResumeLaunchPlan(
     args.push(request.initialPrompt);
   }
 
-  const providerDataInput: ClaudeProviderDataInput = {
+  const providerDataInput: CommonProviderDataInput = {
     mode,
     initialPromptProvided: request.initialPrompt !== undefined,
     resume: true,
     resumeTargetKind: request.resume.target.kind,
   };
+  const providerData = commonProviderData(providerDataInput);
   if (options.hookSettingsPath !== undefined) {
-    providerDataInput.settingsInjected = true;
+    providerData.settingsInjected = true;
   }
 
   return {
@@ -136,10 +73,10 @@ function buildClaudeResumeLaunchPlan(
     command: options.command ?? "claude",
     args,
     cwd: request.worktree.path,
-    env: claudeLaunchEnv(request),
+    env: harnessLaunchEnv("claude", request),
     mode,
     displayTitle: `${request.project.label} Claude`,
-    providerData: claudeProviderData(providerDataInput),
+    providerData,
   };
 }
 
@@ -178,9 +115,10 @@ export function buildClaudeLaunchPlan(
     args.push(request.initialPrompt);
   }
 
-  const providerDataInput: ClaudeProviderDataInput = {
+  const providerDataInput: CommonProviderDataInput = {
     mode,
     initialPromptProvided: request.initialPrompt !== undefined,
+    ...terminalProviderData(request),
   };
   if (profile !== undefined) {
     providerDataInput.profile = profile;
@@ -188,22 +126,17 @@ export function buildClaudeLaunchPlan(
   if (providerPermissionMode !== undefined) {
     providerDataInput.permissionMode = providerPermissionMode;
   }
-  if (options.hookSettingsPath !== undefined) {
-    providerDataInput.settingsInjected = true;
-  }
-  if (request.terminalTarget !== undefined) {
-    providerDataInput.terminalProvider = request.terminalTarget.provider;
-    providerDataInput.terminalTargetId = request.terminalTarget.id;
-  }
+  const providerData = commonProviderData(providerDataInput);
+  if (options.hookSettingsPath !== undefined) providerData.settingsInjected = true;
 
   return {
     provider: "claude",
     command: options.command ?? "claude",
     args,
     cwd: request.worktree.path,
-    env: claudeLaunchEnv(request),
+    env: harnessLaunchEnv("claude", request),
     mode,
     displayTitle: `${request.project.label} Claude`,
-    providerData: claudeProviderData(providerDataInput),
+    providerData,
   };
 }

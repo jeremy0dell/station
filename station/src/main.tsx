@@ -24,8 +24,8 @@ import type { LayoutRestorePlan } from "./state/layout/restoreLayout.js";
 import { readLayoutSnapshotSync } from "./state/layout/layoutPersistence.js";
 import { applyRestoreSeeds, planLayoutRestoreColdShells } from "./state/layout/restoreLayout.js";
 import { savedCwdExists } from "./state/layout/savedCwdExists.js";
-import { createAuxHostTerminalFactory } from "./terminal/pty/auxHostTerminal.js";
-import { createHostBackedTerminal } from "./terminal/pty/hostBackedTerminal.js";
+import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
+import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
 import { createStationClient } from "./sources/createStationClient.js";
 import { resolveOpenUrlCommand } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
@@ -135,7 +135,7 @@ if (restoredLayout !== undefined) {
       cwdExists: savedCwdExists,
       listHost: () => listLiveHostPtys(socket),
       makeHostTerminal: (entry) => (options) =>
-        createHostBackedTerminal({
+        createHostAttachedTerminal({
           hostSocketPath: socket,
           ptyId: entry.ptyId,
           size: { cols: options.size?.cols ?? 80, rows: options.size?.rows ?? 24 },
@@ -143,7 +143,7 @@ if (restoredLayout !== undefined) {
           // closes the PTY; an agent reattach stays observer-owned (detach only).
           ...(entry.kind === "aux" ? { owned: true } : {}),
         }),
-      makeFreshAuxTerminal: createAuxHostTerminalFactory(socket),
+      resolveAuxShellPlacement: resolveAuxShellPlacement(socket),
     });
   }
 }
@@ -158,7 +158,7 @@ const stationRuntime = getOrCreateStationHotRuntime(
   restorePlan?.workspace,
 );
 const { store } = stationRuntime;
-// Seed each restored pane's spawn cwd / host override into the registry BEFORE the
+// Seed each restored pane's spawn cwd / host placement into the registry BEFORE the
 // reconciler runs its no-option ensure (which would otherwise capture
 // no cwd), so a freshly respawned shell reopens in its saved directory and a
 // reattached pane binds to its live host PTY. A warm agent's identity already rides

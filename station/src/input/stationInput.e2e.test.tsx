@@ -4,7 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID } from "../state/types.js";
-import { createNodePtyTerminal } from "../terminal/pty/nodePtyTerminal.js";
+import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
 import { PaneRegistryProvider } from "../terminal/registry/paneTerminalContext.js";
 import { createPtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { TerminalPane } from "../terminal/TerminalPane.js";
@@ -241,7 +241,7 @@ describe("station input end to end", () => {
   };
 
   function realShellFactory(spawn: StationTerminalSpawnOptions): StationTerminalProcess {
-    return createNodePtyTerminal({
+    return createLocalPtyTerminal({
       ...spawn,
       command: "/bin/sh",
       args: ["-i"],
@@ -254,7 +254,7 @@ describe("station input end to end", () => {
     args: readonly string[] = [],
   ): (spawn: StationTerminalSpawnOptions) => StationTerminalProcess {
     return (spawn) =>
-      createNodePtyTerminal({
+      createLocalPtyTerminal({
         ...spawn,
         command,
         args,

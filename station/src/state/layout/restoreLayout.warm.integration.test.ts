@@ -7,7 +7,7 @@ import { buildLayoutSnapshot } from "./layoutSnapshot.js";
 import { applyRestoreSeeds, planLayoutRestoreWarm } from "./restoreLayout.js";
 import { createStationStore } from "../store.js";
 import type { WorkspaceSlice } from "../types.js";
-import { createHostBackedTerminal } from "../../terminal/pty/hostBackedTerminal.js";
+import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
 import { createPtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
 import { type StationHostInstance, startStationHost } from "../../host/startHost.js";
@@ -15,7 +15,7 @@ import type { StationVtScreen } from "../../terminal/vt/screen.js";
 
 // Warm reattach end-to-end against a REAL host daemon: an aux PTY spawned into the
 // host survives a "UI restart" and warm-reattaches with its scrollback via the
-// restore planner + createHostBackedTerminal; once the host PTY is gone the same
+// restore planner + createHostAttachedTerminal; once the host PTY is gone the same
 // planner cold-respawns instead.
 
 const noopLogger = { log: async () => undefined } as never;
@@ -63,7 +63,7 @@ function warmDeps(socketPath: string, live: HostListEntry[]) {
   return {
     liveByTarget: new Map(live.map((entry) => [entry.terminalTargetId, entry])),
     makeHostTerminal: (entry: HostListEntry) => (options: { size?: { cols?: number; rows?: number } }) =>
-      createHostBackedTerminal({
+      createHostAttachedTerminal({
         hostSocketPath: socketPath,
         ptyId: entry.ptyId,
         size: { cols: options.size?.cols ?? 80, rows: options.size?.rows ?? 24 },

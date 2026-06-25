@@ -2,6 +2,17 @@
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import {
+  assignBackupPaths,
+  createHookSetupFileOps,
+  expectedProviderHookScript,
+  hookCommandsForEvents,
+  installConfigScriptHook,
+  type ProviderHookScriptOptions,
+  planConfigScriptHook,
+  providerHookScriptOptions,
+  uninstallConfigScriptHook,
+} from "@station/runtime";
+import {
   documentContainsCommand,
   installCursorHookCommands,
   missingCursorHookEvents,
@@ -9,25 +20,14 @@ import {
   removeGeneratedCursorHookCommands,
   stringifyJsonDocument,
 } from "./hooks/hookConfigEditor.js";
-import type { CursorHookEventName } from "./hooks/hookConstants.js";
-import {
-  backupIfPresent,
-  readOptionalFile,
-  removeHookScriptIfPresent,
-  writeHookConfig,
-  writeHookScript,
-} from "./hooks/hookFiles.js";
+import { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hooks/hookConstants.js";
+import { CursorHookSetupError } from "./hooks/hookErrors.js";
 import { resolveCursorHookScriptPath, resolveCursorHooksPath } from "./hooks/hookPaths.js";
-import {
-  type CursorHookScriptOptions,
-  expectedCursorHookCommands,
-  expectedCursorHookScript,
-} from "./hooks/hookScript.js";
 
 export { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hooks/hookConstants.js";
 export { CursorHookSetupError, type CursorHookSetupErrorCode } from "./hooks/hookErrors.js";
 export { resolveCursorHookScriptPath, resolveCursorHooksPath } from "./hooks/hookPaths.js";
-export { expectedCursorHookCommands, expectedCursorHookScript } from "./hooks/hookScript.js";
+export { expectedCursorHookCommands, expectedCursorHookScript };
 
 export type CursorHookPlanOptions = {
   cursorHooksPath?: string;
@@ -73,55 +73,32 @@ export type CursorHookDoctorResult = {
   message: string;
 };
 
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    CursorHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): CursorHookScriptOptions {
-  const input: CursorHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) {
-    input.stationConfigPath = options.stationConfigPath;
-  }
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) {
-    input.stateDir = options.stateDir;
-  }
-  if (options.hookSpoolDir !== undefined) {
-    input.hookSpoolDir = options.hookSpoolDir;
-  }
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) {
-    input.hookBin = options.hookBin;
-  }
-  return input;
-}
+export type CursorHookScriptOptions = ProviderHookScriptOptions & {
+  hookScriptPath: string;
+};
 
-function installResultFromPlan(plan: CursorHookPlan, installed: boolean): CursorHookInstallResult {
-  return {
-    provider: plan.provider,
-    hooksPath: plan.hooksPath,
-    hookScriptPath: plan.hookScriptPath,
-    commands: plan.commands,
-    missing: plan.missing,
-    changed: plan.changed,
-    configChanged: plan.configChanged,
-    scriptChanged: plan.scriptChanged,
-    before: plan.before,
-    after: plan.after,
-    installed,
-  };
-}
+const fileOps = createHookSetupFileOps(({ operation, cause }) => {
+  if (operation === "read" || operation === "metadata") {
+    return new CursorHookSetupError(
+      "CURSOR_HOOK_CONFIG_UNREADABLE",
+      operation === "read"
+        ? "Cursor hook config could not be read."
+        : "Cursor hook config metadata could not be read.",
+      { cause },
+    );
+  }
+  return new CursorHookSetupError(
+    "CURSOR_HOOK_WRITE_FAILED",
+    operation === "remove"
+      ? "Cursor hook script could not be removed."
+      : operation === "writeScript"
+        ? "Cursor hook script could not be written."
+        : operation === "backup"
+          ? "Cursor hook config backup could not be written."
+          : "Cursor hook config could not be written.",
+    { cause },
+  );
+});
 
 function missingDescription(plan: CursorHookPlan): string {
   const missing = plan.missing.length === 0 ? "none" : plan.missing.join(", ");
@@ -134,32 +111,45 @@ function missingDescription(plan: CursorHookPlan): string {
   return plan.scriptChanged ? `${missing}; script is missing or stale` : missing;
 }
 
+function expectedCursorHookCommands(input: {
+  hookScriptPath: string;
+}): Record<CursorHookEventName, string> {
+  return hookCommandsForEvents(CURSOR_HOOK_EVENT_NAMES, input.hookScriptPath);
+}
+
+function expectedCursorHookScript(input: CursorHookScriptOptions): string {
+  return expectedProviderHookScript({ provider: "cursor", options: input });
+}
+
 export async function planCursorHooks(
   options: CursorHookPlanOptions = {},
 ): Promise<CursorHookPlan> {
   const hooksPath = resolveCursorHooksPath(options);
   const hookScriptPath = resolveCursorHookScriptPath(options);
-  const before = await readOptionalFile(hooksPath);
-  const document = parseJsonDocument(before);
-  const commands = expectedCursorHookCommands({ hookScriptPath });
-  const afterDocument = installCursorHookCommands(document, commands);
-  const after = stringifyJsonDocument(afterDocument);
-  const script = expectedCursorHookScript(scriptOptions(hookScriptPath, options));
-  const scriptBefore = await readOptionalFile(hookScriptPath);
-  const configChanged = before.trim() !== after.trim();
-  const scriptChanged = scriptBefore !== script;
+  const script = expectedCursorHookScript(providerHookScriptOptions(hookScriptPath, options));
+  const plan = await planConfigScriptHook({
+    readOptionalFile: fileOps.readOptionalFile,
+    configPath: hooksPath,
+    hookScriptPath,
+    parseDocument: parseJsonDocument,
+    installCommands: installCursorHookCommands,
+    stringifyDocument: stringifyJsonDocument,
+    missingEvents: missingCursorHookEvents,
+    expectedCommands: (path) => expectedCursorHookCommands({ hookScriptPath: path }),
+    expectedScript: script,
+  });
 
   return {
     provider: "cursor",
     hooksPath,
     hookScriptPath,
-    commands,
-    missing: missingCursorHookEvents(document, commands),
-    changed: configChanged || scriptChanged,
-    configChanged,
-    scriptChanged,
-    before,
-    after,
+    commands: plan.commands,
+    missing: plan.missing,
+    changed: plan.changed,
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptChanged,
+    before: plan.before,
+    after: plan.after,
   };
 }
 
@@ -167,24 +157,19 @@ export async function installCursorHooks(
   options: CursorHookPlanOptions = {},
 ): Promise<CursorHookInstallResult> {
   const plan = await planCursorHooks(options);
-  let backupPath: string | undefined;
-
-  if (plan.configChanged) {
-    backupPath = await backupIfPresent(plan.hooksPath);
-    await writeHookConfig(plan.hooksPath, plan.after);
-  }
-  if (plan.scriptChanged) {
-    await writeHookScript(
-      plan.hookScriptPath,
-      expectedCursorHookScript(scriptOptions(plan.hookScriptPath, options)),
-    );
-  }
-
-  const result = installResultFromPlan(plan, true);
-  if (backupPath !== undefined) {
-    result.backupPath = backupPath;
-    result.backupPaths = [backupPath];
-  }
+  const backupPath = await installConfigScriptHook({
+    configPath: plan.hooksPath,
+    hookScriptPath: plan.hookScriptPath,
+    after: plan.after,
+    expectedScript: expectedCursorHookScript(
+      providerHookScriptOptions(plan.hookScriptPath, options),
+    ),
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptChanged,
+    fileOps,
+  });
+  const result: CursorHookInstallResult = { ...plan, installed: true };
+  assignBackupPaths(result, [backupPath]);
   return result;
 }
 
@@ -193,39 +178,33 @@ export async function uninstallCursorHooks(
 ): Promise<CursorHookInstallResult> {
   const hooksPath = resolveCursorHooksPath(options);
   const hookScriptPath = resolveCursorHookScriptPath(options);
-  const before = await readOptionalFile(hooksPath);
-  const document = parseJsonDocument(before);
-  const commands = expectedCursorHookCommands({ hookScriptPath });
-  const afterDocument = removeGeneratedCursorHookCommands(document, commands);
-  const after = stringifyJsonDocument(afterDocument);
-  const configChanged = before.trim() !== after.trim();
-  let backupPath: string | undefined;
-
-  if (configChanged) {
-    backupPath = await backupIfPresent(hooksPath);
-    await writeHookConfig(hooksPath, after);
-  }
-
-  const scriptStillNeeded = documentContainsCommand(afterDocument, hookScriptPath);
-  const scriptRemoved = scriptStillNeeded ? false : await removeHookScriptIfPresent(hookScriptPath);
+  const plan = await uninstallConfigScriptHook({
+    readOptionalFile: fileOps.readOptionalFile,
+    configPath: hooksPath,
+    hookScriptPath,
+    parseDocument: parseJsonDocument,
+    removeCommands: removeGeneratedCursorHookCommands,
+    stringifyDocument: stringifyJsonDocument,
+    missingEvents: missingCursorHookEvents,
+    documentContainsCommand,
+    expectedCommands: (path) => expectedCursorHookCommands({ hookScriptPath: path }),
+    fileOps,
+  });
   const result: CursorHookInstallResult = {
     provider: "cursor",
     hooksPath,
     hookScriptPath,
-    commands,
-    missing: missingCursorHookEvents(afterDocument, commands),
-    changed: configChanged || scriptRemoved,
-    configChanged,
-    scriptChanged: scriptRemoved,
-    before,
-    after,
+    commands: plan.commands,
+    missing: plan.missing,
+    changed: plan.changed,
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptRemoved,
+    before: plan.before,
+    after: plan.after,
     installed: false,
-    scriptRemoved,
+    scriptRemoved: plan.scriptRemoved,
   };
-  if (backupPath !== undefined) {
-    result.backupPath = backupPath;
-    result.backupPaths = [backupPath];
-  }
+  assignBackupPaths(result, [plan.backupPath]);
   return result;
 }
 

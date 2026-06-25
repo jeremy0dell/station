@@ -1,4 +1,8 @@
-import type { SafeError } from "@station/contracts";
+import {
+  type HarnessProviderError,
+  harnessProviderErrorClass,
+  harnessProviderErrorFromUnknown,
+} from "@station/harness-shared";
 
 export type ClaudeHarnessErrorCode =
   | "HARNESS_CLAUDE_UNAVAILABLE"
@@ -7,51 +11,18 @@ export type ClaudeHarnessErrorCode =
   | "HARNESS_CLAUDE_EVENT_UNSUPPORTED"
   | "HARNESS_CLAUDE_EVENT_INGEST_FAILED";
 
-export class ClaudeHarnessProviderError extends Error implements SafeError {
-  readonly tag = "HarnessProviderError";
-  readonly code: ClaudeHarnessErrorCode;
-  readonly provider = "claude";
-  readonly hint: string | undefined;
+export const ClaudeHarnessProviderError = harnessProviderErrorClass<ClaudeHarnessErrorCode>({
+  name: "ClaudeHarnessProviderError",
+  provider: "claude",
+});
 
-  constructor(
-    code: ClaudeHarnessErrorCode,
-    message: string,
-    options: { cause?: unknown; hint?: string } = {},
-  ) {
-    super(`${code}: ${message}`, { cause: options.cause });
-    Object.defineProperty(this, "name", {
-      value: "ClaudeHarnessProviderError",
-      configurable: true,
-    });
-    this.code = code;
-    this.hint = options.hint;
-  }
-}
-
-export function claudeHarnessError(
-  code: ClaudeHarnessErrorCode,
-  message: string,
-  cause?: unknown,
-): ClaudeHarnessProviderError {
+export function claudeHarnessError(code: ClaudeHarnessErrorCode, message: string, cause?: unknown) {
   return new ClaudeHarnessProviderError(code, message, { cause });
 }
 
 export function claudeProviderErrorFromUnknown(
   error: unknown,
-  fallback: {
-    code: ClaudeHarnessErrorCode;
-    message: string;
-    hint?: string | undefined;
-  },
-): ClaudeHarnessProviderError {
-  if (error instanceof ClaudeHarnessProviderError) {
-    return error;
-  }
-  const options: { cause?: unknown; hint?: string } = {
-    cause: error,
-  };
-  if (fallback.hint !== undefined) {
-    options.hint = fallback.hint;
-  }
-  return new ClaudeHarnessProviderError(fallback.code, fallback.message, options);
+  fallback: { code: ClaudeHarnessErrorCode; message: string; hint?: string | undefined },
+): HarnessProviderError<ClaudeHarnessErrorCode> {
+  return harnessProviderErrorFromUnknown(ClaudeHarnessProviderError, error, fallback);
 }

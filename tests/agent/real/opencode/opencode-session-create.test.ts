@@ -15,7 +15,7 @@ import {
   ProviderRegistry,
   registerObserverCommandHandlers,
 } from "@station/observer/internal";
-import { installOpenCodePlugin, OpenCodeHarnessProvider } from "@station/opencode";
+import { createOpenCodeHarnessProvider, installOpenCodePlugin } from "@station/opencode";
 import { FakeWorktreeProvider } from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
@@ -110,7 +110,7 @@ describeRealOpenCode("real OpenCode session.create", () => {
       }),
       terminal,
       harnesses: [
-        new OpenCodeHarnessProvider({
+        createOpenCodeHarnessProvider({
           command: shimPath,
           configPath,
           observerSocketPath: join(root, "observer.sock"),

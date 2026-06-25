@@ -3,6 +3,13 @@ import type {
   HarnessLaunchPlan,
   HarnessPermissionMode,
 } from "@station/contracts";
+import {
+  type CommonProviderDataInput,
+  commonProviderData,
+  harnessLaunchEnv,
+  isYoloPermissionMode,
+  terminalProviderData,
+} from "@station/harness-shared";
 import { CodexHarnessProviderError } from "./errors.js";
 
 export type CodexLaunchOptions = {
@@ -45,23 +52,13 @@ export function buildCodexLaunchPlan(
     args.push(request.initialPrompt);
   }
 
-  const env = codexLaunchEnv(request);
-  const providerDataInput: CodexProviderDataInput = {
+  const providerDataInput: CommonProviderDataInput = {
     mode,
     initialPromptProvided: request.initialPrompt !== undefined,
+    ...terminalProviderData(request),
   };
   if (profile !== undefined) {
     providerDataInput.profile = profile;
-  }
-  if (hookProfile !== undefined) {
-    providerDataInput.hookProfile = hookProfile;
-  }
-  if (
-    hookProfile !== undefined &&
-    configuredProfile !== undefined &&
-    configuredProfile !== hookProfile
-  ) {
-    providerDataInput.configuredProfile = configuredProfile;
   }
   if (providerPermissionMode !== undefined) {
     providerDataInput.permissionMode = providerPermissionMode;
@@ -72,21 +69,18 @@ export function buildCodexLaunchPlan(
   if (!yolo && sandboxMode !== undefined) {
     providerDataInput.sandboxMode = sandboxMode;
   }
-  if (mode === "interactive" && options.noAltScreen !== undefined) {
-    providerDataInput.noAltScreen = options.noAltScreen;
-  }
-  if (request.terminalTarget !== undefined) {
-    providerDataInput.terminalProvider = request.terminalTarget.provider;
-    providerDataInput.terminalTargetId = request.terminalTarget.id;
-  }
-  const providerData = codexProviderData(providerDataInput);
+  const providerData = codexProviderData(providerDataInput, {
+    configuredProfile,
+    hookProfile,
+    noAltScreen: mode === "interactive" ? options.noAltScreen : undefined,
+  });
 
   return {
     provider: "codex",
     command: options.command ?? "codex",
     args,
     cwd: request.worktree.path,
-    env,
+    env: harnessLaunchEnv("codex", request),
     mode,
     displayTitle: `${request.project.label} Codex`,
     providerData,
@@ -123,7 +117,7 @@ function buildCodexResumeLaunchPlan(
     args.push(request.initialPrompt);
   }
 
-  const providerDataInput: CodexProviderDataInput = {
+  const providerDataInput: CommonProviderDataInput = {
     mode,
     initialPromptProvided: request.initialPrompt !== undefined,
     resume: true,
@@ -132,38 +126,18 @@ function buildCodexResumeLaunchPlan(
   if (profile !== undefined) {
     providerDataInput.profile = profile;
   }
-  if (hookProfile !== undefined) {
-    providerDataInput.hookProfile = hookProfile;
-  }
-  if (
-    hookProfile !== undefined &&
-    configuredProfile !== undefined &&
-    configuredProfile !== hookProfile
-  ) {
-    providerDataInput.configuredProfile = configuredProfile;
-  }
+  const providerData = codexProviderData(providerDataInput, { configuredProfile, hookProfile });
 
   return {
     provider: "codex",
     command: options.command ?? "codex",
     args,
     cwd: request.worktree.path,
-    env: codexLaunchEnv(request),
+    env: harnessLaunchEnv("codex", request),
     mode,
     displayTitle: `${request.project.label} Codex`,
-    providerData: codexProviderData(providerDataInput),
+    providerData,
   };
-}
-
-function isYoloPermissionMode(input: {
-  permissionMode?: HarnessPermissionMode | undefined;
-  approvalPolicy?: string | undefined;
-  sandboxMode?: string | undefined;
-}): boolean {
-  if (input.permissionMode !== undefined) {
-    return input.permissionMode === "yolo";
-  }
-  return input.approvalPolicy === "never" && input.sandboxMode === "danger-full-access";
 }
 
 function interactiveArgs(request: BuildHarnessLaunchRequest): string[] {
@@ -201,78 +175,23 @@ function appendCodexOptions(
   }
 }
 
-function codexLaunchEnv(request: BuildHarnessLaunchRequest): Record<string, string> {
-  const env: Record<string, string> = {
-    STATION_PROJECT_ID: request.project.id,
-    STATION_WORKTREE_ID: request.worktree.id,
-    STATION_WORKTREE_PATH: request.worktree.path,
-    STATION_HARNESS_PROVIDER: "codex",
-  };
-  if (request.sessionId !== undefined) {
-    env.STATION_SESSION_ID = request.sessionId;
+function codexProviderData(
+  input: CommonProviderDataInput,
+  options: {
+    hookProfile?: string | undefined;
+    configuredProfile?: string | undefined;
+    noAltScreen?: boolean | undefined;
+  },
+): Record<string, unknown> {
+  const providerData = commonProviderData(input);
+  if (options.hookProfile !== undefined) providerData.hookProfile = options.hookProfile;
+  if (
+    options.hookProfile !== undefined &&
+    options.configuredProfile !== undefined &&
+    options.configuredProfile !== options.hookProfile
+  ) {
+    providerData.configuredProfile = options.configuredProfile;
   }
-  if (request.terminalTarget !== undefined) {
-    env.STATION_TERMINAL_PROVIDER = request.terminalTarget.provider;
-    env.STATION_TERMINAL_TARGET_ID = request.terminalTarget.id;
-  }
-  return env;
-}
-
-type CodexProviderDataInput = {
-  mode: "interactive" | "exec";
-  profile?: string | undefined;
-  hookProfile?: string | undefined;
-  configuredProfile?: string | undefined;
-  permissionMode?: HarnessPermissionMode | undefined;
-  approvalPolicy?: string | undefined;
-  sandboxMode?: string | undefined;
-  noAltScreen?: boolean | undefined;
-  initialPromptProvided: boolean;
-  terminalProvider?: string | undefined;
-  terminalTargetId?: string | undefined;
-  resume?: boolean | undefined;
-  resumeTargetKind?: string | undefined;
-};
-
-function codexProviderData(input: CodexProviderDataInput): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {
-    interactive: input.mode === "interactive",
-  };
-  if (input.initialPromptProvided) {
-    providerData.initialPromptProvided = true;
-  }
-  if (input.profile !== undefined) {
-    providerData.profile = input.profile;
-  }
-  if (input.hookProfile !== undefined) {
-    providerData.hookProfile = input.hookProfile;
-  }
-  if (input.configuredProfile !== undefined) {
-    providerData.configuredProfile = input.configuredProfile;
-  }
-  if (input.permissionMode !== undefined) {
-    providerData.permissionMode = input.permissionMode;
-  }
-  if (input.approvalPolicy !== undefined) {
-    providerData.approvalPolicy = input.approvalPolicy;
-  }
-  if (input.sandboxMode !== undefined) {
-    providerData.sandboxMode = input.sandboxMode;
-  }
-  if (input.noAltScreen === true) {
-    providerData.noAltScreen = true;
-  }
-  if (input.terminalProvider !== undefined) {
-    providerData.terminalProvider = input.terminalProvider;
-  }
-  if (input.terminalTargetId !== undefined) {
-    providerData.terminalTargetId = input.terminalTargetId;
-  }
-  if (input.resume === true) {
-    providerData.resume = true;
-  }
-  if (input.resumeTargetKind !== undefined) {
-    providerData.resumeTargetKind = input.resumeTargetKind;
-  }
+  if (options.noAltScreen === true) providerData.noAltScreen = true;
   return providerData;
 }

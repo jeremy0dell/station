@@ -9,13 +9,13 @@ import type {
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installOpenCodePlugin } from "../../src/pluginInstall";
-import { OpenCodeHarnessProvider } from "../../src/provider";
+import { createOpenCodeHarnessProvider } from "../../src/provider";
 
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("OpenCodeHarnessProvider", () => {
   it("declares real OpenCode capabilities", () => {
-    const provider = new OpenCodeHarnessProvider();
+    const provider = createOpenCodeHarnessProvider();
 
     expect(provider.capabilities()).toEqual({
       canLaunch: true,
@@ -32,13 +32,13 @@ describe("OpenCodeHarnessProvider", () => {
   });
 
   it("advertises resume only when configured", () => {
-    expect(new OpenCodeHarnessProvider().capabilities().canResume).toBe(false);
-    expect(new OpenCodeHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
+    expect(createOpenCodeHarnessProvider().capabilities().canResume).toBe(false);
+    expect(createOpenCodeHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
   });
 
   it("checks opencode --version for provider health", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new OpenCodeHarnessProvider({
+    const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -60,7 +60,7 @@ describe("OpenCodeHarnessProvider", () => {
   });
 
   it("maps health failures to typed OpenCode provider health", async () => {
-    const provider = new OpenCodeHarnessProvider({
+    const provider = createOpenCodeHarnessProvider({
       command: "missing-opencode",
       now: () => new Date(now),
       runner: async () => {
@@ -84,7 +84,7 @@ describe("OpenCodeHarnessProvider", () => {
   });
 
   it("applies provider launch defaults and discovers terminal-bound runs", async () => {
-    const provider = new OpenCodeHarnessProvider({
+    const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",
       profile: "build",
       approvalPolicy: "on-request",
@@ -141,7 +141,7 @@ describe("OpenCodeHarnessProvider", () => {
   });
 
   it("applies yolo permission mode to non-interactive OpenCode launch plans", async () => {
-    const provider = new OpenCodeHarnessProvider({
+    const provider = createOpenCodeHarnessProvider({
       permissionMode: "yolo",
       approvalPolicy: "on-request",
       sandboxMode: "workspace-write",
@@ -162,7 +162,7 @@ describe("OpenCodeHarnessProvider", () => {
   });
 
   it("launches interactive OpenCode resume with the native session id", async () => {
-    const provider = new OpenCodeHarnessProvider({
+    const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",
       resume: true,
     });
@@ -200,7 +200,7 @@ describe("OpenCodeHarnessProvider", () => {
       hookSpoolDir,
     });
 
-    const provider = new OpenCodeHarnessProvider({
+    const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",
       installHooks: true,
       observerSocketPath,
@@ -231,7 +231,7 @@ describe("OpenCodeHarnessProvider", () => {
   });
 
   it("classifies and ingests OpenCode observations through provider-local parsing", async () => {
-    const provider = new OpenCodeHarnessProvider({ now: () => new Date(now) });
+    const provider = createOpenCodeHarnessProvider({ now: () => new Date(now) });
 
     await expect(
       provider.classifyRun(run(), {

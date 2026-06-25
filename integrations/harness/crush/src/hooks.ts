@@ -2,8 +2,18 @@
 // Upstream hook contract: https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md
 // STATION ingress flow: docs/harness-ingress.md. Matcher omitted = fires on every tool; the script exits 0 with
 // empty stdout so Crush treats it as "no opinion" (never blocks a tool call).
-import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import {
+  assignBackupPaths,
+  createHookSetupFileOps,
+  expectedProviderHookScript,
+  hookCommandsForEvents,
+  installConfigScriptHook,
+  type ProviderHookScriptOptions,
+  planConfigScriptHook,
+  providerHookScriptOptions,
+  uninstallConfigScriptHook,
+} from "@station/runtime";
 import { z } from "zod";
 
 export const CRUSH_HOOK_EVENT_NAMES = ["PreToolUse"] as const;
@@ -90,29 +100,49 @@ export class CrushHookSetupError extends Error {
   }
 }
 
+const fileOps = createHookSetupFileOps(({ operation, cause }) => {
+  if (operation === "read" || operation === "metadata") {
+    return new CrushHookSetupError("CRUSH_HOOK_INVALID_JSON", "Crush config could not be read.", {
+      cause,
+    });
+  }
+  return new CrushHookSetupError(
+    "CRUSH_HOOK_WRITE_FAILED",
+    operation === "writeScript"
+      ? "Failed to write Crush hook script."
+      : operation === "remove"
+        ? "Failed to remove Crush hook script."
+        : "Failed to write Crush config.",
+    { cause },
+  );
+});
+
 export async function planCrushHooks(options: CrushHookPlanOptions = {}): Promise<CrushHookPlan> {
   const configPath = resolveCrushConfigPath(options);
   const hookScriptPath = resolveCrushHookScriptPath(options);
-  const before = await readOptionalFile(configPath);
-  const document = parseCrushConfigDocument(before);
-  const commands = expectedCrushHookCommands({ hookScriptPath });
-  const afterDocument = installCrushHookCommands(document, commands);
-  const after = stringifyCrushConfigDocument(afterDocument);
-  const script = expectedCrushHookScript(scriptOptions(hookScriptPath, options));
-  const scriptBefore = await readOptionalFile(hookScriptPath);
-  const configChanged = before.trim() !== after.trim();
-  const scriptChanged = scriptBefore !== script;
+  const script = expectedCrushHookScript(providerHookScriptOptions(hookScriptPath, options));
+  const plan = await planConfigScriptHook({
+    readOptionalFile: fileOps.readOptionalFile,
+    configPath,
+    hookScriptPath,
+    parseDocument: parseCrushConfigDocument,
+    installCommands: installCrushHookCommands,
+    stringifyDocument: stringifyCrushConfigDocument,
+    missingEvents: missingCrushHookEvents,
+    expectedCommands: (path) => expectedCrushHookCommands({ hookScriptPath: path }),
+    expectedScript: script,
+  });
   return {
     provider: "crush",
     configPath,
     hookScriptPath,
-    commands,
-    missing: missingCrushHookEvents(document, commands),
-    changed: configChanged || scriptChanged,
-    configChanged,
-    scriptChanged,
-    before,
-    after,
+    commands: plan.commands,
+    missing: plan.missing,
+    changed: plan.changed,
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptChanged,
+    before: plan.before,
+    after: plan.after,
   };
 }
 
@@ -120,25 +150,22 @@ export async function installCrushHooks(
   options: CrushHookPlanOptions = {},
 ): Promise<CrushHookInstallResult> {
   const plan = await planCrushHooks(options);
-  let backupPath: string | undefined;
-  if (plan.configChanged) {
-    backupPath = await backupIfPresent(plan.configPath);
-    await writeHookConfig(plan.configPath, plan.after);
-  }
-  if (plan.scriptChanged) {
-    await writeHookScript(
-      plan.hookScriptPath,
-      expectedCrushHookScript(scriptOptions(plan.hookScriptPath, options)),
-    );
-  }
+  const backupPath = await installConfigScriptHook({
+    configPath: plan.configPath,
+    hookScriptPath: plan.hookScriptPath,
+    after: plan.after,
+    expectedScript: expectedCrushHookScript(
+      providerHookScriptOptions(plan.hookScriptPath, options),
+    ),
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptChanged,
+    fileOps,
+  });
   const result: CrushHookInstallResult = {
     ...plan,
     installed: true,
   };
-  if (backupPath !== undefined) {
-    result.backupPath = backupPath;
-    result.backupPaths = [backupPath];
-  }
+  assignBackupPaths(result, [backupPath]);
   return result;
 }
 
@@ -147,37 +174,33 @@ export async function uninstallCrushHooks(
 ): Promise<CrushHookInstallResult> {
   const configPath = resolveCrushConfigPath(options);
   const hookScriptPath = resolveCrushHookScriptPath(options);
-  const before = await readOptionalFile(configPath);
-  const document = parseCrushConfigDocument(before);
-  const commands = expectedCrushHookCommands({ hookScriptPath });
-  const afterDocument = removeGeneratedCrushHookCommands(document, commands);
-  const after = stringifyCrushConfigDocument(afterDocument);
-  const configChanged = before.trim() !== after.trim();
-  let backupPath: string | undefined;
-  if (configChanged) {
-    backupPath = await backupIfPresent(configPath);
-    await writeHookConfig(configPath, after);
-  }
-  const scriptStillNeeded = documentContainsCommand(afterDocument, hookScriptPath);
-  const scriptRemoved = scriptStillNeeded ? false : await removeHookScriptIfPresent(hookScriptPath);
+  const plan = await uninstallConfigScriptHook({
+    readOptionalFile: fileOps.readOptionalFile,
+    configPath,
+    hookScriptPath,
+    parseDocument: parseCrushConfigDocument,
+    removeCommands: removeGeneratedCrushHookCommands,
+    stringifyDocument: stringifyCrushConfigDocument,
+    missingEvents: missingCrushHookEvents,
+    documentContainsCommand,
+    expectedCommands: (path) => expectedCrushHookCommands({ hookScriptPath: path }),
+    fileOps,
+  });
   const result: CrushHookInstallResult = {
     provider: "crush",
     configPath,
     hookScriptPath,
-    commands,
-    missing: missingCrushHookEvents(afterDocument, commands),
-    changed: configChanged || scriptRemoved,
-    configChanged,
-    scriptChanged: scriptRemoved,
-    before,
-    after,
+    commands: plan.commands,
+    missing: plan.missing,
+    changed: plan.changed,
+    configChanged: plan.configChanged,
+    scriptChanged: plan.scriptRemoved,
+    before: plan.before,
+    after: plan.after,
     installed: false,
-    scriptRemoved,
+    scriptRemoved: plan.scriptRemoved,
   };
-  if (backupPath !== undefined) {
-    result.backupPath = backupPath;
-    result.backupPaths = [backupPath];
-  }
+  assignBackupPaths(result, [plan.backupPath]);
   return result;
 }
 
@@ -232,73 +255,21 @@ export function resolveCrushHookScriptPath(options: CrushHookPlanOptions = {}): 
 export function expectedCrushHookCommands(input: {
   hookScriptPath: string;
 }): Record<CrushHookEventName, string> {
-  return { PreToolUse: input.hookScriptPath };
+  return hookCommandsForEvents(CRUSH_HOOK_EVENT_NAMES, input.hookScriptPath);
 }
 
 export function expectedCrushHookScript(input: CrushHookScriptOptions): string {
-  const hookArgs = [input.hookBin ?? "stn-ingress"];
-  if (input.observerSocketPath !== undefined) {
-    hookArgs.push("--socket", input.observerSocketPath);
-  }
-  if (input.stateDir !== undefined) {
-    hookArgs.push("--state-dir", input.stateDir);
-  }
-  if (input.hookSpoolDir !== undefined) {
-    hookArgs.push("--spool-dir", input.hookSpoolDir);
-  }
-  if (input.stationConfigPath !== undefined) {
-    hookArgs.push("--config", input.stationConfigPath);
-  }
-  if (input.autoStartFromHooks === false) {
-    hookArgs.push("--no-auto-start");
-  }
-  hookArgs.push("crush");
-  return [
-    "#!/usr/bin/env bash",
-    "set -euo pipefail",
-    `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    "  exit 0",
-    "fi",
-    `${commandLine(hookArgs)} > /dev/null 2>&1 || true`,
-    "",
-  ].join("\n");
+  return expectedProviderHookScript({
+    provider: "crush",
+    options: input,
+    ignoreFailure: true,
+    redirectStderr: true,
+  });
 }
 
-type CrushHookScriptOptions = {
+export type CrushHookScriptOptions = ProviderHookScriptOptions & {
   hookScriptPath: string;
-  stationConfigPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
-  hookBin?: string;
 };
-
-function scriptOptions(
-  hookScriptPath: string,
-  options: Pick<
-    CrushHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  >,
-): CrushHookScriptOptions {
-  const input: CrushHookScriptOptions = { hookScriptPath };
-  if (options.stationConfigPath !== undefined) input.stationConfigPath = options.stationConfigPath;
-  if (options.observerSocketPath !== undefined) {
-    input.observerSocketPath = options.observerSocketPath;
-  }
-  if (options.stateDir !== undefined) input.stateDir = options.stateDir;
-  if (options.hookSpoolDir !== undefined) input.hookSpoolDir = options.hookSpoolDir;
-  if (options.autoStartFromHooks !== undefined) {
-    input.autoStartFromHooks = options.autoStartFromHooks;
-  }
-  if (options.hookBin !== undefined) input.hookBin = options.hookBin;
-  return input;
-}
 
 function parseCrushConfigDocument(source: string): CrushConfigDocument {
   if (source.trim().length === 0) {
@@ -412,57 +383,6 @@ function documentContainsCommand(document: CrushConfigDocument, command: string)
   );
 }
 
-async function readOptionalFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    return "";
-  }
-}
-
-async function backupIfPresent(path: string): Promise<string | undefined> {
-  try {
-    await stat(path);
-  } catch {
-    return undefined;
-  }
-  const backupPath = `${path}.station-backup-${Date.now()}`;
-  await writeFile(backupPath, await readFile(path, "utf8"), "utf8");
-  return backupPath;
-}
-
-async function writeHookConfig(path: string, content: string): Promise<void> {
-  try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(path, content, { mode: 0o600 });
-  } catch (cause) {
-    throw new CrushHookSetupError("CRUSH_HOOK_WRITE_FAILED", "Failed to write Crush config.", {
-      cause,
-    });
-  }
-}
-
-async function writeHookScript(path: string, content: string): Promise<void> {
-  try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(path, content, { mode: 0o700 });
-    await chmod(path, 0o700);
-  } catch (cause) {
-    throw new CrushHookSetupError("CRUSH_HOOK_WRITE_FAILED", "Failed to write Crush hook script.", {
-      cause,
-    });
-  }
-}
-
-async function removeHookScriptIfPresent(path: string): Promise<boolean> {
-  try {
-    await rm(path, { force: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function missingDescription(plan: CrushHookPlan): string {
   const missing = plan.missing.length === 0 ? "none" : plan.missing.join(", ");
   if (plan.configChanged && plan.scriptChanged) {
@@ -489,12 +409,4 @@ function cloneHooks(
     next[eventName] = entries.map((entry) => ({ ...entry }));
   }
   return next;
-}
-
-function commandLine(args: string[]): string {
-  return args.map(shellQuote).join(" ");
-}
-
-function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }

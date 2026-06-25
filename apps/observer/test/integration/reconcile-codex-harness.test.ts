@@ -1,7 +1,7 @@
 import {
-  CodexHarnessProvider,
   codexHookPayloadToHarnessEventReport,
   compactCodexHookPayload,
+  createCodexHarnessProvider,
 } from "@station/codex";
 import type { StationConfig } from "@station/config";
 import {
@@ -22,7 +22,7 @@ const now = "2026-05-21T12:00:00.000Z";
 
 describe("observer reconcile with Codex harness", () => {
   it("observes a tmux-bound Codex target as a provider-neutral harness run", async () => {
-    const provider = new CodexHarnessProvider({
+    const provider = createCodexHarnessProvider({
       now: () => new Date(now),
       runner: async (input) => ({
         command: input.command,
@@ -265,7 +265,7 @@ function codexProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new CodexHarnessProvider({
+      createCodexHarnessProvider({
         now: () => new Date(now),
         runner: async (input) => ({
           command: input.command,
