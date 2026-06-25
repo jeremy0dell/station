@@ -193,6 +193,51 @@ describe("OpenCode event parsing", () => {
     });
   });
 
+  it("marks OpenCode idle session events as completed turns", () => {
+    const payload = {
+      event_type: "session.status",
+      cwd: "/tmp/station/web/task",
+      opencode_session_id: "opencode_session_123",
+      status_type: "idle",
+      station_worktree_id: "wt_web_task",
+      station_terminal_target_id: "tmux:station:@1:%2",
+    };
+
+    expect(
+      normalizeOpenCodeRawEvent(
+        {
+          provider: "opencode",
+          observedAt: now,
+          event: payload,
+        },
+        context(),
+      )[0],
+    ).toMatchObject({
+      status: {
+        value: "idle",
+      },
+      turn: {
+        kind: "turn_completed",
+      },
+    });
+
+    expect(
+      openCodeHookPayloadToHarnessEventReport({
+        reportId: "report_opencode_idle",
+        eventType: "session.status",
+        observedAt: now,
+        payload,
+      }),
+    ).toMatchObject({
+      status: {
+        value: "idle",
+      },
+      turn: {
+        kind: "turn_completed",
+      },
+    });
+  });
+
   it("derives OpenCode status projection coverage from provider-local ingress rules", () => {
     expect(new Set(openCodeForwardedEventTypes).size).toBe(openCodeForwardedEventTypes.length);
     expect(openCodeForwardedEventTypes).not.toContain("message.part.delta");

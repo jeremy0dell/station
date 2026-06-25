@@ -7,8 +7,17 @@ import type {
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
-import { TerminalTargetObservationSchema, WorktreeObservationSchema } from "@station/contracts";
-import { type RuntimeClock, runRuntimeBoundaryWithTimeout, systemClock } from "@station/runtime";
+import {
+  HarnessEventObservationSchema,
+  TerminalTargetObservationSchema,
+  WorktreeObservationSchema,
+} from "@station/contracts";
+import {
+  type RuntimeClock,
+  runRuntimeBoundaryWithTimeout,
+  systemClock,
+  toIsoTimestamp,
+} from "@station/runtime";
 import type {
   ObserverPersistence,
   PersistedProviderObservation,
@@ -21,6 +30,7 @@ import {
 } from "../persistence/retention.js";
 import { stripTerminalProviderData } from "../persistence/terminalObservations.js";
 import type { ProviderRegistry } from "../providers/registry.js";
+import { persistTurnReadinessFromHarnessObservation } from "./turnReadiness.js";
 
 export type ProviderHookIngestResult = {
   observations: number;
@@ -84,6 +94,14 @@ export async function ingestProviderHookEvent(
       ...observation,
       expiresAt: providerObservationExpiresAt(observation.observedAt, retentionDays),
     });
+    const harnessEvent = harnessEventObservationFromRecord(observation);
+    if (harnessEvent !== undefined) {
+      await persistTurnReadinessFromHarnessObservation({
+        persistence: options.persistence,
+        observation: harnessEvent,
+        updatedAt: toIsoTimestamp(clock.now()),
+      });
+    }
   }
 
   return {
@@ -229,17 +247,51 @@ function harnessEventObservationRecord(
   event: ProviderHookEvent,
   observation: HarnessEventObservation,
 ): ObservationRecord {
+  const payload = harnessEventObservationPayload(event, observation);
   return {
-    provider: observation.provider,
+    provider: payload.provider,
     providerType: "harness",
     entityKind: "harness_event",
     entityKey:
-      observation.harnessRunId ??
-      observation.sessionId ??
-      observation.worktreeId ??
+      payload.harnessRunId ??
+      payload.sessionId ??
+      payload.worktreeId ??
       event.hookId ??
       event.event,
-    payload: observation,
-    observedAt: observation.observedAt,
+    payload,
+    observedAt: payload.observedAt,
   };
+}
+
+function harnessEventObservationPayload(
+  event: ProviderHookEvent,
+  observation: HarnessEventObservation,
+): HarnessEventObservation {
+  const payload: HarnessEventObservation = { ...observation };
+  if (payload.reportId === undefined && event.hookId !== undefined) {
+    payload.reportId = event.hookId;
+  }
+  if (payload.eventType === undefined) {
+    payload.eventType = event.event;
+  }
+  if (payload.projectId === undefined && event.projectId !== undefined) {
+    payload.projectId = event.projectId;
+  }
+  if (payload.worktreeId === undefined && event.worktreeId !== undefined) {
+    payload.worktreeId = event.worktreeId;
+  }
+  if (payload.sessionId === undefined && event.sessionId !== undefined) {
+    payload.sessionId = event.sessionId;
+  }
+  return payload;
+}
+
+function harnessEventObservationFromRecord(
+  observation: ObservationRecord,
+): HarnessEventObservation | undefined {
+  if (observation.providerType !== "harness" || observation.entityKind !== "harness_event") {
+    return undefined;
+  }
+  const result = HarnessEventObservationSchema.safeParse(observation.payload);
+  return result.success ? result.data : undefined;
 }

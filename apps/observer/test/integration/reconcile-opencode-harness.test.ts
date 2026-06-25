@@ -104,6 +104,7 @@ describe("observer reconcile with OpenCode harness", () => {
       status: "ingested",
       accepted: true,
     });
+    expect(receipt).not.toHaveProperty("error");
     const snapshot = await core.reconcile("opencode-hook-event");
     expect(snapshot.rows[0]?.agent).toMatchObject({
       harness: "opencode",
@@ -152,6 +153,14 @@ describe("observer reconcile with OpenCode harness", () => {
           reason: "OpenCode session status is idle.",
         }),
       },
+    });
+    expect(core.getSnapshot().rows[0]?.agent?.turnReadiness).toMatchObject({
+      state: "ready_to_read",
+      completedAt: "2026-05-20T12:00:02.000Z",
+    });
+    await expect(persistence.getSessionTurnReadiness("ses_web_task")).resolves.toMatchObject({
+      worktreeId: "wt_web_task",
+      completedAt: "2026-05-20T12:00:02.000Z",
     });
     await expect(persistence.listProviderObservations()).resolves.toEqual(
       expect.arrayContaining([

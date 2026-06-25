@@ -32,6 +32,7 @@ import {
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { ingestProviderHookEvent } from "./providerHookIngress.js";
+import { persistTurnReadinessFromHarnessObservation } from "./turnReadiness.js";
 
 export type ProviderHookIngress = {
   ingest(
@@ -192,6 +193,7 @@ export function createHarnessEventReportIngestion(
     ingest: async (inputReport, ingestOptions = {}) => {
       const report = HarnessEventReportSchema.parse(inputReport);
       const receivedAt = toIsoTimestamp(clock.now());
+      const observation = harnessEventObservationFromReport(report);
 
       const reportedEvent: StationEvent = {
         type: "harness.eventReported",
@@ -227,7 +229,7 @@ export function createHarnessEventReportIngestion(
                 providerType: "harness",
                 entityKind: "harness_event",
                 entityKey: harnessEventReportEntityKey(report),
-                payload: harnessEventObservationFromReport(report),
+                payload: observation,
                 observedAt: report.observedAt,
                 expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
               },
@@ -239,6 +241,11 @@ export function createHarnessEventReportIngestion(
           if (recoveryHandle !== undefined) {
             await options.persistence.upsertSessionRecoveryHandle(recoveryHandle);
           }
+          await persistTurnReadinessFromHarnessObservation({
+            persistence: options.persistence,
+            observation,
+            updatedAt: receivedAt,
+          });
           options.eventBus?.publish(reportedEvent);
           return { deduped: false };
         },

@@ -46,6 +46,10 @@ export function normalizePiRawEvent(
     observedAt,
     providerData: providerDataFromPiEvent(event),
   };
+  const turn = turnFromPiEvent(event);
+  if (turn !== undefined) {
+    observation.turn = turn;
+  }
   if (correlation.sessionId !== undefined) {
     observation.sessionId = correlation.sessionId;
   }
@@ -85,6 +89,10 @@ export function piHookPayloadToHarnessEventReport(
     observedAt: input.observedAt,
     status: statusFromPiEvent(event, input.observedAt),
   };
+  const turn = turnFromPiEvent(event);
+  if (turn !== undefined) {
+    report.turn = turn;
+  }
   const correlation = reportCorrelationFromPiEvent(event);
   if (correlation !== undefined) {
     report.correlation = correlation;
@@ -99,6 +107,10 @@ export function piHookPayloadToHarnessEventReport(
   }
   report.providerData = providerDataFromPiEvent(event);
   return HarnessEventReportSchema.parse(report);
+}
+
+function turnFromPiEvent(event: PiCompactEvent): HarnessEventReport["turn"] | undefined {
+  return event.event_type === "agent_end" ? { kind: "turn_completed" } : undefined;
 }
 
 export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): ObservedStatus {

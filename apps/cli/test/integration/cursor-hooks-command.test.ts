@@ -82,9 +82,14 @@ describe("CLI Cursor hook commands", () => {
         hookScriptPath,
       },
     });
-    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(
-      `/opt/stn-ingress --socket ${join(root, "run", "observer.sock")} --state-dir ${join(root, "state")} --spool-dir ${join(root, "state", "spool", "hooks")} --config`,
+    const script = await readFile(hookScriptPath, "utf8");
+    expect(script).toContain(providerHookScriptCommand("/opt/stn-ingress", "cursor"));
+    expect(script).toContain(`SOCKET_ARG=(--socket ${join(root, "run", "observer.sock")})`);
+    expect(script).toContain(`STATE_DIR_ARG=(--state-dir ${join(root, "state")})`);
+    expect(script).toContain(
+      `SPOOL_DIR_ARG=(--spool-dir ${join(root, "state", "spool", "hooks")})`,
     );
+    expect(script).toContain(`CONFIG_ARG=(--config ${configPath})`);
 
     const uninstalled = await runCli([
       "--config",
@@ -196,4 +201,19 @@ function existingCursorHooks(): string {
     null,
     2,
   );
+}
+
+function providerHookScriptCommand(hookBin: string, provider: string): string {
+  return [
+    hookBin,
+    guardedArg("SOCKET_ARG"),
+    guardedArg("STATE_DIR_ARG"),
+    guardedArg("SPOOL_DIR_ARG"),
+    guardedArg("CONFIG_ARG"),
+    provider,
+  ].join(" ");
+}
+
+function guardedArg(name: string): string {
+  return ["$", `{${name}[@]+"`, "$", `{${name}[@]}"}`].join("");
 }

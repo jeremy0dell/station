@@ -93,8 +93,13 @@ describe("Cursor hook setup", () => {
     });
     expect(config.hooks.beforeShellExecution).toEqual([{ command: hookScriptPath, timeout: 30 }]);
     expect(script).toContain(
-      "stn-ingress --socket /tmp/station/run/observer.sock --state-dir /tmp/station/state --spool-dir /tmp/station/state/spool/hooks --config /tmp/station/config.toml --no-auto-start cursor",
+      `if [ -n "${shellParameter("STATION_OBSERVER_SOCKET_PATH:-")}" ]; then`,
     );
+    expect(script).toContain('SOCKET_ARG=(--socket "$STATION_OBSERVER_SOCKET_PATH")');
+    expect(script).toContain("SOCKET_ARG=(--socket /tmp/station/run/observer.sock)");
+    expect(script).toContain('CONFIG_ARG=(--config "$STATION_CONFIG_PATH")');
+    expect(script).toContain("CONFIG_ARG=(--config /tmp/station/config.toml)");
+    expect(script).toContain(providerHookScriptCommand("stn-ingress", "cursor", "--no-auto-start"));
     expect(script).toContain(
       `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
     );
@@ -116,6 +121,42 @@ describe("Cursor hook setup", () => {
       installed: true,
       hooksPath,
       hookScriptPath,
+    });
+  });
+
+  it("doctor accepts a shared generated hook script that routes by Station env", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-"));
+    const hooksPath = join(root, "cursor", "hooks.json");
+    const sharedHookScriptPath = join(root, "default", "hooks", "station-cursor-hook.sh");
+    const demoHookScriptPath = join(root, "demo", "hooks", "station-cursor-hook.sh");
+
+    await installCursorHooks({
+      cursorHooksPath: hooksPath,
+      hookScriptPath: sharedHookScriptPath,
+      stationConfigPath: "/tmp/station/config.toml",
+      observerSocketPath: "/tmp/station/run/observer.sock",
+      stateDir: "/tmp/station/state",
+      hookSpoolDir: "/tmp/station/state/spool/hooks",
+    });
+
+    await expect(
+      doctorCursorHooks({
+        cursorHooksPath: hooksPath,
+        hookScriptPath: demoHookScriptPath,
+        stationConfigPath: "/tmp/demo/config.toml",
+        observerSocketPath: "/tmp/demo/run/observer.sock",
+        stateDir: "/tmp/demo/state",
+        hookSpoolDir: "/tmp/demo/state/spool/hooks",
+        enabled: true,
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      installed: true,
+      hookScriptPath: sharedHookScriptPath,
+      commands: {
+        sessionStart: sharedHookScriptPath,
+        postToolUse: sharedHookScriptPath,
+      },
     });
   });
 
@@ -182,6 +223,47 @@ describe("Cursor hook setup", () => {
       "--config /tmp/station/config.toml cursor\n",
     );
     await expect(readFile(stdinLog, "utf8")).resolves.toBe(payload);
+  });
+
+  it("generated script routes through launched Station config env when present", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-"));
+    const hooksPath = join(root, "cursor", "hooks.json");
+    const hookScriptPath = join(root, "state", "hooks", "station-cursor-hook.sh");
+    const hookBin = join(root, "stn-ingress");
+    const argsLog = join(root, "hook.args");
+    await writeFile(
+      hookBin,
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        `printf '%s\\n' "$*" >> ${shellQuote(argsLog)}`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
+
+    await installCursorHooks({
+      cursorHooksPath: hooksPath,
+      hookScriptPath,
+      stationConfigPath: "/tmp/station/config.toml",
+      observerSocketPath: "/tmp/station/run/observer.sock",
+      stateDir: "/tmp/station/state",
+      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      hookBin,
+    });
+
+    const result = await runHookScript(hookScriptPath, '{"hook_event_name":"sessionStart"}', {
+      TMPDIR: root,
+      STATION_SESSION_ID: "ses_web_task",
+      STATION_WORKTREE_ID: "wt_web_task",
+      STATION_CONFIG_PATH: "/tmp/demo/config.toml",
+      STATION_OBSERVER_SOCKET_PATH: "/tmp/demo/observer.sock",
+    });
+
+    expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+    await expect(readFile(argsLog, "utf8")).resolves.toBe(
+      "--socket /tmp/demo/observer.sock --config /tmp/demo/config.toml cursor\n",
+    );
   });
 
   it("uninstalls generated hooks without removing unrelated commands", async () => {
@@ -291,6 +373,26 @@ async function runHookScript(
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function providerHookScriptCommand(hookBin: string, provider: string, ...flags: string[]): string {
+  return [
+    hookBin,
+    guardedArg("SOCKET_ARG"),
+    guardedArg("STATE_DIR_ARG"),
+    guardedArg("SPOOL_DIR_ARG"),
+    guardedArg("CONFIG_ARG"),
+    ...flags,
+    provider,
+  ].join(" ");
+}
+
+function guardedArg(name: string): string {
+  return ["$", `{${name}[@]+"`, "$", `{${name}[@]}"}`].join("");
+}
+
+function shellParameter(name: string): string {
+  return ["$", `{${name}}`].join("");
 }
 
 function existingCursorHooks(): string {
