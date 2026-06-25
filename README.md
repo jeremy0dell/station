@@ -112,15 +112,31 @@ The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the 
 
 station is built around provider boundaries. External tools stay in their own lane; station checks and reports their availability rather than bundling them.
 
-| Provider | Role |
-|----------|------|
+### Supported harnesses
+
+station never asks an agent what it's doing. It watches the hook events each harness emits and derives one status per session: **working**, **idle** (shown as **ready** the moment a turn finishes), **needs attention**, plus lifecycle (**starting**, **exited**) and fallbacks (**stuck**, **unknown**, **no agent**). A harness can only surface the states it can report, so coverage varies.
+
+| Harness | Working | Done | Needs attention | Support | Connects via |
+|---------|:-------:|:----:|:---------------:|---------|--------------|
+| **Claude Code** | ✓ | ✓ | ✓ | Full | `settings.json` hooks |
+| **Codex** | ✓ | ✓ | ✓ | Full | `~/.codex` profile hooks |
+| **Cursor** | ✓ | ✓ | ✓ ¹ | Full | `~/.cursor/hooks.json` |
+| **OpenCode** | ✓ | ✓ | ✓ | Full | plugin |
+| **Pi** | ✓ | ✓ | ✗ | Partial | in-process extension |
+| **Crush** | ~ ² | ✗ | ✗ | Minimal | `.crush.json` (`PreToolUse`) |
+
+¹ Cursor reports attention on error at the end of a turn, not from a live permission prompt.
+² Crush only emits a pre-tool hook, so station can tell an agent is working but not when it finishes, goes idle, or needs you.
+
+Full per-event detail and hook setup live in [Harnesses](docs/harnesses.md).
+
+### Backend integrations
+
+| Integration | Role |
+|-------------|------|
 | **Worktrunk** (`wt`) | Worktree backend: canonical branch and worktree state |
-| **tmux** | Terminal workspaces, pane/window identity, popup binding |
-| **Claude Code** | Harness provider: hook ingress, session tracking |
-| **Codex** | Harness provider: hook ingress, session tracking |
-| **Cursor** | Harness provider: hook ingress, session tracking |
-| **Pi** | Harness provider: in-process hook reports |
-| **OpenCode** | Harness provider: hook ingress, session tracking |
+| **tmux** | Terminal provider: pane and window identity, dashboard popup |
+| **GitHub** | Repository metadata: pull request and CI state |
 
 ---
 
@@ -158,4 +174,5 @@ station is under active development. The current build supports local setup, dia
 | [Debugging](docs/debugging.md) | Trace IDs, command IDs, no-action debugging, evidence lookup |
 | [Diagnostics](docs/diagnostics.md) | `stn doctor`, debug bundles, log retention, hook setup |
 | [System dependencies](docs/system-dependencies.md) | External tools, install checks, dependency diagnostics |
+| [Harnesses](docs/harnesses.md) | Supported harnesses, what each can report, and hook delivery |
 | [Known issues](docs/known-issues.md) | Accepted limitations for the current local-use checkpoint |
