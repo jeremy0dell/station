@@ -1,21 +1,42 @@
+<p align="center">
+  <img src="./station/assets/station-icon.svg" alt="Station logo" width="64" height="64">
+</p>
+
 # station
 
-**A terminal-native control plane for AI-agent worktree sessions.**
+**Run multiple AI coding agents from one terminal, without them fighting over your code.**
 
-When you run more than one AI agent at a time, things get messy fast: worktrees multiply, tmux panes lose their names, you forget which branch has the agent that's been running for twenty minutes. station solves this. It keeps your projects, worktrees, terminal workspaces, and agent harnesses connected — and shows you the live picture in a single TUI.
+Don't lose your terminal workflow. Bring your own harness. Built on top-of-the-line open-source projects.
+
+It usually starts simple: one AI coding agent in one terminal window. Then you open a second window to run another agent on the same project, then a third, and soon they're all editing the same files in `main`, you've lost track of which window is doing what, and closing your terminal kills whatever was mid-run.
+
+station untangles this. It gives each agent its own isolated copy of the repo (a *worktree*, which station sets up and manages for you), so your agents stop colliding. Every session shows up in one live view, so you can see what each one is doing at a glance. And your sessions keep running even after you close your terminal: reattach later and your panes are right where you left them.
+
+<p align="center">
+  <img src="./station/assets/screenshots/fleet-overview.png" alt="Station TUI listing projects, worktrees, and live agent sessions, with a session-create dialog open" width="820">
+  <br>
+  <em>One live view of every project, worktree, and agent session. A new session is a keypress away.</em>
+</p>
 
 ---
 
 ## What it does
 
-station tracks the runtime state of your agent workflow and makes it visible:
+station keeps track of everything that's running and makes it visible:
 
-- **Live TUI** — see every project, worktree, and agent session at a glance, updated in real time
-- **Observer** — a background process that owns runtime truth, reconciles Worktrunk state, and serves snapshots over a socket
-- **CLI** — `stn doctor`, `stn reconcile`, `stn snapshot`, `stn debug bundle`, and more
-- **Session creation** — start a new agent session from the TUI with project, branch, and harness already wired up
-- **Hook ingress** — Claude Code, Codex, Cursor, Pi, and OpenCode emit structured events that station receives and records
-- **Diagnostics** — trace IDs, debug bundles, bounded log retention, and provider health checks built in from day one
+- **Live TUI**: see every project, worktree, and agent session at a glance, updated in real time
+- **Observer**: a background process that owns runtime truth, reconciles Worktrunk state, and serves snapshots over a socket
+- **CLI**: `stn doctor`, `stn reconcile`, `stn snapshot`, `stn debug bundle`, and more
+- **Session creation**: start a new agent session from the TUI with project, branch, and harness already wired up
+- **Persistent sessions**: panes run in host-backed PTYs, so you can close your terminal and reattach to your running agents right where you left them
+- **Hook ingress**: Claude Code, Codex, Cursor, Pi, and OpenCode emit structured events that station receives and records
+- **Diagnostics**: trace IDs, debug bundles, bounded log retention, and provider health checks built in from day one
+
+<p align="center">
+  <img src="./station/assets/screenshots/agent-session-diff.png" alt="Split view: an agent session's transcript on the left, its live diff and working tree on the right" width="880">
+  <br>
+  <em>Follow a session's work on the left and review its live diff against the worktree on the right.</em>
+</p>
 
 ---
 
@@ -63,7 +84,7 @@ cp examples/config.toml ~/.config/station/config.toml
 stn doctor
 ```
 
-See [examples/config.toml](examples/config.toml) for the full reference — projects, observer tuning, harness defaults, tmux topology, and hook setup.
+See [examples/config.toml](examples/config.toml) for the full reference: projects, observer tuning, harness defaults, tmux topology, and hook setup.
 
 ---
 
@@ -71,13 +92,19 @@ See [examples/config.toml](examples/config.toml) for the full reference — proj
 
 The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the observer), the Station terminal UI in `station/`, and a set of shared packages.
 
-**`@station/observer`** — the background process. It talks to configured providers (Worktrunk, tmux, agent harnesses), reconciles project state, records bounded diagnostic evidence, and serves snapshots and events over a Unix socket. Everything else asks the observer questions; nothing else invents runtime state.
+**`@station/observer`**: the background process. It talks to configured providers (Worktrunk, tmux, agent harnesses), reconciles project state, records bounded diagnostic evidence, and serves snapshots and events over a Unix socket. Everything else asks the observer questions; nothing else invents runtime state.
 
-**`@station/cli`** — the `stn` command. Setup, reconciliation, snapshots, live event observation, hooks, diagnostics, and TUI launch. Use `pnpm stn <cmd>` during development.
+**`@station/cli`**: the `stn` command. Setup, reconciliation, snapshots, live event observation, hooks, diagnostics, and TUI launch. Use `pnpm stn <cmd>` during development.
 
-**The Station workspace** — the terminal UI is the OpenTUI renderer in `station/` (on the Bun lane). It connects to the observer, refreshes from live events and snapshots, and shows a provider-neutral view of projects, worktrees, sessions, terminal targets, and agent status. `stn` (no subcommand) starts the observer and, in a bare terminal, launches the native Station workspace (real PTY panes with host-backed persistence); inside tmux it opens the read-only dashboard in a tmux popup, since tmux owns the panes there. A mock-data dashboard preview is available for development via `--dev-fake-dashboard`.
+**The Station workspace**: the terminal UI is the OpenTUI renderer in `station/` (on the Bun lane). It connects to the observer, refreshes from live events and snapshots, and shows a provider-neutral view of projects, worktrees, sessions, terminal targets, and agent status. `stn` (no subcommand) starts the observer and launches the native Station workspace: real PTY panes with host-backed persistence, so closing your terminal doesn't stop your agents; reattach and the panes are still running. (Inside an existing tmux session it opens as a read-only dashboard popup instead.) A mock-data dashboard preview is available for development via `--dev-fake-dashboard`.
 
-**`@station/provider-hooks`** — the `stn-ingress` sender used by generated hook commands. Delivers compact provider reports to the observer socket with bounded delivery and local spooling when the observer is unavailable.
+<p align="center">
+  <img src="./station/assets/screenshots/diff-navigator.png" alt="Station's diff navigator showing a filterable file list and inline add/remove hunks for a session's changes" width="880">
+  <br>
+  <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
+</p>
+
+**`@station/provider-hooks`**: the `stn-ingress` sender used by generated hook commands. Delivers compact provider reports to the observer socket with bounded delivery and local spooling when the observer is unavailable.
 
 ---
 
@@ -87,13 +114,13 @@ station is built around provider boundaries. External tools stay in their own la
 
 | Provider | Role |
 |----------|------|
-| **Worktrunk** (`wt`) | Worktree backend — canonical branch and worktree state |
+| **Worktrunk** (`wt`) | Worktree backend: canonical branch and worktree state |
 | **tmux** | Terminal workspaces, pane/window identity, popup binding |
-| **Claude Code** | Harness provider — hook ingress, session tracking |
-| **Codex** | Harness provider — hook ingress, session tracking |
-| **Cursor** | Harness provider — hook ingress, session tracking |
-| **Pi** | Harness provider — in-process hook reports |
-| **OpenCode** | Harness provider — hook ingress, session tracking |
+| **Claude Code** | Harness provider: hook ingress, session tracking |
+| **Codex** | Harness provider: hook ingress, session tracking |
+| **Cursor** | Harness provider: hook ingress, session tracking |
+| **Pi** | Harness provider: in-process hook reports |
+| **OpenCode** | Harness provider: hook ingress, session tracking |
 
 ---
 

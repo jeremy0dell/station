@@ -9,13 +9,13 @@ import type {
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installCodexHooks } from "../../src/hooks";
-import { CodexHarnessProvider } from "../../src/provider";
+import { createCodexHarnessProvider } from "../../src/provider";
 
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("CodexHarnessProvider", () => {
   it("declares real Codex capabilities", () => {
-    const provider = new CodexHarnessProvider();
+    const provider = createCodexHarnessProvider();
 
     expect(provider.capabilities()).toEqual({
       canLaunch: true,
@@ -32,12 +32,12 @@ describe("CodexHarnessProvider", () => {
   });
 
   it("advertises resume only when configured", () => {
-    expect(new CodexHarnessProvider().capabilities().canResume).toBe(false);
-    expect(new CodexHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
+    expect(createCodexHarnessProvider().capabilities().canResume).toBe(false);
+    expect(createCodexHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
   });
 
   it("hooksStatus reports requested:false / installed:false when hooks are not enabled", async () => {
-    const provider = new CodexHarnessProvider({ now: () => new Date(now) });
+    const provider = createCodexHarnessProvider({ now: () => new Date(now) });
     await expect(provider.hooksStatus()).resolves.toMatchObject({
       provider: "codex",
       requested: false,
@@ -47,7 +47,7 @@ describe("CodexHarnessProvider", () => {
 
   it("checks codex login status for provider health", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new CodexHarnessProvider({
+    const provider = createCodexHarnessProvider({
       command: "codex-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -69,7 +69,7 @@ describe("CodexHarnessProvider", () => {
   });
 
   it("maps health failures to typed harness provider health", async () => {
-    const provider = new CodexHarnessProvider({
+    const provider = createCodexHarnessProvider({
       command: "missing-codex",
       now: () => new Date(now),
       runner: async () => {
@@ -93,7 +93,7 @@ describe("CodexHarnessProvider", () => {
   });
 
   it("applies provider launch defaults and discovers terminal-bound runs", async () => {
-    const provider = new CodexHarnessProvider({
+    const provider = createCodexHarnessProvider({
       command: "codex-test",
       profile: "team-default",
       approvalPolicy: "on-request",
@@ -153,7 +153,7 @@ describe("CodexHarnessProvider", () => {
   });
 
   it("applies provider yolo permission mode to launch plans", async () => {
-    const provider = new CodexHarnessProvider({
+    const provider = createCodexHarnessProvider({
       permissionMode: "yolo",
       approvalPolicy: "on-request",
       sandboxMode: "workspace-write",
@@ -189,7 +189,7 @@ describe("CodexHarnessProvider", () => {
     const previousCodexHome = process.env.CODEX_HOME;
     process.env.CODEX_HOME = codexHome;
     try {
-      const provider = new CodexHarnessProvider({
+      const provider = createCodexHarnessProvider({
         command: "codex-test",
         installHooks: true,
         observerSocketPath,
@@ -215,7 +215,7 @@ describe("CodexHarnessProvider", () => {
   });
 
   it("classifies and ingests Codex observations through provider-local parsing", async () => {
-    const provider = new CodexHarnessProvider({ now: () => new Date(now) });
+    const provider = createCodexHarnessProvider({ now: () => new Date(now) });
 
     await expect(
       provider.classifyRun(run(), {

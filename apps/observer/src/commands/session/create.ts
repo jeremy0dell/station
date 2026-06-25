@@ -1,8 +1,4 @@
-import type {
-  EnsureAgentWorkspaceIntent,
-  ProviderProjectConfig,
-  WorktreeObservation,
-} from "@station/contracts";
+import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverPersistence } from "../../persistence/index.js";
@@ -13,6 +9,7 @@ import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
+  buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
   deleteSessionTitleSeedBestEffort,
   findProjectOrThrow,
@@ -98,12 +95,13 @@ export function createSessionCreateHandler(
       throwIfAborted(context.signal);
 
       const receipt = await options.providers.terminalIntentRunner.submitIntent(
-        ensureAgentWorkspaceIntent({
+        buildEnsureAgentWorkspaceIntent({
           commandId: context.commandId,
           project,
           worktree,
           sessionId,
           terminalProvider: payload.terminal.provider,
+          harnessProvider: payload.harness.provider,
           harness: payload.harness,
           layout: payload.terminal.layout ?? project.defaults.layout,
           focus: payload.terminal.focus,
@@ -159,48 +157,4 @@ export function createSessionCreateHandler(
       clock: options.clock,
     });
   };
-}
-
-function ensureAgentWorkspaceIntent(input: {
-  commandId: string;
-  project: ProviderProjectConfig;
-  worktree: WorktreeObservation;
-  sessionId: string;
-  terminalProvider: string;
-  harness: {
-    provider: string;
-    mode?: "interactive" | "exec" | undefined;
-    profile?: string | undefined;
-    approvalPolicy?: string | undefined;
-    sandboxMode?: string | undefined;
-  };
-  layout: string;
-  focus?: boolean | undefined;
-  origin?: EnsureAgentWorkspaceIntent["origin"] | undefined;
-  initialPrompt?: string | undefined;
-}): EnsureAgentWorkspaceIntent {
-  const intent: EnsureAgentWorkspaceIntent = {
-    type: "session.ensureAgentWorkspace",
-    commandId: input.commandId,
-    terminalProvider: input.terminalProvider,
-    project: input.project,
-    worktree: input.worktree,
-    sessionId: input.sessionId,
-    harness: {
-      provider: input.harness.provider,
-    },
-    layout: input.layout,
-  };
-  if (input.harness.mode !== undefined) intent.harness.mode = input.harness.mode;
-  if (input.harness.profile !== undefined) intent.harness.profile = input.harness.profile;
-  if (input.harness.approvalPolicy !== undefined) {
-    intent.harness.approvalPolicy = input.harness.approvalPolicy;
-  }
-  if (input.harness.sandboxMode !== undefined) {
-    intent.harness.sandboxMode = input.harness.sandboxMode;
-  }
-  if (input.focus !== undefined) intent.focus = input.focus;
-  if (input.origin !== undefined) intent.origin = input.origin;
-  if (input.initialPrompt !== undefined) intent.initialPrompt = input.initialPrompt;
-  return intent;
 }

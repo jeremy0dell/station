@@ -16,7 +16,7 @@ import { StationTerminalSpawnError } from "./errors.js";
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-const BRIDGE_PATH = fileURLToPath(new URL("./nodePtyBridge.cjs", import.meta.url));
+const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
 let nextTerminalSequence = 0;
 
 type BridgeMessage =
@@ -73,7 +73,7 @@ function ensureSpawnHelperExecutable(): void {
   }
 }
 
-export function createNodePtyTerminal(
+export function createLocalPtyTerminal(
   options: StationTerminalSpawnOptions = {},
 ): StationTerminalProcess {
   ensureSpawnHelperExecutable();
@@ -97,7 +97,7 @@ export function createNodePtyTerminal(
       Buffer.from(JSON.stringify(bridgeOptions), "utf8").toString("base64url"),
     ]);
 
-    return new NodePtyTerminalProcess(
+    return new LocalPtyTerminalProcess(
       options.id ?? createTerminalId(),
       command,
       size,
@@ -108,7 +108,7 @@ export function createNodePtyTerminal(
   }
 }
 
-class NodePtyTerminalProcess implements StationTerminalProcess {
+class LocalPtyTerminalProcess implements StationTerminalProcess {
   readonly id: string;
   readonly command: string;
 
@@ -375,7 +375,7 @@ function resolveNodeCommand(): string {
 }
 
 /** The shell a plain pane spawns when no explicit command is given. Exported so
- * the host-backed aux path spawns the same shell (host.spawn requires an explicit
+ * the host-placed aux shell path spawns the same shell (host.spawn requires an explicit
  * command, where the local bridge would have defaulted it). */
 export function defaultShell(): string {
   if (process.platform === "win32") {
@@ -403,7 +403,7 @@ export function createPtyEnv(
 
   // Station renders panes itself, so children should see stable xterm-style capabilities.
   nextEnv.TERM = env?.TERM ?? process.env.TERM ?? "xterm-256color";
-  nextEnv.COLORTERM = env?.COLORTERM ?? process.env.COLORTERM ?? "truecolor";
+  nextEnv.COLORTERM = env?.COLORTERM || process.env.COLORTERM || "truecolor";
 
   // The host owns terminal capabilities; a NO_COLOR/FORCE_COLOR leaked from the
   // observer's env would override the COLORTERM we just set, so drop both.

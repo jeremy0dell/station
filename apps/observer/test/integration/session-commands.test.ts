@@ -6,8 +6,8 @@ import type {
   TerminalIntent,
   TerminalIntentReceipt,
 } from "@station/contracts";
-import { CursorHarnessProvider } from "@station/cursor";
-import { PiHarnessProvider } from "@station/pi";
+import { createCursorHarnessProvider } from "@station/cursor";
+import { createPiHarnessProvider } from "@station/pi";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -219,7 +219,7 @@ describe("session command vertical slice", () => {
     const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
       terminal,
-      harness: new PiHarnessProvider({
+      harness: createPiHarnessProvider({
         command: "pi-test",
         extensionPath: "/tmp/station/piExtension.js",
         configPath: "/tmp/station/config.toml",
@@ -284,7 +284,7 @@ describe("session command vertical slice", () => {
     const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
       terminal,
-      harness: new CursorHarnessProvider({
+      harness: createCursorHarnessProvider({
         command: "agent-test",
         now: () => new Date(now),
       }),

@@ -5,13 +5,13 @@ import type { BuildHarnessLaunchRequest } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installClaudeHooks } from "../../src/hooks";
-import { ClaudeHarnessProvider } from "../../src/provider";
+import { createClaudeHarnessProvider } from "../../src/provider";
 
 const now = "2026-06-11T12:00:00.000Z";
 
 describe("ClaudeHarnessProvider", () => {
   it("declares real Claude Code capabilities", () => {
-    const provider = new ClaudeHarnessProvider();
+    const provider = createClaudeHarnessProvider();
 
     expect(provider.capabilities()).toEqual({
       canLaunch: true,
@@ -28,13 +28,13 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("advertises resume only when configured", () => {
-    expect(new ClaudeHarnessProvider().capabilities().canResume).toBe(false);
-    expect(new ClaudeHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
+    expect(createClaudeHarnessProvider().capabilities().canResume).toBe(false);
+    expect(createClaudeHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
   });
 
   it("checks the claude version for provider health", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       command: "claude-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -56,7 +56,7 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("maps health failures to typed harness provider health", async () => {
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       command: "missing-claude",
       now: () => new Date(now),
       runner: async () => {
@@ -81,7 +81,7 @@ describe("ClaudeHarnessProvider", () => {
 
   it("reports authenticated doctor checks when auth status is logged in", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       command: "claude-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -104,7 +104,7 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("warns in doctor checks when claude is not logged in", async () => {
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       command: "claude-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -127,7 +127,7 @@ describe("ClaudeHarnessProvider", () => {
   it("hooksStatus reports requested:false / installed:false when hooks are not enabled", async () => {
     // install_hooks omitted → the doctor short-circuits without reading files, so
     // the gate sees requested:false (and points the user at the config flag).
-    const provider = new ClaudeHarnessProvider({ now: () => new Date(now) });
+    const provider = createClaudeHarnessProvider({ now: () => new Date(now) });
     await expect(provider.hooksStatus()).resolves.toMatchObject({
       provider: "claude",
       requested: false,
@@ -153,7 +153,7 @@ describe("ClaudeHarnessProvider", () => {
       claudeConfigDir: join(root, "claude-home"),
     });
 
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       installHooks: true,
       stateDir,
       observerSocketPath,
@@ -173,7 +173,7 @@ describe("ClaudeHarnessProvider", () => {
     // requested:true alone must not pass — the artifact must exist (what a fresh
     // claude worktree lacked before the devbox installed its hooks).
     const root = await mkdtemp(join(tmpdir(), "station-claude-guard-"));
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       installHooks: true,
       stateDir: join(root, "observer"),
       now: () => new Date(now),
@@ -186,7 +186,7 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("applies provider launch defaults and discovers terminal-bound runs", async () => {
-    const provider = new ClaudeHarnessProvider({
+    const provider = createClaudeHarnessProvider({
       command: "claude-test",
       profile: "team-default",
       now: () => new Date(now),
@@ -234,7 +234,7 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("classifies discovered runs conservatively", async () => {
-    const provider = new ClaudeHarnessProvider({ now: () => new Date(now) });
+    const provider = createClaudeHarnessProvider({ now: () => new Date(now) });
 
     const status = await provider.classifyRun(
       {
@@ -255,7 +255,7 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("ingests forwarded hook events through provider-local parsing", async () => {
-    const provider = new ClaudeHarnessProvider();
+    const provider = createClaudeHarnessProvider();
 
     const observations = await provider.ingestEvent(
       {
@@ -283,7 +283,7 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("rejects malformed events with a typed ingest error", async () => {
-    const provider = new ClaudeHarnessProvider();
+    const provider = createClaudeHarnessProvider();
 
     await expect(
       provider.ingestEvent(

@@ -1,5 +1,4 @@
 import type {
-  EnsureAgentWorkspaceIntent,
   HarnessProvider,
   HarnessResumeOptions,
   ProviderProjectConfig,
@@ -18,19 +17,21 @@ import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
-import { worktreeMissingError } from "../errors.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
+  buildEnsureAgentWorkspaceIntent,
+  commandValidationError,
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
+  lookupWorktree,
   publishSessionCreated,
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
-  runProviderMutation,
   type SessionCommandIdFactory,
   seedSessionTitle,
   throwIfAborted,
+  validateSnapshotRow,
   worktreeObservationFromRow,
 } from "./shared.js";
 
@@ -123,19 +124,29 @@ export function createSessionResumeAgentHandler(
     });
     throwIfAborted(context.signal);
 
+    // The terminal runner stays provider-neutral: it opens/focuses the pane, and
+    // the harness adapter alone translates this resume target into CLI args.
+    const resume: HarnessResumeOptions = {
+      target: handle.target,
+      recoveryHandleId: handle.id,
+    };
+    if (handle.sessionId !== undefined) {
+      resume.previousSessionId = handle.sessionId;
+    }
     const receipt = await options.providers.terminalIntentRunner.submitIntent(
-      ensureAgentWorkspaceIntent({
+      buildEnsureAgentWorkspaceIntent({
         commandId: context.commandId,
         project,
         worktree,
         sessionId,
         terminalProvider: terminalProviderId,
         harnessProvider: handle.provider,
+        harness: { mode: "interactive" },
         layout: payload.terminal?.layout ?? project.defaults.layout,
         focus: payload.terminal?.focus,
         origin: payload.terminal?.origin,
         initialPrompt: payload.initialPrompt,
-        recoveryHandle: handle,
+        resume,
       }),
       {
         trace: context.trace,
@@ -164,49 +175,6 @@ export function createSessionResumeAgentHandler(
       clock: options.clock,
     });
   };
-}
-
-function ensureAgentWorkspaceIntent(input: {
-  commandId: string;
-  project: ProviderProjectConfig;
-  worktree: WorktreeObservation;
-  sessionId: string;
-  terminalProvider: string;
-  harnessProvider: string;
-  layout: string;
-  focus?: boolean | undefined;
-  origin?: EnsureAgentWorkspaceIntent["origin"] | undefined;
-  initialPrompt?: string | undefined;
-  recoveryHandle: SessionRecoveryHandle;
-}): EnsureAgentWorkspaceIntent {
-  // The terminal runner remains provider-neutral: it opens/focuses the pane,
-  // and the harness adapter alone translates this resume target into CLI args.
-  const resume: HarnessResumeOptions = {
-    target: input.recoveryHandle.target,
-    recoveryHandleId: input.recoveryHandle.id,
-  };
-  if (input.recoveryHandle.sessionId !== undefined) {
-    resume.previousSessionId = input.recoveryHandle.sessionId;
-  }
-
-  const intent: EnsureAgentWorkspaceIntent = {
-    type: "session.ensureAgentWorkspace",
-    commandId: input.commandId,
-    terminalProvider: input.terminalProvider,
-    project: input.project,
-    worktree: input.worktree,
-    sessionId: input.sessionId,
-    harness: {
-      provider: input.harnessProvider,
-      mode: "interactive",
-    },
-    layout: input.layout,
-    resume,
-  };
-  if (input.focus !== undefined) intent.focus = input.focus;
-  if (input.origin !== undefined) intent.origin = input.origin;
-  if (input.initialPrompt !== undefined) intent.initialPrompt = input.initialPrompt;
-  return intent;
 }
 
 async function resolveRecoveryHandle(input: {
@@ -300,18 +268,6 @@ function assertHandleMatchesWorktree(
   });
 }
 
-function validateSnapshotRow(row: WorktreeRow | undefined, projectId: string): void {
-  if (row === undefined || row.projectId === projectId) {
-    return;
-  }
-  throw commandValidationError({
-    code: "WORKTREE_PROJECT_MISMATCH",
-    message: "The requested worktree belongs to a different configured project.",
-    projectId,
-    worktreeId: row.id,
-  });
-}
-
 function assertResumeAllowed(row: WorktreeRow | undefined): void {
   // Relaunchable states (no agent / none / exited, and unknown with a stale or
   // missing terminal — the crash-recovery case) fall through. A genuinely live
@@ -329,76 +285,4 @@ function assertResumeAllowed(row: WorktreeRow | undefined): void {
   };
   if (row.agent?.sessionId !== undefined) error.sessionId = row.agent.sessionId;
   throw error;
-}
-
-async function lookupWorktree(input: {
-  providers: ProviderRegistry;
-  projectId: string;
-  worktreeId: string;
-  runtime: {
-    clock?: RuntimeClock | undefined;
-    commandTimeoutMs?: number | undefined;
-    signal?: AbortSignal | undefined;
-    trace?:
-      | {
-          traceId?: string | undefined;
-          spanId?: string | undefined;
-          operation?: string | undefined;
-        }
-      | undefined;
-  };
-}): Promise<WorktreeObservation> {
-  if (input.providers.worktree.getWorktree === undefined) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-
-  const worktree = await runProviderMutation(
-    {
-      ...input.runtime,
-      operation: `provider.${input.providers.worktree.id}.getWorktree`,
-      fallback: {
-        tag: "WorktreeProviderError",
-        code: "WORKTREE_LOOKUP_FAILED",
-        message: "The worktree provider failed to look up the worktree.",
-        provider: input.providers.worktree.id,
-      },
-    },
-    () =>
-      input.providers.worktree.getWorktree?.({
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      }) as Promise<WorktreeObservation | null>,
-  );
-  if (worktree === null) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-  return worktree;
-}
-
-function commandValidationError(input: {
-  code: string;
-  message: string;
-  hint?: string | undefined;
-  projectId?: string | undefined;
-  worktreeId?: string | undefined;
-  sessionId?: string | undefined;
-}): SafeError {
-  const error: SafeError = {
-    tag: "CommandValidationError",
-    code: input.code,
-    message: input.message,
-  };
-  if (input.hint !== undefined) error.hint = input.hint;
-  if (input.projectId !== undefined) error.projectId = input.projectId;
-  if (input.worktreeId !== undefined) error.worktreeId = input.worktreeId;
-  if (input.sessionId !== undefined) error.sessionId = input.sessionId;
-  return error;
 }

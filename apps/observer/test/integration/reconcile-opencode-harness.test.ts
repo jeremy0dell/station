@@ -1,6 +1,6 @@
 import type { StationConfig } from "@station/config";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { OpenCodeHarnessProvider } from "@station/opencode";
+import { createOpenCodeHarnessProvider } from "@station/opencode";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -8,15 +8,8 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  createCommandQueue,
-  createObserverApi,
-  createObserverCore,
-  createObserverEventBus,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-} from "../../src/internal";
+import { createObserverCore, ProviderRegistry } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -51,30 +44,10 @@ describe("observer reconcile with OpenCode harness", () => {
 
   it("uses correlated OpenCode plugin hook events to update live row state", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
-    const eventBus = createObserverEventBus();
-    const providers = opencodeProviders();
-    const core = createObserverCore({
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
       config,
-      providers,
-      persistence,
-      sqlite,
+      providers: opencodeProviders(),
       clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      config,
-      hookReconcileDebounceMs: 0,
     });
     await core.reconcile("initial-opencode-context");
 
@@ -126,16 +99,15 @@ describe("observer reconcile with OpenCode harness", () => {
       hookId: "hook_opencode_idle",
       provider: "opencode",
       kind: "harness",
-      event: "session.status",
+      event: "session.idle",
       receivedAt: "2026-05-20T12:00:02.000Z",
       projectId: "web",
       worktreeId: "wt_web_task",
       sessionId: "ses_web_task",
       payload: {
-        event_type: "session.status",
+        event_type: "session.idle",
         cwd: "/tmp/station/web/task",
         opencode_session_id: "opencode_session_123",
-        status_type: "idle",
         station_project_id: "web",
         station_worktree_id: "wt_web_task",
         station_session_id: "ses_web_task",
@@ -150,7 +122,7 @@ describe("observer reconcile with OpenCode harness", () => {
         agent: expect.objectContaining({
           harness: "opencode",
           state: "idle",
-          reason: "OpenCode session status is idle.",
+          reason: "OpenCode session is idle.",
         }),
       },
     });
@@ -223,7 +195,7 @@ function opencodeProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new OpenCodeHarnessProvider({
+      createOpenCodeHarnessProvider({
         now: () => new Date(now),
         runner: async (input) => ({
           command: input.command,
@@ -235,19 +207,6 @@ function opencodeProviders(): ProviderRegistry {
       }),
     ],
   });
-}
-
-function ids() {
-  let command = 0;
-  let event = 0;
-  let observation = 0;
-  let breadcrumb = 0;
-  return {
-    commandId: () => `cmd_${++command}`,
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-    breadcrumbId: () => `crumb_${++breadcrumb}`,
-  };
 }
 
 const config: StationConfig = {

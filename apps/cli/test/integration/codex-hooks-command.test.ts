@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
+import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 
 describe("CLI Codex hook commands", () => {
@@ -95,9 +96,14 @@ describe("CLI Codex hook commands", () => {
         },
       },
     });
-    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(
-      `/opt/stn-ingress --socket ${join(root, "run", "observer.sock")} --state-dir ${join(root, "state")} --spool-dir ${join(root, "state", "spool", "hooks")} --config`,
+    const script = await readFile(hookScriptPath, "utf8");
+    expect(providerHookScriptRoutesByStationEnv(script, "codex")).toBe(true);
+    expect(script).toContain(`SOCKET_ARG=(--socket ${join(root, "run", "observer.sock")})`);
+    expect(script).toContain(`STATE_DIR_ARG=(--state-dir ${join(root, "state")})`);
+    expect(script).toContain(
+      `SPOOL_DIR_ARG=(--spool-dir ${join(root, "state", "spool", "hooks")})`,
     );
+    expect(script).toContain(`CONFIG_ARG=(--config ${configPath})`);
     await expect(readFile(baseConfigPath, "utf8")).resolves.not.toContain(hookScriptPath);
     await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath), "utf8");
     const uninstalled = await runCli(

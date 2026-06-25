@@ -5,13 +5,13 @@ import type { BuildHarnessLaunchRequest, HarnessRunObservation } from "@station/
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installCrushHooks } from "../../src/hooks";
-import { CrushHarnessProvider } from "../../src/provider";
+import { createCrushHarnessProvider } from "../../src/provider";
 
 const now = "2026-06-19T12:00:00.000Z";
 
 describe("CrushHarnessProvider", () => {
   it("declares conservative Crush capabilities", () => {
-    const provider = new CrushHarnessProvider();
+    const provider = createCrushHarnessProvider();
 
     expect(provider.capabilities()).toEqual({
       canLaunch: true,
@@ -29,7 +29,7 @@ describe("CrushHarnessProvider", () => {
 
   it("checks crush --version for provider health", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new CrushHarnessProvider({
+    const provider = createCrushHarnessProvider({
       command: "crush-test",
       now: () => new Date(now),
       runner: async (input) => {
@@ -54,7 +54,7 @@ describe("CrushHarnessProvider", () => {
     const previous = process.env.STATION_CRUSH_BIN;
     process.env.STATION_CRUSH_BIN = "crush-from-env";
     try {
-      const provider = new CrushHarnessProvider();
+      const provider = createCrushHarnessProvider();
 
       await expect(provider.buildLaunch(request())).resolves.toMatchObject({
         command: "crush-from-env",
@@ -85,7 +85,7 @@ describe("CrushHarnessProvider", () => {
       hookSpoolDir,
       autoStartFromHooks: false,
     });
-    const provider = new CrushHarnessProvider({
+    const provider = createCrushHarnessProvider({
       installHooks: true,
       configPath,
       observerSocketPath,
@@ -109,7 +109,7 @@ describe("CrushHarnessProvider", () => {
   });
 
   it("discovers and classifies terminal-bound runs", async () => {
-    const provider = new CrushHarnessProvider();
+    const provider = createCrushHarnessProvider();
 
     await expect(
       provider.discoverRuns({
@@ -162,7 +162,7 @@ describe("CrushHarnessProvider", () => {
   });
 
   it("ingests Crush hook events", async () => {
-    const provider = new CrushHarnessProvider();
+    const provider = createCrushHarnessProvider();
 
     const observations = await provider.ingestEvent?.(
       {

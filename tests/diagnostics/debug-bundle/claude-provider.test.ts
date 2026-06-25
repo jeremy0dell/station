@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeHarnessProvider } from "@station/claude";
+import { createClaudeHarnessProvider } from "@station/claude";
 import type { StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
@@ -36,7 +36,7 @@ describe("Claude provider debug bundle diagnostics", () => {
         worktree: new FakeWorktreeProvider({ now }),
         terminal: new FakeTerminalProvider({ now }),
         harnesses: [
-          new ClaudeHarnessProvider({
+          createClaudeHarnessProvider({
             command: "claude-missing",
             now: () => new Date(now),
             runner: async () => {

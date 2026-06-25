@@ -112,7 +112,7 @@ function hostEntry(overrides: Partial<HostListEntry>): HostListEntry {
   };
 }
 
-// A snapshot with an agent (host target native:wt-42) + a host-backed aux shell
+// A snapshot with an agent (host target native:wt-42) + a host-attached aux shell
 // (aux:pane-split-0) + a plain local shell (no target).
 function warmSnapshot(): StationLayoutSnapshot {
   const workspace: WorkspaceSlice = {
@@ -156,7 +156,7 @@ describe("planLayoutRestoreWarm", () => {
     const plan = planLayoutRestoreWarm(warmSnapshot(), deps);
 
     expect(plan.workspace.panes.map((p) => p.id)).toEqual(["pane-agent-wt-42", "pane-split-0", "pane-wt-7"]);
-    // Live agent + live aux got host-backed overrides; the plain shell did not.
+    // Live agent + live aux got host-attached creators; the plain shell did not.
     expect(plan.seeds.find((s) => s.paneId === "pane-agent-wt-42")?.createTerminalOverride).toBeDefined();
     expect(plan.seeds.find((s) => s.paneId === "pane-split-0")?.createTerminalOverride).toBeDefined();
     expect(plan.seeds.find((s) => s.paneId === "pane-wt-7")?.createTerminalOverride).toBeUndefined();
@@ -190,7 +190,7 @@ describe("planLayoutRestoreWarm", () => {
     expect(plan.seeds).toEqual([{ paneId: "pane-wt-7", cwd: "/work/seven" }]);
   });
 
-  it("keeps a live host-backed shell even when its saved cwd is gone", () => {
+  it("keeps a live host-attached shell even when its saved cwd is gone", () => {
     const deps = warmDeps([
       hostEntry({ kind: "aux", terminalTargetId: "aux:pane-split-0", ptyId: "pty-aux" }),
     ]);
@@ -243,12 +243,12 @@ describe("planLayoutRestoreWarm", () => {
     expect(deps.overrides).toEqual(["aux:pane-split-0"]);
   });
 
-  it("respawns a dead shell back INTO the host via makeFreshAuxTerminal", () => {
+  it("respawns a dead shell back into the host via shell placement", () => {
     const fresh: string[] = [];
     const deps: WarmRestoreDeps = {
       liveByTarget: new Map(), // host is up, but this shell's PTY is gone
       makeHostTerminal: () => () => ({ id: "x" }) as unknown as StationTerminalProcess,
-      makeFreshAuxTerminal: (paneId) => {
+      resolveAuxShellPlacement: (paneId) => {
         fresh.push(paneId);
         return () => ({ id: `fresh:${paneId}` }) as unknown as StationTerminalProcess;
       },

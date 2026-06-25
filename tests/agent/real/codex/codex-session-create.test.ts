@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { CodexHarnessProvider } from "@station/codex";
+import { createCodexHarnessProvider } from "@station/codex";
 import type { StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
@@ -92,7 +92,7 @@ describeRealCodex("real Codex session.create", () => {
       }),
       terminal,
       harnesses: [
-        new CodexHarnessProvider({
+        createCodexHarnessProvider({
           command: shimPath,
           noAltScreen: true,
           now: () => new Date(now),

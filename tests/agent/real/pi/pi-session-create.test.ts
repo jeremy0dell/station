@@ -17,7 +17,7 @@ import {
   registerObserverCommandHandlers,
   startObserverServer,
 } from "@station/observer/internal";
-import { PiHarnessProvider } from "@station/pi";
+import { createPiHarnessProvider } from "@station/pi";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -115,7 +115,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       }),
       terminal,
       harnesses: [
-        new PiHarnessProvider({
+        createPiHarnessProvider({
           command: piWrapper.wrapperPath,
           configPath,
           now: () => new Date(now),
@@ -274,7 +274,7 @@ describeRealPi("real Pi session.create launch lane", () => {
           }),
         ],
       }),
-      harnesses: [new PiHarnessProvider({ command: piBin, now: () => new Date(now) })],
+      harnesses: [createPiHarnessProvider({ command: piBin, now: () => new Date(now) })],
     });
     const core = createObserverCore({
       config: testConfig,

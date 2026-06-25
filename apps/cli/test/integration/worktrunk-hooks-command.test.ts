@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
+import { providerHookCommandLine } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 
 describe("CLI Worktrunk hook commands", () => {
@@ -29,7 +30,17 @@ describe("CLI Worktrunk hook commands", () => {
         changed: true,
         configPath: worktrunkConfigPath,
         commands: {
-          "post-create": `/opt/stn-ingress --socket ${join(root, "run", "observer.sock")} --state-dir ${join(root, "state")} --spool-dir ${join(root, "state", "spool", "hooks")} --config ${configPath} worktrunk post-create`,
+          "post-create": providerHookCommandLine(
+            "worktrunk",
+            {
+              hookBin: "/opt/stn-ingress",
+              observerSocketPath: join(root, "run", "observer.sock"),
+              stateDir: join(root, "state"),
+              hookSpoolDir: join(root, "state", "spool", "hooks"),
+              stationConfigPath: configPath,
+            },
+            "post-create",
+          ),
         },
       },
     });

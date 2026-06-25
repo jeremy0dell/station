@@ -193,12 +193,50 @@ describe("OpenCode event parsing", () => {
     });
   });
 
-  it("marks OpenCode idle session events as completed turns", () => {
+  it("keeps status-idle as idle without marking a completed turn", () => {
     const payload = {
       event_type: "session.status",
       cwd: "/tmp/station/web/task",
       opencode_session_id: "opencode_session_123",
       status_type: "idle",
+      station_worktree_id: "wt_web_task",
+      station_terminal_target_id: "tmux:station:@1:%2",
+    };
+
+    const observation = normalizeOpenCodeRawEvent(
+      {
+        provider: "opencode",
+        observedAt: now,
+        event: payload,
+      },
+      context(),
+    )[0];
+    expect(observation).toMatchObject({
+      status: {
+        value: "idle",
+      },
+    });
+    expect(observation).not.toHaveProperty("turn");
+
+    const report = openCodeHookPayloadToHarnessEventReport({
+      reportId: "report_opencode_status_idle",
+      eventType: "session.status",
+      observedAt: now,
+      payload,
+    });
+    expect(report).toMatchObject({
+      status: {
+        value: "idle",
+      },
+    });
+    expect(report).not.toHaveProperty("turn");
+  });
+
+  it("marks OpenCode session.idle events as completed turns", () => {
+    const payload = {
+      event_type: "session.idle",
+      cwd: "/tmp/station/web/task",
+      opencode_session_id: "opencode_session_123",
       station_worktree_id: "wt_web_task",
       station_terminal_target_id: "tmux:station:@1:%2",
     };
@@ -224,7 +262,7 @@ describe("OpenCode event parsing", () => {
     expect(
       openCodeHookPayloadToHarnessEventReport({
         reportId: "report_opencode_idle",
-        eventType: "session.status",
+        eventType: "session.idle",
         observedAt: now,
         payload,
       }),

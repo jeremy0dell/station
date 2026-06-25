@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@station/contracts": "workspace:*",
+    "@station/harness-shared": "workspace:*",
     "@station/runtime": "workspace:*",
     "zod": "^4.1.12"
   }

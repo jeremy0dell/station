@@ -3,8 +3,8 @@ import process from "node:process";
 import type { HostSpawnParamsInput, StationHostClient } from "@station/host";
 import { auxTerminalTargetId, type PaneId } from "../../state/types.js";
 import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../types.js";
-import { createHostBackedTerminal } from "./hostBackedTerminal.js";
-import { defaultShell, defaultShellArgs } from "./nodePtyTerminal.js";
+import { createHostAttachedTerminal } from "./hostAttachedTerminal.js";
+import { defaultShell, defaultShellArgs } from "./localPtyTerminal.js";
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -18,19 +18,16 @@ const DEFAULT_ROWS = 24;
 const AUX_IDENTITY_PLACEHOLDER = "aux";
 const AUX_ENV: Record<string, string> = { TERM: "xterm-256color", COLORTERM: "truecolor" };
 
-/** Builds the override factory that spawns a Station-owned aux shell into the
- * persistent host. Returns `undefined` per pane when no host socket is present,
- * so the caller spawns an ordinary local shell instead — "persistent when the
- * daemon is up, local when it isn't". */
-export type AuxHostTerminalFactory = (
+/** Resolves whether a Station-owned shell should land in the host or stay local. */
+export type AuxShellPlacement = (
   paneId: PaneId,
 ) => ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
 
-export function createAuxHostTerminalFactory(
+export function resolveAuxShellPlacement(
   socketPath: string,
   /** Test seam; production dials the host unix socket. */
   clientFactory?: (socketPath: string) => StationHostClient,
-): AuxHostTerminalFactory {
+): AuxShellPlacement {
   return (paneId) => {
     // Decide local-vs-host at spawn-decision time: a host that is down here means
     // a plain local shell, never a "failed to start shell" against a dead socket.
@@ -59,7 +56,7 @@ export function createAuxHostTerminalFactory(
         cols,
         rows,
       };
-      return createHostBackedTerminal({
+      return createHostAttachedTerminal({
         hostSocketPath: socketPath,
         size: { cols, rows },
         spawn,

@@ -20,14 +20,12 @@ import { describe, expect, it } from "vitest";
 import {
   createCommandQueue,
   createObserverApi,
-  createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
   createWorktreeMetadataRefreshService,
-  openObserverSqlite,
   ProviderRegistry,
   providerProjectsFromConfig,
 } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 const headSha = "2222222222222222222222222222222222222222";
@@ -526,12 +524,6 @@ describe("observer worktree metadata refresh", () => {
 
 function createFixture() {
   const clock = { now: () => new Date(now) };
-  const sqlite = openObserverSqlite({ clock });
-  const persistence = createObserverPersistence({
-    sqlite,
-    clock,
-    idFactory: ids(),
-  });
   const providers = new ProviderRegistry({
     worktree: new FakeWorktreeProvider({
       now,
@@ -550,13 +542,7 @@ function createFixture() {
     terminal: new FakeTerminalProvider({ now }),
     harnesses: [new FakeHarnessProvider({ now })],
   });
-  const core = createObserverCore({
-    config,
-    providers,
-    persistence,
-    sqlite,
-    clock,
-  });
+  const { sqlite, persistence, core } = createTestObserver({ config, providers, clock });
   return {
     clock,
     sqlite,

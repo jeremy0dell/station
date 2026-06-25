@@ -1,7 +1,7 @@
 import {
-  ClaudeHarnessProvider,
   claudeHookPayloadToHarnessEventReport,
   compactClaudeHookPayload,
+  createClaudeHarnessProvider,
 } from "@station/claude";
 import type { StationConfig } from "@station/config";
 import {
@@ -11,15 +11,8 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  createCommandQueue,
-  createObserverApi,
-  createObserverCore,
-  createObserverEventBus,
-  createObserverPersistence,
-  openObserverSqlite,
-  ProviderRegistry,
-} from "../../src/internal";
+import { createObserverCore, ProviderRegistry } from "../../src/internal";
+import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-06-11T12:00:00.000Z";
 
@@ -54,30 +47,10 @@ describe("observer reconcile with Claude harness", () => {
 
   it("uses claude hook event reports to update live row state", async () => {
     const clock = { now: () => new Date(now) };
-    const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock,
-      idFactory: ids(),
-    });
-    const eventBus = createObserverEventBus();
-    const providers = claudeProviders();
-    const core = createObserverCore({
+    const { sqlite, persistence, core, api } = createTestObserver({
       config,
-      providers,
-      persistence,
-      sqlite,
+      providers: claudeProviders(),
       clock,
-    });
-    const api = createObserverApi({
-      core,
-      providers,
-      persistence,
-      commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
-      eventBus,
-      clock,
-      config,
-      hookReconcileDebounceMs: 0,
     });
     await core.reconcile("initial-claude-context");
 
@@ -237,7 +210,7 @@ function claudeProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new ClaudeHarnessProvider({
+      createClaudeHarnessProvider({
         now: () => new Date(now),
         runner: async (input) => ({
           command: input.command,
@@ -249,19 +222,6 @@ function claudeProviders(): ProviderRegistry {
       }),
     ],
   });
-}
-
-function ids() {
-  let command = 0;
-  let event = 0;
-  let observation = 0;
-  let breadcrumb = 0;
-  return {
-    commandId: () => `cmd_${++command}`,
-    eventId: () => `evt_${++event}`,
-    observationId: () => `obs_${++observation}`,
-    breadcrumbId: () => `crumb_${++breadcrumb}`,
-  };
 }
 
 const config: StationConfig = {

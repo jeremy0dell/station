@@ -7,15 +7,14 @@ import type {
   HarnessEventReport,
   ObservedStatus,
   RawHarnessEvent,
-  TerminalTargetObservation,
-  WorktreeObservation,
 } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  observedPathIsSameOrInside,
-  STATION_SCHEMA_VERSION,
-  sameObservedPath,
-} from "@station/contracts";
+  applyCorrelation,
+  correlateTerminalBoundHarnessEvent,
+  harnessEventDiagnostics,
+  reportCorrelation,
+} from "@station/harness-shared";
 import { compactOpenCodeHookPayload } from "./compaction.js";
 import { openCodeHarnessError } from "./errors.js";
 import {
@@ -70,7 +69,17 @@ export function normalizeOpenCodeRawEvent(
   const compaction = compactOpenCodeHookPayload(raw.event);
   const event = parseOpenCodeCompactEvent(compaction.payload);
   const observedAt = event.observed_at ?? raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateOpenCodeEvent(event, context);
+  const correlation = correlateTerminalBoundHarnessEvent({
+    provider: "opencode",
+    identity: event,
+    context,
+    cwd: event.cwd,
+    nativeSessionId: event.opencode_session_id,
+    pid: event.pid,
+    includeProjectId: true,
+    includeTerminalTargetId: true,
+    includeCwd: true,
+  });
   const observation: HarnessEventObservation = {
     provider: "opencode",
     rawEventType: event.event_type,
@@ -88,43 +97,14 @@ export function normalizeOpenCodeRawEvent(
   if (turn !== undefined) {
     observation.turn = turn;
   }
-  if (correlation.projectId !== undefined) {
-    observation.projectId = correlation.projectId;
-  }
-  if (correlation.sessionId !== undefined) {
-    observation.sessionId = correlation.sessionId;
-  }
-  if (correlation.worktreeId !== undefined) {
-    observation.worktreeId = correlation.worktreeId;
-  }
-  if (correlation.harnessRunId !== undefined) {
-    observation.harnessRunId = correlation.harnessRunId;
-  }
-  if (correlation.terminalTargetId !== undefined) {
-    observation.terminalTargetId = correlation.terminalTargetId;
-  }
-  if (event.opencode_session_id !== undefined) {
-    observation.nativeSessionId = event.opencode_session_id;
-  }
-  if (event.cwd !== undefined) {
-    observation.cwd = event.cwd;
-  }
-  if (event.pid !== undefined) {
-    observation.pid = event.pid;
-  }
+  applyCorrelation(observation, correlation);
   if (compaction.omittedFieldNames.length > 0) {
-    const diagnostics: NonNullable<HarnessEventObservation["diagnostics"]> = {
-      rawEventType: event.event_type,
+    observation.diagnostics = harnessEventDiagnostics(event.event_type, {
       compacted: compaction.compacted,
       omittedFieldNames: compaction.omittedFieldNames,
-    };
-    if (compaction.originalByteCount !== null) {
-      diagnostics.payloadBytes = compaction.originalByteCount;
-    }
-    if (compaction.compactedByteCount !== null) {
-      diagnostics.compactedBytes = compaction.compactedByteCount;
-    }
-    observation.diagnostics = diagnostics;
+      payloadBytes: compaction.originalByteCount,
+      compactedBytes: compaction.compactedByteCount,
+    });
   }
   return [observation];
 }
@@ -164,10 +144,7 @@ export function openCodeHookPayloadToHarnessEventReport(
   if (correlation !== undefined) {
     report.correlation = correlation;
   }
-  const diagnostics = reportDiagnosticsFromOpenCodeEvent(event, input.diagnostics);
-  if (diagnostics !== undefined) {
-    report.diagnostics = diagnostics;
-  }
+  report.diagnostics = harnessEventDiagnostics(event.event_type, input.diagnostics);
   const coalesceKey = reportCoalesceKeyFromOpenCodeEvent(event);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;
@@ -238,12 +215,7 @@ export function statusFromOpenCodeEvent(
 function turnFromOpenCodeEvent(
   event: OpenCodeCompactEvent,
 ): HarnessEventReport["turn"] | undefined {
-  if (event.event_type === "session.idle") {
-    return { kind: "turn_completed" };
-  }
-  return event.event_type === "session.status" && event.status_type === "idle"
-    ? { kind: "turn_completed" }
-    : undefined;
+  return event.event_type === "session.idle" ? { kind: "turn_completed" } : undefined;
 }
 
 function statusFromSessionStatus(
@@ -340,54 +312,19 @@ function providerDataFromOpenCodeEvent(event: OpenCodeCompactEvent): Record<stri
 function reportCorrelationFromOpenCodeEvent(
   event: OpenCodeCompactEvent,
 ): HarnessEventReport["correlation"] | undefined {
-  const correlation: NonNullable<HarnessEventReport["correlation"]> = {
+  return reportCorrelation({
     cwd: event.cwd,
-  };
-  if (event.station_project_id !== undefined) {
-    correlation.projectId = event.station_project_id;
-  }
-  if (event.station_worktree_id !== undefined) {
-    correlation.worktreeId = event.station_worktree_id;
-  }
-  if (event.station_session_id !== undefined) {
-    correlation.sessionId = event.station_session_id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    correlation.terminalTargetId = event.station_terminal_target_id;
-    correlation.harnessRunId = `opencode:${event.station_terminal_target_id}`;
-  }
-  if (event.opencode_session_id !== undefined) {
-    correlation.nativeSessionId = event.opencode_session_id;
-  }
-  if (event.pid !== undefined) {
-    correlation.pid = event.pid;
-  }
-  return correlation;
-}
-
-function reportDiagnosticsFromOpenCodeEvent(
-  event: OpenCodeCompactEvent,
-  input: OpenCodeHarnessEventReportInput["diagnostics"],
-): HarnessEventReport["diagnostics"] | undefined {
-  const diagnostics: NonNullable<HarnessEventReport["diagnostics"]> = {
-    rawEventType: event.event_type,
-  };
-  if (typeof input?.payloadBytes === "number") {
-    diagnostics.payloadBytes = input.payloadBytes;
-  }
-  if (typeof input?.compactedBytes === "number") {
-    diagnostics.compactedBytes = input.compactedBytes;
-  }
-  if (input?.compacted !== undefined) {
-    diagnostics.compacted = input.compacted;
-  }
-  if (input?.truncated !== undefined) {
-    diagnostics.truncated = input.truncated;
-  }
-  if (input?.omittedFieldNames !== undefined && input.omittedFieldNames.length > 0) {
-    diagnostics.omittedFieldNames = input.omittedFieldNames;
-  }
-  return diagnostics;
+    nativeSessionId: event.opencode_session_id,
+    pid: event.pid,
+    projectId: event.station_project_id,
+    worktreeId: event.station_worktree_id,
+    sessionId: event.station_session_id,
+    terminalTargetId: event.station_terminal_target_id,
+    harnessRunId:
+      event.station_terminal_target_id === undefined
+        ? undefined
+        : `opencode:${event.station_terminal_target_id}`,
+  });
 }
 
 function reportCoalesceKeyFromOpenCodeEvent(event: OpenCodeCompactEvent): string | undefined {
@@ -398,112 +335,4 @@ function reportCoalesceKeyFromOpenCodeEvent(event: OpenCodeCompactEvent): string
   if (event.tool_call_id !== undefined) parts.push(`tool:${event.tool_call_id}`);
   if (event.request_id !== undefined) parts.push(`request:${event.request_id}`);
   return parts.length === 0 ? undefined : parts.join(":");
-}
-
-function correlateOpenCodeEvent(
-  event: OpenCodeCompactEvent,
-  context: HarnessEventContext,
-): {
-  projectId?: string;
-  sessionId?: string;
-  worktreeId?: string;
-  harnessRunId?: string;
-  terminalTargetId?: string;
-} {
-  const terminal =
-    terminalForId(event.station_terminal_target_id, context.terminalTargets) ??
-    terminalForCwd(event.cwd, context.terminalTargets);
-  const worktree =
-    worktreeForId(event.station_worktree_id, context.worktrees) ??
-    worktreeForPath(event.station_worktree_path, context.worktrees) ??
-    worktreeForCwd(event.cwd, context.worktrees);
-  const result: {
-    projectId?: string;
-    sessionId?: string;
-    worktreeId?: string;
-    harnessRunId?: string;
-    terminalTargetId?: string;
-  } = {};
-  if (event.station_project_id !== undefined) {
-    result.projectId = event.station_project_id;
-  } else if (terminal?.projectId !== undefined) {
-    result.projectId = terminal.projectId;
-  } else if (worktree?.projectId !== undefined) {
-    result.projectId = worktree.projectId;
-  }
-  if (event.station_session_id !== undefined) {
-    result.sessionId = event.station_session_id;
-  } else if (terminal?.sessionId !== undefined) {
-    result.sessionId = terminal.sessionId;
-  }
-  if (event.station_worktree_id !== undefined) {
-    result.worktreeId = event.station_worktree_id;
-  } else if (terminal?.worktreeId !== undefined) {
-    result.worktreeId = terminal.worktreeId;
-  } else if (worktree !== undefined) {
-    result.worktreeId = worktree.id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    result.terminalTargetId = event.station_terminal_target_id;
-    result.harnessRunId = `opencode:${event.station_terminal_target_id}`;
-  } else if (terminal?.harnessRunId !== undefined) {
-    result.terminalTargetId = terminal.id;
-    result.harnessRunId = terminal.harnessRunId;
-  } else if (terminal !== undefined) {
-    result.terminalTargetId = terminal.id;
-    result.harnessRunId = `opencode:${terminal.id}`;
-  }
-  return result;
-}
-
-function terminalForId(
-  terminalTargetId: string | undefined,
-  targets: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  if (terminalTargetId === undefined) {
-    return undefined;
-  }
-  return targets.find((target) => target.id === terminalTargetId);
-}
-
-function terminalForCwd(
-  cwd: string,
-  targets: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  return (
-    targets.find((target) => target.cwd !== undefined && sameObservedPath(target.cwd, cwd)) ??
-    targets.find(
-      (target) => target.cwd !== undefined && observedPathIsSameOrInside(cwd, target.cwd),
-    )
-  );
-}
-
-function worktreeForId(
-  worktreeId: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (worktreeId === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => worktree.id === worktreeId);
-}
-
-function worktreeForPath(
-  path: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (path === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => sameObservedPath(worktree.path, path));
-}
-
-function worktreeForCwd(
-  cwd: string,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  return (
-    worktrees.find((worktree) => sameObservedPath(worktree.path, cwd)) ??
-    worktrees.find((worktree) => observedPathIsSameOrInside(cwd, worktree.path))
-  );
 }

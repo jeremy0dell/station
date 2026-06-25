@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { createObserverCore, ProviderRegistry } from "../../src/internal";
 import { createObserverPersistence } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
+import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -101,18 +102,11 @@ function providersWithOneSession() {
 describe("observer reconcile persistence", () => {
   it("persists provider observations, session correlations, and reconcile events", async () => {
     const dbPath = await tempDbPath();
-    const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock: { now: () => new Date(now) },
-      idFactory: ids(),
-    });
-    const core = createObserverCore({
+    const { sqlite, persistence, core } = createTestObserverCore({
       config,
       providers: providersWithOneSession(),
-      persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
+      sqlitePath: dbPath,
     });
 
     const snapshot = await core.reconcile("persistence-test");
@@ -170,18 +164,15 @@ describe("observer reconcile persistence", () => {
 
   it("does not hydrate the live graph from stale SQLite records", async () => {
     const dbPath = await tempDbPath();
-    const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const {
       sqlite,
-      clock: { now: () => new Date(now) },
-      idFactory: ids(),
-    });
-    const firstCore = createObserverCore({
+      persistence,
+      core: firstCore,
+    } = createTestObserverCore({
       config,
       providers: providersWithOneSession(),
-      persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
+      sqlitePath: dbPath,
     });
     await firstCore.reconcile("initial");
 
@@ -207,11 +198,11 @@ describe("observer reconcile persistence", () => {
 
   it("promotes matching harness hook observations during live reconcile", async () => {
     const dbPath = await tempDbPath();
-    const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
-      sqlite,
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
       clock: { now: () => new Date(now) },
-      idFactory: ids(),
+      sqlitePath: dbPath,
     });
     await persistence.recordProviderObservation({
       provider: "fake-harness",
@@ -234,13 +225,6 @@ describe("observer reconcile persistence", () => {
         },
         observedAt: "2026-05-20T12:00:01.000Z",
       },
-    });
-    const core = createObserverCore({
-      config,
-      providers: providersWithOneSession(),
-      persistence,
-      sqlite,
-      clock: { now: () => new Date(now) },
     });
 
     const snapshot = await core.reconcile("hook-promoted-status");
@@ -293,11 +277,10 @@ describe("observer reconcile persistence", () => {
   });
 
   it("attaches cached current change summaries to hot snapshots", async () => {
-    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
-      sqlite,
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
       clock: { now: () => new Date(now) },
-      idFactory: ids(),
     });
     await persistence.upsertWorktreeMetadataCurrent({
       worktreeId: "wt_web_main",
@@ -318,13 +301,6 @@ describe("observer reconcile persistence", () => {
         checkedAt: now,
       },
     });
-    const core = createObserverCore({
-      config,
-      providers: providersWithOneSession(),
-      persistence,
-      sqlite,
-      clock: { now: () => new Date(now) },
-    });
 
     const snapshot = await core.reconcile("cached-change-summary");
 
@@ -338,17 +314,9 @@ describe("observer reconcile persistence", () => {
   });
 
   it("reconciles successfully when the current metadata cache is empty", async () => {
-    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
-      sqlite,
-      clock: { now: () => new Date(now) },
-      idFactory: ids(),
-    });
-    const core = createObserverCore({
+    const { sqlite, core } = createTestObserverCore({
       config,
       providers: providersWithOneSession(),
-      persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
     });
 
@@ -359,11 +327,10 @@ describe("observer reconcile persistence", () => {
   });
 
   it("does not hydrate change summaries from provider observation history", async () => {
-    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
-      sqlite,
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
       clock: { now: () => new Date(now) },
-      idFactory: ids(),
     });
     await persistence.recordProviderObservation({
       provider: "fake-worktree",
@@ -382,13 +349,6 @@ describe("observer reconcile persistence", () => {
         },
       },
     });
-    const core = createObserverCore({
-      config,
-      providers: providersWithOneSession(),
-      persistence,
-      sqlite,
-      clock: { now: () => new Date(now) },
-    });
 
     const snapshot = await core.reconcile("ignore-provider-observation-metadata");
 
@@ -398,11 +358,11 @@ describe("observer reconcile persistence", () => {
 
   it("leaves unmatched harness hook observations diagnostic-only during live reconcile", async () => {
     const dbPath = await tempDbPath();
-    const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
-      sqlite,
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
       clock: { now: () => new Date(now) },
-      idFactory: ids(),
+      sqlitePath: dbPath,
     });
     await persistence.recordProviderObservation({
       provider: "fake-harness",
@@ -425,13 +385,6 @@ describe("observer reconcile persistence", () => {
         },
         observedAt: "2026-05-20T12:00:01.000Z",
       },
-    });
-    const core = createObserverCore({
-      config,
-      providers: providersWithOneSession(),
-      persistence,
-      sqlite,
-      clock: { now: () => new Date(now) },
     });
 
     const snapshot = await core.reconcile("hook-unmatched-diagnostic-only");

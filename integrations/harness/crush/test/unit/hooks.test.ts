@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { access, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
   doctorCrushHooks,
@@ -84,9 +85,12 @@ describe("Crush hook setup", () => {
       timeout: 30,
     });
     expect(config.hooks.PostToolUse).toEqual([{ command: "echo after", timeout: 5 }]);
-    expect(script).toContain(
-      "stn-ingress --socket /tmp/station/run/observer.sock --state-dir /tmp/station/state --spool-dir /tmp/station/state/spool/hooks --config /tmp/station/config.toml --no-auto-start crush",
-    );
+    expect(providerHookScriptRoutesByStationEnv(script, "crush")).toBe(true);
+    expect(script).toContain("SOCKET_ARG=(--socket /tmp/station/run/observer.sock)");
+    expect(script).toContain("CONFIG_ARG=(--config /tmp/station/config.toml)");
+    expect(script).toContain("STATE_DIR_ARG=(--state-dir /tmp/station/state)");
+    expect(script).toContain("SPOOL_DIR_ARG=(--spool-dir /tmp/station/state/spool/hooks)");
+    expect(script).toContain("--no-auto-start crush");
     expect(script).toContain(
       `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
     );

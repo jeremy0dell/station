@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { createHookSetupFileOps } from "@station/runtime";
 import { openCodeForwardedEventTypes } from "./ingressRules.js";
 
 export const OPENCODE_STATION_PLUGIN_NAME = "station-agent-state.js";
@@ -44,12 +43,16 @@ export type OpenCodePluginDoctorResult = {
   message: string;
 };
 
+const fileOps = createHookSetupFileOps(({ operation, path, cause }) => {
+  return new Error(`OpenCode plugin setup ${operation} failed for ${path}.`, { cause });
+});
+
 export async function planOpenCodePlugin(
   options: OpenCodePluginPlanOptions = {},
 ): Promise<OpenCodePluginPlan> {
   const configDir = resolveOpenCodeConfigDir(options);
   const pluginPath = resolveOpenCodePluginPath(options);
-  const before = await readOptionalFile(pluginPath);
+  const before = await fileOps.readOptionalFile(pluginPath);
   const after = expectedOpenCodePluginScript(options);
   const changed = before !== after;
   return {
@@ -69,9 +72,8 @@ export async function installOpenCodePlugin(
   const plan = await planOpenCodePlugin(options);
   let backupPath: string | undefined;
   if (plan.changed) {
-    backupPath = await backupIfPresent(plan.pluginPath);
-    await mkdir(dirname(plan.pluginPath), { recursive: true, mode: 0o700 });
-    await writeFile(plan.pluginPath, plan.after, { mode: 0o600 });
+    backupPath = await fileOps.backupIfPresent(plan.pluginPath);
+    await fileOps.writeHookConfig(plan.pluginPath, plan.after);
   }
   const result: OpenCodePluginInstallResult = {
     ...plan,
@@ -89,8 +91,7 @@ export async function uninstallOpenCodePlugin(
   const plan = await planOpenCodePlugin(options);
   let removed = false;
   if (plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER)) {
-    await rm(plan.pluginPath, { force: true });
-    removed = true;
+    removed = await fileOps.removeHookFileIfPresent(plan.pluginPath);
   }
   return {
     ...plan,
@@ -282,10 +283,7 @@ function preSpoolCompletionHookEvent(event, payload) {
 }
 
 function isCompletionPayload(payload) {
-  return (
-    payload.event_type === "session.idle" ||
-    (payload.event_type === "session.status" && payload.status_type === "idle")
-  );
+  return payload.event_type === "session.idle";
 }
 
 function spoolHookEventSync(event, error) {
@@ -432,27 +430,4 @@ function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
 }
 `;
-}
-
-async function readOptionalFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    return "";
-  }
-}
-
-async function backupIfPresent(path: string): Promise<string | undefined> {
-  try {
-    const stats = await stat(path);
-    if (!stats.isFile()) {
-      return undefined;
-    }
-  } catch {
-    return undefined;
-  }
-  const backupPath = `${path}.bak.${Date.now()}-${randomUUID()}`;
-  await mkdir(dirname(backupPath), { recursive: true, mode: 0o700 });
-  await writeFile(backupPath, await readFile(path, "utf8"), { mode: 0o600, flag: "wx" });
-  return backupPath;
 }

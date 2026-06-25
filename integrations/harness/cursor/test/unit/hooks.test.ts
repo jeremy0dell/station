@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
   doctorCursorHooks,
@@ -99,7 +100,8 @@ describe("Cursor hook setup", () => {
     expect(script).toContain("SOCKET_ARG=(--socket /tmp/station/run/observer.sock)");
     expect(script).toContain('CONFIG_ARG=(--config "$STATION_CONFIG_PATH")');
     expect(script).toContain("CONFIG_ARG=(--config /tmp/station/config.toml)");
-    expect(script).toContain(providerHookScriptCommand("stn-ingress", "cursor", "--no-auto-start"));
+    expect(providerHookScriptRoutesByStationEnv(script, "cursor")).toBe(true);
+    expect(script).toContain("--no-auto-start cursor");
     expect(script).toContain(
       `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
     );
@@ -373,22 +375,6 @@ async function runHookScript(
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function providerHookScriptCommand(hookBin: string, provider: string, ...flags: string[]): string {
-  return [
-    hookBin,
-    guardedArg("SOCKET_ARG"),
-    guardedArg("STATE_DIR_ARG"),
-    guardedArg("SPOOL_DIR_ARG"),
-    guardedArg("CONFIG_ARG"),
-    ...flags,
-    provider,
-  ].join(" ");
-}
-
-function guardedArg(name: string): string {
-  return ["$", `{${name}[@]+"`, "$", `{${name}[@]}"}`].join("");
 }
 
 function shellParameter(name: string): string {

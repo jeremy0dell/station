@@ -15,7 +15,7 @@ import {
   ProviderRegistry,
   startObserverServer,
 } from "@station/observer/internal";
-import { installOpenCodePlugin, OpenCodeHarnessProvider } from "@station/opencode";
+import { createOpenCodeHarnessProvider, installOpenCodePlugin } from "@station/opencode";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -105,7 +105,9 @@ describeRealOpenCode("real OpenCode event capture", () => {
           }),
         ],
       }),
-      harnesses: [new OpenCodeHarnessProvider({ command: opencodeBin, now: () => new Date(now) })],
+      harnesses: [
+        createOpenCodeHarnessProvider({ command: opencodeBin, now: () => new Date(now) }),
+      ],
     });
     const testConfig = config({ root, stateDir, socketPath, worktreePath });
     const core = createObserverCore({
