@@ -336,7 +336,10 @@ function selectProjectByKey(
   if (project === undefined) {
     return state;
   }
-  const harness = firstHarnessOption(snapshot, project);
+  // Harness options are global, so a chosen harness stays valid across projects;
+  // keep the user's selection and only fall back to the default if it disappears.
+  const options = selectNewSessionHarnessOptions(snapshot, project);
+  const harness = options.find((option) => option.id === state.selectedHarness) ?? options[0];
   if (harness === undefined) {
     return state;
   }

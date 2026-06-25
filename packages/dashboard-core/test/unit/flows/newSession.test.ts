@@ -94,12 +94,14 @@ describe("new session flow", () => {
     });
   });
 
-  it("resets agent and regenerates generated names when the project changes", () => {
+  it("keeps the chosen agent and regenerates generated names when the project changes", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
 
-    const picker = transitionNewSessionFlow(opened, snapshot, { type: "pickProject" });
+    // Pick a non-default harness so the assertion can tell "preserved" from "reset to default".
+    const chosen = { ...opened, selectedHarness: "opencode" as const };
+    const picker = transitionNewSessionFlow(chosen, snapshot, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
     const selected = transitionNewSessionFlow(picker, snapshot, {
       type: "chooseProject",
@@ -110,7 +112,7 @@ describe("new session flow", () => {
     expect(selected).toMatchObject({
       mode: "review",
       selectedProjectId: "api",
-      selectedHarness: "codex",
+      selectedHarness: "opencode",
       branch: "api-bbbbbb",
       nameSource: "generated",
     });
