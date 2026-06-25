@@ -1,3 +1,4 @@
+import { jsonByteCount } from "@station/harness-shared";
 import {
   OpenCodeCompactEventSchema,
   type OpenCodeNativeEvent,
@@ -194,16 +195,4 @@ function omittedNativeFieldNames(
     }
   }
   return [...omitted].sort();
-}
-
-function jsonByteCount(value: unknown): number | null {
-  try {
-    const serialized = JSON.stringify(value);
-    if (serialized === undefined) {
-      return null;
-    }
-    return Buffer.byteLength(serialized, "utf8");
-  } catch {
-    return null;
-  }
 }

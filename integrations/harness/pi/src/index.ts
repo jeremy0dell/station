@@ -4,4 +4,4 @@ export {
   piHookPayloadToHarnessEventReport,
 } from "./event/mapping.js";
 export { piHookAdapter } from "./hookAdapter.js";
-export { PiHarnessProvider, type PiHarnessProviderOptions } from "./provider.js";
+export { createPiHarnessProvider, type PiHarnessProviderOptions } from "./provider.js";

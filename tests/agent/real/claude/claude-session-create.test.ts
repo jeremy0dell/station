@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { ClaudeHarnessProvider } from "@station/claude";
+import { createClaudeHarnessProvider } from "@station/claude";
 import type { StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
@@ -92,7 +92,7 @@ describeRealClaude("real Claude session.create", () => {
       }),
       terminal,
       harnesses: [
-        new ClaudeHarnessProvider({
+        createClaudeHarnessProvider({
           command: shimPath,
           now: () => new Date(now),
         }),

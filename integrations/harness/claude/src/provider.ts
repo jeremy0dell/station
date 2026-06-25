@@ -1,29 +1,22 @@
 import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
-  HarnessClassificationContext,
-  HarnessDiscoveryContext,
-  HarnessEventContext,
-  HarnessEventObservation,
   HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessProvider,
-  HarnessRunObservation,
-  HarnessStatusObservation,
   ProviderDoctorCheck,
   ProviderDoctorContext,
-  ProviderHealth,
-  RawHarnessEvent,
 } from "@station/contracts";
-import { discoverTerminalBoundHarnessRuns } from "@station/contracts";
 import {
-  type ExternalCommandRunner,
-  runExternalCommand,
-  runRuntimeBoundary,
-  safeErrorFromUnknown,
-  systemClock,
-  toIsoTimestamp,
-} from "@station/runtime";
+  type CommonHarnessProviderOptions,
+  createTerminalBoundHarnessProvider,
+  harnessCommand,
+  harnessHealth,
+  harnessHookDoctorOptions,
+  harnessHooksStatusFrom,
+  type TerminalBoundHarnessProviderSpec,
+} from "@station/harness-shared";
+import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
 import { classifyClaudeRunStatus } from "./classify.js";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
 import { normalizeClaudeRawEvent } from "./events.js";
@@ -34,8 +27,7 @@ import {
   type ClaudePermissionMode,
 } from "./launch.js";
 
-export type ClaudeHarnessProviderOptions = {
-  command?: string;
+export type ClaudeHarnessProviderOptions = CommonHarnessProviderOptions & {
   profile?: string;
   permissionMode?: ClaudePermissionMode;
   approvalPolicy?: string;
@@ -48,9 +40,6 @@ export type ClaudeHarnessProviderOptions = {
   hookSpoolDir?: string;
   autoStartFromHooks?: boolean;
   resume?: boolean;
-  now?: () => Date | string;
-  timeoutMs?: number;
-  runner?: ExternalCommandRunner;
 };
 
 const baseCapabilities: HarnessCapabilities = {
@@ -66,13 +55,39 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-function command(options: ClaudeHarnessProviderOptions): string {
-  return options.command ?? process.env.STATION_CLAUDE_BIN ?? "claude";
-}
+const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions> = {
+  id: "claude",
+  displayName: "Claude Code",
+  commandEnvVar: "STATION_CLAUDE_BIN",
+  commandFallback: "claude",
+  baseCapabilities,
+  // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
+  // by [harness.claude].resume.
+  resumeFromOptions: (options) => options.resume === true,
+  health: {
+    args: ["--version"],
+    diagnostics: (result) => ({ version: result.stdout.trim() }),
+    unavailableError: (error) =>
+      claudeProviderErrorFromUnknown(error, {
+        code: "HARNESS_CLAUDE_UNAVAILABLE",
+        message: "Claude Code is not available.",
+        hint: "Install Claude Code and ensure `claude --version` succeeds, or configure [harness.claude].command (env override: STATION_CLAUDE_BIN).",
+      }),
+  },
+  buildLaunch,
+  classifyRun: (run) => classifyClaudeRunStatus(run),
+  ingestEvent: {
+    operation: "provider.claude.ingestEvent",
+    errorCode: "HARNESS_CLAUDE_EVENT_INGEST_FAILED",
+    errorMessage: "The Claude Code harness provider failed to ingest an event.",
+    normalize: (event, context) => normalizeClaudeRawEvent(event, context),
+  },
+  doctorChecks,
+  hooksStatus,
+};
 
-function now(options: ClaudeHarnessProviderOptions): string {
-  const value = options.now?.() ?? systemClock.now();
-  return toIsoTimestamp(value instanceof Date ? value : new Date(value));
+function command(options: ClaudeHarnessProviderOptions): string {
+  return harnessCommand(options, "STATION_CLAUDE_BIN", "claude");
 }
 
 function hookPathOptions(
@@ -104,248 +119,132 @@ function parseLoggedIn(stdout: string): boolean | undefined {
   return undefined;
 }
 
-function capabilities(options: ClaudeHarnessProviderOptions): HarnessCapabilities {
-  // Adapter support alone is not enough; resume stays invisible unless this
-  // provider instance is explicitly enabled by [harness.claude].resume.
-  return {
-    ...baseCapabilities,
-    canResume: options.resume === true,
-  };
+function claudeHookDoctorOptions(
+  options: ClaudeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Parameters<typeof doctorClaudeHooks>[0] {
+  return { ...harnessHookDoctorOptions(options, context), ...hookPathOptions(options) };
 }
 
-export class ClaudeHarnessProvider implements HarnessProvider {
-  readonly id = "claude";
-
-  readonly #options: ClaudeHarnessProviderOptions;
-
-  constructor(options: ClaudeHarnessProviderOptions = {}) {
-    this.#options = options;
+function buildLaunch(
+  options: ClaudeHarnessProviderOptions,
+  request: BuildHarnessLaunchRequest,
+): HarnessLaunchPlan {
+  const launchOptions: ClaudeLaunchOptions = { command: command(options) };
+  if (options.profile !== undefined) {
+    launchOptions.defaultProfile = options.profile;
   }
-
-  capabilities(): HarnessCapabilities {
-    return capabilities(this.#options);
+  if (options.permissionMode !== undefined) {
+    launchOptions.defaultPermissionMode = options.permissionMode;
   }
-
-  async health(): Promise<ProviderHealth> {
-    const checkedAt = now(this.#options);
-    try {
-      const result = await runExternalCommand(
-        {
-          command: command(this.#options),
-          args: ["--version"],
-          timeoutMs: this.#options.timeoutMs ?? 5000,
-          maxOutputChars: 4096,
-        },
-        this.#options.runner,
-      );
-      return {
-        providerId: this.id,
-        providerType: "harness",
-        status: "healthy",
-        lastCheckedAt: checkedAt,
-        capabilities: this.capabilities(),
-        diagnostics: {
-          version: result.stdout.trim(),
-        },
-      };
-    } catch (error) {
-      return {
-        providerId: this.id,
-        providerType: "harness",
-        status: "unavailable",
-        lastCheckedAt: checkedAt,
-        lastError: claudeProviderErrorFromUnknown(error, {
-          code: "HARNESS_CLAUDE_UNAVAILABLE",
-          message: "Claude Code is not available.",
-          hint: "Install Claude Code and ensure `claude --version` succeeds, or configure [harness.claude].command (env override: STATION_CLAUDE_BIN).",
-        }),
-        capabilities: this.capabilities(),
-      };
-    }
+  if (options.approvalPolicy !== undefined) {
+    launchOptions.defaultApprovalPolicy = options.approvalPolicy;
   }
+  if (options.sandboxMode !== undefined) {
+    launchOptions.defaultSandboxMode = options.sandboxMode;
+  }
+  if (options.installHooks === true) {
+    launchOptions.hookSettingsPath = resolveClaudeSettingsArtifactPath(hookPathOptions(options));
+  }
+  return buildClaudeLaunchPlan(request, launchOptions);
+}
 
-  async doctorChecks(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]> {
-    const checks: ProviderDoctorCheck[] = [];
-    const health = await this.health();
-    if (health.status === "healthy") {
-      checks.push({
-        name: "claude.version",
-        status: "ok",
-        message: "Claude Code command is available.",
-      });
-    } else {
-      const check: ProviderDoctorCheck = {
-        name: "claude.version",
-        status: "error",
-        message: "Claude Code is unavailable.",
-      };
-      if (health.lastError !== undefined) {
-        check.error = health.lastError;
-      }
-      checks.push(check);
-      return checks;
+async function doctorChecks(
+  options: ClaudeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderDoctorCheck[]> {
+  const checks: ProviderDoctorCheck[] = [];
+  const health = await harnessHealth(claudeSpec, options);
+  if (health.status === "healthy") {
+    checks.push({
+      name: "claude.version",
+      status: "ok",
+      message: "Claude Code command is available.",
+    });
+  } else {
+    const check: ProviderDoctorCheck = {
+      name: "claude.version",
+      status: "error",
+      message: "Claude Code is unavailable.",
+    };
+    if (health.lastError !== undefined) {
+      check.error = health.lastError;
     }
-
-    // `claude --version` succeeds while logged out, so launchability needs a separate auth probe.
-    try {
-      const result = await runExternalCommand(
-        {
-          command: command(this.#options),
-          args: ["auth", "status"],
-          timeoutMs: this.#options.timeoutMs ?? 5000,
-          maxOutputChars: 4096,
-        },
-        this.#options.runner,
-      );
-      const loggedIn = parseLoggedIn(result.stdout);
-      if (loggedIn === true) {
-        checks.push({
-          name: "claude.auth",
-          status: "ok",
-          message: "Claude Code authentication is available.",
-        });
-      } else {
-        checks.push({
-          name: "claude.auth",
-          status: "warn",
-          message:
-            "Claude Code does not report an authenticated login. Sessions will stall at a login screen; run `claude` once to log in.",
-        });
-      }
-    } catch (cause) {
-      checks.push({
-        name: "claude.auth",
-        status: "warn",
-        message: "Claude Code authentication status could not be determined.",
-        error: claudeProviderErrorFromUnknown(cause, {
-          code: "HARNESS_CLAUDE_UNAVAILABLE",
-          message: "`claude auth status` failed.",
-        }),
-      });
-    }
-
-    try {
-      const hookOptions: Parameters<typeof doctorClaudeHooks>[0] = {
-        ...hookPathOptions(this.#options),
-        enabled: this.#options.installHooks === true,
-      };
-      if (this.#options.observerSocketPath !== undefined) {
-        hookOptions.observerSocketPath = this.#options.observerSocketPath;
-      }
-      if (this.#options.hookSpoolDir !== undefined) {
-        hookOptions.hookSpoolDir = this.#options.hookSpoolDir;
-      }
-      if (this.#options.autoStartFromHooks !== undefined) {
-        hookOptions.autoStartFromHooks = this.#options.autoStartFromHooks;
-      }
-      if (context?.stationConfigPath !== undefined) {
-        hookOptions.stationConfigPath = context.stationConfigPath;
-      }
-      const hookResult = await doctorClaudeHooks(hookOptions);
-      checks.push({
-        name: "claude-hooks",
-        status: hookResult.status,
-        message: `${hookResult.message} Settings artifact: ${hookResult.settingsPath}. User settings: ${hookResult.userSettingsPath}. Script: ${hookResult.hookScriptPath}.`,
-      });
-    } catch (cause) {
-      checks.push({
-        name: "claude-hooks",
-        status: "error",
-        message: "Claude hook diagnostics failed.",
-        error: safeErrorFromUnknown(cause, {
-          tag: "ClaudeHookSetupError",
-          code: "CLAUDE_HOOK_DIAGNOSTIC_FAILED",
-          message: "Claude hook diagnostics failed.",
-          provider: this.id,
-        }),
-      });
-    }
+    checks.push(check);
     return checks;
   }
 
-  async hooksStatus(context?: ProviderDoctorContext): Promise<HarnessHooksStatus> {
-    const hookOptions: Parameters<typeof doctorClaudeHooks>[0] = {
-      ...hookPathOptions(this.#options),
-      enabled: this.#options.installHooks === true,
-    };
-    if (this.#options.observerSocketPath !== undefined) {
-      hookOptions.observerSocketPath = this.#options.observerSocketPath;
+  // `claude --version` succeeds while logged out, so launchability needs a separate auth probe.
+  try {
+    const result = await runExternalCommand(
+      {
+        command: command(options),
+        args: ["auth", "status"],
+        timeoutMs: options.timeoutMs ?? 5000,
+        maxOutputChars: 4096,
+      },
+      options.runner,
+    );
+    const loggedIn = parseLoggedIn(result.stdout);
+    if (loggedIn === true) {
+      checks.push({
+        name: "claude.auth",
+        status: "ok",
+        message: "Claude Code authentication is available.",
+      });
+    } else {
+      checks.push({
+        name: "claude.auth",
+        status: "warn",
+        message:
+          "Claude Code does not report an authenticated login. Sessions will stall at a login screen; run `claude` once to log in.",
+      });
     }
-    if (this.#options.hookSpoolDir !== undefined) {
-      hookOptions.hookSpoolDir = this.#options.hookSpoolDir;
-    }
-    if (this.#options.autoStartFromHooks !== undefined) {
-      hookOptions.autoStartFromHooks = this.#options.autoStartFromHooks;
-    }
-    if (context?.stationConfigPath !== undefined) {
-      hookOptions.stationConfigPath = context.stationConfigPath;
-    }
-    const hookResult = await doctorClaudeHooks(hookOptions);
-    return {
-      provider: this.id,
-      installed: hookResult.installed,
-      requested: this.#options.installHooks === true,
-      missing: hookResult.missing.map((name) => String(name)),
-      message: hookResult.message,
-    };
-  }
-
-  async buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan> {
-    const options: ClaudeLaunchOptions = {
-      command: command(this.#options),
-    };
-    if (this.#options.profile !== undefined) {
-      options.defaultProfile = this.#options.profile;
-    }
-    if (this.#options.permissionMode !== undefined) {
-      options.defaultPermissionMode = this.#options.permissionMode;
-    }
-    if (this.#options.approvalPolicy !== undefined) {
-      options.defaultApprovalPolicy = this.#options.approvalPolicy;
-    }
-    if (this.#options.sandboxMode !== undefined) {
-      options.defaultSandboxMode = this.#options.sandboxMode;
-    }
-    if (this.#options.installHooks === true) {
-      options.hookSettingsPath = resolveClaudeSettingsArtifactPath(hookPathOptions(this.#options));
-    }
-    return buildClaudeLaunchPlan(request, options);
-  }
-
-  async discoverRuns(context: HarnessDiscoveryContext): Promise<HarnessRunObservation[]> {
-    return discoverTerminalBoundHarnessRuns(context, {
-      harnessProvider: this.id,
-      displayName: "Claude Code",
-      role: "main-agent",
+  } catch (cause) {
+    checks.push({
+      name: "claude.auth",
+      status: "warn",
+      message: "Claude Code authentication status could not be determined.",
+      error: claudeProviderErrorFromUnknown(cause, {
+        code: "HARNESS_CLAUDE_UNAVAILABLE",
+        message: "`claude auth status` failed.",
+      }),
     });
   }
 
-  async classifyRun(
-    run: HarnessRunObservation,
-    _context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation> {
-    return classifyClaudeRunStatus(run);
+  try {
+    const hookResult = await doctorClaudeHooks(claudeHookDoctorOptions(options, context));
+    checks.push({
+      name: "claude-hooks",
+      status: hookResult.status,
+      message: `${hookResult.message} Settings artifact: ${hookResult.settingsPath}. User settings: ${hookResult.userSettingsPath}. Script: ${hookResult.hookScriptPath}.`,
+    });
+  } catch (cause) {
+    checks.push({
+      name: "claude-hooks",
+      status: "error",
+      message: "Claude hook diagnostics failed.",
+      error: safeErrorFromUnknown(cause, {
+        tag: "ClaudeHookSetupError",
+        code: "CLAUDE_HOOK_DIAGNOSTIC_FAILED",
+        message: "Claude hook diagnostics failed.",
+        provider: "claude",
+      }),
+    });
   }
+  return checks;
+}
 
-  async ingestEvent(
-    event: RawHarnessEvent,
-    context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]> {
-    const result = await runRuntimeBoundary(
-      {
-        operation: "provider.claude.ingestEvent",
-        error: {
-          tag: "HarnessProviderError",
-          code: "HARNESS_CLAUDE_EVENT_INGEST_FAILED",
-          message: "The Claude Code harness provider failed to ingest an event.",
-          provider: this.id,
-        },
-      },
-      async () => normalizeClaudeRawEvent(event, context),
-    );
-    if (!result.ok) {
-      throw result.error;
-    }
-    return result.value;
-  }
+async function hooksStatus(
+  options: ClaudeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<HarnessHooksStatus> {
+  const hookResult = await doctorClaudeHooks(claudeHookDoctorOptions(options, context));
+  return harnessHooksStatusFrom("claude", options.installHooks === true, hookResult);
+}
+
+export function createClaudeHarnessProvider(
+  options: ClaudeHarnessProviderOptions = {},
+): HarnessProvider {
+  return createTerminalBoundHarnessProvider(claudeSpec, options);
 }

@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ClaudeHarnessProvider } from "@station/claude";
-import { CodexHarnessProvider } from "@station/codex";
+import { type ClaudeHarnessProviderOptions, createClaudeHarnessProvider } from "@station/claude";
+import { type CodexHarnessProviderOptions, createCodexHarnessProvider } from "@station/codex";
 import {
   type ClaudeHarnessProviderConfig,
   type HarnessProviderConfig,
@@ -25,13 +25,16 @@ import type {
   WorktreeObservation,
   WorktreeProvider,
 } from "@station/contracts";
-import { CrushHarnessProvider } from "@station/crush";
-import { CursorHarnessProvider } from "@station/cursor";
+import { type CrushHarnessProviderOptions, createCrushHarnessProvider } from "@station/crush";
+import { type CursorHarnessProviderOptions, createCursorHarnessProvider } from "@station/cursor";
 import { GithubRepositoryProvider } from "@station/github-repository";
 import type { JsonlLogger } from "@station/observability";
 import { createTerminalIntentRunner, ProviderRegistry } from "@station/observer/internal";
-import { OpenCodeHarnessProvider } from "@station/opencode";
-import { PiHarnessProvider } from "@station/pi";
+import {
+  createOpenCodeHarnessProvider,
+  type OpenCodeHarnessProviderOptions,
+} from "@station/opencode";
+import { createPiHarnessProvider, type PiHarnessProviderOptions } from "@station/pi";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
@@ -174,7 +177,7 @@ function createHarnessProvider(
   }
 
   if (id === "claude") {
-    const options: ConstructorParameters<typeof ClaudeHarnessProvider>[0] = {};
+    const options: ClaudeHarnessProviderOptions = {};
     if (providerConfig?.command !== undefined) {
       options.command = providerConfig.command;
     }
@@ -202,11 +205,11 @@ function createHarnessProvider(
     options.stateDir = observerPaths.stateDir;
     options.hookSpoolDir = observerPaths.hookSpoolDir;
     options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
-    return new ClaudeHarnessProvider(options);
+    return createClaudeHarnessProvider(options);
   }
 
   if (id === "codex") {
-    const options: ConstructorParameters<typeof CodexHarnessProvider>[0] = {};
+    const options: CodexHarnessProviderOptions = {};
     if (providerConfig?.command !== undefined) {
       options.command = providerConfig.command;
     }
@@ -234,11 +237,11 @@ function createHarnessProvider(
     options.stateDir = observerPaths.stateDir;
     options.hookSpoolDir = observerPaths.hookSpoolDir;
     options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
-    return new CodexHarnessProvider(options);
+    return createCodexHarnessProvider(options);
   }
 
   if (id === "cursor") {
-    const options: ConstructorParameters<typeof CursorHarnessProvider>[0] = {};
+    const options: CursorHarnessProviderOptions = {};
     if (providerConfig?.command !== undefined) {
       options.command = providerConfig.command;
     }
@@ -256,11 +259,11 @@ function createHarnessProvider(
     options.stateDir = observerPaths.stateDir;
     options.hookSpoolDir = observerPaths.hookSpoolDir;
     options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
-    return new CursorHarnessProvider(options);
+    return createCursorHarnessProvider(options);
   }
 
   if (id === "crush") {
-    const options: ConstructorParameters<typeof CrushHarnessProvider>[0] = {};
+    const options: CrushHarnessProviderOptions = {};
     if (providerConfig?.command !== undefined) {
       options.command = providerConfig.command;
     }
@@ -285,11 +288,11 @@ function createHarnessProvider(
     options.stateDir = observerPaths.stateDir;
     options.hookSpoolDir = observerPaths.hookSpoolDir;
     options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
-    return new CrushHarnessProvider(options);
+    return createCrushHarnessProvider(options);
   }
 
   if (id === "opencode") {
-    const options: ConstructorParameters<typeof OpenCodeHarnessProvider>[0] = {};
+    const options: OpenCodeHarnessProviderOptions = {};
     if (providerConfig?.command !== undefined) {
       options.command = providerConfig.command;
     }
@@ -319,11 +322,11 @@ function createHarnessProvider(
     options.observerSocketPath = observerPaths.socketPath;
     options.stateDir = observerPaths.stateDir;
     options.hookSpoolDir = observerPaths.hookSpoolDir;
-    return new OpenCodeHarnessProvider(options);
+    return createOpenCodeHarnessProvider(options);
   }
 
   if (id === "pi") {
-    const options: ConstructorParameters<typeof PiHarnessProvider>[0] = {};
+    const options: PiHarnessProviderOptions = {};
     if (providerConfig?.command !== undefined) {
       options.command = providerConfig.command;
     }
@@ -337,7 +340,7 @@ function createHarnessProvider(
     options.observerSocketPath = observerPaths.socketPath;
     options.stateDir = observerPaths.stateDir;
     options.hookSpoolDir = observerPaths.hookSpoolDir;
-    return new PiHarnessProvider(options);
+    return createPiHarnessProvider(options);
   }
 
   if (id === "noop-harness") {

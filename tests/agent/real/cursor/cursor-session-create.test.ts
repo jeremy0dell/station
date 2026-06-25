@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { StationConfig } from "@station/config";
-import { CursorHarnessProvider } from "@station/cursor";
+import { createCursorHarnessProvider } from "@station/cursor";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
@@ -94,7 +94,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       }),
       terminal,
       harnesses: [
-        new CursorHarnessProvider({
+        createCursorHarnessProvider({
           command: shimPath,
           now: () => new Date(now),
         }),
