@@ -209,6 +209,42 @@ describe("setup planner", () => {
     });
   });
 
+  it("keeps valid config diagnostics visible without failing required readiness", () => {
+    const plan = buildSetupPlan(
+      facts({
+        config: validConfigFact({
+          diagnostics: [
+            {
+              code: "CONFIG_WORKSPACE_SECTION_INVALID",
+              severity: "warn",
+              message: "Ignoring invalid [workspace] section.",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const warningIds = plan.checks
+      .filter((check) => check.status === "warning")
+      .map((check) => check.id);
+
+    expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
+      tier: "required",
+      status: "ok",
+    });
+    expect(plan.checks.find((check) => check.id === "config-diagnostics")).toMatchObject({
+      tier: "recommended",
+      status: "warning",
+      message: expect.stringContaining("Ignoring invalid [workspace] section."),
+      details: { path: "/tmp/config.toml", project: "repo" },
+    });
+    expect(plan.summary.requiredOk).toBe(true);
+    expect(plan.summary.requiredMissing).toBe(0);
+    expect(plan.summary.warnings).toBe(warningIds.length);
+    expect(warningIds).toContain("config-diagnostics");
+    expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
+  });
+
   it("fails readiness for existing projects outside the core setup path", () => {
     const plan = buildSetupPlan(
       facts({
