@@ -57,42 +57,11 @@ describe("parseStationConfig", () => {
     const { config } = parseStationConfig("");
     const expectedWatchCommand =
       'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
-    const expectedDeltaWrapperScript = [
-      "#!/bin/bash",
-      "args=()",
-      "wrap_width=80",
-      'while [ "$#" -gt 0 ]; do',
-      '  case "$1" in',
-      '    -w=*) wrap_width="${1#-w=}"; args+=("$1"); shift ;;',
-      '    -w|--width) wrap_width="$2"; args+=("$1" "$2"); shift 2 ;;',
-      '    --width=*) wrap_width="${1#--width=}"; args+=("$1"); shift ;;',
-      "    --max-line-length=*) shift ;;",
-      "    --max-line-length) shift 2 ;;",
-      '    *) args+=("$1"); shift ;;',
-      "  esac",
-      "done",
-      'case "$wrap_width" in ""|*[!0-9]*) wrap_width=80 ;; esac',
-      'if [ "$wrap_width" -gt 1 ]; then wrap_width=$((wrap_width - 1)); fi',
-      '"$STATION_DIFFNAV_DELTA_BIN" "${args[@]}" --max-line-length=0 | perl -MEncode=decode -e \'binmode STDOUT, ":encoding(UTF-8)"; my $width = shift @ARGV; $width = 80 if !$width || $width < 1; while (defined(my $line = <STDIN>)) { $line = decode("UTF-8", $line, Encode::FB_DEFAULT); chomp $line; my $col = 0; while (length $line) { if ($line =~ s/^(\\e\\[[0-?]*[ -\\/]*[@-~])//) { print $1; next; } my $ch = substr($line, 0, 1, ""); if ($col >= $width) { print "\\n"; $col = 0; } print $ch; $col++; } print "\\n"; }\' "$wrap_width"',
-    ].join("\n");
-    const expectedCommand =
-      [
-        'delta_bin="$(command -v delta)"',
-        'wrapper_dir="$(mktemp -d)"',
-        `trap 'rm -rf "$wrapper_dir"' EXIT`,
-      ].join(" && ") +
-      ` && cat >"$wrapper_dir/delta" <<'STATION_DELTA_WRAP'\n${expectedDeltaWrapperScript}\nSTATION_DELTA_WRAP\n` +
-      [
-        'chmod +x "$wrapper_dir/delta"',
-        [
-          'STATION_DIFFNAV_DELTA_BIN="$delta_bin"',
-          'PATH="$wrapper_dir:$PATH"',
-          'DIFFNAV_CONFIG_DIR="${DIFFNAV_CONFIG_DIR:-$HOME/.config/diffnav-tmux}"',
-          "diffnav --unified --watch",
-          `--watch-cmd '${expectedWatchCommand}'`,
-          "--watch-interval 2s",
-        ].join(" "),
-      ].join(" && ");
+    const expectedCommand = [
+      "diffnav --unified --watch",
+      `--watch-cmd '${expectedWatchCommand}'`,
+      "--watch-interval 2s",
+    ].join(" ");
     expect(config.automations).toEqual([
       {
         id: "see-diff",
