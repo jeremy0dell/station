@@ -123,7 +123,7 @@ export function rowGridInputForViewportItem(
         slot: undefined,
         marker: { kind: "throbber", variant: "braille" },
         title: item.displayTitle,
-        activity: "removing worktree...",
+        activity: "removing session...",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
       });
@@ -239,12 +239,6 @@ export function commandPromptLineForScreen(screen: TuiScreen): CommandPromptLine
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return { text: "Choose the slot to rename: 1-9/a-z", color: "yellow" };
   }
-  if (screen.name === "removeWorktree" && screen.step === "confirm") {
-    return { text: `confirm ${screen.label}`, color: "red" };
-  }
-  if (screen.name === "removeSession") {
-    return { text: `confirm ${screen.label}`, color: "red" };
-  }
   const prompt = textPromptForScreen(screen);
   if (prompt === undefined) {
     return undefined;
@@ -253,9 +247,6 @@ export function commandPromptLineForScreen(screen: TuiScreen): CommandPromptLine
 }
 
 function textPromptForScreen(screen: TuiScreen): { label: string; value: string } | undefined {
-  if (screen.name === "removeWorktree" && screen.step === "chooseSlot") {
-    return { label: "remove slot", value: "" };
-  }
   if (screen.name === "search") {
     return { label: "search", value: screen.value };
   }
@@ -269,9 +260,6 @@ export function commandPromptRows(screen: TuiScreen): number {
   if (screen.name === "search" || screen.name === "projectCollapse") {
     return 2;
   }
-  if (screen.name === "removeWorktree" || screen.name === "removeSession") {
-    return 2;
-  }
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return 2;
   }
@@ -282,6 +270,8 @@ export function isModalOverlayActive(screen: TuiScreen): boolean {
   return (
     screen.name === "help" ||
     screen.name === "newSession" ||
+    screen.name === "removeWorktree" ||
+    screen.name === "removeSession" ||
     (screen.name === "renameSession" && screen.step === "editName")
   );
 }

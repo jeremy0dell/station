@@ -10,8 +10,10 @@ export function bottomSheetFrameLayout(input: {
   rows: number;
   contentRows: number;
   minHeight?: number;
+  width?: number;
 }): BottomSheetFrameLayout {
-  const width = Math.max(1, input.columns);
+  const viewportColumns = Math.max(1, input.columns);
+  const width = Math.max(1, Math.min(viewportColumns, input.width ?? viewportColumns));
   const viewportRows = Math.max(1, input.rows);
   const minHeight = input.minHeight ?? 7;
   const height = Math.min(viewportRows, Math.max(minHeight, input.contentRows + 2));

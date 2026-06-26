@@ -1,5 +1,5 @@
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
-import { choiceValueByKey } from "../../selectors/selectors.js";
+import { choiceValueByKey, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import type { TuiKey } from "../keys.js";
@@ -57,10 +57,16 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string):
   if (state.screen.name !== "dashboard" && state.screen.name !== "removeWorktree") {
     return state;
   }
-  const row = state.snapshot?.rows.find((candidate) => candidate.id === rowId);
+  const snapshot = state.snapshot;
+  if (snapshot === undefined) {
+    return state;
+  }
+  const row = snapshot.rows.find((candidate) => candidate.id === rowId);
   if (row === undefined) {
     return state;
   }
+  const label =
+    worktreeRowDisplayTitle(row, snapshot.sessions, state.localRows).trim() || row.branch;
   return {
     ...state,
     screen: {
@@ -68,7 +74,7 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string):
       step: "confirm",
       rowId: row.id,
       forceRequired: cleanupForceRequired(row, "remove-worktree"),
-      label: `remove ${row.branch}? Y/N`,
+      label,
     },
   };
 }

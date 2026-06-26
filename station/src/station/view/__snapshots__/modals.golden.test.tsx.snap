@@ -18,13 +18,13 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
         │                     station project view                     │        
 ▼ script│  ↑/↓ wheel  scroll project list                              │  [+sh] 
  [9] ○ a│  1-9/a-z    start or focus row                               │1 [+sh] 
- [a] ? m│  N/A/R/X/C  new/add/rename/remove/fold                       │0 [+sh] 
- [b] - o│  /, Z       search / refresh snapshot                        │  [+sh] 
-        │  H/?        help                                             │        
-▼ empty-│  Q/Esc      close/back/cancel                                │  [+sh] 
+ [a] ? m│  N/A/R/C    new/add/rename/fold                              │0 [+sh] 
+ [b] - o│  X          remove session                                   │  [+sh] 
+        │  /, Z       search / refresh snapshot                        │        
+▼ empty-│  H/?        help                                             │  [+sh] 
 ↓ 1 hidd╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help     
 "
 `;
 
@@ -52,7 +52,7 @@ exports[`modal flow golden frames renders the search prompt 1`] = `
 search: apiject - 0 worktrees | codex                                     [+sh] 
 ↓ 1 hidden                                                                      
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help     
 "
 `;
 
@@ -80,11 +80,11 @@ exports[`modal flow golden frames renders the collapse prompt 1`] = `
 collapse project: 1:station 2:observer 3:scripts 4:empty-project          [+sh] 
 ↓ 1 hidden                                                                      
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help     
 "
 `;
 
-exports[`modal flow golden frames renders the remove slot prompt 1`] = `
+exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 "station                                                                         
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
@@ -102,17 +102,17 @@ exports[`modal flow golden frames renders the remove slot prompt 1`] = `
                                                                                 
 ▼ scripts - 3 worktrees | opencode                                        [+sh] 
  [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
- [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
- [b] - old-experiment               -         no agent                    [+sh] 
-                                                                                
-remove slot: ct - 0 worktrees | codex                                     [+sh] 
-↓ 1 hidden                                                                      
-─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+┌────────────────────────────────────────────┐unknown           +3 -1 #10 [+sh] 
+│ Select session to remove                   │no agent                    [+sh] 
+│                                            │                                  
+│ Click a row or press slot key              │                            [+sh] 
+│ Esc:cancel                                 │                                  
+│                                            │───────────────────────────────── 
+└────────────────────────────────────────────┘ X:rm session /:search H:help     
 "
 `;
 
-exports[`modal flow golden frames renders the remove confirm prompt 1`] = `
+exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 "station                                                                         
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
@@ -128,19 +128,19 @@ exports[`modal flow golden frames renders the remove confirm prompt 1`] = `
  [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh] 
  [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh] 
                                                                                 
-▼ scripts - 3 worktrees | opencode                                        [+sh] 
- [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh] 
- [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh] 
- [b] - old-experiment               -         no agent                    [+sh] 
-                                                                                
-confirm remove cli-help-man? Y/Ncodex                                     [+sh] 
-↓ 1 hidden                                                                      
-─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+┌────────────────────────────────────────────┐                            [+sh] 
+│ Remove session?                            │idle           +14 -6 #5 x1 [+sh] 
+│ Session  cli-help-man                      │unknown           +3 -1 #10 [+sh] 
+│ Removes session, checkout, panes, and state│no agent                    [+sh] 
+│                                            │                                  
+│ Yes (y)     No (n)                         │                            [+sh] 
+│ Esc/Enter:cancel                           │                                  
+│                                            │───────────────────────────────── 
+└────────────────────────────────────────────┘ X:rm session /:search H:help     
 "
 `;
 
-exports[`modal flow golden frames renders the remove session confirm prompt 1`] = `
+exports[`modal flow golden frames renders the remove session confirm sheet 1`] = `
 "station
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -156,15 +156,15 @@ exports[`modal flow golden frames renders the remove session confirm prompt 1`] 
  [7] ⠋ provider-hooks               opencode  working        +32 -8 #16 … [+sh]
  [8] ○ trace-bundle                 opencode  idle             +1 -1 #4 ✓ [+sh]
 
-▼ scripts - 3 worktrees | opencode                                        [+sh]
- [9] ○ api-cache                    opencode  idle           +14 -6 #5 x1 [+sh]
- [a] ? metadata-refresh             opencode  unknown           +3 -1 #10 [+sh]
- [b] - old-experiment               -         no agent                    [+sh]
-
-confirm remove session pty-buffer? Y/N                                    [+sh]
-↓ 1 hidden
-───────────────────────────────────────────────────────────────────────────────
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help
+┌────────────────────────────────────────────┐                            [+sh]
+│ Remove session?                            │idle           +14 -6 #5 x1 [+sh]
+│ Session  pty-buffer                        │unknown           +3 -1 #10 [+sh]
+│ Removes the session; checkout stays.       │no agent                    [+sh]
+│                                            │
+│ Yes (y)     No (n)                         │                            [+sh]
+│ Esc/Enter:cancel                           │
+│                                            │─────────────────────────────────
+└────────────────────────────────────────────┘ X:rm session /:search H:help
 "
 `;
 
@@ -192,7 +192,7 @@ exports[`modal flow golden frames renders the rename slot prompt 1`] = `
 Choose the slot to rename: 1-9/a-zdex                                     [+sh] 
 ↓ 1 hidden                                                                      
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help     
 "
 `;
 

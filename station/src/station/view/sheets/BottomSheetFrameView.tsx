@@ -16,6 +16,7 @@ export type BottomSheetFrameViewProps = {
   title: string;
   contentRows: number;
   minHeight?: number;
+  width?: number;
   children: ReactNode;
 };
 
@@ -25,10 +26,17 @@ export function BottomSheetFrameView({
   title,
   contentRows,
   minHeight = 7,
+  width,
   children,
 }: BottomSheetFrameViewProps) {
   const dispatch = useStationMouse();
-  const layout = bottomSheetFrameLayout({ columns, rows, contentRows, minHeight });
+  const layout = bottomSheetFrameLayout({
+    columns,
+    rows,
+    contentRows,
+    minHeight,
+    ...(width === undefined ? {} : { width }),
+  });
   return (
     <box
       position="absolute"
@@ -46,7 +54,7 @@ export function BottomSheetFrameView({
       <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{` ${title}`}</text>
       <box
         flexDirection="column"
-        width={bottomSheetContentWidth(columns)}
+        width={bottomSheetContentWidth(layout.width)}
         height={Math.max(0, layout.height - 3)}
       >
         {children}

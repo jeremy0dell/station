@@ -3,7 +3,9 @@
 // single-line rows. Ink's dimColor becomes the DIM attribute; named colors
 // come from the theme.
 import { TextAttributes } from "@opentui/core";
-import { isValidElement, type ReactNode } from "react";
+import { isValidElement, type ReactNode, useState } from "react";
+import type { StationMouseTarget } from "../../input/stationMouse.js";
+import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
 import { Throbber } from "../Throbber.js";
 import { STATION_COLORS } from "../theme.js";
 
@@ -83,6 +85,44 @@ export function SheetProgressFooter({ width, children }: { width: number; childr
       <span attributes={TextAttributes.DIM}>{labelText}</span>
       <Throbber variant="dots" />
       {fillWidth > 0 ? <span attributes={TextAttributes.DIM}>{spaces(fillWidth)}</span> : null}
+    </text>
+  );
+}
+
+export type SheetButtonTone = "success" | "danger";
+
+const BUTTON_TONE_COLORS: Record<SheetButtonTone, string> = {
+  success: STATION_COLORS.green,
+  danger: STATION_COLORS.red,
+};
+
+export function SheetButton({
+  label,
+  shortcut,
+  tone,
+  fixedWidth,
+  mouseTarget,
+}: {
+  label: string;
+  shortcut: string;
+  tone: SheetButtonTone;
+  fixedWidth: number;
+  mouseTarget: StationMouseTarget;
+}) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useState(false);
+  const color = BUTTON_TONE_COLORS[tone];
+  return (
+    <text
+      width={fixedWidth}
+      fg={hover ? STATION_COLORS.background : color}
+      attributes={hover ? TextAttributes.BOLD : TextAttributes.NONE}
+      {...(hover ? { bg: color } : {})}
+      {...stationMouseProps(dispatch, mouseTarget)}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {fit(` ${label} (${shortcut})`, fixedWidth)}
     </text>
   );
 }

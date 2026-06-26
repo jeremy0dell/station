@@ -41,6 +41,8 @@ export type StationMouseTarget =
   | { kind: "toast" }
   /** A picker line inside a sheet; the key is the line's slot accelerator. */
   | { kind: "sheetChoice"; choiceKey: string }
+  /** A compact sheet button that dispatches its visible shortcut key. */
+  | { kind: "sheetButton"; key: "y" | "n" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
   | { kind: "sheetBackdrop" };
 
@@ -180,6 +182,11 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.choiceKey }));
+    case "sheetButton":
+      if (mode !== "removeConfirm") {
+        return { kind: "handled" };
+      }
+      return fromKeyOutcome(dispatchStationKey(store, { input: target.key }));
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };

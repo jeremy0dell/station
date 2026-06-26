@@ -60,7 +60,7 @@ export function openRemoveSessionConfirmForRow(state: TuiState, rowId: string): 
       rowId: row.id,
       sessionId: session.id,
       forceRequired: isRunningAgentState(row.agent?.state ?? session.status.value),
-      label: `remove session ${label}? Y/N`,
+      label,
     },
   };
 }

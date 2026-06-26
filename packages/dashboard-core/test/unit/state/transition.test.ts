@@ -12,7 +12,7 @@ import {
 } from "../../fixtures/snapshots.js";
 
 describe("TUI screen transitions", () => {
-  it("opens remove worktree slot selection from the dashboard", () => {
+  it("opens remove session slot selection from the dashboard", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const transition = handleTuiKey(state, { input: "X" });
 
@@ -213,7 +213,7 @@ describe("TUI screen transitions", () => {
       step: "confirm",
       rowId: "wt_web_idle",
       forceRequired: true,
-      label: "remove fix-nav-mobile? Y/N",
+      label: "fix-nav-mobile",
     });
   });
 
@@ -374,7 +374,7 @@ describe("TUI screen transitions", () => {
       rowId: "wt_web_idle",
       sessionId: "ses_wt_web_idle",
       forceRequired: true,
-      label: "remove session fix-nav-mobile? Y/N",
+      label: "fix-nav-mobile",
     });
   });
 
@@ -436,7 +436,7 @@ describe("TUI screen transitions", () => {
       ).screen,
     ).toMatchObject({
       forceRequired: false,
-      label: "remove session done-run? Y/N",
+      label: "done-run",
     });
     expect(
       openRemoveSessionConfirmForRow(
@@ -445,7 +445,7 @@ describe("TUI screen transitions", () => {
       ).screen,
     ).toMatchObject({
       forceRequired: false,
-      label: `remove session ${longTitle}? Y/N`,
+      label: longTitle,
     });
   });
 
