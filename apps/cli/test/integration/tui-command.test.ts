@@ -290,7 +290,7 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([{ STATION_SOURCE: "mock" }]);
   });
 
-  it("rejects invalid widget config before starting the renderer", async () => {
+  it("continues with defaults when widget config is invalid", async () => {
     const fixture = await createTempState();
     const configPath = `${fixture.root}/invalid-widget-config.toml`;
     await writeFile(
@@ -315,23 +315,20 @@ describe("CLI tui command", () => {
       ].join("\n"),
       "utf8",
     );
+    const envs: Array<Record<string, string>> = [];
 
-    await expect(
-      runCli(["--config", configPath, "tui"], {
-        observerDeps: {
-          spawnObserver: async () => {
-            throw new Error("observer should not start for invalid widget config");
-          },
+    const result = await runCli(["--config", configPath, "tui"], {
+      observerDeps: runningObserverDeps(),
+      tuiDeps: {
+        spawnRenderer: async ({ env }) => {
+          envs.push(env);
+          return { status: "exited", code: 0 };
         },
-        tuiDeps: {
-          spawnRenderer: async () => {
-            throw new Error("renderer should not start for invalid widget config");
-          },
-        },
-      }),
-    ).rejects.toMatchObject({
-      code: "CONFIG_VALIDATION_FAILED",
+      },
     });
+
+    expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
+    expect(envs).toEqual([{ STATION_OBSERVER_SOCKET_PATH: fixture.socketPath }]);
   });
 
   it("rejects invalid fake dashboard count flags before observer startup", async () => {

@@ -1,7 +1,12 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { ConfigError, loadConfig, loadConfigFromToml } from "@station/config";
+import {
+  ConfigError,
+  DEFAULT_WORKSPACE_CONFIG,
+  loadConfig,
+  loadConfigFromToml,
+} from "@station/config";
 import { SafeErrorSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -575,13 +580,12 @@ city = "New York, NY"
 refresh_interval_minutes = 0
 `,
     ],
-  ])("rejects %s", async (_name, tuiToml) => {
+  ])("degrades a bad [tui] section (%s) to defaults with a diagnostic", async (_name, tuiToml) => {
     const tempDir = await makeTempDir();
     const root = await makeProjectRoot(tempDir, "web");
 
-    await expect(
-      loadConfigFromToml(
-        `
+    const loaded = await loadConfigFromToml(
+      `
 schema_version = 1
 
 [defaults]
@@ -593,12 +597,16 @@ layout = "agent-build-shell"
 ${tuiToml}
 ${projectToml("web", root)}
 `,
-        { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
-      ),
-    ).rejects.toMatchObject({
-      tag: "ConfigError",
-      code: "CONFIG_VALIDATION_FAILED",
-    });
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    // [tui] is decorative and TUI-only: a typo must not abort the load (which
+    // would take down the observer). The section is dropped and surfaced as a
+    // warn diagnostic instead of throwing CONFIG_VALIDATION_FAILED.
+    expect(loaded.config.tui).toBeUndefined();
+    expect(loaded.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "CONFIG_TUI_SECTION_INVALID", severity: "warn" }),
+    );
   });
 
   it("normalizes an empty feature flag table without adding production flags", async () => {
@@ -1003,7 +1011,6 @@ dev = "pnpm dev"
 [projects.local_config]
 enabled = true
 path = ".station/config.toml"
-trust = "explicit"
 `,
         }),
       ),
@@ -1056,7 +1063,6 @@ approval_policy = "never"
 [projects.local_config]
 enabled = true
 path = ".station/config.toml"
-trust = "explicit"
 `,
         }),
       ),
@@ -1084,7 +1090,6 @@ trust = "explicit"
 [projects.local_config]
 enabled = true
 path = ".station/config.toml"
-trust = "explicit"
 `,
         }),
       ),
@@ -1164,7 +1169,6 @@ location = "worktree"
 [projects.local_config]
 enabled = true
 path = ".station/config.toml"
-trust = "explicit"
 `,
         }),
       ),
@@ -1265,5 +1269,110 @@ breadcrumb_location = "provider-native"
       hookMode: "required-for-mvp",
       breadcrumbLocation: "provider-native",
     });
+  });
+
+  it("reads the native [workspace] section into config.workspace", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    const loaded = await loadConfigFromToml(
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[workspace]
+scroll_on_output = "shift"
+welcome_on_boot = false
+
+[[workspace.automations]]
+id = "build"
+label = "Build"
+
+[[workspace.automations.steps]]
+command = "pnpm build"
+
+${projectToml("web", root)}
+`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.workspace.scroll_on_output).toBe("shift");
+    expect(loaded.config.workspace.welcome_on_boot).toBe(false);
+    expect(loaded.config.workspace.automations).toEqual([
+      {
+        id: "build",
+        label: "Build",
+        enabled: true,
+        steps: [
+          {
+            command: "pnpm build",
+            split: "right",
+            anchor: "previous",
+            run: "execute",
+            focus: false,
+          },
+        ],
+      },
+    ]);
+    expect(loaded.diagnostics).toEqual([]);
+  });
+
+  it("defaults config.workspace when no [workspace] section is present", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    const loaded = await loadConfigFromToml(
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+${projectToml("web", root)}
+`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.workspace).toEqual(DEFAULT_WORKSPACE_CONFIG);
+    expect(loaded.diagnostics.some((d) => d.code === "CONFIG_WORKSPACE_SECTION_INVALID")).toBe(
+      false,
+    );
+  });
+
+  it("degrades a bad [workspace] section to defaults with a diagnostic", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    const loaded = await loadConfigFromToml(
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[workspace]
+scroll_on_output = "bounce"
+
+${projectToml("web", root)}
+`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    // TUI-only and best-effort: a bad value must not abort the daemon's load.
+    expect(loaded.config.workspace).toEqual(DEFAULT_WORKSPACE_CONFIG);
+    expect(loaded.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "CONFIG_WORKSPACE_SECTION_INVALID", severity: "warn" }),
+    );
   });
 });

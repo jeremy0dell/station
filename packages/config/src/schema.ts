@@ -4,6 +4,17 @@ import {
   ObserverEventHookConfigSchema,
 } from "@station/contracts";
 import { z } from "zod";
+import { DEFAULT_WORKSPACE_CONFIG, WorkspaceConfigSchema } from "./workspace.js";
+
+export {
+  type Automation,
+  type AutomationStep,
+  DEFAULT_WORKSPACE_CONFIG,
+  SCROLL_ON_OUTPUT_MODES,
+  type ScrollOnOutputMode,
+  type WorkspaceConfig,
+  WorkspaceConfigSchema,
+} from "./workspace.js";
 
 const nonEmptyStringSchema = z.string().min(1);
 const providerIdSchema = nonEmptyStringSchema;
@@ -44,7 +55,6 @@ export const ProjectLocalConfigRefSchema = z
   .object({
     enabled: z.boolean(),
     path: nonEmptyStringSchema,
-    trust: z.enum(["explicit"]).optional(),
   })
   .strict();
 
@@ -349,7 +359,12 @@ export const ParsedStationConfigSchema = z
     terminal: TerminalProvidersConfigSchema.optional(),
     harness: HarnessProvidersConfigSchema.optional(),
     hooks: HooksConfigSchema.optional(),
-    tui: TuiConfigSchema.optional(),
+    // TUI-only sections. Best-effort: a bad [tui]/[workspace] degrades to
+    // defaults (and a section diagnostic) rather than aborting the load, so a
+    // cosmetic typo never takes down the observer daemon.
+    tui: TuiConfigSchema.optional().catch(undefined),
+    workspace:
+      WorkspaceConfigSchema.default(DEFAULT_WORKSPACE_CONFIG).catch(DEFAULT_WORKSPACE_CONFIG),
     repository: RepositoryProvidersConfigSchema.optional(),
     observability: ObservabilityConfigSchema.optional(),
     featureFlags: FeatureFlagConfigSchema.optional(),

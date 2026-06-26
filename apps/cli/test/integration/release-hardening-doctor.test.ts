@@ -117,7 +117,6 @@ async function writeReleaseDoctorConfig(root: string): Promise<string> {
       "[projects.local_config]",
       "enabled = true",
       'path = ".station/config.toml"',
-      'trust = "explicit"',
       "",
     ].join("\n"),
   );

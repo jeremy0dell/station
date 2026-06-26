@@ -237,7 +237,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 - **halted: <message>** (red) — permanent failure, frozen at last-good snapshot.
 - **idle** (gray) — mock/never-queried.
 - **Snapshot alerts** — e.g. the "Static many-projects fixture" banner that self-identifies mock data.
-- **Resilience** — broken `station.toml` boots with defaults; missing host falls back to cold shells; failed clipboard tool doesn't block copy.
+- **Resilience** — broken `[workspace]` config boots with defaults; missing host falls back to cold shells; failed clipboard tool doesn't block copy.
 
 **Mock scenarios to flip through:** `baseline` (1 project), `many-projects` (3 projects / 11 worktrees / every state), `attention-and-failures` (red throbbers, stuck agents, failed CI, degraded providers), `disconnected` (display-only over a retained snapshot).
 
@@ -245,7 +245,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 
 ## Part 9 — Config & developer tooling
 
-- **`~/.config/station/station.toml`** — user config:
+- **`~/.config/station/config.toml` `[workspace]`** — native workspace config:
   - **`scroll_on_output = "freeze" | "shift" | "follow"`** — what the viewport does when output arrives while you're scrolled up (freeze=hold lines, shift=slide, follow=snap to bottom).
   - **`welcome_on_boot = true|false`** — show the Welcome screen on cold boot.
 - **`[tui.widgets]`** — header widgets (shared `@station/config` loader).

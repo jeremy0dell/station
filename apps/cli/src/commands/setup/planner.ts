@@ -452,6 +452,21 @@ function configCheck(facts: SetupFacts): SetupCheck {
       },
     };
   }
+  const diagnostics = facts.config.diagnostics ?? [];
+  if (diagnostics.length > 0) {
+    // Config is usable (repo matched) but loaded with non-fatal diagnostics —
+    // surface them as a warning instead of a clean OK so they are not hidden.
+    return {
+      id: "config",
+      tier: "required",
+      status: "warning",
+      label: "STATION project config",
+      message: `Config includes the current git repository, with ${diagnostics.length} diagnostic(s): ${diagnostics
+        .map((diagnostic) => diagnostic.message)
+        .join("; ")}`,
+      details: { path: facts.config.path, project: project.id },
+    };
+  }
   return {
     id: "config",
     tier: "required",

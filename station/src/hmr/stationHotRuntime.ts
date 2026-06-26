@@ -1,4 +1,4 @@
-import type { StationConfig } from "../config/stationConfig.js";
+import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import type { WorkspaceSlice } from "../state/types.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
@@ -32,7 +32,7 @@ export function stationHotSlots(): StationHotSlots {
  */
 export function getOrCreateStationHotRuntime(
   slots: StationHotSlots,
-  config: StationConfig,
+  config: WorkspaceConfig,
   initialWorkspace?: WorkspaceSlice,
 ): StationHotRuntime {
   const existing = slots.__stationHotRuntime;

@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 
 export function emptyConfig(): StationConfig {
   return {
@@ -9,6 +9,7 @@ export function emptyConfig(): StationConfig {
       harness: "noop-harness",
       layout: "agent-shell",
     },
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     projects: [],
   };
 }

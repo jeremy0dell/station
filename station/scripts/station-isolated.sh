@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DS="$ROOT/.dev-state"
-CFG="$DS/station.toml"
+CFG="$DS/config.toml"
 STATION_DIR="$ROOT/station"
 CLI="$ROOT/apps/cli/dist/main.js"
 
@@ -52,7 +52,7 @@ cfg = re.sub(r'state_dir = "[^"]*"', f'state_dir = "{ds}/observer"', cfg, count=
 cfg = re.sub(r'(\[defaults\][^\[]*?terminal = )"[^"]*"', r'\1"noop-terminal"', cfg, count=1, flags=re.S)
 if "station_persistent_agents" not in cfg and "stationPersistentAgents" not in cfg:
     cfg = cfg.rstrip() + "\n\n[feature_flags]\nstation_persistent_agents = true\n"
-open(f"{ds}/station.toml", "w").write(cfg)
+open(f"{ds}/config.toml", "w").write(cfg)
 PY
 fi
 

@@ -103,7 +103,7 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
 ```
 
 `station:isolated` does everything needed for a self-contained sandbox:
-- generates a worktree-local config (`.dev-state/station.toml`: state/socket
+- generates a worktree-local config (`.dev-state/config.toml`: state/socket
   relocated, `terminal = "noop-terminal"`, persistence flag on);
 - exports `STATION_HOST_ENTRY` (so the host can spawn) and
   `STATION_OBSERVER_SOCKET_PATH` (so Station connects to this observer);

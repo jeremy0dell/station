@@ -84,7 +84,7 @@ cp examples/config.toml ~/.config/station/config.toml
 stn doctor
 ```
 
-See [examples/config.toml](examples/config.toml) for the full reference: projects, observer tuning, harness defaults, tmux topology, and hook setup.
+[`examples/config.toml`](examples/config.toml) is the annotated starter — projects, observer tuning, harness defaults, tmux topology, hooks, and the native `[workspace]` UI settings. For the field-by-field reference (every section, defaults, the project-local file, and environment variables), see [docs/configuration.md](docs/configuration.md).
 
 ---
 
