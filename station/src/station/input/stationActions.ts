@@ -281,6 +281,10 @@ export function openNewSessionForProject(store: StoreApi<TuiStore>, projectId: s
   if (snapshot === undefined) {
     return;
   }
+  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
+  if (project === undefined || project.health.status === "unavailable") {
+    return;
+  }
   const flow = createNewSessionFlow(snapshot, createNewSessionNameToken(), projectId);
   if (flow === undefined) {
     return;

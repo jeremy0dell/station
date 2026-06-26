@@ -285,7 +285,7 @@ function fromPaneTarget(target: OpenPaneTarget | undefined): StationMouseOutcome
  * hosts the agent), `none` (no project / unavailable) is an inert click.
  */
 function fromQuickSessionSubmit(
-  result: Awaited<ReturnType<typeof resolveQuickSessionSubmit>>,
+  result: ReturnType<typeof resolveQuickSessionSubmit>,
 ): StationMouseOutcome {
   if (result.kind === "submit") {
     return {
