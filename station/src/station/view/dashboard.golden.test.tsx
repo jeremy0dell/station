@@ -164,8 +164,9 @@ describe("dashboard golden frames", () => {
     const frame = setup.captureCharFrame();
     // Status glyphs and labels from the parity checklist.
     expect(frame).toContain("! hook-scope");
-    // The constraint solver truncates meaningful activity text at 80 cols.
-    expect(frame).toContain("Agent needs app…");
+    // Activity claims the row slack but is still bounded by the right-hand
+    // metadata, so meaningful text truncates (later than before) at 80 cols.
+    expect(frame).toContain("Agent needs appro…");
     expect(frame).toContain("⠋ pr-info");
     expect(frame).toContain("? metadata-refresh");
     expect(frame).toContain("x done-run");

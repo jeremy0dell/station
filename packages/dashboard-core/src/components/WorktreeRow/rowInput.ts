@@ -40,6 +40,9 @@ export function worktreeRowGridInput({
     agent: row.agent?.harness ?? "-",
     activity: activity.text,
     activityImportance: activity.importance,
+    // Let the status claim the row's trailing slack so it stretches to the end
+    // instead of truncating while empty space remains, matching transient rows.
+    activityOverflow: "rowSlack",
     metadataGroups: metadataGroups(row),
   };
   if (ready) {
