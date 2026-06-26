@@ -33,21 +33,21 @@ exports[`dashboard golden frames renders many-projects at 120x40 1`] = `
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
                                                                                                                         
 ▼ station - 5 worktrees | codex                                                                                   [+sh] 
- [1] ○ cli-help-man                      codex     idle                                              +14 -6 #70 ✓ [+sh] 
- [2] - docs-cleanup                      -         no agent                                                       [+sh] 
- [3] ○ pty-buffer                        codex     idle                                                     #73 ✓ [+sh] 
- [4] + session-resume                    codex     starting                                                       [+sh] 
- [5] ⠋ station-overlay                   codex     working                                         +412 -96 #76 … [+sh] 
+ [1] ○ cli-help-man                              codex     idle                                      +14 -6 #70 ✓ [+sh] 
+ [2] - docs-cleanup                              -         no agent                                               [+sh] 
+ [3] ○ pty-buffer                                codex     idle                                             #73 ✓ [+sh] 
+ [4] + session-resume                            codex     starting                                               [+sh] 
+ [5] ⠋ station-overlay                           codex     working                                 +412 -96 #76 … [+sh] 
                                                                                                                         
 ▼ observer - 3 worktrees | opencode                                                                               [+sh] 
- [6] x batch-export                      opencode  exited                                                    #8 ✓ [+sh] 
- [7] ⠋ provider-hooks                    opencode  working                                           +32 -8 #16 … [+sh] 
- [8] ○ trace-bundle                      opencode  idle                                                +1 -1 #4 ✓ [+sh] 
+ [6] x batch-export                              opencode  exited                                            #8 ✓ [+sh] 
+ [7] ⠋ provider-hooks                            opencode  working                                   +32 -8 #16 … [+sh] 
+ [8] ○ trace-bundle                              opencode  idle                                        +1 -1 #4 ✓ [+sh] 
                                                                                                                         
 ▼ scripts - 3 worktrees | opencode                                                                                [+sh] 
- [9] ○ api-cache                         opencode  idle                                              +14 -6 #5 x1 [+sh] 
- [a] ? metadata-refresh                  opencode  unknown                                              +3 -1 #10 [+sh] 
- [b] - old-experiment                    -         no agent                                                       [+sh] 
+ [9] ○ api-cache                                 opencode  idle                                      +14 -6 #5 x1 [+sh] 
+ [a] ? metadata-refresh                          opencode  unknown                                      +3 -1 #10 [+sh] 
+ [b] - old-experiment                            -         no agent                                               [+sh] 
                                                                                                                         
 ▼ empty-project - 0 worktrees | codex                                                                             [+sh] 
  0 worktrees                                                                                                            
@@ -113,14 +113,14 @@ exports[`dashboard golden frames renders attention-and-failures at 80x24 1`] = `
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station - 4 worktrees | codex                                           [+sh] 
- [1] ! hook-scope               codex     Agent needs app…   +8 -2 #12 x2 [+sh] 
+ [1] ! hook-scope               codex     Agent needs appro… +8 -2 #12 x2 [+sh] 
  [2] ? metadata-refresh         codex     unknown                   +3 -1 [+sh] 
  [3] ! popup-latency            codex     No progress was… +120 -44 #13 … [+sh] 
  [4] ⠋ pr-info                  codex     working                   #11 ✓ [+sh] 
                                                                                 
 ▼ observer - 2 worktrees | opencode                                       [+sh] 
  [5] x done-run                 opencode  exited                          [+sh] 
- [6] ! sqlite-cleanup           opencode  Agent needs app…   +19 -2 #6 x1 [+sh] 
+ [6] ! sqlite-cleanup           opencode  Agent needs appro… +19 -2 #6 x1 [+sh] 
                                                                                 
                                                                                 
                                                                                 
@@ -141,14 +141,14 @@ exports[`dashboard golden frames renders attention-and-failures at 120x40 1`] = 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
                                                                                                                         
 ▼ station - 4 worktrees | codex                                                                                   [+sh] 
- [1] ! hook-scope                        codex     Agent needs app…                                  +8 -2 #12 x2 [+sh] 
- [2] ? metadata-refresh                  codex     unknown                                                  +3 -1 [+sh] 
- [3] ! popup-latency                     codex     No progress was…                                +120 -44 #13 … [+sh] 
- [4] ⠋ pr-info                           codex     working                                                  #11 ✓ [+sh] 
+ [1] ! hook-scope                                codex     Agent needs approval.                     +8 -2 #12 x2 [+sh] 
+ [2] ? metadata-refresh                          codex     unknown                                          +3 -1 [+sh] 
+ [3] ! popup-latency                             codex     No progress was observed recently.      +120 -44 #13 … [+sh] 
+ [4] ⠋ pr-info                                   codex     working                                          #11 ✓ [+sh] 
                                                                                                                         
 ▼ observer - 2 worktrees | opencode                                                                               [+sh] 
- [5] x done-run                          opencode  exited                                                         [+sh] 
- [6] ! sqlite-cleanup                    opencode  Agent needs app…                                  +19 -2 #6 x1 [+sh] 
+ [5] x done-run                                  opencode  exited                                                 [+sh] 
+ [6] ! sqlite-cleanup                            opencode  Agent needs approval.                     +19 -2 #6 x1 [+sh] 
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -185,14 +185,14 @@ exports[`dashboard golden frames renders attention-and-failures at 60x16 1`] = `
 ─────────────────────────────────────────────────────────── 
                                                             
 ▼ station - 4 worktrees | codex                       [+sh] 
- [1] ! ho…  codex     Agent needs app…   +8 -2 #12 x2 [+sh] 
+ [1] ! ho…  codex     Agent needs appro… +8 -2 #12 x2 [+sh] 
  [2] ? me…  codex     unknown                   +3 -1 [+sh] 
  [3] ! po…  codex     No progress was… +120 -44 #13 … [+sh] 
  [4] ⠋ pr…  codex     working                   #11 ✓ [+sh] 
                                                             
 ▼ observer - 2 worktrees | opencode                   [+sh] 
  [5] x do…  opencode  exited                          [+sh] 
- [6] ! sq…  opencode  Agent needs app…   +19 -2 #6 x1 [+sh] 
+ [6] ! sq…  opencode  Agent needs appro… +19 -2 #6 x1 [+sh] 
                                                             
                                                             
 ─────────────────────────────────────────────────────────── 
