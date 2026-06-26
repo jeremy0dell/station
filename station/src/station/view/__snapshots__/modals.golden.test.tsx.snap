@@ -131,7 +131,7 @@ exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 ┌────────────────────────────────────────────┐                            [+sh] 
 │ Remove session?                            │idle           +14 -6 #5 x1 [+sh] 
 │ Session  cli-help-man                      │unknown           +3 -1 #10 [+sh] 
-│ Removes session, checkout, panes, and state│no agent                    [+sh] 
+│ Removes session, checkout, and panes.      │no agent                    [+sh] 
 │                                            │                                  
 │ Yes (y)     No (n)                         │                            [+sh] 
 │ Esc/Enter:cancel                           │                                  

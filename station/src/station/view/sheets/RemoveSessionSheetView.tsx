@@ -87,7 +87,7 @@ function removeHint(screen: RemoveScreen): string {
   if (screen.name === "removeSession") {
     return "Removes the session; checkout stays.";
   }
-  return "Removes session, checkout, panes, and state.";
+  return "Removes session, checkout, and panes.";
 }
 
 function compactSheetWidth(columns: number): number {

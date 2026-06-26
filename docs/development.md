@@ -14,7 +14,8 @@ Status: current living doc for development, test, and documentation workflow.
 - `pnpm stn` opens the normal station popup from the current checkout's built CLI when run inside tmux.
 - `pnpm stn tui` opens the normal station TUI fullscreen from the current checkout's built CLI.
 - Normal tmux popup fast-path registrations are scoped to the checkout root that created them. A popup launcher from another checkout ignores and clears stale normal popup metadata before falling back to that checkout's CLI.
-- `pnpm station:tui-dev` starts the live-rebuilding dev TUI for the checkout where it is run. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
+- `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
+- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
 
