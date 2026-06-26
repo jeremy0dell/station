@@ -10,7 +10,13 @@
 // mouse reach the same Station managed-launch path.
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
-import { choiceValueByKey, selectDashboardViewport } from "@station/dashboard-core";
+import {
+  choiceValueByKey,
+  createNewSessionFlow,
+  createNewSessionNameToken,
+  generatedSessionBranch,
+  selectDashboardViewport,
+} from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
 import { validateNewSessionCreate } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
@@ -231,6 +237,55 @@ export function resolveKeyNewSessionSubmit(
     return { kind: "none" };
   }
   return resolveNewSessionSubmit(store);
+}
+
+/**
+ * Resolve a project header's quick-session click to its create target. Uses
+ * the project's default harness and a generated branch name — no wizard, no
+ * review screen. Returns `none` if the project is unavailable or missing, so
+ * the click is an inert miss.
+ */
+export type QuickSessionSubmitTarget =
+  | { kind: "submit"; projectId: string; branch: string; harness: ProviderId }
+  | { kind: "none" };
+
+export function resolveQuickSessionSubmit(
+  store: StoreApi<TuiStore>,
+  projectId: string,
+): QuickSessionSubmitTarget {
+  const snapshot = store.getState().snapshot;
+  if (snapshot === undefined) {
+    return { kind: "none" };
+  }
+  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
+  if (project === undefined || project.health.status === "unavailable") {
+    return { kind: "none" };
+  }
+  const branch = generatedSessionBranch(project.id, createNewSessionNameToken());
+  return {
+    kind: "submit",
+    projectId: project.id,
+    branch,
+    harness: project.defaults.harness,
+  };
+}
+
+/**
+ * Open the New Session wizard with the given project pre-selected (skips the
+ * project-picker step, lands on the review screen). Pure store mutation —
+ * no router outcome. Absent or unavailable projects are silently ignored.
+ */
+export function openNewSessionForProject(store: StoreApi<TuiStore>, projectId: string): void {
+  const state = store.getState();
+  const snapshot = state.snapshot;
+  if (snapshot === undefined) {
+    return;
+  }
+  const flow = createNewSessionFlow(snapshot, createNewSessionNameToken(), projectId);
+  if (flow === undefined) {
+    return;
+  }
+  store.setState({ ...state, screen: { name: "newSession", flow } });
 }
 
 /**
