@@ -665,7 +665,6 @@ describe("contract schemas", () => {
       "session.acknowledgeTurn",
       "session.close",
       "session.create",
-      "session.remove",
       "session.rename",
       "session.resumeAgent",
       "session.sendPrompt",

@@ -31,11 +31,6 @@ export type RenameSessionCommandInput = {
   title: string;
 };
 
-export type RemoveSessionCommandInput = {
-  sessionId: SessionId;
-  force: boolean;
-};
-
 export type BuildFocusCommandOptions = {
   origin?: TerminalFocusOrigin;
 };
@@ -134,22 +129,6 @@ export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): St
   }
   return {
     type: "worktree.remove",
-    payload,
-  };
-}
-
-export function buildRemoveSessionCommand(
-  input: RemoveSessionCommandInput,
-): Extract<StationCommand, { type: "session.remove" }> {
-  const payload: Extract<StationCommand, { type: "session.remove" }>["payload"] = {
-    sessionId: input.sessionId,
-    removeWorktree: false,
-  };
-  if (input.force) {
-    payload.force = true;
-  }
-  return {
-    type: "session.remove",
     payload,
   };
 }

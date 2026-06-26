@@ -12,7 +12,6 @@ import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
 import { createSessionCloseHandler } from "./session/close.js";
 import { createSessionCreateHandler } from "./session/create.js";
-import { createSessionRemoveHandler } from "./session/remove.js";
 import { createSessionRenameHandler } from "./session/rename.js";
 import { createSessionResumeAgentHandler } from "./session/resumeAgent.js";
 import type { SessionCommandIdFactory } from "./session/shared.js";
@@ -124,17 +123,6 @@ export function registerObserverCommandHandlers(
     }),
   );
   options.queue.registerHandler(
-    "session.remove",
-    createSessionRemoveHandler({
-      providers: options.providers,
-      core: options.core,
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-    }),
-  );
-  options.queue.registerHandler(
     "session.rename",
     createSessionRenameHandler({
       core: options.core,
@@ -204,7 +192,6 @@ export function registerObserverCommandHandlers(
       "session.startAgent",
       "session.resumeAgent",
       "session.close",
-      "session.remove",
       "session.rename",
       "session.acknowledgeTurn",
       "worktree.create",

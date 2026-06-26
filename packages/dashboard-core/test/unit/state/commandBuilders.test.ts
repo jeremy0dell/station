@@ -2,7 +2,6 @@ import {
   buildCleanupCommand,
   buildCreateSessionCommand,
   buildFocusCommand,
-  buildRemoveSessionCommand,
   buildRenameSessionCommand,
   buildResumeAgentCommand,
   buildSendPromptCommand,
@@ -148,17 +147,6 @@ describe("TUI command builders", () => {
       payload: {
         sessionId: "ses_wt_web_idle",
         title: "Readable feature task",
-      },
-    });
-  });
-
-  it("builds session.remove while preserving the worktree checkout", () => {
-    expect(buildRemoveSessionCommand({ sessionId: "ses_wt_web_idle", force: true })).toEqual({
-      type: "session.remove",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        removeWorktree: false,
-        force: true,
       },
     });
   });

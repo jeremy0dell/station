@@ -151,16 +151,6 @@ export const CloseSessionPayloadSchema = z
 
 export type CloseSessionPayload = z.infer<typeof CloseSessionPayloadSchema>;
 
-export const RemoveSessionPayloadSchema = z
-  .object({
-    sessionId: SessionIdSchema,
-    removeWorktree: z.boolean(),
-    force: z.boolean().optional(),
-  })
-  .strict();
-
-export type RemoveSessionPayload = z.infer<typeof RemoveSessionPayloadSchema>;
-
 export const SendPromptPayloadSchema = z
   .object({
     sessionId: SessionIdSchema,
@@ -233,7 +223,6 @@ export const StationCommandTypeSchema = z.enum([
   "terminal.focus",
   "terminal.close",
   "session.close",
-  "session.remove",
   "session.sendPrompt",
   "session.rename",
   "session.acknowledgeTurn",
@@ -275,10 +264,6 @@ export const CloseSessionCommandSchema = z
   .object({ type: z.literal("session.close"), payload: CloseSessionPayloadSchema })
   .strict();
 
-export const RemoveSessionCommandSchema = z
-  .object({ type: z.literal("session.remove"), payload: RemoveSessionPayloadSchema })
-  .strict();
-
 export const SendPromptCommandSchema = z
   .object({ type: z.literal("session.sendPrompt"), payload: SendPromptPayloadSchema })
   .strict();
@@ -316,7 +301,6 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   TerminalFocusCommandSchema,
   TerminalCloseCommandSchema,
   CloseSessionCommandSchema,
-  RemoveSessionCommandSchema,
   SendPromptCommandSchema,
   RenameSessionCommandSchema,
   AcknowledgeTurnCommandSchema,

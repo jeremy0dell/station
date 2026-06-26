@@ -69,11 +69,11 @@ export function selectActivePaneTree(
 }
 
 /**
- * The pane ids sharing a session (forest tree) with `paneId`, including it.
- * Empty when the pane is absent. Lets `closePane` retarget focus to a survivor
- * in the closed pane's own session rather than jumping to another worktree's.
+ * The pane ids sharing a forest tree (one session's work area) with `paneId`,
+ * including it. Empty when the pane is absent. Lets `closePane` retarget focus
+ * to a survivor in the closed pane's own tree rather than another worktree's.
  */
-export function sessionPaneIds(
+export function paneTreeIds(
   panes: readonly PaneRecord[],
   paneId: PaneId,
 ): ReadonlySet<PaneId> {

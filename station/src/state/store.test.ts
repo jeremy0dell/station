@@ -524,7 +524,7 @@ describe("createStationStore", () => {
     expect(count()).toEqual(0);
   });
 
-  it("closeSession tears down the agent pane plus its splits and switches sessions", () => {
+  it("closePaneTree tears down the agent pane plus its splits and switches sessions", () => {
     const store = createStationStore({ boot: "empty" });
     store.actions.createPane("agent-1");
     store.actions.setPrimaryAgent("agent-1", { sessionId: "s1", terminalTargetId: "t1" });
@@ -532,7 +532,7 @@ describe("createStationStore", () => {
     store.actions.createPane("agent-2");
     store.actions.setPrimaryAgent("agent-2", { sessionId: "s2", terminalTargetId: "t2" });
 
-    store.actions.closeSession("agent-2");
+    store.actions.closePaneTree("agent-2");
 
     const state = store.getState();
     // The removed session's panes are gone; session 1 (agent + its shell) stays.
@@ -541,7 +541,7 @@ describe("createStationStore", () => {
     expect(state.input.focus).toEqual({ kind: "pane", paneId: "agent-1" });
   });
 
-  it("closeSession removes every split pane sharing the session's forest tree", () => {
+  it("closePaneTree removes every split pane sharing the session's forest tree", () => {
     const store = createStationStore({ boot: "empty" });
     store.actions.createPane("agent-1");
     store.actions.setPrimaryAgent("agent-1", { sessionId: "s1", terminalTargetId: "t1" });
@@ -550,7 +550,7 @@ describe("createStationStore", () => {
     store.actions.setPrimaryAgent("agent-2", { sessionId: "s2", terminalTargetId: "t2" });
 
     // Removing the non-active session leaves the active one untouched.
-    store.actions.closeSession("agent-1");
+    store.actions.closePaneTree("agent-1");
 
     const state = store.getState();
     expect(state.workspace.panes.map((pane) => pane.id)).toEqual(["agent-2"]);
@@ -558,12 +558,12 @@ describe("createStationStore", () => {
     expect(state.input.focus).toEqual({ kind: "pane", paneId: "agent-2" });
   });
 
-  it("closeSession of the only session clears active and lands on welcome", () => {
+  it("closePaneTree of the only session clears active and lands on welcome", () => {
     const store = createStationStore({ boot: "empty" });
     store.actions.createPane("agent-1");
     store.actions.setPrimaryAgent("agent-1", { sessionId: "s1", terminalTargetId: "t1" });
 
-    store.actions.closeSession("agent-1");
+    store.actions.closePaneTree("agent-1");
 
     const state = store.getState();
     expect(state.workspace.panes).toEqual([]);
@@ -571,7 +571,7 @@ describe("createStationStore", () => {
     expect(state.input.focus).toEqual({ kind: "welcome" });
   });
 
-  it("closeSession switches to a surviving session that still has an agent", () => {
+  it("closePaneTree switches to a surviving session that still has an agent", () => {
     const store = createStationStore({ boot: "empty" });
     store.actions.createPane("shell-x"); // a shell-only session survivor
     store.actions.createPane("agent-y");
@@ -579,15 +579,15 @@ describe("createStationStore", () => {
     store.actions.createPane("agent-z");
     store.actions.setPrimaryAgent("agent-z", { sessionId: "s-z", terminalTargetId: "t-z" });
 
-    store.actions.closeSession("agent-z");
+    store.actions.closePaneTree("agent-z");
 
     // Prefers the agent session over the earlier shell-only survivor.
     expect(store.getState().workspace.activePaneId).toEqual("agent-y");
   });
 
-  it("closeSession is a silent no-op for an unknown pane", () => {
+  it("closePaneTree is a silent no-op for an unknown pane", () => {
     const { store, count } = createCountingStore();
-    store.actions.closeSession("pane-unknown");
+    store.actions.closePaneTree("pane-unknown");
     expect(count()).toEqual(0);
   });
 

@@ -185,6 +185,36 @@ export function SheetSectionLine({ width, children }: { width: number; children:
   );
 }
 
+/** The Yes/No confirm row shared by the bottom-sheet confirm dialogs. */
+export function SheetConfirmButtons({ width }: { width: number }) {
+  const gap = width >= 22 ? 2 : 0;
+  const buttonWidth = Math.max(1, Math.min(10, Math.floor((width - gap) / 2)));
+  return (
+    <box flexDirection="row" width={width}>
+      <SheetButton
+        label="Yes"
+        shortcut="y"
+        tone="success"
+        fixedWidth={buttonWidth}
+        mouseTarget={{ kind: "sheetButton", key: "y" }}
+      />
+      {gap > 0 ? <text>{spaces(gap)}</text> : null}
+      <SheetButton
+        label="No"
+        shortcut="n"
+        tone="danger"
+        fixedWidth={buttonWidth}
+        mouseTarget={{ kind: "sheetButton", key: "n" }}
+      />
+    </box>
+  );
+}
+
+/** Width for the compact bottom-sheet confirm dialogs (capped at 46 columns). */
+export function compactSheetWidth(columns: number): number {
+  return Math.min(Math.max(1, Math.floor(columns)), 46);
+}
+
 /** Index-selected picker line (the add-project flow's cursor-driven lists). */
 export function SheetPickerLine({
   width,

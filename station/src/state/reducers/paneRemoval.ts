@@ -4,8 +4,8 @@ import { fallbackFocus } from "./paneFocus.js";
 
 /**
  * The input slice after a pane removal, shared by closePane (one pane) and
- * closeSession (a whole session tree). `workspace` is the post-removal
- * panes+active; `isRemoved` reports whether a pane id was part of the removal.
+ * closePaneTree (a whole tree). `workspace` is the post-removal panes+active;
+ * `isRemoved` reports whether a pane id was part of the removal.
  */
 export function inputAfterPaneRemoval(
   state: StationState,

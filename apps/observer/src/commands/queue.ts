@@ -344,7 +344,6 @@ function commandScope(command: StationCommand): string {
     case "terminal.close":
       return terminalCommandScope(command.payload);
     case "session.close":
-    case "session.remove":
     case "session.sendPrompt":
     case "session.rename":
     case "session.acknowledgeTurn":

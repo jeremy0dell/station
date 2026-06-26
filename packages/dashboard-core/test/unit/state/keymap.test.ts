@@ -4,7 +4,6 @@ import {
   deriveTuiInputMode,
   handleTuiKey,
   matchingTuiBindings,
-  openRemoveSessionConfirmForRow,
   TUI_KEYMAP,
   type TuiInputMode,
   type TuiTransition,
@@ -121,9 +120,6 @@ describe("tui keymap metadata", () => {
     for (const [mode, state] of Object.entries(states) as Array<[TuiInputMode, TuiState]>) {
       expect(`${mode}:${deriveTuiInputMode(state)}`).toBe(`${mode}:${mode}`);
     }
-    expect(
-      deriveTuiInputMode(openRemoveSessionConfirmForRow(dashboardState(), "wt_web_idle")),
-    ).toBe("removeConfirm");
   });
 
   it("documents every machine-handled key with exactly one binding", () => {

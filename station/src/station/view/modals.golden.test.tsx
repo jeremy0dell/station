@@ -6,7 +6,6 @@ import { testRender } from "@opentui/react/test-utils";
 import type { StoreApi } from "zustand/vanilla";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { TuiKey } from "@station/dashboard-core";
-import { openRemoveSessionConfirmForRow } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import { DashboardRoot } from "./DashboardRoot.js";
@@ -41,21 +40,12 @@ const CASES: ModalCase[] = [
   {
     name: "remove slot sheet",
     keys: [{ input: "X" }],
-    expect: ["Select session to remove", "Click a row or press slot key", "Esc:cancel"],
+    expect: ["Select session to delete", "Click a row or press slot key", "Esc:cancel"],
   },
   {
     name: "remove confirm sheet",
     keys: [{ input: "X" }, { input: "1" }],
-    expect: ["Remove session?", "Session", "cli-help-man", "Yes (y)", "No (n)"],
-  },
-  {
-    name: "remove session confirm sheet",
-    keys: [],
-    prepare: (store) => {
-      store.setState(openRemoveSessionConfirmForRow(store.getState(), "wt_station_idle"));
-    },
-    trimSnapshotTrailingWhitespace: true,
-    expect: ["Remove session?", "Session", "pty-buffer", "Yes (y)", "No (n)"],
+    expect: ["Delete session?", "Session", "cli-help-man", "Yes (y)", "No (n)"],
   },
   {
     name: "rename slot prompt",

@@ -155,7 +155,7 @@ describe("buildContextMenuItems", () => {
       },
       {
         id: "station.removeWorktree",
-        label: "Remove Worktree",
+        label: "Delete Session",
         danger: true,
         action: { kind: "removeWorktree", rowId: "wt_station_idle" },
       },
@@ -175,7 +175,7 @@ describe("buildContextMenuItems", () => {
     ).toEqual([
       {
         id: "station.removeWorktree",
-        label: "Remove Worktree",
+        label: "Delete Session",
         danger: true,
         action: { kind: "removeWorktree", rowId: "wt_station_none" },
       },

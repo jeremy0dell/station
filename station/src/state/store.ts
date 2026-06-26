@@ -11,7 +11,7 @@ import {
 } from "./types.js";
 import type { ContextMenuAnchor, ContextMenuTarget } from "../contextMenu/types.js";
 import { resolveInitialState, type StationStoreOptions } from "./initialState.js";
-import { sessionPaneIds } from "./paneTree.js";
+import { paneTreeIds } from "./paneTree.js";
 import { closeContextMenuState, openContextMenuState } from "./reducers/contextMenu.js";
 import { closeOverlayState, openOverlayState } from "./reducers/overlay.js";
 import { fallbackFocus, hasPane, withActivePane } from "./reducers/paneFocus.js";
@@ -37,11 +37,12 @@ export type StationStoreActions = {
   setPrimaryAgent(paneId: PaneId, identity: AgentIdentity): void;
   closePane(paneId: PaneId): void;
   /**
-   * Remove every pane in the session forest tree rooted at `agentPaneId`, then
-   * switch the active pane to a surviving session (preferring one with an agent)
-   * or null (welcome screen). For observer session removal. No-op when absent.
+   * Remove every pane in the forest tree rooted at `agentPaneId`, then switch
+   * the active pane to a surviving tree (preferring one with an agent) or null
+   * (welcome screen). This is the UI reaction to an observer *session removal*,
+   * driven by the sessionReaper — not a generic pane close. No-op when absent.
    */
-  closeSession(agentPaneId: PaneId): void;
+  closePaneTree(agentPaneId: PaneId): void;
   /**
    * Reveal an existing pane without spawning a duplicate; open overlays keep
    * focus and get this pane as their return target.
@@ -202,11 +203,11 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         // the whole session is gone fall back to an adjacent pane (the one that
         // shifts into the closed slot, else the previous one).
         const closedIndex = state.workspace.panes.findIndex((pane) => pane.id === paneId);
-        const sessionIds = sessionPaneIds(state.workspace.panes, paneId);
+        const treePaneIds = paneTreeIds(state.workspace.panes, paneId);
         const anchorId = closedPane.split?.anchorPaneId;
         const neighbor =
           (anchorId !== undefined ? panes.find((pane) => pane.id === anchorId) : undefined) ??
-          panes.find((pane) => sessionIds.has(pane.id)) ??
+          panes.find((pane) => treePaneIds.has(pane.id)) ??
           panes[closedIndex] ??
           panes[closedIndex - 1] ??
           null;
@@ -218,22 +219,22 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         const input = inputAfterPaneRemoval(state, workspace, (id) => id === paneId);
         setState({ ...state, workspace, input });
       },
-      closeSession: (agentPaneId) => {
-        const sessionIds = sessionPaneIds(state.workspace.panes, agentPaneId);
-        if (sessionIds.size === 0) {
+      closePaneTree: (agentPaneId) => {
+        const treePaneIds = paneTreeIds(state.workspace.panes, agentPaneId);
+        if (treePaneIds.size === 0) {
           return;
         }
         // Whole trees go at once, so no survivor anchors a closed pane: unlike
         // closePane, no split-anchor repair.
-        const panes = state.workspace.panes.filter((pane) => !sessionIds.has(pane.id));
+        const panes = state.workspace.panes.filter((pane) => !treePaneIds.has(pane.id));
         const survivor =
           panes.find((pane) => pane.role === "primary-agent") ?? panes[0] ?? null;
         const activePaneId =
-          state.workspace.activePaneId !== null && sessionIds.has(state.workspace.activePaneId)
+          state.workspace.activePaneId !== null && treePaneIds.has(state.workspace.activePaneId)
             ? (survivor?.id ?? null)
             : state.workspace.activePaneId;
         const workspace = { panes, activePaneId };
-        const input = inputAfterPaneRemoval(state, workspace, (id) => sessionIds.has(id));
+        const input = inputAfterPaneRemoval(state, workspace, (id) => treePaneIds.has(id));
         setState({ ...state, workspace, input });
       },
       focusPane: (paneId) => {
@@ -255,15 +256,15 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         if (activePaneId === null) {
           return;
         }
-        // Scope to the active pane's session (forest tree): the renderer shows
-        // one session full-screen, so a global cycle would switch sessions.
-        const sessionIds = sessionPaneIds(panes, activePaneId);
-        const sessionPanes = panes.filter((pane) => sessionIds.has(pane.id));
-        if (sessionPanes.length <= 1) {
+        // Scope to the active pane's forest tree: the renderer shows one
+        // session full-screen, so a global cycle would switch sessions.
+        const treePaneIds = paneTreeIds(panes, activePaneId);
+        const treePanes = panes.filter((pane) => treePaneIds.has(pane.id));
+        if (treePanes.length <= 1) {
           return;
         }
-        const currentIndex = sessionPanes.findIndex((pane) => pane.id === activePaneId);
-        const next = sessionPanes[(currentIndex + 1) % sessionPanes.length];
+        const currentIndex = treePanes.findIndex((pane) => pane.id === activePaneId);
+        const next = treePanes[(currentIndex + 1) % treePanes.length];
         if (next === undefined) {
           return;
         }

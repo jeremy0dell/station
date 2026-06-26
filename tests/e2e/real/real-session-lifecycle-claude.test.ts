@@ -136,10 +136,10 @@ describeReal("real Claude session lifecycle", () => {
       expect(focusResult.status).toBe("succeeded");
 
       const removeCommand: StationCommand = {
-        type: "session.remove",
+        type: "worktree.remove",
         payload: {
-          sessionId: row.agent?.sessionId ?? "",
-          removeWorktree: true,
+          worktreeId: row.id,
+          projectId: row.projectId,
           force: true,
         },
       };

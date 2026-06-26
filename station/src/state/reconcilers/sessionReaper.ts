@@ -1,4 +1,4 @@
-import { sessionPaneIds } from "../paneTree.js";
+import { paneTreeIds } from "../paneTree.js";
 import type { StationStore } from "../store.js";
 import type { PaneId } from "../types.js";
 
@@ -62,10 +62,10 @@ export function createSessionReaper(deps: SessionReaperDeps): () => void {
       if (liveSessionIds.has(sessionId)) {
         seenSessionIds.add(sessionId);
       } else if (seenSessionIds.delete(sessionId)) {
-        for (const paneId of sessionPaneIds(deps.store.getState().workspace.panes, pane.id)) {
+        for (const paneId of paneTreeIds(deps.store.getState().workspace.panes, pane.id)) {
           deps.killPane(paneId);
         }
-        deps.store.actions.closeSession(pane.id);
+        deps.store.actions.closePaneTree(pane.id);
       }
     }
   };

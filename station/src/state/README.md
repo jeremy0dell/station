@@ -21,7 +21,7 @@ registries (`terminal/`), never here.
 - **`selectors.ts`** — memo-safe scalar `select*` reads for
   `useSyncExternalStore` consumers.
 - **`paneTree.ts`** — pure render-tree derivation (`buildPaneForest`,
-  `selectActivePaneTree`, `sessionPaneIds`). Read-surface for both the view and
+  `selectActivePaneTree`, `paneTreeIds`). Read-surface for both the view and
   the store; stays at the root because `terminal/PaneGrid.tsx` imports it.
 
 ## reconcilers/ — source → store/registry bridges

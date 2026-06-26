@@ -1,9 +1,4 @@
-import {
-  createInitialTuiState,
-  handleTuiKey,
-  openRemoveSessionConfirmForRow,
-  openRenameEditForRow,
-} from "@station/dashboard-core";
+import { createInitialTuiState, handleTuiKey, openRenameEditForRow } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
   createCommandSnapshot,
@@ -364,103 +359,6 @@ describe("TUI screen transitions", () => {
     expect(openRenameEditForRow(search, "wt_web_idle")).toBe(search);
   });
 
-  it("opens remove-session confirmation for a dashboard row with a current session", () => {
-    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
-
-    const next = openRemoveSessionConfirmForRow(state, "wt_web_idle");
-
-    expect(next.screen).toEqual({
-      name: "removeSession",
-      rowId: "wt_web_idle",
-      sessionId: "ses_wt_web_idle",
-      forceRequired: true,
-      label: "fix-nav-mobile",
-    });
-  });
-
-  it("requires force for remove-session when only the session status is running", () => {
-    const snapshot = createDashboardSnapshot();
-    const sessionOnlySnapshot = {
-      ...snapshot,
-      rows: snapshot.rows.map((row) => {
-        if (row.id !== "wt_web_idle") {
-          return row;
-        }
-        const { agent: _agent, ...rowWithoutAgent } = row;
-        return rowWithoutAgent;
-      }),
-    };
-    const state = createInitialTuiState({ initialSnapshot: sessionOnlySnapshot });
-
-    const next = openRemoveSessionConfirmForRow(state, "wt_web_idle");
-    const transition = handleTuiKey(next, { input: "y" });
-
-    expect(next.screen).toMatchObject({
-      name: "removeSession",
-      rowId: "wt_web_idle",
-      sessionId: "ses_wt_web_idle",
-      forceRequired: true,
-    });
-    expect(transition.commands).toEqual([
-      {
-        type: "session.remove",
-        payload: {
-          sessionId: "ses_wt_web_idle",
-          removeWorktree: false,
-          force: true,
-        },
-      },
-    ]);
-  });
-
-  it("uses branch fallback for empty remove-session titles and preserves long titles", () => {
-    const snapshot = createDashboardSnapshot();
-    const emptyTitle = {
-      ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_exited" ? { ...session, title: "" } : session,
-      ),
-    };
-    const longTitle = "ship context menu session actions without changing pane behavior";
-    const longTitleSnapshot = {
-      ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_exited" ? { ...session, title: longTitle } : session,
-      ),
-    };
-
-    expect(
-      openRemoveSessionConfirmForRow(
-        createInitialTuiState({ initialSnapshot: emptyTitle }),
-        "wt_web_exited",
-      ).screen,
-    ).toMatchObject({
-      forceRequired: false,
-      label: "done-run",
-    });
-    expect(
-      openRemoveSessionConfirmForRow(
-        createInitialTuiState({ initialSnapshot: longTitleSnapshot }),
-        "wt_web_exited",
-      ).screen,
-    ).toMatchObject({
-      forceRequired: false,
-      label: longTitle,
-    });
-  });
-
-  it("guards direct remove-session confirmation off dashboard or without a session", () => {
-    const dashboard = createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") });
-    expect(openRemoveSessionConfirmForRow(dashboard, "missing")).toBe(dashboard);
-    expect(openRemoveSessionConfirmForRow(dashboard, "wt_web_no_agent")).toBe(dashboard);
-
-    const search = {
-      ...createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      screen: { name: "search", value: "" } as const,
-    };
-    expect(openRemoveSessionConfirmForRow(search, "wt_web_idle")).toBe(search);
-  });
-
   it("edits the rename draft at the cursor position", () => {
     const opened = handleTuiKey(
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
@@ -625,70 +523,6 @@ describe("TUI screen transitions", () => {
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
     expect(transition.commands).toBeUndefined();
-  });
-
-  it.each([
-    { input: "n" },
-    { input: "N" },
-    { input: "", escape: true },
-    { input: "\r", return: true },
-  ])("cancels remove-session confirmation without a command", (key) => {
-    const state = openRemoveSessionConfirmForRow(
-      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      "wt_web_idle",
-    );
-
-    const transition = handleTuiKey(state, key);
-
-    expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.commands).toBeUndefined();
-    expect(transition.operations).toBeUndefined();
-  });
-
-  it("confirms remove-session with y and preserves the worktree", () => {
-    const state = openRemoveSessionConfirmForRow(
-      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      "wt_web_idle",
-    );
-
-    const transition = handleTuiKey(state, { input: "y" });
-
-    expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.operations).toBeUndefined();
-    expect(transition.commands).toEqual([
-      {
-        type: "session.remove",
-        payload: {
-          sessionId: "ses_wt_web_idle",
-          removeWorktree: false,
-          force: true,
-        },
-      },
-    ]);
-  });
-
-  it("drops remove-session confirmation when the session disappears before confirm", () => {
-    const opened = openRemoveSessionConfirmForRow(
-      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      "wt_web_idle",
-    );
-    const state = {
-      ...opened,
-      snapshot:
-        opened.snapshot === undefined
-          ? undefined
-          : {
-              ...opened.snapshot,
-              sessions: opened.snapshot.sessions.filter(
-                (session) => session.id !== "ses_wt_web_idle",
-              ),
-            },
-    };
-
-    const transition = handleTuiKey(state, { input: "y" });
-
-    expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.operations).toBeUndefined();
   });
 
   it("opens new session from the dashboard and submits a session.create command", () => {
