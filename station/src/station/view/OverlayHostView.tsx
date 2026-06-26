@@ -7,6 +7,7 @@ import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
+import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 
 export type OverlayHostViewProps = {
   snapshot: StationSnapshot;
@@ -29,6 +30,9 @@ export function OverlayHostView({ snapshot, screen, columns, rows }: OverlayHost
   }
   if (screen.name === "renameSession" && screen.step === "editName") {
     return <RenameSessionSheetView columns={columns} rows={rows} state={screen} />;
+  }
+  if (screen.name === "removeWorktree" || screen.name === "removeSession") {
+    return <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
   }
   return null;
 }

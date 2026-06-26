@@ -868,7 +868,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
   });
 
-  it("opens the shared remove-worktree confirmation from a row context menu", () => {
+  it("opens the shared remove-session confirmation from a row context menu", () => {
     const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
@@ -881,7 +881,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       step: "confirm",
       rowId: "wt_station_idle",
       forceRequired: true,
-      label: "remove pty-buffer? Y/N",
+      label: "pty-buffer",
     });
   });
 

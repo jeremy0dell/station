@@ -120,6 +120,50 @@ describe("routeStationMouse", () => {
     expect(clicked.getState().screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
   });
 
+  it("confirms remove with the sheet yes button", () => {
+    const store = makeStore();
+    const rowId = "wt_station_working";
+    store.getState().handleKey({ input: "X" });
+    store.getState().handleKey({ input: slotForRow(store, rowId) });
+
+    const outcome = routeStationMouse({ kind: "sheetButton", key: "y" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.getState().localRows.pendingRemove).toMatchObject([
+      { localId: `remove:${rowId}`, worktreeId: rowId },
+    ]);
+  });
+
+  it("cancels remove with the sheet no button", () => {
+    const store = makeStore();
+    const rowId = "wt_station_working";
+    store.getState().handleKey({ input: "X" });
+    store.getState().handleKey({ input: slotForRow(store, rowId) });
+
+    const outcome = routeStationMouse({ kind: "sheetButton", key: "n" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.getState().localRows.pendingRemove).toEqual([]);
+  });
+
+  it("ignores sheet buttons outside remove confirm mode", () => {
+    const store = makeStore();
+    const before = store.getState().screen;
+
+    const outcome = routeStationMouse({ kind: "sheetButton", key: "y" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual(before);
+    expect(store.getState().localRows.pendingRemove).toEqual([]);
+
+    store.getState().handleKey({ input: "X" });
+    routeStationMouse({ kind: "sheetButton", key: "y" }, LEFT_DOWN, store);
+    expect(store.getState().screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+    expect(store.getState().localRows.pendingRemove).toEqual([]);
+  });
+
   it("ignores row clicks in text-input modes", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "/" });

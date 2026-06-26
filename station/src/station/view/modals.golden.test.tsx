@@ -39,23 +39,23 @@ const CASES: ModalCase[] = [
     expect: ["collapse project:"],
   },
   {
-    name: "remove slot prompt",
+    name: "remove slot sheet",
     keys: [{ input: "X" }],
-    expect: ["remove slot:"],
+    expect: ["Select session to remove", "Click a row or press slot key", "Esc:cancel"],
   },
   {
-    name: "remove confirm prompt",
+    name: "remove confirm sheet",
     keys: [{ input: "X" }, { input: "1" }],
-    expect: ["confirm remove", "Y/N"],
+    expect: ["Remove session?", "Session", "cli-help-man", "Yes (y)", "No (n)"],
   },
   {
-    name: "remove session confirm prompt",
+    name: "remove session confirm sheet",
     keys: [],
     prepare: (store) => {
       store.setState(openRemoveSessionConfirmForRow(store.getState(), "wt_station_idle"));
     },
     trimSnapshotTrailingWhitespace: true,
-    expect: ["confirm remove session pty-buffer? Y/N"],
+    expect: ["Remove session?", "Session", "pty-buffer", "Yes (y)", "No (n)"],
   },
   {
     name: "rename slot prompt",
