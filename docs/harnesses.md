@@ -93,9 +93,9 @@ Coverage: minimal. Crush exposes no completion signal (`integrations/harness/cru
 Every harness except Pi is wired up the same way:
 
 ```sh
-stn hooks doctor <harness>     # is the hook installed and current?
-stn hooks install <harness>    # write or update the hook
-stn hooks uninstall <harness>  # remove it
+stn hooks doctor <harness>           # is the hook installed and current?
+stn hooks install <harness> --yes    # write or update the hook
+stn hooks uninstall <harness> --yes  # remove it
 ```
 
 `<harness>` is one of `claude`, `codex`, `cursor`, `opencode`, or `crush`. Pi needs no install step because its extension loads in-process. `stn doctor` reports the status of every configured harness.

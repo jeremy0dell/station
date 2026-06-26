@@ -18,6 +18,8 @@ registries (`terminal/`), never here.
     active-pane/focus primitives the other reducers build on.
   - `overlay.ts` — open/close overlay transitions.
   - `contextMenu.ts` — open/close context menu + `focusAfterContextMenu`.
+  - `paneRemoval.ts` — `inputAfterPaneRemoval`: focus/input transition after a
+    pane is removed.
 - **`selectors.ts`** — memo-safe scalar `select*` reads for
   `useSyncExternalStore` consumers.
 - **`paneTree.ts`** — pure render-tree derivation (`buildPaneForest`,

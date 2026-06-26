@@ -230,10 +230,9 @@ export function observerHeaderStatusForConnection(
 export type CommandPromptLine = { text: string; color: "yellow" | "red" };
 
 /**
- * The prompt line per screen (the special-cased rename-slot and
- * remove-confirm lines plus textPromptForScreen below), flattened to
- * text+color so render adapters only render. Lives beside
- * commandPromptRows, which guards the same screens.
+ * The prompt line per screen (the special-cased rename-slot line plus
+ * textPromptForScreen below), flattened to text+color so render adapters
+ * only render. Lives beside commandPromptRows, which guards the same screens.
  */
 export function commandPromptLineForScreen(screen: TuiScreen): CommandPromptLine | undefined {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {

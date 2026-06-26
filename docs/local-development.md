@@ -201,7 +201,7 @@ cd station && bun run station
 
 ### Hot-reloading Station UI while you develop
 
-To see UI changes live, run the **`dev`** script (`bun --hot`) instead of
+To see UI changes live, run **`pnpm station:ui-dev`** (`bun --hot`) instead of
 `station`, **from the worktree you're editing** — it hot-reloads your edits and
 still connects to your real observer by default:
 ```bash
@@ -213,7 +213,7 @@ against the same observer your global build started — edit a component / layou
 input file and it reloads in place. The split:
 
 - **Station UI** (`station/src/**`) → hot-reloads from
-  the worktree you run `bun run dev` in.
+  the worktree you run `pnpm station:ui-dev` in.
 - **Observer / providers / persistent host / protocol+contracts** → run from the
   *built* checkout the observer was started from. Changes there need
   `pnpm build` + `stn observer restart`. (If you change the protocol/contracts,
