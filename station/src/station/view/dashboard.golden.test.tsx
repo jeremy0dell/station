@@ -173,8 +173,8 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("✓");
     expect(frame).toContain("…");
     // Project headers with the disclosure marker and harness suffix.
-    expect(frame).toContain("▼ station - 4 worktrees | codex");
-    expect(frame).toContain("▼ observer - 2 worktrees | opencode");
+    expect(frame).toContain("▼ station - 4 worktrees");
+    expect(frame).toContain("▼ observer - 2 worktrees");
   });
 
   it("colors alert rows red and check glyphs by state", async () => {
