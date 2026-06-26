@@ -14,9 +14,11 @@ import {
   dispatchBindingClick,
   dispatchRowSlot,
   dispatchStationKey,
+  openNewSessionForProject,
   representativeKeyForBinding,
   resolveNewSessionSubmit,
   resolveProjectPaneTarget,
+  resolveQuickSessionSubmit,
   resolveRowAgentTarget,
   resolveRowPaneTarget,
   scrollStationView,
@@ -35,12 +37,18 @@ export type StationMouseTarget =
   | { kind: "openShellForRow"; rowId: string }
   /** The `[+sh]` affordance on a project header: open a shell in its root. */
   | { kind: "openShellForProject"; projectId: string }
+  /** The `[+]` quick-session affordance on a project header. */
+  | { kind: "quickSessionForProject"; projectId: string }
+  /** The `[▾]` harness-picker affordance on a project header. */
+  | { kind: "showHarnessPickerForProject"; projectId: string }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "footerHint"; bindingId: string }
   | { kind: "toast" }
   /** A picker line inside a sheet; the key is the line's slot accelerator. */
   | { kind: "sheetChoice"; choiceKey: string }
+  /** A compact sheet button that dispatches its visible shortcut key. */
+  | { kind: "sheetButton"; key: "y" | "n" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
   | { kind: "sheetBackdrop" };
 
@@ -146,6 +154,17 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromPaneTarget(resolveProjectPaneTarget(store, target.projectId));
+    case "quickSessionForProject":
+      if (mode !== "dashboard") {
+        return { kind: "handled" };
+      }
+      return fromQuickSessionSubmit(resolveQuickSessionSubmit(store, target.projectId));
+    case "showHarnessPickerForProject":
+      if (mode !== "dashboard") {
+        return { kind: "handled" };
+      }
+      openNewSessionForProject(store, target.projectId);
+      return { kind: "handled" };
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
@@ -180,6 +199,11 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.choiceKey }));
+    case "sheetButton":
+      if (mode !== "removeConfirm") {
+        return { kind: "handled" };
+      }
+      return fromKeyOutcome(dispatchStationKey(store, { input: target.key }));
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };
@@ -253,6 +277,25 @@ function fromPaneTarget(target: OpenPaneTarget | undefined): StationMouseOutcome
     outcome.worktreeId = target.worktreeId;
   }
   return outcome;
+}
+
+/**
+ * Map a quick-session submit to an outcome: `submit` surfaces a
+ * `launch-new-session` router outcome (the executor creates the worktree and
+ * hosts the agent), `none` (no project / unavailable) is an inert click.
+ */
+function fromQuickSessionSubmit(
+  result: ReturnType<typeof resolveQuickSessionSubmit>,
+): StationMouseOutcome {
+  if (result.kind === "submit") {
+    return {
+      kind: "launch-new-session",
+      projectId: result.projectId,
+      branch: result.branch,
+      harness: result.harness,
+    };
+  }
+  return { kind: "handled" };
 }
 
 /**

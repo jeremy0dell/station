@@ -205,7 +205,7 @@ To see UI changes live, run the **`dev`** script (`bun --hot`) instead of
 `station`, **from the worktree you're editing** — it hot-reloads your edits and
 still connects to your real observer by default:
 ```bash
-cd <your-worktree>/station && bun run dev
+pnpm station:ui-dev
 ```
 There is no "push it to main to see it" step. The Station UI is a Bun process
 that talks to the observer over a socket, so a worktree's UI runs directly
@@ -240,7 +240,7 @@ still shows your real tmux agents — that is correct for testing the tmux
 integration (see the tmux gotcha in §1).
 
 > `pnpm dev` rebuilds the **Node CLI**, not the Bun renderer. To hot-reload the
-> Station UI itself as you edit `station/src/**`, use the `bun run dev` path in §2b.
+> Station UI itself as you edit `station/src/**`, use `pnpm station:ui-dev` from §2b.
 
 ---
 
