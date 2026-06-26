@@ -169,6 +169,22 @@ export function missingCursorHookEvents(
   );
 }
 
+export function generatedCursorHookCommands(
+  document: CursorHooksDocument,
+): Record<CursorHookEventName, string[]> {
+  const commands: Partial<Record<CursorHookEventName, string[]>> = {};
+  for (const eventName of CURSOR_HOOK_EVENT_NAMES) {
+    const eventCommands: string[] = [];
+    for (const entry of document.hooks?.[eventName] ?? []) {
+      if (entry.command !== undefined && commandLooksLikeGeneratedHookScript(entry.command)) {
+        eventCommands.push(entry.command);
+      }
+    }
+    commands[eventName] = eventCommands;
+  }
+  return commands as Record<CursorHookEventName, string[]>;
+}
+
 export function documentContainsCommand(document: CursorHooksDocument, command: string): boolean {
   if (document.hooks === undefined) {
     return false;

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
+import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 
 describe("CLI Claude hook commands", () => {
@@ -91,9 +92,14 @@ describe("CLI Claude hook commands", () => {
         },
       },
     });
-    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(
-      `/opt/stn-ingress --socket ${join(root, "run", "observer.sock")} --state-dir ${join(root, "state")} --spool-dir ${join(root, "state", "spool", "hooks")} --config`,
+    const script = await readFile(hookScriptPath, "utf8");
+    expect(providerHookScriptRoutesByStationEnv(script, "claude")).toBe(true);
+    expect(script).toContain(`SOCKET_ARG=(--socket ${join(root, "run", "observer.sock")})`);
+    expect(script).toContain(`STATE_DIR_ARG=(--state-dir ${join(root, "state")})`);
+    expect(script).toContain(
+      `SPOOL_DIR_ARG=(--spool-dir ${join(root, "state", "spool", "hooks")})`,
     );
+    expect(script).toContain(`CONFIG_ARG=(--config ${configPath})`);
     await expect(readFile(claudeSettingsPath, "utf8")).resolves.toContain('"hooks"');
     await expect(readFile(userSettingsPath, "utf8")).resolves.not.toContain(hookScriptPath);
 

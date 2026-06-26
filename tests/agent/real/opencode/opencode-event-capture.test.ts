@@ -172,11 +172,22 @@ describeRealOpenCode("real OpenCode event capture", () => {
           source: "harness_event",
         }),
       });
+      await api.reconcile("real-opencode-completion-spool");
+      await pollForOpenCodeReadiness(persistence);
       const snapshot = await core.reconcile("real-opencode-observed");
       expect(snapshot.rows[0]?.agent).toMatchObject({
         harness: "opencode",
         sessionId: "ses_real_opencode",
+        state: "idle",
+        turnReadiness: {
+          state: "ready_to_read",
+        },
       });
+      await expect(persistence.getSessionTurnReadiness("ses_real_opencode")).resolves.toMatchObject(
+        {
+          worktreeId: "wt_real_opencode",
+        },
+      );
     } catch (error) {
       await writeFailureBundle({
         config: testConfig,
@@ -251,6 +262,22 @@ async function pollForOpenCodeStatusObservation(
       return payload.status !== undefined;
     });
   }, "Observer did not ingest a status-bearing OpenCode plugin event.");
+}
+
+async function pollForOpenCodeReadiness(persistence: ReturnType<typeof createObserverPersistence>) {
+  return poll(async () => {
+    const observations = await persistence.listProviderObservations();
+    return observations.find((observation) => {
+      if (observation.provider !== "opencode" || observation.entityKind !== "harness_event") {
+        return false;
+      }
+      const payload = observation.payload as {
+        status?: { value?: unknown };
+        turn?: { kind?: unknown };
+      };
+      return payload.status?.value === "idle" && payload.turn?.kind === "turn_completed";
+    });
+  }, "Observer did not ingest a completed idle OpenCode plugin event.");
 }
 
 async function poll<T>(probe: () => Promise<T | false | undefined>, message: string): Promise<T> {

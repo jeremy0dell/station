@@ -115,6 +115,44 @@ describe("observer reconcile with Pi harness", () => {
         confidence: "medium",
       }),
     ]);
+
+    await expect(
+      api.reportHarnessEvent(
+        piHookPayloadToHarnessEventReport({
+          reportId: "report_pi_done",
+          eventType: "agent_end",
+          observedAt: "2026-05-27T12:00:02.000Z",
+          payload: {
+            event_type: "agent_end",
+            cwd: "/tmp/station/web/task",
+            pi_session_id: "pi_session_123",
+            station_project_id: "web",
+            station_worktree_id: "wt_web_task",
+            station_session_id: "ses_web_task",
+            station_terminal_target_id: "tmux:station:@1:%2",
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      status: "accepted",
+      projected: false,
+      scheduledReconcile: true,
+    });
+    const completedSnapshot = await core.reconcile("pi-done-reconcile");
+    expect(completedSnapshot.rows[0]?.agent).toMatchObject({
+      harness: "pi",
+      state: "idle",
+      turnReadiness: {
+        state: "ready_to_read",
+        token: "report_pi_done",
+        completedAt: "2026-05-27T12:00:02.000Z",
+      },
+    });
+    await expect(persistence.getSessionTurnReadiness("ses_web_task")).resolves.toMatchObject({
+      worktreeId: "wt_web_task",
+      token: "report_pi_done",
+      completedAt: "2026-05-27T12:00:02.000Z",
+    });
     sqlite.close();
   });
 });

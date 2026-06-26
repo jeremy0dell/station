@@ -10,10 +10,12 @@ import {
   type ProviderHookScriptOptions,
   planConfigScriptHook,
   providerHookScriptOptions,
+  providerHookScriptRoutesByStationEnv,
   uninstallConfigScriptHook,
 } from "@station/runtime";
 import {
   documentContainsCommand,
+  generatedCursorHookCommands,
   installCursorHookCommands,
   missingCursorHookEvents,
   parseJsonDocument,
@@ -119,6 +121,61 @@ function expectedCursorHookCommands(input: {
 
 function expectedCursorHookScript(input: CursorHookScriptOptions): string {
   return expectedProviderHookScript({ provider: "cursor", options: input });
+}
+
+async function sharedGeneratedHookPlan(
+  source: string,
+  options: CursorHookPlanOptions,
+): Promise<CursorHookDoctorResult | undefined> {
+  const document = parseJsonDocument(source);
+  const hookScriptPath = sharedGeneratedHookScriptPath(generatedCursorHookCommands(document));
+  if (hookScriptPath === undefined) {
+    return undefined;
+  }
+
+  const scriptBefore = await fileOps.readOptionalFile(hookScriptPath);
+  const expectedScript = expectedCursorHookScript(
+    providerHookScriptOptions(hookScriptPath, options),
+  );
+  if (
+    scriptBefore !== expectedScript &&
+    !providerHookScriptRoutesByStationEnv(scriptBefore, "cursor")
+  ) {
+    return undefined;
+  }
+
+  return {
+    provider: "cursor",
+    hooksPath: resolveCursorHooksPath(options),
+    hookScriptPath,
+    status: "ok",
+    installed: true,
+    missing: [],
+    commands: expectedCursorHookCommands({ hookScriptPath }),
+    message: "Cursor hooks are installed.",
+  };
+}
+
+function sharedGeneratedHookScriptPath(
+  commands: Record<CursorHookEventName, string[]>,
+): string | undefined {
+  let shared: string | undefined;
+  for (const eventName of CURSOR_HOOK_EVENT_NAMES) {
+    const eventCommands = commands[eventName];
+    if (eventCommands.length !== 1) {
+      return undefined;
+    }
+    const command = eventCommands[0];
+    if (command === undefined) {
+      return undefined;
+    }
+    if (shared === undefined) {
+      shared = command;
+    } else if (shared !== command) {
+      return undefined;
+    }
+  }
+  return shared;
 }
 
 export async function planCursorHooks(
@@ -227,6 +284,12 @@ export async function doctorCursorHooks(
 
   const plan = await planCursorHooks(options);
   const installed = plan.missing.length === 0 && !plan.configChanged && !plan.scriptChanged;
+  if (!installed) {
+    const shared = await sharedGeneratedHookPlan(plan.before, options);
+    if (shared !== undefined) {
+      return shared;
+    }
+  }
   return {
     provider: "cursor",
     hooksPath: plan.hooksPath,

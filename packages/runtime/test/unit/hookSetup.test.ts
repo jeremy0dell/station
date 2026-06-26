@@ -10,7 +10,10 @@ import {
   hookCommandsForEvents,
   installConfigScriptHook,
   planConfigScriptHook,
+  providerHookCommandArgs,
   providerHookCommandLine,
+  providerHookScriptOptions,
+  providerHookScriptRoutesByStationEnv,
   shellQuote,
   uninstallConfigScriptHook,
 } from "@station/runtime";
@@ -97,7 +100,8 @@ describe("runtime hookSetup", () => {
 
     it("reproduces each provider's exact redirect/suffix shape", () => {
       const plain = expectedProviderHookScript({ provider: "codex" });
-      expect(plain).toContain("stn-ingress codex > /dev/null\n");
+      expect(plain).toContain(`stn-ingress \${SOCKET_ARG[@]+"\${SOCKET_ARG[@]}"}`);
+      expect(plain).toContain("codex > /dev/null\n");
       expect(plain).not.toContain("|| true");
 
       const ignoreAndRedirect = expectedProviderHookScript({
@@ -105,12 +109,93 @@ describe("runtime hookSetup", () => {
         ignoreFailure: true,
         redirectStderr: true,
       });
-      expect(ignoreAndRedirect).toContain("stn-ingress claude > /dev/null 2>&1 || true\n");
+      expect(ignoreAndRedirect).toContain("claude > /dev/null 2>&1 || true\n");
 
       // The session/worktree ownership guard must survive: no env -> exit 0 before invoking.
       expect(plain).toContain("STATION_SESSION_ID");
       expect(plain).toContain("STATION_WORKTREE_ID");
       expect(plain).toContain("  exit 0");
+    });
+
+    it("builds provider-neutral ingress commands and generated scripts", () => {
+      const options = providerHookScriptOptions("/tmp/station hook.sh", {
+        stationConfigPath: "/tmp/station/config.toml",
+        observerSocketPath: "/tmp/station/run/observer.sock",
+        stateDir: "/tmp/station/state",
+        hookSpoolDir: "/tmp/station/state/spool/hooks",
+        autoStartFromHooks: false,
+        hookBin: "/usr/local/bin/stn-ingress",
+      });
+
+      expect(providerHookCommandArgs("codex", options, "PreToolUse")).toEqual([
+        "/usr/local/bin/stn-ingress",
+        "--socket",
+        "/tmp/station/run/observer.sock",
+        "--state-dir",
+        "/tmp/station/state",
+        "--spool-dir",
+        "/tmp/station/state/spool/hooks",
+        "--config",
+        "/tmp/station/config.toml",
+        "--no-auto-start",
+        "codex",
+        "PreToolUse",
+      ]);
+      expect(providerHookCommandLine("codex", options, "PreToolUse")).toBe(
+        "/usr/local/bin/stn-ingress --socket /tmp/station/run/observer.sock --state-dir /tmp/station/state --spool-dir /tmp/station/state/spool/hooks --config /tmp/station/config.toml --no-auto-start codex PreToolUse",
+      );
+      expect(
+        expectedProviderHookScript({
+          provider: "claude",
+          options,
+          ignoreFailure: true,
+          redirectStderr: true,
+        }),
+      ).toContain("claude > /dev/null 2>&1 || true");
+    });
+
+    it("routes generated hook scripts through runtime Station env before install fallbacks", () => {
+      const script = expectedProviderHookScript({
+        provider: "cursor",
+        options: {
+          stationConfigPath: "/tmp/stale/config.toml",
+          observerSocketPath: "/tmp/stale/observer.sock",
+          stateDir: "/tmp/stale/state",
+          hookSpoolDir: "/tmp/stale/spool/hooks",
+          hookBin: "/tmp/bin/stn-ingress",
+        },
+      });
+
+      expect(script).toContain(`if [ -n "\${STATION_OBSERVER_SOCKET_PATH:-}" ]; then`);
+      expect(script).toContain('  SOCKET_ARG=(--socket "$STATION_OBSERVER_SOCKET_PATH")');
+      expect(script).toContain("else\n  SOCKET_ARG=(--socket /tmp/stale/observer.sock)");
+      expect(script).toContain(`if [ -n "\${STATION_CONFIG_PATH:-}" ]; then`);
+      expect(script).toContain('  CONFIG_ARG=(--config "$STATION_CONFIG_PATH")');
+      expect(script).toContain("else\n  CONFIG_ARG=(--config /tmp/stale/config.toml)");
+      expect(script).toContain(`elif [ -z "\${STATION_CONFIG_PATH:-}" ]; then`);
+      expect(script).toContain("STATE_DIR_ARG=(--state-dir /tmp/stale/state)");
+      expect(script).toContain("SPOOL_DIR_ARG=(--spool-dir /tmp/stale/spool/hooks)");
+    });
+
+    it("recognizes generated scripts that route through runtime Station env", () => {
+      const script = expectedProviderHookScript({
+        provider: "cursor",
+        options: {
+          stationConfigPath: "/tmp/stale/config.toml",
+          observerSocketPath: "/tmp/stale/observer.sock",
+          stateDir: "/tmp/stale/state",
+          hookSpoolDir: "/tmp/stale/spool/hooks",
+        },
+      });
+
+      expect(providerHookScriptRoutesByStationEnv(script, "cursor")).toBe(true);
+      expect(providerHookScriptRoutesByStationEnv(script, "codex")).toBe(false);
+      expect(
+        providerHookScriptRoutesByStationEnv(
+          script.replaceAll("STATION_CONFIG_PATH", "STATION_OLD_CONFIG_PATH"),
+          "cursor",
+        ),
+      ).toBe(false);
     });
   });
 

@@ -93,6 +93,10 @@ export function normalizeOpenCodeRawEvent(
   if (status !== undefined) {
     observation.status = status;
   }
+  const turn = turnFromOpenCodeEvent(event);
+  if (turn !== undefined) {
+    observation.turn = turn;
+  }
   applyCorrelation(observation, correlation);
   if (compaction.omittedFieldNames.length > 0) {
     observation.diagnostics = harnessEventDiagnostics(event.event_type, {
@@ -131,6 +135,10 @@ export function openCodeHookPayloadToHarnessEventReport(
       : undefined;
   if (status !== undefined) {
     report.status = status;
+  }
+  const turn = turnFromOpenCodeEvent(event);
+  if (turn !== undefined) {
+    report.turn = turn;
   }
   const correlation = reportCorrelationFromOpenCodeEvent(event);
   if (correlation !== undefined) {
@@ -202,6 +210,12 @@ export function statusFromOpenCodeEvent(
     default:
       return undefined;
   }
+}
+
+function turnFromOpenCodeEvent(
+  event: OpenCodeCompactEvent,
+): HarnessEventReport["turn"] | undefined {
+  return event.event_type === "session.idle" ? { kind: "turn_completed" } : undefined;
 }
 
 function statusFromSessionStatus(

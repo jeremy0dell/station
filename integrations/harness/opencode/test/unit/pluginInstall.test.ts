@@ -1,4 +1,5 @@
 import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -151,6 +152,128 @@ describe("OpenCode plugin setup", () => {
       await expect(readdir(spoolDir)).rejects.toThrow();
     } finally {
       process.env = previousEnv;
+    }
+  });
+
+  it("synchronously spools completion events before async delivery settles", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
+    const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
+    const spoolDir = join(root, "spool");
+    await installOpenCodePlugin({
+      pluginPath,
+      observerSocketPath: join(root, "missing.sock"),
+      stateDir: join(root, "state"),
+      hookSpoolDir: spoolDir,
+    });
+
+    const previousEnv = { ...process.env };
+    try {
+      process.env.STATION_HARNESS_PROVIDER = "opencode";
+      process.env.STATION_WORKTREE_ID = "wt_1";
+      process.env.STATION_SESSION_ID = "ses_1";
+      process.env.STATION_HOOK_SPOOL_DIR = spoolDir;
+      process.env.STATION_OBSERVER_SOCKET_PATH = join(root, "missing.sock");
+      const moduleUrl = pathToFileURL(pluginPath);
+      moduleUrl.search = `v=${Date.now()}`;
+      const pluginModule = (await import(moduleUrl.href)) as {
+        StationObserverPlugin: (input: { directory: string; worktree: string }) => Promise<{
+          event: (input: { event: unknown }) => Promise<void>;
+        }>;
+      };
+
+      const plugin = await pluginModule.StationObserverPlugin({ directory: root, worktree: root });
+      const pending = plugin.event({
+        event: {
+          type: "session.idle",
+          properties: {
+            sessionID: "opencode_session_1",
+          },
+        },
+      });
+
+      const files = await readdir(spoolDir);
+      expect(files).toHaveLength(1);
+      const record = JSON.parse(await readFile(join(spoolDir, files[0] ?? ""), "utf8"));
+      expect(record).toMatchObject({
+        event: {
+          provider: "opencode",
+          kind: "harness",
+          event: "session.idle",
+          sessionId: "ses_1",
+          payload: {
+            event_type: "session.idle",
+            opencode_session_id: "opencode_session_1",
+          },
+        },
+      });
+      await pending;
+    } finally {
+      process.env = previousEnv;
+    }
+  });
+
+  it("removes pre-spooled completion events after successful delivery", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
+    const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
+    const spoolDir = join(root, "spool");
+    const socketPath = join(root, "observer.sock");
+    await installOpenCodePlugin({
+      pluginPath,
+      observerSocketPath: socketPath,
+      stateDir: join(root, "state"),
+      hookSpoolDir: spoolDir,
+    });
+    const server = createServer((socket) => {
+      let buffer = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk) => {
+        buffer += chunk;
+        const newline = buffer.indexOf("\n");
+        if (newline < 0) return;
+        const request = JSON.parse(buffer.slice(0, newline));
+        socket.end(
+          `${JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: { accepted: true },
+          })}\n`,
+        );
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+
+    const previousEnv = { ...process.env };
+    try {
+      process.env.STATION_HARNESS_PROVIDER = "opencode";
+      process.env.STATION_WORKTREE_ID = "wt_1";
+      process.env.STATION_SESSION_ID = "ses_1";
+      process.env.STATION_HOOK_SPOOL_DIR = spoolDir;
+      process.env.STATION_OBSERVER_SOCKET_PATH = socketPath;
+      const moduleUrl = pathToFileURL(pluginPath);
+      moduleUrl.search = `v=${Date.now()}`;
+      const pluginModule = (await import(moduleUrl.href)) as {
+        StationObserverPlugin: (input: { directory: string; worktree: string }) => Promise<{
+          event: (input: { event: unknown }) => Promise<void>;
+        }>;
+      };
+
+      const plugin = await pluginModule.StationObserverPlugin({ directory: root, worktree: root });
+      await plugin.event({
+        event: {
+          type: "session.idle",
+          properties: {
+            sessionID: "opencode_session_1",
+          },
+        },
+      });
+
+      await expect(readdir(spoolDir)).resolves.toHaveLength(0);
+    } finally {
+      process.env = previousEnv;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 

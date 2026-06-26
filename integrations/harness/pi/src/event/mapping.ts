@@ -7,14 +7,14 @@ import type {
   HarnessEventReport,
   ObservedStatus,
   RawHarnessEvent,
-  TerminalTargetObservation,
-  WorktreeObservation,
 } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
-  HarnessEventReportSchema,
-  observedPathIsSameOrInside,
-  STATION_SCHEMA_VERSION,
-} from "@station/contracts";
+  applyCorrelation,
+  correlateTerminalBoundHarnessEvent,
+  harnessEventDiagnostics,
+  reportCorrelation,
+} from "@station/harness-shared";
 import { piHarnessError } from "../errors.js";
 import { normalizePiEventType, type PiCompactEvent, parsePiCompactEvent } from "./compactEvent.js";
 
@@ -32,13 +32,113 @@ export type PiHarnessEventReportInput = {
   };
 };
 
+function turnFromPiEvent(event: PiCompactEvent): HarnessEventReport["turn"] | undefined {
+  return event.event_type === "agent_end" ? { kind: "turn_completed" } : undefined;
+}
+
+function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown> {
+  const providerData: Record<string, unknown> = {};
+  assignProviderData(providerData, "piSessionId", event.pi_session_id);
+  assignProviderData(providerData, "piSessionFile", event.pi_session_file);
+  assignProviderData(providerData, "model", event.model);
+  switch (event.event_type) {
+    case "session_start":
+      assignProviderData(providerData, "sessionStartReason", event.reason);
+      assignProviderData(providerData, "previousSessionFile", event.previous_session_file);
+      break;
+    case "session_shutdown":
+      assignProviderData(providerData, "shutdownReason", event.reason);
+      assignProviderData(providerData, "targetSessionFile", event.target_session_file);
+      break;
+    case "turn_start":
+      assignProviderData(providerData, "turnIndex", event.turn_index);
+      break;
+    case "tool_execution_start":
+      assignProviderData(providerData, "toolCallId", event.tool_call_id);
+      assignProviderData(providerData, "toolName", event.tool_name);
+      break;
+    case "tool_execution_end":
+      assignProviderData(providerData, "toolCallId", event.tool_call_id);
+      assignProviderData(providerData, "toolName", event.tool_name);
+      assignProviderData(providerData, "isError", event.is_error);
+      break;
+    case "message_end":
+      assignProviderData(providerData, "messageRole", event.message_role);
+      break;
+    case "agent_end":
+      assignProviderData(providerData, "messageCount", event.message_count);
+      break;
+    case "session_compact":
+      assignProviderData(providerData, "fromExtension", event.from_extension);
+      assignProviderData(providerData, "compactionEntryId", event.compaction_entry_id);
+      break;
+    case "agent_start":
+      break;
+    default:
+      assertNever(event);
+  }
+  return providerData;
+}
+
+function reportCorrelationFromPiEvent(
+  event: PiCompactEvent,
+): HarnessEventReport["correlation"] | undefined {
+  return reportCorrelation({
+    cwd: event.cwd,
+    projectId: event.station_project_id,
+    worktreeId: event.station_worktree_id,
+    sessionId: event.station_session_id,
+    terminalTargetId: event.station_terminal_target_id,
+    harnessRunId:
+      event.station_terminal_target_id === undefined
+        ? undefined
+        : `pi:${event.station_terminal_target_id}`,
+    nativeSessionFile: event.pi_session_file,
+    nativeSessionId: event.pi_session_file === undefined ? event.pi_session_id : undefined,
+    pid: event.pid,
+  });
+}
+
+function reportCoalesceKeyFromPiEvent(event: PiCompactEvent): string | undefined {
+  const parts: string[] = [];
+  if (event.event_type === "turn_start" && event.turn_index !== undefined) {
+    parts.push(`turn:${event.turn_index}`);
+  }
+  if (event.event_type === "tool_execution_start" || event.event_type === "tool_execution_end") {
+    if (event.tool_call_id !== undefined) {
+      parts.push(`tool:${event.tool_call_id}`);
+    } else if (event.tool_name !== undefined) {
+      parts.push(`tool:${event.tool_name}`);
+    }
+  }
+  return parts.length === 0 ? undefined : parts.join(":");
+}
+
+function assignProviderData(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
+function assertNever(value: never): never {
+  throw piHarnessError("HARNESS_PI_EVENT_INVALID", `Unhandled Pi event: ${String(value)}.`);
+}
+
 export function normalizePiRawEvent(
   raw: RawHarnessEvent,
   context: HarnessEventContext,
 ): HarnessEventObservation[] {
   const event = parsePiCompactEvent(raw.event);
   const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlatePiEvent(event, context);
+  const correlation = correlateTerminalBoundHarnessEvent({
+    provider: "pi",
+    identity: event,
+    context,
+    cwd: event.cwd,
+    nativeSessionFile: event.pi_session_file,
+    nativeSessionId: event.pi_session_file === undefined ? event.pi_session_id : undefined,
+    includeTerminalTargetId: true,
+  });
   const observation: HarnessEventObservation = {
     provider: "pi",
     rawEventType: event.event_type,
@@ -46,21 +146,11 @@ export function normalizePiRawEvent(
     observedAt,
     providerData: providerDataFromPiEvent(event),
   };
-  if (correlation.sessionId !== undefined) {
-    observation.sessionId = correlation.sessionId;
+  const turn = turnFromPiEvent(event);
+  if (turn !== undefined) {
+    observation.turn = turn;
   }
-  if (correlation.worktreeId !== undefined) {
-    observation.worktreeId = correlation.worktreeId;
-  }
-  if (correlation.harnessRunId !== undefined) {
-    observation.harnessRunId = correlation.harnessRunId;
-  }
-  if (event.pi_session_id !== undefined) {
-    observation.nativeSessionId = event.pi_session_id;
-  }
-  if (event.pi_session_file !== undefined) {
-    observation.nativeSessionFile = event.pi_session_file;
-  }
+  applyCorrelation(observation, correlation);
   return [observation];
 }
 
@@ -85,14 +175,15 @@ export function piHookPayloadToHarnessEventReport(
     observedAt: input.observedAt,
     status: statusFromPiEvent(event, input.observedAt),
   };
+  const turn = turnFromPiEvent(event);
+  if (turn !== undefined) {
+    report.turn = turn;
+  }
   const correlation = reportCorrelationFromPiEvent(event);
   if (correlation !== undefined) {
     report.correlation = correlation;
   }
-  const diagnostics = reportDiagnosticsFromPiEvent(event, input.diagnostics);
-  if (diagnostics !== undefined) {
-    report.diagnostics = diagnostics;
-  }
+  report.diagnostics = harnessEventDiagnostics(event.event_type, input.diagnostics);
   const coalesceKey = reportCoalesceKeyFromPiEvent(event);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;
@@ -205,219 +296,4 @@ export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): Ob
     default:
       return assertNever(event);
   }
-}
-
-function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {};
-  assignProviderData(providerData, "piSessionId", event.pi_session_id);
-  assignProviderData(providerData, "piSessionFile", event.pi_session_file);
-  assignProviderData(providerData, "model", event.model);
-  switch (event.event_type) {
-    case "session_start":
-      assignProviderData(providerData, "sessionStartReason", event.reason);
-      assignProviderData(providerData, "previousSessionFile", event.previous_session_file);
-      break;
-    case "session_shutdown":
-      assignProviderData(providerData, "shutdownReason", event.reason);
-      assignProviderData(providerData, "targetSessionFile", event.target_session_file);
-      break;
-    case "turn_start":
-      assignProviderData(providerData, "turnIndex", event.turn_index);
-      break;
-    case "tool_execution_start":
-      assignProviderData(providerData, "toolCallId", event.tool_call_id);
-      assignProviderData(providerData, "toolName", event.tool_name);
-      break;
-    case "tool_execution_end":
-      assignProviderData(providerData, "toolCallId", event.tool_call_id);
-      assignProviderData(providerData, "toolName", event.tool_name);
-      assignProviderData(providerData, "isError", event.is_error);
-      break;
-    case "message_end":
-      assignProviderData(providerData, "messageRole", event.message_role);
-      break;
-    case "agent_end":
-      assignProviderData(providerData, "messageCount", event.message_count);
-      break;
-    case "session_compact":
-      assignProviderData(providerData, "fromExtension", event.from_extension);
-      assignProviderData(providerData, "compactionEntryId", event.compaction_entry_id);
-      break;
-    case "agent_start":
-      break;
-    default:
-      assertNever(event);
-  }
-  return providerData;
-}
-
-function reportCorrelationFromPiEvent(
-  event: PiCompactEvent,
-): HarnessEventReport["correlation"] | undefined {
-  const correlation: NonNullable<HarnessEventReport["correlation"]> = {
-    cwd: event.cwd,
-  };
-  if (event.station_project_id !== undefined) {
-    correlation.projectId = event.station_project_id;
-  }
-  if (event.station_worktree_id !== undefined) {
-    correlation.worktreeId = event.station_worktree_id;
-  }
-  if (event.station_session_id !== undefined) {
-    correlation.sessionId = event.station_session_id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    correlation.terminalTargetId = event.station_terminal_target_id;
-    correlation.harnessRunId = `pi:${event.station_terminal_target_id}`;
-  }
-  if (event.pi_session_file !== undefined) {
-    correlation.nativeSessionFile = event.pi_session_file;
-  } else if (event.pi_session_id !== undefined) {
-    correlation.nativeSessionId = event.pi_session_id;
-  }
-  if (event.pid !== undefined) {
-    correlation.pid = event.pid;
-  }
-  return correlation;
-}
-
-function reportDiagnosticsFromPiEvent(
-  event: PiCompactEvent,
-  input: PiHarnessEventReportInput["diagnostics"],
-): HarnessEventReport["diagnostics"] | undefined {
-  const diagnostics: NonNullable<HarnessEventReport["diagnostics"]> = {
-    rawEventType: event.event_type,
-  };
-  if (typeof input?.payloadBytes === "number") {
-    diagnostics.payloadBytes = input.payloadBytes;
-  }
-  if (typeof input?.compactedBytes === "number") {
-    diagnostics.compactedBytes = input.compactedBytes;
-  }
-  if (input?.compacted !== undefined) {
-    diagnostics.compacted = input.compacted;
-  }
-  if (input?.truncated !== undefined) {
-    diagnostics.truncated = input.truncated;
-  }
-  if (input?.omittedFieldNames !== undefined && input.omittedFieldNames.length > 0) {
-    diagnostics.omittedFieldNames = input.omittedFieldNames;
-  }
-  return diagnostics;
-}
-
-function reportCoalesceKeyFromPiEvent(event: PiCompactEvent): string | undefined {
-  const parts: string[] = [];
-  if (event.event_type === "turn_start" && event.turn_index !== undefined) {
-    parts.push(`turn:${event.turn_index}`);
-  }
-  if (event.event_type === "tool_execution_start" || event.event_type === "tool_execution_end") {
-    if (event.tool_call_id !== undefined) {
-      parts.push(`tool:${event.tool_call_id}`);
-    } else if (event.tool_name !== undefined) {
-      parts.push(`tool:${event.tool_name}`);
-    }
-  }
-  return parts.length === 0 ? undefined : parts.join(":");
-}
-
-function correlatePiEvent(
-  event: PiCompactEvent,
-  context: HarnessEventContext,
-): {
-  sessionId?: string;
-  worktreeId?: string;
-  harnessRunId?: string;
-} {
-  const terminal =
-    terminalForId(event.station_terminal_target_id, context.terminalTargets) ??
-    terminalForCwd(event.cwd, context.terminalTargets);
-  const worktree =
-    worktreeForId(event.station_worktree_id, context.worktrees) ??
-    worktreeForPath(event.station_worktree_path, context.worktrees) ??
-    worktreeForCwd(event.cwd, context.worktrees);
-  const result: {
-    sessionId?: string;
-    worktreeId?: string;
-    harnessRunId?: string;
-  } = {};
-  if (event.station_session_id !== undefined) {
-    result.sessionId = event.station_session_id;
-  } else if (terminal?.sessionId !== undefined) {
-    result.sessionId = terminal.sessionId;
-  }
-  if (event.station_worktree_id !== undefined) {
-    result.worktreeId = event.station_worktree_id;
-  } else if (terminal?.worktreeId !== undefined) {
-    result.worktreeId = terminal.worktreeId;
-  } else if (worktree !== undefined) {
-    result.worktreeId = worktree.id;
-  }
-  if (event.station_terminal_target_id !== undefined) {
-    result.harnessRunId = `pi:${event.station_terminal_target_id}`;
-  } else if (terminal?.harnessRunId !== undefined) {
-    result.harnessRunId = terminal.harnessRunId;
-  } else if (terminal !== undefined) {
-    result.harnessRunId = `pi:${terminal.id}`;
-  }
-  return result;
-}
-
-function terminalForId(
-  id: string | undefined,
-  terminals: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  if (id === undefined) {
-    return undefined;
-  }
-  return terminals.find((terminal) => terminal.id === id);
-}
-
-function terminalForCwd(
-  cwd: string,
-  terminals: TerminalTargetObservation[],
-): TerminalTargetObservation | undefined {
-  return terminals.find((terminal) => {
-    if (terminal.cwd === undefined) {
-      return false;
-    }
-    return observedPathIsSameOrInside(cwd, terminal.cwd);
-  });
-}
-
-function worktreeForId(
-  id: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (id === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => worktree.id === id);
-}
-
-function worktreeForPath(
-  path: string | undefined,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  if (path === undefined) {
-    return undefined;
-  }
-  return worktrees.find((worktree) => observedPathIsSameOrInside(path, worktree.path));
-}
-
-function worktreeForCwd(
-  cwd: string,
-  worktrees: WorktreeObservation[],
-): WorktreeObservation | undefined {
-  return worktrees.find((worktree) => observedPathIsSameOrInside(cwd, worktree.path));
-}
-
-function assignProviderData(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (value !== undefined) {
-    target[key] = value;
-  }
-}
-
-function assertNever(value: never): never {
-  throw piHarnessError("HARNESS_PI_EVENT_INVALID", `Unhandled Pi event: ${String(value)}.`);
 }

@@ -132,6 +132,52 @@ describe("Pi compact event parsing", () => {
     expect(JSON.stringify(report)).not.toContain(rawSecret);
   });
 
+  it("marks Pi agent_end events as completed turns", () => {
+    const payload = {
+      event_type: "agent_end",
+      cwd: "/tmp/station/web/task",
+      pi_session_id: "pi_session_123",
+      station_project_id: "web",
+      station_worktree_id: "wt_web_task",
+      station_session_id: "ses_web_task",
+      station_terminal_target_id: "tmux:station:@1:%2",
+    };
+
+    expect(
+      normalizePiRawEvent(
+        {
+          provider: "pi",
+          observedAt: now,
+          event: payload,
+        },
+        context(),
+      )[0],
+    ).toMatchObject({
+      status: {
+        value: "idle",
+      },
+      turn: {
+        kind: "turn_completed",
+      },
+    });
+
+    expect(
+      piHookPayloadToHarnessEventReport({
+        reportId: "report_pi_done",
+        eventType: "agent_end",
+        observedAt: now,
+        payload,
+      }),
+    ).toMatchObject({
+      status: {
+        value: "idle",
+      },
+      turn: {
+        kind: "turn_completed",
+      },
+    });
+  });
+
   it("maps every supported Pi event to the v1 status policy", () => {
     const expected = [
       ["session_start", "starting", "high"],

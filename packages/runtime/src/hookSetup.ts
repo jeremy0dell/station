@@ -49,6 +49,110 @@ export type ConfigScriptHookUninstallPlan<Document, EventName extends string> = 
   backupPath?: string;
 };
 
+function providerHookCommandLineFromScriptArgs(
+  provider: string,
+  options: ProviderHookScriptOptions,
+): string {
+  return [
+    shellQuote(options.hookBin ?? "stn-ingress"),
+    guardedArrayExpansion("SOCKET_ARG"),
+    guardedArrayExpansion("STATE_DIR_ARG"),
+    guardedArrayExpansion("SPOOL_DIR_ARG"),
+    guardedArrayExpansion("CONFIG_ARG"),
+    ...(options.autoStartFromHooks === false ? ["--no-auto-start"] : []),
+    shellQuote(provider),
+  ].join(" ");
+}
+
+function guardedArrayExpansion(name: string): string {
+  return ["$", `{${name}[@]+"`, "$", `{${name}[@]}"}`].join("");
+}
+
+function dynamicHookArg(
+  name: string,
+  envName: string,
+  flag: string,
+  fallback: string | undefined,
+  options: { skipFallbackWhenEnvPresent?: string } = {},
+): string[] {
+  const lines = [
+    `${name}=()`,
+    `if [ -n "\${${envName}:-}" ]; then`,
+    `  ${name}=(${flag} "$${envName}")`,
+  ];
+  if (fallback !== undefined) {
+    if (options.skipFallbackWhenEnvPresent !== undefined) {
+      lines.push(`elif [ -z "\${${options.skipFallbackWhenEnvPresent}:-}" ]; then`);
+    } else {
+      lines.push("else");
+    }
+    lines.push(`  ${name}=(${flag} ${shellQuote(fallback)})`);
+  }
+  lines.push("fi");
+  return lines;
+}
+
+async function readOptionalHookFile(
+  path: string,
+  createError: HookSetupErrorFactory,
+): Promise<string> {
+  try {
+    return (await readTextFileIfPresent(path)) ?? "";
+  } catch (cause) {
+    throw createError({ operation: "read", path, cause });
+  }
+}
+
+async function writeHookFile(
+  path: string,
+  contents: string,
+  mode: number,
+  createError: HookSetupErrorFactory,
+): Promise<void> {
+  try {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, contents, { mode });
+    if (mode === 0o700) {
+      await chmod(path, mode);
+    }
+  } catch (cause) {
+    throw createError({
+      operation: mode === 0o700 ? "writeScript" : "writeConfig",
+      path,
+      cause,
+    });
+  }
+}
+
+async function removeHookFile(path: string, createError: HookSetupErrorFactory): Promise<boolean> {
+  try {
+    return await removeFileIfPresent(path);
+  } catch (cause) {
+    throw createError({ operation: "remove", path, cause });
+  }
+}
+
+async function backupHookFile(
+  path: string,
+  createError: HookSetupErrorFactory,
+): Promise<string | undefined> {
+  try {
+    if (!(await pathExists(path))) {
+      return undefined;
+    }
+  } catch (cause) {
+    throw createError({ operation: "metadata", path, cause });
+  }
+
+  const backupPath = `${path}.bak.${new Date().toISOString().replaceAll(/[^0-9]/g, "")}`;
+  try {
+    await copyFile(path, backupPath);
+  } catch (cause) {
+    throw createError({ operation: "backup", path, cause });
+  }
+  return backupPath;
+}
+
 export function createHookSetupFileOps(createError: HookSetupErrorFactory): HookSetupFileOps {
   return {
     readOptionalFile: (path) => readOptionalHookFile(path, createError),
@@ -129,15 +233,46 @@ export function expectedProviderHookScript(input: {
 }): string {
   const suffix = input.ignoreFailure === true ? " || true" : "";
   const redirect = input.redirectStderr === true ? " > /dev/null 2>&1" : " > /dev/null";
+  const options = input.options ?? {};
   return [
     "#!/usr/bin/env bash",
     "set -euo pipefail",
     `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
     "  exit 0",
     "fi",
-    `${providerHookCommandLine(input.provider, input.options)}${redirect}${suffix}`,
+    ...dynamicHookArg(
+      "SOCKET_ARG",
+      "STATION_OBSERVER_SOCKET_PATH",
+      "--socket",
+      options.observerSocketPath,
+    ),
+    ...dynamicHookArg("CONFIG_ARG", "STATION_CONFIG_PATH", "--config", options.stationConfigPath),
+    ...dynamicHookArg("STATE_DIR_ARG", "STATION_STATE_DIR", "--state-dir", options.stateDir, {
+      skipFallbackWhenEnvPresent: "STATION_CONFIG_PATH",
+    }),
+    ...dynamicHookArg(
+      "SPOOL_DIR_ARG",
+      "STATION_HOOK_SPOOL_DIR",
+      "--spool-dir",
+      options.hookSpoolDir,
+      { skipFallbackWhenEnvPresent: "STATION_CONFIG_PATH" },
+    ),
+    `${providerHookCommandLineFromScriptArgs(input.provider, options)}${redirect}${suffix}`,
     "",
   ].join("\n");
+}
+
+export function providerHookScriptRoutesByStationEnv(script: string, provider: string): boolean {
+  return (
+    script.includes(
+      `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
+    ) &&
+    script.includes("STATION_OBSERVER_SOCKET_PATH") &&
+    script.includes("STATION_CONFIG_PATH") &&
+    script.includes("STATION_STATE_DIR") &&
+    script.includes("STATION_HOOK_SPOOL_DIR") &&
+    script.includes(`${shellQuote(provider)} > /dev/null`)
+  );
 }
 
 export function hookCommandsForEvents<EventName extends string>(
@@ -269,65 +404,4 @@ export function commandLine(args: readonly string[]): string {
 
 export function shellQuote(value: string): string {
   return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-async function readOptionalHookFile(
-  path: string,
-  createError: HookSetupErrorFactory,
-): Promise<string> {
-  try {
-    return (await readTextFileIfPresent(path)) ?? "";
-  } catch (cause) {
-    throw createError({ operation: "read", path, cause });
-  }
-}
-
-async function writeHookFile(
-  path: string,
-  contents: string,
-  mode: number,
-  createError: HookSetupErrorFactory,
-): Promise<void> {
-  try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(path, contents, { mode });
-    if (mode === 0o700) {
-      await chmod(path, mode);
-    }
-  } catch (cause) {
-    throw createError({
-      operation: mode === 0o700 ? "writeScript" : "writeConfig",
-      path,
-      cause,
-    });
-  }
-}
-
-async function removeHookFile(path: string, createError: HookSetupErrorFactory): Promise<boolean> {
-  try {
-    return await removeFileIfPresent(path);
-  } catch (cause) {
-    throw createError({ operation: "remove", path, cause });
-  }
-}
-
-async function backupHookFile(
-  path: string,
-  createError: HookSetupErrorFactory,
-): Promise<string | undefined> {
-  try {
-    if (!(await pathExists(path))) {
-      return undefined;
-    }
-  } catch (cause) {
-    throw createError({ operation: "metadata", path, cause });
-  }
-
-  const backupPath = `${path}.bak.${new Date().toISOString().replaceAll(/[^0-9]/g, "")}`;
-  try {
-    await copyFile(path, backupPath);
-  } catch (cause) {
-    throw createError({ operation: "backup", path, cause });
-  }
-  return backupPath;
 }
