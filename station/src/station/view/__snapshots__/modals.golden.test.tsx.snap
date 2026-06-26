@@ -18,10 +18,10 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
         │                     station project view                     │        
 ▼ script│  ↑/↓ wheel  scroll project list                              │qs] [▾] 
  [9] ○ a│  1-9/a-z    start or focus row                               │[shell] 
- [a] ? m│  N/A/R/X/C  new/add/rename/remove/fold                       │[shell] 
- [b] - o│  /, Z       search / refresh snapshot                        │[shell] 
-        │  H/?        help                                             │        
-▼ empty-│  Q/Esc      close/back/cancel                                │qs] [▾] 
+ [a] ? m│  N/A/R/C    new/add/rename/fold                              │[shell] 
+ [b] - o│  X          remove session                                   │[shell] 
+        │  /, Z       search / refresh snapshot                        │        
+▼ empty-│  H/?        help                                             │qs] [▾] 
 ↓ 1 hidd╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
@@ -84,7 +84,7 @@ Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help
 "
 `;
 
-exports[`modal flow golden frames renders the remove slot prompt 1`] = `
+exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 "station                                                                         
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
@@ -102,17 +102,17 @@ exports[`modal flow golden frames renders the remove slot prompt 1`] = `
                                                                                 
 ▼ scripts - 3 worktrees                                           [sh] [qs] [▾] 
  [9] ○ api-cache                  opencode  idle           +14 -6 #5 x1 [shell] 
- [a] ? metadata-refresh           opencode  unknown           +3 -1 #10 [shell] 
- [b] - old-experiment             -         no agent                    [shell] 
-                                                                                
-remove slot: ct - 0 worktrees                                     [sh] [qs] [▾] 
-↓ 1 hidden                                                                      
-─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Select session to remove                                                     │
+│                                                                              │
+│ Click a row or press slot key                                                │
+│ Esc:cancel                                                                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
 
-exports[`modal flow golden frames renders the remove confirm prompt 1`] = `
+exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 "station                                                                         
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
@@ -128,19 +128,19 @@ exports[`modal flow golden frames renders the remove confirm prompt 1`] = `
  [7] ⠋ provider-hooks             opencode  working        +32 -8 #16 … [shell] 
  [8] ○ trace-bundle               opencode  idle             +1 -1 #4 ✓ [shell] 
                                                                                 
-▼ scripts - 3 worktrees                                           [sh] [qs] [▾] 
- [9] ○ api-cache                  opencode  idle           +14 -6 #5 x1 [shell] 
- [a] ? metadata-refresh           opencode  unknown           +3 -1 #10 [shell] 
- [b] - old-experiment             -         no agent                    [shell] 
-                                                                                
-confirm remove cli-help-man? Y/N                                  [sh] [qs] [▾] 
-↓ 1 hidden                                                                      
-─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Remove session?                                                              │
+│ Session  remove cli-help-man? Y/N                                            │
+│ Removes session, checkout, and panes.                                        │
+│                                                                              │
+│ Yes (y)     No (n)                                                           │
+│ Esc/Enter:cancel                                                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
 
-exports[`modal flow golden frames renders the remove session confirm prompt 1`] = `
+exports[`modal flow golden frames renders the remove session confirm sheet 1`] = `
 "station
 ───────────────────────────────────────────────────────────────────────────────
 
@@ -156,15 +156,15 @@ exports[`modal flow golden frames renders the remove session confirm prompt 1`] 
  [7] ⠋ provider-hooks             opencode  working        +32 -8 #16 … [shell]
  [8] ○ trace-bundle               opencode  idle             +1 -1 #4 ✓ [shell]
 
-▼ scripts - 3 worktrees                                           [sh] [qs] [▾]
- [9] ○ api-cache                  opencode  idle           +14 -6 #5 x1 [shell]
- [a] ? metadata-refresh           opencode  unknown           +3 -1 #10 [shell]
- [b] - old-experiment             -         no agent                    [shell]
-
-confirm remove session pty-buffer? Y/N                            [sh] [qs] [▾]
-↓ 1 hidden
-───────────────────────────────────────────────────────────────────────────────
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Remove session?                                                              │
+│ Session  remove session pty-buffer? Y/N                                      │
+│ Removes the session; checkout stays.                                         │
+│                                                                              │
+│ Yes (y)     No (n)                                                           │
+│ Esc/Enter:cancel                                                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
 

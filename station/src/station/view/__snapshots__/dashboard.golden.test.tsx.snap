@@ -24,7 +24,7 @@ exports[`dashboard golden frames renders many-projects at 80x24 1`] = `
 ▼ empty-project - 0 worktrees                                     [sh] [qs] [▾] 
 ↓ 1 hidden                                                                      
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help     
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
 "
 `;
 
@@ -68,7 +68,7 @@ exports[`dashboard golden frames renders many-projects at 120x40 1`] = `
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm session /:search C:fold H:help Q/esc:close                             
+N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm /:search C:fold H:help Q/esc:close                                     
 "
 `;
 
@@ -88,7 +88,7 @@ exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
  [7] ⠋ prov…  opencode  working        +32 -8 #16 … [shell] 
 ↓ 9 hidden                                                  
 ─────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm sessio… 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:… 
 "
 `;
 
@@ -132,7 +132,7 @@ exports[`dashboard golden frames renders attention-and-failures at 80x24 1`] = `
                                                                                 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help     
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:search H:help         
 "
 `;
 
@@ -176,7 +176,7 @@ exports[`dashboard golden frames renders attention-and-failures at 120x40 1`] = 
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm session /:search C:fold H:help Q/esc:close                             
+N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm /:search C:fold H:help Q/esc:close                                     
 "
 `;
 
@@ -196,7 +196,7 @@ exports[`dashboard golden frames renders attention-and-failures at 60x16 1`] = `
                                                             
                                                             
 ─────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:rm sessio… 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:remove /:… 
 "
 `;
 
