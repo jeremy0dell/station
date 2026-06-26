@@ -26,6 +26,7 @@
     "station:reset": "node scripts/maintenance/station-reset.mjs",
     "station:reset:tmux-tui": "node scripts/maintenance/station-tmux-tui-reset.mjs",
     "station:tui-dev": "node scripts/tui-dev.mjs",
+    "station:ui-dev": "cd station && bun run dev",
     "stn-ingress": "bin/stn-ingress",
     "station:link": "pnpm link --global",
     "dev": "node scripts/tui-dev.mjs",
