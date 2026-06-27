@@ -61,7 +61,7 @@ export type TuiKeyPattern =
 
 export type TuiBindingOutcome = "handled" | "exit" | "dismiss-popup";
 
-export type TuiBinding = {
+type TuiBindingSpec = {
   id: string;
   pattern: TuiKeyPattern;
   action: string;
@@ -78,7 +78,7 @@ const slotHelp = { keys: "1-9 a-z", label: "start or focus visible row" };
 // Dashboard dispatch resolves through this table before executing the binding's
 // action. Other mode tables feed copy/tests so documented chords cannot drift
 // silently from their screen machines.
-export const TUI_KEYMAP: Record<TuiInputMode, readonly TuiBinding[]> = {
+export const TUI_KEYMAP = {
   dashboard: [
     {
       id: "tui.dashboard.scrollUp",
@@ -585,16 +585,22 @@ export const TUI_KEYMAP: Record<TuiInputMode, readonly TuiBinding[]> = {
       outcome: "handled",
     },
   ],
-};
+} as const satisfies Record<TuiInputMode, readonly TuiBindingSpec[]>;
 
-export const TUI_GLOBAL_BINDINGS: readonly TuiBinding[] = [
+export const TUI_GLOBAL_BINDINGS = [
   {
     id: "tui.global.exitIntent",
     pattern: { kind: "char", char: "c", ctrl: true },
     action: "tui.exit",
     outcome: "exit",
   },
-];
+] as const satisfies readonly TuiBindingSpec[];
+
+export type TuiModeBinding<M extends TuiInputMode> = (typeof TUI_KEYMAP)[M][number];
+export type TuiGlobalBinding = (typeof TUI_GLOBAL_BINDINGS)[number];
+export type TuiBinding<M extends TuiInputMode = TuiInputMode> =
+  | TuiGlobalBinding
+  | TuiModeBinding<M>;
 
 export const TUI_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
@@ -692,7 +698,10 @@ function matchesPattern(pattern: TuiKeyPattern, key: TuiKey): boolean {
   }
 }
 
-export function matchingTuiBindings(mode: TuiInputMode, key: TuiKey): readonly TuiBinding[] {
+export function matchingTuiBindings<M extends TuiInputMode>(
+  mode: M,
+  key: TuiKey,
+): readonly TuiBinding<M>[] {
   const globals = TUI_GLOBAL_BINDINGS.filter((binding) => matchesPattern(binding.pattern, key));
   if (globals.length > 0) {
     return globals;
@@ -700,6 +709,9 @@ export function matchingTuiBindings(mode: TuiInputMode, key: TuiKey): readonly T
   return TUI_KEYMAP[mode].filter((binding) => matchesPattern(binding.pattern, key));
 }
 
-export function matchTuiBinding(mode: TuiInputMode, key: TuiKey): TuiBinding | undefined {
+export function matchTuiBinding<M extends TuiInputMode>(
+  mode: M,
+  key: TuiKey,
+): TuiBinding<M> | undefined {
   return matchingTuiBindings(mode, key)[0];
 }

@@ -45,7 +45,7 @@ export function handleDashboardKey(
 function handleDashboardBinding(
   state: TuiState,
   key: TuiKey,
-  binding: TuiBinding,
+  binding: TuiBinding<"dashboard">,
   context: TuiKeyRuntimeContext,
 ): TuiTransition {
   switch (binding.action) {
@@ -107,8 +107,12 @@ function handleDashboardBinding(
     case "tui.row.activateSlot":
       return activateDashboardSlot(state, key);
     default:
-      return { state };
+      return assertNever(binding);
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled dashboard binding: ${JSON.stringify(value)}`);
 }
 
 function exitOrDismissPopup(state: TuiState): TuiTransition {
