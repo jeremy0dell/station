@@ -75,8 +75,9 @@ export type TuiHelpContentLine =
 
 const slotHelp = { keys: "1-9 a-z", label: "start or focus visible row" };
 
-// Metadata only: handleTuiKey remains the behavioral source. These tables feed
-// copy/tests so a documented chord cannot drift silently from the machine.
+// Dashboard dispatch resolves through this table before executing the binding's
+// action. Other mode tables feed copy/tests so documented chords cannot drift
+// silently from their screen machines.
 export const TUI_KEYMAP: Record<TuiInputMode, readonly TuiBinding[]> = {
   dashboard: [
     {

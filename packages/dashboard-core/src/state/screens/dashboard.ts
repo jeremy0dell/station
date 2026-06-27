@@ -14,6 +14,7 @@ import {
   buildStartAgentCommand,
 } from "../commandBuilders.js";
 import { scrollDashboard } from "../dashboardScroll.js";
+import { matchTuiBinding, type TuiBinding } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import { addPendingStartAgentRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
@@ -26,88 +27,105 @@ export function handleDashboardKey(
   key: TuiKey,
   context: TuiKeyRuntimeContext,
 ): TuiTransition {
-  const scrollDelta = scrollDeltaForKey(key);
-  if (scrollDelta !== 0) {
+  const mouseScrollDelta = mouseScrollDeltaForKey(key);
+  if (mouseScrollDelta !== 0) {
     return {
-      state: scrollDashboard(state, scrollDelta),
+      state: scrollDashboard(state, mouseScrollDelta),
     };
   }
 
-  if (key.input === "H" || key.input === "?") {
-    return {
-      state: {
-        ...state,
-        screen: { name: "help" },
-      },
-    };
+  const binding = matchTuiBinding("dashboard", key);
+  if (binding === undefined) {
+    return { state };
   }
 
-  if (
-    state.runtime.persistentPopup &&
-    state.runtime.canDismissPopup &&
-    (key.input === "Q" || key.escape === true)
-  ) {
+  return handleDashboardBinding(state, key, binding, context);
+}
+
+function handleDashboardBinding(
+  state: TuiState,
+  key: TuiKey,
+  binding: TuiBinding,
+  context: TuiKeyRuntimeContext,
+): TuiTransition {
+  switch (binding.action) {
+    case "tui.view.scrollUp":
+      return {
+        state: scrollDashboard(state, -1),
+      };
+    case "tui.view.scrollDown":
+      return {
+        state: scrollDashboard(state, 1),
+      };
+    case "tui.help.open":
+      return {
+        state: {
+          ...state,
+          screen: { name: "help" },
+        },
+      };
+    case "tui.exit":
+      return exitOrDismissPopup(state);
+    case "tui.popup.dismiss":
+      return state.runtime.persistentPopup && state.runtime.canDismissPopup
+        ? { state, dismissPopup: true }
+        : { state };
+    case "tui.search.open":
+      return {
+        state: {
+          ...state,
+          screen: { name: "search", value: "" },
+        },
+      };
+    case "tui.rename.open":
+      return {
+        state: {
+          ...state,
+          screen: { name: "renameSession", step: "chooseSlot" },
+        },
+      };
+    case "tui.refresh":
+      return {
+        state,
+        reconcileReason: "tui-refresh",
+      };
+    case "tui.remove.open":
+      return {
+        state: {
+          ...state,
+          screen: { name: "removeWorktree", step: "chooseSlot" },
+        },
+      };
+    case "tui.newSession.open":
+      return openNewSession(state);
+    case "tui.addProject.open":
+      return {
+        state: openAddProject(state, context),
+      };
+    case "tui.collapse.open":
+      return openProjectCollapse(state);
+    case "tui.row.activateSlot":
+      return activateDashboardSlot(state, key);
+    default:
+      return { state };
+  }
+}
+
+function exitOrDismissPopup(state: TuiState): TuiTransition {
+  if (state.runtime.persistentPopup && state.runtime.canDismissPopup) {
     return {
       state,
       dismissPopup: true,
     };
   }
 
-  if (key.input === "Q") {
-    return {
-      state,
-      exitCode: 0,
-    };
-  }
+  return {
+    state,
+    exitCode: 0,
+  };
+}
 
-  if (key.input === "/") {
-    return {
-      state: {
-        ...state,
-        screen: { name: "search", value: "" },
-      },
-    };
-  }
-
-  if (key.input === "R") {
-    return {
-      state: {
-        ...state,
-        screen: { name: "renameSession", step: "chooseSlot" },
-      },
-    };
-  }
-
-  if (key.input === "Z") {
-    return {
-      state,
-      reconcileReason: "tui-refresh",
-    };
-  }
-
-  if (key.input === "X") {
-    return {
-      state: {
-        ...state,
-        screen: { name: "removeWorktree", step: "chooseSlot" },
-      },
-    };
-  }
-
-  if (key.input === "N") {
-    return openNewSession(state);
-  }
-
-  if (key.input === "A") {
-    return {
-      state: openAddProject(state, context),
-    };
-  }
-
-  if (key.input === "C") {
-    return openProjectCollapse(state);
-  }
-
+function activateDashboardSlot(state: TuiState, key: TuiKey): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
@@ -151,6 +169,16 @@ export function scrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
     return -1;
   }
   if (key.downArrow === true || key.mouseScroll === "down") {
+    return 1;
+  }
+  return 0;
+}
+
+function mouseScrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
+  if (key.mouseScroll === "up") {
+    return -1;
+  }
+  if (key.mouseScroll === "down") {
     return 1;
   }
   return 0;
