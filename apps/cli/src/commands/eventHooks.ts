@@ -4,7 +4,7 @@ import {
   removeObserverEventHookBlocksById,
   type StationConfig,
 } from "@station/config";
-import type { ObserverEventHookConfig } from "@station/contracts";
+import { type ObserverEventHookConfig, STATION_SCHEMA_VERSION } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandRunner } from "@station/runtime";
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
 import type { CliEnv } from "../env.js";
@@ -197,7 +197,7 @@ async function checkBuiltInNotifyCommand(input: {
     return checkCommandAvailable(input.command, input.args, input.env);
   }
   const invocation = {
-    schemaVersion: "0.5.0",
+    schemaVersion: STATION_SCHEMA_VERSION,
     hookId: `${builtInHookId}-doctor-check`,
     observedAt: "2026-01-01T00:00:00.000Z",
     event: {

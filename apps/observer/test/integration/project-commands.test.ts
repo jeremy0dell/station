@@ -67,6 +67,41 @@ describe("observer project commands", () => {
     fixture.sqlite.close();
   });
 
+  it("sets a project default harness through config mutation and reconciles the snapshot", async () => {
+    const fixture = await createFixture();
+    const repo = await makeRepo(fixture.root, "web");
+    await fixture.queue.dispatch({ type: "project.add", payload: { path: repo } });
+    await fixture.queue.drain();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "project.setDefaultHarness",
+      payload: { projectId: "web", harness: "other-harness" },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(
+      loadConfig({ configPath: fixture.configPath, homeDir: fixture.root }),
+    ).resolves.toMatchObject({
+      projects: [
+        expect.objectContaining({
+          defaults: expect.objectContaining({ harness: "other-harness" }),
+        }),
+      ],
+    });
+    expect(fixture.core.getSnapshot()).toMatchObject({
+      projects: [
+        expect.objectContaining({
+          defaults: expect.objectContaining({ harness: "other-harness" }),
+        }),
+      ],
+    });
+
+    fixture.sqlite.close();
+  });
+
   it("records safe command failures for invalid project additions", async () => {
     const fixture = await createFixture();
     const folder = join(fixture.root, "not-git");

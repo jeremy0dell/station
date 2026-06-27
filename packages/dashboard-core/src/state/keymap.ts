@@ -15,6 +15,7 @@ export type TuiInputMode =
   | "newSessionEditName"
   | "newSessionPickProject"
   | "newSessionPickAgent"
+  | "projectDefaultAgent"
   | "addProject";
 
 export function deriveTuiInputMode(state: TuiState): TuiInputMode {
@@ -46,6 +47,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       break;
     case "addProject":
       return "addProject";
+    case "projectDefaultAgent":
+      return "projectDefaultAgent";
   }
   return "dashboard";
 }
@@ -516,6 +519,22 @@ export const TUI_KEYMAP: Record<TuiInputMode, readonly TuiBinding[]> = {
       id: "tui.newSessionAgent.choose",
       pattern: { kind: "slot" },
       action: "tui.newSession.chooseAgent",
+      outcome: "handled",
+      help: { keys: "1-9 a-z", label: "choose agent" },
+    },
+  ],
+  projectDefaultAgent: [
+    {
+      id: "tui.projectDefaultAgent.cancel",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.projectDefaultAgent.cancel",
+      outcome: "handled",
+      help: { keys: "esc", label: "cancel" },
+    },
+    {
+      id: "tui.projectDefaultAgent.choose",
+      pattern: { kind: "slot" },
+      action: "tui.projectDefaultAgent.choose",
       outcome: "handled",
       help: { keys: "1-9 a-z", label: "choose agent" },
     },

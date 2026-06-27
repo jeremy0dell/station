@@ -28,6 +28,55 @@ export function removeProjectBlock(source: string, projectId: string): string {
   return `${insertTopLevelEmptyProjectsAssignment(sourceWithoutBlock)}\n`;
 }
 
+export function setProjectDefaultHarness(
+  source: string,
+  projectId: string,
+  harness: string,
+): string {
+  const lines = source.split("\n");
+  const blocks = projectBlocks(lines);
+  const block = blocks.find((candidate) => projectBlockId(candidate.lines) === projectId);
+  if (block === undefined) {
+    throw projectConfigSafeError({
+      code: "PROJECT_BLOCK_NOT_FOUND",
+      message: `Could not find a [[projects]] block for "${projectId}" in config.toml.`,
+      projectId,
+    });
+  }
+
+  const defaultsStart = block.lines.findIndex(isProjectDefaultsTable);
+  if (defaultsStart !== -1) {
+    const start = block.start + defaultsStart;
+    const end = nextProjectSubtableIndex(lines, start + 1, block.end);
+    const harnessIndex = lines
+      .slice(start + 1, end)
+      .findIndex((line) => /^\s*harness\s*=/.test(line));
+    if (harnessIndex !== -1) {
+      const absolute = start + 1 + harnessIndex;
+      const nextLines = [...lines];
+      nextLines[absolute] = replaceTomlStringValue(nextLines[absolute] ?? "", "harness", harness);
+      return `${trimRepeatedBlankLines(nextLines).join("\n").trimEnd()}\n`;
+    }
+    const nextLines = [
+      ...lines.slice(0, start + 1),
+      `harness = ${quoteTomlString(harness)}`,
+      ...lines.slice(start + 1),
+    ];
+    return `${trimRepeatedBlankLines(nextLines).join("\n").trimEnd()}\n`;
+  }
+
+  const insertAt = firstProjectSubtableIndex(block.lines);
+  const absoluteInsertAt = insertAt === -1 ? block.end : block.start + insertAt;
+  const nextLines = [
+    ...lines.slice(0, absoluteInsertAt),
+    "",
+    "[projects.defaults]",
+    `harness = ${quoteTomlString(harness)}`,
+    ...lines.slice(absoluteInsertAt),
+  ];
+  return `${trimRepeatedBlankLines(nextLines).join("\n").trimEnd()}\n`;
+}
+
 function projectBlocks(lines: string[]): Array<{ start: number; end: number; lines: string[] }> {
   const blocks: Array<{ start: number; end: number; lines: string[] }> = [];
   for (let index = 0; index < lines.length; index += 1) {
@@ -61,6 +110,23 @@ function projectBlockId(lines: readonly string[]): string | undefined {
 
 function isProjectArrayTable(line: string): boolean {
   return /^\s*\[\[\s*projects\s*\]\]\s*(?:#.*)?$/.test(line);
+}
+
+function isProjectDefaultsTable(line: string): boolean {
+  return /^\s*\[\s*projects\.defaults\s*\]\s*(?:#.*)?$/.test(line);
+}
+
+function firstProjectSubtableIndex(lines: readonly string[]): number {
+  return lines.findIndex((line) => /^\s*\[\s*projects\.[^\]]+\]\s*(?:#.*)?$/.test(line));
+}
+
+function nextProjectSubtableIndex(lines: readonly string[], start: number, end: number): number {
+  for (let index = start; index < end; index += 1) {
+    if (/^\s*\[\s*projects\.[^\]]+\]\s*(?:#.*)?$/.test(lines[index] ?? "")) {
+      return index;
+    }
+  }
+  return end;
 }
 
 function isNonProjectTable(line: string): boolean {
@@ -133,4 +199,15 @@ function formatMinimalProjectBlock(block: MinimalProjectBlock): string {
 
 function quoteTomlString(value: string): string {
   return JSON.stringify(value);
+}
+
+function replaceTomlStringValue(line: string, key: string, value: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(
+    `^(\\s*${escapedKey}\\s*=\\s*)(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*')(\\s*(?:#.*)?)$`,
+  ).exec(line);
+  if (match === null) {
+    return `${key} = ${quoteTomlString(value)}`;
+  }
+  return `${match[1]}${quoteTomlString(value)}${match[2]}`;
 }

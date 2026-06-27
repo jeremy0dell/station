@@ -6,6 +6,7 @@ import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
+import { handleProjectDefaultAgentKey } from "./screens/projectDefaultAgent.js";
 import { handleRemoveWorktreeKey } from "./screens/removeWorktree.js";
 import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleSearchKey } from "./screens/search.js";
@@ -52,6 +53,8 @@ export function handleTuiKey(
       return handleRenameSessionKey(state, key);
     case "newSession":
       return handleNewSessionKey(state, key);
+    case "projectDefaultAgent":
+      return handleProjectDefaultAgentKey(state, key);
     case "addProject":
       return handleAddProjectKey(state, key);
   }

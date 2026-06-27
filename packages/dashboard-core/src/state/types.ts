@@ -1,4 +1,5 @@
 import type {
+  ProjectId,
   SafeError,
   SessionId,
   StationSnapshot,
@@ -75,7 +76,8 @@ export type TuiScreen =
       validationError?: string;
     }
   | { name: "addProject"; flow: AddProjectFlowState }
-  | { name: "newSession"; flow: NewSessionFlowState };
+  | { name: "newSession"; flow: NewSessionFlowState }
+  | { name: "projectDefaultAgent"; projectId: ProjectId };
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;

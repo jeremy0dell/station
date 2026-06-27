@@ -140,6 +140,13 @@
       "projectId": "web"
     }
   },
+  "projectSetDefaultHarness": {
+    "type": "project.setDefaultHarness",
+    "payload": {
+      "projectId": "web",
+      "harness": "codex"
+    }
+  },
   "hooksInstall": {
     "type": "hooks.install",
     "payload": {

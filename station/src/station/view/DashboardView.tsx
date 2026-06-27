@@ -45,8 +45,7 @@ const SHELL_AFFORDANCE_WIDTH_COMPACT = SHELL_AFFORDANCE_LABEL_COMPACT.length + 1
 
 // The per-project-header quick-session affordance sits after [shell] on project
 // rows: "[quick session]" creates a session (default harness), "[▾]" opens the
-// wizard pre-configured to this project. Compact mode uses "[qs]" when columns
-// are limited.
+// project default-agent picker. Compact mode uses "[qs]" when columns are limited.
 const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
 const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
 // Reserved width: leading space + session label + space + [▾]
@@ -298,8 +297,8 @@ function ShellAffordance({
  * The trailing `[quick session] [▾]` (or `[qs] [▾]` in compact mode)
  * quick-session affordance on project headers. Two separate `<text>` elements
  * so each click target fires independently: the session label immediately
- * creates a session (default harness), `[▾]` opens the harness-picker wizard
- * pre-configured to this project.
+ * creates a session (default harness), `[▾]` opens the default-agent picker
+ * for this project.
  */
 function QuickSessionAffordance({
   projectId,
@@ -326,7 +325,7 @@ function QuickSessionAffordance({
       <text
         flexShrink={0}
         fg={pickerHover ? STATION_COLORS.green : STATION_COLORS.gray}
-        {...stationMouseProps(dispatch, { kind: "showHarnessPickerForProject", projectId })}
+        {...stationMouseProps(dispatch, { kind: "showDefaultAgentPickerForProject", projectId })}
         onMouseOver={() => setPickerHover(true)}
         onMouseOut={() => setPickerHover(false)}
       >

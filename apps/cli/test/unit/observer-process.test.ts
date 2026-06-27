@@ -51,7 +51,7 @@ describe("CLI observer process helpers", () => {
                 throw new Error("not yet");
               }
               return {
-                schemaVersion: "0.5.0",
+                schemaVersion: "0.6.0",
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
@@ -95,7 +95,7 @@ describe("CLI observer process helpers", () => {
                 throw new Error("not running");
               }
               return {
-                schemaVersion: "0.5.0",
+                schemaVersion: "0.6.0",
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
@@ -204,7 +204,7 @@ describe("CLI observer process helpers", () => {
                   tag: "ProtocolError",
                   code: "PROTOCOL_SCHEMA_MISMATCH",
                   message:
-                    "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.5.0.",
+                    "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.6.0.",
                   hint: "A different STATION checkout may own the observer socket.",
                 };
               },

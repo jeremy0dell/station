@@ -1,16 +1,16 @@
 {
   "request": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "jsonrpc": "2.0",
     "id": "req_1",
     "method": "observer.health"
   },
   "successResponse": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "jsonrpc": "2.0",
     "id": "req_1",
     "result": {
-      "schemaVersion": "0.5.0",
+      "schemaVersion": "0.6.0",
       "status": "healthy",
       "pid": 1234,
       "startedAt": "2026-05-20T12:00:00.000Z",
@@ -18,7 +18,7 @@
     }
   },
   "errorResponse": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "jsonrpc": "2.0",
     "id": "req_1",
     "error": {
@@ -28,7 +28,7 @@
     }
   },
   "eventEnvelope": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "event": {
       "type": "providerHook.ingested",
       "at": "2026-05-20T12:02:00.000Z",
@@ -38,7 +38,7 @@
     }
   },
   "doctorRequest": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "jsonrpc": "2.0",
     "id": "req_doctor",
     "method": "doctor.run",
@@ -47,7 +47,7 @@
     }
   },
   "diagnosticsRequest": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "jsonrpc": "2.0",
     "id": "req_diag",
     "method": "diagnostics.collect",

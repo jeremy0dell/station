@@ -25,6 +25,7 @@ export type StationInputMode =
   | "newSessionEditName"
   | "newSessionPickProject"
   | "newSessionPickAgent"
+  | "projectDefaultAgent"
   | "addProject";
 
 export function deriveStationMode(state: TuiState): StationInputMode {
@@ -56,6 +57,8 @@ export function deriveStationMode(state: TuiState): StationInputMode {
       break;
     case "addProject":
       return "addProject";
+    case "projectDefaultAgent":
+      return "projectDefaultAgent";
   }
   return "dashboard";
 }
@@ -183,6 +186,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   newSessionPickAgent: [
     { id: "station.newSessionAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
     { id: "station.newSessionAgent.choose", pattern: { kind: "slot" }, action: "station.newSession.chooseAgent", outcome: "handled", help: { keys: "1-9 a-z", label: "choose agent" } },
+  ],
+  projectDefaultAgent: [
+    { id: "station.projectDefaultAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectDefaultAgent.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
+    { id: "station.projectDefaultAgent.choose", pattern: { kind: "slot" }, action: "station.projectDefaultAgent.choose", outcome: "handled", help: { keys: "1-9 a-z", label: "choose agent" } },
   ],
   // The add-project flow has internal modes (start/choose/review/success/
   // failed, with a slash filter and a name editor); this single table covers

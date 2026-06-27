@@ -13,7 +13,7 @@
 //    the transition reports dismissPopup/exitCode).
 import { describe, expect, it } from "bun:test";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
-import { createInitialTuiState } from "@station/dashboard-core";
+import { createInitialTuiState, openProjectDefaultAgentPicker } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import { handleTuiKey } from "@station/dashboard-core";
 import type { TuiState } from "@station/dashboard-core";
@@ -103,6 +103,7 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     newSessionEditName: drive(base, [{ input: "N" }, { input: "N" }]),
     newSessionPickProject: drive(base, [{ input: "N" }, { input: "P" }]),
     newSessionPickAgent: drive(base, [{ input: "N" }, { input: "A" }]),
+    projectDefaultAgent: openProjectDefaultAgentPicker(base, "station"),
     addProject: drive(base, [{ input: "A" }]),
   };
 }

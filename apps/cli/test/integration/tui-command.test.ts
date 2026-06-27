@@ -24,11 +24,11 @@ const tuiConfig: TuiConfig = {
 
 function emptySnapshot(reason: string) {
   return {
-    schemaVersion: "0.5.0",
+    schemaVersion: "0.6.0",
     reason,
     reconciledAt: now,
     snapshot: {
-      schemaVersion: "0.5.0",
+      schemaVersion: "0.6.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
       providerHealth: {},
@@ -63,7 +63,7 @@ function runningObserverDeps(options: { reconciles?: string[]; hangReconcile?: b
         health: async () => {
           if (!running) throw new Error("stopped");
           return {
-            schemaVersion: "0.5.0",
+            schemaVersion: "0.6.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,

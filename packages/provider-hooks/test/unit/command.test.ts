@@ -33,7 +33,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedPayload = event.payload;
             return {
-              schemaVersion: "0.5.0",
+              schemaVersion: "0.6.0",
               hookId: event.hookId ?? "hook_worktrunk_1",
               provider: event.provider,
               event: event.event,
@@ -88,7 +88,7 @@ describe("provider hook ingress command", () => {
         writeSpool: async ({ spoolDir, event, error, clock }) => {
           observedSpoolDir = spoolDir;
           return {
-            schemaVersion: "0.5.0",
+            schemaVersion: "0.6.0",
             hookId: event.hookId ?? "hook_worktrunk_config_only",
             provider: event.provider,
             event: event.event,
@@ -128,7 +128,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedEvent = event;
             return {
-              schemaVersion: "0.5.0",
+              schemaVersion: "0.6.0",
               hookId: event.hookId ?? "hook_crush_1",
               provider: event.provider,
               event: event.event,
@@ -197,7 +197,7 @@ describe("provider hook ingress command", () => {
             reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
               observedReport = report;
               return {
-                schemaVersion: "0.5.0",
+                schemaVersion: "0.6.0",
                 reportId: report.reportId,
                 provider: report.provider,
                 eventType: report.eventType,
@@ -262,7 +262,7 @@ describe("provider hook ingress command", () => {
             reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
               observedReport = report;
               return {
-                schemaVersion: "0.5.0",
+                schemaVersion: "0.6.0",
                 reportId: report.reportId,
                 provider: report.provider,
                 eventType: report.eventType,
@@ -382,7 +382,7 @@ describe("provider hook ingress command", () => {
             reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
               observedReport = report;
               return {
-                schemaVersion: "0.5.0",
+                schemaVersion: "0.6.0",
                 reportId: report.reportId,
                 provider: report.provider,
                 eventType: report.eventType,
@@ -449,7 +449,7 @@ describe("provider hook ingress command", () => {
             reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
               observedReport = report;
               return {
-                schemaVersion: "0.5.0",
+                schemaVersion: "0.6.0",
                 reportId: report.reportId,
                 provider: report.provider,
                 eventType: report.eventType,
@@ -498,7 +498,7 @@ describe("provider hook ingress command", () => {
           observedTimeoutMs = options.timeoutMs;
           return {
             reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => ({
-              schemaVersion: "0.5.0",
+              schemaVersion: "0.6.0",
               reportId: report.reportId,
               provider: report.provider,
               eventType: report.eventType,

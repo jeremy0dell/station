@@ -40,6 +40,21 @@ export type RemoveProjectFromConfigResult = {
   config: StationConfig;
 };
 
+export type SetProjectDefaultHarnessOptions = {
+  projectId: string;
+  harness: string;
+  configPath?: string;
+  homeDir?: string;
+};
+
+export type SetProjectDefaultHarnessResult = {
+  status: "updated" | "unchanged";
+  configPath: string;
+  projectId: string;
+  harness: string;
+  config: StationConfig;
+};
+
 export type ProjectDoctorResult = {
   project: ProjectConfig;
   rootExists: boolean;

@@ -382,7 +382,7 @@ describe("routeStationMouse", () => {
     }
   });
 
-  it("gates quick-session and harness-picker to dashboard mode", () => {
+  it("gates quick-session and default-agent picker to dashboard mode", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "/" }); // enter search mode
 
@@ -390,7 +390,11 @@ describe("routeStationMouse", () => {
       routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
     expect(
-      routeStationMouse({ kind: "showHarnessPickerForProject", projectId: "station" }, LEFT_DOWN, store),
+      routeStationMouse(
+        { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+        LEFT_DOWN,
+        store,
+      ),
     ).toEqual({ kind: "handled" });
   });
 
@@ -401,25 +405,60 @@ describe("routeStationMouse", () => {
     ).toEqual({ kind: "handled" });
   });
 
-  it("opens the new-session wizard pre-configured to a project via [▾] harness picker", () => {
+  it("opens the project default-agent picker via [▾]", () => {
     const store = makeStore();
-    const outcome = routeStationMouse({ kind: "showHarnessPickerForProject", projectId: "station" }, LEFT_DOWN, store);
-    // The outcome is handled (no router effect); the wizard screen is set on the store.
+    const outcome = routeStationMouse(
+      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
+    // The outcome is handled (no router effect); the picker screen is set on the store.
     expect(outcome).toEqual({ kind: "handled" });
     const screen = store.getState().screen;
     expect(screen).toBeDefined();
-    expect(screen?.name).toBe("newSession");
-    if (screen?.name === "newSession") {
-      expect(screen.flow.selectedProjectId).toBe("station");
-      expect(screen.flow.selectedHarness).toBe("codex");
+    expect(screen?.name).toBe("projectDefaultAgent");
+    if (screen?.name === "projectDefaultAgent") {
+      expect(screen.projectId).toBe("station");
     }
   });
 
-  it("silently ignores harness-picker on absent or unavailable project", () => {
+  it("selects a project default agent by clicking an agent picker row", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 12 });
+    const store = fixture.store;
+    routeStationMouse(
+      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
+
+    const outcome = routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+
+    await waitFor(() => fixture.service.loadCount === 1);
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(
+      fixture.service.dispatched.some(
+        (command) =>
+          command.type === "project.setDefaultHarness" &&
+          command.payload.projectId === "station" &&
+          command.payload.harness === "opencode",
+      ),
+    ).toBe(true);
+    expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    const toast = store
+      .getState()
+      .toasts.find((entry) => entry.toast.message === "Default agent set to opencode.");
+    expect(toast?.toast).toMatchObject({ kind: "success" });
+  });
+
+  it("silently ignores default-agent picker on absent or unavailable project", () => {
     const store = makeStore();
     // Ghost project: no mutation, no router effect.
-    routeStationMouse({ kind: "showHarnessPickerForProject", projectId: "ghost" }, LEFT_DOWN, store);
-    expect(store.getState().screen?.name).not.toBe("newSession");
+    routeStationMouse(
+      { kind: "showDefaultAgentPickerForProject", projectId: "ghost" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen?.name).not.toBe("projectDefaultAgent");
   });
 });
 
@@ -483,4 +522,13 @@ function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
     throw new Error(`no slot for row ${rowId}`);
   }
   return choice.key;
+}
+
+async function waitFor(assertion: () => boolean): Promise<void> {
+  const deadline = Date.now() + 500;
+  for (;;) {
+    if (assertion()) return;
+    if (Date.now() > deadline) throw new Error("timed out waiting for assertion");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }

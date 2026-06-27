@@ -1,4 +1,8 @@
-import { addProjectToConfig, removeProjectFromConfig } from "@station/config";
+import {
+  addProjectToConfig,
+  removeProjectFromConfig,
+  setProjectDefaultHarnessInConfig,
+} from "@station/config";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
@@ -57,6 +61,29 @@ export function createProjectRemoveHandler(
       eventBus: options.eventBus,
       clock: options.clock,
       reason: "command:project.remove",
+      trace: context.trace,
+    });
+  };
+}
+
+export function createProjectSetDefaultHarnessHandler(
+  options: CreateProjectCommandHandlerOptions,
+): CommandHandler {
+  return async (context) => {
+    assertCommandType(context, "project.setDefaultHarness");
+    const result = await setProjectDefaultHarnessInConfig({
+      projectId: context.command.payload.projectId,
+      harness: context.command.payload.harness,
+      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
+    });
+
+    options.core.updateConfig(result.config);
+    await reconcileAndPublish({
+      core: options.core,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      reason: "command:project.setDefaultHarness",
       trace: context.trace,
     });
   };

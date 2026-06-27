@@ -358,6 +358,7 @@ function commandScope(command: StationCommand): string {
     case "observer.reconcile":
     case "project.add":
     case "project.remove":
+    case "project.setDefaultHarness":
     case "hooks.install":
       return "global";
   }

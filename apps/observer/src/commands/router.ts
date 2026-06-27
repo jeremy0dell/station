@@ -6,7 +6,11 @@ import type { ObserverPersistence } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
-import { createProjectAddHandler, createProjectRemoveHandler } from "./project.js";
+import {
+  createProjectAddHandler,
+  createProjectRemoveHandler,
+  createProjectSetDefaultHarnessHandler,
+} from "./project.js";
 import type { CommandQueue } from "./queue.js";
 import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
@@ -182,6 +186,16 @@ export function registerObserverCommandHandlers(
       ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
   );
+  options.queue.registerHandler(
+    "project.setDefaultHarness",
+    createProjectSetDefaultHarnessHandler({
+      core: options.core,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
+    }),
+  );
 
   void options.logger?.info("Observer command handlers registered.", {
     commandTypes: [
@@ -198,6 +212,7 @@ export function registerObserverCommandHandlers(
       "worktree.remove",
       "project.add",
       "project.remove",
+      "project.setDefaultHarness",
     ],
   });
 }

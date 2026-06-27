@@ -7,6 +7,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
+import { openProjectDefaultAgentPicker } from "@station/dashboard-core";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 
@@ -77,6 +78,15 @@ const CASES: ModalCase[] = [
     name: "new session pick agent",
     keys: [{ input: "N" }, { input: "A" }],
     expect: ["Choose Agent", "1-9/a-z:select   Esc:back", "codex"],
+  },
+  {
+    name: "project default agent picker",
+    keys: [],
+    prepare: (store) => {
+      store.setState(openProjectDefaultAgentPicker(store.getState(), "station"));
+    },
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Select default agent for station", "1-9/a-z:select   Esc:cancel", "codex"],
   },
   {
     name: "add project sheet",

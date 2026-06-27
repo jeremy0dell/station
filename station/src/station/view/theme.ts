@@ -3,6 +3,7 @@
 // takes fg hex strings. Values match the terminal-ish palette the rest of
 // Station already uses.
 import { ROW_COLOR_PURPLE, type RowColor } from "@station/dashboard-core";
+import type { ProviderHealth } from "@station/contracts";
 
 export const STATION_COLORS = {
   gray: "#9ca3af",
@@ -36,4 +37,17 @@ export function rowColorToHex(color: RowColor | undefined): string | undefined {
       // ROW_COLOR_PURPLE is already a hex literal.
       return color;
   }
+}
+
+const PROVIDER_HEALTH_STATUS_COLORS: Record<ProviderHealth["status"], string> = {
+  healthy: STATION_COLORS.green,
+  degraded: STATION_COLORS.yellow,
+  unavailable: STATION_COLORS.red,
+  unknown: STATION_COLORS.gray,
+};
+
+export function providerHealthStatusColor(
+  status: ProviderHealth["status"] | undefined,
+): string | undefined {
+  return status === undefined ? undefined : PROVIDER_HEALTH_STATUS_COLORS[status];
 }

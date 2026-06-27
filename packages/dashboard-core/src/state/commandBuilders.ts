@@ -31,6 +31,11 @@ export type RenameSessionCommandInput = {
   title: string;
 };
 
+export type SetProjectDefaultHarnessCommandInput = {
+  projectId: ProjectView["id"];
+  harness: ProviderId;
+};
+
 export type BuildFocusCommandOptions = {
   origin?: TerminalFocusOrigin;
 };
@@ -162,6 +167,18 @@ export function buildRenameSessionCommand(input: RenameSessionCommandInput): Sta
     payload: {
       sessionId: input.sessionId,
       title: input.title,
+    },
+  };
+}
+
+export function buildSetProjectDefaultHarnessCommand(
+  input: SetProjectDefaultHarnessCommandInput,
+): Extract<StationCommand, { type: "project.setDefaultHarness" }> {
+  return {
+    type: "project.setDefaultHarness",
+    payload: {
+      projectId: input.projectId,
+      harness: input.harness,
     },
   };
 }
