@@ -16,6 +16,7 @@ import { EditableTextInputView } from "../EditableTextInputView.js";
 import { STATION_COLORS } from "../theme.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { SheetFooter, SheetLabelValue, SheetLine, spaces } from "./parts.js";
 
 export type NewSessionSheetViewProps = {
@@ -178,16 +179,7 @@ function AgentPicker({
   return (
     <>
       <SheetLine width={width}> </SheetLine>
-      {options.map((choice) => (
-        <ChoiceLine
-          key={choice.value.id}
-          choiceKey={choice.key}
-          label={choice.value.label}
-          detail={choice.value.status}
-          color={statusColor(choice.value.status)}
-          width={width}
-        />
-      ))}
+      <AgentChoiceListView choices={options} width={width} />
       <SheetLine width={width}> </SheetLine>
       <SheetFooter width={width}>{"1-9/a-z:select   Esc:back"}</SheetFooter>
     </>

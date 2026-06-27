@@ -14,7 +14,7 @@ import {
   dispatchBindingClick,
   dispatchRowSlot,
   dispatchStationKey,
-  openNewSessionForProject,
+  openDefaultAgentPickerForProject,
   representativeKeyForBinding,
   resolveNewSessionSubmit,
   resolveProjectPaneTarget,
@@ -39,8 +39,8 @@ export type StationMouseTarget =
   | { kind: "openShellForProject"; projectId: string }
   /** The `[+]` quick-session affordance on a project header. */
   | { kind: "quickSessionForProject"; projectId: string }
-  /** The `[▾]` harness-picker affordance on a project header. */
-  | { kind: "showHarnessPickerForProject"; projectId: string }
+  /** The `[▾]` default-agent affordance on a project header. */
+  | { kind: "showDefaultAgentPickerForProject"; projectId: string }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "footerHint"; bindingId: string }
@@ -159,11 +159,11 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromQuickSessionSubmit(resolveQuickSessionSubmit(store, target.projectId));
-    case "showHarnessPickerForProject":
+    case "showDefaultAgentPickerForProject":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
-      openNewSessionForProject(store, target.projectId);
+      openDefaultAgentPickerForProject(store, target.projectId);
       return { kind: "handled" };
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
@@ -230,6 +230,7 @@ export function stationMouseEventKind(event: StationMouseEvent): StationMouseEve
 const SHEET_CHOICE_MODES: ReadonlySet<StationInputMode> = new Set([
   "newSessionPickProject",
   "newSessionPickAgent",
+  "projectDefaultAgent",
 ]);
 
 function routeStationWheel(

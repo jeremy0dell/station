@@ -6,6 +6,7 @@ import {
   ConfigError,
   loadConfig,
   removeProjectFromConfig,
+  setProjectDefaultHarnessInConfig,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
 
@@ -185,5 +186,91 @@ root = ${JSON.stringify(web)}
     const loaded = await loadConfig({ configPath, homeDir: tempDir });
     expect(loaded.projects).toEqual([]);
     await expect(readFile(configPath, "utf8")).resolves.toContain("projects = []");
+  });
+
+  it("sets a project default harness on a minimal project block", async () => {
+    const tempDir = await makeTempDir();
+    const web = await makeRepo(tempDir, "web");
+    const configPath = await writeBaseConfig(
+      tempDir,
+      `
+[[projects]]
+id = "web"
+label = "web"
+root = ${JSON.stringify(web)}
+`,
+    );
+
+    const result = await setProjectDefaultHarnessInConfig({
+      projectId: "web",
+      harness: "opencode",
+      configPath,
+      homeDir: tempDir,
+    });
+
+    expect(result.status).toBe("updated");
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    expect(loaded.projects[0]?.defaults.harness).toBe("opencode");
+    const source = await readFile(configPath, "utf8");
+    expect(source).toContain('[projects.defaults]\nharness = "opencode"');
+  });
+
+  it("replaces an existing project default harness", async () => {
+    const tempDir = await makeTempDir();
+    const web = await makeRepo(tempDir, "web");
+    const configPath = await writeBaseConfig(
+      tempDir,
+      `
+[[projects]]
+id = "web"
+label = "web"
+root = ${JSON.stringify(web)}
+
+[projects.defaults]
+harness = "codex"
+layout = "agent-shell"
+`,
+    );
+
+    await setProjectDefaultHarnessInConfig({
+      projectId: "web",
+      harness: "opencode",
+      configPath,
+      homeDir: tempDir,
+    });
+
+    const source = await readFile(configPath, "utf8");
+    expect(source).toContain('[projects.defaults]\nharness = "opencode"\nlayout = "agent-shell"');
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    expect(loaded.projects[0]?.defaults).toEqual({
+      harness: "opencode",
+      terminal: "tmux",
+      layout: "agent-shell",
+    });
+  });
+
+  it("does not write when the selected project harness is already effective", async () => {
+    const tempDir = await makeTempDir();
+    const web = await makeRepo(tempDir, "web");
+    const configPath = await writeBaseConfig(
+      tempDir,
+      `
+[[projects]]
+id = "web"
+label = "web"
+root = ${JSON.stringify(web)}
+`,
+    );
+    const before = await readFile(configPath, "utf8");
+
+    const result = await setProjectDefaultHarnessInConfig({
+      projectId: "web",
+      harness: "codex",
+      configPath,
+      homeDir: tempDir,
+    });
+
+    expect(result.status).toBe("unchanged");
+    await expect(readFile(configPath, "utf8")).resolves.toBe(before);
   });
 });

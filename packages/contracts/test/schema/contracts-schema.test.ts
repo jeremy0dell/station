@@ -83,7 +83,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.5.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.6.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -662,6 +662,7 @@ describe("contract schemas", () => {
       "observer.reconcile",
       "project.add",
       "project.remove",
+      "project.setDefaultHarness",
       "session.acknowledgeTurn",
       "session.close",
       "session.create",

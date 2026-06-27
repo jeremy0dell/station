@@ -1,6 +1,6 @@
 {
   "noProjects": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -24,7 +24,7 @@
     "alerts": []
   },
   "multipleProjects": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -109,7 +109,7 @@
     "alerts": []
   },
   "zeroWorktreeProject": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -158,7 +158,7 @@
     "alerts": []
   },
   "noAgentWorktree": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -228,7 +228,7 @@
     "alerts": []
   },
   "idleAgent": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -355,7 +355,7 @@
     "alerts": []
   },
   "workingAgent": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -440,7 +440,7 @@
     "alerts": []
   },
   "needsAttentionAgent": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -524,7 +524,7 @@
     "alerts": []
   },
   "stuckAgent": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -609,7 +609,7 @@
     "alerts": []
   },
   "exitedAgent": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -691,7 +691,7 @@
     "alerts": []
   },
   "unknownLowConfidence": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -775,7 +775,7 @@
     "alerts": []
   },
   "orphanedTerminalTarget": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -809,7 +809,7 @@
     ]
   },
   "providerFailure": {
-    "schemaVersion": "0.5.0",
+    "schemaVersion": "0.6.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,

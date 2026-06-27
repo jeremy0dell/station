@@ -6,6 +6,7 @@ import type { TuiScreen } from "@station/dashboard-core";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
+import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 
@@ -26,6 +27,16 @@ export function OverlayHostView({ snapshot, screen, columns, rows }: OverlayHost
   if (screen.name === "newSession") {
     return (
       <NewSessionSheetView columns={columns} rows={rows} snapshot={snapshot} state={screen.flow} />
+    );
+  }
+  if (screen.name === "projectDefaultAgent") {
+    return (
+      <ProjectDefaultAgentSheetView
+        columns={columns}
+        rows={rows}
+        snapshot={snapshot}
+        screen={screen}
+      />
     );
   }
   if (screen.name === "renameSession" && screen.step === "editName") {

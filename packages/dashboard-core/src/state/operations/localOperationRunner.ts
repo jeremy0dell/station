@@ -1,6 +1,6 @@
 import type { CommandId, SafeError, StationCommand, StationEvent } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
-import { safeErrorToToast } from "../../services/errors/errors.js";
+import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { TuiFolderService } from "../../services/folderService.js";
 import type { TuiObserverService } from "../../services/types.js";
 import {
@@ -215,6 +215,14 @@ export function createTuiLocalOperationRunner(input: {
         if (operation.type === "addProject") {
           void runAddProjectOperation(store(), input.service, operation.command, input.clientLabel);
         }
+        if (operation.type === "setProjectDefaultHarness") {
+          void runSetProjectDefaultHarnessOperation(
+            store(),
+            input.service,
+            operation.command,
+            input.clientLabel,
+          );
+        }
       }
     },
     prepareCommandFailedEvent: (event) => {
@@ -242,6 +250,46 @@ export function createTuiLocalOperationRunner(input: {
       };
     },
   };
+}
+
+async function runSetProjectDefaultHarnessOperation(
+  store: StoreApi<TuiStore>,
+  service: TuiObserverService,
+  command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
+  clientLabel: string,
+): Promise<void> {
+  try {
+    const receipt = await service.dispatch(command);
+    if (!receipt.accepted) {
+      addSafeCommandToast(
+        store,
+        receipt.error ?? {
+          tag: "CommandExecutionError",
+          code: "COMMAND_REJECTED",
+          message: `${command.type} was rejected.`,
+        },
+      );
+      return;
+    }
+    const completion = await service.waitForCommandCompletion(receipt.commandId);
+    if (completion.status === "failed") {
+      addSafeCommandToast(store, completion.error);
+      return;
+    }
+    const snapshot = await service.loadSnapshot();
+    store.setState(
+      addTuiToast(replaceSnapshot(store.getState(), snapshot), {
+        kind: "success",
+        message: `Default agent set to ${command.payload.harness}.`,
+      }),
+    );
+  } catch (error: unknown) {
+    addSafeCommandToast(store, toSafeError(error, { clientLabel }));
+  }
+}
+
+function addSafeCommandToast(store: StoreApi<TuiStore>, error: SafeError): void {
+  store.setState(addTuiToast(store.getState(), safeErrorToToast(error)));
 }
 
 async function runLoadProjectDirectoryOperation(

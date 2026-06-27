@@ -1,4 +1,9 @@
-import { createInitialTuiState, handleTuiKey, openRenameEditForRow } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  handleTuiKey,
+  openProjectDefaultAgentPicker,
+  openRenameEditForRow,
+} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
   createCommandSnapshot,
@@ -551,6 +556,53 @@ describe("TUI screen transitions", () => {
         },
       },
     });
+  });
+
+  it("opens and cancels the project default agent picker", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const opened = openProjectDefaultAgentPicker(state, "web");
+
+    expect(opened.screen).toEqual({ name: "projectDefaultAgent", projectId: "web" });
+    expect(handleTuiKey(opened, { input: "", escape: true }).state.screen).toEqual({
+      name: "dashboard",
+    });
+  });
+
+  it("sets a project default agent from the picker", () => {
+    const state = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+
+    const transition = handleTuiKey(state, { input: "2" });
+
+    expect(transition.state.screen).toEqual({ name: "dashboard" });
+    expect(transition.operations).toEqual([
+      {
+        type: "setProjectDefaultHarness",
+        projectId: "web",
+        harness: "opencode",
+        command: {
+          type: "project.setDefaultHarness",
+          payload: {
+            projectId: "web",
+            harness: "opencode",
+          },
+        },
+      },
+    ]);
+  });
+
+  it("closes the project default agent picker without dispatching when selection is unchanged", () => {
+    const state = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+
+    const transition = handleTuiKey(state, { input: "1" });
+
+    expect(transition.state.screen).toEqual({ name: "dashboard" });
+    expect(transition.operations).toBeUndefined();
   });
 
   it("adds a safe error toast when no project exists for a new session", () => {

@@ -4,6 +4,7 @@ import {
   deriveTuiInputMode,
   handleTuiKey,
   matchingTuiBindings,
+  openProjectDefaultAgentPicker,
   TUI_KEYMAP,
   type TuiInputMode,
   type TuiTransition,
@@ -22,6 +23,7 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   "tui.rename.chooseSlot",
   "tui.newSessionProject.choose",
   "tui.newSessionAgent.choose",
+  "tui.projectDefaultAgent.choose",
   // Add-project metadata is a union over its internal submodes.
   "tui.addProject.cancel",
   "tui.addProject.confirm",
@@ -83,6 +85,7 @@ function representativeStates(): Record<TuiInputMode, TuiState> {
     newSessionEditName: drive(base, [{ input: "N" }, { input: "N" }]),
     newSessionPickProject: drive(base, [{ input: "N" }, { input: "P" }]),
     newSessionPickAgent: drive(base, [{ input: "N" }, { input: "A" }]),
+    projectDefaultAgent: openProjectDefaultAgentPicker(base, "web"),
     addProject: drive(base, [{ input: "A" }]),
   };
 }

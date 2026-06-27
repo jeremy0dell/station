@@ -206,6 +206,15 @@ export const RemoveProjectPayloadSchema = z
 
 export type RemoveProjectPayload = z.infer<typeof RemoveProjectPayloadSchema>;
 
+export const SetProjectDefaultHarnessPayloadSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    harness: ProviderIdSchema,
+  })
+  .strict();
+
+export type SetProjectDefaultHarnessPayload = z.infer<typeof SetProjectDefaultHarnessPayloadSchema>;
+
 export const InstallHooksPayloadSchema = z
   .object({
     provider: ProviderIdSchema,
@@ -229,6 +238,7 @@ export const StationCommandTypeSchema = z.enum([
   "observer.reconcile",
   "project.add",
   "project.remove",
+  "project.setDefaultHarness",
   "hooks.install",
 ]);
 
@@ -288,6 +298,13 @@ export const RemoveProjectCommandSchema = z
   .object({ type: z.literal("project.remove"), payload: RemoveProjectPayloadSchema })
   .strict();
 
+export const SetProjectDefaultHarnessCommandSchema = z
+  .object({
+    type: z.literal("project.setDefaultHarness"),
+    payload: SetProjectDefaultHarnessPayloadSchema,
+  })
+  .strict();
+
 export const InstallHooksCommandSchema = z
   .object({ type: z.literal("hooks.install"), payload: InstallHooksPayloadSchema })
   .strict();
@@ -307,6 +324,7 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   ObserverReconcileCommandSchema,
   AddProjectCommandSchema,
   RemoveProjectCommandSchema,
+  SetProjectDefaultHarnessCommandSchema,
   InstallHooksCommandSchema,
 ]);
 

@@ -12,9 +12,9 @@ import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
 import {
   choiceValueByKey,
-  createNewSessionFlow,
   createNewSessionNameToken,
   generatedSessionBranch,
+  openProjectDefaultAgentPicker,
   selectDashboardViewport,
 } from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
@@ -271,25 +271,14 @@ export function resolveQuickSessionSubmit(
 }
 
 /**
- * Open the New Session wizard with the given project pre-selected (skips the
- * project-picker step, lands on the review screen). Pure store mutation —
- * no router outcome. Absent or unavailable projects are silently ignored.
+ * Open the project default-agent picker. Pure store mutation — no router
+ * outcome. Absent or unavailable projects are silently ignored.
  */
-export function openNewSessionForProject(store: StoreApi<TuiStore>, projectId: string): void {
-  const state = store.getState();
-  const snapshot = state.snapshot;
-  if (snapshot === undefined) {
-    return;
-  }
-  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
-  if (project === undefined || project.health.status === "unavailable") {
-    return;
-  }
-  const flow = createNewSessionFlow(snapshot, createNewSessionNameToken(), projectId);
-  if (flow === undefined) {
-    return;
-  }
-  store.setState({ ...state, screen: { name: "newSession", flow } });
+export function openDefaultAgentPickerForProject(
+  store: StoreApi<TuiStore>,
+  projectId: string,
+): void {
+  store.setState(openProjectDefaultAgentPicker(store.getState(), projectId));
 }
 
 /**
