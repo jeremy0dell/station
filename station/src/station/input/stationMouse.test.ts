@@ -370,6 +370,57 @@ describe("routeStationMouse", () => {
       routeStationMouse({ kind: "openShellForProject", projectId: "ghost" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
   });
+
+  it("creates a session immediately via [+] quick-session affordance", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store);
+    expect(outcome.kind).toBe("launch-new-session");
+    if (outcome.kind === "launch-new-session") {
+      expect(outcome.projectId).toBe("station");
+      expect(outcome.harness).toBe("codex"); // project.defaults.harness
+      expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
+    }
+  });
+
+  it("gates quick-session and harness-picker to dashboard mode", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "/" }); // enter search mode
+
+    expect(
+      routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+    expect(
+      routeStationMouse({ kind: "showHarnessPickerForProject", projectId: "station" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+  });
+
+  it("treats an unresolvable project as an inert click for quick-session", () => {
+    const store = makeStore();
+    expect(
+      routeStationMouse({ kind: "quickSessionForProject", projectId: "ghost" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+  });
+
+  it("opens the new-session wizard pre-configured to a project via [▾] harness picker", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse({ kind: "showHarnessPickerForProject", projectId: "station" }, LEFT_DOWN, store);
+    // The outcome is handled (no router effect); the wizard screen is set on the store.
+    expect(outcome).toEqual({ kind: "handled" });
+    const screen = store.getState().screen;
+    expect(screen).toBeDefined();
+    expect(screen?.name).toBe("newSession");
+    if (screen?.name === "newSession") {
+      expect(screen.flow.selectedProjectId).toBe("station");
+      expect(screen.flow.selectedHarness).toBe("codex");
+    }
+  });
+
+  it("silently ignores harness-picker on absent or unavailable project", () => {
+    const store = makeStore();
+    // Ghost project: no mutation, no router effect.
+    routeStationMouse({ kind: "showHarnessPickerForProject", projectId: "ghost" }, LEFT_DOWN, store);
+    expect(store.getState().screen?.name).not.toBe("newSession");
+  });
 });
 
 describe("resolveKeyRowAgentTarget", () => {

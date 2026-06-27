@@ -164,8 +164,9 @@ describe("dashboard golden frames", () => {
     const frame = setup.captureCharFrame();
     // Status glyphs and labels from the parity checklist.
     expect(frame).toContain("! hook-scope");
-    // The constraint solver truncates meaningful activity text at 80 cols.
-    expect(frame).toContain("Agent needs app…");
+    // Activity claims the row slack but is still bounded by the right-hand
+    // metadata, so meaningful text truncates (later than before) at 80 cols.
+    expect(frame).toContain("Agent needs appro…");
     expect(frame).toContain("⠋ pr-info");
     expect(frame).toContain("? metadata-refresh");
     expect(frame).toContain("x done-run");
@@ -173,8 +174,8 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("✓");
     expect(frame).toContain("…");
     // Project headers with the disclosure marker and harness suffix.
-    expect(frame).toContain("▼ station - 4 worktrees | codex");
-    expect(frame).toContain("▼ observer - 2 worktrees | opencode");
+    expect(frame).toContain("▼ station - 4 worktrees");
+    expect(frame).toContain("▼ observer - 2 worktrees");
   });
 
   it("colors alert rows red and check glyphs by state", async () => {

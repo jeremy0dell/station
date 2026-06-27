@@ -96,9 +96,7 @@ function widgetStrip(widgets: readonly TopRowWidgetText[], visibleCount: number)
 }
 
 export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {
-  return `${collapsed ? "▶" : "▼"} ${project.label} - ${
-    project.counts.worktrees
-  } worktrees | ${project.defaults.harness}`;
+  return `${collapsed ? "▶" : "▼"} ${project.label} - ${project.counts.worktrees} worktrees`;
 }
 
 export function emptyProjectLabel(project: ProjectView): string {

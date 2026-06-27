@@ -113,8 +113,12 @@ export type NewSessionCreateValidation =
 export function createNewSessionFlow(
   snapshot: StationSnapshot,
   token: string,
+  projectId?: ProjectId,
 ): NewSessionReviewState | undefined {
-  const project = snapshot.projects[0];
+  const project =
+    projectId !== undefined
+      ? snapshot.projects.find((p) => p.id === projectId)
+      : snapshot.projects[0];
   if (project === undefined) {
     return undefined;
   }
