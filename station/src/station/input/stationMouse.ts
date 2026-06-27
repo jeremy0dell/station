@@ -200,7 +200,7 @@ export function routeStationMouse(
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.choiceKey }));
     case "sheetButton":
-      if (mode !== "removeConfirm") {
+      if (mode !== "removeConfirm" && mode !== "removeProjectConfirm") {
         return { kind: "handled" };
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.key }));

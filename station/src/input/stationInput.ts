@@ -30,6 +30,8 @@ import { STATION_HOST_PROVIDER_ID } from "@station/host";
 import type { ProviderId, WorktreeRow, StationCommand, StationSnapshot } from "@station/contracts";
 import {
   addPendingCreateSessionRow,
+  openProjectDefaultAgentPicker,
+  openRemoveProjectConfirmForProject,
   openRemoveWorktreeConfirmForRow,
   openRenameEditForRow,
   removeCreateSessionLocalRow,
@@ -475,6 +477,20 @@ function selectContextMenuItem(
       if (stationViewStore !== undefined) {
         stationViewStore.setState(
           openRemoveWorktreeConfirmForRow(stationViewStore.getState(), action.rowId),
+        );
+      }
+      return;
+    case "setProjectDefaultAgent":
+      if (stationViewStore !== undefined) {
+        stationViewStore.setState(
+          openProjectDefaultAgentPicker(stationViewStore.getState(), action.projectId),
+        );
+      }
+      return;
+    case "removeProject":
+      if (stationViewStore !== undefined) {
+        stationViewStore.setState(
+          openRemoveProjectConfirmForProject(stationViewStore.getState(), action.projectId),
         );
       }
       return;

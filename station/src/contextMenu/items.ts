@@ -99,6 +99,12 @@ function buildStationItems(
   if (state?.screen.name !== "dashboard" || state.snapshot === undefined) {
     return [noActionsItem()];
   }
+  // Any project-header affordance (header text, [▾], [+], [+sh]) opens the
+  // project menu, so a right-click anywhere on the header row is consistent.
+  const projectId = projectIdFromStationTarget(target);
+  if (projectId !== undefined) {
+    return buildProjectItems(projectId, state);
+  }
   if (target.kind !== "row") {
     return [noActionsItem()];
   }
@@ -126,6 +132,47 @@ function buildStationItems(
     });
   }
   return items.length === 0 ? [noActionsItem()] : items;
+}
+
+/** The projectId behind any project-scoped station mouse target, else undefined. */
+function projectIdFromStationTarget(
+  target: Extract<ContextMenuTarget, { kind: "station" }>["target"],
+): string | undefined {
+  switch (target.kind) {
+    case "projectHeader":
+    case "openShellForProject":
+    case "quickSessionForProject":
+    case "showDefaultAgentPickerForProject":
+      return target.projectId;
+    default:
+      return undefined;
+  }
+}
+
+function buildProjectItems(projectId: string, state: TuiState): readonly ContextMenuItem[] {
+  const project = state.snapshot?.projects.find((candidate) => candidate.id === projectId);
+  if (project === undefined) {
+    return [noActionsItem()];
+  }
+  // The default-agent picker refuses unavailable projects, so disable the item
+  // there rather than offer an action that silently no-ops.
+  const setDefaultAgent: ContextMenuItem = {
+    id: "project.setDefaultAgent",
+    label: "Set Default Agent",
+    action: { kind: "setProjectDefaultAgent", projectId: project.id },
+  };
+  if (project.health.status === "unavailable") {
+    setDefaultAgent.disabled = true;
+  }
+  return [
+    setDefaultAgent,
+    {
+      id: "project.remove",
+      label: "Remove Project",
+      danger: true,
+      action: { kind: "removeProject", projectId: project.id },
+    },
+  ];
 }
 
 function noActionsItem(): ContextMenuItem {

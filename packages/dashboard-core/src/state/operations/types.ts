@@ -68,6 +68,11 @@ export type SetProjectDefaultHarnessOperation = {
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>;
 };
 
+export type RemoveProjectOperation = {
+  type: "removeProject";
+  command: Extract<StationCommand, { type: "project.remove" }>;
+};
+
 export type TuiOperation =
   | CreateSessionOperation
   | RemoveWorktreeOperation
@@ -78,4 +83,5 @@ export type TuiOperation =
   | ReviewProjectFolderOperation
   | SearchProjectDirectoriesOperation
   | AddProjectOperation
-  | SetProjectDefaultHarnessOperation;
+  | SetProjectDefaultHarnessOperation
+  | RemoveProjectOperation;

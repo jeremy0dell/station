@@ -77,7 +77,8 @@ export type TuiScreen =
     }
   | { name: "addProject"; flow: AddProjectFlowState }
   | { name: "newSession"; flow: NewSessionFlowState }
-  | { name: "projectDefaultAgent"; projectId: ProjectId };
+  | { name: "projectDefaultAgent"; projectId: ProjectId }
+  | { name: "removeProject"; projectId: ProjectId; label: string };
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;

@@ -19,6 +19,7 @@ export type StationInputMode =
   | "projectCollapse"
   | "removeChooseSlot"
   | "removeConfirm"
+  | "removeProjectConfirm"
   | "renameChooseSlot"
   | "renameEdit"
   | "newSessionReview"
@@ -59,6 +60,8 @@ export function deriveStationMode(state: TuiState): StationInputMode {
       return "addProject";
     case "projectDefaultAgent":
       return "projectDefaultAgent";
+    case "removeProject":
+      return "removeProjectConfirm";
   }
   return "dashboard";
 }
@@ -147,6 +150,18 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     // Ctrl-N/Ctrl-Y control bytes cancel/confirm too (upstream behavior).
     { id: "station.removeConfirm.cancelCtrlN", pattern: { kind: "char", char: "n", ctrl: true }, action: "station.remove.cancel", outcome: "handled" },
     { id: "station.removeConfirm.confirmCtrlY", pattern: { kind: "char", char: "y", ctrl: true }, action: "station.remove.confirm", outcome: "handled" },
+  ],
+  removeProjectConfirm: [
+    { id: "station.removeProjectConfirm.cancelEsc", pattern: { kind: "named", named: "escape" }, action: "station.removeProject.cancel", outcome: "handled", help: { keys: "N/esc/enter", label: "cancel" } },
+    { id: "station.removeProjectConfirm.cancelEnter", pattern: { kind: "named", named: "return" }, action: "station.removeProject.cancel", outcome: "handled" },
+    { id: "station.removeProjectConfirm.cancelN", pattern: { kind: "char", char: "N" }, action: "station.removeProject.cancel", outcome: "handled" },
+    { id: "station.removeProjectConfirm.cancelLowerN", pattern: { kind: "char", char: "n" }, action: "station.removeProject.cancel", outcome: "handled" },
+    { id: "station.removeProjectConfirm.confirmY", pattern: { kind: "char", char: "Y" }, action: "station.removeProject.confirm", outcome: "handled", help: { keys: "Y", label: "confirm remove" } },
+    { id: "station.removeProjectConfirm.confirmLowerY", pattern: { kind: "char", char: "y" }, action: "station.removeProject.confirm", outcome: "handled" },
+    // The confirm handler lowercases key.input without reading ctrl, so the
+    // Ctrl-N/Ctrl-Y control bytes cancel/confirm too (mirrors removeConfirm).
+    { id: "station.removeProjectConfirm.cancelCtrlN", pattern: { kind: "char", char: "n", ctrl: true }, action: "station.removeProject.cancel", outcome: "handled" },
+    { id: "station.removeProjectConfirm.confirmCtrlY", pattern: { kind: "char", char: "y", ctrl: true }, action: "station.removeProject.confirm", outcome: "handled" },
   ],
   renameChooseSlot: [
     { id: "station.rename.cancel", pattern: { kind: "named", named: "escape" }, action: "station.rename.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
