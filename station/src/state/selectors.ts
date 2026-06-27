@@ -49,10 +49,6 @@ export function selectFocusedPaneId(state: StationState): PaneId | null {
   return state.input.focus.kind === "pane" ? state.input.focus.paneId : null;
 }
 
-export function selectDialogActive(state: StationState): boolean {
-  return state.input.dialogStack.length > 0;
-}
-
 export function selectContextMenuVisible(state: StationState): boolean {
   return state.input.contextMenu !== null;
 }

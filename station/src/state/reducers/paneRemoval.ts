@@ -26,7 +26,7 @@ export function inputAfterPaneRemoval(
     contextMenu: null,
   };
   // A context menu open over the removal closes; re-seat focus where it would
-  // have returned (top dialog / overlay / active pane).
+  // have returned (overlay / active pane).
   if (contextMenu === null) {
     return next;
   }

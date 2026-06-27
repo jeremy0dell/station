@@ -3,10 +3,6 @@ import type { FocusTarget, StationState } from "../types.js";
 import { fallbackFocus, hasPane, withActivePane } from "./paneFocus.js";
 
 export function focusAfterContextMenu(state: StationState): FocusTarget {
-  const topDialog = state.input.dialogStack[state.input.dialogStack.length - 1];
-  if (topDialog !== undefined) {
-    return { kind: "dialog", dialogId: topDialog };
-  }
   if (state.input.activeOverlay !== null) {
     return { kind: "overlay", overlayId: state.input.activeOverlay };
   }

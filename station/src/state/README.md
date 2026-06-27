@@ -1,6 +1,6 @@
 # state/
 
-Vanilla coordination store for Station's pane / overlay / dialog / toast UI.
+Vanilla coordination store for Station's pane / overlay / toast UI.
 Pure where it can be: live PTYs, terminal buffers, and renderer refs stay in the
 registries (`terminal/`), never here.
 
