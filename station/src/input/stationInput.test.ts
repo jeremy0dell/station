@@ -872,6 +872,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    // Menu order: Rename, Delete Session — one down reaches the delete.
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 

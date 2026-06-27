@@ -97,14 +97,6 @@
       "force": true
     }
   },
-  "sessionRemove": {
-    "type": "session.remove",
-    "payload": {
-      "sessionId": "ses_api_cache",
-      "removeWorktree": false,
-      "force": false
-    }
-  },
   "sessionSendPrompt": {
     "type": "session.sendPrompt",
     "payload": {

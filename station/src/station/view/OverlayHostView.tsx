@@ -31,7 +31,7 @@ export function OverlayHostView({ snapshot, screen, columns, rows }: OverlayHost
   if (screen.name === "renameSession" && screen.step === "editName") {
     return <RenameSessionSheetView columns={columns} rows={rows} state={screen} />;
   }
-  if (screen.name === "removeWorktree" || screen.name === "removeSession") {
+  if (screen.name === "removeWorktree") {
     return <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
   }
   return null;

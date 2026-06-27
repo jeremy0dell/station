@@ -40,8 +40,6 @@ export function deriveStationMode(state: TuiState): StationInputMode {
       return "projectCollapse";
     case "removeWorktree":
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
-    case "removeSession":
-      return "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
     case "newSession":
@@ -106,7 +104,7 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     { id: "station.dashboard.search", pattern: { kind: "char", char: "/" }, action: "station.search.open", outcome: "handled", help: { keys: "/", label: "search" } },
     { id: "station.dashboard.rename", pattern: { kind: "char", char: "R" }, action: "station.rename.open", outcome: "handled", help: { keys: "R", label: "rename" } },
     { id: "station.dashboard.refresh", pattern: { kind: "char", char: "Z" }, action: "station.refresh", outcome: "handled", help: { keys: "Z", label: "refresh" } },
-    { id: "station.dashboard.remove", pattern: { kind: "char", char: "X" }, action: "station.remove.open", outcome: "handled", help: { keys: "X", label: "remove session" } },
+    { id: "station.dashboard.remove", pattern: { kind: "char", char: "X" }, action: "station.remove.open", outcome: "handled", help: { keys: "X", label: "delete session" } },
     { id: "station.dashboard.newSession", pattern: { kind: "char", char: "N" }, action: "station.newSession.open", outcome: "handled", help: { keys: "N", label: "new" } },
     { id: "station.dashboard.addProject", pattern: { kind: "char", char: "A" }, action: "station.addProject.open", outcome: "handled", help: { keys: "A", label: "add" } },
     { id: "station.dashboard.collapse", pattern: { kind: "char", char: "C" }, action: "station.collapse.open", outcome: "handled", help: { keys: "C", label: "fold" } },
@@ -140,7 +138,7 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     { id: "station.removeConfirm.cancelEnter", pattern: { kind: "named", named: "return" }, action: "station.remove.cancel", outcome: "handled" },
     { id: "station.removeConfirm.cancelN", pattern: { kind: "char", char: "N" }, action: "station.remove.cancel", outcome: "handled" },
     { id: "station.removeConfirm.cancelLowerN", pattern: { kind: "char", char: "n" }, action: "station.remove.cancel", outcome: "handled" },
-    { id: "station.removeConfirm.confirmY", pattern: { kind: "char", char: "Y" }, action: "station.remove.confirm", outcome: "handled", help: { keys: "Y", label: "confirm remove" } },
+    { id: "station.removeConfirm.confirmY", pattern: { kind: "char", char: "Y" }, action: "station.remove.confirm", outcome: "handled", help: { keys: "Y", label: "confirm delete" } },
     { id: "station.removeConfirm.confirmLowerY", pattern: { kind: "char", char: "y" }, action: "station.remove.confirm", outcome: "handled" },
     // The confirm handler lowercases key.input without reading ctrl, so the
     // Ctrl-N/Ctrl-Y control bytes cancel/confirm too (upstream behavior).
@@ -221,7 +219,7 @@ export const STATION_HELP_CONTENT = [
   { key: "↑/↓ wheel", description: "scroll project list" },
   { key: "1-9/a-z", description: "start or focus row" },
   { key: "N/A/R/C", description: "new/add/rename/fold" },
-  { key: "X", description: "remove session" },
+  { key: "X", description: "delete session" },
   { key: "/, Z", description: "search / refresh snapshot" },
   { key: "H/?", description: "help" },
   { key: "Q/Esc", description: "close/back/cancel" },

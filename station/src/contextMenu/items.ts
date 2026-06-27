@@ -120,7 +120,7 @@ function buildStationItems(
   if (project === undefined || !samePath(row.path, project.root)) {
     items.push({
       id: "station.removeWorktree",
-      label: "Remove Worktree",
+      label: "Delete Session",
       danger: true,
       action: { kind: "removeWorktree", rowId: row.id },
     });

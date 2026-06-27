@@ -30,8 +30,6 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return "projectCollapse";
     case "removeWorktree":
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
-    case "removeSession":
-      return "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
     case "newSession":
@@ -145,7 +143,7 @@ export const TUI_KEYMAP: Record<TuiInputMode, readonly TuiBinding[]> = {
       pattern: { kind: "char", char: "X" },
       action: "tui.remove.open",
       outcome: "handled",
-      help: { keys: "X", label: "remove session" },
+      help: { keys: "X", label: "delete session" },
     },
     {
       id: "tui.dashboard.newSession",
@@ -312,7 +310,7 @@ export const TUI_KEYMAP: Record<TuiInputMode, readonly TuiBinding[]> = {
       pattern: { kind: "char", char: "Y" },
       action: "tui.remove.confirm",
       outcome: "handled",
-      help: { keys: "Y", label: "confirm remove" },
+      help: { keys: "Y", label: "confirm delete" },
     },
     {
       id: "tui.removeConfirm.confirmLowerY",
@@ -604,7 +602,7 @@ export const TUI_HELP_CONTENT = [
   { key: "1-9/a-z", description: "choose visible item" },
   { key: "N", description: "new session" },
   { key: "R", description: "rename session" },
-  { key: "X", description: "remove session" },
+  { key: "X", description: "delete session" },
   { key: "C", description: "collapse project" },
   { key: "/", description: "search" },
   { key: "Z", description: "refresh snapshot" },
@@ -632,8 +630,8 @@ export function dashboardFooterLabel({
 }): string {
   const full = firstRun
     ? `A:Add Project ${quitHint}`
-    : `N:new A:add R:rename Z:refresh 1-9/a-z:open X:rm session /:search C:fold H:help ${quitHint}`;
-  const compactClose = `${QUIT_HINT_CLOSE} N:new A:add Z:refresh 1-9/a-z:open X:rm session /:search H:help`;
+    : `N:new A:add R:rename Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help ${quitHint}`;
+  const compactClose = `${QUIT_HINT_CLOSE} N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help`;
   return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
 }
 

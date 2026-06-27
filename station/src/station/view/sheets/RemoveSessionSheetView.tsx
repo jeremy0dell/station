@@ -1,17 +1,15 @@
 import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
-  SheetButton,
+  compactSheetWidth,
+  SheetConfirmButtons,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
   SheetMessageLine,
-  spaces,
 } from "./parts.js";
 
-type RemoveScreen =
-  | Extract<TuiScreen, { name: "removeWorktree" }>
-  | Extract<TuiScreen, { name: "removeSession" }>;
+type RemoveScreen = Extract<TuiScreen, { name: "removeWorktree" }>;
 
 export type RemoveSessionSheetViewProps = {
   screen: RemoveScreen;
@@ -22,13 +20,13 @@ export type RemoveSessionSheetViewProps = {
 export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionSheetViewProps) {
   const sheetWidth = compactSheetWidth(columns);
   const contentWidth = bottomSheetContentWidth(sheetWidth);
-  if (screen.name === "removeWorktree" && screen.step === "chooseSlot") {
+  if (screen.step === "chooseSlot") {
     return (
       <BottomSheetFrameView
         columns={columns}
         rows={rows}
         width={sheetWidth}
-        title="Select session to remove"
+        title="Select session to delete"
         contentRows={5}
         minHeight={7}
       >
@@ -44,52 +42,17 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
       columns={columns}
       rows={rows}
       width={sheetWidth}
-      title="Remove session?"
+      title="Delete session?"
       contentRows={7}
       minHeight={9}
     >
       <SheetLabelValue width={contentWidth} label="Session" labelWidth={8} value={screen.label} />
       <SheetMessageLine width={contentWidth} tone="danger">
-        {removeHint(screen)}
+        Removes agent, worktree, and panes.
       </SheetMessageLine>
       <SheetLine width={contentWidth}> </SheetLine>
-      <RemoveConfirmButtons width={contentWidth} />
+      <SheetConfirmButtons width={contentWidth} />
       <SheetFooter width={contentWidth}>Esc/Enter:cancel</SheetFooter>
     </BottomSheetFrameView>
   );
-}
-
-function RemoveConfirmButtons({ width }: { width: number }) {
-  const gap = width >= 22 ? 2 : 0;
-  const buttonWidth = Math.max(1, Math.min(10, Math.floor((width - gap) / 2)));
-  return (
-    <box flexDirection="row" width={width}>
-      <SheetButton
-        label="Yes"
-        shortcut="y"
-        tone="success"
-        fixedWidth={buttonWidth}
-        mouseTarget={{ kind: "sheetButton", key: "y" }}
-      />
-      {gap > 0 ? <text>{spaces(gap)}</text> : null}
-      <SheetButton
-        label="No"
-        shortcut="n"
-        tone="danger"
-        fixedWidth={buttonWidth}
-        mouseTarget={{ kind: "sheetButton", key: "n" }}
-      />
-    </box>
-  );
-}
-
-function removeHint(screen: RemoveScreen): string {
-  if (screen.name === "removeSession") {
-    return "Removes the session; checkout stays.";
-  }
-  return "Removes session, checkout, and panes.";
-}
-
-function compactSheetWidth(columns: number): number {
-  return Math.min(Math.max(1, Math.floor(columns)), 46);
 }

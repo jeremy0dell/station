@@ -6,7 +6,6 @@ import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
-import { handleRemoveSessionKey } from "./screens/removeSession.js";
 import { handleRemoveWorktreeKey } from "./screens/removeWorktree.js";
 import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleSearchKey } from "./screens/search.js";
@@ -49,8 +48,6 @@ export function handleTuiKey(
       return handleProjectCollapseKey(state, key);
     case "removeWorktree":
       return handleRemoveWorktreeKey(state, key);
-    case "removeSession":
-      return handleRemoveSessionKey(state, key);
     case "renameSession":
       return handleRenameSessionKey(state, key);
     case "newSession":

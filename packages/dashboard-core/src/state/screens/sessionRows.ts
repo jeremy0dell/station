@@ -1,13 +1,6 @@
-import {
-  isRunningAgentState,
-  type SessionView,
-  type StationCommand,
-  type StationSnapshot,
-  type WorktreeRow,
-} from "@station/contracts";
+import type { SessionView, StationSnapshot, WorktreeRow } from "@station/contracts";
 import { createEditableTextInputState } from "../../components/EditableTextInput/editing.js";
 import { sessionForWorktreeRow, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
-import { buildRemoveSessionCommand } from "../commandBuilders.js";
 import type { TuiState } from "../types.js";
 
 export type OpenRenameEditForRowOptions = {
@@ -40,46 +33,6 @@ export function openRenameEditForRow(
     screen.returnTo = options.returnTo;
   }
   return { ...state, screen };
-}
-
-export function openRemoveSessionConfirmForRow(state: TuiState, rowId: string): TuiState {
-  if (state.screen.name !== "dashboard") {
-    return state;
-  }
-  const resolved = resolveCurrentRowSession(state, rowId);
-  if (resolved === undefined) {
-    return state;
-  }
-  const { row, session, snapshot } = resolved;
-  const title = worktreeRowDisplayTitle(row, snapshot.sessions, state.localRows).trim();
-  const label = title.length > 0 ? title : row.branch;
-  return {
-    ...state,
-    screen: {
-      name: "removeSession",
-      rowId: row.id,
-      sessionId: session.id,
-      forceRequired: isRunningAgentState(row.agent?.state ?? session.status.value),
-      label,
-    },
-  };
-}
-
-export function removeSessionCommandForCurrentScreen(
-  state: TuiState,
-): Extract<StationCommand, { type: "session.remove" }> | undefined {
-  if (state.screen.name !== "removeSession") {
-    return undefined;
-  }
-  const screen = state.screen;
-  const resolved = resolveCurrentRowSession(state, screen.rowId);
-  if (resolved === undefined || resolved.session.id !== screen.sessionId) {
-    return undefined;
-  }
-  return buildRemoveSessionCommand({
-    sessionId: resolved.session.id,
-    force: screen.forceRequired,
-  });
 }
 
 function canOpenRenameFromScreen(state: TuiState): boolean {

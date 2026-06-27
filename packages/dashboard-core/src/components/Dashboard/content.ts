@@ -269,7 +269,6 @@ export function isModalOverlayActive(screen: TuiScreen): boolean {
     screen.name === "help" ||
     screen.name === "newSession" ||
     screen.name === "removeWorktree" ||
-    screen.name === "removeSession" ||
     (screen.name === "renameSession" && screen.step === "editName")
   );
 }

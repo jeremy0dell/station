@@ -2,7 +2,7 @@
 
 Status: current living terminology for shared runtime, contract, protocol, and user-facing names.
 
-Use this when changing names around providers, hooks, ingress, observer events, event hooks, status evidence, diagnostics, or CLI/config surfaces.
+Use this when changing names around providers, hooks, ingress, observer events, event hooks, status evidence, diagnostics, session/worktree/pane-tree lifecycle, or CLI/config surfaces.
 
 ## Naming Rule
 
@@ -147,3 +147,50 @@ Manual verification after naming work:
 - Notify setup output clearly refers to observer event hooks, not a provider named `event`.
 - Event subscription output clearly uses STATION event names.
 - Debug evidence separates provider hook delivery/spool from observer event hook command execution.
+
+## Session, Worktree, and Pane Tree
+
+Three lifecycle units are easy to conflate. Keep them distinct in names, commands, and UX: a session runs inside a worktree, and a pane tree is how one worktree row is drawn in the TUI.
+
+### Session
+
+A session is one agent / harness run. The observer mints its id as `ses_<uuid>` (`apps/observer/src/commands/session/shared.ts`). A session lives inside a worktree but is not the worktree — ending a session leaves the checkout and panes intact.
+
+There is no deletable "session" unit and no `session.remove` command. The durable, deletable unit is the worktree.
+
+### Worktree
+
+A worktree is the durable, deletable unit: the git worktree, its branch, and its checkout. Worktree ids are **provider-supplied** (e.g. Worktrunk), not minted by the observer, so code must not parse or validate the `wt_` prefix. Removing a worktree also tears down its session and panes.
+
+### Pane Tree
+
+A pane tree is the TUI work area for a worktree row — the panes the user sees for that row. It is a station-only UI concept; the observer has no pane tree. Store state uses `paneTreeIds` and the teardown action is `closePaneTree` (triggered by the session reaper when the underlying worktree/session disappears).
+
+Avoid the older `sessionPaneIds` / `closeSession` names: the panes belong to the worktree's UI, not to the agent session, and the old name implied the agent owned them.
+
+### Two-Command Cleanup Model
+
+| Intent | Command | Tears down |
+| --- | --- | --- |
+| Stop the agent, keep the work | `session.close({ mode: "harness" })` | harness run only |
+| Close the terminal target | `terminal.close` | terminal target (and its session) |
+| Delete the worktree | `worktree.remove` | harness, terminal, worktree, branch, panes |
+
+`session.close` takes a `mode` of `harness | terminal | all` (`CloseSessionPayloadSchema`). Use it for non-destructive stops; use `worktree.remove` for destructive deletes.
+
+### Delete Session vs End Agent (UX)
+
+Two row actions read as different features and must not be merged:
+
+- **Delete Session** (`X`) is destructive. It runs `worktree.remove` and removes the agent, worktree, and panes. Copy must say so: "Removes agent, worktree, and panes."
+- **End Agent** (`E`) is non-destructive. It runs `session.close({ mode: "harness" })` and stops only the agent; the checkout and panes stay. Copy: "Stops the agent; checkout and panes stay."
+
+End Agent is gated on a live agent (`row.agent?.sessionId !== undefined`) and shows even on a project-root row, because it never deletes a worktree.
+
+### Id Model
+
+`StationId<TKind>` (`packages/contracts/src/ids.ts`) is a compile-time-only brand: `string & { readonly [stationIdKind]?: TKind }`. The `?` keeps it **intentionally leaky** — a raw string assigns to a branded type with no parse step.
+
+Prefixes (`ses_`, `wt_`, `cmd_`, `evt_`, `err_`) are human-readability conventions only. Nothing parses them; do not treat a prefix as a validated discriminator. Worktree ids in particular are provider-controlled, so their format is not STATION's to assert.
+
+Tightening the brand to non-leaky (`[stationIdKind]: TKind`, dropping the `?`) was spiked and rejected: it forces an explicit parse/cast at every "construct an id from a raw string" site — observability error and evidence shaping, the testing fixtures, and everything downstream of them — for marginal safety, since no code parses prefixes and worktree ids are provider-supplied. Keep the brand leaky and rely on schema parsing at real input boundaries instead.

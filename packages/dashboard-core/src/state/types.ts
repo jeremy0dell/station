@@ -63,13 +63,6 @@ export type TuiScreen =
       forceRequired: boolean;
       label: string;
     }
-  | {
-      name: "removeSession";
-      rowId: WorktreeId;
-      sessionId: SessionId;
-      forceRequired: boolean;
-      label: string;
-    }
   | { name: "renameSession"; step: "chooseSlot" }
   | {
       name: "renameSession";

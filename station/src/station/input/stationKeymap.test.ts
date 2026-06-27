@@ -13,7 +13,7 @@
 //    the transition reports dismissPopup/exitCode).
 import { describe, expect, it } from "bun:test";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
-import { createInitialTuiState, openRemoveSessionConfirmForRow } from "@station/dashboard-core";
+import { createInitialTuiState } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import { handleTuiKey } from "@station/dashboard-core";
 import type { TuiState } from "@station/dashboard-core";
@@ -126,9 +126,6 @@ describe("station keymap coverage", () => {
     for (const [mode, state] of Object.entries(states)) {
       expect(`${mode}:${deriveStationMode(state)}`).toBe(`${mode}:${mode}`);
     }
-    expect(deriveStationMode(openRemoveSessionConfirmForRow(dashboardState(), "wt_station_working"))).toBe(
-      "removeConfirm",
-    );
   });
 
   it("documents every machine-handled key with exactly one binding (no omission drift)", () => {
