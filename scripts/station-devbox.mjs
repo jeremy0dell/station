@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DS = join(repoRoot, ".dev-state");
-const CFG = join(DS, "station.toml");
+const CFG = join(DS, "config.toml");
 const CLI = join(repoRoot, "apps", "cli", "dist", "main.js");
 const HOST_SOCK = join(DS, "observer", "run", "station-host.sock");
 const LOG_DIR = join(DS, "observer", "logs");

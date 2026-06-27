@@ -359,9 +359,8 @@ export const ParsedStationConfigSchema = z
     terminal: TerminalProvidersConfigSchema.optional(),
     harness: HarnessProvidersConfigSchema.optional(),
     hooks: HooksConfigSchema.optional(),
-    // TUI-only sections. Best-effort: a bad [tui]/[workspace] degrades to
-    // defaults (and a section diagnostic) rather than aborting the load, so a
-    // cosmetic typo never takes down the observer daemon.
+    // TUI-only sections. Best-effort: bad values inside [tui]/[workspace]
+    // degrade to defaults with a section diagnostic instead of aborting load.
     tui: TuiConfigSchema.optional().catch(undefined),
     workspace:
       WorkspaceConfigSchema.default(DEFAULT_WORKSPACE_CONFIG).catch(DEFAULT_WORKSPACE_CONFIG),

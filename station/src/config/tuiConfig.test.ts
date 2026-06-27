@@ -76,6 +76,41 @@ enabled = true
     });
   });
 
+  it("surfaces a warning when [tui] is invalid and widgets fall back", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
+    dirs.push(dir);
+    const projectRoot = join(dir, "project");
+    await mkdir(projectRoot);
+    const configPath = join(dir, "config.toml");
+    await writeFile(
+      configPath,
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[[tui.widgets]]
+type = "weather"
+label = "Missing city"
+
+[[projects]]
+id = "web"
+label = "web"
+root = "${projectRoot}"
+`,
+      "utf8",
+    );
+
+    const result = await loadStationTuiConfig({ path: configPath });
+
+    expect(result.config).toBeUndefined();
+    expect(result.warning).toContain("[tui]");
+  });
+
   it("warns but does not reject when widget config cannot be loaded", async () => {
     const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
     dirs.push(dir);

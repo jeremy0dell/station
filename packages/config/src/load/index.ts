@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { TuiConfigSchema, WorkspaceConfigSchema } from "../schema.js";
-import { isNodeError, isRecord } from "./common.js";
+import { formatZodError, isNodeError, isRecord } from "./common.js";
 import { deriveProjectConfig } from "./deriveProjects.js";
 import type {
   ConfigDiagnostic,
@@ -105,10 +105,10 @@ export async function loadConfigFromToml(
 
 /**
  * The TUI-only `[tui]`/`[workspace]` sections are best-effort in the schema
- * (`.catch` → defaults) so a cosmetic typo never aborts the daemon's load. That
- * silent fallback would otherwise hide the mistake, so surface it as a warn-level
- * diagnostic (visible via `stn doctor`). Validated against the same strict
- * schemas the runtime config uses for these sections.
+ * (`.catch` → defaults) so a bad value inside those sections never aborts the
+ * daemon's load. That silent fallback would otherwise hide the mistake, so
+ * surface it as a warn-level diagnostic. Misspelled section headers are still
+ * top-level schema errors.
  */
 function collectTuiWorkspaceDiagnostics(
   normalizedConfig: unknown,
@@ -120,27 +120,27 @@ function collectTuiWorkspaceDiagnostics(
 
   const diagnostics: ConfigDiagnostic[] = [];
 
-  if (
-    normalizedConfig.tui !== undefined &&
-    !TuiConfigSchema.safeParse(normalizedConfig.tui).success
-  ) {
+  const tuiResult = TuiConfigSchema.safeParse(normalizedConfig.tui);
+  if (normalizedConfig.tui !== undefined && !tuiResult.success) {
     diagnostics.push({
       tag: "ConfigDiagnostic",
       code: "CONFIG_TUI_SECTION_INVALID",
-      message: "The [tui] section is invalid and was ignored; using widget defaults.",
+      message: `The [tui] section is invalid (${formatZodError(
+        tuiResult.error,
+      )}) and was ignored; using widget defaults.`,
       severity: "warn",
       configPath,
     });
   }
 
-  if (
-    normalizedConfig.workspace !== undefined &&
-    !WorkspaceConfigSchema.safeParse(normalizedConfig.workspace).success
-  ) {
+  const workspaceResult = WorkspaceConfigSchema.safeParse(normalizedConfig.workspace);
+  if (normalizedConfig.workspace !== undefined && !workspaceResult.success) {
     diagnostics.push({
       tag: "ConfigDiagnostic",
       code: "CONFIG_WORKSPACE_SECTION_INVALID",
-      message: "The [workspace] section is invalid and was ignored; using workspace defaults.",
+      message: `The [workspace] section is invalid (${formatZodError(
+        workspaceResult.error,
+      )}) and was ignored; using workspace defaults.`,
       severity: "warn",
       configPath,
     });

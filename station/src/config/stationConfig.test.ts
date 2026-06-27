@@ -88,6 +88,20 @@ scroll_on_output = "sideways"`);
     expect(result.warning).toBeDefined();
   });
 
+  it("surfaces unrelated runtime-config failures while falling back to workspace defaults", async () => {
+    const path = await writeConfig(`[workspace]
+scroll_on_output = "shift"
+
+[observer]
+unknown_key = true`);
+    const result = await loadStationConfig({ path });
+
+    expect(result.source).toBe("defaults");
+    expect(result.config).toEqual(DEFAULT_WORKSPACE_CONFIG);
+    expect(result.warning).toContain("Station config is invalid");
+    expect(result.warning).toContain("unknownKey");
+  });
+
   it("degrades to defaults with a warning when the config can't be parsed", async () => {
     const path = await writeConfig("[workspace]\nscroll_on_output =");
     const result = await loadStationConfig({ path });

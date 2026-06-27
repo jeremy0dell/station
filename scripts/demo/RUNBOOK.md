@@ -61,23 +61,25 @@ VHS runs Station in its own PTY; the dual-runtime renderer usually records fine,
 
 ## Optional: make the command split a one-tap automation
 
-The **See diff** automation ships by default. To also expose "Run checks (split below)", write `~/.config/station/station.toml` — note that providing `automations` **replaces** the default list, so include both:
+The **See diff** automation ships by default. To also expose "Run checks (split below)", add a `[workspace]` automation list to `~/.config/station/config.toml` — note that providing `automations` **replaces** the default list, so include both:
 
 ```toml
-[[automations]]
+[workspace]
+
+[[workspace.automations]]
 id = "see-diff"
 label = "See diff (split right)"
-[[automations.steps]]
+[[workspace.automations.steps]]
 split = "right"
 anchor = "origin"
 command = "git -c color.ui=always diff | delta --paging=always"
 run = "execute"
 focus = true
 
-[[automations]]
+[[workspace.automations]]
 id = "run-checks"
 label = "Run checks (split below)"
-[[automations.steps]]
+[[workspace.automations.steps]]
 split = "below"
 command = "./check.sh"
 run = "execute"

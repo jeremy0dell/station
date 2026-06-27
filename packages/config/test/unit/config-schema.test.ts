@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import {
-  DEFAULT_WORKSPACE_CONFIG,
   ParsedStationConfigSchema,
   ProjectConfigSchema,
   ProjectLocalConfigSchema,
@@ -152,9 +151,8 @@ describe("config schemas", () => {
       TuiConfigSchema.safeParse({ widgets: [{ type: "time", timeFormat: "locale" }] }).success,
     ).toBe(false);
 
-    // But the root config attaches [tui] best-effort: a cosmetic typo degrades to
-    // `tui: undefined` rather than failing the whole config parse (and crashing
-    // the observer over a decorative widget).
+    // But the root config attaches [tui] best-effort: bad widget values degrade
+    // to `tui: undefined` rather than failing the whole config parse.
     expect(
       ParsedStationConfigSchema.parse({
         ...config,
@@ -252,10 +250,32 @@ describe("config schemas", () => {
 describe("workspace config", () => {
   it("fills an empty [workspace] with defaults (freeze, welcome on, see-diff)", () => {
     const workspace = WorkspaceConfigSchema.parse({});
+    const expectedWatchCommand =
+      'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
+    const expectedCommand = [
+      "diffnav --unified --watch",
+      `--watch-cmd '${expectedWatchCommand}'`,
+      "--watch-interval 2s",
+    ].join(" ");
+
     expect(workspace.scroll_on_output).toBe("freeze");
     expect(workspace.welcome_on_boot).toBe(true);
-    expect(workspace.automations.map((automation) => automation.id)).toEqual(["see-diff"]);
-    expect(workspace).toEqual(DEFAULT_WORKSPACE_CONFIG);
+    expect(workspace.automations).toEqual([
+      {
+        id: "see-diff",
+        label: "See diff (split right)",
+        enabled: true,
+        steps: [
+          {
+            split: "right",
+            anchor: "origin",
+            command: expectedCommand,
+            run: "execute",
+            focus: true,
+          },
+        ],
+      },
+    ]);
   });
 
   it("accepts the valid scroll-on-output modes and applies per-step automation defaults", () => {
@@ -275,6 +295,71 @@ describe("workspace config", () => {
 
   it("treats an explicit empty automations array as the off switch", () => {
     expect(WorkspaceConfigSchema.parse({ automations: [] }).automations).toEqual([]);
+  });
+
+  it("accepts multi-step automations and disabled automation rows", () => {
+    const workspace = WorkspaceConfigSchema.parse({
+      automations: [
+        {
+          id: "triage",
+          label: "Triage",
+          steps: [
+            { command: "git diff | diffnav" },
+            {
+              split: "below",
+              anchor: "previous",
+              command: "claude review",
+              run: "write",
+              focus: true,
+            },
+          ],
+        },
+        {
+          id: "disabled",
+          label: "Disabled",
+          enabled: false,
+          steps: [{ command: "echo disabled" }],
+        },
+      ],
+    });
+
+    expect(workspace.automations).toEqual([
+      {
+        id: "triage",
+        label: "Triage",
+        enabled: true,
+        steps: [
+          {
+            split: "right",
+            anchor: "previous",
+            command: "git diff | diffnav",
+            run: "execute",
+            focus: false,
+          },
+          {
+            split: "below",
+            anchor: "previous",
+            command: "claude review",
+            run: "write",
+            focus: true,
+          },
+        ],
+      },
+      {
+        id: "disabled",
+        label: "Disabled",
+        enabled: false,
+        steps: [
+          {
+            split: "right",
+            anchor: "previous",
+            command: "echo disabled",
+            run: "execute",
+            focus: false,
+          },
+        ],
+      },
+    ]);
   });
 
   it("rejects an unknown scroll mode, unknown keys, stepless and duplicate automations", () => {

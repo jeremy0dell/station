@@ -54,8 +54,8 @@ normalized snake_case → camelCase, and validated against a **strict Zod schema
 | `auto_start_from_hooks` | bool | Auto-start when a provider hook fires. |
 | `idle_shutdown_minutes` | int > 0 | Shut down after N idle minutes. |
 | `reconcile_interval_ms` | int > 0 | Reconcile loop interval. |
-| `socket_path` | string | Observer IPC socket. `~` is **not** expanded by the schema. |
-| `state_dir` | string | State/log/db root. Defaults to `~/.local/state/station`. |
+| `socket_path` | string | Observer IPC socket. `~` expands at load time. |
+| `state_dir` | string | State/log/db root. Defaults to `~/.local/state/station`; `~` expands at load time. |
 
 ### `[defaults]` — global defaults (REQUIRED)
 
@@ -79,8 +79,8 @@ later at runtime.
 | Key | Type | Notes |
 | --- | --- | --- |
 | `command` | string | Worktrunk CLI, e.g. `"wt"`. |
-| `config_path` | string | Path to worktrunk's own config. |
-| `managed_root` | string | Root for managed worktrees, e.g. `~/.worktrees`. |
+| `config_path` | string | Path to worktrunk's own config. `~` expands at load time. |
+| `managed_root` | string | Root for managed worktrees, e.g. `~/.worktrees`; `~` expands at load time. |
 | `base` | string | Default base branch for worktrees. |
 | `include_main` / `include_external` | bool | |
 | `use_lifecycle_hooks` | bool | |
@@ -286,6 +286,12 @@ unknown key aborts the load. The exceptions are `[harness.<id>]` (any id is acce
 and the best-effort `[tui]`/`[workspace]` sections (a bad value there degrades to
 defaults and a diagnostic instead of failing).
 
+**What happens to `[workspace]` when another runtime section is invalid?** The native
+TUI reads `[workspace]` through the full runtime config loader. If an unrelated core
+section hard-fails validation, the TUI keeps running with workspace defaults and prints
+a warning before rendering. Fix the core config error to restore custom scroll,
+welcome, and automation settings.
+
 **`[tui]` vs `[workspace]`?** `[tui]` is decorative widgets (clock/weather);
 `[workspace]` is native-UI interaction behavior (scroll/welcome/automations). Both
 live in `config.toml`; both are read only by the TUI.
@@ -301,6 +307,8 @@ under `[harness.claude]`, never as a global default or for other harnesses.
 `[projects.local_config].enabled = true`. If it is enabled but broken, the project
 loads global-only and the failure is a diagnostic (see `stn doctor`), not a hard error.
 
-**Are `~` paths expanded?** Inconsistently. The config file path itself and
-`project.root` / project-local paths are expanded; `observer.socket_path`,
-`observer.state_dir`, and worktrunk path fields are stored raw for downstream consumers.
+**Are `~` paths expanded?** Mostly. The config file path, `project.root`,
+project-local paths, `observer.socket_path`, `observer.state_dir`,
+`worktree.worktrunk.config_path`, and `worktree.worktrunk.managed_root` expand `~` at
+load time. Other provider-specific path-like strings may be stored as authored unless
+their provider documents otherwise.

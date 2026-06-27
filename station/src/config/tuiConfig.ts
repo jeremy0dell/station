@@ -18,6 +18,12 @@ export async function loadStationTuiConfig(options?: {
     if (loaded.config.tui !== undefined) {
       result.config = loaded.config.tui;
     }
+    const sectionWarning = loaded.diagnostics.find(
+      (diagnostic) => diagnostic.code === "CONFIG_TUI_SECTION_INVALID",
+    );
+    if (sectionWarning !== undefined) {
+      result.warning = sectionWarning.message;
+    }
     return result;
   } catch (cause) {
     if (cause instanceof ConfigError && cause.code === "CONFIG_FILE_NOT_FOUND") {

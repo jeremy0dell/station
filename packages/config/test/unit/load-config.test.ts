@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -85,6 +85,34 @@ async function writeProjectLocalConfig(root: string, contents: string): Promise<
 }
 
 describe("config loading", () => {
+  it("loads the canonical example config", async () => {
+    const tempDir = await makeTempDir();
+    for (const project of ["web", "api", "mobile", "station"]) {
+      await makeProjectRoot(join(tempDir, "projects"), project);
+    }
+    await writeProjectLocalConfig(
+      join(tempDir, "projects", "web"),
+      'schema_version = 1\n[commands]\ncheck = "pnpm check"\n',
+    );
+    const source = await readFile(
+      new URL("../../../../examples/config.toml", import.meta.url),
+      "utf8",
+    );
+
+    const loaded = await loadConfigFromToml(source, {
+      configPath: join(tempDir, "config.toml"),
+      homeDir: tempDir,
+    });
+
+    expect(loaded.projects.map((project) => project.id)).toEqual([
+      "web",
+      "api",
+      "mobile",
+      "station",
+    ]);
+    expect(loaded.diagnostics).toEqual([]);
+  });
+
   it("loads TOML, applies defaults, expands paths, and keeps every configured project", async () => {
     const tempDir = await makeTempDir();
     const roots = {
@@ -605,7 +633,11 @@ ${projectToml("web", root)}
     // warn diagnostic instead of throwing CONFIG_VALIDATION_FAILED.
     expect(loaded.config.tui).toBeUndefined();
     expect(loaded.diagnostics).toContainEqual(
-      expect.objectContaining({ code: "CONFIG_TUI_SECTION_INVALID", severity: "warn" }),
+      expect.objectContaining({
+        code: "CONFIG_TUI_SECTION_INVALID",
+        severity: "warn",
+        message: expect.stringMatching(/widgets|timeFormat|temperatureUnit|refreshIntervalMinutes/),
+      }),
     );
   });
 
@@ -1372,7 +1404,11 @@ ${projectToml("web", root)}
     // TUI-only and best-effort: a bad value must not abort the daemon's load.
     expect(loaded.config.workspace).toEqual(DEFAULT_WORKSPACE_CONFIG);
     expect(loaded.diagnostics).toContainEqual(
-      expect.objectContaining({ code: "CONFIG_WORKSPACE_SECTION_INVALID", severity: "warn" }),
+      expect.objectContaining({
+        code: "CONFIG_WORKSPACE_SECTION_INVALID",
+        severity: "warn",
+        message: expect.stringContaining("scroll_on_output"),
+      }),
     );
   });
 });
