@@ -26,11 +26,13 @@ export function ProjectDefaultAgentSheetView({
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   const choices = project === undefined ? [] : selectNewSessionHarnessChoices(snapshot, project);
   const contentWidth = bottomSheetContentWidth(columns);
+  const title =
+    project === undefined ? "Select Project Default Agent" : `Select default agent for ${project.label}`;
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
-      title="Select Station Default Agent"
+      title={title}
       contentRows={choices.length + 4}
     >
       <ProjectDefaultAgentPicker choices={choices} width={contentWidth} />

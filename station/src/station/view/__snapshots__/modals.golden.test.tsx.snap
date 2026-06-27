@@ -326,7 +326,7 @@ exports[`modal flow golden frames renders the project default agent picker 1`] =
 
 ▼ scripts - 3 worktrees                                           [sh] [qs] [▾]
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Select Station Default Agent                                                 │
+│ Select default agent for station                                             │
 │                                                                              │
 │ 1 codex unknown                                                              │
 │ 2 opencode unknown                                                           │
