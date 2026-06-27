@@ -28,7 +28,7 @@ importers:
         version: 1.13.6
       react-test-renderer:
         specifier: ^19.2.6
-        version: 19.2.6(react@19.2.6)
+        version: 19.2.6(react@19.2.7)
       turbo:
         specifier: ^2.9.15
         version: 2.9.15
@@ -349,7 +349,7 @@ importers:
         version: 4.4.3
       zustand:
         specifier: ^5.0.14
-        version: 5.0.14(@types/react@19.2.15)(react@19.2.6)
+        version: 5.0.14(@types/react@19.2.15)(react@19.2.7)
     devDependencies:
       '@station/config':
         specifier: workspace:*
@@ -1069,8 +1069,8 @@ packages:
     peerDependencies:
       react: ^19.2.6
 
-  react@19.2.6:
-    resolution: {integrity: sha512-sfWGGfavi0xr8Pg0sVsyHMAOziVYKgPLNrS7ig+ivMNb3wbCBw3KxtflsGBAwD3gYQlE/AEZsTLgToRrSCjb0Q==}
+  react@19.2.7:
+    resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
     engines: {node: '>=0.10.0'}
 
   rollup@4.60.4:
@@ -1675,13 +1675,13 @@ snapshots:
 
   react-is@19.2.6: {}
 
-  react-test-renderer@19.2.6(react@19.2.6):
+  react-test-renderer@19.2.6(react@19.2.7):
     dependencies:
-      react: 19.2.6
+      react: 19.2.7
       react-is: 19.2.6
       scheduler: 0.27.0
 
-  react@19.2.6: {}
+  react@19.2.7: {}
 
   rollup@4.60.4:
     dependencies:
@@ -1848,7 +1848,7 @@ snapshots:
 
   zod@4.4.3: {}
 
-  zustand@5.0.14(@types/react@19.2.15)(react@19.2.6):
+  zustand@5.0.14(@types/react@19.2.15)(react@19.2.7):
     optionalDependencies:
       '@types/react': 19.2.15
-      react: 19.2.6
+      react: 19.2.7

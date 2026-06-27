@@ -38,8 +38,23 @@ const HOVER_BG = STATION_COLORS.hoverBackground;
 // never the row-activate / collapse-toggle on the line it sits beside. The
 // reserved width (label + a leading space) is subtracted from the row grid and
 // header truncation so the affordance is never clipped at small viewports.
-const SHELL_AFFORDANCE_LABEL = "[+sh]";
+const SHELL_AFFORDANCE_LABEL = "[shell]";
+const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
 const SHELL_AFFORDANCE_WIDTH = SHELL_AFFORDANCE_LABEL.length + 1;
+const SHELL_AFFORDANCE_WIDTH_COMPACT = SHELL_AFFORDANCE_LABEL_COMPACT.length + 1;
+
+// The per-project-header quick-session affordance sits after [shell] on project
+// rows: "[quick session]" creates a session (default harness), "[▾]" opens the
+// wizard pre-configured to this project. Compact mode uses "[qs]" when columns
+// are limited.
+const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
+const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
+// Reserved width: leading space + session label + space + [▾]
+const QUICK_SESSION_AFFORDANCE_WIDTH = ` ${QUICK_SESSION_AFFORDANCE_LABEL} [▾]`.length;
+const QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT = ` ${QUICK_SESSION_AFFORDANCE_LABEL_COMPACT} [▾]`.length;
+
+// Below this terminal width the header affordances switch to compact labels.
+const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
 
 export type DashboardViewProps = {
   snapshot: StationSnapshot;
@@ -250,12 +265,15 @@ function WorktreeRowLine({ rowId, layout }: { rowId: string; layout: RowGridLayo
 function ShellAffordance({
   target,
   onHoverChange,
+  compact,
 }: {
   target: StationMouseTarget;
   onHoverChange?: ((hover: boolean) => void) | undefined;
+  compact?: boolean;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
+  const label = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
   return (
     // flexShrink={0}: content grows/clips first, affordance width is never clipped.
     <text
@@ -271,8 +289,50 @@ function ShellAffordance({
         onHoverChange?.(false);
       }}
     >
-      {` ${SHELL_AFFORDANCE_LABEL}`}
+      {` ${label}`}
     </text>
+  );
+}
+
+/**
+ * The trailing `[quick session] [▾]` (or `[qs] [▾]` in compact mode)
+ * quick-session affordance on project headers. Two separate `<text>` elements
+ * so each click target fires independently: the session label immediately
+ * creates a session (default harness), `[▾]` opens the harness-picker wizard
+ * pre-configured to this project.
+ */
+function QuickSessionAffordance({
+  projectId,
+  compact,
+}: {
+  projectId: string;
+  compact?: boolean;
+}) {
+  const dispatch = useStationMouse();
+  const [quickHover, setQuickHover] = useState(false);
+  const [pickerHover, setPickerHover] = useState(false);
+  const sessionLabel = compact ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT : QUICK_SESSION_AFFORDANCE_LABEL;
+  return (
+    <>
+      <text
+        flexShrink={0}
+        fg={quickHover ? STATION_COLORS.green : STATION_COLORS.gray}
+        {...stationMouseProps(dispatch, { kind: "quickSessionForProject", projectId })}
+        onMouseOver={() => setQuickHover(true)}
+        onMouseOut={() => setQuickHover(false)}
+      >
+        {` ${sessionLabel}`}
+      </text>
+      <text
+        flexShrink={0}
+        fg={pickerHover ? STATION_COLORS.green : STATION_COLORS.gray}
+        {...stationMouseProps(dispatch, { kind: "showHarnessPickerForProject", projectId })}
+        onMouseOver={() => setPickerHover(true)}
+        onMouseOut={() => setPickerHover(false)}
+      >
+        {" [▾]"}
+      </text>
+    </>
   );
 }
 
@@ -287,6 +347,9 @@ function ProjectHeaderLine({
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
+  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
+  const shellWidth = compact ? SHELL_AFFORDANCE_WIDTH_COMPACT : SHELL_AFFORDANCE_WIDTH;
+  const quickSessionWidth = compact ? QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT : QUICK_SESSION_AFFORDANCE_WIDTH;
   return (
     <box
       flexDirection="row"
@@ -304,13 +367,15 @@ function ProjectHeaderLine({
       >
         {truncateCells(
           projectHeaderLabel(project, collapsed),
-          Math.max(1, columns - SHELL_AFFORDANCE_WIDTH),
+          Math.max(1, columns - shellWidth - quickSessionWidth),
         )}
       </text>
       <ShellAffordance
         target={{ kind: "openShellForProject", projectId: project.id }}
         onHoverChange={setHover}
+        compact={compact}
       />
+      <QuickSessionAffordance projectId={project.id} compact={compact} />
     </box>
   );
 }

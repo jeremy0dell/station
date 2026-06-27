@@ -119,7 +119,7 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
       role: "flex",
       minCells: 3,
       idealCells: 22,
-      maxCells: 32,
+      maxCells: 40,
       gapBefore: 0,
       dropPriority: 0,
       align: "left",
