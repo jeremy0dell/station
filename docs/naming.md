@@ -168,24 +168,26 @@ A pane tree is the TUI work area for a worktree row — the panes the user sees 
 
 Avoid the older `sessionPaneIds` / `closeSession` names: the panes belong to the worktree's UI, not to the agent session, and the old name implied the agent owned them.
 
-### Two-Command Cleanup Model
+### Cleanup Command Model
 
 | Intent | Command | Tears down |
 | --- | --- | --- |
-| Stop the agent, keep the work | `session.close({ mode: "harness" })` | harness run only |
+| Stop only the harness run | `session.close({ mode: "harness" })` | harness run only |
 | Close the terminal target | `terminal.close` | terminal target (and its session) |
 | Delete the worktree | `worktree.remove` | harness, terminal, worktree, branch, panes |
 
 `session.close` takes a `mode` of `harness | terminal | all` (`CloseSessionPayloadSchema`). Use it for non-destructive stops; use `worktree.remove` for destructive deletes.
 
-### Delete Session vs End Agent (UX)
+### Delete Session UX
 
-Two row actions read as different features and must not be merged:
+The current row action is destructive:
 
 - **Delete Session** (`X`) is destructive. It runs `worktree.remove` and removes the agent, worktree, and panes. Copy must say so: "Removes agent, worktree, and panes."
-- **End Agent** (`E`) is non-destructive. It runs `session.close({ mode: "harness" })` and stops only the agent; the checkout and panes stay. Copy: "Stops the agent; checkout and panes stay."
 
-End Agent is gated on a live agent (`row.agent?.sessionId !== undefined`) and shows even on a project-root row, because it never deletes a worktree.
+There is no `E` binding and no **End Agent** row action. A non-destructive End Agent
+action backed by `session.close({ mode: "harness" })` was considered and cut during
+review because it reintroduced a second user-facing lifecycle action. Keep it out of
+menus and user-facing docs unless the product explicitly re-adds it.
 
 ### Id Model
 
