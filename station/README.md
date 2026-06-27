@@ -70,13 +70,13 @@ station/scripts/run-container.sh --mock
 Bun also loads local env files, so `station/.env.local` can hold
 `STATION_SOURCE=mock` for local Station development.
 
-## Configuration (`station.toml`)
+## Configuration (`[workspace]`)
 
-Station reads an optional `station.toml` from `~/.config/station/station.toml`
-(honoring an absolute `XDG_CONFIG_HOME`). Every key is optional and has a
-default, so a missing file behaves identically to an empty one. The schema is
-strict: a typo'd key or value degrades to defaults with a warning rather than
-refusing to start.
+Station reads workspace settings from `[workspace]` in
+`~/.config/station/config.toml` (or `STATION_CONFIG_PATH`). Every key is optional
+and has a default, so a missing section behaves identically to an empty one. The
+section schema is strict: a typo'd key or value degrades to defaults with a
+warning rather than refusing to start.
 
 - `welcome_on_boot` (boolean, default `true`) — show the welcome intro over the
   restored layout on a cold boot; dismiss it to drop into your sessions. Set

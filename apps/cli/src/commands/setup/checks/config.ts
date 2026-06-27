@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG_PATH, loadConfigFromToml } from "@station/config";
 import { pathIsSame, resolveLocalPath } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupConfigFact } from "../model.js";
+import type { SetupConfigDiagnosticFact, SetupConfigFact } from "../model.js";
 
 export type SetupFileSystemReader = {
   readFile(path: string): Promise<string>;
@@ -65,6 +65,17 @@ export async function checkSetupConfig(
         harness: loaded.config.defaults.harness,
       },
     };
+    // Surface load diagnostics that loadConfigFromToml records but does not
+    // throw on (broken project-local file, bad [tui]/[workspace]), so `stn
+    // setup check` does not report a config with hidden problems as cleanly valid.
+    const diagnostics: SetupConfigDiagnosticFact[] = loaded.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      message: diagnostic.message,
+      severity: diagnostic.severity,
+    }));
+    if (diagnostics.length > 0) {
+      fact.diagnostics = diagnostics;
+    }
     if (loaded.config.worktree?.worktrunk?.useLifecycleHooks !== undefined) {
       fact.worktrunkUseLifecycleHooks = loaded.config.worktree.worktrunk.useLifecycleHooks;
     }

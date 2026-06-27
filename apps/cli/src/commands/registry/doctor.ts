@@ -20,7 +20,7 @@ export const doctorCliCommand: CliCommandNode = {
       description: "Limit project-specific diagnostics to one project.",
     },
   ],
-  examples: ["pnpm stn doctor", "pnpm stn --config ./station.toml doctor --help"],
+  examples: ["pnpm stn doctor", "pnpm stn --config ./config.toml doctor --help"],
   notes: [
     "Normal doctor output may read config and inspect the local observer.",
     "Doctor help and manual output does not require a valid config file.",

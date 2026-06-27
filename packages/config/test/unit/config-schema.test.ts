@@ -4,6 +4,8 @@ import {
   ProjectConfigSchema,
   ProjectLocalConfigSchema,
   StationConfigSchema,
+  TuiConfigSchema,
+  WorkspaceConfigSchema,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
 
@@ -24,7 +26,6 @@ describe("config schemas", () => {
     expect(parsed.projects[0]?.localConfig).toEqual({
       enabled: true,
       path: ".station/config.toml",
-      trust: "explicit",
     });
     expect(parsed.projects[0]?.recoveryBreadcrumbs).toEqual({
       location: "external",
@@ -141,32 +142,23 @@ describe("config schemas", () => {
     });
 
     expect(config.tui?.widgets?.map((widget) => widget.type)).toEqual(["time", "weather"]);
+
+    // The [tui] section schema is strict: bad widgets are rejected outright.
+    expect(TuiConfigSchema.safeParse({ widgets: [{ type: "weather", city: "" }] }).success).toBe(
+      false,
+    );
     expect(
-      ParsedStationConfigSchema.safeParse({
-        ...config,
-        tui: {
-          widgets: [
-            {
-              type: "weather",
-              city: "",
-            },
-          ],
-        },
-      }).success,
+      TuiConfigSchema.safeParse({ widgets: [{ type: "time", timeFormat: "locale" }] }).success,
     ).toBe(false);
+
+    // But the root config attaches [tui] best-effort: bad widget values degrade
+    // to `tui: undefined` rather than failing the whole config parse.
     expect(
-      ParsedStationConfigSchema.safeParse({
+      ParsedStationConfigSchema.parse({
         ...config,
-        tui: {
-          widgets: [
-            {
-              type: "time",
-              timeFormat: "locale",
-            },
-          ],
-        },
-      }).success,
-    ).toBe(false);
+        tui: { widgets: [{ type: "weather", city: "" }] },
+      }).tui,
+    ).toBeUndefined();
   });
 
   it("accepts terminal tmux command config", async () => {
@@ -250,6 +242,139 @@ describe("config schemas", () => {
           location: "worktree",
           path: "",
         },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("workspace config", () => {
+  it("fills an empty [workspace] with defaults (freeze, welcome on, see-diff)", () => {
+    const workspace = WorkspaceConfigSchema.parse({});
+    const expectedWatchCommand =
+      'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
+    const expectedCommand = [
+      "diffnav --unified --watch",
+      `--watch-cmd '${expectedWatchCommand}'`,
+      "--watch-interval 2s",
+    ].join(" ");
+
+    expect(workspace.scroll_on_output).toBe("freeze");
+    expect(workspace.welcome_on_boot).toBe(true);
+    expect(workspace.automations).toEqual([
+      {
+        id: "see-diff",
+        label: "See diff (split right)",
+        enabled: true,
+        steps: [
+          {
+            split: "right",
+            anchor: "origin",
+            command: expectedCommand,
+            run: "execute",
+            focus: true,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("accepts the valid scroll-on-output modes and applies per-step automation defaults", () => {
+    const workspace = WorkspaceConfigSchema.parse({
+      scroll_on_output: "shift",
+      automations: [{ id: "build", label: "Build", steps: [{ command: "pnpm build" }] }],
+    });
+    expect(workspace.scroll_on_output).toBe("shift");
+    expect(workspace.automations[0]?.steps[0]).toMatchObject({
+      command: "pnpm build",
+      split: "right",
+      anchor: "previous",
+      run: "execute",
+      focus: false,
+    });
+  });
+
+  it("treats an explicit empty automations array as the off switch", () => {
+    expect(WorkspaceConfigSchema.parse({ automations: [] }).automations).toEqual([]);
+  });
+
+  it("accepts multi-step automations and disabled automation rows", () => {
+    const workspace = WorkspaceConfigSchema.parse({
+      automations: [
+        {
+          id: "triage",
+          label: "Triage",
+          steps: [
+            { command: "git diff | diffnav" },
+            {
+              split: "below",
+              anchor: "previous",
+              command: "claude review",
+              run: "write",
+              focus: true,
+            },
+          ],
+        },
+        {
+          id: "disabled",
+          label: "Disabled",
+          enabled: false,
+          steps: [{ command: "echo disabled" }],
+        },
+      ],
+    });
+
+    expect(workspace.automations).toEqual([
+      {
+        id: "triage",
+        label: "Triage",
+        enabled: true,
+        steps: [
+          {
+            split: "right",
+            anchor: "previous",
+            command: "git diff | diffnav",
+            run: "execute",
+            focus: false,
+          },
+          {
+            split: "below",
+            anchor: "previous",
+            command: "claude review",
+            run: "write",
+            focus: true,
+          },
+        ],
+      },
+      {
+        id: "disabled",
+        label: "Disabled",
+        enabled: false,
+        steps: [
+          {
+            split: "right",
+            anchor: "previous",
+            command: "echo disabled",
+            run: "execute",
+            focus: false,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("rejects an unknown scroll mode, unknown keys, stepless and duplicate automations", () => {
+    expect(WorkspaceConfigSchema.safeParse({ scroll_on_output: "bounce" }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ welcome: true }).success).toBe(false);
+    expect(
+      WorkspaceConfigSchema.safeParse({ automations: [{ id: "x", label: "X", steps: [] }] })
+        .success,
+    ).toBe(false);
+    expect(
+      WorkspaceConfigSchema.safeParse({
+        automations: [
+          { id: "dup", label: "A", steps: [{ command: "a" }] },
+          { id: "dup", label: "B", steps: [{ command: "b" }] },
+        ],
       }).success,
     ).toBe(false);
   });

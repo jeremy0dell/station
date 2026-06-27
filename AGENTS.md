@@ -2,6 +2,8 @@
 
 For architecture or boundary decisions, read `docs/architecture.md`.
 
+For configuration — the runtime `config.toml` (all sections, including `[workspace]` and `[tui]`), the project-local `.station/config.toml`, and environment variables — read `docs/configuration.md`.
+
 For development, test, and documentation workflow, read `docs/development.md`.
 
 For runtime trace IDs, command IDs, diagnostic IDs, or live debugging, read `docs/debugging.md`.

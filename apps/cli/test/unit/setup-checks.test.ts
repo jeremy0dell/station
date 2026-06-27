@@ -358,6 +358,58 @@ describe("setup dependency checks", () => {
     });
   });
 
+  it("surfaces best-effort config diagnostics without failing required setup", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: join(root, "home"),
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner([], {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        "wt --version": "worktrunk 1.2.3\n",
+        "tmux -V": "tmux 3.5a\n",
+        "codex --version": "codex 0.1.0\n",
+      }),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      fs: readOnlyFs({
+        [join(root, "home/.config/station/config.toml")]: `${configToml(repo)}
+[workspace]
+scroll_on_output = "teleport"
+`,
+      }),
+      noBrew: true,
+    });
+    const plan = buildSetupPlan(facts);
+
+    expect(facts.config).toMatchObject({
+      status: "valid",
+      diagnostics: [expect.objectContaining({ severity: "warn" })],
+    });
+    if (facts.config.status !== "valid") {
+      throw new Error("expected setup config to load with diagnostics");
+    }
+    const [diagnostic] = facts.config.diagnostics ?? [];
+    if (diagnostic === undefined) {
+      throw new Error("expected setup config diagnostics");
+    }
+    expect(plan.summary.requiredOk).toBe(true);
+    expect(plan.summary.requiredMissing).toBe(0);
+    expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
+      tier: "required",
+      status: "ok",
+    });
+    expect(plan.checks.find((check) => check.id === "config-diagnostics")).toMatchObject({
+      tier: "recommended",
+      status: "warning",
+      message: expect.stringContaining(diagnostic.message),
+    });
+    expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
+  });
+
   it("fails readiness for existing config defaults outside the setup core path", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

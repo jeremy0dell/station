@@ -64,6 +64,7 @@ function setupChecks(
     gitCheck(facts),
     harnessCheck(facts, selectedHarness),
     configCheck(facts),
+    ...configDiagnosticsChecks(facts),
     launcherCheck(facts),
     {
       id: "worktrunk-shell-integration",
@@ -460,6 +461,32 @@ function configCheck(facts: SetupFacts): SetupCheck {
     message: "Config includes the current git repository.",
     details: { path: facts.config.path },
   };
+}
+
+function configDiagnosticsChecks(facts: SetupFacts): SetupCheck[] {
+  if (facts.config.status !== "valid") {
+    return [];
+  }
+  const diagnostics = facts.config.diagnostics ?? [];
+  if (diagnostics.length === 0) {
+    return [];
+  }
+  const details: Record<string, string> = { path: facts.config.path };
+  if (facts.config.matchedProject !== undefined) {
+    details.project = facts.config.matchedProject.id;
+  }
+  return [
+    {
+      id: "config-diagnostics",
+      tier: "recommended",
+      status: "warning",
+      label: "STATION config diagnostics",
+      message: `Config loaded with ${diagnostics.length} diagnostic(s): ${diagnostics
+        .map((diagnostic) => diagnostic.message)
+        .join("; ")}`,
+      details,
+    },
+  ];
 }
 
 function defaultConfigCoreProblem(

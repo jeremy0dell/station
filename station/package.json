@@ -32,7 +32,6 @@
     "node-pty": "^1.1.0",
     "react": "19.2.7",
     "react-devtools-core": "7.0.1",
-    "smol-toml": "^1.6.1",
     "string-width": "^8.2.1",
     "ws": "8.21.0",
     "zod": "^4.1.12",

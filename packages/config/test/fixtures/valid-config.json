@@ -112,8 +112,7 @@
       },
       "localConfig": {
         "enabled": true,
-        "path": ".station/config.toml",
-        "trust": "explicit"
+        "path": ".station/config.toml"
       },
       "recoveryBreadcrumbs": {
         "location": "external"

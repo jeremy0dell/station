@@ -5,24 +5,24 @@ import {
   type StationHotRuntime,
   type StationHotSlots,
 } from "./stationHotRuntime.js";
-import type { StationConfig } from "../config/stationConfig.js";
+import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { selectWelcomeCanContinue } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId } from "../state/types.js";
 import { createPtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 
-const FREEZE_CONFIG: StationConfig = {
+const FREEZE_CONFIG: WorkspaceConfig = {
   scroll_on_output: "freeze",
   welcome_on_boot: false,
   automations: [],
 };
-const FOLLOW_CONFIG: StationConfig = {
+const FOLLOW_CONFIG: WorkspaceConfig = {
   scroll_on_output: "follow",
   welcome_on_boot: false,
   automations: [],
 };
-const INTRO_CONFIG: StationConfig = {
+const INTRO_CONFIG: WorkspaceConfig = {
   scroll_on_output: "freeze",
   welcome_on_boot: true,
   automations: [],

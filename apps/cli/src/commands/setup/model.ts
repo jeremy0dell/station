@@ -165,6 +165,12 @@ export type SetupLaunchersFact = {
   tmuxPopup: SetupLauncherFact;
 };
 
+export type SetupConfigDiagnosticFact = {
+  code: string;
+  message: string;
+  severity: "warn" | "error";
+};
+
 export type SetupConfigFact =
   | {
       status: "missing";
@@ -181,6 +187,9 @@ export type SetupConfigFact =
       defaults: SetupConfigDefaultsFact;
       worktrunkUseLifecycleHooks?: boolean;
       matchedProject?: SetupConfigProjectFact;
+      // Non-fatal load diagnostics (broken project-local file, bad
+      // [tui]/[workspace]). Present only when non-empty.
+      diagnostics?: readonly SetupConfigDiagnosticFact[];
     }
   | {
       status: "invalid";
