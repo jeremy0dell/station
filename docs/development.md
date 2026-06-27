@@ -11,11 +11,23 @@ Status: current living doc for development, test, and documentation workflow.
 
 ## Local TUI Workflow
 
+| Need | Command | Boundary |
+| --- | --- | --- |
+| Normal run | `pnpm stn` / `pnpm stn tui` | Built CLI, configured observer |
+| UI hot reload against the selected observer | `pnpm station:ui-dev` | Bun renderer only |
+| CLI/package-output watcher | `pnpm dev` / `pnpm station:tui-dev` | Isolated by default, not Bun HMR |
+| Isolated Station sandbox | `pnpm station:devbox` | Isolated observer, host, state, and supported hooks |
+| Isolated Station sandbox with UI HMR | `pnpm station:devbox dev` | Same devbox isolation, Bun renderer hot reload |
+
+Do not use `station:dev` as a catch-all name until it truthfully owns the UI,
+CLI/package, observer, provider, protocol, and host restart boundaries.
+
 - `pnpm stn` opens the normal station popup from the current checkout's built CLI when run inside tmux.
 - `pnpm stn tui` opens the normal station TUI fullscreen from the current checkout's built CLI.
 - Normal tmux popup fast-path registrations are scoped to the checkout root that created them. A popup launcher from another checkout ignores and clears stale normal popup metadata before falling back to that checkout's CLI.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
-- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
+- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
+- `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
 

@@ -78,8 +78,8 @@ describe("CursorHarnessProvider", () => {
       homeDir: root,
     });
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = root;
     try {
       const provider = createCursorHarnessProvider({
         installHooks: true,
@@ -97,10 +97,10 @@ describe("CursorHarnessProvider", () => {
         }),
       );
     } finally {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
+      if (previousCursorHome === undefined) {
+        delete process.env.STATION_CURSOR_HOME;
       } else {
-        process.env.HOME = previousHome;
+        process.env.STATION_CURSOR_HOME = previousCursorHome;
       }
     }
   });
@@ -130,6 +130,27 @@ describe("CursorHarnessProvider", () => {
         terminalTargetId: "tmux:station:@1:%2",
       },
     });
+  });
+
+  it("launches Cursor with the isolated dev home when configured", async () => {
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = "/tmp/station/cursor-home";
+    try {
+      const provider = createCursorHarnessProvider({ command: "agent-test" });
+
+      await expect(provider.buildLaunch(request())).resolves.toMatchObject({
+        env: {
+          HOME: "/tmp/station/cursor-home",
+          STATION_HARNESS_PROVIDER: "cursor",
+        },
+      });
+    } finally {
+      if (previousCursorHome === undefined) {
+        delete process.env.STATION_CURSOR_HOME;
+      } else {
+        process.env.STATION_CURSOR_HOME = previousCursorHome;
+      }
+    }
   });
 
   it("launches interactive Cursor resume with the native session id", async () => {

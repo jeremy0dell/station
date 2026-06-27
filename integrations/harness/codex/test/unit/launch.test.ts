@@ -162,6 +162,25 @@ describe("buildCodexLaunchPlan", () => {
     });
   });
 
+  it("carries an isolated CODEX_HOME into the launch env", () => {
+    const previous = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = "/tmp/station/codex-home";
+    try {
+      const plan = buildCodexLaunchPlan(request());
+
+      expect(plan.env).toMatchObject({
+        STATION_HARNESS_PROVIDER: "codex",
+        CODEX_HOME: "/tmp/station/codex-home",
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODEX_HOME;
+      } else {
+        process.env.CODEX_HOME = previous;
+      }
+    }
+  });
+
   it("builds non-interactive codex exec plans with JSON events", () => {
     const plan = buildCodexLaunchPlan(
       {

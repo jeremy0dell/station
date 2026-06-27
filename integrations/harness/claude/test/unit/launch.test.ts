@@ -122,6 +122,25 @@ describe("buildClaudeLaunchPlan", () => {
     });
   });
 
+  it("carries an isolated CLAUDE_CONFIG_DIR into the launch env", () => {
+    const previous = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = "/tmp/station/claude-home";
+    try {
+      const plan = buildClaudeLaunchPlan(request());
+
+      expect(plan.env).toMatchObject({
+        STATION_HARNESS_PROVIDER: "claude",
+        CLAUDE_CONFIG_DIR: "/tmp/station/claude-home",
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = previous;
+      }
+    }
+  });
+
   it("builds non-interactive claude print plans with streamed JSON events", () => {
     const plan = buildClaudeLaunchPlan(
       {

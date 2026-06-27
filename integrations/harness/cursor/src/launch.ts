@@ -9,7 +9,18 @@ import { CursorHarnessProviderError } from "./errors.js";
 
 export type CursorLaunchOptions = {
   command?: string;
+  cursorHome?: string;
 };
+
+function cursorLaunchEnv(
+  request: BuildHarnessLaunchRequest,
+  options: CursorLaunchOptions,
+): Record<string, string> {
+  return harnessLaunchEnv("cursor", request, {
+    env: { STATION_CURSOR_HOME: options.cursorHome },
+    carryEnv: [{ from: "STATION_CURSOR_HOME", to: "HOME" }],
+  });
+}
 
 export function buildCursorLaunchPlan(
   request: BuildHarnessLaunchRequest,
@@ -63,7 +74,7 @@ export function buildCursorLaunchPlan(
     command: options.command ?? "agent",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("cursor", request),
+    env: cursorLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} Cursor`,
     providerData,

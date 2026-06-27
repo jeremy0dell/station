@@ -145,11 +145,9 @@ export function resolveOpenCodeConfigDir(options: OpenCodePluginPlanOptions = {}
   if (options.opencodeConfigDir !== undefined) {
     return options.opencodeConfigDir;
   }
-  if (
-    options.env?.OPENCODE_CONFIG_DIR !== undefined &&
-    options.env.OPENCODE_CONFIG_DIR.length > 0
-  ) {
-    return options.env.OPENCODE_CONFIG_DIR;
+  const env = options.env ?? process.env;
+  if (env.OPENCODE_CONFIG_DIR !== undefined && env.OPENCODE_CONFIG_DIR.length > 0) {
+    return env.OPENCODE_CONFIG_DIR;
   }
   return join(options.homeDir ?? homedir(), ".config", "opencode");
 }
