@@ -29,9 +29,8 @@ export function toastOverlayLayout(input: ToastOverlayLayoutInput): ToastOverlay
     return undefined;
   }
 
-  const maxWidth = Math.max(1, Math.min(52, columns - 4));
-  const minWidth = Math.max(1, Math.min(columns - 2, 28));
-  const width = Math.max(1, maxWidth < minWidth ? maxWidth : Math.max(minWidth, maxWidth));
+  // Toast spans up to 52 columns, capped to the available width (columns - 4).
+  const width = Math.max(1, Math.min(52, columns - 4));
   const left =
     columns < 56
       ? Math.max(0, Math.floor((columns - width) / 2))
