@@ -51,6 +51,21 @@ describe("Cursor hook setup", () => {
     await expect(readFile(hookScriptPath, "utf8")).rejects.toThrow();
   });
 
+  it("resolves hook config from STATION_CURSOR_HOME", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-"));
+    const cursorHome = join(root, "cursor-home");
+
+    const plan = await planCursorHooks({
+      env: { STATION_CURSOR_HOME: cursorHome },
+      stationConfigPath: "/tmp/station/config.toml",
+      observerSocketPath: "/tmp/station/run/observer.sock",
+      stateDir: "/tmp/station/state",
+      hookSpoolDir: "/tmp/station/state/spool/hooks",
+    });
+
+    expect(plan.hooksPath).toBe(join(cursorHome, ".cursor", "hooks.json"));
+  });
+
   it("installs, merges hooks.json, writes a 0700 script, and is idempotent", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-"));
     const hooksPath = join(root, "cursor", "hooks.json");

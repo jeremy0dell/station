@@ -14,6 +14,17 @@ export function resolveCursorHooksPath(options: CursorHookPathOptions = {}): str
   if (options.cursorHooksPath !== undefined) {
     return resolveLocalPath(options.cursorHooksPath, options.homeDir);
   }
+  const env = options.env ?? process.env;
+  if (env.STATION_CURSOR_HOOKS_PATH !== undefined && env.STATION_CURSOR_HOOKS_PATH.length > 0) {
+    return resolveLocalPath(env.STATION_CURSOR_HOOKS_PATH, options.homeDir);
+  }
+  if (env.STATION_CURSOR_HOME !== undefined && env.STATION_CURSOR_HOME.length > 0) {
+    return join(
+      resolveLocalPath(env.STATION_CURSOR_HOME, options.homeDir),
+      ".cursor",
+      CURSOR_HOOKS_FILE,
+    );
+  }
   return resolveLocalPath(join("~", ".cursor", CURSOR_HOOKS_FILE), options.homeDir);
 }
 

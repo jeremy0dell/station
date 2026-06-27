@@ -21,6 +21,7 @@ export type ClaudeLaunchOptions = {
   defaultApprovalPolicy?: string;
   defaultSandboxMode?: string;
   hookSettingsPath?: string;
+  env?: NodeJS.ProcessEnv;
 };
 
 const CLAUDE_YOLO_FLAG = "--dangerously-skip-permissions";
@@ -73,11 +74,21 @@ function buildClaudeResumeLaunchPlan(
     command: options.command ?? "claude",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("claude", request),
+    env: claudeLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} Claude`,
     providerData,
   };
+}
+
+function claudeLaunchEnv(
+  request: BuildHarnessLaunchRequest,
+  options: ClaudeLaunchOptions,
+): Record<string, string> {
+  return harnessLaunchEnv("claude", request, {
+    env: options.env,
+    carryEnv: [{ from: "CLAUDE_CONFIG_DIR" }],
+  });
 }
 
 export function buildClaudeLaunchPlan(
@@ -134,7 +145,7 @@ export function buildClaudeLaunchPlan(
     command: options.command ?? "claude",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("claude", request),
+    env: claudeLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} Claude`,
     providerData,

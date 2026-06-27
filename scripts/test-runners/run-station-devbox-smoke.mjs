@@ -7,7 +7,9 @@
 // Warning: runs against the real .dev-state for this checkout — it starts and
 // then STOPS the devbox, so a live devbox here will be stopped.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,8 +21,12 @@ const wrapper = join(repoRoot, "scripts", "station-devbox.mjs");
 const cli = join(repoRoot, "apps", "cli", "dist", "main.js");
 const ds = join(repoRoot, ".dev-state");
 const cfg = join(ds, "config.toml");
-const observerSock = join(ds, "observer", "run", "observer.sock");
-const hostSock = join(ds, "observer", "run", "station-host.sock");
+const socketDir = join(
+  tmpdir(),
+  `stn-db-${createHash("sha256").update(repoRoot).digest("hex").slice(0, 12)}`,
+);
+const observerSock = join(socketDir, "observer.sock");
+const hostSock = join(socketDir, "station-host.sock");
 const hooksDir = join(ds, "observer", "hooks");
 const globalStateFragment = join(".local", "state", "station");
 

@@ -161,6 +161,27 @@ describe("OpenCodeHarnessProvider", () => {
     });
   });
 
+  it("carries an isolated OPENCODE_CONFIG_DIR into the launch env", async () => {
+    const previous = process.env.OPENCODE_CONFIG_DIR;
+    process.env.OPENCODE_CONFIG_DIR = "/tmp/station/opencode-config";
+    try {
+      const provider = createOpenCodeHarnessProvider();
+
+      await expect(provider.buildLaunch(request())).resolves.toMatchObject({
+        env: {
+          STATION_HARNESS_PROVIDER: "opencode",
+          OPENCODE_CONFIG_DIR: "/tmp/station/opencode-config",
+        },
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENCODE_CONFIG_DIR;
+      } else {
+        process.env.OPENCODE_CONFIG_DIR = previous;
+      }
+    }
+  });
+
   it("launches interactive OpenCode resume with the native session id", async () => {
     const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",

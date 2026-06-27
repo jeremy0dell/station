@@ -5,10 +5,17 @@ import type {
 } from "@station/contracts";
 
 export type CommonLaunchEnvOptions = {
-  configPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
+  configPath?: string | undefined;
+  observerSocketPath?: string | undefined;
+  stateDir?: string | undefined;
+  hookSpoolDir?: string | undefined;
+  env?: Record<string, string | undefined> | undefined;
+  carryEnv?: readonly LaunchEnvCarry[] | undefined;
+};
+
+export type LaunchEnvCarry = {
+  from: string;
+  to?: string | undefined;
 };
 
 export type CommonProviderDataInput = {
@@ -48,7 +55,21 @@ export function harnessLaunchEnv(
   }
   if (options.stateDir !== undefined) env.STATION_OBSERVER_STATE_DIR = options.stateDir;
   if (options.hookSpoolDir !== undefined) env.STATION_HOOK_SPOOL_DIR = options.hookSpoolDir;
+  for (const carry of options.carryEnv ?? []) {
+    carryLaunchEnv(env, carry, options.env);
+  }
   return env;
+}
+
+function carryLaunchEnv(
+  env: Record<string, string>,
+  carry: LaunchEnvCarry,
+  source?: Record<string, string | undefined>,
+): void {
+  const value = source?.[carry.from] ?? process.env[carry.from];
+  if (value !== undefined && value.length > 0) {
+    env[carry.to ?? carry.from] = value;
+  }
 }
 
 export function commonProviderData(input: CommonProviderDataInput): Record<string, unknown> {

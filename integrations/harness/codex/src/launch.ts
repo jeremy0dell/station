@@ -20,6 +20,7 @@ export type CodexLaunchOptions = {
   defaultApprovalPolicy?: string;
   defaultSandboxMode?: string;
   noAltScreen?: boolean;
+  env?: NodeJS.ProcessEnv;
 };
 
 const CODEX_YOLO_FLAG = "--dangerously-bypass-approvals-and-sandbox";
@@ -80,7 +81,7 @@ export function buildCodexLaunchPlan(
     command: options.command ?? "codex",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("codex", request),
+    env: codexLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} Codex`,
     providerData,
@@ -133,7 +134,7 @@ function buildCodexResumeLaunchPlan(
     command: options.command ?? "codex",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("codex", request),
+    env: codexLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} Codex`,
     providerData,
@@ -173,6 +174,16 @@ function appendCodexOptions(
   if (options.noAltScreen === true) {
     args.push("--no-alt-screen");
   }
+}
+
+function codexLaunchEnv(
+  request: BuildHarnessLaunchRequest,
+  options: CodexLaunchOptions,
+): Record<string, string> {
+  return harnessLaunchEnv("codex", request, {
+    env: options.env,
+    carryEnv: [{ from: "CODEX_HOME" }],
+  });
 }
 
 function codexProviderData(

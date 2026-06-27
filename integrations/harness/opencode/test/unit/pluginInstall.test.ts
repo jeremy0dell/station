@@ -8,6 +8,7 @@ import {
   doctorOpenCodePlugin,
   installOpenCodePlugin,
   planOpenCodePlugin,
+  resolveOpenCodeConfigDir,
   resolveOpenCodePluginPath,
   uninstallOpenCodePlugin,
 } from "../../src/pluginInstall";
@@ -43,6 +44,20 @@ describe("OpenCode plugin setup", () => {
     expect(plan.after).toContain('"session.next.tool.input.delta"');
     expect(plan.after).toContain("/tmp/station/run/observer.sock");
     await expect(readFile(pluginPath, "utf8")).rejects.toThrow();
+  });
+
+  it("resolves config dir from OPENCODE_CONFIG_DIR in process env", async () => {
+    const previous = process.env.OPENCODE_CONFIG_DIR;
+    process.env.OPENCODE_CONFIG_DIR = "/tmp/station/opencode-config";
+    try {
+      expect(resolveOpenCodeConfigDir()).toBe("/tmp/station/opencode-config");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENCODE_CONFIG_DIR;
+      } else {
+        process.env.OPENCODE_CONFIG_DIR = previous;
+      }
+    }
   });
 
   it("installs, reports idempotence, and uninstalls only the generated plugin", async () => {
