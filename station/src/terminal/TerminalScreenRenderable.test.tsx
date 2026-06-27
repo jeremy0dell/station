@@ -101,6 +101,58 @@ describe("TerminalScreenRenderable selection", () => {
     }
   });
 
+  it("rejoins a soft-wrapped logical line without a newline", async () => {
+    // 30 chars with no spaces wrap across two 20-col rows; the second row is a
+    // wrap continuation, so copy must NOT insert a newline at the boundary.
+    const text = "abcdefghijklmnopqrstuvwxyz0123";
+    const { setup, screen, copied } = await renderPane(text);
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual([text]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("rejoins a soft-wrap where a wide glyph straddles the boundary without a stray space", async () => {
+    // 19 ASCII chars fill cols 0-18; 漢 (width 2) can't fit in the last column, so
+    // xterm pads col 19 blank and wraps 漢字 to row 1. Copy must drop that pad, not
+    // paste "…s 漢字". (Width 20 pane from renderPane.)
+    const text = "abcdefghijklmnopqrs漢字";
+    const { setup, screen, copied } = await renderPane(text);
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual([text]); // no space between "s" and "漢"
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("double-clicks the correct word on a line with wide (CJK) characters", async () => {
+    // 漢 and 字 are each two cells but one code point; without cell↔char mapping
+    // the click column would land in the wrong place.
+    const { setup, screen, copied } = await renderPane("漢字 hello");
+    try {
+      await setup.mockMouse.click(2, 0); // cell 2 = second wide char (字)
+      await setup.mockMouse.click(2, 0);
+      expect(copied).toEqual(["漢字"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("double-clicks the right word when the click lands on a wide glyph's 2nd cell", async () => {
+    // Cell 1 is the continuation half of 漢; it must map to 漢, not the next char.
+    const { setup, screen, copied } = await renderPane("漢字 hello");
+    try {
+      await setup.mockMouse.click(1, 0);
+      await setup.mockMouse.click(1, 0);
+      expect(copied).toEqual(["漢字"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
   it("selects even in an alt-screen app", async () => {
     // The alternate screen is a fresh buffer, so paint content into it (as a
     // pager/TUI would) before selecting.
@@ -184,6 +236,37 @@ describe("TerminalScreenRenderable mouse forwarding", () => {
     try {
       await setup.mockMouse.click(2, 0, 2); // button 2 = right
       expect(forwarded).toEqual([]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("forwards a middle-click press+release to the app", async () => {
+    const { setup, screen, forwarded } = await renderPane("hello world");
+    screen.feed("\x1b[?1000h\x1b[?1006h");
+    await screen.whenIdle();
+    try {
+      await setup.mockMouse.click(2, 0, 1); // button 1 = middle -> SGR button code 1
+      expect(forwarded).toEqual(["\x1b[<1;3;1M", "\x1b[<1;3;1m"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("still owes the middle-click release after intervening output resets selection", async () => {
+    // The middle press is forwarded on `down`; its release is owed via #middleDown,
+    // which must survive the output-driven #resetSelection (anchor is null for a
+    // middle press). Without that, the release would be dropped.
+    const { setup, screen, forwarded } = await renderPane("hello world");
+    screen.feed("\x1b[?1000h\x1b[?1006h");
+    await screen.whenIdle();
+    try {
+      await setup.mockMouse.pressDown(2, 0, 1); // middle press forwarded now
+      screen.feed("x"); // output -> screen update -> #resetSelection
+      await screen.whenIdle();
+      await new Promise((resolve) => setTimeout(resolve, 60)); // let the flush fire the subscriber
+      await setup.mockMouse.release(2, 0, 1);
+      expect(forwarded).toEqual(["\x1b[<1;3;1M", "\x1b[<1;3;1m"]);
     } finally {
       await teardown(setup, screen);
     }

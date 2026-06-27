@@ -6,6 +6,7 @@ import {
   type StationHostClient,
 } from "@station/host";
 import { type SafeErrorFallback, toSafeError } from "@station/observability";
+import { ControlByte } from "../protocol/controlBytes.js";
 import type {
   StationTerminalDisposable,
   StationTerminalExit,
@@ -23,6 +24,23 @@ const HOST_DATA_PLANE_FALLBACK: SafeErrorFallback = {
   message: "The station host request failed.",
   provider: STATION_HOST_PROVIDER_ID,
 };
+
+// A dropped attach connection (host restart, socket hiccup, hot-reload) is
+// transient: reconnect a bounded number of times with backoff before giving up,
+// so a blip doesn't permanently kill a pane whose PTY is still alive. These two
+// host error codes mean the PTY is genuinely gone — those end the pane instead.
+const MAX_ATTACH_ATTEMPTS = 6;
+const RECONNECT_BASE_MS = 250;
+const RECONNECT_MAX_MS = 2_000;
+const PTY_GONE_CODES = new Set(["HOST_ATTACH_GONE", "HOST_PTY_NOT_FOUND"]);
+// Reconnect repaint: cursor home, clear screen, clear scrollback. Lets us replay
+// the fresh ring snapshot on reconnect (which holds output produced while we were
+// detached) without stacking it on top of the history the VT already shows.
+// Exported so the reconnect test can pin that it precedes the replayed snapshot.
+export const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
+const reconnectDelayMs = (attempt: number): number =>
+  Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 export type HostAttachedTerminalOptions = {
   hostSocketPath: string;
@@ -42,6 +60,8 @@ export type HostAttachedTerminalOptions = {
   size: StationTerminalSize;
   /** Test seam; production dials the host unix socket. */
   clientFactory?: (socketPath: string) => StationHostClient;
+  /** Test seam for the reconnect-budget clock; production uses wall time. */
+  now?: () => number;
 };
 
 /**
@@ -54,7 +74,10 @@ export function createHostAttachedTerminal(
 ): StationTerminalProcess {
   const makeClient =
     options.clientFactory ?? ((path) => createStationHostClient({ socketPath: path }));
-  const client = makeClient(options.hostSocketPath);
+  const now = options.now ?? (() => Date.now());
+  // Reassigned on reconnect: the host client does not auto-reconnect, so a dropped
+  // connection is replaced with a fresh one.
+  let client = makeClient(options.hostSocketPath);
   // Station OWNS this aux PTY — it spawned it, or is reattaching to one it spawned
   // earlier — so kill() may close it on the host. An agent attach leaves this
   // false: the observer owns an agent's lifecycle.
@@ -114,76 +137,147 @@ export function createHostAttachedTerminal(
     }
   };
 
+  // Attach, replay scrollback once, then stream frames. A transient transport
+  // failure — or the stream ending with no exit frame — reconnects with backoff;
+  // only a genuinely-gone PTY (or exhausted retries) ends the pane.
+  const runAttachLoop = async (ptyId: string): Promise<void> => {
+    let replayed = false;
+    for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
+      // Stamped once this attempt actually streams; a connection that outlives
+      // the backoff window earns a fresh retry budget below (see the reset).
+      let connectedAt: number | undefined;
+      try {
+        const opened = await client.attach(ptyId);
+        if (disposed) {
+          // dispose() already closed the client connection; the host detaches via
+          // socket-close. No explicit detach (it would race the closed connection).
+          return;
+        }
+        pid = opened.ack.pid;
+        // Defensive: the host deletes exited entries, so attach normally throws
+        // HOST_ATTACH_GONE rather than acking exited. Don't fabricate a clean exit
+        // and don't retry.
+        if (opened.ack.exited) {
+          emitDiagnostic("Station host PTY already exited.");
+          emitExit({ exitCode: 1 });
+          return;
+        }
+        // First successful attach: replay the snapshot into the fresh client VT.
+        // On a RECONNECT the ack snapshot is the current ring — it captured output
+        // produced while we were detached — so repaint from it (clearing first so
+        // the already-shown history isn't duplicated) rather than dropping the gap.
+        if (!replayed) {
+          for (const chunk of opened.ack.scrollback) {
+            emitData(chunk);
+          }
+          replayed = true;
+        } else {
+          emitData(RECONNECT_REPAINT);
+          for (const chunk of opened.ack.scrollback) {
+            emitData(chunk);
+          }
+        }
+        // Sync the host PTY to THIS client's pane size on (re)attach — the host may
+        // have spawned it at a different size — then flush input typed before attach
+        // resolved. Expose `attachment` only AFTER the flush so later writes order
+        // after the buffered ones.
+        await opened.resize(size.cols, size.rows);
+        // Drain front-to-back so a mid-flush failure leaves only the un-sent
+        // writes to retry (no double-send on reconnect). New writes keep arriving
+        // at the back while attachment is still undefined, preserving order.
+        while (pendingWrites.length > 0) {
+          const data = pendingWrites[0];
+          if (data === undefined) {
+            break;
+          }
+          await opened.write(data);
+          pendingWrites.shift();
+        }
+        attachment = opened;
+        connectedAt = now();
+        for await (const frame of opened.frames) {
+          if (frame.type === "data") {
+            emitData(frame.data);
+          } else if (frame.type === "exit") {
+            emitExit({
+              exitCode: frame.exitCode ?? 0,
+              ...(frame.signal === undefined || frame.signal === null
+                ? {}
+                : { signal: frame.signal }),
+            });
+            return;
+          }
+          // a "focus" frame is best-effort and has no terminal-output meaning here
+        }
+        // Stream ended with no exit frame: the host dropped our connection while
+        // the PTY may still be alive. Fall through to reconnect.
+      } catch (error) {
+        if (disposed) {
+          return;
+        }
+        const safe = toSafeError(error, HOST_DATA_PLANE_FALLBACK);
+        if (PTY_GONE_CODES.has(safe.code)) {
+          emitDiagnostic(safe.message);
+          emitExit({ exitCode: 1 });
+          return;
+        }
+        emitDiagnostic(safe.message);
+      }
+      // Transient: clear attachment so write() re-buffers, then drop the dead
+      // client and dial a fresh one before the next attempt.
+      attachment = undefined;
+      if (disposed || closeRequested) {
+        return;
+      }
+      // Flap-safe budget reset: a connection that outlived the max backoff window
+      // was healthy, so a later drop earns a FRESH retry budget — a long-lived
+      // pane reconnects indefinitely across host restarts. A tight accept-then-
+      // drop flap (shorter than the window) does NOT reset, so it still exhausts
+      // the budget and ends the pane rather than spinning forever.
+      if (connectedAt !== undefined && now() - connectedAt > RECONNECT_MAX_MS) {
+        attempt = -1;
+      }
+      if (attempt < MAX_ATTACH_ATTEMPTS - 1) {
+        client.dispose();
+        client = makeClient(options.hostSocketPath);
+        emitDiagnostic("Station host connection lost; reconnecting…");
+        await delay(reconnectDelayMs(attempt));
+      }
+    }
+    emitDiagnostic("Station host reconnect failed.");
+    emitExit({ exitCode: 1 });
+  };
+
   void (async () => {
-    try {
-      if (options.spawn !== undefined) {
-        // Eagerly spawn the aux PTY at the laid-out size, then attach to it like
-        // any other host PTY. The size rides in from the lazy first-resize call.
+    if (options.spawn !== undefined) {
+      // Eagerly spawn the aux PTY at the laid-out size, then attach to it like any
+      // other host PTY. Spawn runs ONCE — never inside the reconnect loop, where a
+      // retry would fork a second PTY. The size rides in from the lazy first-resize.
+      try {
         const spawned = await client.spawn({ ...options.spawn, cols: size.cols, rows: size.rows });
         resolvedPtyId = spawned.ptyId;
         pid = spawned.pid;
-        if (closeRequested) {
-          // The pane was closed while the spawn was in flight: close what we just
-          // created and never attach.
-          closeOwnedPty();
-          return;
-        }
-      }
-      if (disposed) {
-        return;
-      }
-      if (resolvedPtyId === undefined) {
-        emitDiagnostic("Station host attach failed: no pty id.");
+      } catch (error) {
+        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
         emitExit({ exitCode: 1 });
         return;
       }
-      const opened = await client.attach(resolvedPtyId);
-      if (disposed) {
-        // dispose() already closed the client connection; the host detaches via
-        // socket-close. No explicit detach (it would race the closed connection).
+      if (closeRequested) {
+        // The pane was closed while the spawn was in flight: close what we just
+        // created and never attach.
+        closeOwnedPty();
         return;
       }
-      pid = opened.ack.pid;
-      for (const chunk of opened.ack.scrollback) {
-        emitData(chunk);
-      }
-      // Sync the host PTY to THIS client's pane size on (re)attach — the host may
-      // have spawned it at a different size — then flush input typed before attach
-      // resolved. Expose `attachment` only AFTER the flush so later writes order
-      // after the buffered ones.
-      await opened.resize(size.cols, size.rows);
-      for (const data of pendingWrites) {
-        await opened.write(data);
-      }
-      pendingWrites.length = 0;
-      attachment = opened;
-      if (opened.ack.exited) {
-        emitExit({ exitCode: 0 });
-        return;
-      }
-      for await (const frame of opened.frames) {
-        if (frame.type === "data") {
-          emitData(frame.data);
-        } else if (frame.type === "exit") {
-          emitExit({
-            exitCode: frame.exitCode ?? 0,
-            ...(frame.signal === undefined || frame.signal === null ? {} : { signal: frame.signal }),
-          });
-          return;
-        }
-        // a "focus" frame is best-effort and has no terminal-output meaning here
-      }
-      // The stream ended with no exit frame and we did not dispose: the host
-      // connection dropped while the agent may still be alive. Surface it rather
-      // than leaving the pane silently frozen.
-      if (!disposed) {
-        emitDiagnostic("Station host connection lost.");
-        emitExit({ exitCode: 1 });
-      }
-    } catch (error) {
-      emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
-      emitExit({ exitCode: 1 });
     }
+    if (disposed) {
+      return;
+    }
+    if (resolvedPtyId === undefined) {
+      emitDiagnostic("Station host attach failed: no pty id.");
+      emitExit({ exitCode: 1 });
+      return;
+    }
+    await runAttachLoop(resolvedPtyId);
   })();
 
   const disposableFor = <T>(set: Set<T>, listener: T): StationTerminalDisposable => ({

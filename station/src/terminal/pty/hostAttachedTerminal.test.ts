@@ -1,6 +1,12 @@
-import type { HostAttachAck, HostAttachment, HostFrame, StationHostClient } from "@station/host";
+import {
+  type HostAttachAck,
+  type HostAttachment,
+  type HostFrame,
+  type StationHostClient,
+  StationHostProviderError,
+} from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { createHostAttachedTerminal } from "./hostAttachedTerminal.js";
+import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -53,6 +59,11 @@ function controllableAttachment(ack: HostAttachAck) {
     attachment,
     push: (frame: HostFrame) => {
       queue.push(frame);
+      drain();
+    },
+    // Simulate a socket drop: the frame stream ends with no exit frame.
+    endStream: () => {
+      ended = true;
       drain();
     },
     state: { writes, resizes, isDetached: () => detached },
@@ -246,6 +257,166 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.kill();
     await flush();
     expect(tracking.closes).toEqual([]);
+  });
+
+  it("reconnects after a transient attach failure instead of killing the pane", async () => {
+    const ctrl = controllableAttachment(ack({ scrollback: ["scroll-"] }));
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            // First attempt fails with a non-gone (transport) error: a plain
+            // Error normalizes to HOST_REQUEST_FAILED, which is transient.
+            if (attachCalls === 1) {
+              throw new Error("socket hiccup");
+            }
+            return ctrl.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const received: string[] = [];
+    const exits: number[] = [];
+    terminal.onData((data) => received.push(data));
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    // Wait past the first reconnect backoff (~250ms).
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(attachCalls).toBeGreaterThanOrEqual(2);
+    expect(exits).toEqual([]); // the pane was NOT killed by the blip
+    expect(received).toEqual(["scroll-"]); // scrollback replayed once, on reconnect
+
+    ctrl.push({ type: "data", ptyId: "pty-1", data: "live" });
+    await flush();
+    expect(received).toEqual(["scroll-", "live"]); // streaming resumed
+  });
+
+  it("repaints the gap output on reconnect after a dropped stream (does not lose it)", async () => {
+    const first = controllableAttachment(ack({ scrollback: ["history-"] }));
+    // The host ring captured output produced while we were detached, so the
+    // reconnect ack carries more scrollback than the first attach did.
+    const second = controllableAttachment(ack({ scrollback: ["history-", "gap-"] }));
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            return attachCalls === 1 ? first.attachment : second.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const received: string[] = [];
+    const exits: number[] = [];
+    terminal.onData((data) => received.push(data));
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    await flush(); // first attach replays history once
+    expect(received).toEqual(["history-"]);
+
+    first.endStream(); // socket drops with no exit frame
+    await new Promise((resolve) => setTimeout(resolve, 400)); // past reconnect backoff
+
+    expect(exits).toEqual([]); // pane stayed alive
+    // The repaint preamble MUST precede the replayed snapshot, so the history the
+    // VT already shows is cleared before it is re-emitted (no duplication).
+    expect(received).toEqual(["history-", RECONNECT_REPAINT, "history-", "gap-"]);
+  });
+
+  it("keeps reconnecting a long-lived pane across many drops (budget is consecutive, not lifetime)", async () => {
+    // A pane that has streamed for a while then drops should earn a fresh retry
+    // budget each time — otherwise the lifetime cap eventually kills a healthy
+    // pane (the exact failure finding 2.2 set out to prevent).
+    let clock = 0;
+    let attachCalls = 0;
+    let current = controllableAttachment(ack());
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      now: () => clock,
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            current = controllableAttachment(ack());
+            return current.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const exits: number[] = [];
+    terminal.onExit((event) => exits.push(event.exitCode));
+    await flush(); // first attach
+
+    // Drop 8 times — well past MAX_ATTACH_ATTEMPTS. Each connection "outlives" the
+    // backoff window (clock advances 5s), so every drop is a healthy reconnect.
+    for (let i = 0; i < 8; i += 1) {
+      clock += 5_000;
+      current.endStream();
+      await new Promise((resolve) => setTimeout(resolve, 300)); // past healthy backoff
+    }
+    expect(exits).toEqual([]); // never killed despite > MAX_ATTACH_ATTEMPTS drops
+    expect(attachCalls).toBeGreaterThan(8); // it kept redialing each time
+  });
+
+  it("ends the pane without retrying when the host reports the PTY is gone", async () => {
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-gone",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            throw new StationHostProviderError("HOST_ATTACH_GONE", "pty is gone");
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-gone", pid: 1 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const exits: number[] = [];
+    terminal.onExit((event) => exits.push(event.exitCode));
+    await flush();
+    expect(exits).toEqual([1]);
+    expect(attachCalls).toBe(1); // a gone PTY is terminal, not retried
   });
 
   it("kill() before the spawn resolves still closes the PTY once it exists", async () => {

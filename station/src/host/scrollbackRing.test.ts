@@ -30,4 +30,25 @@ describe("ScrollbackRing", () => {
     ring.push("");
     expect(ring.snapshot()).toEqual({ scrollback: [], truncated: false });
   });
+
+  it("prepends a mode-restore preamble for modes set in dropped chunks", () => {
+    const ring = new ScrollbackRing(10);
+    ring.push("\x1b[?1049h"); // enter alt screen (8 bytes) — will be dropped
+    ring.push("aaaaa"); // over budget -> drops the alt-screen-enter chunk
+    ring.push("bbbbb");
+    const snapshot = ring.snapshot();
+    expect(snapshot.truncated).toBe(true);
+    // The surviving chunks alone would replay into a normal-screen VT; the
+    // preamble re-enters the alt screen first.
+    expect(snapshot.scrollback[0]).toBe("\x1b[?1049h");
+    expect(snapshot.scrollback.slice(1)).toEqual(["aaaaa", "bbbbb"]);
+  });
+
+  it("adds no preamble when the dropped chunks set no sticky modes", () => {
+    const ring = new ScrollbackRing(10);
+    ring.push("aaaaa");
+    ring.push("bbbbb");
+    ring.push("ccccc"); // drops "aaaaa" — plain text, nothing to restore
+    expect(ring.snapshot().scrollback).toEqual(["bbbbb", "ccccc"]);
+  });
 });

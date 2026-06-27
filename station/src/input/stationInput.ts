@@ -4,6 +4,7 @@ import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal
 import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { buildWheelForwardSequence } from "../terminal/input/wheelForward.js";
 import { cursorKeyBytes } from "../terminal/protocol/cursorKeys.js";
+import { MouseEncoding } from "../terminal/protocol/mouse.js";
 import type { PtyRegistry, PtyRegistryView } from "../terminal/registry/ptyRegistry.js";
 import type { Automation } from "../config/stationConfig.js";
 import type { StationTerminalSpawnOptions } from "../terminal/types.js";
@@ -592,6 +593,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
         const bytes = buildWheelForwardSequence({
           direction,
           mouseReporting: screen.isMouseReportingEnabled(),
+          encoding: screen.mouseProtocol()?.encoding ?? MouseEncoding.Legacy,
           applicationCursorKeys: screen.isApplicationCursorKeys(),
           cols: stats.cols,
           rows: stats.rows,
