@@ -9,37 +9,67 @@
  * override as needed (e.g. a later alt-screen exit still wins). Full SGR/color
  * state is intentionally out of scope — it self-heals on the next repaint.
  */
+import { ControlByte } from "../terminal/protocol/controlBytes.js";
+import { DecMode } from "../terminal/protocol/decset.js";
 
 // CSI ? <param(;param)*> (h|l) — DECSET (h) / DECRST (l), possibly batching
 // several modes. Built from a string so the ESC byte isn't a control char in a
 // regex literal (matches the style in input/terminalReplies.ts).
 const DECSET_PATTERN = "\\x1b\\[\\?([0-9;]+)([hl])";
+// A still-incomplete DECSET prefix at a chunk's tail, carried into the next
+// chunk so a sequence split across PTY reads ("\x1b[?10" then "49h") is matched.
+const PARTIAL_DECSET = new RegExp("\\x1b(?:\\[(?:\\?[0-9;]*)?)?$");
+const MAX_CARRY = 24;
+
+// DECSET private-mode numbers this tracker recognizes. SGR-mouse and cursor
+// visibility reuse the shared DecMode catalog; the rest are tracked only here
+// (xterm surfaces them on the client, but the host has no VT to ask).
+const Decset = {
+  AltScreen: 1049, // ?1049: alt buffer + save/restore cursor
+  AltScreenNoSave: 1047, // ?1047: alt buffer, no cursor save
+  AltScreenLegacy: 47, // ?47: oldest alt-buffer synonym
+  MouseX10: 9, // ?9: press-only
+  MouseVt200: 1000, // ?1000: press + release
+  MouseDrag: 1002, // ?1002: button-event (motion while held)
+  MouseAny: 1003, // ?1003: any-event motion
+  BracketedPaste: 2004, // ?2004
+  AppCursorKeys: 1, // ?1: DECCKM
+} as const;
 
 // Alt-screen variants, most-preferred first; only one is ever re-emitted.
-const ALT_SCREEN_MODES = [1049, 1047, 47] as const;
-const MOUSE_TRACKING_MODES = [9, 1000, 1002, 1003] as const;
+const ALT_SCREEN_MODES = [Decset.AltScreen, Decset.AltScreenNoSave, Decset.AltScreenLegacy] as const;
+const MOUSE_TRACKING_MODES = [
+  Decset.MouseX10,
+  Decset.MouseVt200,
+  Decset.MouseDrag,
+  Decset.MouseAny,
+] as const;
 // Modes that default OFF: re-emit a "set" on restore when currently on. Cursor
-// visibility (DECTCEM / ?25) defaults ON and is handled separately.
+// visibility (DecMode.CursorVisible) defaults ON and is handled separately.
 const STICKY_ON_MODES: readonly number[] = [
   ...ALT_SCREEN_MODES,
   ...MOUSE_TRACKING_MODES,
-  1006, // SGR mouse encoding
-  2004, // bracketed paste
-  1, // DECCKM application cursor keys
+  DecMode.SgrMouse,
+  Decset.BracketedPaste,
+  Decset.AppCursorKeys,
 ];
 
 export class TerminalModeTracker {
   readonly #on = new Set<number>();
   #cursorHidden = false;
+  #carry = "";
 
   feed(chunk: string): void {
+    // Prepend any partial escape held back from the previous chunk.
+    const data = this.#carry + chunk;
     const re = new RegExp(DECSET_PATTERN, "g");
-    let match: RegExpExecArray | null = re.exec(chunk);
+    let lastEnd = 0;
+    let match: RegExpExecArray | null = re.exec(data);
     while (match !== null) {
       const set = match[2] === "h";
       for (const param of match[1].split(";")) {
         const mode = Number(param);
-        if (mode === 25) {
+        if (mode === DecMode.CursorVisible) {
           this.#cursorHidden = !set;
         } else if (STICKY_ON_MODES.includes(mode)) {
           if (set) {
@@ -49,8 +79,15 @@ export class TerminalModeTracker {
           }
         }
       }
-      match = re.exec(chunk);
+      lastEnd = re.lastIndex;
+      match = re.exec(data);
     }
+    // Hold back a trailing, still-incomplete DECSET prefix (only one that hasn't
+    // been consumed by a match) for the next chunk; bounded so a stray ESC can't
+    // grow it without limit.
+    const escIndex = data.lastIndexOf(ControlByte.Esc);
+    const tail = escIndex >= lastEnd ? data.slice(escIndex) : "";
+    this.#carry = tail.length > 0 && tail.length <= MAX_CARRY && PARTIAL_DECSET.test(tail) ? tail : "";
   }
 
   /** Sequences re-asserting every currently-on mode, or "" when none are set. */
@@ -58,15 +95,21 @@ export class TerminalModeTracker {
     const parts: string[] = [];
     const altMode = ALT_SCREEN_MODES.find((mode) => this.#on.has(mode));
     if (altMode !== undefined) {
-      parts.push(`\x1b[?${altMode}h`);
+      parts.push(`${ControlByte.Csi}?${altMode}h`);
     }
-    for (const mode of [...MOUSE_TRACKING_MODES, 1006, 2004, 1]) {
+    const otherModes = [
+      ...MOUSE_TRACKING_MODES,
+      DecMode.SgrMouse,
+      Decset.BracketedPaste,
+      Decset.AppCursorKeys,
+    ];
+    for (const mode of otherModes) {
       if (this.#on.has(mode)) {
-        parts.push(`\x1b[?${mode}h`);
+        parts.push(`${ControlByte.Csi}?${mode}h`);
       }
     }
     if (this.#cursorHidden) {
-      parts.push("\x1b[?25l");
+      parts.push(`${ControlByte.Csi}?${DecMode.CursorVisible}l`);
     }
     return parts.join("");
   }

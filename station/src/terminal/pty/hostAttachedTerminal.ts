@@ -6,6 +6,7 @@ import {
   type StationHostClient,
 } from "@station/host";
 import { type SafeErrorFallback, toSafeError } from "@station/observability";
+import { ControlByte } from "../protocol/controlBytes.js";
 import type {
   StationTerminalDisposable,
   StationTerminalExit,
@@ -32,6 +33,10 @@ const MAX_ATTACH_ATTEMPTS = 6;
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 2_000;
 const PTY_GONE_CODES = new Set(["HOST_ATTACH_GONE", "HOST_PTY_NOT_FOUND"]);
+// Reconnect repaint: cursor home, clear screen, clear scrollback. Lets us replay
+// the fresh ring snapshot on reconnect (which holds output produced while we were
+// detached) without stacking it on top of the history the VT already shows.
+const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
 const reconnectDelayMs = (attempt: number): number =>
   Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -150,13 +155,20 @@ export function createHostAttachedTerminal(
           emitExit({ exitCode: 1 });
           return;
         }
-        // Replay scrollback only on the FIRST successful attach: a reconnect must
-        // not re-emit history into a client VT that already has it.
+        // First successful attach: replay the snapshot into the fresh client VT.
+        // On a RECONNECT the ack snapshot is the current ring — it captured output
+        // produced while we were detached — so repaint from it (clearing first so
+        // the already-shown history isn't duplicated) rather than dropping the gap.
         if (!replayed) {
           for (const chunk of opened.ack.scrollback) {
             emitData(chunk);
           }
           replayed = true;
+        } else {
+          emitData(RECONNECT_REPAINT);
+          for (const chunk of opened.ack.scrollback) {
+            emitData(chunk);
+          }
         }
         // Sync the host PTY to THIS client's pane size on (re)attach — the host may
         // have spawned it at a different size — then flush input typed before attach

@@ -42,6 +42,20 @@ describe("TerminalModeTracker", () => {
     expect(shown.restoreSequence()).toBe("");
   });
 
+  it("recognizes a DECSET sequence split across fed chunks", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("output\x1b[?10"); // chunk 1: ends mid alt-screen-enter
+    tracker.feed("49h more output"); // chunk 2: completes it
+    expect(tracker.restoreSequence()).toBe("\x1b[?1049h");
+  });
+
+  it("does not carry a completed non-DECSET escape across chunks", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[31m"); // a complete SGR color, not a DECSET prefix
+    tracker.feed("1049h"); // must NOT be glued into a phantom DECSET
+    expect(tracker.restoreSequence()).toBe("");
+  });
+
   it("prefers the highest-priority alt-screen variant in use", () => {
     const tracker = new TerminalModeTracker();
     tracker.feed("\x1b[?47h\x1b[?1049h");

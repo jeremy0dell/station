@@ -332,9 +332,9 @@ export class TerminalScreenRenderable extends Renderable {
       return;
     }
     // wordRangeAt works in string indices; local.x is a cell column. They diverge
-    // once a wide char (one code point, two cells) precedes the click, so map
-    // through viewRowText and back via cellColumnForCharIndex.
-    const charCol = screen.viewRowText(local.y, 0, local.x).length;
+    // once a wide char (one code point, two cells) precedes the click, so map the
+    // clicked cell to the char it covers and back via cellColumnForCharIndex.
+    const charCol = screen.charIndexForCell(local.y, local.x);
     const range = wordRangeAt(screen.viewRowText(local.y), charCol);
     if (range.end <= range.start) {
       this.#clearSelection();

@@ -127,6 +127,18 @@ describe("TerminalScreenRenderable selection", () => {
     }
   });
 
+  it("double-clicks the right word when the click lands on a wide glyph's 2nd cell", async () => {
+    // Cell 1 is the continuation half of 漢; it must map to 漢, not the next char.
+    const { setup, screen, copied } = await renderPane("漢字 hello");
+    try {
+      await setup.mockMouse.click(1, 0);
+      await setup.mockMouse.click(1, 0);
+      expect(copied).toEqual(["漢字"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
   it("selects even in an alt-screen app", async () => {
     // The alternate screen is a fresh buffer, so paint content into it (as a
     // pager/TUI would) before selecting.

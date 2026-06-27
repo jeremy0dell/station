@@ -122,6 +122,13 @@ export type StationVtScreen = {
    * indices) need this to agree on CJK/emoji rows.
    */
   cellColumnForCharIndex(viewRow: number, charIndex: number): number;
+  /**
+   * The string index of the character occupying `cellCol` of `viewRowText`.
+   * Unlike slicing `viewRowText`, a click on the *second* cell of a wide glyph
+   * maps to that glyph, not the next character — so word selection is right on
+   * either half of a CJK/emoji cell.
+   */
+  charIndexForCell(viewRow: number, cellCol: number): number;
   isCursorVisible(): boolean;
   /** DECSET 2004 state; decides paste wrapping. */
   isBracketedPasteEnabled(): boolean;
@@ -459,6 +466,34 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
         chars += cell === undefined ? 1 : (cell.getChars() || " ").length;
       }
       return terminal.cols;
+    },
+    charIndexForCell: (viewRow, cellCol) => {
+      if (cellCol <= 0) {
+        return 0;
+      }
+      const buffer = terminal.buffer.active;
+      const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
+      if (line === undefined) {
+        return cellCol;
+      }
+      // Walk glyph by glyph (width-0 cells continue a wide glyph). Return the
+      // char index of the glyph whose cell span covers cellCol, so a click on
+      // either half of a wide char maps to that char, not the next one.
+      const workCell = buffer.getNullCell();
+      let chars = 0;
+      let glyphChars = 0;
+      for (let col = 0; col <= cellCol && col < terminal.cols; col += 1) {
+        const cell = line.getCell(col, workCell);
+        if (cell !== undefined && cell.getWidth() === 0) {
+          continue;
+        }
+        if (col === cellCol) {
+          return chars;
+        }
+        glyphChars = chars;
+        chars += cell === undefined ? 1 : (cell.getChars() || " ").length;
+      }
+      return glyphChars;
     },
     isCursorVisible: () => cursorVisible,
     isBracketedPasteEnabled: () => terminal.modes.bracketedPasteMode,

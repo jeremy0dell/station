@@ -61,6 +61,11 @@ function controllableAttachment(ack: HostAttachAck) {
       queue.push(frame);
       drain();
     },
+    // Simulate a socket drop: the frame stream ends with no exit frame.
+    endStream: () => {
+      ended = true;
+      drain();
+    },
     state: { writes, resizes, isDetached: () => detached },
   };
 }
@@ -296,6 +301,47 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     ctrl.push({ type: "data", ptyId: "pty-1", data: "live" });
     await flush();
     expect(received).toEqual(["scroll-", "live"]); // streaming resumed
+  });
+
+  it("repaints the gap output on reconnect after a dropped stream (does not lose it)", async () => {
+    const first = controllableAttachment(ack({ scrollback: ["history-"] }));
+    // The host ring captured output produced while we were detached, so the
+    // reconnect ack carries more scrollback than the first attach did.
+    const second = controllableAttachment(ack({ scrollback: ["history-", "gap-"] }));
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            return attachCalls === 1 ? first.attachment : second.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const received: string[] = [];
+    const exits: number[] = [];
+    terminal.onData((data) => received.push(data));
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    await flush(); // first attach replays history once
+    expect(received).toEqual(["history-"]);
+
+    first.endStream(); // socket drops with no exit frame
+    await new Promise((resolve) => setTimeout(resolve, 400)); // past reconnect backoff
+
+    expect(exits).toEqual([]); // pane stayed alive
+    expect(received.join("")).toContain("gap-"); // gap output repainted, not lost
   });
 
   it("ends the pane without retrying when the host reports the PTY is gone", async () => {
