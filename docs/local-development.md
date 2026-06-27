@@ -86,6 +86,7 @@ the same running agent), one command does everything:
 ```bash
 # preferred: one command from any checkout/worktree root (builds first if needed)
 pnpm station:devbox               # start the isolated observer + Station
+pnpm station:devbox dev           # same sandbox, with Bun hot reload for station/src/**
 pnpm station:devbox restart       # rebuild + recycle the observer (agents survive)
 pnpm station:devbox status        # which observer/host am I on? (+ global, read-only)
 pnpm station:devbox logs --follow # tail the isolated observer/host/cli logs
@@ -99,12 +100,14 @@ remain the implementation and still work directly from the package dir:
 ```bash
 cd station
 bun run station:isolated          # isolated observer + persistence flag + Station
+bun run station:isolated dev      # same sandbox, with Bun hot reload
 bun run station:isolated:stop     # tear down the observer + host for this worktree
 ```
 
 `station:isolated` does everything needed for a self-contained sandbox:
 - generates a worktree-local config (`.dev-state/config.toml`: state/socket
-  relocated, `terminal = "noop-terminal"`, persistence flag on);
+  relocated, `terminal = "noop-terminal"`, persistence flag on, supported
+  harness hook flags on);
 - exports `STATION_HOST_ENTRY` (so the host can spawn) and
   `STATION_OBSERVER_SOCKET_PATH` (so Station connects to this observer);
 - sets `CODEX_HOME=.dev-state/codex-home`, seeds it with a symlink to your real
@@ -118,21 +121,29 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
   `CLAUDE_CONFIG_DIR=.dev-state/claude-home` so that install never touches your
   global `~/.claude` and the launched claude reads an isolated config; auth is not
   seeded (see note below);
+- sets `STATION_CURSOR_HOME=.dev-state/cursor-home` and
+  `OPENCODE_CONFIG_DIR=.dev-state/opencode-config`, then installs Cursor and
+  OpenCode hooks there as well;
 - starts the isolated observer and opens Station.
+
+Use `pnpm station:devbox dev` for the same isolated stack with `bun --hot` UI
+reload. It keeps the observer, state, hooks, and host under `.dev-state`, but UI
+edits under `station/src/**` reload in place.
 
 The observer + agents are left running when Station exits, so close/reopen
 reattaches.
 
-> Both **codex** and **claude** get isolated hooks. For claude the script installs
-> the station status hook for the isolated observer — the artifact + script land under
-> `.dev-state/observer`, which is what the launch guard checks, so a claude-default
-> worktree clears the guard. It also exports `CLAUDE_CONFIG_DIR=.dev-state/claude-home`
-> so that install never touches your global `~/.claude/settings.json` and the
-> launched claude reads an isolated config (the observer inherits the env and the
-> host→PTY spawn merges it down). Auth is **not** seeded: on macOS claude keeps
-> credentials in the Keychain (machine-global, not under `CLAUDE_CONFIG_DIR`), so
-> the sandbox stays logged in; on a file-credential platform expect a one-time
-> `claude` login. Your global `~/.claude/settings.json` is never modified.
+> Codex, Claude, Cursor, and OpenCode get isolated hooks/provider homes. For
+> Claude the script installs the station status hook for the isolated observer —
+> the artifact + script land under `.dev-state/observer`, which is what the
+> launch guard checks, so a claude-default worktree clears the guard. It also
+> exports `CLAUDE_CONFIG_DIR=.dev-state/claude-home` so that install never
+> touches your global `~/.claude/settings.json` and the launched claude reads an
+> isolated config (the observer inherits the env and the host→PTY spawn merges it
+> down). Auth is **not** seeded: on macOS claude keeps credentials in the Keychain
+> (machine-global, not under `CLAUDE_CONFIG_DIR`), so the sandbox stays logged in;
+> on a file-credential platform expect a one-time `claude` login. Your global
+> `~/.claude/settings.json` is never modified.
 
 Test the persistence loop:
 1. Open a worktree row → launches a fresh host-backed agent.
@@ -225,19 +236,24 @@ input file and it reloads in place. The split:
 ## 3. Launching via the CLI (`stn tui`)
 
 ```bash
-pnpm dev                                  # rebuild @station/cli on change, then stn tui
-pnpm dev --config /abs/iso-config.toml    # ...against an isolated observer
+pnpm dev                                  # rebuild @station/cli on change, isolated by default
+pnpm dev --config /abs/other-config.toml  # ...against a specific observer/config
 node apps/cli/dist/main.js --config /abs/iso-config.toml tui   # one-shot, no watcher
 ```
 
-`pnpm dev` rebuilds `@station/cli` on change and launches `stn tui`. The CLI
-shells out to the Bun renderer in `station/`: a bare terminal launches the
-**native Station workspace** (its own PTY panes); inside tmux it opens the
-**read-only dashboard** in a tmux popup (tmux owns the panes there). It passes
-`--config` straight through, and `stn tui` auto-starts the observer for the
-configured socket. Because tmux is global, an isolated-state tmux-popup dashboard
-still shows your real tmux agents — that is correct for testing the tmux
-integration (see the tmux gotcha in §1).
+`pnpm dev` rebuilds `@station/cli` on change and launches `stn tui`. With no
+explicit config it generates `.dev-state/tui-dev/config.toml` from your real
+config, relocates the observer `state_dir` and `socket_path` under this checkout,
+and preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that
+observer. The CLI shells out to the Bun renderer in `station/`: a bare terminal
+launches the **native Station workspace** (its own PTY panes); inside tmux it
+opens the **read-only dashboard** in a tmux popup (tmux owns the panes there). It
+passes explicit `--config` choices straight through, and `stn tui` auto-starts
+the observer for the configured socket. The generated default config uses
+`terminal = "noop-terminal"`, so it avoids machine-global tmux pane discovery.
+If you pass an explicit config with `terminal = "tmux"` for tmux-integration
+testing, the popup dashboard can still show your real tmux agents (see the tmux
+gotcha in §1).
 
 > `pnpm dev` rebuilds the **Node CLI**, not the Bun renderer. To hot-reload the
 > Station UI itself as you edit `station/src/**`, use `pnpm station:ui-dev` from §2b.
@@ -299,21 +315,20 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
 - **"<harness> status hooks are not installed" on launch** → the launch path
   (`externalLaunch.ts` → `assertHooksInstalledOrThrow`) refuses to spawn an agent
   whose status hooks aren't installed *for this observer*, so it never spawns a
-  half-wired agent. codex/claude hooks normally live in your **global** harness
-  home, so you can't install them for the isolated observer without clobbering it.
-  The fix (codex): point `CODEX_HOME` at a wt-local dir and install the hook there
-  — `hooks install` writes `$CODEX_HOME/station.config.toml` + a script under the
-  isolated state dir, never touching `~/.codex`. The agent still needs your login,
-  so seed the isolated home with a symlink to `~/.codex/auth.json` and a copy of
-  `config.toml`. The fix (claude): install the station status hook for the isolated
-  observer — its artifact + script land under the isolated state dir, which is what
-  the guard checks — and set `CLAUDE_CONFIG_DIR` to a wt-local home so the install
-  stays off your global `~/.claude` and the launched claude reads an isolated config;
-  auth isn't seeded because claude stores credentials in the macOS Keychain
-  (machine-global), so the sandbox stays logged in. `station:isolated` does all of
-  this. The generated hooks only fire for STATION-launched sessions (they early-exit
-  unless `STATION_SESSION_ID` and `STATION_WORKTREE_ID` are set), so they never disturb
-  your global agents.
+  half-wired agent. Supported provider hooks normally live in global provider
+  homes (`~/.codex`, `~/.claude`, `~/.cursor`, or `~/.config/opencode`), so the
+  isolated lanes redirect those homes before installing hooks. Codex uses
+  `CODEX_HOME`; Claude uses `CLAUDE_CONFIG_DIR`; Cursor uses `STATION_CURSOR_HOME`;
+  OpenCode uses `OPENCODE_CONFIG_DIR`. Codex auth is a symlink to your real
+  `~/.codex/auth.json`; Claude auth usually comes from the macOS Keychain.
+  The generated hooks only fire for STATION-launched sessions (they early-exit
+  unless `STATION_SESSION_ID` and `STATION_WORKTREE_ID` are set), so they never
+  disturb your global agents.
+  `pnpm dev` / `pnpm station:tui-dev` and `pnpm station:devbox` both do this
+  preflight for Codex, Claude, Cursor, and OpenCode under their own `.dev-state`
+  roots, and launched agents carry the same isolated provider-home env. Crush is
+  cwd-config based (`.crush.json`), so a central dev launcher cannot preconfigure
+  every worktree without writing into those worktrees.
 - **Station connects to the wrong observer** → it reads `STATION_OBSERVER_SOCKET_PATH`;
   point it at the isolated socket. `station:isolated` exports it.
 - **`observer stop` hangs / `OBSERVER_STOP_FAILED`** → an observer mid-reconcile

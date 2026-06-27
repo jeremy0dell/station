@@ -22,6 +22,7 @@ export type OpenCodeLaunchOptions = {
   observerSocketPath?: string;
   stateDir?: string;
   hookSpoolDir?: string;
+  env?: NodeJS.ProcessEnv;
 };
 
 export function buildOpenCodeLaunchPlan(
@@ -71,7 +72,7 @@ export function buildOpenCodeLaunchPlan(
     command: options.command ?? "opencode",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("opencode", request, options),
+    env: openCodeLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} OpenCode`,
     providerData: commonProviderData(providerDataInput),
@@ -109,7 +110,7 @@ function buildOpenCodeResumeLaunchPlan(
     command: options.command ?? "opencode",
     args,
     cwd: request.worktree.path,
-    env: harnessLaunchEnv("opencode", request, options),
+    env: openCodeLaunchEnv(request, options),
     mode,
     displayTitle: `${request.project.label} OpenCode`,
     providerData: commonProviderData({
@@ -119,6 +120,18 @@ function buildOpenCodeResumeLaunchPlan(
       resumeTargetKind: request.resume.target.kind,
     }),
   };
+}
+
+function openCodeLaunchEnv(
+  request: BuildHarnessLaunchRequest,
+  options: OpenCodeLaunchOptions,
+): Record<string, string> {
+  const env = harnessLaunchEnv("opencode", request, options);
+  const opencodeConfigDir = options.env?.OPENCODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR;
+  if (opencodeConfigDir !== undefined && opencodeConfigDir.length > 0) {
+    env.OPENCODE_CONFIG_DIR = opencodeConfigDir;
+  }
+  return env;
 }
 
 function interactiveArgs(_request: BuildHarnessLaunchRequest): string[] {

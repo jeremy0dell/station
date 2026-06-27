@@ -110,6 +110,9 @@ function buildLaunch(
   if (options.hookSpoolDir !== undefined) {
     launchOptions.hookSpoolDir = options.hookSpoolDir;
   }
+  if (options.env !== undefined) {
+    launchOptions.env = options.env;
+  }
   return buildOpenCodeLaunchPlan(request, launchOptions);
 }
 

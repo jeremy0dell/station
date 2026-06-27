@@ -12,6 +12,10 @@ DS="$ROOT/.dev-state"
 CFG="$DS/config.toml"
 STATION_DIR="$ROOT/station"
 CLI="$ROOT/apps/cli/dist/main.js"
+COMMAND="${1:-start}"
+if [ "$COMMAND" = "--hot" ]; then
+  COMMAND="dev"
+fi
 
 if [ ! -f "$CLI" ]; then
   echo "stn CLI is not built ($CLI missing). Run 'pnpm build' at the repo root first." >&2
@@ -20,7 +24,7 @@ fi
 
 mkdir -p "$DS/observer/run"
 
-if [ "${1:-}" = "stop" ]; then
+if [ "$COMMAND" = "stop" ]; then
   # Graceful stop can hang mid-reconcile, so finish with path-scoped SIGKILLs
   # against only this worktree's isolated observer and persistent host.
   node "$CLI" --config "$CFG" observer stop --timeout-ms 8000 >/dev/null 2>&1 || true
@@ -29,6 +33,11 @@ if [ "${1:-}" = "stop" ]; then
   rm -f "$DS/observer/run/observer.sock" "$DS/observer/run/station-host.sock"
   echo "isolated observer + host torn down."
   exit 0
+fi
+
+if [ "$COMMAND" != "start" ] && [ "$COMMAND" != "dev" ]; then
+  echo "Usage: $0 [start|dev|--hot|stop]" >&2
+  exit 1
 fi
 
 # Build the isolated config from the real one: observer state + socket relocated
@@ -45,16 +54,59 @@ fallback = (
     'harness = "codex"\nlayout = "agent-shell"\n'
 )
 cfg = open(src).read() if os.path.exists(src) else fallback
-cfg = re.sub(r'socket_path = "[^"]*"', f'socket_path = "{ds}/observer/run/observer.sock"', cfg, count=1)
-cfg = re.sub(r'state_dir = "[^"]*"', f'state_dir = "{ds}/observer"', cfg, count=1)
+def set_section_key(source, section, key, rendered):
+    header_pattern = rf'^\[{re.escape(section)}\]\s*$'
+    header = re.search(header_pattern, source, flags=re.M)
+    if not header:
+        return source.rstrip() + f"\n\n[{section}]\n{key} = {rendered}\n"
+    next_header = re.search(r'^\[.*\]\s*$', source[header.end():], flags=re.M)
+    body_end = len(source) if not next_header else header.end() + next_header.start()
+    body = source[header.end():body_end]
+    key_pattern = rf'^(\s*{re.escape(key)}\s*=\s*).*$'
+    if re.search(key_pattern, body, flags=re.M):
+        next_body = re.sub(key_pattern, rf'\1{rendered}', body, count=1, flags=re.M)
+    else:
+        next_body = f"\n{key} = {rendered}{body}"
+    return source[:header.end()] + next_body + source[body_end:]
+cfg = set_section_key(cfg, "observer", "socket_path", f'"{ds}/observer/run/observer.sock"')
+cfg = set_section_key(cfg, "observer", "state_dir", f'"{ds}/observer"')
 # Isolated Station must not enumerate machine-global tmux panes; that would mark
 # rows as already running. The station provider is still registered separately.
-cfg = re.sub(r'(\[defaults\][^\[]*?terminal = )"[^"]*"', r'\1"noop-terminal"', cfg, count=1, flags=re.S)
-if "station_persistent_agents" not in cfg and "stationPersistentAgents" not in cfg:
-    cfg = cfg.rstrip() + "\n\n[feature_flags]\nstation_persistent_agents = true\n"
+cfg = set_section_key(cfg, "defaults", "terminal", '"noop-terminal"')
+cfg = set_section_key(cfg, "feature_flags", "station_persistent_agents", "true")
 open(f"{ds}/config.toml", "w").write(cfg)
 PY
 fi
+
+python3 - "$CFG" "$DS" <<'PY'
+import os, re, sys
+path = sys.argv[1]
+ds = sys.argv[2]
+if not os.path.exists(path):
+    sys.exit(0)
+cfg = open(path).read()
+def set_section_key(source, section, key, rendered):
+    header_pattern = rf'^\[{re.escape(section)}\]\s*$'
+    header = re.search(header_pattern, source, flags=re.M)
+    if not header:
+        return source.rstrip() + f"\n\n[{section}]\n{key} = {rendered}\n"
+    next_header = re.search(r'^\[.*\]\s*$', source[header.end():], flags=re.M)
+    body_end = len(source) if not next_header else header.end() + next_header.start()
+    body = source[header.end():body_end]
+    key_pattern = rf'^(\s*{re.escape(key)}\s*=\s*).*$'
+    if re.search(key_pattern, body, flags=re.M):
+        next_body = re.sub(key_pattern, rf'\1{rendered}', body, count=1, flags=re.M)
+    else:
+        next_body = f"\n{key} = {rendered}{body}"
+    return source[:header.end()] + next_body + source[body_end:]
+cfg = set_section_key(cfg, "observer", "socket_path", f'"{ds}/observer/run/observer.sock"')
+cfg = set_section_key(cfg, "observer", "state_dir", f'"{ds}/observer"')
+cfg = set_section_key(cfg, "defaults", "terminal", '"noop-terminal"')
+cfg = set_section_key(cfg, "feature_flags", "station_persistent_agents", "true")
+for harness in ("codex", "claude", "cursor", "opencode"):
+    cfg = set_section_key(cfg, f"harness.{harness}", "install_hooks", "true")
+open(path, "w").write(cfg)
+PY
 
 # The observer (Node) spawns the Bun host on demand; it finds the host entry via
 # this env var (observerProviders.ts does not pass it, so the env is REQUIRED —
@@ -65,9 +117,9 @@ export STATION_OBSERVER_SOCKET_PATH="$DS/observer/run/observer.sock"
 # Station reads [tui.widgets] directly for its overlay header; point it at the
 # same isolated config as the observer instead of the user's global default.
 export STATION_CONFIG_PATH="$CFG"
-# Keep Codex hooks/auth isolated to this worktree and make generated hooks
-# resolve this checkout's `stn-ingress`. Launched agents inherit both, so status
-# reports target this observer instead of global station state.
+# Keep generated hooks/provider config isolated to this worktree and make hooks
+# resolve this checkout's `stn-ingress`. Launched agents inherit these env vars,
+# so status reports target this observer instead of global station state.
 export PATH="$ROOT/bin:$PATH"
 export CODEX_HOME="$DS/codex-home"
 # Seed isolated Codex auth/config: auth is a shared symlink, config is copied once
@@ -82,17 +134,25 @@ mkdir -p "$CODEX_HOME"
 export CLAUDE_CONFIG_DIR="$DS/claude-home"
 mkdir -p "$CLAUDE_CONFIG_DIR"
 
+export STATION_CURSOR_HOME="$DS/cursor-home"
+export OPENCODE_CONFIG_DIR="$DS/opencode-config"
+mkdir -p "$STATION_CURSOR_HOME" "$OPENCODE_CONFIG_DIR"
+
 # Idempotent: reuses a healthy observer, so reopening Station leaves agents alone.
 node "$CLI" --config "$CFG" observer start >/dev/null
 
 # Install status hooks against THIS observer so the launch guard lets these
 # harnesses spawn; each writes into its own isolated home/state, never globals.
-for harness in codex claude; do
+for harness in codex claude cursor opencode; do
   node "$CLI" --config "$CFG" hooks install "$harness" --yes >/dev/null 2>&1 || true
 done
 
 echo "Isolated observer up — $STATION_OBSERVER_SOCKET_PATH"
-echo "  Launch an agent, quit Station (q), re-run 'bun run station:isolated' → it reattaches."
+if [ "$COMMAND" = "dev" ]; then
+  echo "  Hot reload: edit station/src/**; Bun HMR updates the isolated UI."
+else
+  echo "  Launch an agent, quit Station (q), re-run 'bun run station:isolated' → it reattaches."
+fi
 echo "  Inspect agents:  bun run host:list -- --socket $DS/observer/run/station-host.sock"
 echo "  Host timeline:   tail -f $DS/observer/logs/station-host.jsonl"
 echo "  Stop everything: bun run station:isolated:stop"
@@ -105,4 +165,7 @@ if [ "${STATION_ISOLATED_NO_LAUNCH:-}" = "1" ]; then
 fi
 
 cd "$STATION_DIR"
+if [ "$COMMAND" = "dev" ]; then
+  exec bun run dev
+fi
 exec bun run station

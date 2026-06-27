@@ -161,6 +161,19 @@ describe("OpenCodeHarnessProvider", () => {
     });
   });
 
+  it("carries an isolated OPENCODE_CONFIG_DIR into the launch env", async () => {
+    const provider = createOpenCodeHarnessProvider({
+      env: { OPENCODE_CONFIG_DIR: "/tmp/station/opencode-config" },
+    });
+
+    await expect(provider.buildLaunch(request())).resolves.toMatchObject({
+      env: {
+        STATION_HARNESS_PROVIDER: "opencode",
+        OPENCODE_CONFIG_DIR: "/tmp/station/opencode-config",
+      },
+    });
+  });
+
   it("launches interactive OpenCode resume with the native session id", async () => {
     const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",

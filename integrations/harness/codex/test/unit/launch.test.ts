@@ -162,6 +162,17 @@ describe("buildCodexLaunchPlan", () => {
     });
   });
 
+  it("carries an isolated CODEX_HOME into the launch env", () => {
+    const plan = buildCodexLaunchPlan(request(), {
+      env: { CODEX_HOME: "/tmp/station/codex-home" },
+    });
+
+    expect(plan.env).toMatchObject({
+      STATION_HARNESS_PROVIDER: "codex",
+      CODEX_HOME: "/tmp/station/codex-home",
+    });
+  });
+
   it("builds non-interactive codex exec plans with JSON events", () => {
     const plan = buildCodexLaunchPlan(
       {

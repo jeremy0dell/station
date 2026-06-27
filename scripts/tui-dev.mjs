@@ -2,7 +2,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, openSync, writeSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -28,26 +29,33 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 export async function runTuiDev({ argv = process.argv.slice(2), env = process.env } = {}) {
-  const devSessionName = env.STATION_TUI_SESSION_NAME ?? defaultDevSessionName;
+  const runtime = await prepareTuiDevRuntime({ argv, env });
+  const devSessionName = runtime.env.STATION_TUI_SESSION_NAME ?? defaultDevSessionName;
   const devTuiCommand =
-    env.STATION_TUI_COMMAND ??
-    shellCommand(["env", "STATION_TUI_DEV=1", process.execPath, tuiWatchRunner, cliEntry]);
+    runtime.env.STATION_TUI_COMMAND ??
+    shellCommand([
+      "env",
+      ...devCommandEnvAssignments(runtime),
+      process.execPath,
+      tuiWatchRunner,
+      cliEntry,
+    ]);
   const devOwner = `${process.pid}:${Date.now()}:${randomUUID()}`;
   const registeredDevTuiCommand =
-    env.STATION_TUI_REGISTERED_COMMAND ??
+    runtime.env.STATION_TUI_REGISTERED_COMMAND ??
     appendShellArgs(devTuiCommand, [
-      ...globalOptionsFromArgs(argv),
+      ...globalOptionsFromArgs(runtime.argv),
       "tui",
       "--popup",
       "--persistent",
     ]);
-  const runDirectTui = shouldRunDirectTui(argv, env);
-  const keepAliveAfterLauncherExit = shouldKeepAliveAfterLauncherExit(argv, env);
+  const runDirectTui = shouldRunDirectTui(runtime.argv, runtime.env);
+  const keepAliveAfterLauncherExit = shouldKeepAliveAfterLauncherExit(runtime.argv, runtime.env);
 
   if (keepAliveAfterLauncherExit) {
     await guardAgainstForeignDevPopup({
       currentRoot: repoRoot,
-      env,
+      env: runtime.env,
     });
   }
 
@@ -60,11 +68,14 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
     {
       cwd: repoRoot,
       stdio: "inherit",
-      env,
+      env: runtime.env,
     },
   );
   if (initialBuild.status !== 0) {
     process.exit(initialBuild.status ?? 1);
+  }
+  if (runtime.generated) {
+    installTuiDevHooks(runtime);
   }
 
   const logFd = openSync(logPath, "a");
@@ -91,21 +102,23 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
     {
       cwd: repoRoot,
       stdio: ["ignore", logFd, logFd],
-      env,
+      env: runtime.env,
     },
   );
 
   const childEnv = {
-    ...env,
+    ...runtime.env,
     STATION_TUI_DEV: "1",
     STATION_TUI_COMMAND: devTuiCommand,
     STATION_TUI_DEV_OWNER: devOwner,
     STATION_TUI_SESSION_NAME: devSessionName,
   };
-  const nodeArgs = runDirectTui ? [tuiWatchRunner, cliEntry, ...argv] : [cliEntry, ...argv];
+  const nodeArgs = runDirectTui
+    ? [tuiWatchRunner, cliEntry, ...runtime.argv]
+    : [cliEntry, ...runtime.argv];
   if (keepAliveAfterLauncherExit) {
     registerDevPopupPreference({
-      env,
+      env: runtime.env,
       owner: devOwner,
       root: repoRoot,
       sessionName: devSessionName,
@@ -129,8 +142,8 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
     if (!launcherExited) {
       station.kill(signal);
     }
-    clearDevPopupPreference({ env, owner: devOwner });
-    cleanupDevUiSession(devSessionName, env, defaultDevSessionName);
+    clearDevPopupPreference({ env: runtime.env, owner: devOwner });
+    cleanupDevUiSession(devSessionName, runtime.env, defaultDevSessionName);
     if (launcherExited) {
       closeLog();
       process.exitCode = 1;
@@ -148,8 +161,8 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
     if (!launcherExited) {
       station.kill("SIGTERM");
     }
-    clearDevPopupPreference({ env, owner: devOwner });
-    cleanupDevUiSession(devSessionName, env, defaultDevSessionName);
+    clearDevPopupPreference({ env: runtime.env, owner: devOwner });
+    cleanupDevUiSession(devSessionName, runtime.env, defaultDevSessionName);
     closeLog();
     process.exitCode = signal === null ? (code ?? 1) : 1;
   });
@@ -165,8 +178,8 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
     if (!exiting) {
       exiting = true;
       buildWatcher.kill("SIGTERM");
-      clearDevPopupPreference({ env, owner: devOwner });
-      cleanupDevUiSession(devSessionName, env, defaultDevSessionName);
+      clearDevPopupPreference({ env: runtime.env, owner: devOwner });
+      cleanupDevUiSession(devSessionName, runtime.env, defaultDevSessionName);
     }
     closeLog();
     if (signal !== null) {
@@ -175,6 +188,291 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
     }
     process.exitCode = code ?? 0;
   });
+}
+
+export async function prepareTuiDevRuntime({ argv = [], env = process.env, root = repoRoot } = {}) {
+  const configFromArgs = configPathFromArgs(argv);
+  if (configFromArgs !== undefined) {
+    return {
+      argv,
+      env: envForExplicitConfig({ env, configPath: configFromArgs, root }),
+      configPath: configFromArgs,
+      generated: false,
+    };
+  }
+
+  const configFromEnv = env.STATION_CONFIG_PATH?.trim();
+  if (configFromEnv !== undefined && configFromEnv.length > 0) {
+    return {
+      argv: ["--config", configFromEnv, ...argv],
+      env: envForExplicitConfig({ env, configPath: configFromEnv, root }),
+      configPath: configFromEnv,
+      generated: false,
+    };
+  }
+
+  const generated = await writeTuiDevConfig({ env, root });
+  const hookEnv = await prepareTuiDevHookEnv({
+    env,
+    checkoutRoot: root,
+    stateRoot: generated.devRoot,
+  });
+  return {
+    argv: ["--config", generated.configPath, ...argv],
+    env: {
+      ...env,
+      ...hookEnv,
+      STATION_CONFIG_PATH: generated.configPath,
+      STATION_OBSERVER_SOCKET_PATH: generated.socketPath,
+    },
+    configPath: generated.configPath,
+    generated: true,
+  };
+}
+
+export async function writeTuiDevConfig({
+  env = process.env,
+  root = repoRoot,
+  readSource = readFile,
+  writeTarget = writeFile,
+  makeDir = mkdir,
+} = {}) {
+  const devRoot = join(root, ".dev-state", "tui-dev");
+  const stateDir = join(devRoot, "observer");
+  const socketPath = join(stateDir, "run", "observer.sock");
+  const configPath = join(devRoot, "config.toml");
+  const sourcePath = join(env.HOME ?? homedir(), ".config", "station", "config.toml");
+
+  let source;
+  try {
+    source = await readSource(sourcePath, "utf8");
+  } catch {
+    source = fallbackConfigSource();
+  }
+
+  const config = withObserverPaths(source, { socketPath, stateDir });
+  await makeDir(join(stateDir, "run"), { recursive: true });
+  await writeTarget(configPath, config, "utf8");
+  return { configPath, socketPath, stateDir, devRoot };
+}
+
+export function configPathFromArgs(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== "--config") {
+      continue;
+    }
+    const value = argv[index + 1];
+    return value === undefined || value.startsWith("--") ? undefined : value;
+  }
+  return undefined;
+}
+
+export function withObserverPaths(source, paths) {
+  let next = ensureTomlSection(source.trimEnd(), "observer");
+  next = setTomlStringKey(next, "observer", "socket_path", paths.socketPath);
+  next = setTomlStringKey(next, "observer", "state_dir", paths.stateDir);
+  next = setTomlStringKey(next, "defaults", "terminal", "noop-terminal");
+  next = setTomlBooleanKey(next, "feature_flags", "station_persistent_agents", true);
+  next = setTomlBooleanKey(next, "harness.codex", "install_hooks", true);
+  next = setTomlBooleanKey(next, "harness.claude", "install_hooks", true);
+  next = setTomlBooleanKey(next, "harness.cursor", "install_hooks", true);
+  next = setTomlBooleanKey(next, "harness.opencode", "install_hooks", true);
+  return `${next.trimEnd()}\n`;
+}
+
+export async function prepareTuiDevHookEnv({
+  env = process.env,
+  checkoutRoot = repoRoot,
+  stateRoot = join(repoRoot, ".dev-state", "tui-dev"),
+} = {}) {
+  const homes = tuiDevProviderHomeEnv(stateRoot);
+  await mkdir(homes.CODEX_HOME, { recursive: true });
+  await mkdir(homes.CLAUDE_CONFIG_DIR, { recursive: true });
+  await mkdir(homes.STATION_CURSOR_HOME, { recursive: true });
+  await mkdir(homes.OPENCODE_CONFIG_DIR, { recursive: true });
+
+  const home = env.HOME ?? homedir();
+  await replaceSymlinkIfPresent(
+    join(home, ".codex", "auth.json"),
+    join(homes.CODEX_HOME, "auth.json"),
+  );
+  await copyFileIfMissing(
+    join(home, ".codex", "config.toml"),
+    join(homes.CODEX_HOME, "config.toml"),
+  );
+
+  return {
+    PATH: `${checkoutRoot}/bin${
+      env.PATH === undefined || env.PATH.length === 0 ? "" : `:${env.PATH}`
+    }`,
+    ...homes,
+  };
+}
+
+function envForExplicitConfig({ env, configPath, root }) {
+  const next = { ...env, STATION_CONFIG_PATH: configPath };
+  delete next.STATION_OBSERVER_SOCKET_PATH;
+
+  const generatedHomes = tuiDevProviderHomeEnv(join(root, ".dev-state", "tui-dev"));
+  for (const [name, value] of Object.entries(generatedHomes)) {
+    if (next[name] === value) {
+      delete next[name];
+    }
+  }
+  return next;
+}
+
+function tuiDevProviderHomeEnv(stateRoot) {
+  return {
+    CODEX_HOME: join(stateRoot, "codex-home"),
+    CLAUDE_CONFIG_DIR: join(stateRoot, "claude-home"),
+    STATION_CURSOR_HOME: join(stateRoot, "cursor-home"),
+    OPENCODE_CONFIG_DIR: join(stateRoot, "opencode-config"),
+  };
+}
+
+export function installTuiDevHooks(runtime, runCommand = spawnSync) {
+  for (const harness of ["codex", "claude", "cursor", "opencode"]) {
+    const result = runCommand(
+      process.execPath,
+      [cliEntry, "--config", runtime.configPath, "hooks", "install", harness, "--yes"],
+      {
+        cwd: repoRoot,
+        env: runtime.env,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    if ((result.status ?? 1) === 0) {
+      continue;
+    }
+    const detail = [result.stderr, result.stdout]
+      .filter((text) => typeof text === "string" && text.trim().length > 0)
+      .map((text) => text.trim())
+      .join("\n");
+    process.stderr.write(
+      `warning: failed to install ${harness} hooks for isolated dev TUI${
+        detail.length === 0 ? "." : `:\n${detail}\n`
+      }`,
+    );
+  }
+}
+
+function devCommandEnvAssignments(runtime) {
+  const assignments = [["STATION_TUI_DEV", "1"]];
+  for (const name of [
+    "STATION_CONFIG_PATH",
+    "STATION_OBSERVER_SOCKET_PATH",
+    "CODEX_HOME",
+    "CLAUDE_CONFIG_DIR",
+    "STATION_CURSOR_HOME",
+    "OPENCODE_CONFIG_DIR",
+    "PATH",
+  ]) {
+    const value = runtime.env[name];
+    if (value !== undefined && value.length > 0) {
+      assignments.push([name, value]);
+    }
+  }
+  return assignments.map(([name, value]) => `${name}=${value}`);
+}
+
+async function replaceSymlinkIfPresent(source, target) {
+  try {
+    await readFile(source, "utf8");
+    await rm(target, { force: true });
+    await symlink(source, target);
+  } catch {
+    // Missing auth is fine; Codex will prompt/login according to its normal rules.
+  }
+}
+
+async function copyFileIfMissing(source, target) {
+  try {
+    await readFile(target, "utf8");
+    return;
+  } catch {
+    // Continue and copy from the real config if it exists.
+  }
+
+  try {
+    await copyFile(source, target);
+  } catch {
+    // A missing real config is acceptable for fresh machines and tests.
+  }
+}
+
+function fallbackConfigSource() {
+  return [
+    "schema_version = 1",
+    "projects = []",
+    "",
+    "[observer]",
+    'socket_path = ""',
+    'state_dir = ""',
+    "",
+    "[defaults]",
+    'worktree_provider = "worktrunk"',
+    'terminal = "tmux"',
+    'harness = "codex"',
+    'layout = "agent-shell"',
+    "",
+  ].join("\n");
+}
+
+function ensureTomlSection(source, section) {
+  if (tomlSectionBounds(source, section) !== undefined) {
+    return source;
+  }
+  return `${source.trimEnd()}\n\n[${section}]\n`;
+}
+
+function setTomlStringKey(source, section, key, value) {
+  return setTomlKey(source, section, key, JSON.stringify(value));
+}
+
+function setTomlBooleanKey(source, section, key, value) {
+  return setTomlKey(source, section, key, value ? "true" : "false");
+}
+
+function setTomlKey(source, section, key, renderedValue) {
+  const bounds = tomlSectionBounds(source, section);
+  if (bounds === undefined) {
+    return setTomlKey(ensureTomlSection(source, section), section, key, renderedValue);
+  }
+
+  const body = source.slice(bounds.headerEnd, bounds.bodyEnd);
+  const keyPattern = new RegExp(`^([ \\t]*${escapeRegExp(key)}[ \\t]*=[ \\t]*).*$`, "m");
+  const match = keyPattern.exec(body);
+  if (match !== null) {
+    const lineStart = bounds.headerEnd + match.index;
+    const lineEnd = lineStart + match[0].length;
+    return `${source.slice(0, lineStart)}${match[1]}${renderedValue}${source.slice(lineEnd)}`;
+  }
+
+  return `${source.slice(0, bounds.headerEnd)}\n${key} = ${renderedValue}${source.slice(
+    bounds.headerEnd,
+  )}`;
+}
+
+function tomlSectionBounds(source, section) {
+  const sectionPattern = new RegExp(`^[ \\t]*\\[${escapeRegExp(section)}\\][ \\t]*(?:#.*)?$`, "m");
+  const match = sectionPattern.exec(source);
+  if (match === null) {
+    return undefined;
+  }
+
+  const nextSectionPattern = /^[ \t]*\[.*\][ \t]*(?:#.*)?$/gm;
+  nextSectionPattern.lastIndex = match.index + match[0].length;
+  const next = nextSectionPattern.exec(source);
+  return {
+    headerEnd: match.index + match[0].length,
+    bodyEnd: next?.index ?? source.length,
+  };
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function commandFromArgs(argv) {

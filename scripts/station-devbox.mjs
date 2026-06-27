@@ -18,10 +18,11 @@ const LOG_DIR = join(DS, "observer", "logs");
 const STATION_DIR = join(repoRoot, "station");
 const ISOLATED_SCRIPT = join(repoRoot, "station", "scripts", "station-isolated.sh");
 
-const handlers = { start, restart, status, logs, stop, reset, help };
+const handlers = { start, dev, restart, status, logs, stop, reset, help };
 
 const [rawVerb = "start", ...rest] = process.argv.slice(2);
-const verb = rawVerb === "-h" || rawVerb === "--help" ? "help" : rawVerb;
+const verb =
+  rawVerb === "-h" || rawVerb === "--help" ? "help" : rawVerb === "--hot" ? "dev" : rawVerb;
 const handler = handlers[verb];
 if (handler === undefined) {
   process.stderr.write(`Unknown station:devbox command: ${verb}\n\n`);
@@ -40,6 +41,11 @@ function start() {
   // Station UI links are never stale — `station:devbox` needs no separate build.
   run("pnpm", ["build"], { cwd: repoRoot });
   process.exit(run("bun", ["run", "station:isolated"], { cwd: STATION_DIR, check: false }));
+}
+
+function dev() {
+  run("pnpm", ["build"], { cwd: repoRoot });
+  process.exit(run("bun", ["run", "station:isolated", "dev"], { cwd: STATION_DIR, check: false }));
 }
 
 function restart() {
@@ -102,7 +108,7 @@ function stop() {
 
 function reset(args) {
   // Guarded: this deletes the isolated observer DB, diagnostics, hook artifacts,
-  // and the isolated Codex/Claude homes (and any reattachable host state).
+  // isolated provider homes, and any reattachable host state.
   if (!args.some((arg) => arg === "--yes" || arg === "-y")) {
     process.stderr.write(
       `Refusing to reset without --yes. This deletes everything under ${DS}.\n\n` +
@@ -118,9 +124,10 @@ function reset(args) {
 function help() {
   process.stdout.write(
     [
-      "Usage: pnpm station:devbox [start|restart|status|logs|stop|reset]",
+      "Usage: pnpm station:devbox [start|dev|restart|status|logs|stop|reset]",
       "",
       "  start            (default) build if needed, then start the isolated Station sandbox",
+      "  dev, --hot       build if needed, then start the isolated Station sandbox with UI HMR",
       "  restart          rebuild + recycle the isolated observer (persistent host/agents survive)",
       "  status           report the isolated observer/host + (read-only) the global observer",
       "  logs [--follow]  tail the isolated observer/host/cli logs",

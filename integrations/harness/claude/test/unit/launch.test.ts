@@ -122,6 +122,17 @@ describe("buildClaudeLaunchPlan", () => {
     });
   });
 
+  it("carries an isolated CLAUDE_CONFIG_DIR into the launch env", () => {
+    const plan = buildClaudeLaunchPlan(request(), {
+      env: { CLAUDE_CONFIG_DIR: "/tmp/station/claude-home" },
+    });
+
+    expect(plan.env).toMatchObject({
+      STATION_HARNESS_PROVIDER: "claude",
+      CLAUDE_CONFIG_DIR: "/tmp/station/claude-home",
+    });
+  });
+
   it("builds non-interactive claude print plans with streamed JSON events", () => {
     const plan = buildClaudeLaunchPlan(
       {
