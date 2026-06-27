@@ -220,8 +220,8 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
     case "terminal-scroll":
       return effects.scrollTerminal(outcome.paneId, outcome.direction);
     case "focus":
-      // Only pane focus arrives as a bare focus outcome; overlay and dialog
-      // focus changes are expressed as overlay/dialog outcomes and actions.
+      // Only pane focus arrives as a bare focus outcome; overlay focus changes
+      // are expressed as overlay outcomes and actions.
       if (outcome.target.kind === "pane") {
         effects.store.actions.focusPane(outcome.target.paneId);
       }
@@ -529,13 +529,13 @@ export type StationInputRuntimeOptions = {
 export function createStationInputRuntime(options: StationInputRuntimeOptions): StationInputRuntime {
   const keymap = options.keymap ?? createStationKeymap(options.stationViewStore);
   const mouseBindings = options.mouseBindings ?? createStationMouseBindings(options.stationViewStore);
-  // Pane chords are `reserved`, so they pierce the context-menu catch-all and (no dialog
-  // keyboard layer) fire under dialogs too; gate on modal state so split/close/focus stay
-  // inert while a context menu or dialog owns the screen. `effects` is read lazily — these
-  // closures only run once a chord fires, by which point it is initialized.
+  // Pane chords are `reserved`, so they pierce the context-menu catch-all; gate
+  // on that real modal state so split/close/focus stay inert while a context
+  // menu owns the screen. `effects` is read lazily — these closures only run
+  // once a chord fires, by which point it is initialized.
   const blockedByModal = (): boolean => {
     const input = options.store.getState().input;
-    return input.contextMenu !== null || input.dialogStack.length > 0;
+    return input.contextMenu !== null;
   };
   const paneCommand = (run: () => void): (() => void) => {
     return () => {

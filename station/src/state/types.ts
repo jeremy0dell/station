@@ -3,7 +3,6 @@ import type { ProviderId } from "@station/contracts";
 
 export type PaneId = string;
 export type OverlayId = string;
-export type DialogId = string;
 
 export const MAIN_PANE_ID: PaneId = "pane-main";
 export const STATION_OVERLAY_ID: OverlayId = "station";
@@ -102,7 +101,6 @@ export type FocusTarget =
   | { kind: "welcome" }
   | { kind: "pane"; paneId: PaneId }
   | { kind: "overlay"; overlayId: OverlayId }
-  | { kind: "dialog"; dialogId: DialogId }
   | { kind: "contextMenu" };
 
 export type WorkspaceSlice = {
@@ -122,7 +120,6 @@ export type InputSlice = {
   activeOverlay: OverlayId | null;
   /** Focus to restore when the overlay closes; only pane focus is recorded. */
   overlayReturnFocus: FocusTarget | null;
-  dialogStack: readonly DialogId[];
   contextMenu: ContextMenuState | null;
 };
 

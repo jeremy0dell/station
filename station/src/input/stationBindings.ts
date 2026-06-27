@@ -179,16 +179,13 @@ export function createStationKeymap(
 /**
  * Header clicks must work while the overlay is open - the mouse path is the
  * documented fallback for terminal setups that never deliver Ctrl-O, so it
- * is guarded only by dialogs, not by the overlay itself. Pane clicks do not
- * focus through a modal.
+ * is not guarded by the overlay itself. Pane clicks do not focus through an
+ * active overlay.
  */
 export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>): MouseBindings {
   const anchorFrom = (event: StationMouseEvent) => ({ x: event.x, y: event.y });
   return {
     header: (_target, state, event) => {
-      if (state.input.dialogStack.length > 0) {
-        return { kind: "swallowed" };
-      }
       if (state.workspace.panes.length === 0 && state.input.activeOverlay === null) {
         return { kind: "swallowed" };
       }
@@ -205,7 +202,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
       return stationOverlayToggleOutcome(state);
     },
     welcomeOpenProjectView: (_target, state, event) => {
-      if (state.input.dialogStack.length > 0 || state.input.activeOverlay !== null) {
+      if (state.input.activeOverlay !== null) {
         return { kind: "swallowed" };
       }
       if (!isPrimaryMouseEvent(event)) {
@@ -214,7 +211,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
       return { kind: "overlay-open", overlayId: STATION_OVERLAY_ID };
     },
     welcomeContinue: (_target, state, event) => {
-      if (state.input.dialogStack.length > 0 || state.input.activeOverlay !== null) {
+      if (state.input.activeOverlay !== null) {
         return { kind: "swallowed" };
       }
       if (!isPrimaryMouseEvent(event)) {
@@ -223,11 +220,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
       return { kind: "welcome-dismiss" };
     },
     pane: (target, state, event) => {
-      if (
-        state.input.activeOverlay !== null ||
-        state.input.dialogStack.length > 0 ||
-        state.input.introVisible
-      ) {
+      if (state.input.activeOverlay !== null || state.input.introVisible) {
         return { kind: "swallowed" };
       }
       const scroll = wheelDirection(event);
@@ -296,7 +289,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
       return { kind: "swallowed" };
     },
     stationBackdrop: (_target, state, event) => {
-      if (state.input.dialogStack.length > 0 || state.input.activeOverlay !== STATION_OVERLAY_ID) {
+      if (state.input.activeOverlay !== STATION_OVERLAY_ID) {
         return { kind: "swallowed" };
       }
       if (!isPrimaryMouseEvent(event)) {

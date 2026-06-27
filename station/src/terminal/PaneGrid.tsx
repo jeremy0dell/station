@@ -53,7 +53,7 @@ export function PaneGrid({
   // Stable getSnapshot identity (store is stable) so useSyncExternalStore rereads only on store notify, not every render.
   const getWorkspace = useCallback(() => store.getState().workspace, [store]);
   const getActivePaneId = useCallback(() => selectActivePaneId(store.getState()), [store]);
-  // Slice to `workspace` only—stays Object.is-stable across focus/overlay/dialog actions that don't touch panes.
+  // Slice to `workspace` only—stays Object.is-stable across focus/overlay actions that don't touch panes.
   const workspace = useSyncExternalStore(store.subscribe, getWorkspace, getWorkspace);
   const panes = workspace.panes;
   const activePaneId = useSyncExternalStore(store.subscribe, getActivePaneId, getActivePaneId);
@@ -114,12 +114,12 @@ function PaneLeaf({ paneId, ctx }: { paneId: PaneId; ctx: RenderCtx }): ReactNod
 
 /**
  * Mouse reports write directly to the PTY so hover/clicks do not snap scrollback
- * to bottom. Block them while overlay/dialog input owns the screen.
+ * to bottom. Block them while overlay input owns the screen.
  */
 function forwardInputFor(ctx: RenderCtx, paneId: PaneId): (bytes: string) => void {
   return (bytes: string) => {
     const input = ctx.store.getState().input;
-    if (input.activeOverlay !== null || input.dialogStack.length > 0) {
+    if (input.activeOverlay !== null) {
       return;
     }
     ctx.registry.write(paneId, bytes);

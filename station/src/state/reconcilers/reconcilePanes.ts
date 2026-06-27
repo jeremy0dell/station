@@ -9,7 +9,7 @@ import type { StationStore } from "../store.js";
  * create/close stay deterministic even when unmount work can't flush before exit.
  */
 export function createPaneReconciler(store: StationStore, registry: PtyRegistry): () => void {
-  // The store keeps the same `panes` array reference across focus/overlay/dialog
+  // The store keeps the same `panes` array reference across focus/overlay
   // changes (only create/close allocate a new one), so gating on identity keeps
   // this off the hot input path.
   let lastPanes: readonly PaneRecord[] | undefined;

@@ -57,9 +57,13 @@ function overlayOpenState(): StationState {
   return store.getState();
 }
 
-function dialogOpenState(): StationState {
-  const store = createStationStore();
-  store.actions.pushDialog("dialog-test");
+function headerFocusedState(): StationState {
+  const store = createStationStore({
+    initialWorkspace: {
+      panes: [{ id: MAIN_PANE_ID, split: null, role: "shell" }],
+      activePaneId: null,
+    },
+  });
   return store.getState();
 }
 
@@ -113,11 +117,11 @@ describe("routeKey with the station keymap", () => {
   });
 
   it("ignores unbound keys when no passthrough is active", () => {
-    expect(routeKey("a", dialogOpenState(), keymap)).toEqual({ kind: "ignored" });
+    expect(routeKey("a", headerFocusedState(), keymap)).toEqual({ kind: "ignored" });
   });
 
-  it("keeps reserved chords available under a dialog with no dialog layer", () => {
-    expect(routeKey(STATION_EXIT_LEGACY, dialogOpenState(), keymap)).toEqual({
+  it("keeps reserved chords available when no passthrough is active", () => {
+    expect(routeKey(STATION_EXIT_LEGACY, headerFocusedState(), keymap)).toEqual({
       kind: "command",
       commandId: "station.exit",
     });
@@ -272,22 +276,6 @@ describe("routeMouse with the station bindings", () => {
     });
   });
 
-  it("swallows STATION backdrop clicks while a dialog owns input", () => {
-    const store = createStationStore();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    store.actions.pushDialog("dialog-test");
-
-    expect(routeMouse({ kind: "stationBackdrop" }, LEFT_DOWN, store.getState(), mouseBindings)).toEqual({
-      kind: "swallowed",
-    });
-  });
-
-  it("swallows header clicks while a dialog is open", () => {
-    expect(routeMouse({ kind: "header" }, LEFT_DOWN, dialogOpenState(), mouseBindings)).toEqual({
-      kind: "swallowed",
-    });
-  });
-
   it("routes context menu backdrop and item targets", () => {
     expect(
       routeMouse({ kind: "contextMenuBackdrop" }, LEFT_DOWN, paneFocusedState(), mouseBindings),
@@ -322,8 +310,8 @@ describe("routePaste", () => {
     expect(routePaste("hello", overlayOpenState())).toEqual({ kind: "ignored" });
   });
 
-  it("ignores paste while a dialog is open", () => {
-    expect(routePaste("hello", dialogOpenState())).toEqual({ kind: "ignored" });
+  it("ignores paste when focus is not on a pane", () => {
+    expect(routePaste("hello", headerFocusedState())).toEqual({ kind: "ignored" });
   });
 
   it("swallows paste while the context menu is focused", () => {

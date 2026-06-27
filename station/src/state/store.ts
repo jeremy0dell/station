@@ -1,6 +1,5 @@
 import {
   type AgentIdentity,
-  type DialogId,
   type FocusTarget,
   type OverlayId,
   type PaneId,
@@ -68,8 +67,6 @@ export type StationStoreActions = {
   openContextMenu(target: ContextMenuTarget, anchor: ContextMenuAnchor): void;
   closeContextMenu(): void;
   setContextMenuActiveIndex(activeIndex: number): void;
-  pushDialog(dialogId: DialogId): void;
-  popDialog(): void;
   /** Show a bottom-right app toast (e.g. a copy confirmation). */
   showToast(message: string, kind?: "info" | "error"): void;
   /** Clear the toast if it still carries `token` (ignores a superseded timer). */
@@ -311,34 +308,6 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
             ...state.input,
             contextMenu: { ...contextMenu, activeIndex },
           },
-        });
-      },
-      pushDialog: (dialogId) => {
-        setState({
-          ...state,
-          input: {
-            ...state.input,
-            contextMenu: null,
-            dialogStack: [...state.input.dialogStack, dialogId],
-            focus: { kind: "dialog", dialogId },
-          },
-        });
-      },
-      popDialog: () => {
-        if (state.input.dialogStack.length === 0) {
-          return;
-        }
-        const dialogStack = state.input.dialogStack.slice(0, -1);
-        const topDialog = dialogStack[dialogStack.length - 1];
-        const focus: FocusTarget =
-          topDialog !== undefined
-            ? { kind: "dialog", dialogId: topDialog }
-            : state.input.activeOverlay !== null
-              ? { kind: "overlay", overlayId: state.input.activeOverlay }
-              : fallbackFocus(state);
-        setState({
-          ...state,
-          input: { ...state.input, dialogStack, focus },
         });
       },
       showToast: (message, kind = "info") => {

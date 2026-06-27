@@ -67,14 +67,13 @@ function paneRecord(
 }
 
 describe("createStationStore", () => {
-  it("boots with the main pane focused and no overlay or dialogs", () => {
+  it("boots with the main pane focused and no overlay", () => {
     const store = createStationStore();
     const state = store.getState();
     expect(state.workspace.panes).toEqual([paneRecord(MAIN_PANE_ID)]);
     expect(state.workspace.activePaneId).toEqual(MAIN_PANE_ID);
     expect(state.input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
     expect(state.input.activeOverlay).toBeNull();
-    expect(state.input.dialogStack).toEqual([]);
   });
 
   it("can explicitly boot empty for the welcome screen", () => {
@@ -85,7 +84,6 @@ describe("createStationStore", () => {
     expect(state.input.focus).toEqual({ kind: "welcome" });
     expect(state.input.activeOverlay).toBeNull();
     expect(state.input.overlayReturnFocus).toBeNull();
-    expect(state.input.dialogStack).toEqual([]);
   });
 
   it("boots with no intro by default so a plain boot lands on its pane", () => {
@@ -621,8 +619,8 @@ describe("createStationStore", () => {
 
   it("closeOverlay falls back to the active pane when nothing was recorded", () => {
     const store = createStationStore();
-    store.actions.pushDialog("dialog-test");
-    // Opening from dialog focus records nothing to restore.
+    store.actions.openContextMenu({ kind: "header" }, { x: 1, y: 1 });
+    // Opening from non-pane focus records nothing to restore.
     store.actions.openOverlay(STATION_OVERLAY_ID);
     expect(store.getState().input.overlayReturnFocus).toBeNull();
     store.actions.closeOverlay();
@@ -643,35 +641,6 @@ describe("createStationStore", () => {
     const state = store.getState();
     expect(state.input.activeOverlay).toBeNull();
     expect(state.input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
-  });
-
-  it("pushDialog focuses the dialog and popDialog restores the overlay, then the pane", () => {
-    const store = createStationStore();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    store.actions.pushDialog("dialog-confirm");
-    expect(store.getState().input.focus).toEqual({ kind: "dialog", dialogId: "dialog-confirm" });
-    store.actions.popDialog();
-    expect(store.getState().input.focus).toEqual({ kind: "overlay", overlayId: STATION_OVERLAY_ID });
-    store.actions.closeOverlay();
-    store.actions.pushDialog("dialog-confirm");
-    store.actions.popDialog();
-    expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
-  });
-
-  it("nested dialogs pop back to the dialog underneath", () => {
-    const store = createStationStore();
-    store.actions.pushDialog("dialog-outer");
-    store.actions.pushDialog("dialog-inner");
-    store.actions.popDialog();
-    const state = store.getState();
-    expect(state.input.dialogStack).toEqual(["dialog-outer"]);
-    expect(state.input.focus).toEqual({ kind: "dialog", dialogId: "dialog-outer" });
-  });
-
-  it("popDialog on an empty stack is a silent no-op", () => {
-    const { store, count } = createCountingStore();
-    store.actions.popDialog();
-    expect(count()).toEqual(0);
   });
 
   it("notifies exactly once per state change", () => {
@@ -738,7 +707,7 @@ describe("createStationStore", () => {
     expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
   });
 
-  it("clears stale context menus on pane close, overlay close, and dialog open", () => {
+  it("clears stale context menus on pane close and overlay close", () => {
     const store = createStationStore();
     store.actions.createPane("pane-second");
     store.actions.openContextMenu({ kind: "pane", paneId: "pane-second" }, { x: 1, y: 1 });
@@ -751,11 +720,6 @@ describe("createStationStore", () => {
     store.actions.closeOverlay();
     expect(store.getState().input.contextMenu).toBeNull();
     expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
-
-    store.actions.openContextMenu({ kind: "header" }, { x: 1, y: 1 });
-    store.actions.pushDialog("dialog-test");
-    expect(store.getState().input.contextMenu).toBeNull();
-    expect(store.getState().input.focus).toEqual({ kind: "dialog", dialogId: "dialog-test" });
   });
 });
 

@@ -227,8 +227,8 @@ export function routeMouse(
 /**
  * Paste is a separate dispatch from key sequences (OpenTUI routes paste
  * around the sequence handlers, and only the pane knows its bracketed-paste
- * state). It routes by focus: pane focus delivers, anything modal ignores
- * so the event stays un-prevented for OpenTUI's own paste handling.
+ * state). It routes by focus: pane focus delivers, overlays ignore so the
+ * event stays un-prevented for OpenTUI's own paste handling.
  */
 export function routePaste(text: string, state: StationState): RouteOutcome {
   if (state.input.focus.kind === "contextMenu") {
@@ -241,7 +241,7 @@ export function routePaste(text: string, state: StationState): RouteOutcome {
   ) {
     return { kind: "swallowed" };
   }
-  if (state.input.activeOverlay !== null || state.input.dialogStack.length > 0) {
+  if (state.input.activeOverlay !== null) {
     return { kind: "ignored" };
   }
   const focus = state.input.focus;
