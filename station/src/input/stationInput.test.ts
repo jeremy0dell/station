@@ -524,7 +524,10 @@ describe("createStationInputRuntime", () => {
     it("forwards the wheel as an SGR wheel event to a mouse-reporting app", async () => {
       const { runtime, registry, scripted } = harness();
       const screen = registry.get(MAIN_PANE_ID)?.screen;
-      scripted.helpers.emitData("\x1b[?1000h");
+      // Negotiate SGR (1006) alongside mouse reporting (1000) so the wheel
+      // forward stays on the SGR path this test asserts; without 1006 the app
+      // is on legacy encoding and the report would be legacy-encoded instead.
+      scripted.helpers.emitData("\x1b[?1000h\x1b[?1006h");
       await screen?.whenIdle();
       const before = scripted.helpers.writes.length;
 
