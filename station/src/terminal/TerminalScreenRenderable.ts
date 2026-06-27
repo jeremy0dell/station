@@ -415,7 +415,13 @@ export class TerminalScreenRenderable extends Renderable {
       // width: keep its tail (trimming would drop real content) and let the line
       // continue. Only a non-wrapped row ends the logical line.
       const wrappedIntoNext = row < last && screen.isViewRowWrapped(row + 1);
-      const text = screen.viewRowText(row, cols.start, cols.end);
+      let text = screen.viewRowText(row, cols.start, cols.end);
+      if (wrappedIntoNext && screen.firstGlyphWidth(row + 1) === 2) {
+        // xterm pads this row's last column with a blank when the next row's
+        // leading wide glyph couldn't fit; drop that one phantom space so a
+        // wrapped CJK/emoji line doesn't paste with a stray gap at the boundary.
+        text = text.replace(/ $/, "");
+      }
       current = (current ?? "") + (wrappedIntoNext ? text : text.replace(/\s+$/, ""));
       if (!wrappedIntoNext) {
         lines.push(current);

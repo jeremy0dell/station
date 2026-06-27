@@ -56,6 +56,28 @@ describe("TerminalModeTracker", () => {
     expect(tracker.restoreSequence()).toBe("");
   });
 
+  it("recognizes a long semicolon-batched DECSET split across chunks", () => {
+    // 6 batched params overflow the old 24-byte carry; all must survive the split.
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[?1049;1000;1002;1003;10"); // boundary mid-batch (>24 bytes)
+    tracker.feed("06;2004h");
+    expect(tracker.restoreSequence()).toBe(
+      "\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h\x1b[?2004h",
+    );
+  });
+
+  it("clears all tracked modes on a RIS (full reset) in the dropped data", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[?1049h\x1b[?1000hsome output\x1bc"); // alt+mouse, then reset
+    expect(tracker.restoreSequence()).toBe("");
+  });
+
+  it("keeps only modes set after the last RIS", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[?1049h\x1bc\x1b[?1000h"); // reset wipes alt; mouse set after
+    expect(tracker.restoreSequence()).toBe("\x1b[?1000h");
+  });
+
   it("prefers the highest-priority alt-screen variant in use", () => {
     const tracker = new TerminalModeTracker();
     tracker.feed("\x1b[?47h\x1b[?1049h");

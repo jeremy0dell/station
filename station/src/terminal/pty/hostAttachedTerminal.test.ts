@@ -6,7 +6,7 @@ import {
   StationHostProviderError,
 } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { createHostAttachedTerminal } from "./hostAttachedTerminal.js";
+import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -341,7 +341,53 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     await new Promise((resolve) => setTimeout(resolve, 400)); // past reconnect backoff
 
     expect(exits).toEqual([]); // pane stayed alive
-    expect(received.join("")).toContain("gap-"); // gap output repainted, not lost
+    // The repaint preamble MUST precede the replayed snapshot, so the history the
+    // VT already shows is cleared before it is re-emitted (no duplication).
+    expect(received).toEqual(["history-", RECONNECT_REPAINT, "history-", "gap-"]);
+  });
+
+  it("keeps reconnecting a long-lived pane across many drops (budget is consecutive, not lifetime)", async () => {
+    // A pane that has streamed for a while then drops should earn a fresh retry
+    // budget each time — otherwise the lifetime cap eventually kills a healthy
+    // pane (the exact failure finding 2.2 set out to prevent).
+    let clock = 0;
+    let attachCalls = 0;
+    let current = controllableAttachment(ack());
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      now: () => clock,
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            current = controllableAttachment(ack());
+            return current.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const exits: number[] = [];
+    terminal.onExit((event) => exits.push(event.exitCode));
+    await flush(); // first attach
+
+    // Drop 8 times — well past MAX_ATTACH_ATTEMPTS. Each connection "outlives" the
+    // backoff window (clock advances 5s), so every drop is a healthy reconnect.
+    for (let i = 0; i < 8; i += 1) {
+      clock += 5_000;
+      current.endStream();
+      await new Promise((resolve) => setTimeout(resolve, 300)); // past healthy backoff
+    }
+    expect(exits).toEqual([]); // never killed despite > MAX_ATTACH_ATTEMPTS drops
+    expect(attachCalls).toBeGreaterThan(8); // it kept redialing each time
   });
 
   it("ends the pane without retrying when the host reports the PTY is gone", async () => {

@@ -19,7 +19,12 @@ const DECSET_PATTERN = "\\x1b\\[\\?([0-9;]+)([hl])";
 // A still-incomplete DECSET prefix at a chunk's tail, carried into the next
 // chunk so a sequence split across PTY reads ("\x1b[?10" then "49h") is matched.
 const PARTIAL_DECSET = new RegExp("\\x1b(?:\\[(?:\\?[0-9;]*)?)?$");
-const MAX_CARRY = 24;
+// Big enough to hold the longest realistic semicolon-batched DECSET split across
+// a read boundary (e.g. ?1049;1000;1002;1003;1006;2004h); PARTIAL_DECSET still
+// rejects non-DECSET tails of any length, so this only bounds a stray ESC run.
+const MAX_CARRY = 64;
+// RIS (ESC c) — a full terminal reset clears every DEC private mode.
+const RIS = `${ControlByte.Esc}c`;
 
 // DECSET private-mode numbers this tracker recognizes. SGR-mouse and cursor
 // visibility reuse the shared DecMode catalog; the rest are tracked only here
@@ -62,8 +67,17 @@ export class TerminalModeTracker {
   feed(chunk: string): void {
     // Prepend any partial escape held back from the previous chunk.
     const data = this.#carry + chunk;
+    // A full reset wipes every prior mode; only state set AFTER the last RIS
+    // survives, so drop accumulated state and scan from just past it.
+    const risIndex = data.lastIndexOf(RIS);
+    const scanFrom = risIndex >= 0 ? risIndex + RIS.length : 0;
+    if (risIndex >= 0) {
+      this.#on.clear();
+      this.#cursorHidden = false;
+    }
     const re = new RegExp(DECSET_PATTERN, "g");
-    let lastEnd = 0;
+    re.lastIndex = scanFrom;
+    let lastEnd = scanFrom;
     let match: RegExpExecArray | null = re.exec(data);
     while (match !== null) {
       const set = match[2] === "h";

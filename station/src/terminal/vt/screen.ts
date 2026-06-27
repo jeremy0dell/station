@@ -129,6 +129,13 @@ export type StationVtScreen = {
    * either half of a CJK/emoji cell.
    */
   charIndexForCell(viewRow: number, cellCol: number): number;
+  /**
+   * Display width of the first glyph on an in-view row (2 for a leading wide
+   * char, else 1). Lets copy detect the blank pad cell xterm leaves in the last
+   * column of a soft-wrapped row when the next row's leading wide glyph couldn't
+   * fit there — that pad would otherwise paste as a stray space.
+   */
+  firstGlyphWidth(viewRow: number): number;
   isCursorVisible(): boolean;
   /** DECSET 2004 state; decides paste wrapping. */
   isBracketedPasteEnabled(): boolean;
@@ -494,6 +501,12 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
         chars += cell === undefined ? 1 : (cell.getChars() || " ").length;
       }
       return glyphChars;
+    },
+    firstGlyphWidth: (viewRow) => {
+      const buffer = terminal.buffer.active;
+      const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
+      const workCell = buffer.getNullCell();
+      return line?.getCell(0, workCell)?.getWidth() ?? 1;
     },
     isCursorVisible: () => cursorVisible,
     isBracketedPasteEnabled: () => terminal.modes.bracketedPasteMode,

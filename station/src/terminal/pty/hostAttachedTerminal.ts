@@ -36,7 +36,8 @@ const PTY_GONE_CODES = new Set(["HOST_ATTACH_GONE", "HOST_PTY_NOT_FOUND"]);
 // Reconnect repaint: cursor home, clear screen, clear scrollback. Lets us replay
 // the fresh ring snapshot on reconnect (which holds output produced while we were
 // detached) without stacking it on top of the history the VT already shows.
-const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
+// Exported so the reconnect test can pin that it precedes the replayed snapshot.
+export const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
 const reconnectDelayMs = (attempt: number): number =>
   Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,6 +60,8 @@ export type HostAttachedTerminalOptions = {
   size: StationTerminalSize;
   /** Test seam; production dials the host unix socket. */
   clientFactory?: (socketPath: string) => StationHostClient;
+  /** Test seam for the reconnect-budget clock; production uses wall time. */
+  now?: () => number;
 };
 
 /**
@@ -71,6 +74,7 @@ export function createHostAttachedTerminal(
 ): StationTerminalProcess {
   const makeClient =
     options.clientFactory ?? ((path) => createStationHostClient({ socketPath: path }));
+  const now = options.now ?? (() => Date.now());
   // Reassigned on reconnect: the host client does not auto-reconnect, so a dropped
   // connection is replaced with a fresh one.
   let client = makeClient(options.hostSocketPath);
@@ -139,6 +143,9 @@ export function createHostAttachedTerminal(
   const runAttachLoop = async (ptyId: string): Promise<void> => {
     let replayed = false;
     for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
+      // Stamped once this attempt actually streams; a connection that outlives
+      // the backoff window earns a fresh retry budget below (see the reset).
+      let connectedAt: number | undefined;
       try {
         const opened = await client.attach(ptyId);
         if (disposed) {
@@ -187,6 +194,7 @@ export function createHostAttachedTerminal(
           pendingWrites.shift();
         }
         attachment = opened;
+        connectedAt = now();
         for await (const frame of opened.frames) {
           if (frame.type === "data") {
             emitData(frame.data);
@@ -220,6 +228,14 @@ export function createHostAttachedTerminal(
       attachment = undefined;
       if (disposed || closeRequested) {
         return;
+      }
+      // Flap-safe budget reset: a connection that outlived the max backoff window
+      // was healthy, so a later drop earns a FRESH retry budget — a long-lived
+      // pane reconnects indefinitely across host restarts. A tight accept-then-
+      // drop flap (shorter than the window) does NOT reset, so it still exhausts
+      // the budget and ends the pane rather than spinning forever.
+      if (connectedAt !== undefined && now() - connectedAt > RECONNECT_MAX_MS) {
+        attempt = -1;
       }
       if (attempt < MAX_ATTACH_ATTEMPTS - 1) {
         client.dispose();
