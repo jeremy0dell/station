@@ -1,6 +1,16 @@
-import type { SafeError, StationEvent, StationSnapshot, WorktreeRow } from "@station/contracts";
+import type {
+  ProviderId,
+  SafeError,
+  StationEvent,
+  StationSnapshot,
+  WorktreeRow,
+} from "@station/contracts";
 import type { TuiFolderService, TuiObserverService } from "@station/dashboard-core";
-import { createTuiStore, type TuiStore } from "@station/dashboard-core";
+import {
+  createTuiStore,
+  openProjectDefaultAgentPicker,
+  type TuiStore,
+} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
   createCommandSnapshot,
@@ -250,6 +260,107 @@ describe("TUI store", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 
+  it("sets a project default harness, refreshes the snapshot, and shows success", async () => {
+    const snapshot = createDashboardSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    service.setSnapshot(snapshotWithProjectHarness(snapshot, "web", "opencode"));
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+
+    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
+    store.getState().handleKey({ input: "2" });
+
+    await waitFor(() => service.loadCount === 1);
+    expect(service.dispatched).toEqual([
+      {
+        type: "project.setDefaultHarness",
+        payload: { projectId: "web", harness: "opencode" },
+      },
+    ]);
+    expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    expect(store.getState().snapshot?.projects[0]?.defaults.harness).toBe("opencode");
+    expect(store.getState().toasts.map((entry) => entry.toast)).toContainEqual(
+      expect.objectContaining({
+        kind: "success",
+        message: "Default agent set to opencode.",
+      }),
+    );
+  });
+
+  it("shows an error toast when setting a project default harness is rejected", async () => {
+    const snapshot = createDashboardSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    service.nextReceipt = {
+      commandId: "cmd_tui_rejected",
+      accepted: false,
+      status: "rejected",
+      error: {
+        tag: "CommandExecutionError",
+        code: "COMMAND_REJECTED",
+        message: "Default harness was rejected.",
+      },
+    };
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+
+    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
+    store.getState().handleKey({ input: "2" });
+
+    await waitFor(() =>
+      store
+        .getState()
+        .toasts.some((entry) => entry.toast.message === "Default harness was rejected."),
+    );
+    expect(service.waitedForCommandIds).toEqual([]);
+    expect(service.loadCount).toBe(0);
+  });
+
+  it("shows an error toast when setting a project default harness fails completion", async () => {
+    const snapshot = createDashboardSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    service.nextCompletion = {
+      status: "failed",
+      commandId: "cmd_tui_1",
+      error: {
+        tag: "ProjectConfigError",
+        code: "PROJECT_DEFAULT_HARNESS_OVERRIDDEN",
+        message: "Project-local config keeps claude effective.",
+      },
+    };
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+
+    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
+    store.getState().handleKey({ input: "2" });
+
+    await waitFor(() =>
+      store
+        .getState()
+        .toasts.some(
+          (entry) => entry.toast.message === "Project-local config keeps claude effective.",
+        ),
+    );
+    expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    expect(service.loadCount).toBe(0);
+  });
+
+  it("shows an error toast when setting a project default harness dispatch throws", async () => {
+    const snapshot = createDashboardSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    service.nextDispatchError = {
+      tag: "ProtocolError",
+      code: "PROTOCOL_SOCKET_CLOSED",
+      message: "Observer socket closed.",
+    };
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+
+    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
+    store.getState().handleKey({ input: "2" });
+
+    await waitFor(() =>
+      store.getState().toasts.some((entry) => entry.toast.message === "Observer socket closed."),
+    );
+    expect(service.waitedForCommandIds).toEqual([]);
+    expect(service.loadCount).toBe(0);
+  });
+
   it("reviews a pasted full path when folder filtering has no matches", async () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
@@ -432,6 +543,21 @@ function addProjectSearchResultCount(state: TuiStore) {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.searchEntries.length
     : 0;
+}
+
+function snapshotWithProjectHarness(
+  snapshot: StationSnapshot,
+  projectId: string,
+  harness: ProviderId,
+): StationSnapshot {
+  return {
+    ...snapshot,
+    projects: snapshot.projects.map((project) =>
+      project.id === projectId
+        ? { ...project, defaults: { ...project.defaults, harness } }
+        : project,
+    ),
+  };
 }
 
 class SnapshotConnectFailingService extends FakeTuiObserverService {

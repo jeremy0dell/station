@@ -13,11 +13,16 @@ import {
   selectNewSessionProjectChoices,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { STATION_COLORS } from "../theme.js";
-import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import { providerHealthStatusColor, STATION_COLORS } from "../theme.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
-import { SheetFooter, SheetLabelValue, SheetLine, spaces } from "./parts.js";
+import {
+  SheetChoiceLine,
+  SheetFooter,
+  SheetLabelValue,
+  SheetLine,
+  spaces,
+} from "./parts.js";
 
 export type NewSessionSheetViewProps = {
   snapshot: StationSnapshot;
@@ -103,7 +108,7 @@ function Review({
         label="Agent"
         labelWidth={10}
         value={harness === undefined ? state.selectedHarness : `${harness.label} ${harness.status}`}
-        {...colorProp(statusColor(harness?.status))}
+        {...colorProp(providerHealthStatusColor(harness?.status))}
       />
       <SheetLine width={width}> </SheetLine>
       <SheetFooter width={width}>{"Enter:create N:name P:project A:agent Esc:cancel"}</SheetFooter>
@@ -151,12 +156,12 @@ function ProjectPicker({ snapshot, width }: { snapshot: StationSnapshot; width: 
     <>
       <SheetLine width={width}> </SheetLine>
       {projects.map((choice) => (
-        <ChoiceLine
+        <SheetChoiceLine
           key={choice.value.id}
           choiceKey={choice.key}
           label={choice.value.label}
           detail={choice.value.health.status}
-          color={statusColor(choice.value.health.status)}
+          color={providerHealthStatusColor(choice.value.health.status)}
           width={width}
         />
       ))}
@@ -186,39 +191,6 @@ function AgentPicker({
   );
 }
 
-/** Slot-keyed picker line; a click selects exactly what the key would. */
-function ChoiceLine({
-  choiceKey,
-  label,
-  detail,
-  color,
-  width,
-}: {
-  choiceKey: string;
-  label: string;
-  detail: string;
-  color?: string | undefined;
-  width: number;
-}) {
-  const dispatch = useStationMouse();
-  const prefix = ` ${choiceKey} `;
-  const detailPrefix = `${label} `;
-  const detailWidth = Math.max(0, width - prefix.length - detailPrefix.length);
-  const visibleDetail = detail.slice(0, detailWidth);
-  const padding = spaces(Math.max(0, detailWidth - visibleDetail.length));
-  return (
-    <text
-      fg={STATION_COLORS.foreground}
-      {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
-    >
-      {prefix}
-      {detailPrefix}
-      <span {...(color === undefined ? {} : { fg: color })}>{visibleDetail}</span>
-      {padding}
-    </text>
-  );
-}
-
 function selectedHarnessOption(
   snapshot: StationSnapshot,
   project: ProjectView,
@@ -241,16 +213,6 @@ function optionCountForState(
     return selectNewSessionHarnessChoices(snapshot, project).length;
   }
   return 0;
-}
-
-function statusColor(status: string | undefined): string | undefined {
-  if (status === "unavailable") {
-    return STATION_COLORS.red;
-  }
-  if (status === "degraded") {
-    return STATION_COLORS.yellow;
-  }
-  return undefined;
 }
 
 function colorProp(color: string | undefined): { valueColor?: string } {

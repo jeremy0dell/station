@@ -54,7 +54,7 @@ export function setProjectDefaultHarness(
     if (harnessIndex !== -1) {
       const absolute = start + 1 + harnessIndex;
       const nextLines = [...lines];
-      nextLines[absolute] = `harness = ${quoteTomlString(harness)}`;
+      nextLines[absolute] = replaceTomlStringValue(nextLines[absolute] ?? "", "harness", harness);
       return `${trimRepeatedBlankLines(nextLines).join("\n").trimEnd()}\n`;
     }
     const nextLines = [
@@ -199,4 +199,15 @@ function formatMinimalProjectBlock(block: MinimalProjectBlock): string {
 
 function quoteTomlString(value: string): string {
   return JSON.stringify(value);
+}
+
+function replaceTomlStringValue(line: string, key: string, value: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(
+    `^(\\s*${escapedKey}\\s*=\\s*)(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*')(\\s*(?:#.*)?)$`,
+  ).exec(line);
+  if (match === null) {
+    return `${key} = ${quoteTomlString(value)}`;
+  }
+  return `${match[1]}${quoteTomlString(value)}${match[2]}`;
 }

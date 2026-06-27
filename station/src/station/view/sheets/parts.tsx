@@ -76,6 +76,41 @@ export function SheetFooter({ width, children }: { width: number; children: stri
   );
 }
 
+export function SheetChoiceLine({
+  choiceKey,
+  label,
+  detail,
+  color,
+  width,
+}: {
+  choiceKey: string;
+  label: string;
+  detail: string;
+  color?: string | undefined;
+  width: number;
+}) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useState(false);
+  const prefix = ` ${choiceKey} `;
+  const detailPrefix = `${label} `;
+  const detailWidth = Math.max(0, width - prefix.length - detailPrefix.length);
+  const visibleDetail = detail.slice(0, detailWidth);
+  const padding = spaces(Math.max(0, detailWidth - visibleDetail.length));
+  return (
+    <text
+      fg={hover ? STATION_COLORS.green : STATION_COLORS.foreground}
+      {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {prefix}
+      {detailPrefix}
+      <span {...(color === undefined ? {} : { fg: color })}>{visibleDetail}</span>
+      {padding}
+    </text>
+  );
+}
+
 export function SheetProgressFooter({ width, children }: { width: number; children: string }) {
   const throbberWidth = 3;
   const labelText = ` ${children}`.slice(0, Math.max(0, width - throbberWidth));

@@ -65,8 +65,6 @@ export type AddProjectOperation = {
 
 export type SetProjectDefaultHarnessOperation = {
   type: "setProjectDefaultHarness";
-  projectId: string;
-  harness: ProviderId;
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>;
 };
 

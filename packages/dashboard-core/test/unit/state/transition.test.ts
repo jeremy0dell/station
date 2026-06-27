@@ -568,6 +568,25 @@ describe("TUI screen transitions", () => {
     });
   });
 
+  it("does not open the project default agent picker without a usable project", () => {
+    const noSnapshot = createInitialTuiState();
+    expect(openProjectDefaultAgentPicker(noSnapshot, "web")).toBe(noSnapshot);
+
+    const snapshot = createDashboardSnapshot();
+    const unavailable = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "web"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const state = createInitialTuiState({ initialSnapshot: unavailable });
+
+    expect(openProjectDefaultAgentPicker(state, "web").screen).toEqual({ name: "dashboard" });
+    expect(openProjectDefaultAgentPicker(state, "ghost").screen).toEqual({ name: "dashboard" });
+  });
+
   it("sets a project default agent from the picker", () => {
     const state = openProjectDefaultAgentPicker(
       createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
@@ -580,8 +599,6 @@ describe("TUI screen transitions", () => {
     expect(transition.operations).toEqual([
       {
         type: "setProjectDefaultHarness",
-        projectId: "web",
-        harness: "opencode",
         command: {
           type: "project.setDefaultHarness",
           payload: {

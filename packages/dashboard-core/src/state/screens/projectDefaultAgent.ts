@@ -57,8 +57,6 @@ export function handleProjectDefaultAgentKey(state: TuiState, key: TuiKey): TuiT
     operations: [
       {
         type: "setProjectDefaultHarness",
-        projectId: project.id,
-        harness: option.id,
         command: buildSetProjectDefaultHarnessCommand({
           projectId: project.id,
           harness: option.id,

@@ -32,10 +32,25 @@ export async function setProjectDefaultHarnessInConfig(
     options.projectId,
     options.harness,
   );
-  await loadConfigFromToml(candidateSource, {
+  const candidate = await loadConfigFromToml(candidateSource, {
     configPath: loaded.configPath,
     homeDir: loaded.homeDir,
   });
+  const candidateProject = candidate.projects.find(
+    (nextProject) => nextProject.id === options.projectId,
+  );
+  if (candidateProject?.defaults.harness !== options.harness) {
+    const hint =
+      candidateProject?.localConfig?.enabled === true
+        ? `Edit ${candidateProject.localConfig.path} or remove its [defaults].harness override.`
+        : undefined;
+    throw projectConfigSafeError({
+      code: "PROJECT_DEFAULT_HARNESS_OVERRIDDEN",
+      message: `Project "${options.projectId}" has a default harness override that keeps "${candidateProject?.defaults.harness ?? "unknown"}" effective.`,
+      projectId: options.projectId,
+      ...(hint === undefined ? {} : { hint }),
+    });
+  }
   await atomicWriteConfig(loaded.configPath, candidateSource);
   const after = await loadConfig({ configPath: loaded.configPath, homeDir: loaded.homeDir });
 

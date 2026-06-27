@@ -14,6 +14,7 @@ export class FakeTuiObserverService implements TuiObserverService {
   cleanupCount = 0;
   loadCount = 0;
   subscribeCount = 0;
+  nextDispatchError: unknown = undefined;
   nextReceipt: CommandReceipt = {
     commandId: "cmd_tui_1",
     accepted: true,
@@ -57,6 +58,11 @@ export class FakeTuiObserverService implements TuiObserverService {
   }
 
   async dispatch(command: StationCommand): Promise<CommandReceipt> {
+    if (this.nextDispatchError !== undefined) {
+      const error = this.nextDispatchError;
+      this.nextDispatchError = undefined;
+      throw error;
+    }
     this.dispatched.push(command);
     return this.nextReceipt;
   }

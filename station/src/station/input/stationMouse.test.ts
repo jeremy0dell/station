@@ -432,9 +432,8 @@ describe("routeStationMouse", () => {
     );
 
     const outcome = routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
-    await Promise.resolve();
-    await Promise.resolve();
 
+    await waitFor(() => fixture.service.loadCount === 1);
     expect(outcome).toEqual({ kind: "handled" });
     expect(
       fixture.service.dispatched.some(
@@ -444,6 +443,11 @@ describe("routeStationMouse", () => {
           command.payload.harness === "opencode",
       ),
     ).toBe(true);
+    expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    const toast = store
+      .getState()
+      .toasts.find((entry) => entry.toast.message === "Default agent set to opencode.");
+    expect(toast?.toast).toMatchObject({ kind: "success" });
   });
 
   it("silently ignores default-agent picker on absent or unavailable project", () => {
@@ -518,4 +522,13 @@ function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
     throw new Error(`no slot for row ${rowId}`);
   }
   return choice.key;
+}
+
+async function waitFor(assertion: () => boolean): Promise<void> {
+  const deadline = Date.now() + 500;
+  for (;;) {
+    if (assertion()) return;
+    if (Date.now() > deadline) throw new Error("timed out waiting for assertion");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
