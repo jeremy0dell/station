@@ -9,7 +9,7 @@ import {
 import { extend } from "@opentui/react";
 import type { StationTerminalSize } from "./types.js";
 import { buildMouseReportSequence } from "./input/mouseReport.js";
-import { MouseTracking } from "./protocol/mouse.js";
+import { type MouseButtonName, MouseTracking } from "./protocol/mouse.js";
 import type { VtRow } from "./vt/rows.js";
 import type { MouseProtocol, StationVtScreen } from "./vt/screen.js";
 import { stationVtTheme } from "./vt/theme.js";
@@ -63,10 +63,15 @@ export class TerminalScreenRenderable extends Renderable {
   // A non-null #anchor means a drag is in progress (its starting cell).
   #selection: CellSelection | null = null;
   #anchor: CellPoint | null = null;
-  // A forward-eligible press whose click-vs-drag verdict is still pending: set on
-  // a plain left `down` in a mouse-reporting pane, forwarded as a click on `up`,
+  // A forward-eligible LEFT press whose click-vs-drag verdict is still pending:
+  // set on a left `down` in a mouse-reporting pane, forwarded as a click on `up`,
   // cleared on `drag` (it became a selection drag instead).
   #pendingClick: { local: CellPoint; modifiers: MouseModifiers } | null = null;
+  // A middle press whose release we still owe the app. Middle never starts a
+  // Station selection, so its press is forwarded immediately on `down`; this lives
+  // OUTSIDE #resetSelection so an output-driven selection reset can't drop the
+  // release we owe on `up`.
+  #middleDown: { local: CellPoint; modifiers: MouseModifiers } | null = null;
   #copyOnUp = false;
   #lastClickAt = 0;
   #lastClickCell: CellPoint | null = null;
@@ -93,8 +98,10 @@ export class TerminalScreenRenderable extends Renderable {
     this.#unsubscribe = null;
     this.#screen = value;
     this.#rowsVersion = -1;
-    // A new pane's screen invalidates any in-flight selection's coordinates.
+    // A new pane's screen invalidates any in-flight selection's coordinates and
+    // any unreleased middle press (its owed release belongs to the old pane).
     this.#resetSelection();
+    this.#middleDown = null;
     if (value !== null) {
       this.#unsubscribe = value.subscribe(() => {
         // Output or a scroll changes what the selection's viewport cells show,
@@ -191,29 +198,47 @@ export class TerminalScreenRenderable extends Renderable {
   }
 
   #onMouseDown(event: MouseEvent, local: CellPoint, protocol: MouseProtocol | null): void {
-    // A plain left press in a mouse-reporting pane is a *potential* click: arm a
-    // selection anchor so a following drag still selects, but remember to
-    // forward it as a click if it releases without moving. Shift/Ctrl fall
-    // through to native selection, so they never forward.
-    const forwardable =
-      protocol !== null && event.button === 0 && !event.modifiers.shift && !event.modifiers.ctrl;
-    if (forwardable) {
-      // Anchor only (no visible selection yet): the app owns the pointer, so a
-      // press-and-hold shows no Station highlight. A following `drag` paints the
-      // selection from this anchor; a release with no drag forwards a click.
+    // Right-click is reserved for Station's per-pane context menu (see PaneGrid),
+    // and Shift/Ctrl are reserved for native selection — none of those forward.
+    const button = mouseButtonName(event.button);
+    if (
+      protocol === null ||
+      (button !== "left" && button !== "middle") ||
+      event.modifiers.shift ||
+      event.modifiers.ctrl
+    ) {
+      this.#onSelectionDown(event, local);
+      return;
+    }
+    if (button === "left") {
+      // A left press is a *potential* click: arm a selection anchor so a following
+      // drag still selects (no visible highlight until then — the app owns the
+      // pointer), and forward it as a click on release if it never moved.
       this.#pendingClick = { local, modifiers: { ...event.modifiers } };
       this.#anchor = local;
       return;
     }
-    this.#onSelectionDown(event, local);
+    // Middle never selects, so forward the press now (deferring it like the left
+    // click wouldn't survive an output-driven selection reset) and owe a release.
+    this.#forwardPointer(protocol, "press", local, event.modifiers, "middle");
+    this.#middleDown = { local, modifiers: { ...event.modifiers } };
   }
 
   #onMouseUp(protocol: MouseProtocol | null): void {
+    const middle = this.#middleDown;
+    this.#middleDown = null;
+    if (middle !== null) {
+      // Release the middle press forwarded on `down`. X10 (DECSET 9) is press-only.
+      if (protocol !== null && protocol.tracking !== MouseTracking.X10) {
+        this.#forwardPointer(protocol, "release", middle.local, middle.modifiers, "middle");
+      }
+      return;
+    }
     const pending = this.#pendingClick;
     this.#pendingClick = null;
     if (pending !== null) {
-      // Press+release with no drag: a click we forward to the app, never a copy.
-      // X10 (DECSET 9) is press-only — it has no release event — so skip it there.
+      // Press+release with no drag: a left click we forward to the app, never a
+      // copy. X10 (DECSET 9) is press-only — no release event — so skip it there.
       if (protocol !== null) {
         this.#forwardPointer(protocol, "press", pending.local, pending.modifiers);
         if (protocol.tracking !== MouseTracking.X10) {
@@ -240,6 +265,7 @@ export class TerminalScreenRenderable extends Renderable {
     action: "press" | "release" | "motion",
     local: CellPoint,
     modifiers: MouseModifiers,
+    button: MouseButtonName = "left",
   ): void {
     const forward = this.#onForwardInput;
     const screen = this.#screen;
@@ -254,7 +280,7 @@ export class TerminalScreenRenderable extends Renderable {
     forward(
       buildMouseReportSequence({
         action,
-        button: action === "motion" ? "none" : "left",
+        button: action === "motion" ? "none" : button,
         col,
         row,
         modifiers,
@@ -305,14 +331,18 @@ export class TerminalScreenRenderable extends Renderable {
     if (screen === null) {
       return;
     }
-    const range = wordRangeAt(screen.viewRowText(local.y), local.x);
+    // wordRangeAt works in string indices; local.x is a cell column. They diverge
+    // once a wide char (one code point, two cells) precedes the click, so map
+    // through viewRowText and back via cellColumnForCharIndex.
+    const charCol = screen.viewRowText(local.y, 0, local.x).length;
+    const range = wordRangeAt(screen.viewRowText(local.y), charCol);
     if (range.end <= range.start) {
       this.#clearSelection();
       return;
     }
     this.#setSelection({
-      anchor: { x: range.start, y: local.y },
-      focus: { x: range.end - 1, y: local.y },
+      anchor: { x: screen.cellColumnForCharIndex(local.y, range.start), y: local.y },
+      focus: { x: screen.cellColumnForCharIndex(local.y, range.end) - 1, y: local.y },
     });
   }
 
@@ -326,7 +356,12 @@ export class TerminalScreenRenderable extends Renderable {
       this.#clearSelection();
       return;
     }
-    this.#setSelection({ anchor: { x: 0, y: row }, focus: { x: range.end - 1, y: row } });
+    // range.end is a string index (trimmed length); map to a cell column so the
+    // highlight reaches the true last cell on wide-char lines.
+    this.#setSelection({
+      anchor: { x: 0, y: row },
+      focus: { x: screen.cellColumnForCharIndex(row, range.end) - 1, y: row },
+    });
   }
 
   #setSelection(selection: CellSelection): void {
@@ -355,7 +390,11 @@ export class TerminalScreenRenderable extends Renderable {
     }
   }
 
-  /** Selected text in reading order, each line right-trimmed, newline-joined. */
+  /**
+   * Selected text in reading order, newline-joined. Soft-wrapped buffer rows of
+   * one logical line are rejoined without a newline (so a wrapped command pastes
+   * as one line); only a non-wrapped row ends a line and gets right-trimmed.
+   */
   getSelectedText(): string {
     const screen = this.#screen;
     const selection = this.#selection;
@@ -366,14 +405,27 @@ export class TerminalScreenRenderable extends Renderable {
     const first = Math.max(0, ordered.startY);
     const last = Math.min(this.height - 1, ordered.endY);
     const lines: string[] = [];
+    let current: string | null = null;
     for (let row = first; row <= last; row += 1) {
       const cols = rowColumnsOrdered(ordered, row, this.width);
       if (cols === null) {
         continue;
       }
-      lines.push(screen.viewRowText(row, cols.start, cols.end).replace(/\s+$/, ""));
+      // When the next row is a wrap continuation, this row's glyphs fill the full
+      // width: keep its tail (trimming would drop real content) and let the line
+      // continue. Only a non-wrapped row ends the logical line.
+      const wrappedIntoNext = row < last && screen.isViewRowWrapped(row + 1);
+      const text = screen.viewRowText(row, cols.start, cols.end);
+      current = (current ?? "") + (wrappedIntoNext ? text : text.replace(/\s+$/, ""));
+      if (!wrappedIntoNext) {
+        lines.push(current);
+        current = null;
+      }
     }
-    // Drop trailing blank rows so a drag into the empty area below output
+    if (current !== null) {
+      lines.push(current);
+    }
+    // Drop trailing blank lines so a drag into the empty area below output
     // doesn't copy (or have the toast count) phantom lines; interior blanks
     // stay. An all-blank selection collapses to "" and is not copied.
     while (lines.length > 0 && lines[lines.length - 1] === "") {
@@ -449,6 +501,21 @@ export class TerminalScreenRenderable extends Renderable {
 // Keep a forwarded mouse cell inside the 1-based PTY grid.
 function clampCell(value: number, max: number): number {
   return Math.max(1, Math.min(Math.max(1, max), value));
+}
+
+// OpenTUI mouse buttons follow the DOM convention (0/1/2 = left/middle/right);
+// anything else (e.g. a wheel pseudo-button) isn't a click and doesn't forward.
+function mouseButtonName(button: number): MouseButtonName | null {
+  switch (button) {
+    case 0:
+      return "left";
+    case 1:
+      return "middle";
+    case 2:
+      return "right";
+    default:
+      return null;
+  }
 }
 
 // drawText's selection arg highlights columns [start, end) of the drawn text.

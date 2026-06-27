@@ -109,6 +109,19 @@ export type StationVtScreen = {
    * engine, so columns line up with the rendered grid. Powers selection/copy.
    */
   viewRowText(viewRow: number, startCol?: number, endCol?: number): string;
+  /**
+   * Whether an in-view row is a soft-wrap continuation of the row above it
+   * (xterm `IBufferLine.isWrapped`). Lets copy join a wrapped logical line
+   * back into one line instead of inserting a newline at each wrap boundary.
+   */
+  isViewRowWrapped(viewRow: number): boolean;
+  /**
+   * The cell column where the character at `charIndex` of `viewRowText(viewRow)`
+   * begins. Inverse of slicing `viewRowText`: a wide char is one code point but
+   * two cells, so selection geometry (cell columns) and word lookup (string
+   * indices) need this to agree on CJK/emoji rows.
+   */
+  cellColumnForCharIndex(viewRow: number, charIndex: number): number;
   isCursorVisible(): boolean;
   /** DECSET 2004 state; decides paste wrapping. */
   isBracketedPasteEnabled(): boolean;
@@ -415,6 +428,37 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       const buffer = terminal.buffer.active;
       const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
       return line?.translateToString(false, startCol, endCol) ?? "";
+    },
+    isViewRowWrapped: (viewRow) => {
+      const buffer = terminal.buffer.active;
+      return buffer.getLine(buffer.baseY - scrollOffset + viewRow)?.isWrapped ?? false;
+    },
+    cellColumnForCharIndex: (viewRow, charIndex) => {
+      if (charIndex <= 0) {
+        return 0;
+      }
+      const buffer = terminal.buffer.active;
+      const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
+      if (line === undefined) {
+        return charIndex;
+      }
+      // Walk cells the way translateToString builds the string: width-0 cells
+      // continue a wide char and contribute no text; every other cell adds its
+      // chars (blank → one space). Return the first non-continuation cell whose
+      // preceding text already covers `charIndex`.
+      const workCell = buffer.getNullCell();
+      let chars = 0;
+      for (let col = 0; col < terminal.cols; col += 1) {
+        const cell = line.getCell(col, workCell);
+        if (cell !== undefined && cell.getWidth() === 0) {
+          continue;
+        }
+        if (chars >= charIndex) {
+          return col;
+        }
+        chars += cell === undefined ? 1 : (cell.getChars() || " ").length;
+      }
+      return terminal.cols;
     },
     isCursorVisible: () => cursorVisible,
     isBracketedPasteEnabled: () => terminal.modes.bracketedPasteMode,

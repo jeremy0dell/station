@@ -101,6 +101,32 @@ describe("TerminalScreenRenderable selection", () => {
     }
   });
 
+  it("rejoins a soft-wrapped logical line without a newline", async () => {
+    // 30 chars with no spaces wrap across two 20-col rows; the second row is a
+    // wrap continuation, so copy must NOT insert a newline at the boundary.
+    const text = "abcdefghijklmnopqrstuvwxyz0123";
+    const { setup, screen, copied } = await renderPane(text);
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual([text]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("double-clicks the correct word on a line with wide (CJK) characters", async () => {
+    // 漢 and 字 are each two cells but one code point; without cell↔char mapping
+    // the click column would land in the wrong place.
+    const { setup, screen, copied } = await renderPane("漢字 hello");
+    try {
+      await setup.mockMouse.click(2, 0); // cell 2 = second wide char (字)
+      await setup.mockMouse.click(2, 0);
+      expect(copied).toEqual(["漢字"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
   it("selects even in an alt-screen app", async () => {
     // The alternate screen is a fresh buffer, so paint content into it (as a
     // pager/TUI would) before selecting.
@@ -184,6 +210,18 @@ describe("TerminalScreenRenderable mouse forwarding", () => {
     try {
       await setup.mockMouse.click(2, 0, 2); // button 2 = right
       expect(forwarded).toEqual([]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("forwards a middle-click press+release to the app", async () => {
+    const { setup, screen, forwarded } = await renderPane("hello world");
+    screen.feed("\x1b[?1000h\x1b[?1006h");
+    await screen.whenIdle();
+    try {
+      await setup.mockMouse.click(2, 0, 1); // button 1 = middle -> SGR button code 1
+      expect(forwarded).toEqual(["\x1b[<1;3;1M", "\x1b[<1;3;1m"]);
     } finally {
       await teardown(setup, screen);
     }

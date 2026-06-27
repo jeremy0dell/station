@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { MouseEncoding } from "../protocol/mouse.js";
 import { buildWheelForwardSequence } from "./wheelForward.js";
 
 const base = {
@@ -6,6 +7,7 @@ const base = {
   rows: 24,
   applicationCursorKeys: false,
   lines: 3,
+  encoding: MouseEncoding.Sgr,
 } as const;
 
 describe("buildWheelForwardSequence", () => {
@@ -36,6 +38,18 @@ describe("buildWheelForwardSequence", () => {
         applicationCursorKeys: true,
       }),
     ).toBe("\x1bOA\x1bOA\x1bOA");
+  });
+
+  it("emits a legacy wheel report when the app negotiated legacy encoding (no DECSET 1006)", () => {
+    // 64 (wheel up) and center cells 40/12 each +32 in the legacy byte form.
+    expect(
+      buildWheelForwardSequence({
+        ...base,
+        direction: "up",
+        mouseReporting: true,
+        encoding: MouseEncoding.Legacy,
+      }),
+    ).toBe(`\x1b[M${String.fromCharCode(96)}${String.fromCharCode(72)}${String.fromCharCode(44)}`);
   });
 
   it("keeps the synthetic wheel cell on a tiny viewport", () => {

@@ -337,4 +337,22 @@ describe("createStationVtScreen", () => {
     await screen.whenIdle();
     expect(screen.isKittyKeyboardEnabled()).toBe(true);
   });
+
+  it("flags soft-wrap continuation rows", async () => {
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 6 } }));
+    screen.feed("abcdefghijklmnopqrstuvwxyz0123"); // 30 chars -> wraps at col 20
+    await screen.whenIdle();
+    expect(screen.isViewRowWrapped(0)).toBe(false);
+    expect(screen.isViewRowWrapped(1)).toBe(true);
+  });
+
+  it("maps char indices to cell columns across wide chars", async () => {
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 4 } }));
+    screen.feed("漢字 hi"); // 漢:cells 0-1, 字:cells 2-3, space:cell 4, h:cell 5, i:cell 6
+    await screen.whenIdle();
+    expect(screen.cellColumnForCharIndex(0, 0)).toBe(0);
+    expect(screen.cellColumnForCharIndex(0, 1)).toBe(2);
+    expect(screen.cellColumnForCharIndex(0, 2)).toBe(4);
+    expect(screen.cellColumnForCharIndex(0, 3)).toBe(5);
+  });
 });
