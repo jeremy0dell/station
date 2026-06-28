@@ -167,10 +167,9 @@ function buildProjectItems(projectId: string, state: TuiState): readonly Context
   return [
     setDefaultAgent,
     {
-      id: "project.remove",
-      label: "Remove Project",
-      danger: true,
-      action: { kind: "removeProject", projectId: project.id },
+      id: "project.openSettings",
+      label: "Project Settings…",
+      action: { kind: "openProjectSettings", projectId: project.id },
     },
   ];
 }

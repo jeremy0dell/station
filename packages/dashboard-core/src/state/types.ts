@@ -78,7 +78,18 @@ export type TuiScreen =
   | { name: "addProject"; flow: AddProjectFlowState }
   | { name: "newSession"; flow: NewSessionFlowState }
   | { name: "projectDefaultAgent"; projectId: ProjectId }
-  | { name: "removeProject"; projectId: ProjectId; label: string };
+  | {
+      name: "projectSettings";
+      projectId: ProjectId;
+      focus: ProjectSettingsFocus;
+      activeId: ProjectSettingsItemId;
+      removeDraft: EditableTextInputState;
+    };
+
+/** Which pane of the two-pane settings panel owns keyboard input. */
+export type ProjectSettingsFocus = "list" | "detail";
+/** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
+export type ProjectSettingsItemId = "agent" | "remove";
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;

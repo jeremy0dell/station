@@ -31,7 +31,7 @@ import type { ProviderId, WorktreeRow, StationCommand, StationSnapshot } from "@
 import {
   addPendingCreateSessionRow,
   openProjectDefaultAgentPicker,
-  openRemoveProjectConfirmForProject,
+  openProjectSettings,
   openRemoveWorktreeConfirmForRow,
   openRenameEditForRow,
   removeCreateSessionLocalRow,
@@ -487,11 +487,9 @@ function selectContextMenuItem(
         );
       }
       return;
-    case "removeProject":
+    case "openProjectSettings":
       if (stationViewStore !== undefined) {
-        stationViewStore.setState(
-          openRemoveProjectConfirmForProject(stationViewStore.getState(), action.projectId),
-        );
+        stationViewStore.setState(openProjectSettings(stationViewStore.getState(), action.projectId));
       }
       return;
   }
