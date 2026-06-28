@@ -39,7 +39,9 @@ export function validateForkSessionCreate(
   if (branch.length === 0) {
     return { ok: false, message: "Branch name cannot be empty." };
   }
-  if (snapshot.rows.some((row) => row.branch === branch)) {
+  // Branch names are unique per project/repo, not globally — only a worktree in
+  // the same project can collide.
+  if (snapshot.rows.some((row) => row.projectId === screen.projectId && row.branch === branch)) {
     return { ok: false, message: `A worktree on "${branch}" already exists.` };
   }
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
@@ -124,7 +126,9 @@ export function openForkDetailsForRow(
     sourceBranch: row.branch,
     sourceDirty: row.worktree.dirty === true,
     sourceAgentRunning: isRunningAgentState(row.agent?.state),
-    draftBranch: createEditableTextInputState(suggestForkBranch(row.branch, snapshot.rows)),
+    draftBranch: createEditableTextInputState(
+      suggestForkBranch(row.branch, snapshot.rows, row.projectId),
+    ),
     nameSource: "generated",
     copyDirty: true,
     focus: "branch",
@@ -135,8 +139,13 @@ export function openForkDetailsForRow(
   return { ...state, screen };
 }
 
-function suggestForkBranch(sourceBranch: string, rows: readonly WorktreeRow[]): string {
-  const taken = new Set(rows.map((row) => row.branch));
+function suggestForkBranch(
+  sourceBranch: string,
+  rows: readonly WorktreeRow[],
+  projectId: WorktreeRow["projectId"],
+): string {
+  // Only the source project's branches can collide (uniqueness is per repo).
+  const taken = new Set(rows.filter((row) => row.projectId === projectId).map((row) => row.branch));
   const base = `${sourceBranch}-fork`;
   // `taken` is finite, so an unused suffix is always found within taken.size + 1 tries.
   let candidate = base;

@@ -1,7 +1,12 @@
+import type { StationSnapshot } from "@station/contracts";
 import type { TuiKey, TuiState, TuiTransition } from "@station/dashboard-core";
-import { createInitialTuiState, handleTuiKey } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  handleTuiKey,
+  openForkDetailsForRow,
+} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
+import { createDashboardSnapshot, row } from "../../../fixtures/snapshots.js";
 
 const CTX = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
@@ -118,6 +123,32 @@ describe("fork screen", () => {
     const transition = step(typed, ENTER);
     expect(transition.operations).toBeUndefined();
     expect(detailsScreen(transition.state).validationError).toContain(existing);
+  });
+
+  it("scopes branch collisions and suggestions to the source project", () => {
+    // A DIFFERENT project already holds the name this web fork would suggest.
+    // Branch uniqueness is per repo, so it must neither bump the suggestion nor
+    // block the submit. (wt_web_idle is on "fix-nav-mobile" → suggests "-fork".)
+    const base = createDashboardSnapshot();
+    const snapshot: StationSnapshot = {
+      ...base,
+      rows: [
+        ...base.rows,
+        row({ id: "wt_api_fork", projectId: "api", branch: "fix-nav-mobile-fork", state: "idle" }),
+      ],
+    };
+    const opened = openForkDetailsForRow(
+      createInitialTuiState({ initialSnapshot: snapshot }),
+      "wt_web_idle",
+    );
+    const screen = detailsScreen(opened);
+    expect(screen.draftBranch.value).toBe("fix-nav-mobile-fork");
+
+    const transition = step(opened, ENTER);
+    expect(transition.operations).toHaveLength(1);
+    const operation = transition.operations?.[0];
+    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
+    expect(operation.branch).toBe("fix-nav-mobile-fork");
   });
 
   it("escapes from details back to chooseSlot, then to the dashboard", () => {
