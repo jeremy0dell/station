@@ -211,19 +211,41 @@ describe("buildContextMenuItems", () => {
     ]);
   });
 
-  it("keeps STATION non-row targets inert", () => {
+  it("keeps STATION non-row, non-project targets inert", () => {
     const store = createStationStore();
     const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
 
     for (const target of [
       { kind: "openShellForRow", rowId: "wt_station_idle" } as const,
-      { kind: "projectHeader", projectId: "station" } as const,
       { kind: "body" } as const,
     ]) {
       expect(
         buildContextMenuItems({ kind: "station", target }, store.getState(), stationState)[0]?.disabled,
       ).toBe(true);
     }
+  });
+
+  it("builds project actions for project-header targets", () => {
+    const store = createStationStore();
+    const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
+
+    const items = buildContextMenuItems(
+      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      store.getState(),
+      stationState,
+    );
+
+    expect(items.map((item) => item.label)).toEqual(["Set Default Agent", "Project Settings…"]);
+    // Project is healthy in the fixture, so Set Default Agent is actionable.
+    expect(items[0]?.disabled).toBeUndefined();
+    expect(resolveContextMenuAction(items[0])).toEqual({
+      kind: "setProjectDefaultAgent",
+      projectId: "station",
+    });
+    expect(resolveContextMenuAction(items[1])).toEqual({
+      kind: "openProjectSettings",
+      projectId: "station",
+    });
   });
 
   it("keeps STATION row actions inert off the dashboard screen", () => {

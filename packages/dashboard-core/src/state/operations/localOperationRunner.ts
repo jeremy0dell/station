@@ -221,6 +221,16 @@ export function createTuiLocalOperationRunner(input: {
             input.service,
             operation.command,
             input.clientLabel,
+            (commandId) => handledCommandFailureIds.add(commandId),
+          );
+        }
+        if (operation.type === "removeProject") {
+          void runRemoveProjectOperation(
+            store(),
+            input.service,
+            operation.command,
+            input.clientLabel,
+            (commandId) => handledCommandFailureIds.add(commandId),
           );
         }
       }
@@ -257,6 +267,7 @@ async function runSetProjectDefaultHarnessOperation(
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
   clientLabel: string,
+  markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
   try {
     const receipt = await service.dispatch(command);
@@ -271,6 +282,10 @@ async function runSetProjectDefaultHarnessOperation(
       );
       return;
     }
+    // This op shows its own failure toast below, so claim the command's failure
+    // before awaiting: the observer's command.failed notice is then suppressed
+    // regardless of which path resolves first (otherwise both fire).
+    markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
       addSafeCommandToast(store, completion.error);
@@ -281,6 +296,51 @@ async function runSetProjectDefaultHarnessOperation(
       addTuiToast(replaceSnapshot(store.getState(), snapshot), {
         kind: "success",
         message: `Default agent set to ${command.payload.harness}.`,
+      }),
+    );
+  } catch (error: unknown) {
+    addSafeCommandToast(store, toSafeError(error, { clientLabel }));
+  }
+}
+
+async function runRemoveProjectOperation(
+  store: StoreApi<TuiStore>,
+  service: TuiObserverService,
+  command: Extract<StationCommand, { type: "project.remove" }>,
+  clientLabel: string,
+  markCommandFailureHandled: (commandId: CommandId) => void,
+): Promise<void> {
+  // Read the label before dispatch; the post-reload snapshot no longer has it.
+  const label = store
+    .getState()
+    .snapshot?.projects.find((candidate) => candidate.id === command.payload.projectId)?.label;
+  try {
+    const receipt = await service.dispatch(command);
+    if (!receipt.accepted) {
+      addSafeCommandToast(
+        store,
+        receipt.error ?? {
+          tag: "CommandExecutionError",
+          code: "COMMAND_REJECTED",
+          message: `${command.type} was rejected.`,
+        },
+      );
+      return;
+    }
+    // This op shows its own failure toast below, so claim the command's failure
+    // before awaiting: the observer's command.failed notice is then suppressed
+    // regardless of which path resolves first (otherwise both fire).
+    markCommandFailureHandled(receipt.commandId);
+    const completion = await service.waitForCommandCompletion(receipt.commandId);
+    if (completion.status === "failed") {
+      addSafeCommandToast(store, completion.error);
+      return;
+    }
+    const snapshot = await service.loadSnapshot();
+    store.setState(
+      addTuiToast(replaceSnapshot(store.getState(), snapshot), {
+        kind: "success",
+        message: label === undefined ? "Project removed." : `Removed project ${label}.`,
       }),
     );
   } catch (error: unknown) {

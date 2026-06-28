@@ -48,6 +48,10 @@ export type SetProjectDefaultHarnessCommandInput = {
   harness: ProviderId;
 };
 
+export type RemoveProjectCommandInput = {
+  projectId: ProjectView["id"];
+};
+
 export type BuildFocusCommandOptions = {
   origin?: TerminalFocusOrigin;
 };
@@ -220,6 +224,17 @@ export function buildSetProjectDefaultHarnessCommand(
     payload: {
       projectId: input.projectId,
       harness: input.harness,
+    },
+  };
+}
+
+export function buildRemoveProjectCommand(
+  input: RemoveProjectCommandInput,
+): Extract<StationCommand, { type: "project.remove" }> {
+  return {
+    type: "project.remove",
+    payload: {
+      projectId: input.projectId,
     },
   };
 }

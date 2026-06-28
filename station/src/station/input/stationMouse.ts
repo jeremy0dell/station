@@ -6,7 +6,8 @@
 // never touch the store.
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
-import type { TuiStore } from "@station/dashboard-core";
+import { isRemoveProjectArmed } from "@station/dashboard-core";
+import type { ProjectSettingsItemId, TuiStore } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
@@ -14,6 +15,7 @@ import {
   dispatchBindingClick,
   dispatchRowSlot,
   dispatchStationKey,
+  focusProjectSettingsItem,
   openDefaultAgentPickerForProject,
   representativeKeyForBinding,
   resolveNewSessionSubmit,
@@ -49,6 +51,10 @@ export type StationMouseTarget =
   | { kind: "sheetChoice"; choiceKey: string }
   /** A compact sheet button that dispatches its visible shortcut key. */
   | { kind: "sheetButton"; key: "y" | "n" }
+  /** A left-list row in the Project Settings panel; selecting opens its detail. */
+  | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
+  /** The armed "Remove project (R)" action in the panel's detail pane. */
+  | { kind: "projectSettingsConfirmRemove" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
   | { kind: "sheetBackdrop" };
 
@@ -204,6 +210,25 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.key }));
+    case "projectSettingsItem":
+      if (mode !== "projectSettings") {
+        return { kind: "handled" };
+      }
+      focusProjectSettingsItem(store, target.itemId);
+      return { kind: "handled" };
+    case "projectSettingsConfirmRemove": {
+      if (mode !== "projectSettings") {
+        return { kind: "handled" };
+      }
+      // Only an armed button fires. Dispatching "r" while unarmed would be typed
+      // into the confirm field (the machine treats "r" as editable text until the
+      // phrase matches), so guard the click here rather than emit a stray key.
+      const { screen } = store.getState();
+      if (screen.name === "projectSettings" && isRemoveProjectArmed(screen)) {
+        return fromKeyOutcome(dispatchStationKey(store, { input: "r" }));
+      }
+      return { kind: "handled" };
+    }
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };
@@ -231,6 +256,7 @@ const SHEET_CHOICE_MODES: ReadonlySet<StationInputMode> = new Set([
   "newSessionPickProject",
   "newSessionPickAgent",
   "projectDefaultAgent",
+  "projectSettings",
 ]);
 
 function routeStationWheel(

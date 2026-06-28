@@ -13,7 +13,11 @@
 //    the transition reports dismissPopup/exitCode).
 import { describe, expect, it } from "bun:test";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
-import { createInitialTuiState, openProjectDefaultAgentPicker } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  openProjectDefaultAgentPicker,
+  openProjectSettings,
+} from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import { handleTuiKey } from "@station/dashboard-core";
 import type { TuiState } from "@station/dashboard-core";
@@ -27,18 +31,24 @@ import {
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
-/** The shared action every addProject union-table entry dispatches. */
+/** The shared actions union-table modes dispatch (addProject, projectSettings). */
 const ADD_PROJECT_KEY_ACTION = "station.addProject.key";
+const PROJECT_SETTINGS_KEY_ACTION = "station.projectSettings.key";
 
 /**
- * Slot bindings are runtime-assigned, and addProject's union table is checked by
- * its shared action only so future distinct stale actions still fail the audit.
+ * Slot bindings are runtime-assigned, and the union-table modes (addProject,
+ * projectSettings) route every key to one action and decode it in the machine,
+ * so their bindings are checked by that shared action only — future distinct
+ * stale actions still fail the audit.
  */
 function allowedNoOpBinding(mode: StationInputMode, binding: StationBinding): boolean {
   if (binding.pattern.kind === "slot") {
     return true;
   }
-  return mode === "addProject" && binding.action === ADD_PROJECT_KEY_ACTION;
+  if (mode === "addProject" && binding.action === ADD_PROJECT_KEY_ACTION) {
+    return true;
+  }
+  return mode === "projectSettings" && binding.action === PROJECT_SETTINGS_KEY_ACTION;
 }
 
 function probeKeys(): TuiKey[] {
@@ -97,6 +107,7 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     projectCollapse: drive(base, [{ input: "C" }]),
     removeChooseSlot: drive(base, [{ input: "X" }]),
     removeConfirm: drive(base, [{ input: "X" }, { input: "1" }]),
+    projectSettings: openProjectSettings(base, "station"),
     renameChooseSlot: drive(renameBase, [{ input: "R" }]),
     renameEdit: drive(renameBase, [{ input: "R" }, { input: "1" }]),
     newSessionReview: drive(base, [{ input: "N" }]),

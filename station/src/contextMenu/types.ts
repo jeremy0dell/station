@@ -23,6 +23,8 @@ export type ContextMenuItemId =
   | "pane.close"
   | "station.renameSession"
   | "station.removeWorktree"
+  | "project.setDefaultAgent"
+  | "project.openSettings"
   | "station.noActions"
   // One per configured automation; the id carries the automation id.
   | `pane.automation.${string}`;
@@ -33,6 +35,8 @@ export type ContextMenuItemAction =
   | { kind: "closePane"; paneId: PaneId }
   | { kind: "renameSession"; rowId: string }
   | { kind: "removeWorktree"; rowId: string }
+  | { kind: "setProjectDefaultAgent"; projectId: string }
+  | { kind: "openProjectSettings"; projectId: string }
   // Run a configured automation, anchored on the pane the menu opened over.
   | { kind: "runAutomation"; automationId: string; paneId: PaneId };
 

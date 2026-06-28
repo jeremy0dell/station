@@ -13,9 +13,11 @@ import type { ProviderId } from "@station/contracts";
 import {
   choiceValueByKey,
   createNewSessionNameToken,
+  focusProjectSettingsItem as focusProjectSettingsItemState,
   generatedSessionBranch,
   openProjectDefaultAgentPicker,
   selectDashboardViewport,
+  type ProjectSettingsItemId,
 } from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
 import { validateNewSessionCreate } from "@station/dashboard-core";
@@ -279,6 +281,18 @@ export function openDefaultAgentPickerForProject(
   projectId: string,
 ): void {
   store.setState(openProjectDefaultAgentPicker(store.getState(), projectId));
+}
+
+/**
+ * Station mouse extension: clicking a left-list item selects it and drops into
+ * its detail pane. No single keyboard key maps to this (the keyboard path is
+ * arrow-move then enter), so it lives here like the header-collapse toggle.
+ */
+export function focusProjectSettingsItem(
+  store: StoreApi<TuiStore>,
+  itemId: ProjectSettingsItemId,
+): void {
+  store.setState(focusProjectSettingsItemState(store.getState(), itemId));
 }
 
 /**
