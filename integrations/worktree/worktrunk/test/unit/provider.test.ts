@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
+import { nodeExternalCommandRunner } from "@station/runtime";
 import { WorktrunkProvider } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
@@ -297,9 +298,29 @@ describe("WorktrunkProvider", () => {
     const root = await mkdtemp(join(tmpdir(), "wt-seed-"));
     const srcPath = join(root, "source");
     const tgtPath = join(root, "feature");
+    const git = (cwd: string, ...args: string[]) =>
+      nodeExternalCommandRunner({ command: "git", args, cwd });
+
+    // Real source repo: a base commit, then a dirty working tree spanning every state
+    // the seed must carry (unstaged mod, staged mod, tracked deletion, untracked + nested).
+    await mkdir(srcPath, { recursive: true });
+    await git(srcPath, "init", "-q");
+    await git(srcPath, "config", "user.email", "t@example.com");
+    await git(srcPath, "config", "user.name", "t");
+    await git(srcPath, "config", "commit.gpgsign", "false");
+    await writeFile(join(srcPath, "tracked.txt"), "base\n");
+    await writeFile(join(srcPath, "staged.txt"), "base\n");
+    await writeFile(join(srcPath, "deleteme.txt"), "bye\n");
+    await git(srcPath, "add", ".");
+    await git(srcPath, "commit", "-qm", "init");
+    await writeFile(join(srcPath, "tracked.txt"), "base\nunstaged\n");
+    await writeFile(join(srcPath, "staged.txt"), "base\nstaged\n");
+    await git(srcPath, "add", "staged.txt");
+    await rm(join(srcPath, "deleteme.txt"));
     await mkdir(join(srcPath, "nested"), { recursive: true });
     await writeFile(join(srcPath, "untracked.txt"), "untracked-contents");
     await writeFile(join(srcPath, "nested", "deep.txt"), "deep-contents");
+    const srcStatusBefore = (await git(srcPath, "status", "--porcelain")).stdout;
 
     const calls: ExternalCommandInput[] = [];
     const provider = new WorktrunkProvider({
@@ -308,15 +329,18 @@ describe("WorktrunkProvider", () => {
       runner: async (input) => {
         calls.push(input);
         if (input.command === "wt" && input.args?.[0] === "switch") {
+          // Stand in for `wt switch --create`: a real linked worktree at the source HEAD
+          // so the seed can materialize the snapshot tree into it.
+          await git(srcPath, "worktree", "add", "-q", tgtPath, "-b", "feature", "HEAD");
           return result(input, JSON.stringify([{ path: tgtPath, branch: "feature" }]));
         }
         if (input.command === "wt" && input.args?.[0] === "list") {
           return result(input, JSON.stringify([{ path: tgtPath, branch: "feature", dirty: true }]));
         }
-        if (input.command === "git" && input.args?.includes("ls-files")) {
-          return result(input, "untracked.txt\0nested/deep.txt\0");
+        // Run the seed's git plumbing for real against the temp repos.
+        if (input.command === "git") {
+          return nodeExternalCommandRunner(input);
         }
-        // git stash create: no tracked changes in this fixture.
         return result(input, "");
       },
     });
@@ -332,21 +356,34 @@ describe("WorktrunkProvider", () => {
       // The post-seed re-list surfaces the copied dirty state on the returned observation.
       expect(created).toMatchObject({ branch: "feature", dirty: true });
 
-      // Untracked files (incl. nested) are really copied into the target worktree.
+      // The full working tree really lands in the target (git did the materialization):
+      // unstaged mod, staged mod, untracked (incl. nested), and the tracked deletion.
+      expect(await readFile(join(tgtPath, "tracked.txt"), "utf8")).toBe("base\nunstaged\n");
+      expect(await readFile(join(tgtPath, "staged.txt"), "utf8")).toBe("base\nstaged\n");
       expect(await readFile(join(tgtPath, "untracked.txt"), "utf8")).toBe("untracked-contents");
       expect(await readFile(join(tgtPath, "nested", "deep.txt"), "utf8")).toBe("deep-contents");
+      await expect(readFile(join(tgtPath, "deleteme.txt"))).rejects.toThrow();
 
-      // Tracked changes travel via a stash object; untracked via ls-files relative to the
-      // source (no cwd dependency, no shell pipeline to mask a failure).
-      const seedCommands = calls
-        .filter((call) => call.command === "git")
-        .map((call) => (call.args ?? []).join(" "));
-      expect(seedCommands).toEqual([
-        `-C ${srcPath} stash create`,
-        `-C ${srcPath} ls-files --others --exclude-standard -z`,
+      // The seed is read-only: the source worktree is byte-for-byte unchanged, so a live
+      // agent running there is never disturbed.
+      expect((await git(srcPath, "status", "--porcelain")).stdout).toBe(srcStatusBefore);
+
+      // The seed is a temp-index snapshot — read-tree HEAD -> add -A -> write-tree against
+      // a throwaway index in the source, materialized via read-tree -m -u in the target.
+      const seedCalls = calls.filter((call) => call.command === "git");
+      expect(seedCalls).toHaveLength(4);
+      expect(seedCalls.slice(0, 3).map((call) => call.args)).toEqual([
+        ["-C", srcPath, "read-tree", "HEAD"],
+        ["-C", srcPath, "add", "-A"],
+        ["-C", srcPath, "write-tree"],
       ]);
+      expect(
+        seedCalls.slice(0, 3).every((call) => typeof call.env?.GIT_INDEX_FILE === "string"),
+      ).toBe(true);
+      expect(seedCalls[3]?.args?.slice(0, 5)).toEqual(["-C", tgtPath, "read-tree", "-m", "-u"]);
+      expect(seedCalls[3]?.args?.[5]).toMatch(/^[0-9a-f]{40}$/);
 
-      // The fork's base is pinned to the source branch so the seeded apply is conflict-free.
+      // The fork's base is pinned to the source branch so the seed materializes cleanly.
       const switchCall = calls.find((c) => c.command === "wt" && c.args?.[0] === "switch");
       expect(switchCall?.args).toContain("source-branch");
     } finally {
