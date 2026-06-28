@@ -26,11 +26,10 @@ export type WorktreeForkHandlerOptions = {
 };
 
 /**
- * Worktree-only half of session.fork for Station: branch off the source
- * worktree's HEAD and seed its working tree (when copyDirty), then let Station
- * host the inherited harness itself via prepareExternalLaunch. Unlike
- * session.fork it mints no session and launches no terminal. There is no
- * live-agent guard on the source — the seed is a read-only snapshot.
+ * Worktree-only half of session.fork: branch off the source HEAD and seed its
+ * working tree (when copyDirty), minting no session and launching no terminal so
+ * Station can host the inherited harness itself. No live-agent guard on the
+ * source — the seed is a read-only snapshot.
  */
 export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): CommandHandler {
   return async (context) => {

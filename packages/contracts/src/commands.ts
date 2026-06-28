@@ -39,10 +39,7 @@ export const RemoveWorktreePayloadSchema = z
 
 export type RemoveWorktreePayload = z.infer<typeof RemoveWorktreePayloadSchema>;
 
-// Worktree-only half of session.fork for Station: create a new branch off the
-// source worktree's HEAD and seed its working tree (when copyDirty), without
-// minting a session or launching a terminal. Station then hosts the inherited
-// harness itself via prepareExternalLaunch.
+// Fork a worktree: new branch off the source HEAD, optionally seeding its working tree.
 export const ForkWorktreePayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
