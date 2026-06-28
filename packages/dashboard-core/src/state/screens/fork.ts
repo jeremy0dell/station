@@ -100,15 +100,12 @@ export function openForkDetailsForRow(
 function suggestForkBranch(sourceBranch: string, rows: readonly WorktreeRow[]): string {
   const taken = new Set(rows.map((row) => row.branch));
   const base = `${sourceBranch}-fork`;
-  if (!taken.has(base)) {
-    return base;
+  // `taken` is finite, so an unused suffix is always found within taken.size + 1 tries.
+  let candidate = base;
+  for (let suffix = 2; taken.has(candidate); suffix += 1) {
+    candidate = `${base}-${suffix}`;
   }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${base}-${suffix}`;
-    if (!taken.has(candidate)) {
-      return candidate;
-    }
-  }
+  return candidate;
 }
 
 function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScreen): TuiTransition {
@@ -132,16 +129,14 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
     return {
       state: {
         ...state,
-        screen: detailsScreen(screen, { focus: cycleFocus(screen.focus, key.upArrow === true) }),
+        screen: { ...screen, focus: cycleFocus(screen.focus, key.upArrow === true) },
       },
     };
   }
 
   if (screen.focus === "copyDirty") {
     if (key.input === " " || key.leftArrow === true || key.rightArrow === true) {
-      return {
-        state: { ...state, screen: detailsScreen(screen, { copyDirty: !screen.copyDirty }) },
-      };
+      return { state: { ...state, screen: { ...screen, copyDirty: !screen.copyDirty } } };
     }
     return { state };
   }
@@ -154,10 +149,11 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
     return {
       state: {
         ...state,
-        screen: detailsScreen(screen, {
+        screen: {
+          ...screen,
           draftBranch: transitionEditableTextInput(screen.draftBranch, intent.action),
           nameSource: "edited",
-        }),
+        },
       },
     };
   }
@@ -168,12 +164,12 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
 function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
   const branch = screen.draftBranch.value.trim();
   if (branch.length === 0) {
-    return invalid(state, screen, "Branch name cannot be empty.");
+    return rejected(state, screen, "Branch name cannot be empty.");
   }
 
   const rows = state.snapshot?.rows ?? [];
   if (rows.some((row) => row.branch === branch)) {
-    return invalid(state, screen, `A worktree on "${branch}" already exists.`);
+    return rejected(state, screen, `A worktree on "${branch}" already exists.`);
   }
 
   const project = state.snapshot?.projects.find((candidate) => candidate.id === screen.projectId);
@@ -208,8 +204,9 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
   };
 }
 
-function invalid(state: TuiState, screen: ForkDetailsScreen, message: string): TuiTransition {
-  return { state: { ...state, screen: detailsScreen(screen, { validationError: message }) } };
+// The validation error rides on the spread and clears on the next submit, which re-validates.
+function rejected(state: TuiState, screen: ForkDetailsScreen, message: string): TuiTransition {
+  return { state: { ...state, screen: { ...screen, validationError: message } } };
 }
 
 function cycleFocus(
@@ -220,38 +217,4 @@ function cycleFocus(
   const delta = backwards ? -1 : 1;
   const next = (index + delta + FOCUS_ORDER.length) % FOCUS_ORDER.length;
   return FOCUS_ORDER[next] ?? "branch";
-}
-
-// Rebuilds the details screen, clearing the validation error unless one is set in this
-// edit. Conditional assignment preserves exactOptionalPropertyTypes for optional fields.
-function detailsScreen(
-  screen: ForkDetailsScreen,
-  changes: Partial<
-    Pick<
-      ForkDetailsScreen,
-      "draftBranch" | "nameSource" | "copyDirty" | "focus" | "validationError"
-    >
-  >,
-): ForkDetailsScreen {
-  const next: ForkDetailsScreen = {
-    name: "fork",
-    step: "details",
-    sourceWorktreeId: screen.sourceWorktreeId,
-    projectId: screen.projectId,
-    projectLabel: screen.projectLabel,
-    sourceBranch: screen.sourceBranch,
-    sourceDirty: screen.sourceDirty,
-    sourceAgentRunning: screen.sourceAgentRunning,
-    draftBranch: changes.draftBranch ?? screen.draftBranch,
-    nameSource: changes.nameSource ?? screen.nameSource,
-    copyDirty: changes.copyDirty ?? screen.copyDirty,
-    focus: changes.focus ?? screen.focus,
-  };
-  if (screen.returnTo !== undefined) {
-    next.returnTo = screen.returnTo;
-  }
-  if (changes.validationError !== undefined) {
-    next.validationError = changes.validationError;
-  }
-  return next;
 }
