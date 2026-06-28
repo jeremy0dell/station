@@ -1,6 +1,6 @@
-import { constants as fsConstants } from "node:fs";
-import { copyFile, lstat, mkdir, readlink, symlink } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import type {
   CreateWorktreeRequest,
   DiagnosticDetail,
@@ -55,10 +55,6 @@ export type WorktrunkProviderOptions = {
   runner?: ExternalCommandRunner;
   clock?: RuntimeClock;
 };
-
-// The untracked-file list (paths only, .gitignore-filtered) is captured into memory;
-// generous cap so large dirty trees are not silently truncated.
-const SEED_LS_FILES_MAX_OUTPUT_CHARS = 16 * 1024 * 1024;
 
 const defaultCapabilities: WorktreeCapabilities = {
   canCreate: true,
@@ -267,63 +263,37 @@ export class WorktrunkProvider implements WorktreeProvider {
     return found;
   }
 
-  // Copies the source worktree's uncommitted working tree (staged, unstaged, and
-  // untracked) into the freshly created worktree. Worktrees in one repo share a
-  // single object store, so a stash commit created in the source is reachable from
-  // the target. The new branch must be based on the source's HEAD for a clean apply.
   async #seedWorkingTree(srcPath: string, tgtPath: string): Promise<void> {
-    const created = await this.#runSeedCommand("git", ["-C", srcPath, "stash", "create"]);
-    const stashSha = created.stdout.trim();
-    if (stashSha.length > 0) {
-      // --index preserves the staged/unstaged split and, on a divergent base,
-      // refuses atomically (leaving the target clean) instead of writing markers.
-      await this.#runSeedCommand("git", ["-C", tgtPath, "stash", "apply", "--index", stashSha]);
-    }
-    await this.#copyUntrackedFiles(srcPath, tgtPath);
-  }
-
-  // `git stash create` never captures untracked files, so copy them explicitly.
-  // ls-files emits NUL-separated paths relative to the source worktree (honoring
-  // .gitignore), copied file-by-file so any failure surfaces instead of being masked
-  // by a shell pipeline, and resolved against the source so cwd never matters.
-  async #copyUntrackedFiles(srcPath: string, tgtPath: string): Promise<void> {
-    const listed = await this.#runSeedCommand(
-      "git",
-      ["-C", srcPath, "ls-files", "--others", "--exclude-standard", "-z"],
-      SEED_LS_FILES_MAX_OUTPUT_CHARS,
-    );
-    const relativePaths = listed.stdout.split("\0").filter((entry) => entry.length > 0);
+    const indexDir = await mkdtemp(join(tmpdir(), "wt-seed-index-"));
+    // Snapshot the source's full working tree via a throwaway index, so `add -A` never
+    // writes the source's real index. Collapses the staged/unstaged split — everything
+    // lands staged in the target, which is fine for a fork.
+    const env = { GIT_INDEX_FILE: join(indexDir, "index") };
     try {
-      for (const relativePath of relativePaths) {
-        const from = join(srcPath, relativePath);
-        const to = join(tgtPath, relativePath);
-        await mkdir(dirname(to), { recursive: true });
-        const stats = await lstat(from);
-        if (stats.isSymbolicLink()) {
-          // Preserve the link instead of dereferencing it (and avoid failing on a
-          // dangling target). Keep an existing target (mirrors a no-clobber copy).
-          await keepExisting(symlink(await readlink(from), to));
-        } else {
-          await keepExisting(copyFile(from, to, fsConstants.COPYFILE_EXCL));
-        }
-      }
-    } catch (cause) {
-      throw new WorktrunkProviderError(
-        "WORKTRUNK_SEED_FAILED",
-        "Worktrunk created the worktree but failed to copy untracked files from the source.",
-        { cause },
-      );
+      await this.#runSeedCommand("git", ["-C", srcPath, "read-tree", "HEAD"], { env });
+      await this.#runSeedCommand("git", ["-C", srcPath, "add", "-A"], { env });
+      const written = await this.#runSeedCommand("git", ["-C", srcPath, "write-tree"], { env });
+      const tree = written.stdout.trim();
+      // Materialize the snapshot in the target (incl. deletions); a clean source yields
+      // HEAD's tree, so this is a no-op.
+      await this.#runSeedCommand("git", ["-C", tgtPath, "read-tree", "-m", "-u", tree]);
+    } finally {
+      await rm(indexDir, { recursive: true, force: true });
     }
   }
 
-  async #runSeedCommand(command: string, args: string[], maxOutputChars?: number) {
+  async #runSeedCommand(
+    command: string,
+    args: string[],
+    options?: { env?: Record<string, string> },
+  ) {
     try {
       return await runExternalCommand(
         {
           command,
           args,
           timeoutMs: this.#timeoutMs,
-          ...(maxOutputChars === undefined ? {} : { maxOutputChars }),
+          ...(options?.env === undefined ? {} : { env: options.env }),
         },
         this.#runner,
       );
@@ -811,18 +781,6 @@ function isMainWorktree(project: ProviderProjectConfig, observation: WorktreeObs
     samePath(observation.path, project.root) ||
     (defaultBranch !== undefined && observation.branch === defaultBranch)
   );
-}
-
-// Treat an already-present target as success so files seeded by worktrunk lifecycle
-// hooks (e.g. copy-ignored) are not clobbered; any other error propagates.
-async function keepExisting(operation: Promise<unknown>): Promise<void> {
-  try {
-    await operation;
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw cause;
-    }
-  }
 }
 
 function worktreePathEnv(
