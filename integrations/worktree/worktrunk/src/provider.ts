@@ -1,4 +1,6 @@
-import { isAbsolute, normalize, relative, resolve } from "node:path";
+import { constants as fsConstants } from "node:fs";
+import { copyFile, lstat, mkdir, readlink, symlink } from "node:fs/promises";
+import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import type {
   CreateWorktreeRequest,
   DiagnosticDetail,
@@ -53,6 +55,10 @@ export type WorktrunkProviderOptions = {
   runner?: ExternalCommandRunner;
   clock?: RuntimeClock;
 };
+
+// The untracked-file list (paths only, .gitignore-filtered) is captured into memory;
+// generous cap so large dirty trees are not silently truncated.
+const SEED_LS_FILES_MAX_OUTPUT_CHARS = 16 * 1024 * 1024;
 
 const defaultCapabilities: WorktreeCapabilities = {
   canCreate: true,
@@ -237,8 +243,18 @@ export class WorktrunkProvider implements WorktreeProvider {
         "Worktrunk create did not return or list the created worktree.",
       );
     }
+    // Cache before seeding so the cleanup path can resolve the worktree if seeding fails.
+    this.#observations.set(found.id, found);
     if (request.seedFrom !== undefined) {
-      await this.#seedWorkingTree(request.seedFrom.path, found.path);
+      try {
+        await this.#seedWorkingTree(request.seedFrom.path, found.path);
+      } catch (seedError) {
+        // Seeding failed after the worktree was created. Remove it so callers never
+        // inherit a half-seeded worktree; best-effort, then rethrow the seed cause.
+        await this.removeWorktree({ worktreeId: found.id, force: true }).catch(() => {});
+        this.#observations.delete(found.id);
+        throw seedError;
+      }
       // Re-list so the seeded dirty state is observed before we return; listWorktrees
       // refreshes the observation cache, so the caller sees the post-seed status.
       const refreshed = (await this.listWorktrees(request.project)).find(
@@ -248,7 +264,6 @@ export class WorktrunkProvider implements WorktreeProvider {
         return refreshed;
       }
     }
-    this.#observations.set(found.id, found);
     return found;
   }
 
@@ -264,27 +279,51 @@ export class WorktrunkProvider implements WorktreeProvider {
       // refuses atomically (leaving the target clean) instead of writing markers.
       await this.#runSeedCommand("git", ["-C", tgtPath, "stash", "apply", "--index", stashSha]);
     }
-    // `git stash create` silently drops untracked files, so copy them separately.
-    // Paths go through env (never the shell token stream) and the file bytes stream
-    // process-to-process, so they never hit the captured stdout buffer.
-    await this.#runSeedCommand(
-      "sh",
-      [
-        "-c",
-        'git -C "$SEED_SRC" ls-files --others --exclude-standard -z | tar --null -T - -cf - | tar -k -C "$SEED_TGT" -xf -',
-      ],
-      { SEED_SRC: srcPath, SEED_TGT: tgtPath },
-    );
+    await this.#copyUntrackedFiles(srcPath, tgtPath);
   }
 
-  async #runSeedCommand(command: string, args: string[], env?: Record<string, string>) {
+  // `git stash create` never captures untracked files, so copy them explicitly.
+  // ls-files emits NUL-separated paths relative to the source worktree (honoring
+  // .gitignore), copied file-by-file so any failure surfaces instead of being masked
+  // by a shell pipeline, and resolved against the source so cwd never matters.
+  async #copyUntrackedFiles(srcPath: string, tgtPath: string): Promise<void> {
+    const listed = await this.#runSeedCommand(
+      "git",
+      ["-C", srcPath, "ls-files", "--others", "--exclude-standard", "-z"],
+      SEED_LS_FILES_MAX_OUTPUT_CHARS,
+    );
+    const relativePaths = listed.stdout.split("\0").filter((entry) => entry.length > 0);
+    try {
+      for (const relativePath of relativePaths) {
+        const from = join(srcPath, relativePath);
+        const to = join(tgtPath, relativePath);
+        await mkdir(dirname(to), { recursive: true });
+        const stats = await lstat(from);
+        if (stats.isSymbolicLink()) {
+          // Preserve the link instead of dereferencing it (and avoid failing on a
+          // dangling target). Keep an existing target (mirrors a no-clobber copy).
+          await keepExisting(symlink(await readlink(from), to));
+        } else {
+          await keepExisting(copyFile(from, to, fsConstants.COPYFILE_EXCL));
+        }
+      }
+    } catch (cause) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_SEED_FAILED",
+        "Worktrunk created the worktree but failed to copy untracked files from the source.",
+        { cause },
+      );
+    }
+  }
+
+  async #runSeedCommand(command: string, args: string[], maxOutputChars?: number) {
     try {
       return await runExternalCommand(
         {
           command,
           args,
           timeoutMs: this.#timeoutMs,
-          ...(env === undefined ? {} : { env }),
+          ...(maxOutputChars === undefined ? {} : { maxOutputChars }),
         },
         this.#runner,
       );
@@ -772,6 +811,18 @@ function isMainWorktree(project: ProviderProjectConfig, observation: WorktreeObs
     samePath(observation.path, project.root) ||
     (defaultBranch !== undefined && observation.branch === defaultBranch)
   );
+}
+
+// Treat an already-present target as success so files seeded by worktrunk lifecycle
+// hooks (e.g. copy-ignored) are not clobbered; any other error propagates.
+async function keepExisting(operation: Promise<unknown>): Promise<void> {
+  try {
+    await operation;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw cause;
+    }
+  }
 }
 
 function worktreePathEnv(

@@ -76,6 +76,27 @@
       "initialPrompt": "Continue the recovered task."
     }
   },
+  "sessionFork": {
+    "type": "session.fork",
+    "payload": {
+      "projectId": "api",
+      "sourceWorktreeId": "wt_api_cache",
+      "branch": "feature/cache-fork",
+      "base": "feature/cache",
+      "copyDirty": true,
+      "harness": {
+        "provider": "codex",
+        "mode": "interactive",
+        "profile": "default"
+      },
+      "terminal": {
+        "provider": "tmux",
+        "layout": "default",
+        "focus": false
+      },
+      "initialPrompt": "Continue from the forked state."
+    }
+  },
   "terminalFocus": {
     "type": "terminal.focus",
     "payload": {

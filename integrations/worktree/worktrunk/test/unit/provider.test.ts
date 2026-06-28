@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { WorktrunkProvider } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
@@ -291,6 +294,13 @@ describe("WorktrunkProvider", () => {
   });
 
   it("seeds the new worktree's working tree from a source path when seedFrom is set", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wt-seed-"));
+    const srcPath = join(root, "source");
+    const tgtPath = join(root, "feature");
+    await mkdir(join(srcPath, "nested"), { recursive: true });
+    await writeFile(join(srcPath, "untracked.txt"), "untracked-contents");
+    await writeFile(join(srcPath, "nested", "deep.txt"), "deep-contents");
+
     const calls: ExternalCommandInput[] = [];
     const provider = new WorktrunkProvider({
       command: "wt",
@@ -298,54 +308,50 @@ describe("WorktrunkProvider", () => {
       runner: async (input) => {
         calls.push(input);
         if (input.command === "wt" && input.args?.[0] === "switch") {
-          return result(
-            input,
-            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
-          );
+          return result(input, JSON.stringify([{ path: tgtPath, branch: "feature" }]));
         }
         if (input.command === "wt" && input.args?.[0] === "list") {
-          return result(
-            input,
-            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature", dirty: true }]),
-          );
+          return result(input, JSON.stringify([{ path: tgtPath, branch: "feature", dirty: true }]));
         }
-        if (input.command === "git" && input.args?.includes("create")) {
-          return result(input, "stashsha123\n");
+        if (input.command === "git" && input.args?.includes("ls-files")) {
+          return result(input, "untracked.txt\0nested/deep.txt\0");
         }
+        // git stash create: no tracked changes in this fixture.
         return result(input, "");
       },
     });
 
-    const created = await provider.createWorktree({
-      project,
-      branch: "feature",
-      base: "source-branch",
-      seedFrom: { path: "/tmp/station/web/source" },
-    });
+    try {
+      const created = await provider.createWorktree({
+        project,
+        branch: "feature",
+        base: "source-branch",
+        seedFrom: { path: srcPath },
+      });
 
-    // The post-seed re-list surfaces the copied dirty state on the returned observation.
-    expect(created).toMatchObject({ branch: "feature", dirty: true });
+      // The post-seed re-list surfaces the copied dirty state on the returned observation.
+      expect(created).toMatchObject({ branch: "feature", dirty: true });
 
-    // Tracked changes travel via a stash object; untracked files via a shell pipeline.
-    const seedCalls = calls
-      .filter((call) => call.command === "git" || call.command === "sh")
-      .map((call) => [call.command, ...(call.args ?? [])]);
-    expect(seedCalls).toEqual([
-      ["git", "-C", "/tmp/station/web/source", "stash", "create"],
-      ["git", "-C", "/tmp/station/web/feature", "stash", "apply", "--index", "stashsha123"],
-      ["sh", "-c", expect.stringContaining("ls-files --others --exclude-standard")],
-    ]);
+      // Untracked files (incl. nested) are really copied into the target worktree.
+      expect(await readFile(join(tgtPath, "untracked.txt"), "utf8")).toBe("untracked-contents");
+      expect(await readFile(join(tgtPath, "nested", "deep.txt"), "utf8")).toBe("deep-contents");
 
-    // Untracked-copy paths go through env so they are never parsed as shell tokens.
-    const shCall = calls.find((call) => call.command === "sh");
-    expect(shCall?.env).toEqual({
-      SEED_SRC: "/tmp/station/web/source",
-      SEED_TGT: "/tmp/station/web/feature",
-    });
+      // Tracked changes travel via a stash object; untracked via ls-files relative to the
+      // source (no cwd dependency, no shell pipeline to mask a failure).
+      const seedCommands = calls
+        .filter((call) => call.command === "git")
+        .map((call) => (call.args ?? []).join(" "));
+      expect(seedCommands).toEqual([
+        `-C ${srcPath} stash create`,
+        `-C ${srcPath} ls-files --others --exclude-standard -z`,
+      ]);
 
-    // The fork's base is pinned to the source branch so the seeded apply is conflict-free.
-    const switchCall = calls.find((call) => call.command === "wt" && call.args?.[0] === "switch");
-    expect(switchCall?.args).toContain("source-branch");
+      // The fork's base is pinned to the source branch so the seeded apply is conflict-free.
+      const switchCall = calls.find((c) => c.command === "wt" && c.args?.[0] === "switch");
+      expect(switchCall?.args).toContain("source-branch");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("skips Worktrunk hooks for automated mutations when lifecycle hooks are disabled", async () => {
