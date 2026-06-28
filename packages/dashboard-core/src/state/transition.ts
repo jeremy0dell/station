@@ -3,6 +3,7 @@ import type { TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
+import { handleForkKey } from "./screens/fork.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
@@ -51,6 +52,8 @@ export function handleTuiKey(
       return handleRemoveWorktreeKey(state, key);
     case "renameSession":
       return handleRenameSessionKey(state, key);
+    case "fork":
+      return handleForkKey(state, key);
     case "newSession":
       return handleNewSessionKey(state, key);
     case "projectDefaultAgent":

@@ -77,6 +77,13 @@ function handleDashboardBinding(
           screen: { name: "renameSession", step: "chooseSlot" },
         },
       };
+    case "tui.fork.open":
+      return {
+        state: {
+          ...state,
+          screen: { name: "fork", step: "chooseSlot" },
+        },
+      };
     case "tui.refresh":
       return {
         state,

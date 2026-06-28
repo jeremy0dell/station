@@ -11,6 +11,8 @@ export type TuiInputMode =
   | "removeConfirm"
   | "renameChooseSlot"
   | "renameEdit"
+  | "forkChooseSlot"
+  | "forkDetails"
   | "newSessionReview"
   | "newSessionEditName"
   | "newSessionPickProject"
@@ -33,6 +35,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
+    case "fork":
+      return screen.step === "chooseSlot" ? "forkChooseSlot" : "forkDetails";
     case "newSession":
       switch (screen.flow.mode) {
         case "review":
@@ -134,6 +138,13 @@ export const TUI_KEYMAP = {
       action: "tui.rename.open",
       outcome: "handled",
       help: { keys: "R", label: "rename" },
+    },
+    {
+      id: "tui.dashboard.fork",
+      pattern: { kind: "char", char: "F" },
+      action: "tui.fork.open",
+      outcome: "handled",
+      help: { keys: "F", label: "fork" },
     },
     {
       id: "tui.dashboard.refresh",
@@ -407,6 +418,94 @@ export const TUI_KEYMAP = {
       pattern: { kind: "text" },
       action: "tui.rename.edit",
       outcome: "handled",
+    },
+  ],
+  forkChooseSlot: [
+    {
+      id: "tui.fork.cancel",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.fork.cancel",
+      outcome: "handled",
+      help: { keys: "esc", label: "cancel" },
+    },
+    {
+      id: "tui.fork.scrollUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.view.scrollUp",
+      outcome: "handled",
+    },
+    {
+      id: "tui.fork.scrollDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.view.scrollDown",
+      outcome: "handled",
+    },
+    {
+      id: "tui.fork.chooseSlot",
+      pattern: { kind: "slot" },
+      action: "tui.fork.chooseSlot",
+      outcome: "handled",
+      help: { keys: "1-9 a-z", label: "choose source" },
+    },
+  ],
+  forkDetails: [
+    {
+      id: "tui.forkDetails.back",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.fork.back",
+      outcome: "handled",
+      help: { keys: "esc", label: "back" },
+    },
+    {
+      id: "tui.forkDetails.submit",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.fork.submit",
+      outcome: "handled",
+      help: { keys: "enter", label: "fork" },
+    },
+    {
+      id: "tui.forkDetails.focusUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.fork.focus",
+      outcome: "handled",
+    },
+    {
+      id: "tui.forkDetails.focusDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.fork.focus",
+      outcome: "handled",
+      help: { keys: "↑↓", label: "field" },
+    },
+    {
+      id: "tui.forkDetails.cursorLeft",
+      pattern: { kind: "named", named: "left" },
+      action: "tui.fork.detailKey",
+      outcome: "handled",
+    },
+    {
+      id: "tui.forkDetails.cursorRight",
+      pattern: { kind: "named", named: "right" },
+      action: "tui.fork.detailKey",
+      outcome: "handled",
+    },
+    {
+      id: "tui.forkDetails.backspace",
+      pattern: { kind: "named", named: "backspace" },
+      action: "tui.fork.detailKey",
+      outcome: "handled",
+    },
+    {
+      id: "tui.forkDetails.delete",
+      pattern: { kind: "named", named: "delete" },
+      action: "tui.fork.detailKey",
+      outcome: "handled",
+    },
+    {
+      id: "tui.forkDetails.type",
+      pattern: { kind: "text" },
+      action: "tui.fork.detailKey",
+      outcome: "handled",
+      help: { keys: "space", label: "toggle copy" },
     },
   ],
   newSessionReview: [
