@@ -6,6 +6,7 @@
 // never touch the store.
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
+import { isRemoveProjectArmed } from "@station/dashboard-core";
 import type { ProjectSettingsItemId, TuiStore } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
@@ -215,12 +216,19 @@ export function routeStationMouse(
       }
       focusProjectSettingsItem(store, target.itemId);
       return { kind: "handled" };
-    case "projectSettingsConfirmRemove":
+    case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {
         return { kind: "handled" };
       }
-      // The armed-remove guard lives in the machine; "r" fires only when matched.
-      return fromKeyOutcome(dispatchStationKey(store, { input: "r" }));
+      // Only an armed button fires. Dispatching "r" while unarmed would be typed
+      // into the confirm field (the machine treats "r" as editable text until the
+      // phrase matches), so guard the click here rather than emit a stray key.
+      const { screen } = store.getState();
+      if (screen.name === "projectSettings" && isRemoveProjectArmed(screen)) {
+        return fromKeyOutcome(dispatchStationKey(store, { input: "r" }));
+      }
+      return { kind: "handled" };
+    }
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };

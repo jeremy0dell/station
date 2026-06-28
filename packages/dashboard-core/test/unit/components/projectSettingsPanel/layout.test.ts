@@ -11,7 +11,8 @@ describe("project settings panel layout", () => {
       left: 16,
       top: 10,
       innerWidth: 86,
-      contentHeight: 17,
+      // height 20 - border(2) - title(1) - footer(1).
+      contentHeight: 16,
       // ratio 0.4 of 86 = 34 → clamped to LEFT_COLUMN_MAX.
       leftWidth: 26,
       rightWidth: 59,

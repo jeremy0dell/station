@@ -7,6 +7,11 @@ import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import { selectDashboardViewport } from "@station/dashboard-core";
 import { addTuiToast } from "@station/dashboard-core";
+import {
+  createEditableTextInputState,
+  openProjectSettings,
+  removeProjectConfirmPhrase,
+} from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import { agentWorktreePaneId } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
@@ -459,6 +464,67 @@ describe("routeStationMouse", () => {
       store,
     );
     expect(store.getState().screen?.name).not.toBe("projectDefaultAgent");
+  });
+
+  it("focuses a settings item on click and leaves an unarmed remove click inert", () => {
+    const store = makeStore();
+    store.setState(openProjectSettings(store.getState(), "station"));
+
+    // Clicking a left-list item drops into its detail pane.
+    routeStationMouse({ kind: "projectSettingsItem", itemId: "remove" }, LEFT_DOWN, store);
+    expect(store.getState().screen).toMatchObject({
+      name: "projectSettings",
+      activeId: "remove",
+      focus: "detail",
+    });
+
+    // Unarmed: the confirm click must not dispatch "r" (which the machine would
+    // type into the confirm field) nor fire removal.
+    const outcome = routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store);
+    expect(outcome).toEqual({ kind: "handled" });
+    const after = store.getState().screen;
+    expect(after.name).toBe("projectSettings");
+    if (after.name === "projectSettings") {
+      expect(after.removeDraft.value).toBe("");
+    }
+  });
+
+  it("fires removal when the armed remove confirmation is clicked", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 12 });
+    const store = fixture.store;
+    store.setState({
+      ...store.getState(),
+      screen: {
+        name: "projectSettings",
+        projectId: "station",
+        focus: "detail",
+        activeId: "remove",
+        removeDraft: createEditableTextInputState(removeProjectConfirmPhrase("station")),
+      },
+    });
+
+    const outcome = routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    await waitFor(() =>
+      fixture.service.dispatched.some(
+        (command) => command.type === "project.remove" && command.payload.projectId === "station",
+      ),
+    );
+  });
+
+  it("ignores project-settings targets outside projectSettings mode", () => {
+    const store = makeStore();
+    const before = store.getState().screen;
+
+    expect(
+      routeStationMouse({ kind: "projectSettingsItem", itemId: "remove" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+    expect(
+      routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store),
+    ).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual(before);
   });
 });
 

@@ -221,6 +221,7 @@ export function createTuiLocalOperationRunner(input: {
             input.service,
             operation.command,
             input.clientLabel,
+            (commandId) => handledCommandFailureIds.add(commandId),
           );
         }
         if (operation.type === "removeProject") {
@@ -229,6 +230,7 @@ export function createTuiLocalOperationRunner(input: {
             input.service,
             operation.command,
             input.clientLabel,
+            (commandId) => handledCommandFailureIds.add(commandId),
           );
         }
       }
@@ -265,6 +267,7 @@ async function runSetProjectDefaultHarnessOperation(
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
   clientLabel: string,
+  markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
   try {
     const receipt = await service.dispatch(command);
@@ -279,6 +282,10 @@ async function runSetProjectDefaultHarnessOperation(
       );
       return;
     }
+    // This op shows its own failure toast below, so claim the command's failure
+    // before awaiting: the observer's command.failed notice is then suppressed
+    // regardless of which path resolves first (otherwise both fire).
+    markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
       addSafeCommandToast(store, completion.error);
@@ -301,6 +308,7 @@ async function runRemoveProjectOperation(
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "project.remove" }>,
   clientLabel: string,
+  markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
   // Read the label before dispatch; the post-reload snapshot no longer has it.
   const label = store
@@ -319,6 +327,10 @@ async function runRemoveProjectOperation(
       );
       return;
     }
+    // This op shows its own failure toast below, so claim the command's failure
+    // before awaiting: the observer's command.failed notice is then suppressed
+    // regardless of which path resolves first (otherwise both fire).
+    markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
       addSafeCommandToast(store, completion.error);

@@ -58,7 +58,7 @@ export function ProjectSettingsPanelView({
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{` ${title}`}</text>
+      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{fit(` ${title}`, innerWidth)}</text>
       <box flexDirection="row" width={innerWidth} height={contentHeight}>
         <box flexDirection="column" width={leftWidth}>
           <ItemList screen={screen} width={leftWidth} />
@@ -123,9 +123,15 @@ function AgentDetail({
     <>
       <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{fit(" Default agent", width)}</text>
       <SheetLine width={width}> </SheetLine>
-      <AgentChoiceListView choices={choices} width={width} />
-      <SheetLine width={width}> </SheetLine>
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" 1-9/a-z select", width)}</text>
+      {choices.length === 0 ? (
+        <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" No agents available", width)}</text>
+      ) : (
+        <>
+          <AgentChoiceListView choices={choices} width={width} />
+          <SheetLine width={width}> </SheetLine>
+          <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" 1-9/a-z select", width)}</text>
+        </>
+      )}
     </>
   );
 }

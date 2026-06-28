@@ -16,7 +16,6 @@ import {
   focusProjectSettingsItem as focusProjectSettingsItemState,
   generatedSessionBranch,
   openProjectDefaultAgentPicker,
-  openProjectSettings,
   selectDashboardViewport,
   type ProjectSettingsItemId,
 } from "@station/dashboard-core";
@@ -282,11 +281,6 @@ export function openDefaultAgentPickerForProject(
   projectId: string,
 ): void {
   store.setState(openProjectDefaultAgentPicker(store.getState(), projectId));
-}
-
-/** Open the two-pane Project Settings panel. Absent projects are ignored. */
-export function openProjectSettingsPanel(store: StoreApi<TuiStore>, projectId: string): void {
-  store.setState(openProjectSettings(store.getState(), projectId));
 }
 
 /**

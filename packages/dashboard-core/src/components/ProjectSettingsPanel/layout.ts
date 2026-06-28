@@ -27,9 +27,9 @@ export function projectSettingsPanelLayout(
 ): ProjectSettingsPanelLayout {
   const width = Math.min(Math.max(MIN_PANEL_WIDTH, columns - SCREEN_MARGIN_X), MAX_PANEL_WIDTH);
   const height = Math.min(Math.max(MIN_PANEL_HEIGHT, rows - SCREEN_MARGIN_Y), MAX_PANEL_HEIGHT);
-  // Frame chrome consumed by the border (2) plus the title and footer rows.
+  // Frame chrome consumed by the border (2) plus the title and footer rows (2).
   const innerWidth = width - 2;
-  const contentHeight = Math.max(1, height - 3);
+  const contentHeight = Math.max(1, height - 4);
   const leftWidth = Math.min(
     LEFT_COLUMN_MAX,
     Math.max(LEFT_COLUMN_MIN, Math.floor(innerWidth * LEFT_COLUMN_RATIO)),

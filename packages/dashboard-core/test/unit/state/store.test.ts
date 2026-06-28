@@ -361,6 +361,49 @@ describe("TUI store", () => {
     expect(service.loadCount).toBe(0);
   });
 
+  it("shows a single toast when a failed default-harness command also broadcasts command.failed", async () => {
+    const snapshot = createDashboardSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    const failure: SafeError = {
+      tag: "ProjectConfigError",
+      code: "PROJECT_DEFAULT_HARNESS_OVERRIDDEN",
+      message: "Project-local config keeps claude effective.",
+    };
+    service.nextCompletion = { status: "failed", commandId: "cmd_tui_1", error: failure };
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const stop = store.getState().start();
+    await waitFor(() => service.subscribeCount === 1);
+
+    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
+    store.getState().handleKey({ input: "2" });
+
+    // The op registers the command before awaiting, so the observer's separate
+    // command.failed broadcast must be suppressed (one toast, not two). A second
+    // unrelated failure is emitted after as an ordering barrier: once its toast
+    // lands, the earlier event has already been processed (FIFO).
+    await waitFor(() => service.waitedForCommandIds.includes("cmd_tui_1"));
+    service.emit({ type: "command.failed", commandId: "cmd_tui_1", error: failure });
+    service.emit({
+      type: "command.failed",
+      commandId: "cmd_other",
+      error: {
+        tag: "CommandExecutionError",
+        code: "COMMAND_REJECTED",
+        message: "Unrelated failure.",
+      },
+    });
+
+    await waitFor(
+      () =>
+        store.getState().toasts.some((entry) => entry.toast.message === failure.message) &&
+        store.getState().toasts.some((entry) => entry.toast.message === "Unrelated failure."),
+    );
+    expect(
+      store.getState().toasts.filter((entry) => entry.toast.message === failure.message),
+    ).toHaveLength(1);
+    stop();
+  });
+
   it("reviews a pasted full path when folder filtering has no matches", async () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);

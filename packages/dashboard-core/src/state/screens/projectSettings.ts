@@ -65,7 +65,11 @@ export function focusProjectSettingsItem(state: TuiState, itemId: ProjectSetting
   if (state.screen.name !== "projectSettings") {
     return state;
   }
-  return { ...state, screen: { ...state.screen, activeId: itemId, focus: "detail" } };
+  const screen: ProjectSettingsScreen = { ...state.screen, activeId: itemId, focus: "detail" };
+  if (itemId !== "remove") {
+    screen.removeDraft = createEditableTextInputState("");
+  }
+  return { ...state, screen };
 }
 
 export function handleProjectSettingsKey(state: TuiState, key: TuiKey): TuiTransition {
@@ -191,7 +195,13 @@ function moveActive(state: TuiState, screen: ProjectSettingsScreen, delta: numbe
   if (item === undefined || item.id === screen.activeId) {
     return state;
   }
-  return { ...state, screen: { ...screen, activeId: item.id } };
+  const nextScreen: ProjectSettingsScreen = { ...screen, activeId: item.id };
+  // Leaving the remove item drops an abandoned confirm phrase so a forgotten
+  // "delete <id>" can't keep the destructive action armed on return.
+  if (item.id !== "remove") {
+    nextScreen.removeDraft = createEditableTextInputState("");
+  }
+  return { ...state, screen: nextScreen };
 }
 
 function editableKeyFlags(key: TuiKey): EditableTextInputInput["key"] {
