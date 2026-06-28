@@ -8,15 +8,16 @@ import type { StationSnapshot } from "@station/contracts";
 import {
   isRemoveProjectArmed,
   PROJECT_SETTINGS_ITEMS,
+  projectSettingsPanelLayout,
   removeProjectConfirmPhrase,
   selectNewSessionHarnessChoices,
   type TuiScreen,
 } from "@station/dashboard-core";
-import { EditableTextInputView } from "./EditableTextInputView.js";
-import { AgentChoiceListView } from "./sheets/AgentChoiceListView.js";
-import { fit, SheetLine } from "./sheets/parts.js";
-import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
-import { STATION_COLORS } from "./theme.js";
+import { EditableTextInputView } from "../EditableTextInputView.js";
+import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
+import { fit, SheetLine } from "../sheets/parts.js";
+import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import { STATION_COLORS } from "../theme.js";
 
 type ProjectSettingsScreen = Extract<TuiScreen, { name: "projectSettings" }>;
 
@@ -36,14 +37,8 @@ export function ProjectSettingsPanelView({
   const dispatch = useStationMouse();
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
 
-  const width = Math.min(Math.max(46, columns - 6), 88);
-  const height = Math.min(Math.max(11, rows - 4), 20);
-  const top = Math.max(0, Math.floor((rows - height) / 2));
-  const left = Math.max(0, Math.floor((columns - width) / 2));
-  const innerWidth = width - 2;
-  const contentHeight = Math.max(1, height - 3);
-  const leftWidth = Math.min(26, Math.max(16, Math.floor(innerWidth * 0.4)));
-  const rightWidth = Math.max(1, innerWidth - leftWidth - 1);
+  const { top, left, width, height, innerWidth, contentHeight, leftWidth, rightWidth } =
+    projectSettingsPanelLayout(columns, rows);
 
   const title = project === undefined ? "Project settings" : `Project settings · ${project.label}`;
   const footer =
