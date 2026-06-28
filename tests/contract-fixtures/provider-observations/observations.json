@@ -4,7 +4,8 @@
     "canRemove": true,
     "canList": true,
     "canEmitLifecycleEvents": true,
-    "canExposeDirtyState": true
+    "canExposeDirtyState": true,
+    "canSeedWorkingTree": true
   },
   "terminalCapabilities": {
     "canOpenWorkspace": true,

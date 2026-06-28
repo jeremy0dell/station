@@ -16,6 +16,7 @@ import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
 import { createSessionCloseHandler } from "./session/close.js";
 import { createSessionCreateHandler } from "./session/create.js";
+import { createSessionForkHandler } from "./session/fork.js";
 import { createSessionRenameHandler } from "./session/rename.js";
 import { createSessionResumeAgentHandler } from "./session/resumeAgent.js";
 import type { SessionCommandIdFactory } from "./session/shared.js";
@@ -116,6 +117,20 @@ export function registerObserverCommandHandlers(
     }),
   );
   options.queue.registerHandler(
+    "session.fork",
+    createSessionForkHandler({
+      getProjects,
+      providers: options.providers,
+      core: options.core,
+      persistence: options.persistence,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      idFactory: options.idFactory,
+      logger: options.logger,
+      commandTimeoutMs: options.commandTimeoutMs,
+    }),
+  );
+  options.queue.registerHandler(
     "session.close",
     createSessionCloseHandler({
       providers: options.providers,
@@ -205,6 +220,7 @@ export function registerObserverCommandHandlers(
       "session.create",
       "session.startAgent",
       "session.resumeAgent",
+      "session.fork",
       "session.close",
       "session.rename",
       "session.acknowledgeTurn",

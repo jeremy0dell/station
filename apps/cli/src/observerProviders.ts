@@ -417,6 +417,7 @@ class NoopWorktreeProvider implements WorktreeProvider {
       canList: true,
       canEmitLifecycleEvents: true,
       canExposeDirtyState: false,
+      canSeedWorkingTree: false,
     };
   }
 
@@ -447,6 +448,7 @@ class UnavailableWorktreeProvider implements WorktreeProvider {
       canList: false,
       canEmitLifecycleEvents: false,
       canExposeDirtyState: false,
+      canSeedWorkingTree: false,
     };
   }
 
