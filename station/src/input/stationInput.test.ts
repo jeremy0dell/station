@@ -871,11 +871,29 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
   });
 
+  it("opens the fork details sheet from a row context menu", () => {
+    const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
+
+    rightClickRow();
+    // Menu order: Rename, Fork, Delete Session — one down reaches the fork.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
+    expect(runtime.handleSequence("\r")).toBe(true);
+
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(stationViewStore.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      sourceWorktreeId: "wt_station_idle",
+      returnTo: "dashboard",
+    });
+  });
+
   it("opens the shared remove-session confirmation from a row context menu", () => {
     const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
-    // Menu order: Rename, Delete Session — one down reaches the delete.
+    // Menu order: Rename, Fork, Delete Session — two downs reach the delete.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 
@@ -894,6 +912,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
 
     rightClickRow();
     runtime.handleSequence("\x1b[B");
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
     stationViewStore.getState().handleKey({ input: "y" });
 
@@ -910,6 +929,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, stationViewStore, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
     stationViewStore.getState().handleKey({ input: "", escape: true });

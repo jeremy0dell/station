@@ -77,6 +77,17 @@ export type RouteOutcome =
       branch: string;
       harness: ProviderId;
     }
+  /**
+   * Station Fork creates a seeded worktree off the source's HEAD (worktree.fork),
+   * then hosts the inherited harness in a Station pane instead of a tmux session.
+   */
+  | {
+      kind: "pane-launch-fork";
+      projectId: string;
+      sourceWorktreeId: string;
+      branch: string;
+      copyDirty: boolean;
+    }
   | { kind: "open-url"; url: string }
   | { kind: "swallowed" }
   | { kind: "ignored" };
@@ -115,6 +126,26 @@ export function paneLaunchNewSessionOutcome(target: {
     projectId: target.projectId,
     branch: target.branch,
     harness: target.harness,
+  };
+}
+
+/**
+ * The one place the fork-launch outcome is built — shared by the details
+ * screen's Enter (overlay layer) and a click on its fork button (mouse) so they
+ * can't drift.
+ */
+export function paneLaunchForkSessionOutcome(target: {
+  projectId: string;
+  sourceWorktreeId: string;
+  branch: string;
+  copyDirty: boolean;
+}): Extract<RouteOutcome, { kind: "pane-launch-fork" }> {
+  return {
+    kind: "pane-launch-fork",
+    projectId: target.projectId,
+    sourceWorktreeId: target.sourceWorktreeId,
+    branch: target.branch,
+    copyDirty: target.copyDirty,
   };
 }
 

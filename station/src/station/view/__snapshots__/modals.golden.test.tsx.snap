@@ -18,7 +18,7 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
         │                     station project view                     │        
 ▼ script│  ↑/↓ wheel  scroll project list                              │qs] [▾] 
  [9] ○ a│  1-9/a-z    start or focus row                               │[shell] 
- [a] ? m│  N/A/R/C    new/add/rename/fold                              │[shell] 
+ [a] ? m│  N/A/R/C/F  new/add/rename/fold/fork                         │[shell] 
  [b] - o│  X          delete session                                   │[shell] 
         │  /, Z       search / refresh snapshot                        │        
 ▼ empty-│  H/?        help                                             │qs] [▾] 
@@ -193,6 +193,62 @@ exports[`modal flow golden frames renders the rename sheet 1`] = `
 │ Enter:rename   Esc:back                                                      │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the fork slot sheet 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees                                           [sh] [qs] [▾] 
+ [1] ○ cli-help-man               codex     idle           +14 -6 #70 ✓ [shell] 
+ [2] - docs-cleanup               -         no agent                    [shell] 
+ [3] ○ pty-buffer                 codex     idle                  #73 ✓ [shell] 
+ [4] + session-resume             codex     starting                    [shell] 
+ [5] ⠋ station-XXXXXXy            codex     working      +412 -96 #76 … [shell] 
+                                                                                
+▼ observer - 3 worktrees                                          [sh] [qs] [▾] 
+ [6] x batch-export               opencode  exited                 #8 ✓ [shell] 
+ [7] ⠋ provider-hooks             opencode  working        +32 -8 #16 … [shell] 
+ [8] ○ trace-bundle               opencode  idle             +1 -1 #4 ✓ [shell] 
+                                                                                
+▼ scripts - 3 worktrees                                           [sh] [qs] [▾] 
+ [9] ○ api-cache                  opencode  idle           +14 -6 #5 x1 [shell] 
+┌────────────────────────────────────────────┐known           +3 -1 #10 [shell] 
+│ Select session to fork                     │ agent                    [shell] 
+│                                            │                                  
+│ Click a row or press slot key              │                    [sh] [qs] [▾] 
+│ Esc:cancel                                 │                                  
+│                                            │───────────────────────────────── 
+└────────────────────────────────────────────┘ X:delete session /:search H:help 
+"
+`;
+
+exports[`modal flow golden frames renders the fork details sheet 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees                                           [sh] [qs] [▾] 
+ [1] ○ cli-help-man               codex     idle           +14 -6 #70 ✓ [shell] 
+ [2] - docs-cleanup               -         no agent                    [shell] 
+ [3] ○ pty-buffer                 codex     idle                  #73 ✓ [shell] 
+ [4] + session-resume             codex     starting                    [shell] 
+ [5] ⠋ station-XXXXXXy            codex     working      +412 -96 #76 … [shell] 
+                                                                                
+▼ observer - 3 worktrees                                          [sh] [qs] [▾] 
+ [6] x batch-export               opencode  exited                 #8 ✓ [shell] 
+ [7] ⠋ provider-hooks             opencode  working        +32 -8 #16 … [shell] 
+ [8] ○ trace-bundle               opencode  idle             +1 -1 #4 ✓ [shell] 
+┌────────────────────────────────────────────┐                                  
+│ Fork Session                               │                    [sh] [qs] [▾] 
+│ Source   station · cli-help-man            │le           +14 -6 #5 x1 [shell] 
+│ > Branch cli-help-man-fork|                │known           +3 -1 #10 [shell] 
+│   Copy   [x] uncommitted changes           │ agent                    [shell] 
+│ Source keeps running — copy is read-only.  │                                  
+│                                            │                    [sh] [qs] [▾] 
+│ Fork (enter)                               │                                  
+│ ↑↓:field space:toggle enter:fork esc:back  │───────────────────────────────── 
+└────────────────────────────────────────────┘ X:delete session /:search H:help 
 "
 `;
 

@@ -68,7 +68,7 @@ exports[`dashboard golden frames renders many-projects at 120x40 1`] = `
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-N:new A:add R:rename Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help Q/esc:close                         
+N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help Q/esc:close                  
 "
 `;
 
@@ -176,7 +176,7 @@ exports[`dashboard golden frames renders attention-and-failures at 120x40 1`] = 
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-N:new A:add R:rename Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help Q/esc:close                         
+N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help Q/esc:close                  
 "
 `;
 

@@ -713,7 +713,7 @@ export function dashboardFooterLabel({
 }): string {
   const full = firstRun
     ? `A:Add Project ${quitHint}`
-    : `N:new A:add R:rename Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help ${quitHint}`;
+    : `N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help ${quitHint}`;
   const compactClose = `${QUIT_HINT_CLOSE} N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help`;
   return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
 }
