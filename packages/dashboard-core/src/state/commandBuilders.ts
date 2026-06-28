@@ -5,6 +5,7 @@ import type {
   SessionView,
   StationCommand,
   TerminalFocusOrigin,
+  WorktreeId,
   WorktreeRow,
 } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
@@ -29,6 +30,17 @@ export type CreateSessionCommandInput = {
 export type RenameSessionCommandInput = {
   sessionId: SessionId;
   title: string;
+};
+
+export type ForkSessionCommandInput = {
+  project: ProjectView;
+  sourceWorktreeId: WorktreeId;
+  branch: string;
+  base?: string;
+  copyDirty?: boolean;
+  // Omit to let the observer inherit the source worktree's harness.
+  harnessProvider?: ProviderId;
+  initialPrompt?: string;
 };
 
 export type SetProjectDefaultHarnessCommandInput = {
@@ -157,6 +169,35 @@ export function buildCreateSessionCommand(input: CreateSessionCommandInput): Sta
   }
   return {
     type: "session.create",
+    payload,
+  };
+}
+
+export function buildForkSessionCommand(input: ForkSessionCommandInput): StationCommand {
+  const payload: Extract<StationCommand, { type: "session.fork" }>["payload"] = {
+    projectId: input.project.id,
+    sourceWorktreeId: input.sourceWorktreeId,
+    branch: input.branch,
+    terminal: {
+      provider: input.project.defaults.terminal,
+      layout: commandLayout(input.project.defaults.layout),
+      focus: false,
+    },
+  };
+  if (input.base !== undefined) {
+    payload.base = input.base;
+  }
+  if (input.copyDirty !== undefined) {
+    payload.copyDirty = input.copyDirty;
+  }
+  if (input.harnessProvider !== undefined) {
+    payload.harness = { provider: input.harnessProvider };
+  }
+  if (input.initialPrompt !== undefined && input.initialPrompt.length > 0) {
+    payload.initialPrompt = input.initialPrompt;
+  }
+  return {
+    type: "session.fork",
     payload,
   };
 }

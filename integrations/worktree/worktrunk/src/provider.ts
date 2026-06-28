@@ -60,6 +60,7 @@ const defaultCapabilities: WorktreeCapabilities = {
   canList: true,
   canEmitLifecycleEvents: true,
   canExposeDirtyState: true,
+  canSeedWorkingTree: true,
 };
 
 export class WorktrunkProvider implements WorktreeProvider {
@@ -236,8 +237,64 @@ export class WorktrunkProvider implements WorktreeProvider {
         "Worktrunk create did not return or list the created worktree.",
       );
     }
+    if (request.seedFrom !== undefined) {
+      await this.#seedWorkingTree(request.seedFrom.path, found.path);
+      // Re-list so the seeded dirty state is observed before we return; listWorktrees
+      // refreshes the observation cache, so the caller sees the post-seed status.
+      const refreshed = (await this.listWorktrees(request.project)).find(
+        (observation) => observation.id === found.id,
+      );
+      if (refreshed !== undefined) {
+        return refreshed;
+      }
+    }
     this.#observations.set(found.id, found);
     return found;
+  }
+
+  // Copies the source worktree's uncommitted working tree (staged, unstaged, and
+  // untracked) into the freshly created worktree. Worktrees in one repo share a
+  // single object store, so a stash commit created in the source is reachable from
+  // the target. The new branch must be based on the source's HEAD for a clean apply.
+  async #seedWorkingTree(srcPath: string, tgtPath: string): Promise<void> {
+    const created = await this.#runSeedCommand("git", ["-C", srcPath, "stash", "create"]);
+    const stashSha = created.stdout.trim();
+    if (stashSha.length > 0) {
+      // --index preserves the staged/unstaged split and, on a divergent base,
+      // refuses atomically (leaving the target clean) instead of writing markers.
+      await this.#runSeedCommand("git", ["-C", tgtPath, "stash", "apply", "--index", stashSha]);
+    }
+    // `git stash create` silently drops untracked files, so copy them separately.
+    // Paths go through env (never the shell token stream) and the file bytes stream
+    // process-to-process, so they never hit the captured stdout buffer.
+    await this.#runSeedCommand(
+      "sh",
+      [
+        "-c",
+        'git -C "$SEED_SRC" ls-files --others --exclude-standard -z | tar --null -T - -cf - | tar -k -C "$SEED_TGT" -xf -',
+      ],
+      { SEED_SRC: srcPath, SEED_TGT: tgtPath },
+    );
+  }
+
+  async #runSeedCommand(command: string, args: string[], env?: Record<string, string>) {
+    try {
+      return await runExternalCommand(
+        {
+          command,
+          args,
+          timeoutMs: this.#timeoutMs,
+          ...(env === undefined ? {} : { env }),
+        },
+        this.#runner,
+      );
+    } catch (cause) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_SEED_FAILED",
+        "Worktrunk created the worktree but failed to seed its working tree from the source.",
+        { cause },
+      );
+    }
   }
 
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {

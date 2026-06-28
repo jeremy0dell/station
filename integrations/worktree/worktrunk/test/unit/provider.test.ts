@@ -290,6 +290,64 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("seeds the new worktree's working tree from a source path when seedFrom is set", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "wt" && input.args?.[0] === "switch") {
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        }
+        if (input.command === "wt" && input.args?.[0] === "list") {
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature", dirty: true }]),
+          );
+        }
+        if (input.command === "git" && input.args?.includes("create")) {
+          return result(input, "stashsha123\n");
+        }
+        return result(input, "");
+      },
+    });
+
+    const created = await provider.createWorktree({
+      project,
+      branch: "feature",
+      base: "source-branch",
+      seedFrom: { path: "/tmp/station/web/source" },
+    });
+
+    // The post-seed re-list surfaces the copied dirty state on the returned observation.
+    expect(created).toMatchObject({ branch: "feature", dirty: true });
+
+    // Tracked changes travel via a stash object; untracked files via a shell pipeline.
+    const seedCalls = calls
+      .filter((call) => call.command === "git" || call.command === "sh")
+      .map((call) => [call.command, ...(call.args ?? [])]);
+    expect(seedCalls).toEqual([
+      ["git", "-C", "/tmp/station/web/source", "stash", "create"],
+      ["git", "-C", "/tmp/station/web/feature", "stash", "apply", "--index", "stashsha123"],
+      ["sh", "-c", expect.stringContaining("ls-files --others --exclude-standard")],
+    ]);
+
+    // Untracked-copy paths go through env so they are never parsed as shell tokens.
+    const shCall = calls.find((call) => call.command === "sh");
+    expect(shCall?.env).toEqual({
+      SEED_SRC: "/tmp/station/web/source",
+      SEED_TGT: "/tmp/station/web/feature",
+    });
+
+    // The fork's base is pinned to the source branch so the seeded apply is conflict-free.
+    const switchCall = calls.find((call) => call.command === "wt" && call.args?.[0] === "switch");
+    expect(switchCall?.args).toContain("source-branch");
+  });
+
   it("skips Worktrunk hooks for automated mutations when lifecycle hooks are disabled", async () => {
     const calls: ExternalCommandInput[] = [];
     const provider = new WorktrunkProvider({

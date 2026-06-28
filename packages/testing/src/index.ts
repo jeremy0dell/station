@@ -152,6 +152,7 @@ const defaultWorktreeCapabilities: WorktreeCapabilities = {
   canList: true,
   canEmitLifecycleEvents: true,
   canExposeDirtyState: true,
+  canSeedWorkingTree: true,
 };
 
 const defaultTerminalCapabilities: TerminalCapabilities = {

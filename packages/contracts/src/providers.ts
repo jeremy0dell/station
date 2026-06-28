@@ -50,6 +50,7 @@ export const WorktreeCapabilitiesSchema = z
     canList: z.boolean(),
     canEmitLifecycleEvents: z.boolean(),
     canExposeDirtyState: z.boolean(),
+    canSeedWorkingTree: z.boolean(),
   })
   .strict();
 
@@ -144,6 +145,11 @@ export type CreateWorktreeRequest = {
   branch: string;
   base?: string;
   path?: string;
+  // When set, the provider seeds the new worktree's working tree (staged,
+  // unstaged, and untracked changes) from this source path after creation.
+  // The observer resolves the source worktree's absolute path; the UI never
+  // supplies filesystem paths directly.
+  seedFrom?: { path: string; worktreeId?: WorktreeId };
 };
 
 export type RemoveWorktreeRequest = {

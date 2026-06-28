@@ -113,6 +113,21 @@ export const ResumeAgentPayloadSchema = z
 
 export type ResumeAgentPayload = z.infer<typeof ResumeAgentPayloadSchema>;
 
+export const ForkSessionPayloadSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    sourceWorktreeId: WorktreeIdSchema,
+    branch: nonEmptyStringSchema,
+    base: nonEmptyStringSchema.optional(),
+    copyDirty: z.boolean().optional(),
+    harness: StartAgentHarnessCommandOptionsSchema.optional(),
+    terminal: TerminalCommandOptionsSchema.partial().optional(),
+    initialPrompt: nonEmptyStringSchema.optional(),
+  })
+  .strict();
+
+export type ForkSessionPayload = z.infer<typeof ForkSessionPayloadSchema>;
+
 export const TerminalFocusPayloadSchema = z
   .object({
     sessionId: SessionIdSchema.optional(),
@@ -229,6 +244,7 @@ export const StationCommandTypeSchema = z.enum([
   "session.create",
   "session.startAgent",
   "session.resumeAgent",
+  "session.fork",
   "terminal.focus",
   "terminal.close",
   "session.close",
@@ -260,6 +276,10 @@ export const StartAgentCommandSchema = z
 
 export const ResumeAgentCommandSchema = z
   .object({ type: z.literal("session.resumeAgent"), payload: ResumeAgentPayloadSchema })
+  .strict();
+
+export const ForkSessionCommandSchema = z
+  .object({ type: z.literal("session.fork"), payload: ForkSessionPayloadSchema })
   .strict();
 
 export const TerminalFocusCommandSchema = z
@@ -315,6 +335,7 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   CreateSessionCommandSchema,
   StartAgentCommandSchema,
   ResumeAgentCommandSchema,
+  ForkSessionCommandSchema,
   TerminalFocusCommandSchema,
   TerminalCloseCommandSchema,
   CloseSessionCommandSchema,
