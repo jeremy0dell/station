@@ -18,7 +18,7 @@ import {
   selectDashboardViewport,
 } from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
-import { validateNewSessionCreate } from "@station/dashboard-core";
+import { validateForkSessionCreate, validateNewSessionCreate } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import type { TuiHandleKeyResult, TuiStore } from "@station/dashboard-core";
 import {
@@ -237,6 +237,54 @@ export function resolveKeyNewSessionSubmit(
     return { kind: "none" };
   }
   return resolveNewSessionSubmit(store);
+}
+
+export type ForkSessionSubmitTarget =
+  | {
+      kind: "submit";
+      projectId: string;
+      sourceWorktreeId: string;
+      branch: string;
+      copyDirty: boolean;
+    }
+  | { kind: "none" };
+
+/**
+ * Resolve the Fork details screen to its launch. `none` off the details step or
+ * when validation fails — both fall through to the shared machine, where
+ * submitFork re-validates and surfaces the inline error. The happy path is
+ * intercepted here so the launch hosts the agent in Station rather than running
+ * the machine's tmux-bound session.fork.
+ */
+export function resolveForkSessionSubmit(store: StoreApi<TuiStore>): ForkSessionSubmitTarget {
+  const state = store.getState();
+  if (state.screen.name !== "fork" || state.screen.step !== "details") {
+    return { kind: "none" };
+  }
+  if (state.snapshot === undefined) {
+    return { kind: "none" };
+  }
+  const validation = validateForkSessionCreate(state.snapshot, state.screen);
+  if (!validation.ok) {
+    return { kind: "none" };
+  }
+  return {
+    kind: "submit",
+    projectId: validation.project.id,
+    sourceWorktreeId: validation.sourceWorktreeId,
+    branch: validation.branch,
+    copyDirty: validation.copyDirty,
+  };
+}
+
+export function resolveKeyForkSessionSubmit(
+  store: StoreApi<TuiStore>,
+  sequence: string,
+): ForkSessionSubmitTarget {
+  if (sequenceToTuiKey(sequence)?.return !== true) {
+    return { kind: "none" };
+  }
+  return resolveForkSessionSubmit(store);
 }
 
 /**

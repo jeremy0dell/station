@@ -15,7 +15,45 @@ import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { scrollDeltaForKey } from "./dashboard.js";
 
-type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
+export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
+
+type ForkSnapshot = NonNullable<TuiState["snapshot"]>;
+
+export type ForkSessionCreateValidation =
+  | {
+      ok: true;
+      project: ForkSnapshot["projects"][number];
+      sourceWorktreeId: ForkDetailsScreen["sourceWorktreeId"];
+      branch: string;
+      copyDirty: boolean;
+    }
+  | { ok: false; message: string };
+
+// Single source of truth for fork submit validation, shared by the machine's
+// submitFork (inline error) and the native station submit resolver (intercept).
+export function validateForkSessionCreate(
+  snapshot: ForkSnapshot,
+  screen: ForkDetailsScreen,
+): ForkSessionCreateValidation {
+  const branch = screen.draftBranch.value.trim();
+  if (branch.length === 0) {
+    return { ok: false, message: "Branch name cannot be empty." };
+  }
+  if (snapshot.rows.some((row) => row.branch === branch)) {
+    return { ok: false, message: `A worktree on "${branch}" already exists.` };
+  }
+  const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
+  if (project === undefined) {
+    return { ok: false, message: "The source project is no longer available." };
+  }
+  return {
+    ok: true,
+    project,
+    sourceWorktreeId: screen.sourceWorktreeId,
+    branch,
+    copyDirty: screen.copyDirty,
+  };
+}
 
 const FOCUS_ORDER = ["branch", "copyDirty", "submit"] as const;
 
@@ -162,28 +200,22 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
 }
 
 function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
-  const branch = screen.draftBranch.value.trim();
-  if (branch.length === 0) {
-    return rejected(state, screen, "Branch name cannot be empty.");
-  }
-
-  const rows = state.snapshot?.rows ?? [];
-  if (rows.some((row) => row.branch === branch)) {
-    return rejected(state, screen, `A worktree on "${branch}" already exists.`);
-  }
-
-  const project = state.snapshot?.projects.find((candidate) => candidate.id === screen.projectId);
-  if (project === undefined) {
+  if (state.snapshot === undefined) {
     return { state: { ...state, screen: { name: "dashboard" } } };
+  }
+
+  const validation = validateForkSessionCreate(state.snapshot, screen);
+  if (!validation.ok) {
+    return rejected(state, screen, validation.message);
   }
 
   // Omit base + harness so the observer pins base to the source HEAD and inherits the
   // source worktree's harness; copyDirty is passed explicitly from the toggle.
   const command = buildForkSessionCommand({
-    project,
-    sourceWorktreeId: screen.sourceWorktreeId,
-    branch,
-    copyDirty: screen.copyDirty,
+    project: validation.project,
+    sourceWorktreeId: validation.sourceWorktreeId,
+    branch: validation.branch,
+    copyDirty: validation.copyDirty,
   });
   if (command.type !== "session.fork") {
     return { state };
@@ -194,10 +226,10 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
     operations: [
       {
         type: "forkSession",
-        localId: `fork:${screen.sourceWorktreeId}:${branch}`,
+        localId: `fork:${validation.sourceWorktreeId}:${validation.branch}`,
         projectId: screen.projectId,
-        sourceWorktreeId: screen.sourceWorktreeId,
-        branch,
+        sourceWorktreeId: validation.sourceWorktreeId,
+        branch: validation.branch,
         command,
       },
     ],

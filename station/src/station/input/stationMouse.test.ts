@@ -164,6 +164,48 @@ describe("routeStationMouse", () => {
     expect(store.getState().localRows.pendingRemove).toEqual([]);
   });
 
+  it("chooses the clicked row in fork mode, same as the slot key", () => {
+    const clicked = makeStore();
+    const keyed = makeStore();
+    const rowId = "wt_station_working";
+    clicked.getState().handleKey({ input: "F" });
+    keyed.getState().handleKey({ input: "F" });
+    const slot = slotForRow(keyed, rowId);
+
+    routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
+    keyed.getState().handleKey({ input: slot });
+
+    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
+    expect(clicked.getState().screen).toMatchObject({ name: "fork", step: "details" });
+  });
+
+  it("launches a fork from the sheet submit button", () => {
+    const store = makeStore();
+    const rowId = "wt_station_working";
+    store.getState().handleKey({ input: "F" });
+    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
+
+    const outcome = routeStationMouse({ kind: "sheetSubmit" }, LEFT_DOWN, store);
+
+    expect(outcome.kind).toBe("launch-fork");
+    if (outcome.kind === "launch-fork") {
+      expect(outcome.projectId).toBe("station");
+      expect(outcome.sourceWorktreeId).toBe(rowId);
+      expect(outcome.copyDirty).toBe(true);
+      expect(outcome.branch.length).toBeGreaterThan(0);
+    }
+    // The submit is intercepted, not dispatched to the machine — the sheet stays open
+    // until the executor closes it, so the machine never ran the tmux session.fork.
+    expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
+  });
+
+  it("ignores sheet submit outside fork details mode", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse({ kind: "sheetSubmit" }, LEFT_DOWN, store);
+    expect(outcome).toEqual({ kind: "handled" });
+  });
+
   it("ignores row clicks in text-input modes", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "/" });

@@ -34,6 +34,7 @@ export * from "./state/operations/renameSession.js";
 export * from "./state/operations/runtimeCommands.js";
 export * from "./state/operations/startAgent.js";
 export * from "./state/operations/types.js";
+export * from "./state/screens/fork.js";
 export * from "./state/screens/projectDefaultAgent.js";
 export * from "./state/screens/removeWorktree.js";
 export * from "./state/screens/sessionRows.js";

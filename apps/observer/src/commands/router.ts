@@ -23,6 +23,7 @@ import type { SessionCommandIdFactory } from "./session/shared.js";
 import { createSessionStartAgentHandler } from "./session/startAgent.js";
 import { createTerminalCloseHandler, createTerminalFocusHandler } from "./terminal.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
+import { createWorktreeForkHandler } from "./worktree/fork.js";
 import { createWorktreeRemoveHandler } from "./worktree/remove.js";
 
 export type RegisterObserverCommandHandlersOptions = {
@@ -171,6 +172,18 @@ export function registerObserverCommandHandlers(
     }),
   );
   options.queue.registerHandler(
+    "worktree.fork",
+    createWorktreeForkHandler({
+      getProjects,
+      providers: options.providers,
+      core: options.core,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
+    }),
+  );
+  options.queue.registerHandler(
     "worktree.remove",
     createWorktreeRemoveHandler({
       providers: options.providers,
@@ -225,6 +238,7 @@ export function registerObserverCommandHandlers(
       "session.rename",
       "session.acknowledgeTurn",
       "worktree.create",
+      "worktree.fork",
       "worktree.remove",
       "project.add",
       "project.remove",

@@ -117,6 +117,12 @@ function buildStationItems(
       action: { kind: "renameSession", rowId: row.id },
     });
   }
+  // Any worktree can be forked (branch off its HEAD, copy its dirty tree).
+  items.push({
+    id: "station.forkSession",
+    label: "Fork Session",
+    action: { kind: "forkSession", rowId: row.id },
+  });
   if (project === undefined || !samePath(row.path, project.root)) {
     items.push({
       id: "station.removeWorktree",

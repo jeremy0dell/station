@@ -30,6 +30,7 @@ import { STATION_HOST_PROVIDER_ID } from "@station/host";
 import type { ProviderId, WorktreeRow, StationCommand, StationSnapshot } from "@station/contracts";
 import {
   addPendingCreateSessionRow,
+  openForkDetailsForRow,
   openRemoveWorktreeConfirmForRow,
   openRenameEditForRow,
   removeCreateSessionLocalRow,
@@ -200,6 +201,17 @@ export type StationInputEffects = {
    * click uses; failures surface as a STATION toast.
    */
   launchHostedNewSession(target: { projectId: string; branch: string; harness: ProviderId }): void;
+  /**
+   * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
+   * harness in a Station pane (the Fork details screen's submit). Fire-and-forget
+   * like launchHostedNewSession; failures surface as a STATION toast.
+   */
+  launchHostedForkSession(target: {
+    projectId: string;
+    sourceWorktreeId: string;
+    branch: string;
+    copyDirty: boolean;
+  }): void;
   openExternalUrl(url: string): void;
 };
 
@@ -285,6 +297,14 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
         projectId: outcome.projectId,
         branch: outcome.branch,
         harness: outcome.harness,
+      });
+      return true;
+    case "pane-launch-fork":
+      effects.launchHostedForkSession({
+        projectId: outcome.projectId,
+        sourceWorktreeId: outcome.sourceWorktreeId,
+        branch: outcome.branch,
+        copyDirty: outcome.copyDirty,
       });
       return true;
     case "open-url":
@@ -386,6 +406,18 @@ function closeNewSessionWizard(store: StoreApi<TuiStore> | undefined): void {
   }
 }
 
+function closeForkSheet(store: StoreApi<TuiStore> | undefined): void {
+  if (store === undefined) {
+    return;
+  }
+  // The submit was intercepted before the machine ran submitFork, so unwind the
+  // fork sheet to the dashboard here. Esc steps details → chooseSlot → dashboard
+  // (≤2 hops); the cap stops a future screen change from spinning this loop.
+  for (let hop = 0; hop < 2 && store.getState().screen.name === "fork"; hop += 1) {
+    dispatchStationKey(store, { input: "", escape: true });
+  }
+}
+
 function splitActivePane(effects: StationInputEffects, direction: PaneSplitDirection): void {
   const activeId = effects.store.getState().workspace.activePaneId;
   if (activeId === null) {
@@ -476,6 +508,14 @@ function selectContextMenuItem(
         stationViewStore.setState(
           openRemoveWorktreeConfirmForRow(stationViewStore.getState(), action.rowId),
         );
+      }
+      return;
+    case "forkSession":
+      if (stationViewStore !== undefined) {
+        stationViewStore.setState(
+          openForkDetailsForRow(stationViewStore.getState(), action.rowId, "dashboard"),
+        );
+        effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
   }
@@ -718,6 +758,14 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       }
       void runManagedNewSession(target, localId).catch((error) => {
         clearPendingCreateRow(localId);
+        pushLaunchError(error);
+      });
+    },
+    launchHostedForkSession: (target) => {
+      // Close the fork sheet, then seed the worktree and host its inherited
+      // harness in the background (mirrors launchHostedNewSession).
+      closeForkSheet(options.stationViewStore);
+      void runManagedFork(target).catch((error) => {
         pushLaunchError(error);
       });
     },
@@ -1032,6 +1080,74 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       harness: target.harness,
       background: true,
     });
+  }
+
+  // Fork in Station: seed a worktree off the source's HEAD (worktree.fork — no
+  // tmux), then host the inherited harness in a pane via the same managed launch.
+  async function runManagedFork(target: {
+    projectId: string;
+    sourceWorktreeId: string;
+    branch: string;
+    copyDirty: boolean;
+  }): Promise<void> {
+    const observerService = options.observerService;
+    if (observerService === undefined) {
+      pushLaunchToast("No observer connection; cannot fork the session.");
+      return;
+    }
+    const viewStore = options.stationViewStore;
+    if (viewStore === undefined) {
+      pushLaunchToast("The dashboard is not available; cannot fork the session.");
+      return;
+    }
+    // Capture the source's harness before forking: the seeded worktree has no
+    // remembered harness yet, so pass the source's through (else project default).
+    const sourceRow = findWorktreeRowById(viewStore, target.sourceWorktreeId);
+    const inheritedHarness = sourceRow?.agent?.harness ?? sourceRow?.recovery?.provider;
+
+    const forkCommand: Extract<StationCommand, { type: "worktree.fork" }> = {
+      type: "worktree.fork",
+      payload: {
+        projectId: target.projectId,
+        sourceWorktreeId: target.sourceWorktreeId,
+        branch: target.branch,
+        copyDirty: target.copyDirty,
+      },
+    };
+    const receipt = await observerService.dispatch(forkCommand);
+    if (!receipt.accepted) {
+      pushLaunchError(
+        receipt.error ?? {
+          tag: "ClientObserverError",
+          code: "STATION_WORKTREE_FORK_REJECTED",
+          message: "Station could not fork the worktree.",
+        },
+      );
+      return;
+    }
+    const completion = await observerService.waitForCommandCompletion(receipt.commandId);
+    if (completion.status === "failed") {
+      pushLaunchError(completion.error);
+      return;
+    }
+    const row = await waitForWorktreeByBranch(viewStore, target.projectId, target.branch);
+    if (row === undefined) {
+      pushLaunchToast(
+        "Forked the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.",
+        "info",
+      );
+      return;
+    }
+    const launchTarget: ManagedLaunchTarget = {
+      projectId: target.projectId,
+      worktreeId: row.id,
+      cwd: row.path,
+      background: true,
+    };
+    if (inheritedHarness !== undefined) {
+      launchTarget.harness = inheritedHarness;
+    }
+    await runManagedLaunch(agentWorktreePaneId(row.id), launchTarget);
   }
 
   function pushLaunchToast(message: string, kind: "info" | "error" = "error"): void {

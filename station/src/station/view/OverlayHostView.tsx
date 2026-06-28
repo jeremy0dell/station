@@ -9,6 +9,7 @@ import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
+import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 
 export type OverlayHostViewProps = {
   snapshot: StationSnapshot;
@@ -44,6 +45,9 @@ export function OverlayHostView({ snapshot, screen, columns, rows }: OverlayHost
   }
   if (screen.name === "removeWorktree") {
     return <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
+  }
+  if (screen.name === "fork") {
+    return <ForkSessionSheetView columns={columns} rows={rows} screen={screen} />;
   }
   return null;
 }

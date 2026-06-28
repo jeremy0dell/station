@@ -22,6 +22,7 @@ export type ContextMenuItemId =
   | "pane.splitBelow"
   | "pane.close"
   | "station.renameSession"
+  | "station.forkSession"
   | "station.removeWorktree"
   | "station.noActions"
   // One per configured automation; the id carries the automation id.
@@ -32,6 +33,7 @@ export type ContextMenuItemAction =
   | { kind: "splitPane"; paneId: PaneId; direction: PaneSplitDirection }
   | { kind: "closePane"; paneId: PaneId }
   | { kind: "renameSession"; rowId: string }
+  | { kind: "forkSession"; rowId: string }
   | { kind: "removeWorktree"; rowId: string }
   // Run a configured automation, anchored on the pane the menu opened over.
   | { kind: "runAutomation"; automationId: string; paneId: PaneId };
