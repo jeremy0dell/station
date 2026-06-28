@@ -2,6 +2,7 @@ import type { TuiKey, TuiState } from "@station/dashboard-core";
 import {
   createInitialTuiState,
   deriveTuiInputMode,
+  editableTextBindings,
   handleTuiKey,
   matchingTuiBindings,
   openProjectDefaultAgentPicker,
@@ -189,6 +190,33 @@ describe("tui keymap metadata", () => {
         expect(`${mode}:${textIndex}`).toBe(`${mode}:${table.length - 1}`);
       }
     }
+  });
+});
+
+describe("editableTextBindings", () => {
+  it("produces the cursor + text catch-all block for a single action", () => {
+    const bindings = editableTextBindings("tui.example", "tui.example.edit");
+    expect(bindings.map((binding) => binding.id)).toEqual([
+      "tui.example.cursorLeft",
+      "tui.example.cursorRight",
+      "tui.example.backspace",
+      "tui.example.delete",
+      "tui.example.type",
+    ]);
+    expect(bindings.every((binding) => binding.action === "tui.example.edit")).toBe(true);
+    expect(bindings.every((binding) => binding.outcome === "handled")).toBe(true);
+    // The text catch-all must be last so specific named keys match first.
+    expect(bindings.at(-1)?.pattern).toEqual({ kind: "text" });
+    expect(bindings.every((binding) => binding.help === undefined)).toBe(true);
+  });
+
+  it("attaches optional help to the text binding only", () => {
+    const bindings = editableTextBindings("tui.example", "tui.example.edit", {
+      keys: "space",
+      label: "toggle",
+    });
+    expect(bindings.at(-1)?.help).toEqual({ keys: "space", label: "toggle" });
+    expect(bindings.slice(0, -1).every((binding) => binding.help === undefined)).toBe(true);
   });
 });
 
