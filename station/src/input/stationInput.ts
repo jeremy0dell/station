@@ -1046,14 +1046,16 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
 
   function startHostedWorktreeLaunch(spec: HostedWorktreeLaunch): void {
     const viewStore = options.stationViewStore;
-    if (viewStore !== undefined && spec.harness !== undefined) {
+    if (viewStore !== undefined) {
       viewStore.setState(
         addPendingCreateSessionRow(viewStore.getState(), {
           localId: spec.localId,
           projectId: spec.projectId,
           branch: spec.branch,
-          harnessProvider: spec.harness,
           createdAt: new Date().toISOString(),
+          // Fork can inherit no harness (source has none, project has no default);
+          // the row still shows, agent column blank until the launch picks a default.
+          ...(spec.harness === undefined ? {} : { harnessProvider: spec.harness }),
         }),
       );
     }
