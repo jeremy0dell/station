@@ -166,7 +166,7 @@ export function rowGridInputForViewportItem(
     slot: undefined,
     marker: { kind: "throbber", variant: "braille" },
     title: item.row.branch,
-    agent: item.row.harnessProvider,
+    agent: item.row.harnessProvider ?? "",
     activity: "starting session...",
     activityImportance: "meaningful",
     activityOverflow: "rowSlack",
