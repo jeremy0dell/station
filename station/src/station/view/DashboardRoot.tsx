@@ -115,7 +115,13 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
       />
       <CommandPromptView screen={screen} />
       {toastOverlay}
-      <OverlayHostView snapshot={snapshot} screen={screen} columns={columns} rows={rows} />
+      <OverlayHostView
+        snapshot={snapshot}
+        screen={screen}
+        columns={columns}
+        rows={rows}
+        localRows={localRows}
+      />
     </box>
   );
 }

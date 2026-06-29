@@ -7,6 +7,7 @@ export type TuiInputMode =
   | "help"
   | "search"
   | "projectCollapse"
+  | "projectSettingsPicker"
   | "removeChooseSlot"
   | "removeConfirm"
   | "renameChooseSlot"
@@ -31,6 +32,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return "search";
     case "projectCollapse":
       return "projectCollapse";
+    case "projectSettingsPicker":
+      return "projectSettingsPicker";
     case "removeWorktree":
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
     case "renameSession":
@@ -225,6 +228,13 @@ export const TUI_KEYMAP = {
       help: { keys: "C", label: "fold" },
     },
     {
+      id: "tui.dashboard.projectSettings",
+      pattern: { kind: "char", char: "P" },
+      action: "tui.projectSettings.openPicker",
+      outcome: "handled",
+      help: { keys: "P", label: "settings" },
+    },
+    {
       id: "tui.dashboard.slotActivate",
       pattern: { kind: "slot" },
       action: "tui.row.activateSlot",
@@ -307,6 +317,22 @@ export const TUI_KEYMAP = {
       action: "tui.collapse.toggleSlot",
       outcome: "handled",
       help: { keys: "1-9 a-z", label: "toggle project" },
+    },
+  ],
+  projectSettingsPicker: [
+    {
+      id: "tui.projectSettingsPicker.cancel",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.projectSettings.pickerCancel",
+      outcome: "handled",
+      help: { keys: "esc", label: "cancel" },
+    },
+    {
+      id: "tui.projectSettingsPicker.choose",
+      pattern: { kind: "slot" },
+      action: "tui.projectSettings.pick",
+      outcome: "handled",
+      help: { keys: "1-9 a-z", label: "open settings" },
     },
   ],
   removeChooseSlot: [
@@ -687,6 +713,7 @@ export const TUI_HELP_CONTENT = [
   { key: "R", description: "rename session" },
   { key: "X", description: "delete session" },
   { key: "C", description: "collapse project" },
+  { key: "P", description: "project settings" },
   { key: "/", description: "search" },
   { key: "Z", description: "refresh snapshot" },
   { key: "H / ?", description: "help" },
@@ -713,7 +740,7 @@ export function dashboardFooterLabel({
 }): string {
   const full = firstRun
     ? `A:Add Project ${quitHint}`
-    : `N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold H:help ${quitHint}`;
+    : `N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold P:settings H:help ${quitHint}`;
   const compactClose = `${QUIT_HINT_CLOSE} N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help`;
   return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
 }

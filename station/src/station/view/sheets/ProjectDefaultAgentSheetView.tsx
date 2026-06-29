@@ -35,7 +35,11 @@ export function ProjectDefaultAgentSheetView({
       title={title}
       contentRows={choices.length + 4}
     >
-      <ProjectDefaultAgentPicker choices={choices} width={contentWidth} />
+      <ProjectDefaultAgentPicker
+        choices={choices}
+        width={contentWidth}
+        currentId={project?.defaults.harness}
+      />
     </BottomSheetFrameView>
   );
 }
@@ -43,16 +47,18 @@ export function ProjectDefaultAgentSheetView({
 function ProjectDefaultAgentPicker({
   choices,
   width,
+  currentId,
 }: {
   choices: readonly KeyedChoice<NewSessionHarnessOption>[];
   width: number;
+  currentId?: NewSessionHarnessOption["id"];
 }) {
   return (
     <>
       <SheetLine width={width}> </SheetLine>
-      <AgentChoiceListView choices={choices} width={width} />
+      <AgentChoiceListView choices={choices} width={width} currentId={currentId} />
       <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"1-9/a-z:select   Esc:cancel"}</SheetFooter>
+      <SheetFooter width={width}>{"✓ current   1-9/a-z:select   Esc:cancel"}</SheetFooter>
     </>
   );
 }

@@ -18,7 +18,7 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
         │                     station project view                     │        
 ▼ script│  ↑/↓ wheel  scroll project list                              │qs] [▾] 
  [9] ○ a│  1-9/a-z    start or focus row                               │[shell] 
- [a] ? m│  N/A/R/C/F  new/add/rename/fold/fork                         │[shell] 
+ [a] ? m│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │[shell] 
  [b] - o│  X          delete session                                   │[shell] 
         │  /, Z       search / refresh snapshot                        │        
 ▼ empty-│  H/?        help                                             │qs] [▾] 
@@ -79,6 +79,118 @@ exports[`modal flow golden frames renders the collapse prompt 1`] = `
                                                                                 
 collapse project: 1:station 2:observer 3:scripts 4:empty-project  [sh] [qs] [▾] 
 ↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+"
+`;
+
+exports[`modal flow golden frames renders the project settings picker prompt 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+▼ station - 5 worktrees                                           [sh] [qs] [▾] 
+ [1] ○ cli-help-man               codex     idle           +14 -6 #70 ✓ [shell] 
+ [2] - docs-cleanup               -         no agent                    [shell] 
+ [3] ○ pty-buffer                 codex     idle                  #73 ✓ [shell] 
+ [4] + session-resume             codex     starting                    [shell] 
+ [5] ⠋ station-XXXXXXy            codex     working      +412 -96 #76 … [shell] 
+                                                                                
+▼ observer - 3 worktrees                                          [sh] [qs] [▾] 
+ [6] x batch-export               opencode  exited                 #8 ✓ [shell] 
+ [7] ⠋ provider-hooks             opencode  working        +32 -8 #16 … [shell] 
+ [8] ○ trace-bundle               opencode  idle             +1 -1 #4 ✓ [shell] 
+                                                                                
+▼ scripts - 3 worktrees                                           [sh] [qs] [▾] 
+ [9] ○ api-cache                  opencode  idle           +14 -6 #5 x1 [shell] 
+ [a] ? metadata-refresh           opencode  unknown           +3 -1 #10 [shell] 
+ [b] - old-experiment             -         no agent                    [shell] 
+                                                                                
+settings for project: 1:station 2:observer 3:scripts 4:empty-projecth] [qs] [▾] 
+↓ 1 hidden                                                                      
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+"
+`;
+
+exports[`modal flow golden frames renders the project settings panel 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+   ┌────────────────────────────────────────────────────────────────────────┐   
+▼ s│ Project settings                                                       │▾] 
+ [1│ station                  │ Default agent                               │l] 
+ [2│▸ Default agent           │✓1 codex unknown                             │l] 
+ [3│  Remove project          │ 2 opencode unknown                          │l] 
+ [4│                          │                                             │l] 
+ [5│                          │ ✓ current · 1-9/a-z select                  │l] 
+   │                          │                                             │   
+▼ o│                          │                                             │▾] 
+ [6│                          │                                             │l] 
+ [7│                          │                                             │l] 
+ [8│                          │                                             │l] 
+   │                          │                                             │   
+▼ s│                          │                                             │▾] 
+ [9│                          │                                             │l] 
+ [a│                          │                                             │l] 
+ [b│                          │                                             │l] 
+   │                          │                                             │   
+▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
+↓ 1└────────────────────────────────────────────────────────────────────────┘   
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+"
+`;
+
+exports[`modal flow golden frames renders the project settings remove pane 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+   ┌────────────────────────────────────────────────────────────────────────┐   
+▼ s│ Project settings                                                       │▾] 
+ [1│ station                  │ Remove project                              │l] 
+ [2│  Default agent           │ Removes it from Station.                    │l] 
+ [3│▸ Remove project          │ Worktrees & files stay on disk.             │l] 
+ [4│                          │                                             │l] 
+ [5│                          │ Type "delete station" to confirm            │l] 
+   │                          │ ▸ |delete station                           │   
+▼ o│                          │                                             │▾] 
+ [6│                          │ [ Remove project (R) ]                      │l] 
+ [7│                          │                                             │l] 
+ [8│                          │                                             │l] 
+   │                          │                                             │   
+▼ s│                          │                                             │▾] 
+ [9│                          │                                             │l] 
+ [a│                          │                                             │l] 
+ [b│                          │                                             │l] 
+   │                          │                                             │   
+▼ e│ ←/esc back                                                             │▾] 
+↓ 1└────────────────────────────────────────────────────────────────────────┘   
+─────────────────────────────────────────────────────────────────────────────── 
+Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+"
+`;
+
+exports[`modal flow golden frames renders the project settings optimistic default 1`] = `
+"station                                                                         
+─────────────────────────────────────────────────────────────────────────────── 
+   ┌────────────────────────────────────────────────────────────────────────┐   
+▼ s│ Project settings                                                       │▾] 
+ [1│ station                  │ Default agent                               │l] 
+ [2│▸ Default agent           │ 1 codex unknown                             │l] 
+ [3│  Remove project          │✓2 opencode unknown                 updating…│l] 
+ [4│                          │                                             │l] 
+ [5│                          │ ✓ current · 1-9/a-z select                  │l] 
+   │                          │                                             │   
+▼ o│                          │                                             │▾] 
+ [6│                          │                                             │l] 
+ [7│                          │                                             │l] 
+ [8│                          │                                             │l] 
+   │                          │                                             │   
+▼ s│                          │                                             │▾] 
+ [9│                          │                                             │l] 
+ [a│                          │                                             │l] 
+ [b│                          │                                             │l] 
+   │                          │                                             │   
+▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
+↓ 1└────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
 Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
 "
@@ -384,10 +496,10 @@ exports[`modal flow golden frames renders the project default agent picker 1`] =
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Select default agent for station                                             │
 │                                                                              │
-│ 1 codex unknown                                                              │
+│✓1 codex unknown                                                              │
 │ 2 opencode unknown                                                           │
 │                                                                              │
-│ 1-9/a-z:select   Esc:cancel                                                  │
+│ ✓ current   1-9/a-z:select   Esc:cancel                                      │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

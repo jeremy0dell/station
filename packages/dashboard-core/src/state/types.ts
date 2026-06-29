@@ -56,6 +56,7 @@ export type TuiScreen =
   | { name: "help" }
   | { name: "search"; value: string }
   | { name: "projectCollapse"; value: string }
+  | { name: "projectSettingsPicker"; value: string }
   | { name: "removeWorktree"; step: "chooseSlot" }
   | {
       name: "removeWorktree";

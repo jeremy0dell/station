@@ -251,11 +251,18 @@ function textPromptForScreen(screen: TuiScreen): { label: string; value: string 
   if (screen.name === "projectCollapse") {
     return { label: "collapse project", value: screen.value };
   }
+  if (screen.name === "projectSettingsPicker") {
+    return { label: "settings for project", value: screen.value };
+  }
   return undefined;
 }
 
 export function commandPromptRows(screen: TuiScreen): number {
-  if (screen.name === "search" || screen.name === "projectCollapse") {
+  if (
+    screen.name === "search" ||
+    screen.name === "projectCollapse" ||
+    screen.name === "projectSettingsPicker"
+  ) {
     return 2;
   }
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
