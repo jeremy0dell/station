@@ -14,6 +14,7 @@ import {
   buildSetProjectDefaultHarnessCommand,
 } from "../commandBuilders.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
+import { addPendingProjectDefaultHarness } from "../localRows.js";
 import type { TuiTransition } from "../transition.js";
 import type { ProjectSettingsItemId, TuiState } from "../types.js";
 
@@ -135,8 +136,13 @@ function selectAgent(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey
   if (option.id === project.defaults.harness) {
     return { state: { ...state, screen: { ...screen, focus: "list" } } };
   }
+  // Move the marker to the picked agent immediately; the runner reverts this if
+  // the command fails, and the next snapshot prunes it once the change lands.
   return {
-    state: { ...state, screen: { ...screen, focus: "list" } },
+    state: addPendingProjectDefaultHarness(
+      { ...state, screen: { ...screen, focus: "list" } },
+      { projectId: project.id, harness: option.id, createdAt: new Date().toISOString() },
+    ),
     operations: [
       {
         type: "setProjectDefaultHarness",

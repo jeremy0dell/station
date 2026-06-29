@@ -17,6 +17,7 @@ export type StationInputMode =
   | "help"
   | "search"
   | "projectCollapse"
+  | "projectSettingsPicker"
   | "removeChooseSlot"
   | "removeConfirm"
   | "renameChooseSlot"
@@ -40,6 +41,8 @@ export function deriveStationMode(state: TuiState): StationInputMode {
       return "search";
     case "projectCollapse":
       return "projectCollapse";
+    case "projectSettingsPicker":
+      return "projectSettingsPicker";
     case "removeWorktree":
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
     case "renameSession":
@@ -114,6 +117,7 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     { id: "station.dashboard.newSession", pattern: { kind: "char", char: "N" }, action: "station.newSession.open", outcome: "handled", help: { keys: "N", label: "new" } },
     { id: "station.dashboard.addProject", pattern: { kind: "char", char: "A" }, action: "station.addProject.open", outcome: "handled", help: { keys: "A", label: "add" } },
     { id: "station.dashboard.collapse", pattern: { kind: "char", char: "C" }, action: "station.collapse.open", outcome: "handled", help: { keys: "C", label: "fold" } },
+    { id: "station.dashboard.projectSettings", pattern: { kind: "char", char: "P" }, action: "station.projectSettings.openPicker", outcome: "handled", help: { keys: "P", label: "settings" } },
     { id: "station.dashboard.slotActivate", pattern: { kind: "slot" }, action: "station.row.activateSlot", outcome: "handled", help: slotHelp },
   ],
   help: [
@@ -132,6 +136,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   projectCollapse: [
     { id: "station.collapse.cancel", pattern: { kind: "named", named: "escape" }, action: "station.collapse.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
     { id: "station.collapse.toggleSlot", pattern: { kind: "slot" }, action: "station.collapse.toggleSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "toggle project" } },
+  ],
+  projectSettingsPicker: [
+    { id: "station.projectSettingsPicker.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectSettings.pickerCancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
+    { id: "station.projectSettingsPicker.choose", pattern: { kind: "slot" }, action: "station.projectSettings.pick", outcome: "handled", help: { keys: "1-9 a-z", label: "open settings" } },
   ],
   removeChooseSlot: [
     { id: "station.remove.cancel", pattern: { kind: "named", named: "escape" }, action: "station.remove.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
@@ -244,7 +252,7 @@ export const STATION_HELP_CONTENT = [
   { text: "station project view", align: "center" as const },
   { key: "↑/↓ wheel", description: "scroll project list" },
   { key: "1-9/a-z", description: "start or focus row" },
-  { key: "N/A/R/C", description: "new/add/rename/fold" },
+  { key: "N/A/R/C/P", description: "new/add/rename/fold/settings" },
   { key: "X", description: "delete session" },
   { key: "/, Z", description: "search / refresh snapshot" },
   { key: "H/?", description: "help" },

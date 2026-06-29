@@ -1,11 +1,15 @@
-import type { TuiKey, TuiState } from "@station/dashboard-core";
+import type { StationSnapshot, TuiKey, TuiState } from "@station/dashboard-core";
 import {
   createInitialTuiState,
   focusProjectSettingsItem,
   handleTuiKey,
   openProjectSettings,
+  pendingProjectDefaultHarnesses,
+  pruneLocalRowsForSnapshot,
+  removePendingProjectDefaultHarness,
   removeProjectConfirmPhrase,
   selectNewSessionHarnessChoices,
+  selectProjectDefaultHarness,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
@@ -78,6 +82,53 @@ describe("project settings panel", () => {
     expect(
       transition.state.screen.name === "projectSettings" && transition.state.screen.focus,
     ).toBe("list");
+  });
+
+  it("marks the picked agent as the optimistic default until the snapshot confirms", () => {
+    const snapshot = createDashboardSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "web");
+    if (project === undefined) throw new Error("missing web project");
+    const other = selectNewSessionHarnessChoices(snapshot, project).find(
+      (choice) => choice.value.id !== project.defaults.harness,
+    );
+    if (other === undefined) throw new Error("no alternative harness in fixture");
+
+    const { state } = handleTuiKey(drive(panelState(), [RIGHT]), { input: other.key });
+
+    // The marker jumps to the picked agent right away, flagged pending.
+    expect(selectProjectDefaultHarness(state.localRows, project)).toEqual({
+      harness: other.value.id,
+      pending: true,
+    });
+
+    // A snapshot that reflects the new default prunes the optimistic entry.
+    const confirmed: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.map((candidate) =>
+        candidate.id === "web"
+          ? { ...candidate, defaults: { ...candidate.defaults, harness: other.value.id } }
+          : candidate,
+      ),
+    };
+    const pruned = pruneLocalRowsForSnapshot(state.localRows, confirmed);
+    expect(pendingProjectDefaultHarnesses(pruned)).toEqual({});
+  });
+
+  it("reverting the optimistic default falls back to the snapshot value", () => {
+    const snapshot = createDashboardSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "web");
+    if (project === undefined) throw new Error("missing web project");
+    const other = selectNewSessionHarnessChoices(snapshot, project).find(
+      (choice) => choice.value.id !== project.defaults.harness,
+    );
+    if (other === undefined) throw new Error("no alternative harness in fixture");
+
+    const { state } = handleTuiKey(drive(panelState(), [RIGHT]), { input: other.key });
+    const reverted = removePendingProjectDefaultHarness(state, "web");
+    expect(selectProjectDefaultHarness(reverted.localRows, project)).toEqual({
+      harness: project.defaults.harness,
+      pending: false,
+    });
   });
 
   it("requires typing the confirm phrase before removal is armed", () => {

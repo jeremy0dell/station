@@ -6,6 +6,7 @@ import type { TuiObserverService } from "../../services/types.js";
 import {
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
+  removePendingProjectDefaultHarness,
   removePendingRemoveWorktreeRow,
   removePendingRenameSessionTitle,
   removePendingStartAgentRow,
@@ -269,9 +270,14 @@ async function runSetProjectDefaultHarnessOperation(
   clientLabel: string,
   markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
+  // Roll the optimistic marker back to the snapshot's default; success leaves it
+  // for the next snapshot to prune once the change has landed.
+  const revertOptimistic = () =>
+    store.setState(removePendingProjectDefaultHarness(store.getState(), command.payload.projectId));
   try {
     const receipt = await service.dispatch(command);
     if (!receipt.accepted) {
+      revertOptimistic();
       addSafeCommandToast(
         store,
         receipt.error ?? {
@@ -288,6 +294,7 @@ async function runSetProjectDefaultHarnessOperation(
     markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
+      revertOptimistic();
       addSafeCommandToast(store, completion.error);
       return;
     }
@@ -299,6 +306,7 @@ async function runSetProjectDefaultHarnessOperation(
       }),
     );
   } catch (error: unknown) {
+    revertOptimistic();
     addSafeCommandToast(store, toSafeError(error, { clientLabel }));
   }
 }

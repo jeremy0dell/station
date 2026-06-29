@@ -19,6 +19,7 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   // the current viewport, selected picker, and row data.
   "tui.dashboard.slotActivate",
   "tui.collapse.toggleSlot",
+  "tui.projectSettingsPicker.choose",
   "tui.remove.chooseSlot",
   "tui.rename.chooseSlot",
   "tui.newSessionProject.choose",
@@ -77,6 +78,7 @@ function representativeStates(): Record<TuiInputMode, TuiState> {
     help: drive(base, [{ input: "H" }]),
     search: drive(base, [{ input: "/" }, { input: "ab" }]),
     projectCollapse: drive(base, [{ input: "C" }]),
+    projectSettingsPicker: drive(base, [{ input: "P" }]),
     removeChooseSlot: drive(base, [{ input: "X" }]),
     removeConfirm: drive(base, [{ input: "X" }, { input: "1" }]),
     renameChooseSlot: drive(base, [{ input: "R" }]),

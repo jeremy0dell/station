@@ -1,10 +1,6 @@
 import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
-import {
-  choiceValueByKey,
-  type KeyedChoice,
-  selectProjectChoices,
-} from "../../selectors/selectors.js";
+import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { matchTuiBinding, type TuiBinding } from "../keymap.js";
@@ -14,6 +10,7 @@ import { addTuiToast } from "../toasts.js";
 import type { TuiKeyRuntimeContext, TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
+import { openProjectSlotPicker } from "./projectSlotPicker.js";
 
 export function handleDashboardKey(
   state: TuiState,
@@ -96,7 +93,9 @@ function handleDashboardBinding(
         state: openAddProject(state, context),
       };
     case "tui.collapse.open":
-      return openProjectCollapse(state);
+      return openProjectSlotPicker(state, "projectCollapse");
+    case "tui.projectSettings.openPicker":
+      return openProjectSlotPicker(state, "projectSettingsPicker");
     case "tui.row.activateSlot":
       return activateDashboardSlot(state, key);
     default:
@@ -184,23 +183,4 @@ function openNewSession(state: TuiState): TuiTransition {
       screen: { name: "newSession", flow },
     },
   };
-}
-
-function openProjectCollapse(state: TuiState): TuiTransition {
-  if (state.snapshot === undefined) {
-    return { state };
-  }
-  return {
-    state: {
-      ...state,
-      screen: {
-        name: "projectCollapse",
-        value: formatProjectChoicePrompt(selectProjectChoices(state.snapshot, state)),
-      },
-    },
-  };
-}
-
-function formatProjectChoicePrompt(choices: ReadonlyArray<KeyedChoice<{ label: string }>>): string {
-  return choices.map((choice) => `${choice.key}:${choice.value.label}`).join(" ");
 }

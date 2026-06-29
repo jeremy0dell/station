@@ -105,6 +105,7 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     help: drive(base, [{ input: "H" }]),
     search: drive(base, [{ input: "/" }, { input: "ab" }]),
     projectCollapse: drive(base, [{ input: "C" }]),
+    projectSettingsPicker: drive(base, [{ input: "P" }]),
     removeChooseSlot: drive(base, [{ input: "X" }]),
     removeConfirm: drive(base, [{ input: "X" }, { input: "1" }]),
     projectSettings: openProjectSettings(base, "station"),
