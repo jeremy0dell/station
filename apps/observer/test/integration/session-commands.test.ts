@@ -1648,3 +1648,88 @@ describe("worktree.create command", () => {
     fixture.sqlite.close();
   });
 });
+
+describe("worktree.fork command", () => {
+  async function createSource(fixture: ReturnType<typeof createFixture>, branch: string) {
+    await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: { projectId: "web", branch },
+    });
+    await fixture.queue.drain();
+    const row = fixture.core.getSnapshot().rows.find((candidate) => candidate.branch === branch);
+    if (row === undefined) {
+      throw new Error(`source worktree ${branch} was not created`);
+    }
+    return row;
+  }
+
+  it("branches off the source and seeds its working tree, with no session or terminal", async () => {
+    // The native fork mirrors New Session: seed a worktree, then Station hosts the
+    // inherited harness itself — so this must NOT mint a session or launch a terminal.
+    const worktree = new FakeWorktreeProvider({ now });
+    const terminal = new FakeTerminalProvider({ now });
+    const fixture = createFixture({ worktree, terminal });
+    const source = await createSource(fixture, "feature");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.fork",
+      payload: { projectId: "web", sourceWorktreeId: source.id, branch: "feature-fork" },
+    });
+    await fixture.queue.drain();
+
+    expect(receipt).toMatchObject({ accepted: true, status: "accepted" });
+
+    const rows = fixture.core.getSnapshot().rows;
+    expect(rows.map((row) => row.branch).sort()).toEqual(["feature", "feature-fork"]);
+    expect(rows.find((row) => row.branch === "feature-fork")?.agent).toBeUndefined();
+    expect(fixture.core.getSnapshot().sessions).toEqual([]);
+    expect(terminal.snapshot().launches).toHaveLength(0);
+
+    // The fork create pins base to the source branch HEAD and seeds from the source path.
+    const forkCreate = worktree.snapshot().created.find((req) => req.branch === "feature-fork");
+    expect(forkCreate).toMatchObject({
+      branch: "feature-fork",
+      base: "feature",
+      seedFrom: { path: source.path, worktreeId: source.id },
+    });
+    fixture.sqlite.close();
+  });
+
+  it("omits the seed when copyDirty is false", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const fixture = createFixture({ worktree });
+    const source = await createSource(fixture, "feature");
+
+    await fixture.queue.dispatch({
+      type: "worktree.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "feature-fork",
+        copyDirty: false,
+      },
+    });
+    await fixture.queue.drain();
+
+    const forkCreate = worktree.snapshot().created.find((req) => req.branch === "feature-fork");
+    expect(forkCreate?.seedFrom).toBeUndefined();
+    expect(forkCreate?.base).toBe("feature");
+    fixture.sqlite.close();
+  });
+
+  it("fails when the source worktree is not in the snapshot", async () => {
+    const fixture = createFixture({});
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.fork",
+      payload: { projectId: "web", sourceWorktreeId: "wt_missing", branch: "feature-fork" },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_NOT_FOUND" },
+    });
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+    fixture.sqlite.close();
+  });
+});

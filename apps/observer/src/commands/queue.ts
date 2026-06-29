@@ -353,6 +353,7 @@ function commandScope(command: StationCommand): string {
     case "session.resumeAgent":
       return `worktree:${command.payload.worktreeId}`;
     case "worktree.create":
+    case "worktree.fork":
     case "session.create":
     case "session.fork":
       return `project:${command.payload.projectId}`;

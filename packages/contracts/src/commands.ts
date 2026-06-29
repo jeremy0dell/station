@@ -39,6 +39,19 @@ export const RemoveWorktreePayloadSchema = z
 
 export type RemoveWorktreePayload = z.infer<typeof RemoveWorktreePayloadSchema>;
 
+// Fork a worktree: new branch off the source HEAD, optionally seeding its working tree.
+export const ForkWorktreePayloadSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    sourceWorktreeId: WorktreeIdSchema,
+    branch: nonEmptyStringSchema,
+    base: nonEmptyStringSchema.optional(),
+    copyDirty: z.boolean().optional(),
+  })
+  .strict();
+
+export type ForkWorktreePayload = z.infer<typeof ForkWorktreePayloadSchema>;
+
 export const HarnessCommandOptionsSchema = z
   .object({
     provider: ProviderIdSchema,
@@ -240,6 +253,7 @@ export type InstallHooksPayload = z.infer<typeof InstallHooksPayloadSchema>;
 
 export const StationCommandTypeSchema = z.enum([
   "worktree.create",
+  "worktree.fork",
   "worktree.remove",
   "session.create",
   "session.startAgent",
@@ -260,6 +274,10 @@ export const StationCommandTypeSchema = z.enum([
 
 export const CreateWorktreeCommandSchema = z
   .object({ type: z.literal("worktree.create"), payload: CreateWorktreePayloadSchema })
+  .strict();
+
+export const ForkWorktreeCommandSchema = z
+  .object({ type: z.literal("worktree.fork"), payload: ForkWorktreePayloadSchema })
   .strict();
 
 export const RemoveWorktreeCommandSchema = z
@@ -331,6 +349,7 @@ export const InstallHooksCommandSchema = z
 
 export const StationCommandSchema = z.discriminatedUnion("type", [
   CreateWorktreeCommandSchema,
+  ForkWorktreeCommandSchema,
   RemoveWorktreeCommandSchema,
   CreateSessionCommandSchema,
   StartAgentCommandSchema,
