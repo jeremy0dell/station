@@ -53,9 +53,6 @@ importers:
       '@station/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@station/crush':
-        specifier: workspace:*
-        version: link:../../integrations/harness/crush
       '@station/cursor':
         specifier: workspace:*
         version: link:../../integrations/harness/cursor
@@ -152,21 +149,6 @@ importers:
       smol-toml:
         specifier: ^1.6.1
         version: 1.6.1
-      zod:
-        specifier: ^4.1.12
-        version: 4.4.3
-
-  integrations/harness/crush:
-    dependencies:
-      '@station/contracts':
-        specifier: workspace:*
-        version: link:../../../packages/contracts
-      '@station/harness-shared':
-        specifier: workspace:*
-        version: link:../../../packages/harness-shared
-      '@station/runtime':
-        specifier: workspace:*
-        version: link:../../../packages/runtime
       zod:
         specifier: ^4.1.12
         version: 4.4.3

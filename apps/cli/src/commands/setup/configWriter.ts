@@ -246,11 +246,7 @@ function tomlString(value: string): string {
 
 function harnessSupportsHooks(harness: string): boolean {
   return (
-    harness === "claude" ||
-    harness === "codex" ||
-    harness === "cursor" ||
-    harness === "crush" ||
-    harness === "opencode"
+    harness === "claude" || harness === "codex" || harness === "cursor" || harness === "opencode"
   );
 }
 

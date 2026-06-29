@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("release readiness docs", () => {
@@ -26,8 +27,31 @@ describe("release readiness docs", () => {
     expect(localRealConfig).toContain("include_external = false");
     expect(localRealConfig).not.toContain('profile = "default"');
   });
+
+  it("does not advertise removed Crush harness surfaces", async () => {
+    const files = ["README.md", "AGENTS.md", ...(await markdownFiles("docs"))];
+
+    for (const file of files) {
+      const content = await read(file);
+      expect(content, file).not.toMatch(/\bcrush\b|\.crush|STATION_CRUSH|station-crush/i);
+    }
+  });
 });
 
 async function read(path: string): Promise<string> {
   return readFile(path, "utf8");
+}
+
+async function markdownFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await markdownFiles(path)));
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(path);
+    }
+  }
+  return files;
 }

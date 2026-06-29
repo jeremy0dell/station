@@ -173,7 +173,7 @@ export type CommonHookDoctorOptions = {
   stationConfigPath?: string;
 };
 
-/** The hook-doctor option subset shared by claude/codex/cursor/crush; adapters spread-and-extend. */
+/** The hook-doctor option subset shared by claude/codex/cursor; adapters spread-and-extend. */
 export function harnessHookDoctorOptions(
   options: HarnessHookDoctorOptionsInput,
   context?: ProviderDoctorContext,

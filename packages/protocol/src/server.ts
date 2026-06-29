@@ -155,10 +155,6 @@ async function routeSingleResponseRequest(
         const params = ProviderHookIngestParamsSchema.parse(request.params);
         return await api.ingestProviderHookEvent(params.event);
       }
-      case "observer.ingestHookEvent": {
-        const params = ProviderHookIngestParamsSchema.parse(request.params);
-        return await api.ingestHookEvent(params.event);
-      }
       case "observer.harnessEvent.report": {
         const params = HarnessEventReportParamsSchema.parse(request.params);
         return await api.reportHarnessEvent(params.report);

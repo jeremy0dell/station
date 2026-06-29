@@ -10,21 +10,12 @@ import {
   type ProviderHooksCommandOptions,
   runClaudeHooksCommand,
   runCodexHooksCommand,
-  runCrushHooksCommand,
   runCursorHooksCommand,
   runOpenCodeHooksCommand,
   runWorktrunkHooksCommand,
 } from "../providerHookAdapters.js";
 
-const hookTargets = [
-  "worktrunk",
-  "claude",
-  "codex",
-  "cursor",
-  "crush",
-  "opencode",
-  "event",
-] as const;
+const hookTargets = ["worktrunk", "claude", "codex", "cursor", "opencode", "event"] as const;
 const hookActions = ["plan", "install", "uninstall", "doctor"] as const;
 
 export const hooksCliCommand: CliCommandNode = {
@@ -93,14 +84,6 @@ async function runProviderHookCliCommand(context: CliCommandRunContext) {
       const result = await runCursorHooksCommand(hookArgs, cursorOptions);
       return { code: hookCommandExitCode(result), output: result };
     }
-    case "crush": {
-      const crushOptions: ProviderHooksCommandOptions = loadedCommandOptions(context);
-      if (context.options.env !== undefined) {
-        crushOptions.env = context.options.env;
-      }
-      const result = await runCrushHooksCommand(hookArgs, crushOptions);
-      return { code: hookCommandExitCode(result), output: result };
-    }
     case "opencode": {
       const openCodeOptions: ProviderHooksCommandOptions = loadedCommandOptions(context);
       if (context.options.env !== undefined) {
@@ -144,10 +127,6 @@ function hookActionCommand(action: (typeof hookActions)[number]): CliCommandNode
       {
         name: "--cursor-hooks <path>",
         description: "Use a specific Cursor hooks directory for Cursor.",
-      },
-      {
-        name: "--crush-config <path>",
-        description: "Use a specific Crush config file for Crush.",
       },
       {
         name: "--worktrunk-config <path>",

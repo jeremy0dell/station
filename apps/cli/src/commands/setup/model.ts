@@ -12,14 +12,7 @@ export const setupActionKinds = [
   "noop",
 ] as const;
 export const setupActionStatuses = ["pending", "completed", "failed", "skipped"] as const;
-export const supportedHarnessIds = [
-  "codex",
-  "cursor",
-  "opencode",
-  "crush",
-  "pi",
-  "claude",
-] as const;
+export const supportedHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
 
 export const SetupTierSchema = z.enum(setupTiers);
 export const SetupStatusSchema = z.enum(setupStatuses);
