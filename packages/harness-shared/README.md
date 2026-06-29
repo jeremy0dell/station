@@ -1,7 +1,7 @@
 # @station/harness-shared
 
 Provider-neutral building blocks shared by the terminal harness adapters (claude, codex, cursor,
-crush, opencode, pi). Each adapter supplies provider-specific data plus a few callbacks; this
+opencode, pi). Each adapter supplies provider-specific data plus a few callbacks; this
 package supplies the uniform machinery so the adapters stay short and read top-to-bottom.
 
 ## Modules

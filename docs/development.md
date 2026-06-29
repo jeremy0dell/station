@@ -7,7 +7,7 @@ Status: current living doc for development, test, and documentation workflow.
 - Use Node.js 24.x and pnpm 11. The root `package.json` pins `node: 24.x`, `pnpm: 11.0.0`, and `packageManager: pnpm@11.0.0`.
 - Use the repo-local command during development: `pnpm stn ...`.
 - Use `pnpm station:link` only when you intentionally want the current checkout linked as the global `stn`.
-- External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, and Claude Code, Codex, Crush, Cursor, Pi, or OpenCode for real harness workflows.
+- External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, and Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows.
 
 ## Local TUI Workflow
 

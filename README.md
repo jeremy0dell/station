@@ -123,10 +123,8 @@ station never asks an agent what it's doing. It watches the hook events each har
 | **Cursor** | ✓ | ✓ | ✓ ¹ | Full | `~/.cursor/hooks.json` |
 | **OpenCode** | ✓ | ✓ | ✓ | Full | plugin |
 | **Pi** | ✓ | ✓ | ✗ | Partial | in-process extension |
-| **Crush** | ~ ² | ✗ | ✗ | Minimal | `.crush.json` (`PreToolUse`) |
 
 ¹ Cursor reports attention on error at the end of a turn, not from a live permission prompt.
-² Crush only emits a pre-tool hook, so station can tell an agent is working but not when it finishes, goes idle, or needs you.
 
 Full per-event detail and hook setup live in [Harnesses](docs/harnesses.md).
 

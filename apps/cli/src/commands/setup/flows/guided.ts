@@ -236,11 +236,7 @@ function canWriteHarnessHookFlag(facts: SetupFacts, harnessId: string): boolean 
 
 function harnessSupportsHooks(harness: string): boolean {
   return (
-    harness === "claude" ||
-    harness === "codex" ||
-    harness === "cursor" ||
-    harness === "crush" ||
-    harness === "opencode"
+    harness === "claude" || harness === "codex" || harness === "cursor" || harness === "opencode"
   );
 }
 

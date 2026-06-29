@@ -9,7 +9,6 @@ import {
   type ProviderHookSenderOptions,
   sendClaudeHookPayload,
   sendCodexHookPayload,
-  sendCrushHookPayload,
   sendCursorHookPayload,
   sendPiHookPayload,
   sendWorktrunkHookEvent,
@@ -95,21 +94,6 @@ export async function runProviderIngressCommand(
       hookInput.env = options.env;
     }
     return sendCursorHookPayload(hookInput, deps);
-  }
-
-  if (provider === "crush") {
-    const payload = parseJsonPayload(stdin, "crush", event ?? "unknown", deps);
-    if (!payload.ok) {
-      return payload.receipt;
-    }
-    const hookInput: Parameters<typeof sendCrushHookPayload>[0] = {
-      ...senderOptions,
-      payload: payload.value,
-    };
-    if (options.env !== undefined) {
-      hookInput.env = options.env;
-    }
-    return sendCrushHookPayload(hookInput, deps);
   }
 
   if (provider === "pi") {

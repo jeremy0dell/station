@@ -56,7 +56,7 @@ Start with the narrowest matching tool:
 - live event stream: `stn observe --include-snapshot --duration 3s`, with `--json` for agent-readable output
 - command lifecycle record: `stn command get <commandId>`
 - redacted shareable evidence: `stn debug bundle --trace <traceId>`, `stn debug bundle --command <commandId>`, or `stn debug bundle --latest-failure`
-- provider hook setup: `stn hooks doctor worktrunk|claude|codex|cursor|crush|opencode` or `stn event-hooks doctor`
+- provider hook setup: `stn hooks doctor worktrunk|claude|codex|cursor|opencode` or `stn event-hooks doctor`
 - setup/tool readiness: `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check`
 
 If the user says "no action", treat debugging as read-only: inspect only existing logs, existing bundles, existing command/error records, and `stn debug trace` / `stn debug logs` output. Do not start/restart observer, run commands that call or auto-start the observer, retry commands, kill processes, mutate setup/hooks/config, or write a new bundle unless explicitly asked.

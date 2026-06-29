@@ -1,9 +1,8 @@
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import * as contracts from "@station/contracts";
-import { installCrushHooks } from "@station/crush";
 import { installCursorHooks } from "@station/cursor";
 import { describe, expect, it } from "vitest";
 import { createProviderRegistry } from "../../src/observerProviders";
@@ -159,7 +158,7 @@ describe("observer providers", () => {
     expect("DefaultTerminalIntentRunner" in contracts).toBe(false);
   });
 
-  it("omits unconfigured built-in harnesses and shows configured Codex, Crush, Pi, OpenCode, and Cursor", () => {
+  it("omits unconfigured built-in harnesses and shows configured Codex, Cursor, Pi, and OpenCode", () => {
     const codexOnly = createProviderRegistry(config);
 
     expect([...codexOnly.harnesses.keys()]).toEqual(["codex"]);
@@ -168,20 +167,13 @@ describe("observer providers", () => {
       ...config,
       harness: {
         codex: {},
-        crush: {},
         cursor: {},
         pi: {},
         opencode: {},
       },
     });
 
-    expect([...allBuiltIns.harnesses.keys()]).toEqual([
-      "codex",
-      "crush",
-      "cursor",
-      "pi",
-      "opencode",
-    ]);
+    expect([...allBuiltIns.harnesses.keys()]).toEqual(["codex", "cursor", "pi", "opencode"]);
   });
 
   it("passes tmux command config into the tmux terminal provider", async () => {
@@ -598,7 +590,7 @@ describe("observer providers", () => {
     });
   });
 
-  it("registers Crush harness provider with command and observer config path", async () => {
+  it("reports removed Crush harness configs as unavailable", async () => {
     const registry = createProviderRegistry(
       {
         ...config,
@@ -625,91 +617,20 @@ describe("observer providers", () => {
       { configPath: "/tmp/station/config.toml" },
     );
     const provider = registry.harnesses.get("crush");
-    const project = firstProject();
 
-    await expect(
-      provider?.buildLaunch({
-        project: {
-          ...project,
-          defaults: {
-            harness: "crush",
-            terminal: "fake-terminal",
-            layout: "agent-shell",
-          },
-        },
-        worktree: {
-          id: "wt_web_task",
-          provider: "worktrunk",
-          projectId: "web",
-          branch: "task",
-          path: "/tmp/station/web/task",
-          state: "exists",
-          source: "worktrunk",
-          observedAt: now,
-        },
-        mode: "exec",
-        initialPrompt: "Review the task.",
-      }),
-    ).resolves.toMatchObject({
-      provider: "crush",
-      command: "crush-custom",
-      args: ["run", "--quiet", "Review the task."],
-      env: {
-        STATION_CONFIG_PATH: "/tmp/station/config.toml",
+    await expect(provider?.health()).resolves.toMatchObject({
+      providerId: "crush",
+      providerType: "harness",
+      status: "unavailable",
+      lastError: {
+        code: "PROVIDER_NOT_REGISTERED",
+        provider: "crush",
       },
     });
-  });
-
-  it("passes Crush hook config and observer paths into the Crush harness provider", async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "station-crush-factory-")));
-    const stateDir = join(root, "state");
-    const observerSocketPath = join(root, "run", "observer.sock");
-    const hookSpoolDir = join(stateDir, "spool", "hooks");
-    const configPath = join(root, "station.config.toml");
-    const previousCwd = process.cwd();
-
-    await installCrushHooks({
-      stationConfigPath: configPath,
-      observerSocketPath,
-      stateDir,
-      hookSpoolDir,
-      autoStartFromHooks: false,
-      cwd: root,
+    await expect(provider?.buildLaunch({} as never)).rejects.toMatchObject({
+      code: "PROVIDER_NOT_REGISTERED",
+      provider: "crush",
     });
-
-    process.chdir(root);
-    try {
-      const registry = createProviderRegistry(
-        {
-          ...config,
-          observer: {
-            stateDir,
-            socketPath: observerSocketPath,
-            autoStartFromHooks: false,
-          },
-          defaults: {
-            ...config.defaults,
-            harness: "crush",
-          },
-          harness: {
-            crush: {
-              installHooks: true,
-            },
-          },
-        },
-        { configPath },
-      );
-      const provider = registry.harnesses.get("crush");
-
-      await expect(provider?.doctorChecks?.()).resolves.toContainEqual(
-        expect.objectContaining({
-          name: "crush-hooks",
-          status: "ok",
-        }),
-      );
-    } finally {
-      process.chdir(previousCwd);
-    }
   });
 
   it("registers GitHub as an optional repository provider without eager health alerts", async () => {

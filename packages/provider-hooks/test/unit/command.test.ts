@@ -45,7 +45,6 @@ describe("provider hook ingress command", () => {
           };
           return {
             ingestProviderHookEvent: ingest,
-            ingestHookEvent: ingest,
           } as never;
         },
       },
@@ -82,7 +81,6 @@ describe("provider hook ingress command", () => {
           };
           return {
             ingestProviderHookEvent: ingest,
-            ingestHookEvent: ingest,
           } as never;
         },
         writeSpool: async ({ spoolDir, event, error, clock }) => {
@@ -111,62 +109,18 @@ describe("provider hook ingress command", () => {
     expect(observedSpoolDir).toBe(fixture.hookSpoolDir);
   });
 
-  it("delivers Crush PreToolUse hooks through observer.ingestProviderHookEvent", async () => {
+  it("rejects removed Crush hook sender targets", async () => {
     const fixture = await createTempState();
-    let observedEvent: ProviderHookEvent | undefined;
 
-    const receipt = await runProviderIngressCommand(
-      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "crush"],
-      {
-        stdin: JSON.stringify(crushPayload()),
-        env: stationEnv(),
-      },
-      {
-        clock: { now: () => new Date(now) },
-        hookId: () => "hook_crush_1",
-        clientFactory: () => {
-          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
-            observedEvent = event;
-            return {
-              schemaVersion: "0.6.0",
-              hookId: event.hookId ?? "hook_crush_1",
-              provider: event.provider,
-              event: event.event,
-              accepted: true,
-              status: "ingested",
-              receivedAt: event.receivedAt,
-              reconciled: false,
-            };
-          };
-          return {
-            ingestProviderHookEvent: ingest,
-            ingestHookEvent: ingest,
-          } as never;
+    await expect(
+      runProviderIngressCommand(
+        ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "crush"],
+        {
+          stdin: JSON.stringify({ event: "PreToolUse" }),
+          env: stationEnv(),
         },
-      },
-    );
-
-    expect(receipt).toMatchObject({
-      status: "ingested",
-      provider: "crush",
-      event: "PreToolUse",
-    });
-    expect(observedEvent).toMatchObject({
-      provider: "crush",
-      kind: "harness",
-      event: "PreToolUse",
-      payload: {
-        event: "PreToolUse",
-        session_id: "crush_session_1",
-        cwd: "/tmp/station/web/task",
-        tool_name: "bash",
-        tool_input: { command: "pnpm test" },
-        station_project_id: "web",
-        station_worktree_id: "wt_web_task",
-        station_session_id: "ses_web_task",
-        station_terminal_target_id: "tmux:station:@1:%2",
-      },
-    });
+      ),
+    ).rejects.toThrow("Unsupported provider hook sender: crush");
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
@@ -631,16 +585,6 @@ function cursorPayload() {
     command: "pnpm test",
     tool_input: { command: "pnpm test" },
     user_email: "person@example.com",
-  };
-}
-
-function crushPayload() {
-  return {
-    event: "PreToolUse",
-    session_id: "crush_session_1",
-    cwd: "/tmp/station/web/task",
-    tool_name: "bash",
-    tool_input: { command: "pnpm test" },
   };
 }
 

@@ -40,7 +40,7 @@ Use the narrowest tool that can answer the question:
 | One command lifecycle record | `stn command get <commandId>` |
 | Failed provider command details | `stn debug trace <traceOrCommandId>` or `stn command get <commandId>` |
 | Redacted shareable evidence | `stn debug bundle --trace <traceId>` / `--command <commandId>` / `--latest-failure` |
-| Provider hook setup | `stn hooks doctor <target>` for worktrunk, claude, codex, cursor, crush, or opencode |
+| Provider hook setup | `stn hooks doctor <target>` for worktrunk, claude, codex, cursor, or opencode |
 | Observer event hook setup | `stn event-hooks doctor` |
 | Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check` |
 

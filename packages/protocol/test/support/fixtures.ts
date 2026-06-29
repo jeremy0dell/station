@@ -45,16 +45,6 @@ export function createFakeObserverApi(
       receivedAt: event.receivedAt,
       reconciled: true,
     }),
-    ingestHookEvent: async (event): Promise<ProviderHookReceipt> => ({
-      schemaVersion: STATION_SCHEMA_VERSION,
-      hookId: "hook_1",
-      provider: event.provider,
-      event: event.event,
-      accepted: true,
-      status: "ingested",
-      receivedAt: event.receivedAt,
-      reconciled: true,
-    }),
     reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reportId: report.reportId,

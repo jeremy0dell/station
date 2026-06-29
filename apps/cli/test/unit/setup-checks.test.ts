@@ -127,7 +127,7 @@ describe("setup dependency checks", () => {
     expect(plan.summary.selectedHarness).toBe("cursor");
   });
 
-  it("detects Crush as a supported harness", async () => {
+  it("ignores Crush when choosing a supported harness", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -150,12 +150,12 @@ describe("setup dependency checks", () => {
     });
     const plan = buildSetupPlan(facts);
 
-    expect(facts.harnesses.find((harness) => harness.id === "crush")).toMatchObject({
-      status: "ok",
-      command: "crush",
-      version: "1.2.3",
+    expect(facts.harnesses.some((harness) => harness.id === "crush")).toBe(false);
+    expect(plan.summary.selectedHarness).toBeUndefined();
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "missing",
+      message: "Install one supported harness CLI: claude, codex, cursor agent, opencode, or pi.",
     });
-    expect(plan.summary.selectedHarness).toBe("crush");
   });
 
   it("detects harness CLIs installed under the user local bin directory", async () => {
