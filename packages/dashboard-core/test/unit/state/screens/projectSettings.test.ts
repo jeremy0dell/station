@@ -114,6 +114,56 @@ describe("project settings panel", () => {
     expect(pendingProjectDefaultHarnesses(pruned)).toEqual({});
   });
 
+  it("does not re-dispatch when re-selecting the agent that is already optimistically current", () => {
+    const snapshot = createDashboardSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "web");
+    if (project === undefined) throw new Error("missing web project");
+    const other = selectNewSessionHarnessChoices(snapshot, project).find(
+      (choice) => choice.value.id !== project.defaults.harness,
+    );
+    if (other === undefined) throw new Error("no alternative harness in fixture");
+
+    const picked = handleTuiKey(drive(panelState(), [RIGHT]), { input: other.key });
+    expect(picked.operations).toHaveLength(1);
+
+    // It is now the optimistic default, so re-selecting it is a no-op edit — not
+    // a duplicate setProjectDefaultHarness command for a change already in flight.
+    const again = handleTuiKey(picked.state, { input: other.key });
+    expect(again.operations ?? []).toEqual([]);
+  });
+
+  it("overrides an in-flight change when the snapshot default is re-selected", () => {
+    const snapshot = createDashboardSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "web");
+    if (project === undefined) throw new Error("missing web project");
+    const choices = selectNewSessionHarnessChoices(snapshot, project);
+    const current = choices.find((choice) => choice.value.id === project.defaults.harness);
+    const other = choices.find((choice) => choice.value.id !== project.defaults.harness);
+    if (current === undefined || other === undefined) {
+      throw new Error("fixture needs the default plus one alternative harness");
+    }
+
+    // Pick the alternative (optimistic pending), then pick the snapshot default
+    // again before the change lands.
+    const pendingOther = handleTuiKey(drive(panelState(), [RIGHT]), { input: other.key }).state;
+    const revert = handleTuiKey(pendingOther, { input: current.key });
+
+    // The final choice must win: dispatch the default and re-point the optimistic
+    // marker, not silently drop it because it matches the stale snapshot value.
+    expect(revert.operations).toEqual([
+      expect.objectContaining({
+        type: "setProjectDefaultHarness",
+        command: expect.objectContaining({
+          payload: { projectId: "web", harness: project.defaults.harness },
+        }),
+      }),
+    ]);
+    expect(selectProjectDefaultHarness(revert.state.localRows, project)).toEqual({
+      harness: project.defaults.harness,
+      pending: true,
+    });
+  });
+
   it("reverting the optimistic default falls back to the snapshot value", () => {
     const snapshot = createDashboardSnapshot();
     const project = snapshot.projects.find((candidate) => candidate.id === "web");
