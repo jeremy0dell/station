@@ -11,6 +11,8 @@ export type TuiInputMode =
   | "removeConfirm"
   | "renameChooseSlot"
   | "renameEdit"
+  | "forkChooseSlot"
+  | "forkDetails"
   | "newSessionReview"
   | "newSessionEditName"
   | "newSessionPickProject"
@@ -33,6 +35,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
+    case "fork":
+      return screen.step === "chooseSlot" ? "forkChooseSlot" : "forkDetails";
     case "newSession":
       switch (screen.flow.mode) {
         case "review":
@@ -64,13 +68,56 @@ export type TuiKeyPattern =
 
 export type TuiBindingOutcome = "handled" | "exit" | "dismiss-popup";
 
-type TuiBindingSpec = {
+export type TuiBindingSpec = {
   id: string;
   pattern: TuiKeyPattern;
   action: string;
   outcome: TuiBindingOutcome;
   help?: { keys: string; label: string };
 };
+
+// The shared editable-text key block (cursor moves, backspace/delete, and a trailing
+// text catch-all) reused by every single-field edit mode. All keys route to one action
+// the mode handler interprets, so modes never redeclare this boilerplate.
+export function editableTextBindings(
+  prefix: string,
+  action: string,
+  typeHelp?: { keys: string; label: string },
+): readonly TuiBindingSpec[] {
+  return [
+    {
+      id: `${prefix}.cursorLeft`,
+      pattern: { kind: "named", named: "left" },
+      action,
+      outcome: "handled",
+    },
+    {
+      id: `${prefix}.cursorRight`,
+      pattern: { kind: "named", named: "right" },
+      action,
+      outcome: "handled",
+    },
+    {
+      id: `${prefix}.backspace`,
+      pattern: { kind: "named", named: "backspace" },
+      action,
+      outcome: "handled",
+    },
+    {
+      id: `${prefix}.delete`,
+      pattern: { kind: "named", named: "delete" },
+      action,
+      outcome: "handled",
+    },
+    {
+      id: `${prefix}.type`,
+      pattern: { kind: "text" },
+      action,
+      outcome: "handled",
+      ...(typeHelp === undefined ? {} : { help: typeHelp }),
+    },
+  ];
+}
 
 export type TuiHelpContentLine =
   | { text: string; align?: "center" }
@@ -134,6 +181,13 @@ export const TUI_KEYMAP = {
       action: "tui.rename.open",
       outcome: "handled",
       help: { keys: "R", label: "rename" },
+    },
+    {
+      id: "tui.dashboard.fork",
+      pattern: { kind: "char", char: "F" },
+      action: "tui.fork.open",
+      outcome: "handled",
+      help: { keys: "F", label: "fork" },
     },
     {
       id: "tui.dashboard.refresh",
@@ -378,36 +432,68 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "enter", label: "rename" },
     },
+    ...editableTextBindings("tui.renameEdit", "tui.rename.edit"),
+  ],
+  forkChooseSlot: [
     {
-      id: "tui.renameEdit.backspace",
-      pattern: { kind: "named", named: "backspace" },
-      action: "tui.rename.edit",
+      id: "tui.fork.cancel",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.fork.cancel",
+      outcome: "handled",
+      help: { keys: "esc", label: "cancel" },
+    },
+    {
+      id: "tui.fork.scrollUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.view.scrollUp",
       outcome: "handled",
     },
     {
-      id: "tui.renameEdit.delete",
-      pattern: { kind: "named", named: "delete" },
-      action: "tui.rename.edit",
+      id: "tui.fork.scrollDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.view.scrollDown",
       outcome: "handled",
     },
     {
-      id: "tui.renameEdit.cursorLeft",
-      pattern: { kind: "named", named: "left" },
-      action: "tui.rename.edit",
+      id: "tui.fork.chooseSlot",
+      pattern: { kind: "slot" },
+      action: "tui.fork.chooseSlot",
+      outcome: "handled",
+      help: { keys: "1-9 a-z", label: "choose source" },
+    },
+  ],
+  forkDetails: [
+    {
+      id: "tui.forkDetails.back",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.fork.back",
+      outcome: "handled",
+      help: { keys: "esc", label: "back" },
+    },
+    {
+      id: "tui.forkDetails.submit",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.fork.submit",
+      outcome: "handled",
+      help: { keys: "enter", label: "fork" },
+    },
+    {
+      id: "tui.forkDetails.focusUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.fork.focus",
       outcome: "handled",
     },
     {
-      id: "tui.renameEdit.cursorRight",
-      pattern: { kind: "named", named: "right" },
-      action: "tui.rename.edit",
+      id: "tui.forkDetails.focusDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.fork.focus",
       outcome: "handled",
+      help: { keys: "↑↓", label: "field" },
     },
-    {
-      id: "tui.renameEdit.type",
-      pattern: { kind: "text" },
-      action: "tui.rename.edit",
-      outcome: "handled",
-    },
+    ...editableTextBindings("tui.forkDetails", "tui.fork.detailKey", {
+      keys: "space",
+      label: "toggle copy",
+    }),
   ],
   newSessionReview: [
     {
@@ -461,36 +547,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "enter", label: "use name" },
     },
-    {
-      id: "tui.newSessionEdit.backspace",
-      pattern: { kind: "named", named: "backspace" },
-      action: "tui.newSession.editInput",
-      outcome: "handled",
-    },
-    {
-      id: "tui.newSessionEdit.delete",
-      pattern: { kind: "named", named: "delete" },
-      action: "tui.newSession.editInput",
-      outcome: "handled",
-    },
-    {
-      id: "tui.newSessionEdit.cursorLeft",
-      pattern: { kind: "named", named: "left" },
-      action: "tui.newSession.editInput",
-      outcome: "handled",
-    },
-    {
-      id: "tui.newSessionEdit.cursorRight",
-      pattern: { kind: "named", named: "right" },
-      action: "tui.newSession.editInput",
-      outcome: "handled",
-    },
-    {
-      id: "tui.newSessionEdit.type",
-      pattern: { kind: "text" },
-      action: "tui.newSession.editInput",
-      outcome: "handled",
-    },
+    ...editableTextBindings("tui.newSessionEdit", "tui.newSession.editInput"),
   ],
   newSessionPickProject: [
     {
