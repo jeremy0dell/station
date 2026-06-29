@@ -151,6 +151,14 @@ export function createTuiLocalOperationRunner(input: {
             (error) => addSafeErrorToast(store(), error),
           );
         }
+        if (operation.type === "forkSession") {
+          void runForkSessionOperation(
+            store(),
+            input.service,
+            operation.command,
+            input.clientLabel,
+          );
+        }
         if (operation.type === "removeWorktree") {
           void runRemoveWorktreeOperation(
             store(),
@@ -399,6 +407,38 @@ async function runSearchProjectDirectoriesOperation(
     store.setState(applyAddProjectFolderSearchLoaded(store.getState(), result));
   } catch (error: unknown) {
     store.setState(applyAddProjectFolderSearchFailed(store.getState(), query, error, clientLabel));
+  }
+}
+
+async function runForkSessionOperation(
+  store: StoreApi<TuiStore>,
+  service: TuiObserverService,
+  command: Extract<StationCommand, { type: "session.fork" }>,
+  clientLabel: string,
+): Promise<void> {
+  try {
+    const receipt = await service.dispatch(command);
+    if (!receipt.accepted) {
+      addSafeErrorToast(
+        store,
+        receipt.error ??
+          ({
+            tag: "CommandDispatchError",
+            code: "SESSION_FORK_REJECTED",
+            message: "Fork was rejected.",
+          } satisfies SafeError),
+      );
+      return;
+    }
+    const completion = await service.waitForCommandCompletion(receipt.commandId);
+    if (completion.status === "failed") {
+      addSafeErrorToast(store, completion.error);
+      return;
+    }
+    const snapshot = await service.loadSnapshot();
+    store.setState(replaceSnapshot(store.getState(), snapshot));
+  } catch (error: unknown) {
+    addSafeErrorToast(store, toSafeError(error, { clientLabel }));
   }
 }
 

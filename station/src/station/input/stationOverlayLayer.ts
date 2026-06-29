@@ -11,6 +11,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { KeymapLayer } from "../../input/keymaps.js";
 import {
+  paneLaunchForkSessionOutcome,
   paneLaunchManagedOutcome,
   paneLaunchNewSessionOutcome,
   type RouteOutcome,
@@ -19,6 +20,7 @@ import { STATION_OVERLAY_ID } from "../../state/types.js";
 import type { TuiStore } from "@station/dashboard-core";
 import {
   handleStationSequence,
+  resolveKeyForkSessionSubmit,
   resolveKeyNewSessionSubmit,
   resolveKeyRowAgentTarget,
 } from "./stationActions.js";
@@ -44,6 +46,13 @@ export function createStationOverlayLayer(
       const submit = resolveKeyNewSessionSubmit(stationViewStore, key);
       if (submit.kind === "submit") {
         return paneLaunchNewSessionOutcome(submit);
+      }
+      // Enter on the Fork details screen seeds a worktree (worktree.fork) and
+      // hosts the inherited harness in Station, bypassing the machine's
+      // tmux-bound session.fork the same way New Session bypasses session.create.
+      const fork = resolveKeyForkSessionSubmit(stationViewStore, key);
+      if (fork.kind === "submit") {
+        return paneLaunchForkSessionOutcome(fork);
       }
       const outcome = handleStationSequence(stationViewStore, key);
       if (outcome.kind === "close-overlay") {

@@ -10,6 +10,7 @@ import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetV
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
+import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 
 export type OverlayHostViewProps = {
   snapshot: StationSnapshot;
@@ -63,6 +64,9 @@ export function OverlayHostView({
         localRows={localRows}
       />
     );
+  }
+  if (screen.name === "fork") {
+    return <ForkSessionSheetView columns={columns} rows={rows} screen={screen} />;
   }
   return null;
 }

@@ -101,6 +101,16 @@ const CASES: ModalCase[] = [
     expect: ["Rename Session", "Name", "Enter:rename   Esc:back"],
   },
   {
+    name: "fork slot sheet",
+    keys: [{ input: "F" }],
+    expect: ["Select session to fork", "Click a row or press slot key", "Esc:cancel"],
+  },
+  {
+    name: "fork details sheet",
+    keys: [{ input: "F" }, { input: "1" }],
+    expect: ["Fork Session", "Source", "uncommitted changes", "Fork (enter)", "enter:fork"],
+  },
+  {
     name: "new session review",
     keys: [{ input: "N" }],
     expect: ["Create Session", "Project", "Agent", "Enter:create N:name P:project A:agent Esc:cancel"],

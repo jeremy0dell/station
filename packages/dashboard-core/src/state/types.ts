@@ -76,6 +76,23 @@ export type TuiScreen =
       returnTo?: "dashboard";
       validationError?: string;
     }
+  | { name: "fork"; step: "chooseSlot" }
+  | {
+      name: "fork";
+      step: "details";
+      sourceWorktreeId: WorktreeId;
+      projectId: ProjectId;
+      projectLabel: string;
+      sourceBranch: string;
+      sourceDirty: boolean;
+      sourceAgentRunning: boolean;
+      draftBranch: EditableTextInputState;
+      nameSource: "generated" | "edited";
+      copyDirty: boolean;
+      focus: "branch" | "copyDirty" | "submit";
+      returnTo?: "dashboard";
+      validationError?: string;
+    }
   | { name: "addProject"; flow: AddProjectFlowState }
   | { name: "newSession"; flow: NewSessionFlowState }
   | { name: "projectDefaultAgent"; projectId: ProjectId }

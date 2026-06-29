@@ -13,7 +13,7 @@ export type PendingCreateSessionRow = {
   localId: string;
   projectId: string;
   branch: string;
-  harnessProvider: ProviderId;
+  harnessProvider?: ProviderId;
   createdAt: string;
   commandId?: CommandId;
 };

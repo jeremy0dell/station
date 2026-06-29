@@ -246,7 +246,7 @@ function localRowMatchesSearch(
   if (query.length === 0) {
     return true;
   }
-  const harnessProvider = row.status === "pending" ? row.harnessProvider : "";
+  const harnessProvider = row.status === "pending" ? (row.harnessProvider ?? "") : "";
   return [row.branch, project.label, harnessProvider].some((value) =>
     value.toLocaleLowerCase().includes(query),
   );

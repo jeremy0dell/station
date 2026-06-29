@@ -18,6 +18,7 @@ import {
   focusProjectSettingsItem,
   openDefaultAgentPickerForProject,
   representativeKeyForBinding,
+  resolveForkSessionSubmit,
   resolveNewSessionSubmit,
   resolveProjectPaneTarget,
   resolveQuickSessionSubmit,
@@ -55,6 +56,8 @@ export type StationMouseTarget =
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   /** The armed "Remove project (R)" action in the panel's detail pane. */
   | { kind: "projectSettingsConfirmRemove" }
+  /** A sheet's primary submit button (the fork details "Fork" action). */
+  | { kind: "sheetSubmit" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
   | { kind: "sheetBackdrop" };
 
@@ -101,7 +104,19 @@ export type StationMouseOutcome =
    * Station pane. The create-hint click counterpart of the keyboard Enter on the
    * New Session review screen.
    */
-  | { kind: "launch-new-session"; projectId: string; branch: string; harness: ProviderId };
+  | { kind: "launch-new-session"; projectId: string; branch: string; harness: ProviderId }
+  /**
+   * Consumed; the router should seed a worktree off a source and host its agent
+   * in a Station pane. The fork-button click counterpart of the keyboard Enter on
+   * the Fork details screen.
+   */
+  | {
+      kind: "launch-fork";
+      projectId: string;
+      sourceWorktreeId: string;
+      branch: string;
+      copyDirty: boolean;
+    };
 
 const SCROLL_PAGE_ROWS = 5;
 
@@ -110,6 +125,7 @@ const ROW_INTERACTIVE_MODES: ReadonlySet<StationInputMode> = new Set([
   "dashboard",
   "removeChooseSlot",
   "renameChooseSlot",
+  "forkChooseSlot",
 ]);
 
 export function routeStationMouse(
@@ -228,6 +244,25 @@ export function routeStationMouse(
         return fromKeyOutcome(dispatchStationKey(store, { input: "r" }));
       }
       return { kind: "handled" };
+    }
+    case "sheetSubmit": {
+      // A click on the Fork details "Fork" button hosts the agent in Station,
+      // matching the keyboard Enter path (resolveKeyForkSessionSubmit) rather than
+      // dispatching the machine's tmux-bound session.fork.
+      if (mode !== "forkDetails") {
+        return { kind: "handled" };
+      }
+      const submit = resolveForkSessionSubmit(store);
+      if (submit.kind === "none") {
+        return { kind: "handled" };
+      }
+      return {
+        kind: "launch-fork",
+        projectId: submit.projectId,
+        sourceWorktreeId: submit.sourceWorktreeId,
+        branch: submit.branch,
+        copyDirty: submit.copyDirty,
+      };
     }
     case "body":
     case "sheetBackdrop":

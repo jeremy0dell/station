@@ -30,6 +30,7 @@ import { STATION_HOST_PROVIDER_ID } from "@station/host";
 import type { ProviderId, WorktreeRow, StationCommand, StationSnapshot } from "@station/contracts";
 import {
   addPendingCreateSessionRow,
+  openForkDetailsForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
   openRemoveWorktreeConfirmForRow,
@@ -202,6 +203,17 @@ export type StationInputEffects = {
    * click uses; failures surface as a STATION toast.
    */
   launchHostedNewSession(target: { projectId: string; branch: string; harness: ProviderId }): void;
+  /**
+   * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
+   * harness in a Station pane (the Fork details screen's submit). Fire-and-forget
+   * like launchHostedNewSession; failures surface as a STATION toast.
+   */
+  launchHostedForkSession(target: {
+    projectId: string;
+    sourceWorktreeId: string;
+    branch: string;
+    copyDirty: boolean;
+  }): void;
   openExternalUrl(url: string): void;
 };
 
@@ -289,6 +301,14 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
         harness: outcome.harness,
       });
       return true;
+    case "pane-launch-fork":
+      effects.launchHostedForkSession({
+        projectId: outcome.projectId,
+        sourceWorktreeId: outcome.sourceWorktreeId,
+        branch: outcome.branch,
+        copyDirty: outcome.copyDirty,
+      });
+      return true;
     case "open-url":
       effects.openExternalUrl(outcome.url);
       return true;
@@ -317,6 +337,19 @@ function findWorktreeRowByBranch(
   return store
     .getState()
     .snapshot?.rows.find((row) => row.projectId === projectId && row.branch === branch);
+}
+
+// The harness a fork inherits: the source's live/recovery harness, else the
+// project default — shared by the optimistic row and the launch.
+function inheritedForkHarness(
+  store: StoreApi<TuiStore>,
+  projectId: string,
+  sourceWorktreeId: string,
+): ProviderId | undefined {
+  const snapshot = store.getState().snapshot;
+  const source = snapshot?.rows.find((row) => row.id === sourceWorktreeId);
+  const project = snapshot?.projects.find((candidate) => candidate.id === projectId);
+  return source?.agent?.harness ?? source?.recovery?.provider ?? project?.defaults.harness;
 }
 
 /**
@@ -384,6 +417,17 @@ function waitForWorktreeByBranch(
  */
 function closeNewSessionWizard(store: StoreApi<TuiStore> | undefined): void {
   if (store !== undefined && store.getState().screen.name === "newSession") {
+    dispatchStationKey(store, { input: "", escape: true });
+  }
+}
+
+function closeForkSheet(store: StoreApi<TuiStore> | undefined): void {
+  if (store === undefined) {
+    return;
+  }
+  // Submit is intercepted before submitFork runs, so unwind to the dashboard
+  // here. Esc steps details → chooseSlot → dashboard; the cap can't spin.
+  for (let hop = 0; hop < 2 && store.getState().screen.name === "fork"; hop += 1) {
     dispatchStationKey(store, { input: "", escape: true });
   }
 }
@@ -490,6 +534,14 @@ function selectContextMenuItem(
     case "openProjectSettings":
       if (stationViewStore !== undefined) {
         stationViewStore.setState(openProjectSettings(stationViewStore.getState(), action.projectId));
+      }
+      return;
+    case "forkSession":
+      if (stationViewStore !== undefined) {
+        stationViewStore.setState(
+          openForkDetailsForRow(stationViewStore.getState(), action.rowId, "dashboard"),
+        );
+        effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
   }
@@ -713,26 +765,34 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       });
     },
     launchHostedNewSession: (target) => {
-      // Close the wizard but keep the overlay open: show an optimistic row, then create the worktree
-      // and host its agent in the background (mirrors session.create). The row is auto-pruned
-      // when the real worktree reaches the snapshot (pruneLocalRowsForSnapshot).
+      // Harness comes from the wizard pick; New Session keeps the overlay open.
       closeNewSessionWizard(options.stationViewStore);
-      const localId = `station-create:${target.projectId}:${target.branch}`;
+      startHostedWorktreeLaunch({
+        localId: `station-create:${target.projectId}:${target.branch}`,
+        projectId: target.projectId,
+        branch: target.branch,
+        harness: target.harness,
+        command: {
+          type: "worktree.create",
+          payload: { projectId: target.projectId, branch: target.branch },
+        },
+        verb: "create",
+      });
+    },
+    launchHostedForkSession: (target) => {
+      // Fork inherits the source's harness (the seeded worktree has none yet).
+      closeForkSheet(options.stationViewStore);
       const viewStore = options.stationViewStore;
-      if (viewStore !== undefined) {
-        viewStore.setState(
-          addPendingCreateSessionRow(viewStore.getState(), {
-            localId,
-            projectId: target.projectId,
-            branch: target.branch,
-            harnessProvider: target.harness,
-            createdAt: new Date().toISOString(),
-          }),
-        );
-      }
-      void runManagedNewSession(target, localId).catch((error) => {
-        clearPendingCreateRow(localId);
-        pushLaunchError(error);
+      startHostedWorktreeLaunch({
+        localId: `station-fork:${target.sourceWorktreeId}:${target.branch}`,
+        projectId: target.projectId,
+        branch: target.branch,
+        harness:
+          viewStore === undefined
+            ? undefined
+            : inheritedForkHarness(viewStore, target.projectId, target.sourceWorktreeId),
+        command: { type: "worktree.fork", payload: { ...target } },
+        verb: "fork",
       });
     },
     openExternalUrl: options.openExternalUrl ?? (() => {}),
@@ -987,65 +1047,89 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
     }
   }
 
-  // New Session in Station: create the worktree only (no agent), then host its
-  // agent in a pane via the same managed launch a row click uses. The project
-  // default terminal is tmux, which Station can't render — so we deliberately do
-  // NOT let the wizard's session.create spawn the agent.
-  async function runManagedNewSession(
-    target: { projectId: string; branch: string; harness: ProviderId },
-    localId: string,
-  ): Promise<void> {
+  // Station hosts agents itself (worktree.create/fork + a managed launch), never
+  // the machine's session.create/fork — those spawn a tmux terminal it can't render.
+  type HostedWorktreeLaunch = {
+    localId: string;
+    projectId: string;
+    branch: string;
+    harness: ProviderId | undefined;
+    command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
+    verb: "create" | "fork";
+  };
+
+  function startHostedWorktreeLaunch(spec: HostedWorktreeLaunch): void {
+    const viewStore = options.stationViewStore;
+    if (viewStore !== undefined) {
+      viewStore.setState(
+        addPendingCreateSessionRow(viewStore.getState(), {
+          localId: spec.localId,
+          projectId: spec.projectId,
+          branch: spec.branch,
+          createdAt: new Date().toISOString(),
+          // Fork can inherit no harness (source has none, project has no default);
+          // the row still shows, agent column blank until the launch picks a default.
+          ...(spec.harness === undefined ? {} : { harnessProvider: spec.harness }),
+        }),
+      );
+    }
+    void runHostedWorktreeLaunch(spec).catch((error) => {
+      clearPendingCreateRow(spec.localId);
+      pushLaunchError(error);
+    });
+  }
+
+  async function runHostedWorktreeLaunch(spec: HostedWorktreeLaunch): Promise<void> {
     const observerService = options.observerService;
     if (observerService === undefined) {
-      clearPendingCreateRow(localId);
-      pushLaunchToast("No observer connection; cannot create the session.");
+      clearPendingCreateRow(spec.localId);
+      pushLaunchToast(`No observer connection; cannot ${spec.verb} the session.`);
       return;
     }
     const viewStore = options.stationViewStore;
     if (viewStore === undefined) {
-      pushLaunchToast("The dashboard is not available; cannot create the session.");
+      pushLaunchToast(`The dashboard is not available; cannot ${spec.verb} the session.`);
       return;
     }
-    const createCommand: Extract<StationCommand, { type: "worktree.create" }> = {
-      type: "worktree.create",
-      payload: { projectId: target.projectId, branch: target.branch },
-    };
-    const receipt = await observerService.dispatch(createCommand);
+    const receipt = await observerService.dispatch(spec.command);
     if (!receipt.accepted) {
-      clearPendingCreateRow(localId);
+      clearPendingCreateRow(spec.localId);
       pushLaunchError(
         receipt.error ?? {
           tag: "ClientObserverError",
-          code: "STATION_WORKTREE_CREATE_REJECTED",
-          message: "Station could not create the worktree.",
+          code: `STATION_WORKTREE_${spec.verb.toUpperCase()}_REJECTED`,
+          message: `Station could not ${spec.verb} the worktree.`,
         },
       );
       return;
     }
     const completion = await observerService.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
-      clearPendingCreateRow(localId);
+      clearPendingCreateRow(spec.localId);
       pushLaunchError(completion.error);
       return;
     }
-    // On success the optimistic row is auto-pruned once the real worktree reaches the snapshot
-    // (pruneLocalRowsForSnapshot), which is also when this await resolves.
-    const row = await waitForWorktreeByBranch(viewStore, target.projectId, target.branch);
+    // The optimistic row auto-prunes when the worktree reaches the snapshot, which
+    // is also when this resolves.
+    const row = await waitForWorktreeByBranch(viewStore, spec.projectId, spec.branch);
     if (row === undefined) {
-      clearPendingCreateRow(localId);
+      clearPendingCreateRow(spec.localId);
       pushLaunchToast(
-        "Created the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.",
+        `${spec.verb === "create" ? "Created" : "Forked"} the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.`,
         "info",
       );
       return;
     }
-    await runManagedLaunch(agentWorktreePaneId(row.id), {
-      projectId: target.projectId,
+    const launchTarget: ManagedLaunchTarget = {
+      projectId: spec.projectId,
       worktreeId: row.id,
       cwd: row.path,
-      harness: target.harness,
       background: true,
-    });
+    };
+    if (spec.harness !== undefined) {
+      launchTarget.harness = spec.harness;
+    }
+    await runManagedLaunch(agentWorktreePaneId(row.id), launchTarget);
   }
 
   function pushLaunchToast(message: string, kind: "info" | "error" = "error"): void {

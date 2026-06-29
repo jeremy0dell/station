@@ -23,6 +23,7 @@ import { handleTuiKey } from "@station/dashboard-core";
 import type { TuiState } from "@station/dashboard-core";
 import {
   deriveStationMode,
+  editableTextBindings,
   matchStationBinding,
   STATION_KEYMAP,
   type StationBinding,
@@ -111,6 +112,8 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     projectSettings: openProjectSettings(base, "station"),
     renameChooseSlot: drive(renameBase, [{ input: "R" }]),
     renameEdit: drive(renameBase, [{ input: "R" }, { input: "1" }]),
+    forkChooseSlot: drive(base, [{ input: "F" }]),
+    forkDetails: drive(base, [{ input: "F" }, { input: "1" }]),
     newSessionReview: drive(base, [{ input: "N" }]),
     newSessionEditName: drive(base, [{ input: "N" }, { input: "N" }]),
     newSessionPickProject: drive(base, [{ input: "N" }, { input: "P" }]),
@@ -202,6 +205,31 @@ describe("station keymap coverage", () => {
         expect(`${mode}:${textIndex}`).toBe(`${mode}:${table.length - 1}`);
       }
     }
+  });
+});
+
+describe("editableTextBindings", () => {
+  it("produces the cursor + text catch-all block with the text binding last", () => {
+    const bindings = editableTextBindings("station.example", "station.example.edit");
+    expect(bindings.map((binding) => binding.id)).toEqual([
+      "station.example.cursorLeft",
+      "station.example.cursorRight",
+      "station.example.backspace",
+      "station.example.delete",
+      "station.example.type",
+    ]);
+    expect(bindings.every((binding) => binding.action === "station.example.edit")).toBe(true);
+    expect(bindings.at(-1)?.pattern).toEqual({ kind: "text" });
+    expect(bindings.every((binding) => binding.help === undefined)).toBe(true);
+  });
+
+  it("attaches optional help to the text binding only", () => {
+    const bindings = editableTextBindings("station.example", "station.example.edit", {
+      keys: "space",
+      label: "toggle",
+    });
+    expect(bindings.at(-1)?.help).toEqual({ keys: "space", label: "toggle" });
+    expect(bindings.slice(0, -1).every((binding) => binding.help === undefined)).toBe(true);
   });
 });
 
