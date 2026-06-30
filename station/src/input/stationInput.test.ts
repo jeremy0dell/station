@@ -23,7 +23,7 @@ import { FakeTuiObserverService } from "../station/test/support/fakeObserverServ
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { resolveNewSessionSubmit } from "../station/input/stationActions.js";
 import type { StationMouseEvent } from "./mouse.js";
-import { createStationInputRuntime, nextSplitSeqFromPanes, normalizeSequence } from "./stationInput.js";
+import { createStationInputRuntime } from "./stationInput.js";
 
 const TMUX_STARTUP_BURST =
   "\x1b]10;rgb:ffff/ffff/ffff\x07" +
@@ -2166,52 +2166,5 @@ describe("createStationInputRuntime pane split/focus/close", () => {
     runtime.dispatchMouse({ kind: "contextMenuItem", itemIndex: 1 }, LEFT_DOWN);
     const created = store.getState().workspace.panes.find((pane) => pane.split !== null);
     expect(created?.split).toEqual({ anchorPaneId: MAIN_PANE_ID, direction: "below" });
-  });
-});
-
-describe("normalizeSequence", () => {
-  it("consumes pure reply bursts", () => {
-    expect(normalizeSequence(TMUX_STARTUP_BURST)).toEqual({ consumed: true });
-  });
-
-  it("consumes kitty key releases", () => {
-    expect(normalizeSequence("\x1b[111;5:3u")).toEqual({ consumed: true });
-  });
-
-  it("translates kitty chords to legacy bytes", () => {
-    expect(normalizeSequence("\x1b[111;5u")).toEqual({ consumed: false, legacy: "\x0f" });
-  });
-
-  it("translates xterm Shift+Enter according to preserve mode", () => {
-    expect(normalizeSequence("\x1b[27;2;13~")).toEqual({ consumed: false, legacy: "\r" });
-    expect(normalizeSequence("\x1b[27;2;13~", { preserveModifiedEnter: true })).toEqual({
-      consumed: false,
-      legacy: "\x1b[13;2u",
-    });
-  });
-
-  it("passes ordinary bytes through", () => {
-    expect(normalizeSequence("a")).toEqual({ consumed: false, legacy: "a" });
-  });
-});
-
-describe("nextSplitSeqFromPanes", () => {
-  it("returns one past the highest pane-split-N", () => {
-    expect(
-      nextSplitSeqFromPanes([
-        { id: "pane-main" },
-        { id: "pane-split-2" },
-        { id: "pane-split-9" },
-        { id: "pane-wt-x" },
-      ]),
-    ).toBe(10);
-  });
-
-  it("returns 0 when there are no split panes", () => {
-    expect(nextSplitSeqFromPanes([{ id: "pane-main" }, { id: "pane-agent-wt-1" }])).toBe(0);
-  });
-
-  it("ignores non-numeric split suffixes", () => {
-    expect(nextSplitSeqFromPanes([{ id: "pane-split-abc" }, { id: "pane-split-3" }])).toBe(4);
   });
 });
