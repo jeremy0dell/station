@@ -5,7 +5,7 @@ These are accepted limitations and testing gaps for the current local-use checkp
 ## Product Limitations
 
 - Real E2E remains opt-in because it requires local Worktrunk, tmux, real harness CLIs, credentials or model access, and isolated temporary projects.
-- station is still a private workspace package. There is no public npm package, installer, or release artifact outside this repository.
+- station is still a private workspace package. There is no public npm package or release artifact outside this repository; the draft Homebrew tap packaging path is tracked in [Homebrew packaging](homebrew.md).
 - The scripted/fake-provider release smoke is deterministic, but it does not prove a real harness model response or real Worktrunk shell integration.
 - Station does not include a row-level inspect/debug panel in v1. Use `stn doctor`, `stn snapshot --json`, and `stn debug bundle` for support evidence.
 - Real provider status can be conservative. Provider hooks can promote correlated live rows to working, needs attention, or idle when supported, but terminal-only rows may remain unknown until a reliable hook or provider status signal arrives.
