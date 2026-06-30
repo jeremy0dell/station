@@ -410,6 +410,87 @@ describe("createStationInputRuntime", () => {
     expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
   });
 
+  it("drops a queued automation command when its pane never lays out before the timeout", () => {
+    const automation: Automation = {
+      id: "see-diff",
+      label: "See diff (split right)",
+      enabled: true,
+      steps: [
+        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+      ],
+    };
+    // Fire the 10s send-timeout (the registry-subscription leak guard) deterministically
+    // instead of waiting AUTOMATION_SEND_TIMEOUT_MS; sub-second debounce/settle timers pass through.
+    const realSetTimeout = globalThis.setTimeout;
+    const longTimers: Array<() => void> = [];
+    globalThis.setTimeout = ((
+      callback: (...callbackArgs: unknown[]) => void,
+      ms?: number,
+      ...rest: unknown[]
+    ) => {
+      if (typeof ms === "number" && ms >= 5000) {
+        longTimers.push(() => callback(...rest));
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }
+      return realSetTimeout(callback, ms, ...rest);
+    }) as typeof globalThis.setTimeout;
+    try {
+      const { runtime, scripted, registry } = harness({ automations: [automation] });
+      runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
+      runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, HOVER);
+      expect(runtime.handleSequence("\r")).toBe(true);
+
+      expect(longTimers).toHaveLength(1);
+      for (const fire of longTimers) {
+        fire();
+      }
+
+      // A layout arriving after the timeout finds no subscriber: the command is dropped.
+      registry.resize("pane-split-0", { cols: 36, rows: 8 });
+      expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
+  it("focuses a pane on a primary click through the focus outcome", () => {
+    const { runtime, store } = harness();
+    store.actions.createPane("pane-second");
+    store.actions.focusPane("pane-second");
+    expect(selectActivePaneId(store.getState())).toBe("pane-second");
+
+    expect(runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, LEFT_DOWN)).toBe(true);
+    expect(selectActivePaneId(store.getState())).toBe(MAIN_PANE_ID);
+  });
+
+  it("ignores an overlay paste that sanitizes to nothing", () => {
+    const snapshot = manyProjectsSnapshot();
+    const stationViewStore = createTuiStore({
+      source: new FakeStationSource(snapshot),
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      onDismiss: async () => {},
+      initialState: { terminalRows: 12 },
+    });
+    const { runtime, store } = harness({ stationViewStore });
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+    const before = stationViewStore.getState().screen;
+
+    let prevented = false;
+    runtime.handlePaste({
+      bytes: new TextEncoder().encode("\x00\x01\x02"),
+      preventDefault: () => {
+        prevented = true;
+      },
+    });
+
+    // The overlay claims the paste (preventDefault) but a control-only chunk
+    // sanitizes to empty, so nothing reaches the dashboard machine.
+    expect(prevented).toBe(true);
+    expect(stationViewStore.getState().screen).toEqual(before);
+  });
+
   it("highlights a context menu item on hover via mouse dispatch", () => {
     const { runtime, store } = harness();
     store.actions.createPane("pane-second");
@@ -927,6 +1008,41 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
 
     expect(stationViewStore.getState().screen).toEqual({ name: "search", value: "pty" });
   });
+
+  it("opens the default-agent picker from a project-header context menu", () => {
+    const { runtime, store, stationViewStore } = contextMenuHarness();
+
+    // Right-click a project header opens the project menu: [Set Default Agent, Project Settings…].
+    runtime.dispatchMouse(
+      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      RIGHT_DOWN,
+    );
+    expect(runtime.handleSequence("\r")).toBe(true);
+
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(stationViewStore.getState().screen).toMatchObject({
+      name: "projectDefaultAgent",
+      projectId: "station",
+    });
+  });
+
+  it("opens project settings from a project-header context menu", () => {
+    const { runtime, store, stationViewStore } = contextMenuHarness();
+
+    runtime.dispatchMouse(
+      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      RIGHT_DOWN,
+    );
+    // Menu order: Set Default Agent, Project Settings… — one down reaches settings.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
+    expect(runtime.handleSequence("\r")).toBe(true);
+
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(stationViewStore.getState().screen).toMatchObject({
+      name: "projectSettings",
+      projectId: "station",
+    });
+  });
 });
 
 describe("createStationInputRuntime managed primary-agent launch", () => {
@@ -1425,6 +1541,106 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
     expect(observerService.preparedLaunches).toEqual([]);
   });
+
+  it("toasts and keeps the overlay open when focusing an existing session is rejected", async () => {
+    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
+      stationHostedSnapshot({ focusable: true }),
+    );
+    observerService.nextReceipt = {
+      commandId: "cmd_tui_1",
+      accepted: false,
+      status: "rejected",
+      error: { tag: "ClientObserverError", code: "STATION_FOCUS_REJECTED", message: "Focus was rejected." },
+    };
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    // The focus is dispatched but rejected, so focusExistingSession returns false and
+    // the land-on-pane tail never runs: error toast, overlay stays open.
+    expect(observerService.dispatched).toEqual([
+      { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
+    ]);
+    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Focus was rejected.",
+    });
+    expect(selectStationOverlayVisible(store.getState())).toBe(true);
+  });
+
+  it("toasts and keeps the overlay open when the focus command completion fails", async () => {
+    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
+      stationHostedSnapshot({ focusable: true }),
+    );
+    observerService.nextCompletion = {
+      status: "failed",
+      commandId: "cmd_tui_1",
+      error: { tag: "ClientObserverError", code: "STATION_FOCUS_FAILED", message: "Focus never completed." },
+    };
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Focus never completed.",
+    });
+    expect(selectStationOverlayVisible(store.getState())).toBe(true);
+  });
+
+  it("toasts and keeps the overlay open when the focus dispatch throws", async () => {
+    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
+      stationHostedSnapshot({ focusable: true }),
+    );
+    observerService.dispatch = async () => {
+      throw { tag: "ClientObserverError", code: "STATION_FOCUS_THREW", message: "Observer is gone." };
+    };
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Observer is gone.",
+    });
+    expect(selectStationOverlayVisible(store.getState())).toBe(true);
+  });
+
+  it("still opens the pane when acknowledging the ready turn fails", async () => {
+    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+      preparedPlan(),
+      withTurnReadiness(manyProjectsSnapshot()),
+    );
+    // Only the turn ack throws; the launch itself is unaffected. A failed best-effort
+    // ack must not turn a successful open into an error.
+    observerService.dispatch = async (command) => {
+      if (command.type === "session.acknowledgeTurn") {
+        throw { tag: "ClientObserverError", code: "ACK_FAILED", message: "ack failed" };
+      }
+      return observerService.nextReceipt;
+    };
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    // The open succeeded: overlay closed onto the new primary-agent pane...
+    expect(selectStationOverlayVisible(store.getState())).toBe(false);
+    expect(store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.role).toBe(
+      "primary-agent",
+    );
+    // ...and the swallowed ack error produced no error toast.
+    expect(stationViewStore.getState().toasts.some((entry) => entry.toast.kind === "error")).toBe(
+      false,
+    );
+  });
 });
 
 describe("createStationInputRuntime New Session hosted launch", () => {
@@ -1582,6 +1798,102 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     // No agent was launched: the create failed before any prepare.
     expect(harness.observerService.preparedLaunches).toEqual([]);
     expect(branch.length).toBeGreaterThan(0);
+  });
+
+  it("removes the optimistic row and toasts when the worktree create completion fails", async () => {
+    const harness = newSessionHarness();
+    harness.observerService.nextCompletion = {
+      status: "failed",
+      commandId: "cmd_tui_1",
+      error: {
+        tag: "ClientObserverError",
+        code: "WORKTREE_CREATE_FAILED",
+        message: "Create failed mid-flight.",
+      },
+    };
+    const branch = openWizardAndCaptureBranch(harness);
+
+    expect(harness.pressKey("\r")).toBe(true);
+    await harness.settle();
+
+    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
+    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Create failed mid-flight.",
+    });
+    // The create never completed, so no agent launch was prepared.
+    expect(harness.observerService.preparedLaunches).toEqual([]);
+    expect(branch.length).toBeGreaterThan(0);
+  });
+
+  it("toasts and clears the optimistic row when there is no observer connection", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const stationViewStore = createTuiStore({
+      source: new FakeStationSource(snapshot),
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      onDismiss: async () => {},
+      initialState: { terminalRows: 12 },
+    });
+    const store = createStationStore();
+    // No observerService threaded in → the New Session create cannot dispatch.
+    const runtime = createStationInputRuntime({ store, shutdown: () => {}, stationViewStore });
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+    runtime.handleSequence("N");
+    expect(runtime.handleSequence("\r")).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(stationViewStore.getState().localRows.pendingCreate).toEqual([]);
+    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "No observer connection; cannot create the session.",
+    });
+  });
+
+  it("toasts when the created worktree never reaches the snapshot in time", async () => {
+    const harness = newSessionHarness();
+    const branch = openWizardAndCaptureBranch(harness);
+    const localId = `station-create:${PROJECT_ID}:${branch}`;
+
+    // Fire the 10s "worktree appeared" timeout deterministically instead of waiting
+    // WORKTREE_APPEAR_TIMEOUT_MS; sub-second settle timers pass through.
+    const realSetTimeout = globalThis.setTimeout;
+    const longTimers: Array<() => void> = [];
+    globalThis.setTimeout = ((
+      callback: (...callbackArgs: unknown[]) => void,
+      ms?: number,
+      ...rest: unknown[]
+    ) => {
+      if (typeof ms === "number" && ms >= 5000) {
+        longTimers.push(() => callback(...rest));
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }
+      return realSetTimeout(callback, ms, ...rest);
+    }) as typeof globalThis.setTimeout;
+    try {
+      expect(harness.pressKey("\r")).toBe(true);
+      // Let create dispatch + completion resolve and waitForWorktreeByBranch subscribe.
+      await harness.settle();
+      // The row never arrives; fire the appear-timeout so the wait resolves undefined.
+      for (const fire of longTimers) {
+        fire();
+      }
+      await harness.settle();
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+
+    expect(
+      harness.stationViewStore.getState().localRows.pendingCreate.map((row) => row.localId),
+    ).not.toContain(localId);
+    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "info",
+      message:
+        "Created the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.",
+    });
+    // The launch never proceeded past the missing row.
+    expect(harness.observerService.preparedLaunches).toEqual([]);
   });
 });
 
