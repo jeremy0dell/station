@@ -18,6 +18,10 @@ export type SetupApplyFileSystem = {
 export type ApplySetupPlanOptions = {
   runner?: ExternalCommandRunner;
   fs?: SetupApplyFileSystem;
+  // Environment for spawned run-command/brew-install actions, merged over the
+  // process env. Needed so a post-bootstrap `brew install` finds brew via the
+  // freshly added brew prefix, which the current process PATH usually lacks.
+  env?: Record<string, string>;
   dryRun?: boolean;
   now?: () => Date;
   actionFilter?: (action: SetupAction) => boolean;
@@ -51,12 +55,14 @@ export async function applySetupPlan(
       const context: {
         fs: SetupApplyFileSystem;
         runner?: ExternalCommandRunner;
+        env?: Record<string, string>;
         now?: () => Date;
         showCommandOutput?: boolean;
       } = {
         fs,
       };
       if (options.runner !== undefined) context.runner = options.runner;
+      if (options.env !== undefined) context.env = options.env;
       if (options.now !== undefined) context.now = options.now;
       if (options.showCommandOutput !== undefined) {
         context.showCommandOutput = options.showCommandOutput;
@@ -109,7 +115,11 @@ async function applyAction(
 
 async function runActionCommand(
   action: SetupAction,
-  options: { runner?: ExternalCommandRunner; showCommandOutput?: boolean },
+  options: {
+    runner?: ExternalCommandRunner;
+    env?: Record<string, string>;
+    showCommandOutput?: boolean;
+  },
 ) {
   const command = action.command;
   if (command === undefined || command.length === 0) {
@@ -120,6 +130,7 @@ async function runActionCommand(
     throw new Error(`${action.id} action requires a command.`);
   }
   const input: ExternalCommandInput = { command: binary, args, maxOutputChars: 4096 };
+  if (options.env !== undefined) input.env = options.env;
   if (options.showCommandOutput === true) input.stdio = "inherit";
   await runExternalCommand(input, options.runner);
 }

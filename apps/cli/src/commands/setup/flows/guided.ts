@@ -66,7 +66,9 @@ async function runGuidedSetupWithPrompt(
     }
     const installResult = await applySetupPlan(
       plan,
-      applyOptions(deps, {
+      // brew lives in the brew prefix, which the current PATH usually lacks right
+      // after a fresh install; run the installs with it prepended.
+      applyOptions(depsWithBrewBinPath(deps), {
         actionFilter: isInstallAction,
         announceActions: true,
         showCommandOutput: true,
@@ -79,7 +81,9 @@ async function runGuidedSetupWithPrompt(
       );
       return { code: 1 };
     }
-    facts = await collectForCommand("apply", options, deps, {});
+    // Brew installs land in the brew prefix, which is typically not on the current
+    // PATH; re-probe with it prepended so the freshly installed tools are detected.
+    facts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
   }
 
   const harnessFacts = await ensureHarnessAvailable(options, deps, prompt, facts);
@@ -241,8 +245,9 @@ async function ensureBootstrapTools(
       );
       return { halt: true };
     }
-    // Re-probe so the brew-installed core tools become installable in the main plan.
-    return { facts: await collectForCommand("apply", options, deps, {}) };
+    // Re-probe with the brew prefix on PATH so the just-installed brew (and the
+    // core tools it can now install) are detected in the main plan.
+    return { facts: await collectForCommand("apply", options, depsWithBrewBinPath(deps), {}) };
   }
 
   return {};
@@ -447,6 +452,20 @@ async function ensureHarnessAvailable(
 function depsWithUserBinPath(deps: SetupCommandDeps, facts: SetupFacts): SetupCommandDeps {
   const env = { ...(deps.env ?? process.env) };
   env.PATH = prependPath(`${facts.homeDir}/.local/bin`, env.PATH);
+  return { ...deps, env };
+}
+
+// Standard Homebrew prefix bin dirs: Apple Silicon, Intel, and Linuxbrew. A fresh
+// shell or GUI-launched process usually has none of these on PATH right after the
+// installer runs, so a re-probe would not see brew or the tools it just installed.
+const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
+
+// Prepend the brew prefixes for re-probes that follow `brew install`. Without this,
+// a fresh Apple-Silicon Mac reports brew (and every brew-installed core tool) still
+// missing immediately after a successful install, and the guided run exits 1.
+function depsWithBrewBinPath(deps: SetupCommandDeps): SetupCommandDeps {
+  const env = { ...(deps.env ?? process.env) };
+  env.PATH = brewBinDirs.reduceRight((path, dir) => prependPath(dir, path), env.PATH);
   return { ...deps, env };
 }
 

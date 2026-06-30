@@ -9,12 +9,20 @@
 // "station-happy" image built (tests/env/macos/station-happy.pkr.hcl), and a
 // vanilla image pulled for deprivation states. Respects Apple's 2-VM/host limit
 // by running profiles strictly sequentially.
-import { spawnSync } from "node:child_process";
+//
+// Prerequisites NOT yet automated (image work, needs a Mac + packer): the
+// station-happy image must bake the checkout at /Users/admin/station, the built
+// CLI (apps/cli/dist/main.js), and a harness CLI; and the `ready` profile needs a
+// valid /Users/admin/station.toml written (mirror setupProfiles.ts readyConfigToml)
+// before `setup check` can reach exit 0. Until then this runner is wired but not
+// end-to-end green — do not read a passing run as full coverage.
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 // Each profile maps to a base image + the expected `setup check` outcome. The
 // expectations mirror packages/testing/src/setupProfiles.ts (the canonical
 // contract); the in-process tier-1 test is the source of truth.
-const profiles = {
+export const profiles = {
   ready: {
     image: "station-happy",
     setup: "full", // run bootstrap + write config, expect requiredOk
@@ -37,51 +45,62 @@ const profiles = {
   },
 };
 
-const requested = process.argv.slice(2);
-if (requested.length === 0) {
-  console.error(
-    `Usage: run-setup-macos.mjs <profile>... (known: ${Object.keys(profiles).join(", ")})`,
-  );
-  process.exit(2);
-}
-
-let failures = 0;
-// Sequential by design: Apple permits at most 2 macOS VMs per host.
-for (const name of requested) {
-  const profile = profiles[name];
-  if (profile === undefined) {
-    console.error(`Unknown profile: ${name}`);
-    failures += 1;
-    continue;
+// Guarded so importing this module (e.g. the contract-consistency unit test) does
+// not boot any VMs; only a direct `node run-setup-macos.mjs` invocation runs.
+// Portable across Node versions (vs. import.meta.main, which needs Node 24.2+).
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const requested = process.argv.slice(2);
+  if (requested.length === 0) {
+    console.error(
+      `Usage: run-setup-macos.mjs <profile>... (known: ${Object.keys(profiles).join(", ")})`,
+    );
+    process.exit(2);
   }
-  const clone = `stn-setup-${name}`;
-  try {
-    console.log(`\n==> ${name}: cloning ${profile.image}`);
-    tart(["clone", profile.image, clone]);
-    tart(["run", "--no-graphics", clone], { background: true });
-    const ip = waitForIp(clone);
-    const json = ssh(ip, setupCommand(profile));
-    const problems = assertOutcome(profile, json);
-    if (problems.length > 0) {
-      console.error(`✗ ${name}: ${problems.join("; ")}`);
+
+  let failures = 0;
+  // Sequential by design: Apple permits at most 2 macOS VMs per host.
+  for (const name of requested) {
+    const profile = profiles[name];
+    if (profile === undefined) {
+      console.error(`Unknown profile: ${name}`);
       failures += 1;
-    } else {
-      console.log(`✓ ${name}`);
+      continue;
     }
-  } catch (error) {
-    console.error(`✗ ${name}: ${error instanceof Error ? error.message : String(error)}`);
-    failures += 1;
-  } finally {
-    spawnSync("tart", ["stop", clone], { stdio: "ignore" });
-    spawnSync("tart", ["delete", clone], { stdio: "ignore" });
+    const clone = `stn-setup-${name}`;
+    // `tart run` runs the guest in the foreground until it stops, so it must be an
+    // async child (not spawnSync, which would block here forever); retain the handle
+    // to kill it in finally.
+    let vm;
+    try {
+      console.log(`\n==> ${name}: cloning ${profile.image}`);
+      tart(["clone", profile.image, clone]);
+      vm = spawn("tart", ["run", "--no-graphics", clone], { stdio: "ignore", detached: true });
+      vm.unref();
+      const ip = waitForIp(clone);
+      const json = ssh(ip, setupCommand(profile));
+      const problems = assertOutcome(profile, json);
+      if (problems.length > 0) {
+        console.error(`✗ ${name}: ${problems.join("; ")}`);
+        failures += 1;
+      } else {
+        console.log(`✓ ${name}`);
+      }
+    } catch (error) {
+      console.error(`✗ ${name}: ${error instanceof Error ? error.message : String(error)}`);
+      failures += 1;
+    } finally {
+      vm?.kill();
+      spawnSync("tart", ["stop", clone], { stdio: "ignore" });
+      spawnSync("tart", ["delete", clone], { stdio: "ignore" });
+    }
   }
-}
 
-if (failures > 0) {
-  console.error(`\n${failures} profile(s) failed.`);
-  process.exit(1);
+  if (failures > 0) {
+    console.error(`\n${failures} profile(s) failed.`);
+    process.exit(1);
+  }
+  console.log(`\nAll ${requested.length} macOS profile(s) passed.`);
 }
-console.log(`\nAll ${requested.length} macOS profile(s) passed.`);
 
 function setupCommand(profile) {
   // `full` runs the real bootstrap (brew bundle + build + link) before checking;
@@ -115,16 +134,13 @@ function assertOutcome(profile, result) {
   return problems;
 }
 
-function tart(args, options = {}) {
-  const result = spawnSync("tart", args, {
-    encoding: "utf8",
-    stdio: options.background ? "ignore" : "inherit",
-    detached: options.background === true,
-  });
-  if (!options.background && result.status !== 0) {
+// Blocking tart commands only (clone). The long-running `tart run` uses async
+// spawn at the call site so it does not deadlock the sequential profile loop.
+function tart(args) {
+  const result = spawnSync("tart", args, { encoding: "utf8", stdio: "inherit" });
+  if (result.status !== 0) {
     throw new Error(`tart ${args.join(" ")} failed`);
   }
-  if (options.background) result.unref?.();
   return result;
 }
 

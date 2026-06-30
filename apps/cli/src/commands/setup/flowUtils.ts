@@ -1,5 +1,6 @@
 import type { CliEnv } from "../../env.js";
 import type { applySetupPlan } from "./apply.js";
+import { commandEnv } from "./checks/env.js";
 import {
   type CollectSetupFactsOptions,
   collectSetupFacts,
@@ -43,6 +44,9 @@ export function applyOptions(
   const options: Parameters<typeof applySetupPlan>[1] = {};
   if (deps.runner !== undefined) options.runner = deps.runner;
   if (deps.fs !== undefined) options.fs = deps.fs;
+  // Run spawned actions with deps.env so a brew-augmented PATH reaches `brew install`.
+  const env = commandEnv(deps.env);
+  if (env !== undefined) options.env = env;
   if (deps.now !== undefined) options.now = deps.now;
   if (input.dryRun !== undefined) options.dryRun = input.dryRun;
   if (input.actionFilter !== undefined) options.actionFilter = input.actionFilter;

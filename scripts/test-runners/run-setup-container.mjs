@@ -13,11 +13,16 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const dockerfile = join(repoRoot, "tests", "env", "docker", "Dockerfile");
+// True only when run directly (`node run-setup-container.mjs`), false when imported
+// (e.g. the contract-consistency unit test). Portable across Node versions.
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 
 // Mirrors the Linux-coverable subset of packages/testing/src/setupProfiles.ts.
 // Each `setup check` exits 1 until a config is written, so the distinguishing
-// signal is requiredOk + which checks are missing.
-const expectations = {
+// signal is requiredOk + which checks are missing. Exported so a unit test can
+// assert this table stays a subset of the canonical machineProfiles contract
+// (`happy-linux` maps to the canonical `all-tools-present`).
+export const expectations = {
   "happy-linux": {
     exitCode: 1,
     requiredOk: false,
@@ -43,50 +48,54 @@ const expectations = {
   "no-harness": { exitCode: 1, requiredOk: false, checks: { harness: "missing" } },
 };
 
-const requested = process.argv.slice(2);
-const profiles = requested.length > 0 ? requested : Object.keys(expectations);
+// Guarded so importing this module (e.g. the contract-consistency unit test) does
+// not shell out to docker; only a direct `node run-setup-container.mjs` invocation runs.
+if (isMain) {
+  const requested = process.argv.slice(2);
+  const profiles = requested.length > 0 ? requested : Object.keys(expectations);
 
-let failures = 0;
-for (const profile of profiles) {
-  const expect = expectations[profile];
-  if (expect === undefined) {
-    console.error(`Unknown profile: ${profile} (known: ${Object.keys(expectations).join(", ")})`);
-    failures += 1;
-    continue;
+  let failures = 0;
+  for (const profile of profiles) {
+    const expect = expectations[profile];
+    if (expect === undefined) {
+      console.error(`Unknown profile: ${profile} (known: ${Object.keys(expectations).join(", ")})`);
+      failures += 1;
+      continue;
+    }
+    const tag = `stn-setup-${profile}`;
+    console.log(`\n==> building ${profile}`);
+    const build = run("docker", [
+      "build",
+      "-f",
+      dockerfile,
+      "--target",
+      profile,
+      "-t",
+      tag,
+      repoRoot,
+    ]);
+    if (build.status !== 0) {
+      console.error(`build failed for ${profile}`);
+      failures += 1;
+      continue;
+    }
+    console.log(`==> running ${profile}`);
+    const result = run("docker", ["run", "--rm", tag], { capture: true });
+    const mismatch = assertProfile(expect, result);
+    if (mismatch.length > 0) {
+      console.error(`✗ ${profile}: ${mismatch.join("; ")}`);
+      failures += 1;
+    } else {
+      console.log(`✓ ${profile}`);
+    }
   }
-  const tag = `stn-setup-${profile}`;
-  console.log(`\n==> building ${profile}`);
-  const build = run("docker", [
-    "build",
-    "-f",
-    dockerfile,
-    "--target",
-    profile,
-    "-t",
-    tag,
-    repoRoot,
-  ]);
-  if (build.status !== 0) {
-    console.error(`build failed for ${profile}`);
-    failures += 1;
-    continue;
-  }
-  console.log(`==> running ${profile}`);
-  const result = run("docker", ["run", "--rm", tag], { capture: true });
-  const mismatch = assertProfile(expect, result);
-  if (mismatch.length > 0) {
-    console.error(`✗ ${profile}: ${mismatch.join("; ")}`);
-    failures += 1;
-  } else {
-    console.log(`✓ ${profile}`);
-  }
-}
 
-if (failures > 0) {
-  console.error(`\n${failures} profile(s) failed.`);
-  process.exit(1);
+  if (failures > 0) {
+    console.error(`\n${failures} profile(s) failed.`);
+    process.exit(1);
+  }
+  console.log(`\nAll ${profiles.length} container profile(s) passed.`);
 }
-console.log(`\nAll ${profiles.length} container profile(s) passed.`);
 
 function assertProfile(expect, result) {
   const problems = [];

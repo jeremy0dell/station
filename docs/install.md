@@ -16,11 +16,16 @@ stn
 
 ## Requirements
 
+These are the tools `stn setup check` treats as required; a missing one blocks setup (exit 1). The list matches the `brew bundle` set in `bootstrap.sh` above and the required-tier checks in the setup engine.
+
 - Node.js 24.x
 - pnpm 11
-- Worktrunk `wt` for real Worktrunk workflows
-- tmux for the reference terminal provider and popup local-use path
-- Claude Code, Codex, Cursor, Pi, or OpenCode only when running those real harness providers
+- Bun — bare `stn` renders the TUI through `bun run`
+- Git, run from inside the git repository you want to manage (macOS: the Command Line Tools)
+- Worktrunk `wt` for core worktree setup
+- tmux for the reference terminal provider and popup path
+- diffnav and git-delta for the "See diff (split right)" automation
+- One agent CLI: Claude Code, Codex, Crush, Cursor, OpenCode, or Pi
 
 ## Fresh Checkout
 

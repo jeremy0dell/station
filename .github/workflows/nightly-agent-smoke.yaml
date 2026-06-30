@@ -17,11 +17,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    env:
-      # Non-interactive Claude auth. Either secret is enough; the run step skips
-      # cleanly when both are absent (e.g. before the maintainer adds them).
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,9 +42,17 @@ jobs:
           npm install -g @anthropic-ai/claude-code
 
       - name: Real Claude launch + hook-capture smoke
+        # Non-interactive Claude auth. Either secret is enough. Scoped to this step
+        # only so the secrets are never in scope for `pnpm install`/`pnpm build`/`npm
+        # install -g` third-party lifecycle scripts.
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ] && [ -z "${ANTHROPIC_API_KEY}" ]; then
-            echo "No Claude auth secret configured; skipping the real-agent smoke." >&2
+            # Surface as an annotation so a deleted/never-configured secret silently
+            # disabling this version-skew tripwire is visible in the run summary.
+            echo "::warning::No Claude auth secret (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY) configured; skipping the real-agent version-skew smoke."
             exit 0
           fi
           pnpm test:agent:nightly

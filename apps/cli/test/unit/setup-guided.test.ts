@@ -514,6 +514,132 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Command Line Tools: xcode-select --install");
     expect(calls.some((call) => call.command === "/bin/bash")).toBe(false);
   });
+
+  it("installs core tools after a fresh Apple-Silicon Homebrew install, then writes config", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const configPath = join(root, "home/.config/station/config.toml");
+
+    // Fresh arm64 Mac: CLT present, but brew and every core tool are missing. brew
+    // and the brew-installed tools resolve ONLY once /opt/homebrew/bin is on the
+    // probe/exec PATH — the exact state that broke onboarding before this fix.
+    const installed = new Set<string>();
+    let brewInstalled = false;
+    const formulaTool: Record<string, string> = {
+      worktrunk: "wt",
+      tmux: "tmux",
+      bun: "bun",
+      "dlvhdr/formulae/diffnav": "diffnav",
+      "git-delta": "delta",
+    };
+    const hasBrewPrefix = (input: ExternalCommandInput) =>
+      input.env?.PATH?.includes("/opt/homebrew/bin") === true;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          // Dependency checks run the resolved path (e.g. /opt/homebrew/bin/wt), so
+          // match on the command basename, not the literal string.
+          const bin = input.command.split("/").pop() ?? input.command;
+          const key = `${bin} ${(input.args ?? []).join(" ")}`;
+          // The official Homebrew installer (curl | bash).
+          if (input.command === "/bin/bash") {
+            brewInstalled = true;
+            return commandResult(input, "");
+          }
+          // brew resolves only after install AND with its prefix on PATH.
+          if (key === "brew --version") {
+            if (brewInstalled && hasBrewPrefix(input)) {
+              return commandResult(input, "Homebrew 4.0.0\n");
+            }
+            throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+          }
+          // `brew install` must itself run with the brew prefix on PATH, or brew is
+          // unresolvable on a fresh Mac; mark the tool installed on success.
+          if (bin === "brew" && input.args?.[0] === "install") {
+            if (!hasBrewPrefix(input)) {
+              throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+            }
+            const tool = formulaTool[input.args?.[1] ?? ""];
+            if (tool !== undefined) installed.add(tool);
+            return commandResult(input, "");
+          }
+          // worktrunk/tmux resolve via the brew-prefix access below (PATH sensitivity),
+          // then run --version on the resolved path — gate the output on install state.
+          if (key === "wt --version") {
+            if (installed.has("wt")) return commandResult(input, "worktrunk 1.2.3\n");
+            throw Object.assign(new Error("wt not found"), { code: "ENOENT" });
+          }
+          if (key === "tmux -V") {
+            if (installed.has("tmux")) return commandResult(input, "tmux 3.5a\n");
+            throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
+          }
+          const staticOutputs: Record<string, string> = {
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "codex --version": "codex 0.1.0\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
+          };
+          const out = staticOutputs[key];
+          if (out === undefined) {
+            throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+          }
+          return commandResult(input, out);
+        },
+        // bun/diffnav/delta (and wt/tmux path resolution) live in the brew prefix and
+        // resolve only once their formula has been installed.
+        access: async (path) => {
+          const present =
+            (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
+            (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
+            (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
+            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
+            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+          if (!present) {
+            throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
+          }
+        },
+        fs,
+        // Accept the bootstrap, the core-tool installs, and the config write; decline
+        // every optional extra. Matching on text keeps this robust to prompt ordering.
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Homebrew") ||
+              message.includes("Install missing required tools") ||
+              message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    // The brew-install actions actually ran (not silent no-ops) — the discriminator:
+    // before the fix the re-probe never sees brew, so these are never executed.
+    expect(
+      calls
+        .filter((call) => call.command === "brew" && call.args?.[0] === "install")
+        .map((call) => call.args?.[1]),
+    ).toEqual(
+      expect.arrayContaining(["worktrunk", "tmux", "bun", "dlvhdr/formulae/diffnav", "git-delta"]),
+    );
+    expect(fs.files[configPath]).toContain("[[projects]]");
+  });
 });
 
 async function tempRoot(tempRoots: string[]): Promise<string> {

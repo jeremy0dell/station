@@ -31,6 +31,10 @@ export async function checkSetupGit(options: CheckGitOptions = {}): Promise<Setu
     // runExternalCommand normalizes a missing binary to a safe error coded ENOENT;
     // a real git that fails rev-parse (not a repository) carries a numeric exitCode
     // instead. The two cases need different remediation.
+    // Note: on a bare macOS host /usr/bin/git is a Command Line Tools shim that
+    // exists, so spawn succeeds and rev-parse fails with a numeric exit code (not
+    // ENOENT) — that host is surfaced by the separate Command Line Tools check, so
+    // git-absent here is the genuinely-uninstalled (e.g. Linux) case.
     if (isSafeError(error) && error.code === "ENOENT") {
       return {
         status: "missing",

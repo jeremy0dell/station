@@ -59,7 +59,7 @@ Requires Docker. Covers: `happy-linux`, `no-git`, `no-tmux`, `no-worktrunk`,
 
 Only a real Mac can exercise real `brew install`, `/opt/homebrew`, `node@24`
 keg-only PATH behaviour, and a truly CLT-absent host. We use **Tart**
-(`openai/tart`) on Apple Silicon: native `Virtualization.framework`, APFS
+(`cirruslabs/tart`) on Apple Silicon: native `Virtualization.framework`, APFS
 copy-on-write `tart clone` (near-instant fresh state), OCI image distribution.
 
 - `tests/env/macos/station-happy.pkr.hcl` — a Packer template that builds the
@@ -67,8 +67,9 @@ copy-on-write `tart clone` (near-instant fresh state), OCI image distribution.
   from a base image. Use `cirruslabs/macos-image-templates` `*-vanilla` (no brew,
   no Xcode) for the `no-brew` / `no-xcode-clt` profiles.
 - `tests/env/macos/run-setup-macos.mjs` — clones the right base per profile, runs
-  the real `bootstrap.sh` + `stn setup check --json` over SSH, asserts the shared
-  contract, and deletes the clone.
+  `bootstrap.sh` before `stn setup check --json` only for the happy `ready` profile
+  (`setup: "full"`); deprivation profiles run `stn setup check --json` against the
+  image as-is. It asserts the shared contract over SSH, then deletes the clone.
 
 ```bash
 node tests/env/macos/run-setup-macos.mjs ready        # happy image
