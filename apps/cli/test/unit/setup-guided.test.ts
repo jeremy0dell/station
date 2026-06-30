@@ -335,9 +335,19 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
-        prompt: prompt({
-          confirms: [true, false, false, false, false, false, false, false, true, false, false],
-        }),
+        // Accept the Codex install and the config write; decline the rest. Match on
+        // message text so the test is robust to the exact prompt count (e.g. which
+        // optional prompts fire depends on launcher detection on the host).
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Codex?") || message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
         writeStdout: (chunk) => chunks.push(chunk),
       },
     );

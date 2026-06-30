@@ -56,7 +56,10 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["y", "n", "n", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
+        // Prompt order: install codex (y), decline cursor/opencode/pi/claude, decline
+        // link-launchers + Worktrunk-hooks + codex-hooks, accept Write config (y),
+        // decline shell-integration + popup. (Crush removal dropped one harness prompt.)
+        answers: ["y", "n", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -169,14 +172,13 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
     NO_COLOR: "1",
     STATION_WORKTRUNK_BIN: "wt",
     STATION_TMUX_BIN: "tmux",
+    // Pin every non-target harness so the post-install re-probe (which now also
+    // searches the brew prefix) can't pick up a real one from the dev machine.
     STATION_CODEX_BIN: input.harness === "missing" ? "/missing/codex" : "codex",
     STATION_CURSOR_AGENT_BIN: "/missing/agent",
     STATION_OPENCODE_BIN: "/missing/opencode",
     STATION_PI_BIN: "/missing/pi",
     STATION_CLAUDE_BIN: "/missing/claude",
-    // Pin every non-target harness so the post-install re-probe (which now also
-    // searches the brew prefix) can't pick up a real one from the dev machine.
-    STATION_CRUSH_BIN: "/missing/crush",
   };
 
   return {

@@ -23,7 +23,7 @@ stn
 - tmux for the reference terminal provider and popup path
 - Bun — bare `stn` renders the TUI through `bun run` (not required when `STATION_DASHBOARD_COMMAND` overrides the renderer)
 - diffnav and git-delta for the "See diff (split right)" automation
-- One agent CLI: Claude Code, Codex, Crush, Cursor, OpenCode, or Pi
+- One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
 
 `bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk, Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
 
