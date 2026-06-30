@@ -10,3 +10,7 @@ dist
 coverage
 **/*.log
 station/node_modules
+# Keep local secrets out of the tier-2 test image (Dockerfile COPYs the repo root).
+.env
+.env.*
+!.env.example

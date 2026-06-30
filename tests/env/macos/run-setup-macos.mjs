@@ -14,8 +14,11 @@
 // station-happy image must bake the checkout at /Users/admin/station, the built
 // CLI (apps/cli/dist/main.js), and a harness CLI; and the `ready` profile needs a
 // valid /Users/admin/station.toml written (mirror setupProfiles.ts readyConfigToml)
-// before `setup check` can reach exit 0. Until then this runner is wired but not
-// end-to-end green — do not read a passing run as full coverage.
+// before `setup check` can reach exit 0. The no-brew / no-xcode-clt profiles run on
+// the vanilla cirruslabs image, which also lacks node and the checkout, so
+// `node .../main.js setup check` exits 127 there until that image is likewise
+// provisioned. Until then this runner is wired but not end-to-end green — do not
+// read a passing run as full coverage.
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 

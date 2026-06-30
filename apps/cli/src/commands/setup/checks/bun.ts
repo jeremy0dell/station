@@ -22,6 +22,12 @@ export async function checkSetupBun(
 ): Promise<SetupDependencyFact> {
   const env = setupEnv(options.env);
   const command = defaultBunCommand;
+  // Mirror tui.ts and doctor's rendererRuntimeCheck: a STATION_DASHBOARD_COMMAND
+  // override replaces `bun run`, so Bun is not required to launch the dashboard and
+  // must not block core setup (else doctor reports healthy while setup check exits 1).
+  if (env.STATION_DASHBOARD_COMMAND !== undefined) {
+    return { status: "ok", command };
+  }
   const resolveOptions: ResolveExecutablePathOptions = {};
   if (env.PATH !== undefined) resolveOptions.pathEnv = env.PATH;
   if (options.access !== undefined) resolveOptions.access = options.access;

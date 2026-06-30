@@ -1,6 +1,8 @@
 # Tier 3 (see docs/setup-testing.md): build the "STATION happy-path" macOS image
-# with Tart + Packer. Provisions everything `stn setup` expects so a clone of this
-# image reports requiredOk once a config is written.
+# with Tart + Packer. Provisions the Brewfile dependencies `stn setup` expects.
+# Note: this image does NOT bake an agent-CLI harness, so the required `harness`
+# check stays missing; a clone reaches requiredOk only after a supported agent CLI
+# is installed AND a config is written.
 #
 # Prereqs: Tart (https://tart.run) and the cirruslabs/tart Packer plugin on an
 # Apple-Silicon Mac.  Build:  packer init . && packer build station-happy.pkr.hcl

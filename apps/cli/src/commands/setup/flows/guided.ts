@@ -325,7 +325,9 @@ async function maybeLinkStationLaunchers(
     return facts;
   }
 
-  return collectForCommand("apply", options, deps, {});
+  // Brew prefix here too: this result overwrites facts, so a brew-less re-probe would
+  // drop the core tools installed earlier this session on a fresh Mac.
+  return collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
 }
 
 async function promptHookPreferences(
@@ -427,10 +429,13 @@ async function ensureHarnessAvailable(
     return undefined;
   }
 
+  // Compose both prefixes: the agent CLI lands in ~/.local/bin, but the core tools
+  // installed earlier this session live in the brew prefix — without it they re-read
+  // as missing and overwrite the good facts, dead-ending config write on a fresh Mac.
   const refreshedFacts = await collectForCommand(
     "apply",
     options,
-    depsWithUserBinPath(deps, facts),
+    depsWithBrewBinPath(depsWithUserBinPath(deps, facts)),
     {},
   );
   if (refreshedFacts.harnesses.some((harness) => harness.status === "ok")) {
@@ -460,12 +465,15 @@ function depsWithUserBinPath(deps: SetupCommandDeps, facts: SetupFacts): SetupCo
 // installer runs, so a re-probe would not see brew or the tools it just installed.
 const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
 
-// Prepend the brew prefixes for re-probes that follow `brew install`. Without this,
-// a fresh Apple-Silicon Mac reports brew (and every brew-installed core tool) still
-// missing immediately after a successful install, and the guided run exits 1.
+// Make the brew prefixes resolvable for re-probes that follow `brew install`. Without
+// this, a fresh Apple-Silicon Mac reports brew (and every brew-installed core tool)
+// still missing right after a successful install, and the guided run exits 1.
+// APPEND (not prepend): the caller's existing PATH keeps precedence, so we only add a
+// fallback for tools that were just installed and aren't already resolvable elsewhere
+// — this avoids shadowing the caller's chosen tools with brew's copies.
 function depsWithBrewBinPath(deps: SetupCommandDeps): SetupCommandDeps {
   const env = { ...(deps.env ?? process.env) };
-  env.PATH = brewBinDirs.reduceRight((path, dir) => prependPath(dir, path), env.PATH);
+  env.PATH = brewBinDirs.reduce((path, dir) => appendPath(path, dir), env.PATH);
   return { ...deps, env };
 }
 
@@ -474,4 +482,11 @@ function prependPath(path: string, existing: string | undefined): string {
     return path;
   }
   return existing.split(":").includes(path) ? existing : `${path}:${existing}`;
+}
+
+function appendPath(existing: string | undefined, path: string): string {
+  if (existing === undefined || existing.length === 0) {
+    return path;
+  }
+  return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
 }

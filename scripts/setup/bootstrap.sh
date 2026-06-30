@@ -25,6 +25,14 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 step "Checking Homebrew"
+# The official installer writes brew to its prefix but does not touch the current
+# shell PATH, so a same-session re-run would otherwise dead-end here despite a
+# successful install. Pick it up from the standard prefixes first.
+if ! command -v brew >/dev/null 2>&1; then
+  for brew_bin in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    [ -x "$brew_bin" ] && eval "$("$brew_bin" shellenv)" && break
+  done
+fi
 if ! command -v brew >/dev/null 2>&1; then
   echo "Homebrew is required. Install it from https://brew.sh and re-run this script." >&2
   exit 1

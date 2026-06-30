@@ -174,6 +174,9 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
     STATION_OPENCODE_BIN: "/missing/opencode",
     STATION_PI_BIN: "/missing/pi",
     STATION_CLAUDE_BIN: "/missing/claude",
+    // Pin every non-target harness so the post-install re-probe (which now also
+    // searches the brew prefix) can't pick up a real one from the dev machine.
+    STATION_CRUSH_BIN: "/missing/crush",
   };
 
   return {

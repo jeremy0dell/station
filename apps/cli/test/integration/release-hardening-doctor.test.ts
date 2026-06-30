@@ -64,6 +64,43 @@ describe("CLI release doctor", () => {
     expect(report.debugBundle.available).toBe(true);
     expect(report.debugBundle.diagnosticsDir).toContain("diagnostics");
   }, 60_000);
+
+  it("emits the renderer-runtime row through the real doctor when bun is unresolvable", async () => {
+    // Drives the CLI-side check wiring end-to-end (doctor.ts: gate -> push -> loop ->
+    // reportWithCliCheck). The deterministic doctor tests inject clientFactory, which
+    // disables CLI checks, so only this real-observer run exercises the append. Hide
+    // bun via PATH so rendererRuntimeCheck (resolveExecutablePath("bun")) emits warn;
+    // the observer spawns via absolute process.execPath, so node is unaffected.
+    const root = await mkdtemp(join(tmpdir(), "station-release-doctor-nobun-"));
+    tempRoots.push(root);
+    const configPath = await writeReleaseDoctorConfig(root);
+    const emptyBin = join(root, "no-bun-bin");
+    await mkdir(emptyBin, { recursive: true });
+
+    const savedPath = process.env.PATH;
+    const savedOverride = process.env.STATION_DASHBOARD_COMMAND;
+    process.env.PATH = emptyBin;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+    try {
+      const result = await runCli(["--config", configPath, "doctor"]);
+      const report = result.output as DoctorReport;
+
+      expect(report.status).toBe("degraded");
+      expect(report.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "renderer-runtime",
+            status: "warn",
+            error: expect.objectContaining({ code: "BUN_RUNTIME_MISSING" }),
+          }),
+        ]),
+      );
+    } finally {
+      process.env.PATH = savedPath;
+      if (savedOverride === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = savedOverride;
+    }
+  }, 60_000);
 });
 
 async function writeReleaseDoctorConfig(root: string): Promise<string> {

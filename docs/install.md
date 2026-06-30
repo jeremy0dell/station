@@ -16,16 +16,18 @@ stn
 
 ## Requirements
 
-These are the tools `stn setup check` treats as required; a missing one blocks setup (exit 1). The list matches the `brew bundle` set in `bootstrap.sh` above and the required-tier checks in the setup engine.
+`stn setup check` blocks (exit 1) until these required tools are present:
 
-- Node.js 24.x
-- pnpm 11
-- Bun — bare `stn` renders the TUI through `bun run`
 - Git, run from inside the git repository you want to manage (macOS: the Command Line Tools)
 - Worktrunk `wt` for core worktree setup
 - tmux for the reference terminal provider and popup path
+- Bun — bare `stn` renders the TUI through `bun run` (not required when `STATION_DASHBOARD_COMMAND` overrides the renderer)
 - diffnav and git-delta for the "See diff (split right)" automation
 - One agent CLI: Claude Code, Codex, Crush, Cursor, OpenCode, or Pi
+
+`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
+
+Node.js 24.x and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node).
 
 ## Fresh Checkout
 

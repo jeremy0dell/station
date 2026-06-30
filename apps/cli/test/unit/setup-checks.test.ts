@@ -632,6 +632,16 @@ describe("checkSetupBun", () => {
     expect(fact.status).toBe("missing");
     expect(fact.message).toContain("brew install bun");
   });
+
+  it("reports ok without Bun when STATION_DASHBOARD_COMMAND overrides the renderer", async () => {
+    // Mirrors doctor's rendererRuntimeCheck: a custom dashboard command means bun is
+    // not needed, so the required check must not block setup even with bun absent.
+    const fact = await checkSetupBun({
+      env: { PATH: "/fake/bin", STATION_DASHBOARD_COMMAND: "my-renderer --foo" },
+      access: fakeAccess([]),
+    });
+    expect(fact).toMatchObject({ status: "ok", command: "bun" });
+  });
 });
 
 describe("checkSetupGitDelta", () => {

@@ -640,6 +640,125 @@ describe("guided setup command", () => {
     );
     expect(fs.files[configPath]).toContain("[[projects]]");
   });
+
+  it("keeps brew tools after a fresh Mac installs its first agent CLI", async () => {
+    // The harness-install path re-probes facts AFTER the brew tools were installed.
+    // That re-probe must keep the brew prefix, or the just-installed core tools read
+    // as missing again and config write dead-ends at exit 1. No agent CLI is present
+    // initially, so ensureHarnessAvailable installs one and runs the lossy re-probe.
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const configPath = join(root, "home/.config/station/config.toml");
+
+    const installed = new Set<string>();
+    let brewInstalled = false;
+    let codexInstalled = false;
+    const formulaTool: Record<string, string> = {
+      worktrunk: "wt",
+      tmux: "tmux",
+      bun: "bun",
+      "dlvhdr/formulae/diffnav": "diffnav",
+      "git-delta": "delta",
+    };
+    const hasBrewPrefix = (input: ExternalCommandInput) =>
+      input.env?.PATH?.includes("/opt/homebrew/bin") === true;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          const bin = input.command.split("/").pop() ?? input.command;
+          const key = `${bin} ${(input.args ?? []).join(" ")}`;
+          if (input.command === "/bin/bash") {
+            brewInstalled = true;
+            return commandResult(input, "");
+          }
+          // The agent CLI installer (no agent CLI is present until this runs).
+          if (key === "sh -c curl -fsSL https://chatgpt.com/codex/install.sh | sh") {
+            codexInstalled = true;
+            return commandResult(input, "");
+          }
+          if (key === "codex --version") {
+            if (codexInstalled) return commandResult(input, "codex 0.1.0\n");
+            throw Object.assign(new Error("codex not found"), { code: "ENOENT" });
+          }
+          if (key === "brew --version") {
+            if (brewInstalled && hasBrewPrefix(input)) {
+              return commandResult(input, "Homebrew 4.0.0\n");
+            }
+            throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+          }
+          if (bin === "brew" && input.args?.[0] === "install") {
+            if (!hasBrewPrefix(input)) {
+              throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+            }
+            const tool = formulaTool[input.args?.[1] ?? ""];
+            if (tool !== undefined) installed.add(tool);
+            return commandResult(input, "");
+          }
+          if (key === "wt --version") {
+            if (installed.has("wt")) return commandResult(input, "worktrunk 1.2.3\n");
+            throw Object.assign(new Error("wt not found"), { code: "ENOENT" });
+          }
+          if (key === "tmux -V") {
+            if (installed.has("tmux")) return commandResult(input, "tmux 3.5a\n");
+            throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
+          }
+          const staticOutputs: Record<string, string> = {
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
+          };
+          const out = staticOutputs[key];
+          if (out === undefined) {
+            throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+          }
+          return commandResult(input, out);
+        },
+        access: async (path) => {
+          const present =
+            (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
+            (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
+            (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
+            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
+            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+          if (!present) {
+            throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
+          }
+        },
+        fs,
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Homebrew") ||
+              message.includes("Install missing required tools") ||
+              message.includes("chatgpt.com/codex") ||
+              message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    // Without the brew prefix on the post-agent-install re-probe this exits 1 with no
+    // config: the brew tools (resolvable only under /opt/homebrew/bin) re-read missing.
+    expect(result.code).toBe(0);
+    expect(calls.some((call) => call.command === "sh")).toBe(true);
+    expect(fs.files[configPath]).toContain("[[projects]]");
+  });
 });
 
 async function tempRoot(tempRoots: string[]): Promise<string> {
