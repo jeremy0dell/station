@@ -21,6 +21,10 @@ Prefer self-documenting code. Add a comment when it protects non-obvious intent 
 
 Prefer one precise comment near the protected code over leaving the rationale in a planning doc or review thread. Do not add comments that restate the branch condition, variable name, or TypeScript type. If a comment would need to narrate several steps of ordinary code, simplify or extract the code first.
 
+Keep load-bearing comments; do not strip them chasing a zero-comment ideal. The target is the necessary minimum, which is almost always SOME, not NONE — a file with real ordering, concurrency, or boundary subtlety should carry the comments that protect it.
+
+Voice: one sentence by default (needing two usually means the code wants renaming or extracting). State the mechanism or invariant, not a narrative. Cut storytelling and anthropomorphizing ("brings the user there", "yanked into the pane", "lands the user in the pane") and anything that restates a named flag or type. At most one parenthetical per comment.
+
 ## Optional Object Construction
 
 `exactOptionalPropertyTypes` is intentional. Preserve the difference between absent optional fields and fields set to `undefined`.
