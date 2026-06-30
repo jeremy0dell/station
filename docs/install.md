@@ -12,7 +12,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, and `pnpm link --global`. If you manage your own runtimes, the manual steps below are equivalent. (A single prebuilt binary is the post-alpha goal — it needs the runtime unification tracked in `docs/`.)
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, and `pnpm link --global`. If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
 
 ## Requirements
 
