@@ -19,11 +19,11 @@ station never asks an agent what it is doing. The observer takes the hook events
 | `unknown` | An agent is present but its state cannot be determined. This is also the fallback when a harness cannot report enough. |
 | `no agent` | No harness is running on that worktree. |
 
-A harness can only light up the states it can report. That gives three support tiers:
+A harness can only light up the states it can report. That gives two support tiers among the
+currently supported harnesses:
 
 - **Full**: reports activity, completion, and attention. Can drive every status.
 - **Partial**: reports activity and completion, but has no attention signal.
-- **Minimal**: can only infer that work is happening; status otherwise falls back to process liveness (running vs exited).
 
 ## Support at a glance
 
@@ -34,7 +34,6 @@ A harness can only light up the states it can report. That gives three support t
 | Cursor | ✓ | ✓ | ✓ ¹ | Full | `~/.cursor/hooks.json` |
 | OpenCode | ✓ | ✓ | ✓ | Full | plugin |
 | Pi | ✓ | ✓ | ✗ | Partial | in-process extension |
-| Crush | ~ | ✗ | ✗ | Minimal | `.crush.json` (`PreToolUse`) |
 
 ¹ Cursor surfaces attention from a `stop` event with error status, not from a live permission prompt.
 
@@ -80,14 +79,6 @@ Hooks: Pi loads an in-process station extension, so there is no external config 
 
 Coverage: partial. Lifecycle and activity are covered (`agent_end` maps to **idle**, `session_shutdown` to **exited**), but Pi emits no permission or notification event, so it never reports **needs attention**.
 
-### Crush (Minimal)
-
-Events (`integrations/harness/crush/src/hooks.ts`): `PreToolUse` only.
-
-Hooks: a station entry under `hooks.PreToolUse` in `.crush.json` calls `station-crush-hook.sh` (30s timeout; the script exits 0 with empty output so Crush never treats it as blocking a tool).
-
-Coverage: minimal. Crush exposes no completion signal (`integrations/harness/crush/src/provider.ts` sets `canStop: false`), so a running Crush session resolves to `unknown` ("Crush run has no reliable Crush status signal yet"). station can tell that a tool is about to run, but not when Crush finishes, goes idle, or needs you. Status otherwise relies on process liveness.
-
 ## Installing hooks
 
 Every harness except Pi is wired up the same way:
@@ -98,4 +89,4 @@ stn hooks install <harness>    # write or update the hook
 stn hooks uninstall <harness>  # remove it
 ```
 
-`<harness>` is one of `claude`, `codex`, `cursor`, `opencode`, or `crush`. Pi needs no install step because its extension loads in-process. `stn doctor` reports the status of every configured harness.
+`<harness>` is one of `claude`, `codex`, `cursor`, or `opencode`. Pi needs no install step because its extension loads in-process. `stn doctor` reports the status of every configured harness.

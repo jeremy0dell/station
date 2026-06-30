@@ -82,31 +82,47 @@ export function SheetChoiceLine({
   detail,
   color,
   width,
+  current = false,
+  note,
 }: {
   choiceKey: string;
   label: string;
   detail: string;
   color?: string | undefined;
   width: number;
+  /** Marks the row as the currently-selected option (e.g. a project's default). */
+  current?: boolean;
+  /** Right-aligned dim status (e.g. "updating…") shown in the row's free space. */
+  note?: string | undefined;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
-  const prefix = ` ${choiceKey} `;
+  // The marker reuses the prefix's leading margin column so the key/label
+  // columns stay aligned and the row width is unchanged whether or not it is set.
+  const marker = current ? "✓" : " ";
+  const keyPrefix = `${choiceKey} `;
   const detailPrefix = `${label} `;
-  const detailWidth = Math.max(0, width - prefix.length - detailPrefix.length);
+  const detailWidth = Math.max(0, width - 1 - keyPrefix.length - detailPrefix.length);
   const visibleDetail = detail.slice(0, detailWidth);
-  const padding = spaces(Math.max(0, detailWidth - visibleDetail.length));
+  // Whatever the detail leaves unused is split into a gap then the right-aligned
+  // note, so the row stays exactly `width` wide whether or not a note is set.
+  const free = Math.max(0, detailWidth - visibleDetail.length);
+  const visibleNote = (note ?? "").slice(0, free);
+  const gap = spaces(free - visibleNote.length);
   return (
     <text
       fg={hover ? STATION_COLORS.green : STATION_COLORS.foreground}
+      {...(hover ? { bg: STATION_COLORS.hoverBackground } : {})}
       {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      {prefix}
+      <span {...(current ? { fg: STATION_COLORS.cyan } : {})}>{marker}</span>
+      {keyPrefix}
       {detailPrefix}
       <span {...(color === undefined ? {} : { fg: color })}>{visibleDetail}</span>
-      {padding}
+      {gap}
+      <span attributes={TextAttributes.DIM}>{visibleNote}</span>
     </text>
   );
 }

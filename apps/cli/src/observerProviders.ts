@@ -25,7 +25,6 @@ import type {
   WorktreeObservation,
   WorktreeProvider,
 } from "@station/contracts";
-import { type CrushHarnessProviderOptions, createCrushHarnessProvider } from "@station/crush";
 import { type CursorHarnessProviderOptions, createCursorHarnessProvider } from "@station/cursor";
 import { GithubRepositoryProvider } from "@station/github-repository";
 import type { JsonlLogger } from "@station/observability";
@@ -235,16 +234,6 @@ function createHarnessProvider(
     return createCursorHarnessProvider(options);
   }
 
-  if (id === "crush") {
-    const options: CrushHarnessProviderOptions = {};
-    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    applyObserverPaths(options, config, true);
-    return createCrushHarnessProvider(options);
-  }
-
   if (id === "opencode") {
     const options: OpenCodeHarnessProviderOptions = {};
     applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
@@ -352,7 +341,7 @@ function applyObserverPaths(
   }
 }
 
-/** Permission/approval/sandbox/hook fields shared by the codex, crush, and opencode adapters. */
+/** Permission/approval/sandbox/hook fields shared by the codex and opencode adapters. */
 function applyHarnessAgentOptions(
   options: {
     command?: string;

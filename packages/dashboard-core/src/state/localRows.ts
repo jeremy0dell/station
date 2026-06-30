@@ -1,5 +1,6 @@
 import type {
   CommandId,
+  ProjectId,
   ProviderId,
   SafeError,
   SessionId,
@@ -12,7 +13,7 @@ export type PendingCreateSessionRow = {
   localId: string;
   projectId: string;
   branch: string;
-  harnessProvider: ProviderId;
+  harnessProvider?: ProviderId;
   createdAt: string;
   commandId?: CommandId;
 };
@@ -51,12 +52,24 @@ export type PendingRenameSessionTitle = {
   commandId?: CommandId;
 };
 
+/**
+ * Optimistic "default agent" change for a project: the picked harness shown as
+ * current before the observer round-trip lands. Pruned when the snapshot's
+ * default matches, removed (reverted) if the command fails.
+ */
+export type PendingProjectDefaultHarness = {
+  projectId: ProjectId;
+  harness: ProviderId;
+  createdAt: string;
+};
+
 export type TuiLocalRows = {
   pendingCreate: PendingCreateSessionRow[];
   failedCreate: FailedCreateSessionRow[];
   pendingRemove: PendingRemoveWorktreeRow[];
   pendingStart: PendingStartAgentRow[];
   pendingRenameTitles?: Readonly<Record<SessionId, PendingRenameSessionTitle>>;
+  pendingProjectDefaults?: Readonly<Record<ProjectId, PendingProjectDefaultHarness>>;
 };
 
 export function createEmptyTuiLocalRows(): TuiLocalRows {
@@ -66,6 +79,7 @@ export function createEmptyTuiLocalRows(): TuiLocalRows {
     pendingRemove: [],
     pendingStart: [],
     pendingRenameTitles: {},
+    pendingProjectDefaults: {},
   };
 }
 
@@ -284,6 +298,41 @@ export function removePendingRenameSessionTitle(state: TuiState, sessionId: Sess
   };
 }
 
+export function addPendingProjectDefaultHarness(
+  state: TuiState,
+  row: PendingProjectDefaultHarness,
+): TuiState {
+  return {
+    ...state,
+    localRows: withPendingProjectDefaults(state.localRows, {
+      ...pendingProjectDefaultHarnesses(state.localRows),
+      [row.projectId]: row,
+    }),
+  };
+}
+
+export function removePendingProjectDefaultHarness(
+  state: TuiState,
+  projectId: ProjectId,
+): TuiState {
+  const pending = pendingProjectDefaultHarnesses(state.localRows);
+  if (pending[projectId] === undefined) {
+    return state;
+  }
+  const nextPending = { ...pending };
+  delete nextPending[projectId];
+  return {
+    ...state,
+    localRows: withPendingProjectDefaults(state.localRows, nextPending),
+  };
+}
+
+export function pendingProjectDefaultHarnesses(
+  localRows: TuiLocalRows,
+): Readonly<Record<ProjectId, PendingProjectDefaultHarness>> {
+  return localRows.pendingProjectDefaults ?? {};
+}
+
 export function pruneLocalRowsForSnapshot(
   localRows: TuiLocalRows,
   snapshot: StationSnapshot,
@@ -292,7 +341,7 @@ export function pruneLocalRowsForSnapshot(
   const realWorktreeIds = new Set(snapshot.rows.map((row) => row.id));
   const rowsByWorktreeId = new Map(snapshot.rows.map((row) => [row.id, row]));
   const sessionWorktreeIds = new Set(snapshot.sessions.map((session) => session.worktreeId));
-  return withPendingRenameTitles(
+  const pruned = withPendingRenameTitles(
     {
       ...localRows,
       pendingCreate: localRows.pendingCreate.filter(
@@ -310,6 +359,7 @@ export function pruneLocalRowsForSnapshot(
     },
     prunePendingRenameTitles(localRows, snapshot),
   );
+  return withPendingProjectDefaults(pruned, prunePendingProjectDefaults(localRows, snapshot));
 }
 
 export function pendingRenameTitles(
@@ -342,6 +392,34 @@ function withPendingRenameTitles(
     next.pendingRenameTitles = titles;
   } else {
     delete next.pendingRenameTitles;
+  }
+  return next;
+}
+
+function prunePendingProjectDefaults(
+  localRows: TuiLocalRows,
+  snapshot: StationSnapshot,
+): Record<ProjectId, PendingProjectDefaultHarness> {
+  const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
+  return Object.fromEntries(
+    Object.entries(pendingProjectDefaultHarnesses(localRows)).filter(([projectId, pending]) => {
+      const project = projectsById.get(projectId);
+      return project !== undefined && project.defaults.harness !== pending.harness;
+    }),
+  );
+}
+
+function withPendingProjectDefaults(
+  localRows: TuiLocalRows,
+  defaults: Readonly<Record<ProjectId, PendingProjectDefaultHarness>>,
+): TuiLocalRows {
+  const next: TuiLocalRows = {
+    ...localRows,
+  };
+  if (Object.keys(defaults).length > 0) {
+    next.pendingProjectDefaults = defaults;
+  } else {
+    delete next.pendingProjectDefaults;
   }
   return next;
 }

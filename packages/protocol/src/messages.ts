@@ -38,7 +38,6 @@ export const ProtocolMethods = [
   "command.get",
   "observer.reconcile",
   "observer.ingestProviderHookEvent",
-  "observer.ingestHookEvent",
   "observer.harnessEvent.report",
   "agent.prepareExternalLaunch",
   "agent.reportExternalExit",
@@ -208,7 +207,6 @@ export const ProviderHookIngestParamsSchema = z
     event: ProviderHookEventSchema,
   })
   .strict();
-export const HookIngestParamsSchema = ProviderHookIngestParamsSchema;
 
 export const HarnessEventReportParamsSchema = z
   .object({
@@ -227,7 +225,6 @@ export const ProtocolParamSchemas = {
   "command.get": CommandGetParamsSchema,
   "observer.reconcile": ReconcileParamsSchema,
   "observer.ingestProviderHookEvent": ProviderHookIngestParamsSchema,
-  "observer.ingestHookEvent": ProviderHookIngestParamsSchema,
   "observer.harnessEvent.report": HarnessEventReportParamsSchema,
   "agent.prepareExternalLaunch": AgentPrepareExternalLaunchParamsSchema,
   "agent.reportExternalExit": AgentReportExternalExitParamsSchema,
@@ -244,7 +241,6 @@ export const ProtocolResultSchemas = {
   "command.get": CommandRecordSchema.nullable(),
   "observer.reconcile": ReconcileReceiptSchema,
   "observer.ingestProviderHookEvent": ProviderHookReceiptSchema,
-  "observer.ingestHookEvent": ProviderHookReceiptSchema,
   "observer.harnessEvent.report": HarnessEventReportReceiptSchema,
   "agent.prepareExternalLaunch": AgentPrepareExternalLaunchResultSchema,
   "agent.reportExternalExit": AgentReportExternalExitResultSchema,

@@ -18,16 +18,18 @@ export function inputAfterPaneRemoval(
   const nextFocus = focus.kind === "pane" && isRemoved(focus.paneId) ? survivingFocus(state, workspace) : focus;
   // Drop an overlay-return pane that's now gone, else closeOverlay would restore it.
   const droppedReturn = overlayReturnFocus?.kind === "pane" && isRemoved(overlayReturnFocus.paneId);
+  const shouldCloseContextMenu =
+    contextMenu?.target.kind === "pane" && isRemoved(contextMenu.target.paneId);
 
   const next: InputSlice = {
     ...state.input,
     focus: nextFocus,
     overlayReturnFocus: droppedReturn ? null : overlayReturnFocus,
-    contextMenu: null,
+    contextMenu: shouldCloseContextMenu ? null : contextMenu,
   };
   // A context menu open over the removal closes; re-seat focus where it would
   // have returned (overlay / active pane).
-  if (contextMenu === null) {
+  if (!shouldCloseContextMenu) {
     return next;
   }
   return { ...next, focus: focusAfterContextMenu({ ...state, workspace, input: next }) };

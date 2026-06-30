@@ -373,8 +373,7 @@ function harnessCheck(
       tier: "required",
       status: "missing",
       label: "Agent CLI",
-      message:
-        "Install one supported harness CLI: claude, codex, crush, cursor agent, opencode, or pi.",
+      message: "Install one supported harness CLI: claude, codex, cursor agent, opencode, or pi.",
     };
   }
   const selected = available.find((harness) => harness.id === selectedHarness) ?? available[0];
@@ -701,7 +700,7 @@ function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessI
     harness,
     "--yes",
   ];
-  if (harness === "claude" || harness === "codex" || harness === "cursor" || harness === "crush") {
+  if (harness === "claude" || harness === "codex" || harness === "cursor") {
     command.push("--hook-bin", facts.launchers.ingress.command);
   }
   return command;
@@ -709,13 +708,9 @@ function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessI
 
 function harnessSupportsHooks(
   harness: string,
-): harness is "claude" | "codex" | "cursor" | "crush" | "opencode" {
+): harness is "claude" | "codex" | "cursor" | "opencode" {
   return (
-    harness === "claude" ||
-    harness === "codex" ||
-    harness === "cursor" ||
-    harness === "crush" ||
-    harness === "opencode"
+    harness === "claude" || harness === "codex" || harness === "cursor" || harness === "opencode"
   );
 }
 

@@ -20,16 +20,6 @@ import {
 } from "@station/codex";
 import type { StationConfig } from "@station/config";
 import {
-  type CrushHookDoctorResult,
-  type CrushHookInstallResult,
-  type CrushHookPlan,
-  type CrushHookPlanOptions,
-  doctorCrushHooks,
-  installCrushHooks,
-  planCrushHooks,
-  uninstallCrushHooks,
-} from "@station/crush";
-import {
   type CursorHookDoctorResult,
   type CursorHookInstallResult,
   type CursorHookPlan,
@@ -78,11 +68,6 @@ export type CodexHooksCommandResult =
   | CodexHookInstallResult
   | CodexHookDoctorResult;
 
-export type CrushHooksCommandResult =
-  | CrushHookPlan
-  | CrushHookInstallResult
-  | CrushHookDoctorResult;
-
 export type CursorHooksCommandResult =
   | CursorHookPlan
   | CursorHookInstallResult
@@ -104,10 +89,6 @@ function isClaudeEnabled(config: StationConfig | undefined): boolean {
 
 function isCodexEnabled(config: StationConfig | undefined): boolean {
   return config?.harness?.codex?.installHooks === true;
-}
-
-function isCrushEnabled(config: StationConfig | undefined): boolean {
-  return config?.harness?.crush?.installHooks === true;
 }
 
 function isCursorEnabled(config: StationConfig | undefined): boolean {
@@ -183,37 +164,6 @@ export function runCodexHooksCommand(
     { providerConfigFlag: "--codex-config", supportsHookScript: true, supportsHookBin: true },
   );
   return runner(args, options) as Promise<CodexHooksCommandResult>;
-}
-
-export function runCrushHooksCommand(
-  args: string[],
-  options: ProviderHooksCommandOptions = {},
-): Promise<CrushHooksCommandResult> {
-  const runner = createProviderHooksRunner<CrushHookPlanOptions>(
-    {
-      provider: "crush",
-      plan: planCrushHooks,
-      install: installCrushHooks,
-      uninstall: uninstallCrushHooks,
-      doctor: doctorCrushHooks,
-      buildOptions: (flags, context) => {
-        const options: CrushHookPlanOptions = buildCommonHookOptions(context);
-        if (flags.providerConfig !== undefined) {
-          options.crushConfigPath = flags.providerConfig;
-        }
-        if (flags.hookScriptPath !== undefined) {
-          options.hookScriptPath = flags.hookScriptPath;
-        }
-        if (flags.hookBin !== undefined) {
-          options.hookBin = flags.hookBin;
-        }
-        return options;
-      },
-      isEnabled: isCrushEnabled,
-    },
-    { providerConfigFlag: "--crush-config", supportsHookScript: true, supportsHookBin: true },
-  );
-  return runner(args, options) as Promise<CrushHooksCommandResult>;
 }
 
 export function runCursorHooksCommand(

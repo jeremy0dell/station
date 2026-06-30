@@ -162,7 +162,7 @@ The same provider-health evidence is included in `stn debug bundle`, so a failed
 ## Hooks
 
 Guided `stn setup` can enable and install Worktrunk lifecycle hooks plus the selected Claude, Codex,
-Cursor, Crush, or OpenCode agent hooks. Worktrunk lifecycle hooks are optional when automation is
+Cursor, or OpenCode agent hooks. Worktrunk lifecycle hooks are optional when automation is
 configured to skip them. `worktree.worktrunk.use_lifecycle_hooks = false` makes automated Worktrunk
 mutations use `--no-hooks`; `true` makes them use `--yes`; unset leaves Worktrunk's default prompt
 behavior in place.
@@ -176,7 +176,6 @@ stn hooks install worktrunk --yes
 stn hooks install claude --yes
 stn hooks install codex --yes
 stn hooks install cursor --yes
-stn hooks install crush --yes
 stn hooks install opencode --yes
 ```
 

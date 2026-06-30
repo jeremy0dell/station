@@ -9,6 +9,15 @@ export type CreateSessionOperation = {
   command: Extract<StationCommand, { type: "session.create" }>;
 };
 
+export type ForkSessionOperation = {
+  type: "forkSession";
+  localId: string;
+  projectId: string;
+  sourceWorktreeId: WorktreeId;
+  branch: string;
+  command: Extract<StationCommand, { type: "session.fork" }>;
+};
+
 export type RemoveWorktreeOperation = {
   type: "removeWorktree";
   localId: string;
@@ -75,6 +84,7 @@ export type RemoveProjectOperation = {
 
 export type TuiOperation =
   | CreateSessionOperation
+  | ForkSessionOperation
   | RemoveWorktreeOperation
   | StartAgentOperation
   | ResumeAgentOperation
