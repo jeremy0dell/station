@@ -54,11 +54,22 @@ describe("CLI diagnostic commands", () => {
   });
 
   it("warns when Bun is missing because bare stn cannot render the TUI", async () => {
-    await expect(rendererRuntimeCheck(async () => undefined)).resolves.toMatchObject({
-      name: "renderer-runtime",
-      status: "warn",
-      error: { code: "BUN_RUNTIME_MISSING" },
-    });
+    // rendererRuntimeCheck's dashboardCommandOverride defaults to
+    // process.env.STATION_DASHBOARD_COMMAND, so a dev with that override exported
+    // would short-circuit the check. Clear it for this assertion (passing undefined
+    // would re-trigger the default). Restore in finally.
+    const saved = process.env.STATION_DASHBOARD_COMMAND;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+    try {
+      await expect(rendererRuntimeCheck(async () => undefined)).resolves.toMatchObject({
+        name: "renderer-runtime",
+        status: "warn",
+        error: { code: "BUN_RUNTIME_MISSING" },
+      });
+    } finally {
+      if (saved === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = saved;
+    }
   });
 
   it("stays silent when Bun is resolvable", async () => {

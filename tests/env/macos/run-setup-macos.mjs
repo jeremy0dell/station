@@ -160,7 +160,22 @@ function waitForIp(clone) {
 function ssh(ip, command) {
   const result = spawnSync(
     "sshpass",
-    ["-p", "admin", "ssh", "-o", "StrictHostKeyChecking=no", `admin@${ip}`, command],
+    [
+      "-p",
+      "admin",
+      "ssh",
+      "-o",
+      "StrictHostKeyChecking=no",
+      // Ephemeral Tart VMs reuse IPs with fresh host keys; a stale known_hosts entry
+      // makes OpenSSH disable password auth, so sshpass fails and stdout is empty
+      // (then JSON.parse throws and masks the real outcome). Don't touch known_hosts.
+      "-o",
+      "UserKnownHostsFile=/dev/null",
+      "-o",
+      "LogLevel=ERROR",
+      `admin@${ip}`,
+      command,
+    ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
   );
   return { status: result.status, stdout: result.stdout ?? "" };

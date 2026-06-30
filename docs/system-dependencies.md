@@ -43,7 +43,7 @@ Required for the default useful workflow:
 - Bun — bare `stn` renders the terminal UI by shelling out to `bun run` against the station workspace, so the dashboard cannot launch without it
 - diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
 - git (the binary) and a git repository for the first project
-- one supported agent CLI: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
+- one supported agent CLI: Claude Code, Codex, Crush, Cursor Agent, OpenCode, or Pi
 
 On macOS, the Command Line Tools provide git and the compilers Homebrew needs.
 `stn setup` detects a missing-git binary distinctly from "not inside a repo" and,

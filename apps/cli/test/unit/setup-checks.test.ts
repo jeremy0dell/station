@@ -716,6 +716,27 @@ describe("checkSetupGit", () => {
     });
     expect(notARepo).toMatchObject({ status: "missing", reason: "not-a-repo" });
   });
+
+  it("gives the safe.directory remediation when git refuses for dubious ownership", async () => {
+    const dubious = await checkSetupGit({
+      env: { PATH: "/fake/bin" },
+      cwd: "/tmp/owned-by-root",
+      // git runs but exits 128 with a dubious-ownership message; the user IS inside
+      // the repo, so the remediation must point at safe.directory, not "not a repo".
+      runner: async () => {
+        throw Object.assign(
+          new Error("fatal: detected dubious ownership in repository at '/tmp/owned-by-root'"),
+          {
+            code: 128,
+            stderr: "fatal: detected dubious ownership in repository at '/tmp/owned-by-root'",
+          },
+        );
+      },
+    });
+    expect(dubious).toMatchObject({ status: "missing", reason: "not-a-repo" });
+    if (dubious.status !== "missing") throw new Error("expected missing git");
+    expect(dubious.message).toContain("safe.directory");
+  });
 });
 
 async function tempRoot(tempRoots: string[]): Promise<string> {

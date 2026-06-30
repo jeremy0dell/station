@@ -48,9 +48,22 @@ export async function checkSetupGit(options: CheckGitOptions = {}): Promise<Setu
       status: "missing",
       reason: "not-a-repo",
       defaultBranch: "main",
-      message: "Run stn setup from inside the git repository you want to manage.",
+      // git can run yet refuse the repo for "dubious ownership" (owned by a different
+      // UID — common with mounted volumes / containers). The user IS inside the repo,
+      // so the not-a-repo wording is wrong; point at the real fix instead.
+      message: isDubiousOwnershipError(error)
+        ? "git refused this repository for dubious ownership (it is owned by a different user, common with mounted volumes or containers). Run: git config --global --add safe.directory <repository path>, then run stn setup."
+        : "Run stn setup from inside the git repository you want to manage.",
     };
   }
+}
+
+function isDubiousOwnershipError(error: unknown): boolean {
+  if (!isSafeError(error)) {
+    return false;
+  }
+  const stderr = error.diagnosticDetails?.[0]?.stderrSnippet ?? "";
+  return /dubious ownership|safe\.directory/i.test(stderr);
 }
 
 async function detectDefaultBranch(options: CheckGitOptions): Promise<string> {

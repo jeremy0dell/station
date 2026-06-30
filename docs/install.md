@@ -25,7 +25,7 @@ stn
 - diffnav and git-delta for the "See diff (split right)" automation
 - One agent CLI: Claude Code, Codex, Crush, Cursor, OpenCode, or Pi
 
-`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
+`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk, Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
 
 Node.js 24.x and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node).
 
