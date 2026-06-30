@@ -161,14 +161,18 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
     return rows.find((row) => row.id === worktreeId)?.path;
   }
 
-  // The split anchor chain is acyclic by construction (createPane validates the anchor already
-  // exists; closePane only clears anchors), so this walk to the worktree-owning pane terminates.
-  function worktreeIdForPane(paneId: PaneId, rows: readonly WorktreeRow[], depth = 0): string | undefined {
-    // Depth guard: disk-restored panes are read here, so cap the walk rather than trust the
-    // acyclic invariant absolutely.
-    if (depth > rows.length + 1) {
+  // Walk the split-anchor chain to the worktree-owning pane. Live panes are acyclic by construction
+  // (createPane validates the anchor exists; closePane only clears anchors), but disk-restored panes
+  // are read here too, so a visited set guards against a corrupt cycle without bounding chain depth.
+  function worktreeIdForPane(
+    paneId: PaneId,
+    rows: readonly WorktreeRow[],
+    visited: Set<PaneId> = new Set(),
+  ): string | undefined {
+    if (visited.has(paneId)) {
       return undefined;
     }
+    visited.add(paneId);
     for (const row of rows) {
       if (agentWorktreePaneId(row.id) === paneId || worktreePaneId(row.id) === paneId) {
         return row.id;
@@ -178,7 +182,7 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
     if (pane?.split === null || pane?.split === undefined) {
       return undefined;
     }
-    return worktreeIdForPane(pane.split.anchorPaneId, rows, depth + 1);
+    return worktreeIdForPane(pane.split.anchorPaneId, rows, visited);
   }
 
   // A split pane's PTY spawns lazily on its first layout/resize, so its terminal is null right after

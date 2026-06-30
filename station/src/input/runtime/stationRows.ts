@@ -6,14 +6,14 @@ import type { ProviderId, WorktreeRow } from "@station/contracts";
 /** How long to wait for a freshly created worktree's row to reach the snapshot. */
 const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
 
-export function findWorktreeRowById(
+function findWorktreeRowById(
   store: StoreApi<TuiStore>,
   worktreeId: string,
 ): WorktreeRow | undefined {
   return store.getState().snapshot?.rows.find((row) => row.id === worktreeId);
 }
 
-export function findWorktreeRowByBranch(
+function findWorktreeRowByBranch(
   store: StoreApi<TuiStore>,
   projectId: string,
   branch: string,

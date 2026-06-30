@@ -41,21 +41,12 @@ export type ManagedLaunchTarget = {
   background?: boolean;
 };
 
+// The hosted-launch capability behind StationInputEffects' launch* methods; see that contract
+// (stationInput.ts) for what each submit path does. All are fire-and-forget: input stays consumed
+// while observer preparation and local spawn finish, and failures surface as STATION toasts.
 export type ManagedLaunch = {
-  /**
-   * Managed launches are fire-and-forget so input stays consumed while observer
-   * preparation and local spawn finish; failures surface as STATION toasts.
-   */
   launchPrimaryAgent(paneId: PaneId, target: ManagedLaunchTarget): void;
-  /**
-   * Create a new worktree and host its primary agent in a Station pane (the New
-   * Session wizard's submit). Fire-and-forget like launchPrimaryAgent.
-   */
   launchHostedNewSession(target: { projectId: string; branch: string; harness: ProviderId }): void;
-  /**
-   * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
-   * harness in a Station pane (the Fork details submit). Fire-and-forget too.
-   */
   launchHostedForkSession(target: {
     projectId: string;
     sourceWorktreeId: string;
