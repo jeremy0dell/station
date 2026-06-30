@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+dist
+**/dist
+.turbo
+**/.turbo
+.dev-state
+**/.dev-state
+coverage
+**/*.log
+station/node_modules

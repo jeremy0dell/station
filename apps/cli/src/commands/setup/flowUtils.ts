@@ -26,6 +26,7 @@ export function collectForCommand(
   if (deps.access !== undefined) collectOptions.access = deps.access;
   if (deps.fs !== undefined) collectOptions.fs = deps.fs;
   if (deps.now !== undefined) collectOptions.now = deps.now;
+  if (deps.platform !== undefined) collectOptions.platform = deps.platform;
   if (flags.noBrew !== undefined) collectOptions.noBrew = flags.noBrew;
   return collectSetupFacts(collectOptions);
 }

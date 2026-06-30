@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
+  isSafeError,
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
@@ -26,11 +27,24 @@ export async function checkSetupGit(options: CheckGitOptions = {}): Promise<Setu
       defaultBranch,
       repoName: basename(root) || "project",
     };
-  } catch {
+  } catch (error) {
+    // runExternalCommand normalizes a missing binary to a safe error coded ENOENT;
+    // a real git that fails rev-parse (not a repository) carries a numeric exitCode
+    // instead. The two cases need different remediation.
+    if (isSafeError(error) && error.code === "ENOENT") {
+      return {
+        status: "missing",
+        reason: "git-absent",
+        defaultBranch: "main",
+        message:
+          "git is not installed. On macOS run xcode-select --install (or install git), then run stn setup.",
+      };
+    }
     return {
       status: "missing",
+      reason: "not-a-repo",
       defaultBranch: "main",
-      message: "Run station setup from inside the git repository you want to manage.",
+      message: "Run stn setup from inside the git repository you want to manage.",
     };
   }
 }

@@ -242,9 +242,11 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
         "Lifecycle hooks are enabled; automated Worktrunk mutations pass --yes to pre-approve prompts.",
     },
     tmux: { status: "ok", command: "tmux" },
+    bun: { status: "ok", command: "bun" },
     diffnav: { status: "ok", command: "diffnav" },
     gitDelta: { status: "ok", command: "delta" },
     brew: { status: "ok", command: "brew" },
+    xcode: { status: "ok", applicable: true },
     launchers: {
       packageRoot: "/tmp/station",
       station: {

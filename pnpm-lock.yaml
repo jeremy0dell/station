@@ -95,6 +95,10 @@ importers:
       zod:
         specifier: ^4.1.12
         version: 4.4.3
+    devDependencies:
+      '@station/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   apps/observer:
     dependencies:

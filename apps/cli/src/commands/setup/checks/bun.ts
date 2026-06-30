@@ -3,24 +3,25 @@ import type { SetupDependencyFact } from "../model.js";
 import { setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";
 
-export const defaultDiffnavCommand = "diffnav";
+export const defaultBunCommand = "bun";
 
-export function diffnavInstallHint(command = defaultDiffnavCommand): string {
+export function bunInstallHint(command = defaultBunCommand): string {
   return [
-    "Install diffnav with brew install dlvhdr/formulae/diffnav for the STATION 'See diff' automation.",
-    `stn tried ${command}.`,
+    "Install Bun with brew install bun to run the STATION terminal UI.",
+    `Bare stn launches the dashboard through ${command} run.`,
   ].join(" ");
 }
 
 /**
- * Required diffnav probe for STATION's "See diff" automation. Presence of the
- * literal command on PATH is enough; absence blocks core setup.
+ * Required Bun probe. Bare `stn` renders the TUI via `bun run` against the
+ * station workspace, so a missing Bun makes the primary terminal UI fail to
+ * launch. Presence of the command on PATH is enough; absence blocks core setup.
  */
-export async function checkSetupDiffnav(
+export async function checkSetupBun(
   options: SetupDependencyCheckOptions = {},
 ): Promise<SetupDependencyFact> {
   const env = setupEnv(options.env);
-  const command = defaultDiffnavCommand;
+  const command = defaultBunCommand;
   const resolveOptions: ResolveExecutablePathOptions = {};
   if (env.PATH !== undefined) resolveOptions.pathEnv = env.PATH;
   if (options.access !== undefined) resolveOptions.access = options.access;
@@ -28,5 +29,5 @@ export async function checkSetupDiffnav(
   if (resolvedPath !== undefined) {
     return { status: "ok", command, resolvedPath };
   }
-  return { status: "missing", command, message: diffnavInstallHint(command) };
+  return { status: "missing", command, message: bunInstallHint(command) };
 }

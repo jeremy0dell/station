@@ -24,6 +24,9 @@ export type SetupCommandDeps = {
   cwd?: string;
   homeDir?: string;
   now?: () => Date;
+  // Defaults to process.platform; injected by machine-state tests to drive the
+  // macOS Command Line Tools check on any host.
+  platform?: NodeJS.Platform;
 };
 
 export type SetupCommandOptions = {

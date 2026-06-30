@@ -44,8 +44,16 @@ async function runGuidedSetupWithPrompt(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<SetupCommandResult> {
-  await write(deps, "Core setup: Worktrunk + tmux + one agent + first project.\n\n");
+  await write(deps, "Core setup: required tools, one agent, and your first project.\n\n");
   let facts = await collectForCommand("apply", options, deps, {});
+
+  // Bootstrap layer (macOS): Command Line Tools, then Homebrew — the prerequisites
+  // for git and every brew-installed tool below. Resolving these can change what is
+  // installable, so it runs before the plan is built.
+  const bootstrap = await ensureBootstrapTools(facts, options, deps, prompt);
+  if (bootstrap.halt) return { code: 1 };
+  if (bootstrap.facts !== undefined) facts = bootstrap.facts;
+
   let plan = buildSetupPlan(facts, { configWrite: await planSetupConfigWrite(facts) });
   await write(deps, renderSetupPlan(plan, renderOptions(deps)));
 
@@ -118,7 +126,7 @@ async function runGuidedSetupWithPrompt(
       applyOptions(deps, { actionFilter: isConfigAction, announceActions: true }),
     );
     if (writeResult.failedAction !== undefined) {
-      await write(deps, "Config write failed. Run: station setup plan\n");
+      await write(deps, "Config write failed. Run: stn setup plan\n");
       return { code: 1 };
     }
   }
@@ -134,7 +142,7 @@ async function runGuidedSetupWithPrompt(
       }),
     );
     if (hookResult.failedAction !== undefined) {
-      await write(deps, "Hook install failed. Fix the install error, then run: station setup\n");
+      await write(deps, "Hook install failed. Fix the install error, then run: stn setup\n");
       return { code: 1 };
     }
   }
@@ -180,6 +188,115 @@ type HookPreferences = {
   installWorktrunkHooks?: boolean;
   installHarnessHooks?: boolean;
 };
+
+// Kicks the macOS bootstrap installers (Command Line Tools, then Homebrew) behind
+// explicit prompts. Both need a TTY (a GUI dialog / a sudo password), so this path
+// is guided-only — `setup apply --yes` stays guidance-only for these.
+async function ensureBootstrapTools(
+  facts: SetupFacts,
+  options: SetupCommandOptions,
+  deps: SetupCommandDeps,
+  prompt: SetupPromptAdapter,
+): Promise<{ halt?: boolean; facts?: SetupFacts }> {
+  if (facts.xcode.status === "missing") {
+    const accepted = await prompt.confirm(
+      "Install Xcode Command Line Tools now? (runs xcode-select --install)",
+    );
+    if (accepted) {
+      await applySetupPlan(
+        harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
+        applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+      );
+      // The CLT installer runs asynchronously in its own window; we cannot continue
+      // until it finishes, so stop here and have the user re-run.
+      await write(
+        deps,
+        "Command Line Tools installation started in a separate window. Finish it, then run: stn setup\n",
+      );
+    } else {
+      await write(
+        deps,
+        "Install the Command Line Tools (xcode-select --install), then run: stn setup\n",
+      );
+    }
+    return { halt: true };
+  }
+
+  if (facts.brew.status === "missing" && coreToolsNeedBrew(facts)) {
+    const accepted = await prompt.confirm(
+      "Install Homebrew now? (runs the official Homebrew installer)",
+    );
+    if (!accepted) {
+      await write(deps, brewMissingCallout(facts));
+      return {};
+    }
+    const result = await applySetupPlan(
+      harnessInstallPlan(facts, [homebrewInstallAction()]),
+      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+    );
+    if (result.failedAction !== undefined) {
+      await write(
+        deps,
+        "Homebrew install failed. Install it from https://brew.sh, then run: stn setup\n",
+      );
+      return { halt: true };
+    }
+    // Re-probe so the brew-installed core tools become installable in the main plan.
+    return { facts: await collectForCommand("apply", options, deps, {}) };
+  }
+
+  return {};
+}
+
+function commandLineToolsInstallAction(): SetupAction {
+  return {
+    id: "install-command-line-tools",
+    kind: "run-command",
+    tier: "required",
+    selected: true,
+    label: "Install Command Line Tools",
+    message: "Trigger the macOS Command Line Tools installer.",
+    command: ["xcode-select", "--install"],
+  };
+}
+
+function homebrewInstallAction(): SetupAction {
+  return {
+    id: "install-homebrew",
+    kind: "run-command",
+    tier: "required",
+    selected: true,
+    label: "Install Homebrew",
+    message: "Run the official Homebrew installer.",
+    command: [
+      "/bin/bash",
+      "-c",
+      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)",
+    ],
+  };
+}
+
+function coreToolsNeedBrew(facts: SetupFacts): boolean {
+  return (
+    facts.worktrunk.status !== "ok" ||
+    facts.tmux.status !== "ok" ||
+    facts.bun.status !== "ok" ||
+    facts.diffnav.status !== "ok" ||
+    facts.gitDelta.status !== "ok"
+  );
+}
+
+function brewMissingCallout(facts: SetupFacts): string {
+  const lines = [
+    "Homebrew is required to install the missing core tools.",
+    "  Install Homebrew first: https://brew.sh",
+  ];
+  // facts.xcode.applicable is true only on macOS, where brew itself needs the CLT.
+  if (facts.xcode.applicable) {
+    lines.push("  Command Line Tools: xcode-select --install");
+  }
+  return `${lines.join("\n")}\n\n`;
+}
 
 async function maybeLinkStationLaunchers(
   facts: SetupFacts,
@@ -285,7 +402,7 @@ async function ensureHarnessAvailable(
       [
         "No agent CLI was installed.",
         "Install one supported agent CLI, then run:",
-        "  station setup",
+        "  stn setup",
         "",
       ].join("\n"),
     );
@@ -301,7 +418,7 @@ async function ensureHarnessAvailable(
     }),
   );
   if (result.failedAction !== undefined) {
-    await write(deps, "Agent CLI install failed. Fix the install error, then run: station setup\n");
+    await write(deps, "Agent CLI install failed. Fix the install error, then run: stn setup\n");
     return undefined;
   }
 
@@ -320,7 +437,7 @@ async function ensureHarnessAvailable(
     [
       "No supported agent CLI was detected after install.",
       "Make sure the installed CLI is on PATH, then run:",
-      "  station setup",
+      "  stn setup",
       "",
     ].join("\n"),
   );

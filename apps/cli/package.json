@@ -39,5 +39,8 @@
     "@station/tmux": "workspace:*",
     "@station/worktrunk": "workspace:*",
     "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@station/testing": "workspace:*"
   }
 }

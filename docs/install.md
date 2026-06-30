@@ -41,7 +41,7 @@ STATION is installed.
 Next:
   stn setup
 
-This configures the core local workflow: Worktrunk, tmux, one agent CLI, and your first project.
+This configures the core local workflow: the required tools, an agent CLI, and your first project.
 Optional integrations can be added later.
 ```
 

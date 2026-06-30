@@ -37,7 +37,13 @@ describe("guided setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, false, false] }),
         writeStdout: (chunk) => chunks.push(chunk),
@@ -76,7 +82,13 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "wt -y config shell install": "",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
         writeStdout: (chunk) => chunks.push(chunk),
@@ -112,7 +124,13 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, false] }),
         writeStdout: () => undefined,
@@ -144,7 +162,13 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "opencode --version": "opencode 1.0.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, false, false], selects: ["opencode"] }),
         writeStdout: () => undefined,
@@ -176,7 +200,13 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
         writeStdout: () => undefined,
@@ -214,6 +244,9 @@ describe("guided setup command", () => {
         access: fakeAccess([
           "/fake/bin/wt",
           "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -294,7 +327,13 @@ describe("guided setup command", () => {
             "tmux -V": "tmux 3.5a\n",
           })(input);
         },
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({
           confirms: [true, false, false, false, false, false, false, false, true, false, false],
@@ -334,7 +373,13 @@ describe("guided setup command", () => {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: {
           ...prompt({ confirms: [false, false, false, false] }),
@@ -350,6 +395,124 @@ describe("guided setup command", () => {
     expect(closed).toBe(true);
     expect(Object.keys(fs.files)).toEqual([]);
     expect(chunks.join("")).toContain("No agent CLI was installed.");
+  });
+
+  it("kicks the Command Line Tools installer on macOS when accepted", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          const key = `${input.command} ${(input.args ?? []).join(" ")}`;
+          // Bare Mac: the Command Line Tools are absent until installed.
+          if (key === "xcode-select -p") {
+            throw Object.assign(new Error("no developer tools"), { code: "ENOENT" });
+          }
+          if (key === "xcode-select --install") return commandResult(input, "");
+          return commandResult(input, "");
+        },
+        access: fakeAccess([]),
+        fs,
+        prompt: prompt({ confirms: [true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(calls).toContainEqual(
+      expect.objectContaining({ command: "xcode-select", args: ["--install"], stdio: "inherit" }),
+    );
+    expect(chunks.join("")).toContain(
+      "Command Line Tools installation started in a separate window.",
+    );
+    expect(Object.keys(fs.files)).toEqual([]);
+  });
+
+  it("prints Command Line Tools guidance on macOS when declined", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          if (`${input.command} ${(input.args ?? []).join(" ")}` === "xcode-select -p") {
+            throw Object.assign(new Error("no developer tools"), { code: "ENOENT" });
+          }
+          return commandResult(input, "");
+        },
+        access: fakeAccess([]),
+        fs,
+        prompt: prompt({ confirms: [false] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(
+      calls.some((call) => call.command === "xcode-select" && call.args?.[0] === "--install"),
+    ).toBe(false);
+    expect(chunks.join("")).toContain("Install the Command Line Tools (xcode-select --install)");
+  });
+
+  it("offers Homebrew and prints the callout when declined on macOS", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        // CLT present (default probe) but Homebrew and diffnav are missing, so the
+        // brew prompt fires; declining must surface the manual callout.
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/delta"]),
+        fs,
+        prompt: prompt({ confirms: [false] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(chunks.join("")).toContain("Install Homebrew first: https://brew.sh");
+    expect(chunks.join("")).toContain("Command Line Tools: xcode-select --install");
+    expect(calls.some((call) => call.command === "/bin/bash")).toBe(false);
   });
 });
 
@@ -379,7 +542,8 @@ function fakeRunner(
   return async (input) => {
     calls.push(input);
     const key = `${input.command} ${(input.args ?? []).join(" ")}`;
-    const stdout = outputs[key] ?? fakeBinOutput(input, outputs);
+    // Synthetic machines have macOS Command Line Tools unless a test overrides it.
+    const stdout = outputs[key] ?? fakeBinOutput(input, outputs) ?? defaultProbeOutput(key);
     if (stdout === undefined) {
       throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
     }
@@ -395,6 +559,10 @@ function fakeBinOutput(
     return undefined;
   }
   return outputs[`${basename(input.command)} ${(input.args ?? []).join(" ")}`];
+}
+
+function defaultProbeOutput(key: string): string | undefined {
+  return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
 }
 
 function commandResult(input: ExternalCommandInput, stdout: string): ExternalCommandResult {

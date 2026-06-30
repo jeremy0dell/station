@@ -3,6 +3,7 @@ import type { ExternalCommandRunner } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
 import type { SetupFacts, SetupMode } from "../model.js";
 import { checkBrewDependency } from "./brew.js";
+import { checkSetupBun } from "./bun.js";
 import {
   type CheckSetupConfigOptions,
   checkSetupConfig,
@@ -18,6 +19,7 @@ import { checkSetupLaunchers } from "./launchers.js";
 import { checkSetupTmux } from "./tmux.js";
 import { checkSetupTmuxBinding } from "./tmuxBinding.js";
 import { checkSetupWorktrunk, checkSetupWorktrunkAutomation } from "./worktrunk.js";
+import { type CheckXcodeOptions, checkSetupXcode } from "./xcode.js";
 
 export type SetupDependencyCheckOptions = {
   runner?: ExternalCommandRunner;
@@ -36,6 +38,9 @@ export type CollectSetupFactsOptions = {
   fs?: SetupFileSystemReader;
   now?: () => Date;
   noBrew?: boolean;
+  // Defaults to process.platform; injectable so machine-state tests can drive the
+  // macOS Command Line Tools check on any host.
+  platform?: NodeJS.Platform;
 };
 
 export async function collectSetupFacts(options: CollectSetupFactsOptions): Promise<SetupFacts> {
@@ -70,16 +75,20 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   if (gitRoot !== undefined) setupConfigInput.gitRoot = gitRoot;
   const configPathOptions = setupConfigOptions(setupConfigInput);
   const configPath = setupConfigPath(configPathOptions);
-  const [worktrunk, tmux, diffnav, gitDelta, brew, harnesses, config, launchers] =
+  const xcodeOptions: CheckXcodeOptions = { ...commandOptions };
+  if (options.platform !== undefined) xcodeOptions.platform = options.platform;
+  const [worktrunk, tmux, bun, diffnav, gitDelta, brew, xcode, harnesses, config, launchers] =
     await Promise.all([
       checkSetupWorktrunk(dependencyOptions),
       checkSetupTmux(dependencyOptions),
+      checkSetupBun(dependencyOptions),
       checkSetupDiffnav(dependencyOptions),
       checkSetupGitDelta(dependencyOptions),
       checkBrewDependency({
         ...commandOptions,
         ...(options.noBrew === undefined ? {} : { noBrew: options.noBrew }),
       }),
+      checkSetupXcode(xcodeOptions),
       checkSetupHarnesses(commandOptions),
       checkSetupConfig({ ...configPathOptions, configPath }),
       checkSetupLaunchers(dependencyOptions),
@@ -109,9 +118,11 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     worktrunk,
     worktrunkAutomation,
     tmux,
+    bun,
     diffnav,
     gitDelta,
     brew,
+    xcode,
     launchers,
     git,
     harnesses,

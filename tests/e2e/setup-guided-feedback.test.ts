@@ -134,6 +134,10 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
     "brew",
     'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
   );
+  // diffnav + delta are required; the checks only need the binaries on PATH.
+  await writeShim(bin, "diffnav", "exit 0\n");
+  await writeShim(bin, "delta", "exit 0\n");
+  await writeShim(bin, "bun", "exit 0\n");
   if (input.harness === "codex") {
     await writeCodexShim(bin);
   }

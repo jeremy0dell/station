@@ -20,6 +20,7 @@ describe("setup planner", () => {
     expect(plan.checks.map((check) => [check.id, check.status])).toEqual([
       ["worktrunk", "ok"],
       ["tmux", "ok"],
+      ["bun", "ok"],
       ["git-project", "ok"],
       ["harness", "ok"],
       ["config", "ok"],
@@ -63,6 +64,22 @@ describe("setup planner", () => {
         command: ["brew", "install", "tmux"],
       },
     ]);
+  });
+
+  it("plans a Homebrew install for missing Bun", () => {
+    const plan = buildSetupPlan(
+      facts({
+        bun: { status: "missing", command: "bun", message: "Bun missing." },
+      }),
+    );
+
+    expect(plan.summary.requiredMissing).toBe(1);
+    expect(plan.actions.find((action) => action.id === "install-bun")).toMatchObject({
+      kind: "brew-install",
+      tier: "required",
+      selected: true,
+      command: ["brew", "install", "bun"],
+    });
   });
 
   it("blocks config writes when no harness is available", () => {
@@ -290,6 +307,11 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       command: "tmux",
       version: "3.5a",
     },
+    bun: {
+      status: "ok",
+      command: "bun",
+      resolvedPath: "/tmp/bin/bun",
+    },
     diffnav: {
       status: "ok",
       command: "diffnav",
@@ -304,6 +326,11 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       status: "ok",
       command: "brew",
       version: "4.0.0",
+    },
+    xcode: {
+      status: "ok",
+      applicable: true,
+      path: "/Library/Developer/CommandLineTools",
     },
     launchers: {
       packageRoot: "/tmp/station",

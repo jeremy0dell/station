@@ -112,6 +112,19 @@ export type SetupBrewFact = {
   message?: string;
 };
 
+export type SetupXcodeFact =
+  | {
+      status: "ok";
+      // false on non-macOS hosts, where Command Line Tools do not apply.
+      applicable: boolean;
+      path?: string;
+    }
+  | {
+      status: "missing";
+      applicable: true;
+      message: string;
+    };
+
 export type SetupGitFact =
   | {
       status: "ok";
@@ -121,6 +134,9 @@ export type SetupGitFact =
     }
   | {
       status: "missing";
+      // "git-absent": the git binary is not installed (bare-machine case).
+      // "not-a-repo": git works but the cwd is not inside a repository.
+      reason: "git-absent" | "not-a-repo";
       defaultBranch: string;
       message: string;
     };
@@ -227,9 +243,11 @@ export type SetupFacts = {
   worktrunk: SetupDependencyFact;
   worktrunkAutomation: SetupWorktrunkAutomationFact;
   tmux: SetupDependencyFact;
+  bun: SetupDependencyFact;
   diffnav: SetupDependencyFact;
   gitDelta: SetupDependencyFact;
   brew: SetupBrewFact;
+  xcode: SetupXcodeFact;
   launchers: SetupLaunchersFact;
   git: SetupGitFact;
   harnesses: readonly SetupHarnessFact[];
