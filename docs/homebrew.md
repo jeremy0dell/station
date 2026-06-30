@@ -1,21 +1,24 @@
 # Homebrew Packaging
 
-Status: draft path for an internal/team tap. Station is not ready for
-`homebrew/core` yet: the `station` repo itself is private, it is still a
-private workspace package internally, uses Node 24 plus a separate Bun
-workspace, and requires explicit first-run setup.
+Status: live, internal/team tap at
+[`jeremy0dell/homebrew-station`](https://github.com/jeremy0dell/homebrew-station).
+Station is not ready for `homebrew/core` yet: the `station` repo itself is
+private, uses Node 24 plus a separate Bun workspace, and requires explicit
+first-run setup. v0.1.0 is the first tagged release.
 
 Because `jeremy0dell/station` is a private GitHub repo, this tap is for
-internal/team use, not public onboarding. Anyone running `brew install` needs
-`HOMEBREW_GITHUB_API_TOKEN` set to a token with `repo` scope on
-`jeremy0dell/station`, and the formula's `url`/`head` use
-`GitHubPrivateRepositoryDownloadStrategy` to authenticate the tarball
-download. Revisit this once `station` goes public.
+internal/team use, not public onboarding. There is no built-in Homebrew
+download strategy for private-repo archive tarballs (verified against
+Homebrew 6.x source -- no such strategy exists), so the formula clones via
+git+https instead (`url "...git", tag:, revision:`). This authenticates
+transparently using whatever git credentials the installing user already has
+for github.com (SSH key, or `gh auth login`'s git credential helper) -- no
+extra token/env var needed at install time. Revisit this once `station` goes
+public.
 
 ## Target user flow
 
 ```bash
-export HOMEBREW_GITHUB_API_TOKEN=<token with repo access to jeremy0dell/station>
 brew tap jeremy0dell/station
 brew trust jeremy0dell/station
 brew install station
@@ -32,10 +35,11 @@ Those steps are user/project aware and belong to `stn setup`.
 
 ## Formula shape
 
-Keep the initial formula in an upstream tap, for example
-`jeremy0dell/homebrew-station`, and copy
+The formula lives in the
+[`jeremy0dell/homebrew-station`](https://github.com/jeremy0dell/homebrew-station)
+tap as `Formula/station.rb`, kept in sync with
 [`packaging/homebrew/station.rb.template`](../packaging/homebrew/station.rb.template)
-to the tap as `Formula/station.rb`.
+in this repo.
 
 The current install is source-tree based, not a single binary. The formula must
 preserve the repository-relative layout because:
@@ -62,21 +66,48 @@ Runtime launchers should wrap the installed tree and prepend Homebrew's
 
 ## Release checklist
 
-1. Tag a Station release.
-2. Replace the formula template `url` and `sha256` with the tagged tarball and
-   checksum.
-3. Test locally:
+1. Bump `version` in root `package.json`, commit, tag (`git tag vX.Y.Z`), push
+   the commit and tag.
+2. `gh release create vX.Y.Z --generate-notes`.
+3. `.github/workflows/homebrew-bump.yml` runs on `release: published` and
+   updates `Formula/station.rb`'s `tag`/`revision` in the tap automatically,
+   committing directly to the tap's default branch (no PR, single maintainer).
+   It needs a `COMMITTER_TOKEN` repo secret on `jeremy0dell/station`: a PAT
+   (fine-grained, `contents: write` on `jeremy0dell/homebrew-station`, or
+   classic with `repo` scope) -- create one and run
+   `gh secret set COMMITTER_TOKEN -R jeremy0dell/station`. Without it the
+   workflow fails to push to the tap (cross-repo push needs an explicit
+   token; the default `GITHUB_TOKEN` only has access to the repo the
+   workflow runs in).
+4. If the bump workflow isn't set up yet, update `Formula/station.rb`'s `tag`
+   and `revision` by hand (`git rev-parse vX.Y.Z` for the revision).
+5. Test locally:
 
    ```bash
-   brew install --build-from-source ./Formula/station.rb
+   brew untap jeremy0dell/station; brew tap jeremy0dell/station
+   brew trust jeremy0dell/station
+   brew install --build-from-source station
+   brew audit --strict station
    brew test station
    stn setup check --json
    stn doctor
    stn
    ```
 
-4. Publish bottles from the tap once the formula is reviewed and the tap CI is
+6. Publish bottles from the tap once the formula is reviewed and the tap CI is
    green.
+
+## Known issues
+
+- `brew install` prints a non-fatal warning: `Failed changing dylib ID of
+  .../node_modules/@opentui/core-darwin-arm64/libopentui.dylib`. Homebrew's
+  automatic post-install relinking pass scans every Mach-O file in the keg,
+  including vendored prebuilt native node_modules binaries, and this
+  particular upstream binary doesn't have enough Mach-O header padding to be
+  rewritten. The CLI still works (`stn`, `stn setup check --json`, `brew
+  test` all pass) -- Node loads the addon by direct path, not via dyld
+  rpath resolution -- but expect the warning on every install/upgrade until
+  `@opentui/core` ships a binary built with `-headerpad_max_install_names`.
 
 ## Core-readiness blockers
 

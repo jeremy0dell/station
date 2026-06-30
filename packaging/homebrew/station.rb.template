@@ -1,32 +1,34 @@
 # Draft formula for the upstream Station tap.
 #
-# station is a PRIVATE repo. The source tarball download requires
-# HOMEBREW_GITHUB_API_TOKEN (a token with `repo` scope) to be set in the
-# environment of whoever runs `brew install` -- this formula is for
+# station is a PRIVATE repo. There is no built-in Homebrew download strategy
+# for private-repo archive tarballs (verified against Homebrew 6.x source --
+# no such strategy exists). Instead this clones via git+https, which
+# transparently authenticates using whatever git credentials the installing
+# user already has for github.com (SSH key, or `gh auth login`'s git
+# credential helper) -- no extra token/env var needed. This formula is for
 # internal/team use, not public onboarding, until the repo goes public.
 #
-# Copy this file to Formula/station.rb in the tap and replace the url/sha256
-# placeholders with a tagged release tarball before publishing.
+# Copy this file to Formula/station.rb in the tap and replace the tag/revision
+# placeholders with a new tagged release before publishing.
 class Station < Formula
   desc "Terminal-native control plane for AI-agent worktree sessions"
   homepage "https://github.com/jeremy0dell/station"
-  url "https://github.com/jeremy0dell/station/archive/refs/tags/v0.1.0.tar.gz",
-      using: GitHubPrivateRepositoryDownloadStrategy
-  sha256 "REPLACE_WITH_RELEASE_TARBALL_SHA256"
+  url "https://github.com/jeremy0dell/station.git",
+      tag:      "v0.1.0",
+      revision: "9842b141e6faf526c8f88225c3f92274d7eb18bf"
   license "FSL-1.1-ALv2"
-  head "https://github.com/jeremy0dell/station.git", branch: "main",
-       using: GitHubPrivateRepositoryDownloadStrategy
+  head "https://github.com/jeremy0dell/station.git", branch: "main"
 
-  depends_on "node@24"
   depends_on "pnpm" => :build
   depends_on "python" => :build
   depends_on "bun"
-  depends_on "worktrunk"
-  depends_on "tmux"
   depends_on "diffnav"
+  depends_on "node@24"
+  depends_on "tmux"
+  depends_on "worktrunk"
 
   def install
-    node24_bin = Formula["node@24"].opt_bin
+    node24_bin = formula_opt_bin("node@24")
     ENV.prepend_path "PATH", node24_bin
 
     system "pnpm", "install", "--frozen-lockfile"
@@ -37,6 +39,12 @@ class Station < Formula
       system "bun", "run", "link:station"
       system "bun", "run", "repair:node-pty"
     end
+
+    # node-pty ships prebuilds for every platform/arch; keep only this Mac's,
+    # so foreign-arch Mach-O binaries don't end up in the installed prefix
+    # (brew audit --strict flags them).
+    other_macos_arch = Hardware::CPU.arm? ? "darwin-x64" : "darwin-arm64"
+    rm_r "station/node_modules/node-pty/prebuilds/#{other_macos_arch}"
 
     libexec.install "apps", "bin", "integrations", "packages", "station"
     libexec.install "node_modules", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"
@@ -49,7 +57,7 @@ class Station < Formula
   def write_launcher(name, target)
     (bin/name).write <<~SH
       #!/bin/sh
-      export PATH="#{Formula["node@24"].opt_bin}:#{Formula["bun"].opt_bin}:$PATH"
+      export PATH="#{formula_opt_bin("node@24")}:#{formula_opt_bin("bun")}:$PATH"
       exec "#{target}" "$@"
     SH
   end
@@ -66,7 +74,8 @@ class Station < Formula
       Runtime state:  ~/.local/state/station
 
       station is a private repo. Installing or upgrading this formula requires
-      HOMEBREW_GITHUB_API_TOKEN set to a token with repo access.
+      git access to jeremy0dell/station (SSH key, or `gh auth login`'s git
+      credential helper).
     EOS
   end
 
