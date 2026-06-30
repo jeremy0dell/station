@@ -20,6 +20,7 @@ describe("setup planner", () => {
     expect(plan.checks.map((check) => [check.id, check.status])).toEqual([
       ["worktrunk", "ok"],
       ["tmux", "ok"],
+      ["bun", "ok"],
       ["git-project", "ok"],
       ["harness", "ok"],
       ["config", "ok"],
@@ -63,6 +64,54 @@ describe("setup planner", () => {
         command: ["brew", "install", "tmux"],
       },
     ]);
+  });
+
+  it("plans a Homebrew install for missing Bun", () => {
+    const plan = buildSetupPlan(
+      facts({
+        bun: { status: "missing", command: "bun", message: "Bun missing." },
+      }),
+    );
+
+    expect(plan.summary.requiredMissing).toBe(1);
+    expect(plan.actions.find((action) => action.id === "install-bun")).toMatchObject({
+      kind: "brew-install",
+      tier: "required",
+      selected: true,
+      command: ["brew", "install", "bun"],
+    });
+  });
+
+  it("plans required Homebrew installs for missing diffnav and git-delta", () => {
+    const plan = buildSetupPlan(
+      facts({
+        diffnav: { status: "missing", command: "diffnav", message: "diffnav missing." },
+        gitDelta: { status: "missing", command: "delta", message: "git-delta missing." },
+      }),
+    );
+
+    expect(plan.summary.requiredMissing).toBe(2);
+    // Both checks stay required+missing (guards a silent tier demotion to optional).
+    expect(plan.checks.find((check) => check.id === "diffnav")).toMatchObject({
+      tier: "required",
+      status: "missing",
+    });
+    expect(plan.checks.find((check) => check.id === "git-delta")).toMatchObject({
+      tier: "required",
+      status: "missing",
+    });
+    expect(plan.actions.find((action) => action.id === "install-diffnav")).toMatchObject({
+      kind: "brew-install",
+      tier: "required",
+      selected: true,
+      command: ["brew", "install", "dlvhdr/formulae/diffnav"],
+    });
+    expect(plan.actions.find((action) => action.id === "install-git-delta")).toMatchObject({
+      kind: "brew-install",
+      tier: "required",
+      selected: true,
+      command: ["brew", "install", "git-delta"],
+    });
   });
 
   it("blocks config writes when no harness is available", () => {
@@ -290,6 +339,11 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       command: "tmux",
       version: "3.5a",
     },
+    bun: {
+      status: "ok",
+      command: "bun",
+      resolvedPath: "/tmp/bin/bun",
+    },
     diffnav: {
       status: "ok",
       command: "diffnav",
@@ -304,6 +358,11 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       status: "ok",
       command: "brew",
       version: "4.0.0",
+    },
+    xcode: {
+      status: "ok",
+      applicable: true,
+      path: "/Library/Developer/CommandLineTools",
     },
     launchers: {
       packageRoot: "/tmp/station",

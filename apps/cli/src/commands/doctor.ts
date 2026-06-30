@@ -3,7 +3,7 @@ import type { StationConfig } from "@station/config";
 import type { DoctorCheck, DoctorOptions, DoctorReport } from "@station/contracts";
 import { DoctorOptionsSchema } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import { resolveExecutablePath, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { parseRequiredOptionValue } from "../args.js";
 import {
   type ObserverProcessDeps,
@@ -60,13 +60,55 @@ export async function runDoctorCommand(
     throw result.error;
   }
   const observerStartedAt = status.health.startedAt ?? result.value.observer.startedAt;
-  const freshnessCheck =
-    shouldCheckRuntimeFreshness(deps) && observerStartedAt !== undefined
-      ? await observerRuntimeFreshnessCheck(observerStartedAt)
-      : undefined;
-  return freshnessCheck === undefined
-    ? result.value
-    : reportWithCliCheck(result.value, freshnessCheck);
+  // CLI-side checks run only against the real runtime; injected tests (clientFactory
+  // / spawnObserver) skip them so their reports stay deterministic.
+  const runCliChecks = shouldRunCliRuntimeChecks(deps);
+  const cliChecks: DoctorCheck[] = [];
+  if (runCliChecks && observerStartedAt !== undefined) {
+    const freshnessCheck = await observerRuntimeFreshnessCheck(observerStartedAt);
+    if (freshnessCheck !== undefined) cliChecks.push(freshnessCheck);
+  }
+  if (runCliChecks) {
+    const rendererCheck = await rendererRuntimeCheck();
+    if (rendererCheck !== undefined) cliChecks.push(rendererCheck);
+  }
+  let report = result.value;
+  for (const check of cliChecks) {
+    report = reportWithCliCheck(report, check);
+  }
+  return report;
+}
+
+/**
+ * Bare `stn` renders the TUI by shelling out to `bun run` against the station
+ * workspace, so a missing Bun leaves the primary terminal UI silently broken even
+ * when the observer is healthy. Surface it as a degraded (warn) doctor finding.
+ */
+export async function rendererRuntimeCheck(
+  resolve: (command: string) => Promise<string | undefined> = (command) =>
+    resolveExecutablePath(command),
+  dashboardCommandOverride: string | undefined = process.env.STATION_DASHBOARD_COMMAND,
+): Promise<DoctorCheck | undefined> {
+  // Mirror tui.ts: STATION_DASHBOARD_COMMAND replaces `bun run` with a custom
+  // renderer command, so Bun is not required when that override is set.
+  if (dashboardCommandOverride !== undefined) {
+    return undefined;
+  }
+  const bunPath = await resolve("bun");
+  if (bunPath !== undefined) {
+    return undefined;
+  }
+  return {
+    name: "renderer-runtime",
+    status: "warn",
+    message: "Bun is not installed; bare stn cannot render the STATION terminal UI.",
+    error: {
+      tag: "RendererRuntimeError",
+      code: "BUN_RUNTIME_MISSING",
+      message: "The station TUI renderer runs on Bun (bun run), which is not on PATH.",
+      hint: "Install Bun (brew install bun), then run stn doctor.",
+    },
+  };
 }
 
 function parseDoctorOptions(args: string[]): DoctorOptions {
@@ -144,7 +186,7 @@ export async function observerRuntimeFreshnessCheck(
   };
 }
 
-function shouldCheckRuntimeFreshness(deps: ObserverProcessDeps): boolean {
+function shouldRunCliRuntimeChecks(deps: ObserverProcessDeps): boolean {
   return deps.clientFactory === undefined && deps.spawnObserver === undefined;
 }
 

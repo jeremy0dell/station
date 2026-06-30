@@ -37,7 +37,13 @@ describe("guided setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, false, false] }),
         writeStdout: (chunk) => chunks.push(chunk),
@@ -76,7 +82,13 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "wt -y config shell install": "",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
         writeStdout: (chunk) => chunks.push(chunk),
@@ -112,7 +124,13 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, false] }),
         writeStdout: () => undefined,
@@ -144,7 +162,13 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "opencode --version": "opencode 1.0.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, false, false], selects: ["opencode"] }),
         writeStdout: () => undefined,
@@ -176,7 +200,13 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
         writeStdout: () => undefined,
@@ -214,6 +244,9 @@ describe("guided setup command", () => {
         access: fakeAccess([
           "/fake/bin/wt",
           "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -294,11 +327,27 @@ describe("guided setup command", () => {
             "tmux -V": "tmux 3.5a\n",
           })(input);
         },
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
-        prompt: prompt({
-          confirms: [true, false, false, false, false, false, false, false, true, false, false],
-        }),
+        // Accept the Codex install and the config write; decline the rest. Match on
+        // message text so the test is robust to the exact prompt count (e.g. which
+        // optional prompts fire depends on launcher detection on the host).
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Codex?") || message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
         writeStdout: (chunk) => chunks.push(chunk),
       },
     );
@@ -334,7 +383,13 @@ describe("guided setup command", () => {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs,
         prompt: {
           ...prompt({ confirms: [false, false, false, false] }),
@@ -350,6 +405,369 @@ describe("guided setup command", () => {
     expect(closed).toBe(true);
     expect(Object.keys(fs.files)).toEqual([]);
     expect(chunks.join("")).toContain("No agent CLI was installed.");
+  });
+
+  it("kicks the Command Line Tools installer on macOS when accepted", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          const key = `${input.command} ${(input.args ?? []).join(" ")}`;
+          // Bare Mac: the Command Line Tools are absent until installed.
+          if (key === "xcode-select -p") {
+            throw Object.assign(new Error("no developer tools"), { code: "ENOENT" });
+          }
+          if (key === "xcode-select --install") return commandResult(input, "");
+          return commandResult(input, "");
+        },
+        access: fakeAccess([]),
+        fs,
+        prompt: prompt({ confirms: [true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(calls).toContainEqual(
+      expect.objectContaining({ command: "xcode-select", args: ["--install"], stdio: "inherit" }),
+    );
+    expect(chunks.join("")).toContain(
+      "Command Line Tools installation started in a separate window.",
+    );
+    expect(Object.keys(fs.files)).toEqual([]);
+  });
+
+  it("prints Command Line Tools guidance on macOS when declined", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          if (`${input.command} ${(input.args ?? []).join(" ")}` === "xcode-select -p") {
+            throw Object.assign(new Error("no developer tools"), { code: "ENOENT" });
+          }
+          return commandResult(input, "");
+        },
+        access: fakeAccess([]),
+        fs,
+        prompt: prompt({ confirms: [false] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(
+      calls.some((call) => call.command === "xcode-select" && call.args?.[0] === "--install"),
+    ).toBe(false);
+    expect(chunks.join("")).toContain("Install the Command Line Tools (xcode-select --install)");
+  });
+
+  it("offers Homebrew and prints the callout when declined on macOS", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        // CLT present (default probe) but Homebrew and diffnav are missing, so the
+        // brew prompt fires; declining must surface the manual callout.
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/delta"]),
+        fs,
+        prompt: prompt({ confirms: [false] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(chunks.join("")).toContain("Install Homebrew first: https://brew.sh");
+    expect(chunks.join("")).toContain("Command Line Tools: xcode-select --install");
+    expect(calls.some((call) => call.command === "/bin/bash")).toBe(false);
+  });
+
+  it("installs core tools after a fresh Apple-Silicon Homebrew install, then writes config", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const configPath = join(root, "home/.config/station/config.toml");
+
+    // Fresh arm64 Mac: CLT present, but brew and every core tool are missing. brew
+    // and the brew-installed tools resolve ONLY once /opt/homebrew/bin is on the
+    // probe/exec PATH — the exact state that broke onboarding before this fix.
+    const installed = new Set<string>();
+    let brewInstalled = false;
+    const formulaTool: Record<string, string> = {
+      worktrunk: "wt",
+      tmux: "tmux",
+      bun: "bun",
+      "dlvhdr/formulae/diffnav": "diffnav",
+      "git-delta": "delta",
+    };
+    const hasBrewPrefix = (input: ExternalCommandInput) =>
+      input.env?.PATH?.includes("/opt/homebrew/bin") === true;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          // Dependency checks run the resolved path (e.g. /opt/homebrew/bin/wt), so
+          // match on the command basename, not the literal string.
+          const bin = input.command.split("/").pop() ?? input.command;
+          const key = `${bin} ${(input.args ?? []).join(" ")}`;
+          // The official Homebrew installer (curl | bash).
+          if (input.command === "/bin/bash") {
+            brewInstalled = true;
+            return commandResult(input, "");
+          }
+          // brew resolves only after install AND with its prefix on PATH.
+          if (key === "brew --version") {
+            if (brewInstalled && hasBrewPrefix(input)) {
+              return commandResult(input, "Homebrew 4.0.0\n");
+            }
+            throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+          }
+          // `brew install` must itself run with the brew prefix on PATH, or brew is
+          // unresolvable on a fresh Mac; mark the tool installed on success.
+          if (bin === "brew" && input.args?.[0] === "install") {
+            if (!hasBrewPrefix(input)) {
+              throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+            }
+            const tool = formulaTool[input.args?.[1] ?? ""];
+            if (tool !== undefined) installed.add(tool);
+            return commandResult(input, "");
+          }
+          // worktrunk/tmux resolve via the brew-prefix access below (PATH sensitivity),
+          // then run --version on the resolved path — gate the output on install state.
+          if (key === "wt --version") {
+            if (installed.has("wt")) return commandResult(input, "worktrunk 1.2.3\n");
+            throw Object.assign(new Error("wt not found"), { code: "ENOENT" });
+          }
+          if (key === "tmux -V") {
+            if (installed.has("tmux")) return commandResult(input, "tmux 3.5a\n");
+            throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
+          }
+          const staticOutputs: Record<string, string> = {
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "codex --version": "codex 0.1.0\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
+          };
+          const out = staticOutputs[key];
+          if (out === undefined) {
+            throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+          }
+          return commandResult(input, out);
+        },
+        // bun/diffnav/delta (and wt/tmux path resolution) live in the brew prefix and
+        // resolve only once their formula has been installed.
+        access: async (path) => {
+          const present =
+            (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
+            (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
+            (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
+            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
+            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+          if (!present) {
+            throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
+          }
+        },
+        fs,
+        // Accept the bootstrap, the core-tool installs, and the config write; decline
+        // every optional extra. Matching on text keeps this robust to prompt ordering.
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Homebrew") ||
+              message.includes("Install missing required tools") ||
+              message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    // The brew-install actions actually ran (not silent no-ops) — the discriminator:
+    // before the fix the re-probe never sees brew, so these are never executed.
+    expect(
+      calls
+        .filter((call) => call.command === "brew" && call.args?.[0] === "install")
+        .map((call) => call.args?.[1]),
+    ).toEqual(
+      expect.arrayContaining(["worktrunk", "tmux", "bun", "dlvhdr/formulae/diffnav", "git-delta"]),
+    );
+    expect(fs.files[configPath]).toContain("[[projects]]");
+  });
+
+  it("keeps brew tools after a fresh Mac installs its first agent CLI", async () => {
+    // The harness-install path re-probes facts AFTER the brew tools were installed.
+    // That re-probe must keep the brew prefix, or the just-installed core tools read
+    // as missing again and config write dead-ends at exit 1. No agent CLI is present
+    // initially, so ensureHarnessAvailable installs one and runs the lossy re-probe.
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const configPath = join(root, "home/.config/station/config.toml");
+
+    const installed = new Set<string>();
+    let brewInstalled = false;
+    let codexInstalled = false;
+    const formulaTool: Record<string, string> = {
+      worktrunk: "wt",
+      tmux: "tmux",
+      bun: "bun",
+      "dlvhdr/formulae/diffnav": "diffnav",
+      "git-delta": "delta",
+    };
+    const hasBrewPrefix = (input: ExternalCommandInput) =>
+      input.env?.PATH?.includes("/opt/homebrew/bin") === true;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          calls.push(input);
+          const bin = input.command.split("/").pop() ?? input.command;
+          const key = `${bin} ${(input.args ?? []).join(" ")}`;
+          if (input.command === "/bin/bash") {
+            brewInstalled = true;
+            return commandResult(input, "");
+          }
+          // The agent CLI installer (no agent CLI is present until this runs).
+          if (key === "sh -c curl -fsSL https://chatgpt.com/codex/install.sh | sh") {
+            codexInstalled = true;
+            return commandResult(input, "");
+          }
+          if (key === "codex --version") {
+            if (codexInstalled) return commandResult(input, "codex 0.1.0\n");
+            throw Object.assign(new Error("codex not found"), { code: "ENOENT" });
+          }
+          if (key === "brew --version") {
+            if (brewInstalled && hasBrewPrefix(input)) {
+              return commandResult(input, "Homebrew 4.0.0\n");
+            }
+            throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+          }
+          if (bin === "brew" && input.args?.[0] === "install") {
+            if (!hasBrewPrefix(input)) {
+              throw Object.assign(new Error("brew not found"), { code: "ENOENT" });
+            }
+            const tool = formulaTool[input.args?.[1] ?? ""];
+            if (tool !== undefined) installed.add(tool);
+            return commandResult(input, "");
+          }
+          if (key === "wt --version") {
+            if (installed.has("wt")) return commandResult(input, "worktrunk 1.2.3\n");
+            throw Object.assign(new Error("wt not found"), { code: "ENOENT" });
+          }
+          if (key === "tmux -V") {
+            if (installed.has("tmux")) return commandResult(input, "tmux 3.5a\n");
+            throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
+          }
+          const staticOutputs: Record<string, string> = {
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
+          };
+          const out = staticOutputs[key];
+          if (out === undefined) {
+            throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+          }
+          return commandResult(input, out);
+        },
+        access: async (path) => {
+          const present =
+            (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
+            (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
+            (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
+            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
+            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+          if (!present) {
+            throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
+          }
+        },
+        fs,
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Homebrew") ||
+              message.includes("Install missing required tools") ||
+              message.includes("chatgpt.com/codex") ||
+              message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    // Without the brew prefix on the post-agent-install re-probe this exits 1 with no
+    // config: the brew tools (resolvable only under /opt/homebrew/bin) re-read missing.
+    expect(result.code).toBe(0);
+    expect(calls.some((call) => call.command === "sh")).toBe(true);
+    expect(fs.files[configPath]).toContain("[[projects]]");
   });
 });
 
@@ -379,7 +797,8 @@ function fakeRunner(
   return async (input) => {
     calls.push(input);
     const key = `${input.command} ${(input.args ?? []).join(" ")}`;
-    const stdout = outputs[key] ?? fakeBinOutput(input, outputs);
+    // Synthetic machines have macOS Command Line Tools unless a test overrides it.
+    const stdout = outputs[key] ?? fakeBinOutput(input, outputs) ?? defaultProbeOutput(key);
     if (stdout === undefined) {
       throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
     }
@@ -395,6 +814,10 @@ function fakeBinOutput(
     return undefined;
   }
   return outputs[`${basename(input.command)} ${(input.args ?? []).join(" ")}`];
+}
+
+function defaultProbeOutput(key: string): string | undefined {
+  return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
 }
 
 function commandResult(input: ExternalCommandInput, stdout: string): ExternalCommandResult {

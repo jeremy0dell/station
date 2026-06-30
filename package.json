@@ -53,7 +53,9 @@
     "test:e2e:opencode:real": "vitest run --config config/vitest/vitest.opencode-real.config.ts",
     "test:agent:scripted": "vitest run --config config/vitest/vitest.agent-scripted.config.ts",
     "test:agent:real": "pnpm test:e2e:codex:real",
+    "test:agent:nightly": "STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real",
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
+    "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
     "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup"
   },
   "devDependencies": {

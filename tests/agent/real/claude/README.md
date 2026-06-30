@@ -12,7 +12,18 @@ Opt-in tests that exercise the real Claude Code CLI. They are skipped unless exp
 
 ```sh
 STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real
+# or the exact nightly lane:
+pnpm test:agent:nightly
 ```
+
+## Nightly CI
+
+`.github/workflows/nightly-agent-smoke.yaml` runs this lane on a schedule (and via
+`workflow_dispatch`), gated to the repo owner. It installs the `claude` CLI + tmux,
+builds the workspace, and authenticates non-interactively from the
+`CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` secrets; with neither set the run
+step skips. It is deliberately a standalone scheduled workflow — never part of
+PR/`main` CI — so a real-agent or upstream-CLI change cannot block a PR.
 
 Overrides:
 

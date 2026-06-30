@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
+  isSafeError,
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
@@ -26,13 +27,43 @@ export async function checkSetupGit(options: CheckGitOptions = {}): Promise<Setu
       defaultBranch,
       repoName: basename(root) || "project",
     };
-  } catch {
+  } catch (error) {
+    // runExternalCommand normalizes a missing binary to a safe error coded ENOENT;
+    // a real git that fails rev-parse (not a repository) carries a numeric exitCode
+    // instead. The two cases need different remediation.
+    // Note: on a bare macOS host /usr/bin/git is a Command Line Tools shim that
+    // exists, so spawn succeeds and rev-parse fails with a numeric exit code (not
+    // ENOENT) — that host is surfaced by the separate Command Line Tools check, so
+    // git-absent here is the genuinely-uninstalled (e.g. Linux) case.
+    if (isSafeError(error) && error.code === "ENOENT") {
+      return {
+        status: "missing",
+        reason: "git-absent",
+        defaultBranch: "main",
+        message:
+          "git is not installed. On macOS run xcode-select --install (or install git), then run stn setup.",
+      };
+    }
     return {
       status: "missing",
+      reason: "not-a-repo",
       defaultBranch: "main",
-      message: "Run station setup from inside the git repository you want to manage.",
+      // git can run yet refuse the repo for "dubious ownership" (owned by a different
+      // UID — common with mounted volumes / containers). The user IS inside the repo,
+      // so the not-a-repo wording is wrong; point at the real fix instead.
+      message: isDubiousOwnershipError(error)
+        ? "git refused this repository for dubious ownership (it is owned by a different user, common with mounted volumes or containers). Run: git config --global --add safe.directory <repository path>, then run stn setup."
+        : "Run stn setup from inside the git repository you want to manage.",
     };
   }
+}
+
+function isDubiousOwnershipError(error: unknown): boolean {
+  if (!isSafeError(error)) {
+    return false;
+  }
+  const stderr = error.diagnosticDetails?.[0]?.stderrSnippet ?? "";
+  return /dubious ownership|safe\.directory/i.test(stderr);
 }
 
 async function detectDefaultBranch(options: CheckGitOptions): Promise<string> {

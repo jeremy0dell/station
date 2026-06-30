@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runCli } from "@station/cli";
-import { observerRuntimeFreshnessCheck } from "@station/cli/internal";
+import { observerRuntimeFreshnessCheck, rendererRuntimeCheck } from "@station/cli/internal";
 import type { DiagnosticEvidenceIndex, DiagnosticSnapshot, DoctorReport } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
@@ -51,6 +51,35 @@ describe("CLI diagnostic commands", () => {
         code: "OBSERVER_RUNTIME_STALE",
       },
     });
+  });
+
+  it("warns when Bun is missing because bare stn cannot render the TUI", async () => {
+    // rendererRuntimeCheck's dashboardCommandOverride defaults to
+    // process.env.STATION_DASHBOARD_COMMAND, so a dev with that override exported
+    // would short-circuit the check. Clear it for this assertion (passing undefined
+    // would re-trigger the default). Restore in finally.
+    const saved = process.env.STATION_DASHBOARD_COMMAND;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+    try {
+      await expect(rendererRuntimeCheck(async () => undefined)).resolves.toMatchObject({
+        name: "renderer-runtime",
+        status: "warn",
+        error: { code: "BUN_RUNTIME_MISSING" },
+      });
+    } finally {
+      if (saved === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = saved;
+    }
+  });
+
+  it("stays silent when Bun is resolvable", async () => {
+    await expect(rendererRuntimeCheck(async () => "/usr/local/bin/bun")).resolves.toBeUndefined();
+  });
+
+  it("stays silent when a STATION_DASHBOARD_COMMAND override replaces bun run", async () => {
+    await expect(
+      rendererRuntimeCheck(async () => undefined, "my-renderer --foo"),
+    ).resolves.toBeUndefined();
   });
 
   it("collects diagnostics and writes a debug bundle", async () => {

@@ -6,7 +6,7 @@ station ships Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, and OpenCode as e
 stn setup
 ```
 
-This configures the core local workflow: Worktrunk, tmux, one agent CLI, and your first project. Optional integrations can be added later.
+This configures the core local workflow: the required tools, an agent CLI, and your first project. Optional integrations can be added later.
 
 The local checkout also expects Node.js 24.x and pnpm 11 for development. Real-provider test lanes remain opt-in.
 `stn setup system --check` reports those versions, but it does not change the active Node or pnpm
@@ -32,7 +32,7 @@ Exit codes:
 - `1`: required core setup is missing or an apply action failed.
 - `2`: invalid setup command arguments.
 
-`stn setup check` and `stn setup plan` are read-only. `stn setup apply --dry-run` performs no writes or installs. Direct `stn setup system` also requires an explicit mode: use `--check` for read-only reporting or `--yes` to apply Homebrew installs for missing Worktrunk and tmux.
+`stn setup check` and `stn setup plan` are read-only. `stn setup apply --dry-run` performs no writes or installs. Direct `stn setup system` also requires an explicit mode: use `--check` for read-only reporting or `--yes` to apply Homebrew installs for missing Worktrunk, tmux, Bun, diffnav, and git-delta.
 
 ## Dependency Tiers
 
@@ -40,8 +40,15 @@ Required for the default useful workflow:
 
 - Worktrunk / `wt`
 - tmux
-- a git repository for the first project
+- Bun — bare `stn` renders the terminal UI by shelling out to `bun run` against the station workspace, so the dashboard cannot launch without it
+- diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
+- git (the binary) and a git repository for the first project
 - one supported agent CLI: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
+
+On macOS, the Command Line Tools provide git and the compilers Homebrew needs.
+`stn setup` detects a missing-git binary distinctly from "not inside a repo" and,
+on macOS, reports missing Command Line Tools with the `xcode-select --install`
+remediation. `scripts/setup/bootstrap.sh` preflights both before touching Homebrew.
 
 Recommended after setup:
 
@@ -149,6 +156,8 @@ diagnostics.installHint
 ```
 
 The same provider-health evidence is included in `stn debug bundle`, so a failed `session.create` can be tied back to the missing external binary. Failed Worktrunk commands can also surface redacted command diagnostics through `stn command get <commandId>` and `stn debug trace <traceOrCommandId>`.
+
+`stn doctor` also runs a CLI-side `renderer-runtime` check: when Bun is not on PATH it reports a `warn` (degraded) finding with code `BUN_RUNTIME_MISSING`, because bare `stn` cannot render the TUI without `bun run` even when the observer is healthy. This catches an already-set-up machine that later loses Bun.
 
 ## Hooks
 

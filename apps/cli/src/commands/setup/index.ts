@@ -54,5 +54,5 @@ export async function runSetupCommand(
 }
 
 function renderSetupHelp(path: readonly string[], options: SetupCommandOptions): string {
-  return options.renderHelp?.(path) ?? "Usage: station setup [check|plan|apply|system]\n";
+  return options.renderHelp?.(path) ?? "Usage: stn setup [check|plan|apply|system]\n";
 }

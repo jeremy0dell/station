@@ -49,6 +49,7 @@ function setupChecks(
   selectedHarness: SupportedHarnessId | undefined,
 ): SetupCheck[] {
   return [
+    ...xcodeChecks(facts),
     dependencyCheck({
       id: "worktrunk",
       label: "Worktrunk / wt",
@@ -60,6 +61,13 @@ function setupChecks(
       label: "tmux",
       missingMessage: facts.tmux.message ?? "tmux is required for the reference terminal workflow.",
       dependency: facts.tmux,
+    }),
+    dependencyCheck({
+      id: "bun",
+      label: "Bun",
+      missingMessage:
+        facts.bun.message ?? "Bun is required to run the STATION terminal UI (bare stn).",
+      dependency: facts.bun,
     }),
     gitCheck(facts),
     harnessCheck(facts, selectedHarness),
@@ -103,7 +111,7 @@ function setupChecks(
       tier: "recommended",
       status: "warning",
       label: "stn doctor",
-      message: "Run station doctor after setup to validate the observer runtime.",
+      message: "Run stn doctor after setup to validate the observer runtime.",
     },
   ];
 }
@@ -240,6 +248,21 @@ function harnessHooksCheck(
   };
 }
 
+function xcodeChecks(facts: SetupFacts): SetupCheck[] {
+  // Only surface a row when there is something to fix: a macOS host missing the
+  // Command Line Tools. Healthy or non-macOS hosts add no noise to the plan.
+  if (facts.xcode.status !== "missing") return [];
+  return [
+    {
+      id: "command-line-tools",
+      tier: "required",
+      status: "missing",
+      label: "Command Line Tools",
+      message: facts.xcode.message,
+    },
+  ];
+}
+
 function dependencyCheck(input: {
   id: string;
   label: string;
@@ -268,21 +291,21 @@ function diffnavCheck(facts: SetupFacts): SetupCheck {
   if (facts.diffnav.status === "ok") {
     return {
       id: "diffnav",
-      tier: "optional",
+      tier: "required",
       status: "ok",
       label: "diffnav",
-      message: "diffnav is available for the station 'See diff (split right)' automation.",
+      message: "diffnav is available for the STATION 'See diff (split right)' automation.",
       details,
     };
   }
   return {
     id: "diffnav",
-    tier: "optional",
-    status: "warning",
+    tier: "required",
+    status: "missing",
     label: "diffnav",
     message:
       facts.diffnav.message ??
-      "Optional: install diffnav for the station 'See diff (split right)' automation.",
+      "diffnav is required for the STATION 'See diff (split right)' automation.",
     details,
   };
 }
@@ -293,22 +316,22 @@ function gitDeltaCheck(facts: SetupFacts): SetupCheck {
   if (facts.gitDelta.status === "ok") {
     return {
       id: "git-delta",
-      tier: "optional",
+      tier: "required",
       status: "ok",
       label: "git-delta",
       message:
-        "git-delta is available; diffnav renders the station 'See diff' automation through it.",
+        "git-delta is available; diffnav renders the STATION 'See diff' automation through it.",
       details,
     };
   }
   return {
     id: "git-delta",
-    tier: "optional",
-    status: "warning",
+    tier: "required",
+    status: "missing",
     label: "git-delta",
     message:
       facts.gitDelta.message ??
-      "Optional: install git-delta; diffnav renders the station 'See diff' automation through it.",
+      "git-delta is required; diffnav renders the STATION 'See diff' automation through it.",
     details,
   };
 }
@@ -536,15 +559,18 @@ function setupActions(
   if (facts.tmux.status === "missing") {
     actions.push(installAction("install-tmux", "tmux", "tmux", facts.brew));
   }
+  if (facts.bun.status === "missing") {
+    actions.push(installAction("install-bun", "Bun", "bun", facts.brew));
+  }
   if (facts.diffnav.status === "missing") {
     actions.push(
-      optionalInstallAction("install-diffnav", "diffnav", "dlvhdr/formulae/diffnav", facts.brew),
+      installAction("install-diffnav", "diffnav", "dlvhdr/formulae/diffnav", facts.brew),
     );
   }
   // delta is diffnav's renderer, not standalone-useful here; install it alongside
-  // so opting into diffnav never yields a diffnav that errors for a missing delta.
+  // so a required diffnav never yields a diffnav that errors for a missing delta.
   if (facts.gitDelta.status === "missing") {
-    actions.push(optionalInstallAction("install-git-delta", "git-delta", "git-delta", facts.brew));
+    actions.push(installAction("install-git-delta", "git-delta", "git-delta", facts.brew));
   }
   if (stationLaunchersNeedLink(facts)) {
     actions.push({
@@ -710,27 +736,6 @@ function installAction(
   return action;
 }
 
-function optionalInstallAction(
-  id: string,
-  label: string,
-  formula: string,
-  brew: SetupFacts["brew"],
-): SetupAction {
-  return {
-    id,
-    kind: brew.status === "ok" ? "brew-install" : "noop",
-    tier: "optional",
-    selected: false,
-    label: `Install ${label}`,
-    message:
-      brew.status === "ok"
-        ? `Optional: install ${label} with Homebrew for the station 'See diff' automation.`
-        : `Homebrew is unavailable; install ${label} manually with: brew install ${formula}`,
-    command: ["brew", "install", formula],
-    data: { formula },
-  };
-}
-
 function configWriteActions(
   facts: SetupFacts,
   selectedHarness: SetupHarnessFact | undefined,
@@ -790,16 +795,27 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
     const stationCommand = quoteCommandPart(facts.launchers.station.command);
     return [`${stationCommand} doctor`, stationCommand];
   }
+  if (facts.xcode.status === "missing") {
+    return [facts.xcode.message];
+  }
   if (facts.worktrunk.status === "missing") {
-    return ["Install Worktrunk, then run: station setup check"];
+    return ["Install Worktrunk, then run: stn setup check"];
   }
   if (facts.tmux.status === "missing") {
-    return ["Install tmux, then run: station setup check"];
+    return ["Install tmux, then run: stn setup check"];
+  }
+  if (facts.bun.status === "missing") {
+    return ["Install Bun (brew install bun), then run: stn setup check"];
   }
   if (facts.git.status === "missing") {
-    return ["Run station setup from inside the git repository you want to manage."];
+    return [facts.git.message];
   }
-  return ["Resolve the missing required setup items, then run: station setup check"];
+  if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {
+    return [
+      "Install diffnav and git-delta (brew install dlvhdr/formulae/diffnav git-delta), then run: stn setup check",
+    ];
+  }
+  return ["Resolve the missing required setup items, then run: stn setup check"];
 }
 
 function quoteCommandPart(part: string): string {

@@ -1,10 +1,14 @@
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createFakeExternalCommandRunner,
   externalCommandErrorFromUnknown,
   nodeExternalCommandRunner,
+  resolveExecutablePath,
   runExternalCommand,
 } from "@station/runtime";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 describe("runtime external command boundary", () => {
   it("supports fakeable command execution", async () => {
@@ -280,5 +284,35 @@ describe("runtime external command boundary", () => {
       code: "EXTERNAL_COMMAND_ABORTED",
       command: "fake cancel-with-timeout",
     });
+  });
+});
+
+describe("resolveExecutablePath", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  it("resolves an executable file on PATH", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "resolve-exec-"));
+    tempDirs.push(dir);
+    const tool = join(dir, "mytool");
+    await writeFile(tool, "#!/bin/sh\n");
+    await chmod(tool, 0o755);
+
+    expect(await resolveExecutablePath("mytool", { pathEnv: dir })).toBe(tool);
+  });
+
+  it("does not resolve a present-but-non-executable file", async () => {
+    // The bug this guards: a file that exists but lacks the execute bit (partial
+    // install, wrong perms) previously resolved as a usable tool via F_OK only.
+    const dir = await mkdtemp(join(tmpdir(), "resolve-exec-"));
+    tempDirs.push(dir);
+    const tool = join(dir, "mytool");
+    await writeFile(tool, "#!/bin/sh\n");
+    await chmod(tool, 0o644);
+
+    expect(await resolveExecutablePath("mytool", { pathEnv: dir })).toBeUndefined();
   });
 });

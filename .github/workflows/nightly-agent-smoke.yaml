@@ -1,0 +1,58 @@
+# Nightly real-agent smoke: launch real Claude Code through real tmux and capture
+# its hooks end-to-end (the version-skew tripwire). This is intentionally a
+# standalone scheduled workflow — NOT part of PR/`main` CI and NOT the
+# tend-generated nightly — so a real-agent or upstream-CLI change never blocks a
+# PR. It runs only the opt-in `tests/agent/real/claude/**` lane, which itself
+# skips unless STATION_REAL_CLAUDE=1.
+name: nightly-agent-smoke
+on:
+  schedule:
+    # Offset from tend-nightly (06:17) to avoid contending for the runner.
+    - cron: "47 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  claude-real:
+    if: github.repository_owner == 'jeremy0dell'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Enable pnpm 11
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.0 --activate
+
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      # The real-claude lane runs on node + tmux + claude (no Bun renderer), so
+      # the build only needs the CLI/observer/provider-hooks — bin/stn-ingress.
+      - name: Build
+        run: pnpm build
+
+      - name: Install tmux and the Claude Code CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tmux
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Real Claude launch + hook-capture smoke
+        # Non-interactive Claude auth. Either secret is enough. Scoped to this step
+        # only so the secrets are never in scope for `pnpm install`/`pnpm build`/`npm
+        # install -g` third-party lifecycle scripts.
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ] && [ -z "${ANTHROPIC_API_KEY}" ]; then
+            # Surface as an annotation so a deleted/never-configured secret silently
+            # disabling this version-skew tripwire is visible in the run summary.
+            echo "::warning::No Claude auth secret (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY) configured; skipping the real-agent version-skew smoke."
+            exit 0
+          fi
+          pnpm test:agent:nightly
