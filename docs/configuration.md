@@ -77,7 +77,7 @@ later at runtime.
 
 Currently meaningful provider ids include `worktrunk` / `noop-worktree`,
 `tmux` / `noop-terminal`, and harness ids such as `claude`, `codex`, `cursor`,
-`opencode`, `pi`, `crush`, `scripted`, and `noop-harness`. Unknown ids are
+`opencode`, `pi`, `scripted`, and `noop-harness`. Unknown ids are
 accepted by config validation but become unavailable providers at runtime.
 
 ### `[worktree.worktrunk]` — worktree provider (optional)
@@ -132,7 +132,6 @@ Harness command fallback env vars:
 | Cursor Agent | `STATION_CURSOR_AGENT_BIN` | `agent` |
 | OpenCode | `STATION_OPENCODE_BIN` | `opencode` |
 | Pi | `STATION_PI_BIN` | `pi` |
-| Crush | `STATION_CRUSH_BIN` | `crush` |
 
 ### `[[hooks.event]]` — observer event hooks (optional, repeatable)
 
@@ -388,7 +387,6 @@ Provider command overrides, used when the matching config `command` field is abs
 | `STATION_CURSOR_AGENT_BIN` | Cursor Agent harness | `agent` |
 | `STATION_OPENCODE_BIN` | OpenCode harness | `opencode` |
 | `STATION_PI_BIN` | Pi harness | `pi` |
-| `STATION_CRUSH_BIN` | Crush harness | `crush` |
 
 Provider config/home overrides:
 
