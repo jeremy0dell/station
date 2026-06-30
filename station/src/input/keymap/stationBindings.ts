@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
-import { STATION_OVERLAY_ID, type StationState } from "../state/types.js";
-import { createStationOverlayLayer } from "../station/input/stationOverlayLayer.js";
-import { routeStationMouse } from "../station/input/stationMouse.js";
+import { STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
+import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
+import { routeStationMouse } from "../../station/input/stationMouse.js";
 import type { TuiStore } from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
@@ -9,15 +9,15 @@ import {
   paneLaunchNewSessionOutcome,
   type MouseBindings,
   type RouteOutcome,
-} from "./router.js";
+} from "../router.js";
 import {
   isPrimaryMouseEvent,
   isRightMouseEvent,
   wheelDirection,
   type StationMouseEvent,
-} from "./mouse.js";
-import { ControlByte } from "../terminal/protocol/controlBytes.js";
-import { ARROW_KEYS } from "../terminal/protocol/cursorKeys.js";
+} from "../mouse.js";
+import { ControlByte } from "../../terminal/protocol/controlBytes.js";
+import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 
 export const STATION_EXIT_LEGACY = "\x11"; // Ctrl-Q
 export const OVERLAY_TOGGLE_LEGACY = "\x0f"; // Ctrl-O

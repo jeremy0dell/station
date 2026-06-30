@@ -1,23 +1,23 @@
-import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
-import { buildWheelForwardSequence } from "../terminal/input/wheelForward.js";
-import { MouseEncoding } from "../terminal/protocol/mouse.js";
-import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import type { StationTerminalSpawnOptions } from "../terminal/types.js";
+import type { AuxShellPlacement } from "../../terminal/pty/auxShellPlacement.js";
+import { buildWheelForwardSequence } from "../../terminal/input/wheelForward.js";
+import { MouseEncoding } from "../../terminal/protocol/mouse.js";
+import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
+import type { StationTerminalSpawnOptions } from "../../terminal/types.js";
 import type { StoreApi } from "zustand/vanilla";
-import { selectPaneRecord } from "../state/selectors.js";
-import type { CreatePaneOptions, StationStore } from "../state/store.js";
+import { selectPaneRecord } from "../../state/selectors.js";
+import type { CreatePaneOptions, StationStore } from "../../state/store.js";
 import {
   agentWorktreePaneId,
   worktreePaneId,
   type PaneId,
   type PaneRole,
   type PaneSplitDirection,
-} from "../state/types.js";
-import type { Automation } from "../config/stationConfig.js";
+} from "../../state/types.js";
+import type { Automation } from "../../config/stationConfig.js";
 import type { TuiStore } from "@station/dashboard-core";
 import type { WorktreeRow } from "@station/contracts";
 import { paneInputBytes } from "./sequenceNormalize.js";
-import type { OpenPaneSpawn } from "./stationInput.js";
+import type { OpenPaneSpawn } from "../stationInput.js";
 
 /** Lines of scrollback per wheel tick, and arrow repeats per tick when a
  * fullscreen pager owns the screen. Not yet configurable. */

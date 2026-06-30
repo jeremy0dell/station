@@ -24,22 +24,22 @@ import {
   type RouteOutcome,
   type StationCommandId,
 } from "./router.js";
-import type { KeymapStack } from "./keymaps.js";
-import { createStationKeymap, createStationMouseBindings } from "./stationBindings.js";
+import type { KeymapStack } from "./keymap/keymaps.js";
+import { createStationKeymap, createStationMouseBindings } from "./keymap/stationBindings.js";
 import type { StationMouseEvent } from "./mouse.js";
-import { focusedPaneAcceptsModifiedEnter } from "./modifiedEnterPolicy.js";
+import { focusedPaneAcceptsModifiedEnter } from "./keymap/modifiedEnterPolicy.js";
 import {
   normalizeSequence,
   providerSupportsModifiedEnterSoftNewline,
   type NormalizedSequence,
-} from "./sequenceNormalize.js";
-import { executeOutcome } from "./executeOutcome.js";
-import { createPaneEffects } from "./paneEffects.js";
-import { createManagedLaunch, type ManagedLaunchTarget } from "./managedLaunch.js";
+} from "./runtime/sequenceNormalize.js";
+import { executeOutcome } from "./runtime/executeOutcome.js";
+import { createPaneEffects } from "./runtime/paneEffects.js";
+import { createManagedLaunch, type ManagedLaunchTarget } from "./runtime/managedLaunch.js";
 
 // Re-exported so callers (apps + tests) keep importing them from this module.
 export { executeOutcome, normalizeSequence };
-export { nextSplitSeqFromPanes } from "./paneEffects.js";
+export { nextSplitSeqFromPanes } from "./runtime/paneEffects.js";
 export type { NormalizedSequence, ManagedLaunchTarget };
 
 /**

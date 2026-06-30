@@ -1,13 +1,13 @@
-import { buildContextMenuItems, resolveContextMenuAction } from "../contextMenu/items.js";
-import { STATION_OVERLAY_ID } from "../state/types.js";
+import { buildContextMenuItems, resolveContextMenuAction } from "../../contextMenu/items.js";
+import { STATION_OVERLAY_ID } from "../../state/types.js";
 import {
   openProjectDefaultAgentPicker,
   openProjectSettings,
   openRemoveWorktreeConfirmForRow,
   openRenameEditForRow,
 } from "@station/dashboard-core";
-import type { RouteOutcome } from "./router.js";
-import type { OpenPaneSpawn, StationInputEffects } from "./stationInput.js";
+import type { RouteOutcome } from "../router.js";
+import type { OpenPaneSpawn, StationInputEffects } from "../stationInput.js";
 
 /**
  * Applies a route outcome and reports whether the input was consumed.

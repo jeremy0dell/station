@@ -1,8 +1,8 @@
-import { kittySequenceToLegacy } from "../terminal/index.js";
-import { stripTerminalReplies } from "../terminal/input/terminalReplies.js";
-import { cursorKeyBytes } from "../terminal/protocol/cursorKeys.js";
-import type { PtyRegistryView } from "../terminal/registry/ptyRegistry.js";
-import type { PaneId } from "../state/types.js";
+import { kittySequenceToLegacy } from "../../terminal/index.js";
+import { stripTerminalReplies } from "../../terminal/input/terminalReplies.js";
+import { cursorKeyBytes } from "../../terminal/protocol/cursorKeys.js";
+import type { PtyRegistryView } from "../../terminal/registry/ptyRegistry.js";
+import type { PaneId } from "../../state/types.js";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 
 export type NormalizedSequence = { consumed: true } | { consumed: false; legacy: string };

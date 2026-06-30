@@ -1,11 +1,11 @@
-import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
-import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import type { StationTerminalSpawnOptions } from "../terminal/types.js";
+import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
+import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
+import type { StationTerminalSpawnOptions } from "../../terminal/types.js";
 import type { StoreApi } from "zustand/vanilla";
-import { selectPaneRecord } from "../state/selectors.js";
-import type { StationStore } from "../state/store.js";
-import { agentWorktreePaneId, type AgentIdentity, type PaneId } from "../state/types.js";
-import { dispatchStationKey } from "../station/input/stationActions.js";
+import { selectPaneRecord } from "../../state/selectors.js";
+import type { StationStore } from "../../state/store.js";
+import { agentWorktreePaneId, type AgentIdentity, type PaneId } from "../../state/types.js";
+import { dispatchStationKey } from "../../station/input/stationActions.js";
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, StationCommand } from "@station/contracts";
 import {

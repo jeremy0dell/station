@@ -9,7 +9,7 @@
 // restore. One exception — a worktree-row slot key — resolves to a managed
 // launch (see catchAll) so the keyboard opens an agent exactly as a click does.
 import type { StoreApi } from "zustand/vanilla";
-import type { KeymapLayer } from "../../input/keymaps.js";
+import type { KeymapLayer } from "../../input/keymap/keymaps.js";
 import {
   paneLaunchManagedOutcome,
   paneLaunchNewSessionOutcome,

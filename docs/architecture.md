@@ -59,6 +59,10 @@ When these disagree, reconcile from config, providers, and current observer stat
 - Provider hooks are ingress notifications and fast status reports. They can trigger persistence, projection, spool fallback, or scheduled reconcile, but they are not authoritative graph truth by themselves. Observer event hooks are configured commands triggered by STATION events and should not be conflated with provider hook ingress.
 - Terminal topology is provider-owned. Shared contracts and Station UI behavior should express product intent where possible, not provider target mechanics.
 
+## Module Layout
+
+When a directory outgrows a handful of files, keep its public surface and composition root at the directory root and push internal concern-clusters into lowercase subdirs — mirroring `terminal/`'s `protocol|pty|registry` and `state/`'s `reducers|reconcilers`. For example `input/` keeps the consumed hubs (`router`, `mouse`) and the `stationInput` composition root at root, with `keymap/` and `runtime/` beneath. Colocate each test beside its source and move it with the source. Add an `index.ts` barrel only when a directory's public symbols would otherwise be reached through deep subpaths; skip it when the public surface already sits at the root.
+
 ## Station Subsystem
 
 The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime:

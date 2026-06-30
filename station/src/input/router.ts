@@ -3,7 +3,7 @@ import type { ContextMenuAnchor, ContextMenuTarget } from "../contextMenu/types.
 import type { StationMouseEvent } from "./mouse.js";
 import type { FocusTarget, OverlayId, PaneId, PaneRole, StationState } from "../state/types.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
-import type { KeymapStack } from "./keymaps.js";
+import type { KeymapStack } from "./keymap/keymaps.js";
 
 export type StationCommandId =
   | "station.exit"

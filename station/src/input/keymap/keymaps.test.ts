@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createStationStore } from "../state/store.js";
-import type { StationState } from "../state/types.js";
+import { createStationStore } from "../../state/store.js";
+import type { StationState } from "../../state/types.js";
 import { createKeymapStack, type KeymapLayer } from "./keymaps.js";
 
 const state: StationState = createStationStore().getState();
