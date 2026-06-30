@@ -34,7 +34,6 @@ export type ObserverApi = {
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;
   reconcile(reason?: string): Promise<ReconcileReceipt>;
   ingestProviderHookEvent(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
-  ingestHookEvent(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
   reportHarnessEvent(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
   prepareExternalLaunch(
     params: AgentPrepareExternalLaunchParams,

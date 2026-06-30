@@ -17,10 +17,13 @@ export type StationInputMode =
   | "help"
   | "search"
   | "projectCollapse"
+  | "projectSettingsPicker"
   | "removeChooseSlot"
   | "removeConfirm"
   | "renameChooseSlot"
   | "renameEdit"
+  | "forkChooseSlot"
+  | "forkDetails"
   | "newSessionReview"
   | "newSessionEditName"
   | "newSessionPickProject"
@@ -40,10 +43,14 @@ export function deriveStationMode(state: TuiState): StationInputMode {
       return "search";
     case "projectCollapse":
       return "projectCollapse";
+    case "projectSettingsPicker":
+      return "projectSettingsPicker";
     case "removeWorktree":
       return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
+    case "fork":
+      return screen.step === "chooseSlot" ? "forkChooseSlot" : "forkDetails";
     case "newSession":
       switch (screen.flow.mode) {
         case "review":
@@ -99,6 +106,31 @@ export type StationBinding = {
 
 const slotHelp = { keys: "1-9 a-z", label: "start or focus visible row" };
 
+/**
+ * The cursor/edit key block shared by every single-field edit mode: arrow
+ * cursor moves, backspace/delete, and the trailing text catch-all (kept last so
+ * specific named keys match first). All route the same edit action.
+ */
+export function editableTextBindings(
+  prefix: string,
+  action: string,
+  typeHelp?: { keys: string; label: string },
+): readonly StationBinding[] {
+  return [
+    { id: `${prefix}.cursorLeft`, pattern: { kind: "named", named: "left" }, action, outcome: "handled" },
+    { id: `${prefix}.cursorRight`, pattern: { kind: "named", named: "right" }, action, outcome: "handled" },
+    { id: `${prefix}.backspace`, pattern: { kind: "named", named: "backspace" }, action, outcome: "handled" },
+    { id: `${prefix}.delete`, pattern: { kind: "named", named: "delete" }, action, outcome: "handled" },
+    {
+      id: `${prefix}.type`,
+      pattern: { kind: "text" },
+      action,
+      outcome: "handled",
+      ...(typeHelp === undefined ? {} : { help: typeHelp }),
+    },
+  ];
+}
+
 export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]> = {
   dashboard: [
     { id: "station.dashboard.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
@@ -109,11 +141,13 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     { id: "station.dashboard.dismissEsc", pattern: { kind: "named", named: "escape" }, action: "station.overlay.dismiss", outcome: "close-overlay" },
     { id: "station.dashboard.search", pattern: { kind: "char", char: "/" }, action: "station.search.open", outcome: "handled", help: { keys: "/", label: "search" } },
     { id: "station.dashboard.rename", pattern: { kind: "char", char: "R" }, action: "station.rename.open", outcome: "handled", help: { keys: "R", label: "rename" } },
+    { id: "station.dashboard.fork", pattern: { kind: "char", char: "F" }, action: "station.fork.open", outcome: "handled", help: { keys: "F", label: "fork" } },
     { id: "station.dashboard.refresh", pattern: { kind: "char", char: "Z" }, action: "station.refresh", outcome: "handled", help: { keys: "Z", label: "refresh" } },
     { id: "station.dashboard.remove", pattern: { kind: "char", char: "X" }, action: "station.remove.open", outcome: "handled", help: { keys: "X", label: "delete session" } },
     { id: "station.dashboard.newSession", pattern: { kind: "char", char: "N" }, action: "station.newSession.open", outcome: "handled", help: { keys: "N", label: "new" } },
     { id: "station.dashboard.addProject", pattern: { kind: "char", char: "A" }, action: "station.addProject.open", outcome: "handled", help: { keys: "A", label: "add" } },
     { id: "station.dashboard.collapse", pattern: { kind: "char", char: "C" }, action: "station.collapse.open", outcome: "handled", help: { keys: "C", label: "fold" } },
+    { id: "station.dashboard.projectSettings", pattern: { kind: "char", char: "P" }, action: "station.projectSettings.openPicker", outcome: "handled", help: { keys: "P", label: "settings" } },
     { id: "station.dashboard.slotActivate", pattern: { kind: "slot" }, action: "station.row.activateSlot", outcome: "handled", help: slotHelp },
   ],
   help: [
@@ -132,6 +166,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   projectCollapse: [
     { id: "station.collapse.cancel", pattern: { kind: "named", named: "escape" }, action: "station.collapse.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
     { id: "station.collapse.toggleSlot", pattern: { kind: "slot" }, action: "station.collapse.toggleSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "toggle project" } },
+  ],
+  projectSettingsPicker: [
+    { id: "station.projectSettingsPicker.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectSettings.pickerCancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
+    { id: "station.projectSettingsPicker.choose", pattern: { kind: "slot" }, action: "station.projectSettings.pick", outcome: "handled", help: { keys: "1-9 a-z", label: "open settings" } },
   ],
   removeChooseSlot: [
     { id: "station.remove.cancel", pattern: { kind: "named", named: "escape" }, action: "station.remove.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
@@ -176,11 +214,20 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   renameEdit: [
     { id: "station.renameEdit.back", pattern: { kind: "named", named: "escape" }, action: "station.rename.back", outcome: "handled", help: { keys: "esc", label: "back" } },
     { id: "station.renameEdit.submit", pattern: { kind: "named", named: "return" }, action: "station.rename.submit", outcome: "handled", help: { keys: "enter", label: "rename" } },
-    { id: "station.renameEdit.backspace", pattern: { kind: "named", named: "backspace" }, action: "station.rename.edit", outcome: "handled" },
-    { id: "station.renameEdit.delete", pattern: { kind: "named", named: "delete" }, action: "station.rename.edit", outcome: "handled" },
-    { id: "station.renameEdit.cursorLeft", pattern: { kind: "named", named: "left" }, action: "station.rename.edit", outcome: "handled" },
-    { id: "station.renameEdit.cursorRight", pattern: { kind: "named", named: "right" }, action: "station.rename.edit", outcome: "handled" },
-    { id: "station.renameEdit.type", pattern: { kind: "text" }, action: "station.rename.edit", outcome: "handled" },
+    ...editableTextBindings("station.renameEdit", "station.rename.edit"),
+  ],
+  forkChooseSlot: [
+    { id: "station.fork.cancel", pattern: { kind: "named", named: "escape" }, action: "station.fork.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
+    { id: "station.fork.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
+    { id: "station.fork.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
+    { id: "station.fork.chooseSlot", pattern: { kind: "slot" }, action: "station.fork.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose source" } },
+  ],
+  forkDetails: [
+    { id: "station.forkDetails.back", pattern: { kind: "named", named: "escape" }, action: "station.fork.back", outcome: "handled", help: { keys: "esc", label: "back" } },
+    { id: "station.forkDetails.submit", pattern: { kind: "named", named: "return" }, action: "station.fork.submit", outcome: "handled", help: { keys: "enter", label: "fork" } },
+    { id: "station.forkDetails.focusUp", pattern: { kind: "named", named: "up" }, action: "station.fork.focus", outcome: "handled" },
+    { id: "station.forkDetails.focusDown", pattern: { kind: "named", named: "down" }, action: "station.fork.focus", outcome: "handled", help: { keys: "↑↓", label: "field" } },
+    ...editableTextBindings("station.forkDetails", "station.fork.detailKey", { keys: "space", label: "toggle copy" }),
   ],
   newSessionReview: [
     { id: "station.newSession.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
@@ -192,11 +239,7 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   newSessionEditName: [
     { id: "station.newSessionEdit.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
     { id: "station.newSessionEdit.commit", pattern: { kind: "named", named: "return" }, action: "station.newSession.commitName", outcome: "handled", help: { keys: "enter", label: "use name" } },
-    { id: "station.newSessionEdit.backspace", pattern: { kind: "named", named: "backspace" }, action: "station.newSession.editInput", outcome: "handled" },
-    { id: "station.newSessionEdit.delete", pattern: { kind: "named", named: "delete" }, action: "station.newSession.editInput", outcome: "handled" },
-    { id: "station.newSessionEdit.cursorLeft", pattern: { kind: "named", named: "left" }, action: "station.newSession.editInput", outcome: "handled" },
-    { id: "station.newSessionEdit.cursorRight", pattern: { kind: "named", named: "right" }, action: "station.newSession.editInput", outcome: "handled" },
-    { id: "station.newSessionEdit.type", pattern: { kind: "text" }, action: "station.newSession.editInput", outcome: "handled" },
+    ...editableTextBindings("station.newSessionEdit", "station.newSession.editInput"),
   ],
   newSessionPickProject: [
     { id: "station.newSessionProject.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
@@ -244,7 +287,7 @@ export const STATION_HELP_CONTENT = [
   { text: "station project view", align: "center" as const },
   { key: "↑/↓ wheel", description: "scroll project list" },
   { key: "1-9/a-z", description: "start or focus row" },
-  { key: "N/A/R/C", description: "new/add/rename/fold" },
+  { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
   { key: "X", description: "delete session" },
   { key: "/, Z", description: "search / refresh snapshot" },
   { key: "H/?", description: "help" },

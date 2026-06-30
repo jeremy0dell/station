@@ -34,7 +34,13 @@ describe("CLI setup command", () => {
             "tmux -V": "tmux 3.5a\n",
             "codex --version": "codex 0.1.0\n",
           }),
-          access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+          access: fakeAccess([
+            "/fake/bin/wt",
+            "/fake/bin/tmux",
+            "/fake/bin/bun",
+            "/fake/bin/diffnav",
+            "/fake/bin/delta",
+          ]),
           fs: readOnlyFs({}),
           now: () => new Date("2026-06-08T12:00:00.000Z"),
         },
@@ -73,7 +79,13 @@ describe("CLI setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs: readOnlyFs({}),
         writeStdout: (chunk) => chunks.push(chunk),
       },
@@ -105,7 +117,13 @@ describe("CLI setup command", () => {
             "brew --version": "Homebrew 4.0.0\n",
             "codex --version": "codex 0.1.0\n",
           }),
-          access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+          access: fakeAccess([
+            "/fake/bin/wt",
+            "/fake/bin/tmux",
+            "/fake/bin/bun",
+            "/fake/bin/diffnav",
+            "/fake/bin/delta",
+          ]),
           fs,
           writeStdout: () => undefined,
         },
@@ -156,7 +174,13 @@ describe("CLI setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         fs: readOnlyFs({ [configPath]: "schema_version = 1\n[defaults\n" }),
       },
     });
@@ -181,7 +205,13 @@ describe("CLI setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "pnpm --version": "8.15.0\n",
         }),
-        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
         writeStdout: (chunk) => chunks.push(chunk),
       },
     });
@@ -230,6 +260,18 @@ describe("CLI setup command", () => {
             available.add("/fake/bin/tmux");
             return commandResult(input, "");
           }
+          if (key === "brew install bun") {
+            available.add("/fake/bin/bun");
+            return commandResult(input, "");
+          }
+          if (key === "brew install dlvhdr/formulae/diffnav") {
+            available.add("/fake/bin/diffnav");
+            return commandResult(input, "");
+          }
+          if (key === "brew install git-delta") {
+            available.add("/fake/bin/delta");
+            return commandResult(input, "");
+          }
           return fakeRunner([], {
             "brew --version": "Homebrew 4.0.0\n",
             "pnpm --version": "11.0.0\n",
@@ -251,6 +293,7 @@ describe("CLI setup command", () => {
       expect.arrayContaining([
         expect.objectContaining({ command: "brew", args: ["install", "worktrunk"] }),
         expect.objectContaining({ command: "brew", args: ["install", "tmux"] }),
+        expect.objectContaining({ command: "brew", args: ["install", "bun"] }),
         expect.objectContaining({ command: "/fake/bin/wt", args: ["--version"] }),
         expect.objectContaining({ command: "/fake/bin/tmux", args: ["-V"] }),
       ]),
@@ -273,7 +316,8 @@ function fakeRunner(
   return async (input) => {
     calls.push(input);
     const key = `${input.command} ${(input.args ?? []).join(" ")}`;
-    const stdout = outputs[key] ?? fakeBinOutput(input, outputs);
+    // Synthetic machines have macOS Command Line Tools unless a test overrides it.
+    const stdout = outputs[key] ?? fakeBinOutput(input, outputs) ?? defaultProbeOutput(key);
     if (stdout === undefined) {
       throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
     }
@@ -295,6 +339,10 @@ function fakeBinOutput(
     return undefined;
   }
   return outputs[`${basename(input.command)} ${(input.args ?? []).join(" ")}`];
+}
+
+function defaultProbeOutput(key: string): string | undefined {
+  return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
 }
 
 function commandResult(input: ExternalCommandInput, stdout: string): ExternalCommandResult {

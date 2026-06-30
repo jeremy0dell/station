@@ -124,7 +124,7 @@ export function correlateTerminalBoundHarnessEvent(input: {
   } else if (worktree !== undefined) {
     result.worktreeId = worktree.id;
   }
-  // Opt-in providers (cursor/crush/opencode) trust the hook-provided terminal target id and derive
+  // Opt-in providers (cursor/opencode/pi) trust the hook-provided terminal target id and derive
   // the run id directly from it. Providers that do not opt in (claude/codex) resolve the run id from
   // a matched terminal only; deriving it from the raw field would regress their observation
   // correlation when that id fails to resolve to a known terminal.

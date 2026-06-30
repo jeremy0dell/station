@@ -8,14 +8,14 @@ export const defaultGitDeltaCommand = "delta";
 
 export function gitDeltaInstallHint(command = defaultGitDeltaCommand): string {
   return [
-    "Optional: install git-delta with brew install git-delta — diffnav renders the station 'See diff' automation through it.",
-    `station tried ${command}.`,
+    "Install git-delta with brew install git-delta — diffnav renders the STATION 'See diff' automation through it.",
+    `stn tried ${command}.`,
   ].join(" ");
 }
 
 /**
- * Optional delta probe paired with diffnav; without it, the "See diff" automation
- * can resolve diffnav but still fail while rendering.
+ * Required delta probe paired with diffnav; without it, the "See diff" automation
+ * can resolve diffnav but still fail while rendering, so delta moves with diffnav.
  */
 export async function checkSetupGitDelta(
   options: SetupDependencyCheckOptions = {},

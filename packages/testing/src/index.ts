@@ -295,6 +295,7 @@ export class FakeWorktreeProvider implements WorktreeProvider {
   readonly #now: FakeProviderClock | undefined;
   readonly #worktrees: WorktreeObservation[];
   readonly #removed: RemoveWorktreeRequest[] = [];
+  readonly #created: CreateWorktreeRequest[] = [];
   readonly #createPath: ((request: CreateWorktreeRequest) => string) | undefined;
   readonly #health: Partial<ProviderHealth> | undefined;
   readonly #capabilities: WorktreeCapabilities;
@@ -337,6 +338,7 @@ export class FakeWorktreeProvider implements WorktreeProvider {
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
     maybeThrow(this.#failures, "createWorktree");
+    this.#created.push(request);
     const path = this.#createPath?.(request) ?? request.path;
     const worktree = createFakeWorktree({
       provider: this.id,
@@ -382,10 +384,15 @@ export class FakeWorktreeProvider implements WorktreeProvider {
     );
   }
 
-  snapshot(): { worktrees: WorktreeObservation[]; removed: RemoveWorktreeRequest[] } {
+  snapshot(): {
+    worktrees: WorktreeObservation[];
+    removed: RemoveWorktreeRequest[];
+    created: CreateWorktreeRequest[];
+  } {
     return {
       worktrees: [...this.#worktrees],
       removed: this.#removed.map((request) => ({ ...request })),
+      created: this.#created.map((request) => ({ ...request })),
     };
   }
 }
@@ -685,3 +692,5 @@ export class FakeHarnessProvider implements HarnessProvider {
     };
   }
 }
+
+export * from "./setupProfiles.js";

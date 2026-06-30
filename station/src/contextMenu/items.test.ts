@@ -154,6 +154,11 @@ describe("buildContextMenuItems", () => {
         action: { kind: "renameSession", rowId: "wt_station_idle" },
       },
       {
+        id: "station.forkSession",
+        label: "Fork Session",
+        action: { kind: "forkSession", rowId: "wt_station_idle" },
+      },
+      {
         id: "station.removeWorktree",
         label: "Delete Session",
         danger: true,
@@ -173,6 +178,11 @@ describe("buildContextMenuItems", () => {
         stationState,
       ),
     ).toEqual([
+      {
+        id: "station.forkSession",
+        label: "Fork Session",
+        action: { kind: "forkSession", rowId: "wt_station_none" },
+      },
       {
         id: "station.removeWorktree",
         label: "Delete Session",
@@ -207,6 +217,11 @@ describe("buildContextMenuItems", () => {
         id: "station.renameSession",
         label: "Rename Session",
         action: { kind: "renameSession", rowId: "wt_station_idle" },
+      },
+      {
+        id: "station.forkSession",
+        label: "Fork Session",
+        action: { kind: "forkSession", rowId: "wt_station_idle" },
       },
     ]);
   });

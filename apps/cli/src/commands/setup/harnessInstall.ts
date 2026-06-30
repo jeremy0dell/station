@@ -24,11 +24,6 @@ const harnessInstallDefinitions: readonly HarnessInstallDefinition[] = [
     message: "Install OpenCode CLI.",
   },
   {
-    id: "crush",
-    command: ["npm", "install", "-g", "--ignore-scripts", "@charmland/crush"],
-    message: "Install Crush CLI with npm.",
-  },
-  {
     id: "pi",
     command: ["npm", "install", "-g", "--ignore-scripts", "@earendil-works/pi-coding-agent"],
     message: "Install Pi CLI with npm.",

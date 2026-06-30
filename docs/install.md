@@ -16,11 +16,18 @@ stn
 
 ## Requirements
 
-- Node.js 24.x
-- pnpm 11
-- Worktrunk `wt` for real Worktrunk workflows
-- tmux for the reference terminal provider and popup local-use path
-- Claude Code, Codex, Cursor, Pi, or OpenCode only when running those real harness providers
+`stn setup check` blocks (exit 1) until these required tools are present:
+
+- Git, run from inside the git repository you want to manage (macOS: the Command Line Tools)
+- Worktrunk `wt` for core worktree setup
+- tmux for the reference terminal provider and popup path
+- Bun — bare `stn` renders the TUI through `bun run` (not required when `STATION_DASHBOARD_COMMAND` overrides the renderer)
+- diffnav and git-delta for the "See diff (split right)" automation
+- One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
+
+`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk, Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
+
+Node.js 24.x and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node).
 
 ## Fresh Checkout
 
@@ -41,7 +48,7 @@ STATION is installed.
 Next:
   stn setup
 
-This configures the core local workflow: Worktrunk, tmux, one agent CLI, and your first project.
+This configures the core local workflow: the required tools, an agent CLI, and your first project.
 Optional integrations can be added later.
 ```
 

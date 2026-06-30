@@ -6,6 +6,7 @@ import type { TuiObserverService } from "../../services/types.js";
 import {
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
+  removePendingProjectDefaultHarness,
   removePendingRemoveWorktreeRow,
   removePendingRenameSessionTitle,
   removePendingStartAgentRow,
@@ -150,6 +151,14 @@ export function createTuiLocalOperationRunner(input: {
             (error) => addSafeErrorToast(store(), error),
           );
         }
+        if (operation.type === "forkSession") {
+          void runForkSessionOperation(
+            store(),
+            input.service,
+            operation.command,
+            input.clientLabel,
+          );
+        }
         if (operation.type === "removeWorktree") {
           void runRemoveWorktreeOperation(
             store(),
@@ -269,9 +278,14 @@ async function runSetProjectDefaultHarnessOperation(
   clientLabel: string,
   markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
+  // Roll the optimistic marker back to the snapshot's default; success leaves it
+  // for the next snapshot to prune once the change has landed.
+  const revertOptimistic = () =>
+    store.setState(removePendingProjectDefaultHarness(store.getState(), command.payload.projectId));
   try {
     const receipt = await service.dispatch(command);
     if (!receipt.accepted) {
+      revertOptimistic();
       addSafeCommandToast(
         store,
         receipt.error ?? {
@@ -288,6 +302,7 @@ async function runSetProjectDefaultHarnessOperation(
     markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
+      revertOptimistic();
       addSafeCommandToast(store, completion.error);
       return;
     }
@@ -299,6 +314,7 @@ async function runSetProjectDefaultHarnessOperation(
       }),
     );
   } catch (error: unknown) {
+    revertOptimistic();
     addSafeCommandToast(store, toSafeError(error, { clientLabel }));
   }
 }
@@ -391,6 +407,38 @@ async function runSearchProjectDirectoriesOperation(
     store.setState(applyAddProjectFolderSearchLoaded(store.getState(), result));
   } catch (error: unknown) {
     store.setState(applyAddProjectFolderSearchFailed(store.getState(), query, error, clientLabel));
+  }
+}
+
+async function runForkSessionOperation(
+  store: StoreApi<TuiStore>,
+  service: TuiObserverService,
+  command: Extract<StationCommand, { type: "session.fork" }>,
+  clientLabel: string,
+): Promise<void> {
+  try {
+    const receipt = await service.dispatch(command);
+    if (!receipt.accepted) {
+      addSafeErrorToast(
+        store,
+        receipt.error ??
+          ({
+            tag: "CommandDispatchError",
+            code: "SESSION_FORK_REJECTED",
+            message: "Fork was rejected.",
+          } satisfies SafeError),
+      );
+      return;
+    }
+    const completion = await service.waitForCommandCompletion(receipt.commandId);
+    if (completion.status === "failed") {
+      addSafeErrorToast(store, completion.error);
+      return;
+    }
+    const snapshot = await service.loadSnapshot();
+    store.setState(replaceSnapshot(store.getState(), snapshot));
+  } catch (error: unknown) {
+    addSafeErrorToast(store, toSafeError(error, { clientLabel }));
   }
 }
 

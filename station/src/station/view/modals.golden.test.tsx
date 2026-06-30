@@ -7,7 +7,11 @@ import type { StoreApi } from "zustand/vanilla";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
-import { openProjectDefaultAgentPicker } from "@station/dashboard-core";
+import {
+  addPendingProjectDefaultHarness,
+  openProjectDefaultAgentPicker,
+  openProjectSettings,
+} from "@station/dashboard-core";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 
@@ -39,6 +43,43 @@ const CASES: ModalCase[] = [
     expect: ["collapse project:"],
   },
   {
+    name: "project settings picker prompt",
+    keys: [{ input: "P" }],
+    expect: ["settings for project:"],
+  },
+  {
+    name: "project settings panel",
+    keys: [{ input: "P" }, { input: "1" }],
+    expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
+  },
+  {
+    name: "project settings remove pane",
+    keys: [
+      { input: "P" },
+      { input: "1" },
+      { input: "", downArrow: true },
+      { input: "\r", return: true },
+    ],
+    expect: ["Remove project", "Worktrees & files stay on disk.", "[ Remove project (R) ]"],
+  },
+  {
+    name: "project settings optimistic default",
+    keys: [],
+    prepare: (store) => {
+      store.setState(openProjectSettings(store.getState(), "station"));
+      // Optimistic state the picker sets the moment a new agent is chosen,
+      // before the observer round-trip lands (station's real default is codex).
+      store.setState(
+        addPendingProjectDefaultHarness(store.getState(), {
+          projectId: "station",
+          harness: "opencode",
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }),
+      );
+    },
+    expect: ["Default agent", "updating…"],
+  },
+  {
     name: "remove slot sheet",
     keys: [{ input: "X" }],
     expect: ["Select session to delete", "Click a row or press slot key", "Esc:cancel"],
@@ -58,6 +99,16 @@ const CASES: ModalCase[] = [
     keys: [{ input: "R" }, { input: "1" }],
     snapshot: attentionAndFailuresSnapshot,
     expect: ["Rename Session", "Name", "Enter:rename   Esc:back"],
+  },
+  {
+    name: "fork slot sheet",
+    keys: [{ input: "F" }],
+    expect: ["Select session to fork", "Click a row or press slot key", "Esc:cancel"],
+  },
+  {
+    name: "fork details sheet",
+    keys: [{ input: "F" }, { input: "1" }],
+    expect: ["Fork Session", "Source", "uncommitted changes", "Fork (enter)", "enter:fork"],
   },
   {
     name: "new session review",

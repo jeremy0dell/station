@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { SetupPlanSchema } from "../../src/commands/setup/model.js";
+import { harnessDefinitions } from "../../src/commands/setup/checks/harnesses.js";
+import { SetupPlanSchema, supportedHarnessIds } from "../../src/commands/setup/model.js";
 
 describe("setup model", () => {
+  it("keeps supported harness ids aligned with setup detection", () => {
+    expect([...supportedHarnessIds]).toEqual(harnessDefinitions.map((harness) => harness.id));
+    expect([...supportedHarnessIds]).not.toContain("crush");
+  });
+
   it("validates setup plan JSON shape", () => {
     const parsed = SetupPlanSchema.parse({
       generatedAt: "2026-06-08T12:00:00.000Z",

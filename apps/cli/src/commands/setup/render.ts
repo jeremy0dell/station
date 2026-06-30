@@ -60,7 +60,9 @@ export function renderSetupPlan(plan: SetupPlan, options: SetupRenderOptions = {
 export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOptions = {}): string {
   const theme = setupTheme(options);
   if (plan.summary.requiredOk) {
-    const nextSteps = plan.nextSteps.length > 0 ? plan.nextSteps : ["stn doctor", "stn"];
+    // plan.nextSteps is computed before apply, so on a freshly-completed setup it
+    // can still read "resolve the missing items". Show the completion steps here.
+    const nextSteps = ["stn doctor", "stn"];
     return [
       theme.bold(theme.green("Core setup complete.")),
       "",
@@ -73,16 +75,40 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
   const missing = plan.checks.find(
     (check) => check.tier === "required" && check.status === "missing",
   );
+  if (missing?.id === "command-line-tools") {
+    return missingResult(missing.message, "Then run:", theme);
+  }
   if (missing?.id === "worktrunk") {
     return missingResult("Worktrunk is still missing.", "Install it, then run:", theme);
   }
   if (missing?.id === "tmux") {
     return missingResult("tmux is still missing.", "Install it, then run:", theme);
   }
+  if (missing?.id === "bun") {
+    return missingResult(
+      "Bun is still missing (bare stn renders the TUI through it).",
+      "Install it (brew install bun), then run:",
+      theme,
+    );
+  }
   if (missing?.id === "harness") {
     return missingResult(
       "No supported agent CLI is available.",
       "Install claude, codex, cursor agent, opencode, or pi, then run:",
+      theme,
+    );
+  }
+  if (missing?.id === "diffnav") {
+    return missingResult(
+      "diffnav is still missing.",
+      "Install it (brew install dlvhdr/formulae/diffnav), then run:",
+      theme,
+    );
+  }
+  if (missing?.id === "git-delta") {
+    return missingResult(
+      "git-delta is still missing (diffnav renders through it).",
+      "Install it (brew install git-delta), then run:",
       theme,
     );
   }

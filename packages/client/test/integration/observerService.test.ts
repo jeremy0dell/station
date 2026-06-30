@@ -217,16 +217,6 @@ describe("observer client service", () => {
           receivedAt: event.receivedAt,
           reconciled: true,
         }),
-        ingestHookEvent: async (event: ProviderHookEvent) => ({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          hookId: "hook_1",
-          provider: event.provider,
-          event: event.event,
-          accepted: true,
-          status: "ingested",
-          receivedAt: event.receivedAt,
-          reconciled: true,
-        }),
         runDoctor: async () => fakeDoctor(),
         collectDiagnostics: async () => fakeDiagnostics(),
         subscribe: () => ({
@@ -398,7 +388,6 @@ function fakeApi(
         snapshot,
       })),
     ingestProviderHookEvent,
-    ingestHookEvent: overrides.ingestHookEvent ?? ingestProviderHookEvent,
     reportHarnessEvent:
       overrides.reportHarnessEvent ??
       (async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> => ({
@@ -485,16 +474,6 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       snapshot: createCommandSnapshot("idle"),
     }),
     ingestProviderHookEvent: async (event: ProviderHookEvent) => ({
-      schemaVersion: STATION_SCHEMA_VERSION,
-      hookId: "hook_1",
-      provider: event.provider,
-      event: event.event,
-      accepted: true,
-      status: "ingested",
-      receivedAt: event.receivedAt,
-      reconciled: true,
-    }),
-    ingestHookEvent: async (event: ProviderHookEvent) => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       hookId: "hook_1",
       provider: event.provider,

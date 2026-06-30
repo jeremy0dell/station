@@ -24,7 +24,6 @@ export const harnessDefinitions: readonly HarnessDefinition[] = [
     defaultCommand: "agent",
   },
   { id: "opencode", label: "OpenCode", envKey: "STATION_OPENCODE_BIN", defaultCommand: "opencode" },
-  { id: "crush", label: "Crush", envKey: "STATION_CRUSH_BIN", defaultCommand: "crush" },
   { id: "pi", label: "Pi", envKey: "STATION_PI_BIN", defaultCommand: "pi" },
   { id: "claude", label: "Claude Code", envKey: "STATION_CLAUDE_BIN", defaultCommand: "claude" },
 ] as const;

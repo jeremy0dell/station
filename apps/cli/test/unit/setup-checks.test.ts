@@ -3,14 +3,17 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it } from "vitest";
+import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
 import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.js";
 import { checkSetupDiffnav } from "../../src/commands/setup/checks/diffnav.js";
+import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
 import { checkSetupGitDelta } from "../../src/commands/setup/checks/gitDelta.js";
 import { collectSetupFacts } from "../../src/commands/setup/checks/system.js";
 import {
   checkSetupTmuxBinding,
   tmuxPopupBindingBlock,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
+import { checkSetupXcode } from "../../src/commands/setup/checks/xcode.js";
 import { buildSetupPlan } from "../../src/commands/setup/planner.js";
 
 describe("setup dependency checks", () => {
@@ -45,7 +48,13 @@ describe("setup dependency checks", () => {
       homeDir: join(root, "home"),
       env: { PATH: "/fake/bin" },
       runner,
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs,
       now: () => new Date("2026-06-08T12:00:00.000Z"),
     });
@@ -96,7 +105,7 @@ describe("setup dependency checks", () => {
     expect(plan.summary.requiredOk).toBe(false);
     expect(
       plan.checks.filter((check) => check.status === "missing").map((check) => check.id),
-    ).toEqual(["worktrunk", "tmux", "config"]);
+    ).toEqual(["worktrunk", "tmux", "bun", "config", "diffnav", "git-delta"]);
   });
 
   it("selects the first available harness from detection order", async () => {
@@ -118,7 +127,13 @@ describe("setup dependency checks", () => {
         "agent --version": "cursor-agent 1.0.0\n",
         "opencode --version": "opencode 1.0.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
     });
@@ -127,7 +142,7 @@ describe("setup dependency checks", () => {
     expect(plan.summary.selectedHarness).toBe("cursor");
   });
 
-  it("detects Crush as a supported harness", async () => {
+  it("ignores Crush when choosing a supported harness", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -144,18 +159,24 @@ describe("setup dependency checks", () => {
         "brew --version": "Homebrew 4.0.0\n",
         "crush --version": "crush version 1.2.3\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
     });
     const plan = buildSetupPlan(facts);
 
-    expect(facts.harnesses.find((harness) => harness.id === "crush")).toMatchObject({
-      status: "ok",
-      command: "crush",
-      version: "1.2.3",
+    expect(facts.harnesses.some((harness) => harness.id === "crush")).toBe(false);
+    expect(plan.summary.selectedHarness).toBeUndefined();
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "missing",
+      message: "Install one supported harness CLI: claude, codex, cursor agent, opencode, or pi.",
     });
-    expect(plan.summary.selectedHarness).toBe("crush");
   });
 
   it("detects harness CLIs installed under the user local bin directory", async () => {
@@ -175,7 +196,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         [`${home}/.local/bin/agent --version`]: "cursor-agent 1.0.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({}),
       noBrew: true,
     });
@@ -204,7 +231,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           useLifecycleHooks: false,
@@ -245,7 +278,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           useLifecycleHooks: true,
@@ -282,7 +321,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           useLifecycleHooks: false,
@@ -320,7 +365,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({}),
       noBrew: true,
     });
@@ -344,7 +395,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: "schema_version = 1\n[defaults\n",
       }),
@@ -374,7 +431,13 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: `${configToml(repo)}
 [workspace]
@@ -428,7 +491,13 @@ scroll_on_output = "teleport"
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(otherRepo, {
           worktreeProvider: "noop-worktree",
@@ -458,7 +527,13 @@ scroll_on_output = "teleport"
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux"]),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           harness: "missing-harness",
@@ -536,6 +611,39 @@ describe("checkSetupDiffnav", () => {
   });
 });
 
+describe("checkSetupBun", () => {
+  it("reports ok with the resolved path when bun is on PATH", async () => {
+    const fact = await checkSetupBun({
+      env: { PATH: "/fake/bin" },
+      access: fakeAccess(["/fake/bin/bun"]),
+    });
+    expect(fact).toMatchObject({
+      status: "ok",
+      command: "bun",
+      resolvedPath: "/fake/bin/bun",
+    });
+  });
+
+  it("reports missing with an install hint when bun is absent", async () => {
+    const fact = await checkSetupBun({
+      env: { PATH: "/fake/bin" },
+      access: fakeAccess([]),
+    });
+    expect(fact.status).toBe("missing");
+    expect(fact.message).toContain("brew install bun");
+  });
+
+  it("reports ok without Bun when STATION_DASHBOARD_COMMAND overrides the renderer", async () => {
+    // Mirrors doctor's rendererRuntimeCheck: a custom dashboard command means bun is
+    // not needed, so the required check must not block setup even with bun absent.
+    const fact = await checkSetupBun({
+      env: { PATH: "/fake/bin", STATION_DASHBOARD_COMMAND: "my-renderer --foo" },
+      access: fakeAccess([]),
+    });
+    expect(fact).toMatchObject({ status: "ok", command: "bun" });
+  });
+});
+
 describe("checkSetupGitDelta", () => {
   it("reports ok with the resolved path when delta is on PATH", async () => {
     const fact = await checkSetupGitDelta({
@@ -559,6 +667,78 @@ describe("checkSetupGitDelta", () => {
   });
 });
 
+describe("checkSetupXcode", () => {
+  it("is not applicable off macOS and never blocks setup", async () => {
+    const fact = await checkSetupXcode({ platform: "linux" });
+    expect(fact).toEqual({ status: "ok", applicable: false });
+  });
+
+  it("reports ok when xcode-select resolves a developer directory on macOS", async () => {
+    const fact = await checkSetupXcode({
+      platform: "darwin",
+      runner: fakeRunner([], { "xcode-select -p": "/Library/Developer/CommandLineTools\n" }),
+    });
+    expect(fact).toMatchObject({ status: "ok", applicable: true });
+  });
+
+  it("reports missing with the xcode-select --install hint when CLT are absent", async () => {
+    const fact = await checkSetupXcode({
+      platform: "darwin",
+      // A bare Mac: xcode-select exits non-zero ("unable to get active developer directory").
+      runner: async () => {
+        throw Object.assign(new Error("unable to get active developer directory"), { code: 1 });
+      },
+    });
+    expect(fact.status).toBe("missing");
+    if (fact.status !== "missing") throw new Error("expected missing CLT");
+    expect(fact.message).toContain("xcode-select --install");
+  });
+});
+
+describe("checkSetupGit", () => {
+  it("distinguishes a missing git binary from a missing repository", async () => {
+    const absent = await checkSetupGit({
+      env: { PATH: "/fake/bin" },
+      cwd: "/tmp/not-a-repo",
+      runner: fakeRunner([], {}),
+    });
+    expect(absent).toMatchObject({ status: "missing", reason: "git-absent" });
+    if (absent.status !== "missing") throw new Error("expected missing git");
+    expect(absent.message).toContain("xcode-select --install");
+
+    const notARepo = await checkSetupGit({
+      env: { PATH: "/fake/bin" },
+      cwd: "/tmp/not-a-repo",
+      // git resolves but rev-parse fails with a non-ENOENT exit code.
+      runner: async () => {
+        throw Object.assign(new Error("not a git repository"), { code: 128 });
+      },
+    });
+    expect(notARepo).toMatchObject({ status: "missing", reason: "not-a-repo" });
+  });
+
+  it("gives the safe.directory remediation when git refuses for dubious ownership", async () => {
+    const dubious = await checkSetupGit({
+      env: { PATH: "/fake/bin" },
+      cwd: "/tmp/owned-by-root",
+      // git runs but exits 128 with a dubious-ownership message; the user IS inside
+      // the repo, so the remediation must point at safe.directory, not "not a repo".
+      runner: async () => {
+        throw Object.assign(
+          new Error("fatal: detected dubious ownership in repository at '/tmp/owned-by-root'"),
+          {
+            code: 128,
+            stderr: "fatal: detected dubious ownership in repository at '/tmp/owned-by-root'",
+          },
+        );
+      },
+    });
+    expect(dubious).toMatchObject({ status: "missing", reason: "not-a-repo" });
+    if (dubious.status !== "missing") throw new Error("expected missing git");
+    expect(dubious.message).toContain("safe.directory");
+  });
+});
+
 async function tempRoot(tempRoots: string[]): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "station-setup-checks-"));
   tempRoots.push(root);
@@ -572,7 +752,8 @@ function fakeRunner(
   return async (input) => {
     calls.push(input);
     const key = `${input.command} ${(input.args ?? []).join(" ")}`;
-    const stdout = outputs[key] ?? fakeBinOutput(input, outputs);
+    // Synthetic machines have macOS Command Line Tools unless a test overrides it.
+    const stdout = outputs[key] ?? fakeBinOutput(input, outputs) ?? defaultProbeOutput(key);
     if (stdout === undefined) {
       throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
     }
@@ -594,6 +775,10 @@ function fakeBinOutput(
     return undefined;
   }
   return outputs[`${basename(input.command)} ${(input.args ?? []).join(" ")}`];
+}
+
+function defaultProbeOutput(key: string): string | undefined {
+  return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
 }
 
 function fakeAccess(paths: readonly string[]): (path: string) => Promise<void> {

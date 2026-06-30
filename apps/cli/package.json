@@ -25,7 +25,6 @@
     "@station/contracts": "workspace:*",
     "@station/claude": "workspace:*",
     "@station/codex": "workspace:*",
-    "@station/crush": "workspace:*",
     "@station/cursor": "workspace:*",
     "@station/github-repository": "workspace:*",
     "@station/opencode": "workspace:*",
@@ -39,5 +38,8 @@
     "@station/tmux": "workspace:*",
     "@station/worktrunk": "workspace:*",
     "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@station/testing": "workspace:*"
   }
 }

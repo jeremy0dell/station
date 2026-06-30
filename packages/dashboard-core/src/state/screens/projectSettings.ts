@@ -8,12 +8,14 @@ import {
   choiceValueByKey,
   isSelectionKey,
   selectNewSessionHarnessChoices,
+  selectProjectDefaultHarness,
 } from "../../selectors/selectors.js";
 import {
   buildRemoveProjectCommand,
   buildSetProjectDefaultHarnessCommand,
 } from "../commandBuilders.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
+import { addPendingProjectDefaultHarness } from "../localRows.js";
 import type { TuiTransition } from "../transition.js";
 import type { ProjectSettingsItemId, TuiState } from "../types.js";
 
@@ -131,12 +133,21 @@ function selectAgent(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey
   if (option === undefined) {
     return { state };
   }
-  // Selecting the current default is a no-op edit; just return to the list.
-  if (option.id === project.defaults.harness) {
+  // Compare against the effective (optimistic) default, not the snapshot value:
+  // while a change is in flight the picked agent is what the user sees as current,
+  // so re-selecting it is a no-op and selecting anything else — even the snapshot
+  // default — is a real change that must override the pending one.
+  const effectiveDefault = selectProjectDefaultHarness(state.localRows, project).harness;
+  if (option.id === effectiveDefault) {
     return { state: { ...state, screen: { ...screen, focus: "list" } } };
   }
+  // Move the marker to the picked agent immediately; the runner reverts this if
+  // the command fails, and the next snapshot prunes it once the change lands.
   return {
-    state: { ...state, screen: { ...screen, focus: "list" } },
+    state: addPendingProjectDefaultHarness(
+      { ...state, screen: { ...screen, focus: "list" } },
+      { projectId: project.id, harness: option.id, createdAt: new Date().toISOString() },
+    ),
     operations: [
       {
         type: "setProjectDefaultHarness",

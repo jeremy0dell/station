@@ -31,9 +31,6 @@ export const stationAliases = {
   "@station/codex": fileURLToPath(
     new URL("../../integrations/harness/codex/src/index.ts", import.meta.url),
   ),
-  "@station/crush": fileURLToPath(
-    new URL("../../integrations/harness/crush/src/index.ts", import.meta.url),
-  ),
   "@station/cursor": fileURLToPath(
     new URL("../../integrations/harness/cursor/src/index.ts", import.meta.url),
   ),

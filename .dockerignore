@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+.git
+dist
+**/dist
+.turbo
+**/.turbo
+.dev-state
+**/.dev-state
+coverage
+**/*.log
+station/node_modules
+# Keep local secrets out of the tier-2 test image (Dockerfile COPYs the repo root).
+.env
+.env.*
+!.env.example
