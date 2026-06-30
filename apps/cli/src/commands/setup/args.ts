@@ -67,23 +67,23 @@ function setupKind(value: string | undefined): SetupCommandKind {
 function validateSetupArgs(args: SetupArgs): void {
   if (args.kind === "guided") {
     if (args.dryRun) {
-      throw new Error("stn setup --dry-run is not supported. Use: station setup apply --dry-run.");
+      throw new Error("stn setup --dry-run is not supported. Use: stn setup apply --dry-run.");
     }
     if (args.check) {
-      throw new Error("stn setup --check is not supported. Use: station setup check.");
+      throw new Error("stn setup --check is not supported. Use: stn setup check.");
     }
     if (args.json) {
-      throw new Error("stn setup --json is not supported. Use: station setup check --json.");
+      throw new Error("stn setup --json is not supported. Use: stn setup check --json.");
     }
     if (args.yes) {
-      throw new Error("stn setup --yes is not supported. Use: station setup apply --yes.");
+      throw new Error("stn setup --yes is not supported. Use: stn setup apply --yes.");
     }
     if (args.noBrew) {
-      throw new Error("stn setup --no-brew is not supported. Use: station setup check --no-brew.");
+      throw new Error("stn setup --no-brew is not supported. Use: stn setup check --no-brew.");
     }
   }
   if (args.json && args.kind !== "check" && args.kind !== "plan") {
-    throw new Error("--json is supported for station setup check and station setup plan.");
+    throw new Error("--json is supported for stn setup check and stn setup plan.");
   }
   if (args.kind === "check" && args.dryRun) {
     throw new Error("stn setup check cannot use --dry-run.");

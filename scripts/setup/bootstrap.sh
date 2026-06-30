@@ -8,7 +8,31 @@ cd "$repo_root"
 
 step() { printf '\n==> %s\n' "$1"; }
 
+# The Command Line Tools provide git and the compilers Homebrew itself needs, so a
+# bare Mac dead-ends at the brew step without them. Check first and give the real
+# remediation instead of a confusing "git/brew not found" later.
+step "Checking Xcode Command Line Tools"
+if ! xcode-select -p >/dev/null 2>&1; then
+  echo "Command Line Tools are not installed. Run: xcode-select --install" >&2
+  echo "Re-run this script once they finish installing." >&2
+  exit 1
+fi
+
+step "Checking git"
+if ! command -v git >/dev/null 2>&1; then
+  echo "git is not installed. Run: xcode-select --install (or install git), then re-run." >&2
+  exit 1
+fi
+
 step "Checking Homebrew"
+# The official installer writes brew to its prefix but does not touch the current
+# shell PATH, so a same-session re-run would otherwise dead-end here despite a
+# successful install. Pick it up from the standard prefixes first.
+if ! command -v brew >/dev/null 2>&1; then
+  for brew_bin in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    [ -x "$brew_bin" ] && eval "$("$brew_bin" shellenv)" && break
+  done
+fi
 if ! command -v brew >/dev/null 2>&1; then
   echo "Homebrew is required. Install it from https://brew.sh and re-run this script." >&2
   exit 1
@@ -47,7 +71,7 @@ cat <<'EOF'
 Station is installed.
 
 Next:
-  stn setup     # Worktrunk, tmux, an agent CLI, and your first project
+  stn setup     # required tools, an agent CLI, and your first project
   stn           # launch the workspace
 EOF
 

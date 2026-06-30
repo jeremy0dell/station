@@ -1,6 +1,7 @@
 import { buildContextMenuItems, resolveContextMenuAction } from "../../contextMenu/items.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
 import {
+  openForkDetailsForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
   openRemoveWorktreeConfirmForRow,
@@ -91,6 +92,14 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
         projectId: outcome.projectId,
         branch: outcome.branch,
         harness: outcome.harness,
+      });
+      return true;
+    case "pane-launch-fork":
+      effects.launchHostedForkSession({
+        projectId: outcome.projectId,
+        sourceWorktreeId: outcome.sourceWorktreeId,
+        branch: outcome.branch,
+        copyDirty: outcome.copyDirty,
       });
       return true;
     case "open-url":
@@ -184,6 +193,14 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
         stationViewStore.setState(
           openProjectSettings(stationViewStore.getState(), action.projectId),
         );
+      }
+      return;
+    case "forkSession":
+      if (stationViewStore !== undefined) {
+        stationViewStore.setState(
+          openForkDetailsForRow(stationViewStore.getState(), action.rowId, "dashboard"),
+        );
+        effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
   }

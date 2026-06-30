@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { TuiStore } from "@station/dashboard-core";
 import { STATION_HOST_PROVIDER_ID } from "@station/host";
-import type { WorktreeRow } from "@station/contracts";
+import type { ProviderId, WorktreeRow } from "@station/contracts";
 
 /** How long to wait for a freshly created worktree's row to reach the snapshot. */
 const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
@@ -21,6 +21,19 @@ export function findWorktreeRowByBranch(
   return store
     .getState()
     .snapshot?.rows.find((row) => row.projectId === projectId && row.branch === branch);
+}
+
+// The harness a fork inherits: the source's live/recovery harness, else the
+// project default — shared by the optimistic row and the launch.
+export function inheritedForkHarness(
+  store: StoreApi<TuiStore>,
+  projectId: string,
+  sourceWorktreeId: string,
+): ProviderId | undefined {
+  const snapshot = store.getState().snapshot;
+  const source = snapshot?.rows.find((row) => row.id === sourceWorktreeId);
+  const project = snapshot?.projects.find((candidate) => candidate.id === projectId);
+  return source?.agent?.harness ?? source?.recovery?.provider ?? project?.defaults.harness;
 }
 
 /**

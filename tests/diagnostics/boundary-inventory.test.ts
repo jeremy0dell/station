@@ -15,7 +15,6 @@ const observerConcreteProviderImports = [
   "@station/worktrunk",
   "@station/claude",
   "@station/codex",
-  "@station/crush",
   "@station/cursor",
   "@station/opencode",
   "@station/pi",

@@ -55,7 +55,7 @@ describe("correlateTerminalBoundHarnessEvent harnessRunId derivation", () => {
     expect(result.terminalTargetId).toBeUndefined();
   });
 
-  // cursor/crush/opencode semantics: opt in via includeTerminalTargetId to trust the raw target id.
+  // cursor/opencode/pi semantics: opt in via includeTerminalTargetId to trust the raw target id.
   it("derives harnessRunId directly from the raw target id when opting in", () => {
     const identity: StationHookIdentityPayload = { station_terminal_target_id: "term_ghost" };
     const result = correlateTerminalBoundHarnessEvent({

@@ -7,7 +7,11 @@ import type {
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
-import { pendingRenameTitles, type TuiLocalRows } from "../state/localRows.js";
+import {
+  pendingProjectDefaultHarnesses,
+  pendingRenameTitles,
+  type TuiLocalRows,
+} from "../state/localRows.js";
 import type { TuiViewState } from "../state/types.js";
 
 export const SELECTION_KEYS = [
@@ -211,6 +215,23 @@ export function worktreeRowDisplayTitle(
     return row.branch;
   }
   return pendingRenameTitles(localRows)[session.id]?.title ?? session.title;
+}
+
+/**
+ * The default harness to render as a project's current selection: the optimistic
+ * pending value (set the moment a new agent is picked) until the snapshot
+ * confirms it, otherwise the snapshot value. `pending` drives the "updating…"
+ * cue while the change is in flight.
+ */
+export function selectProjectDefaultHarness(
+  localRows: TuiLocalRows,
+  project: ProjectView,
+): { harness: ProviderId; pending: boolean } {
+  const pending = pendingProjectDefaultHarnesses(localRows)[project.id];
+  if (pending === undefined) {
+    return { harness: project.defaults.harness, pending: false };
+  }
+  return { harness: pending.harness, pending: true };
 }
 
 function compareRows(

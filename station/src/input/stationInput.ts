@@ -103,6 +103,17 @@ export type StationInputEffects = {
    * click uses; failures surface as a STATION toast.
    */
   launchHostedNewSession(target: { projectId: string; branch: string; harness: ProviderId }): void;
+  /**
+   * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
+   * harness in a Station pane (the Fork details submit); fire-and-forget like
+   * launchHostedNewSession.
+   */
+  launchHostedForkSession(target: {
+    projectId: string;
+    sourceWorktreeId: string;
+    branch: string;
+    copyDirty: boolean;
+  }): void;
   openExternalUrl(url: string): void;
 };
 
@@ -237,6 +248,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
     closePane: paneEffects.closePane,
     launchPrimaryAgent: managed.launchPrimaryAgent,
     launchHostedNewSession: managed.launchHostedNewSession,
+    launchHostedForkSession: managed.launchHostedForkSession,
     openExternalUrl: options.openExternalUrl ?? (() => {}),
   };
   if (options.stationViewStore !== undefined) {

@@ -171,8 +171,6 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     reconcile: (reason) => runReconcile(reconcileDeps, reconciling, reason),
     ingestProviderHookEvent: (event: ProviderHookEvent): Promise<ProviderHookReceipt> =>
       providerHookIngress.ingest(event),
-    ingestHookEvent: (event: ProviderHookEvent): Promise<ProviderHookReceipt> =>
-      providerHookIngress.ingest(event),
     reportHarnessEvent: async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> =>
       harnessIngressQueue.enqueue(report),
     prepareExternalLaunch: (params) =>

@@ -173,7 +173,7 @@ describe("CLI manual-smoke commands", () => {
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
     const text = textOutput(result);
     expect(text).toContain("Usage:\n  stn hooks install <target> --yes [options]");
-    expect(text).toContain("One of: worktrunk, claude, codex, cursor, crush, opencode, event.");
+    expect(text).toContain("One of: worktrunk, claude, codex, cursor, opencode, event.");
   });
 
   it("does not advertise fake command ids in command help examples", async () => {

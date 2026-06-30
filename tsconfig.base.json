@@ -25,7 +25,6 @@
       "@station/dashboard-core/*": ["packages/dashboard-core/src/*"],
       "@station/claude": ["integrations/harness/claude/src/index.ts"],
       "@station/codex": ["integrations/harness/codex/src/index.ts"],
-      "@station/crush": ["integrations/harness/crush/src/index.ts"],
       "@station/cursor": ["integrations/harness/cursor/src/index.ts"],
       "@station/github-repository": ["integrations/repository/github/src/index.ts"],
       "@station/harness-shared": ["packages/harness-shared/src/index.ts"],

@@ -2,6 +2,7 @@ import type { TuiKey, TuiState } from "@station/dashboard-core";
 import {
   createInitialTuiState,
   deriveTuiInputMode,
+  editableTextBindings,
   handleTuiKey,
   matchingTuiBindings,
   openProjectDefaultAgentPicker,
@@ -19,8 +20,10 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   // the current viewport, selected picker, and row data.
   "tui.dashboard.slotActivate",
   "tui.collapse.toggleSlot",
+  "tui.projectSettingsPicker.choose",
   "tui.remove.chooseSlot",
   "tui.rename.chooseSlot",
+  "tui.fork.chooseSlot",
   "tui.newSessionProject.choose",
   "tui.newSessionAgent.choose",
   "tui.projectDefaultAgent.choose",
@@ -77,10 +80,13 @@ function representativeStates(): Record<TuiInputMode, TuiState> {
     help: drive(base, [{ input: "H" }]),
     search: drive(base, [{ input: "/" }, { input: "ab" }]),
     projectCollapse: drive(base, [{ input: "C" }]),
+    projectSettingsPicker: drive(base, [{ input: "P" }]),
     removeChooseSlot: drive(base, [{ input: "X" }]),
     removeConfirm: drive(base, [{ input: "X" }, { input: "1" }]),
     renameChooseSlot: drive(base, [{ input: "R" }]),
     renameEdit: drive(base, [{ input: "R" }, { input: "1" }]),
+    forkChooseSlot: drive(base, [{ input: "F" }]),
+    forkDetails: drive(base, [{ input: "F" }, { input: "1" }]),
     newSessionReview: drive(base, [{ input: "N" }]),
     newSessionEditName: drive(base, [{ input: "N" }, { input: "N" }]),
     newSessionPickProject: drive(base, [{ input: "N" }, { input: "P" }]),
@@ -186,6 +192,33 @@ describe("tui keymap metadata", () => {
         expect(`${mode}:${textIndex}`).toBe(`${mode}:${table.length - 1}`);
       }
     }
+  });
+});
+
+describe("editableTextBindings", () => {
+  it("produces the cursor + text catch-all block for a single action", () => {
+    const bindings = editableTextBindings("tui.example", "tui.example.edit");
+    expect(bindings.map((binding) => binding.id)).toEqual([
+      "tui.example.cursorLeft",
+      "tui.example.cursorRight",
+      "tui.example.backspace",
+      "tui.example.delete",
+      "tui.example.type",
+    ]);
+    expect(bindings.every((binding) => binding.action === "tui.example.edit")).toBe(true);
+    expect(bindings.every((binding) => binding.outcome === "handled")).toBe(true);
+    // The text catch-all must be last so specific named keys match first.
+    expect(bindings.at(-1)?.pattern).toEqual({ kind: "text" });
+    expect(bindings.every((binding) => binding.help === undefined)).toBe(true);
+  });
+
+  it("attaches optional help to the text binding only", () => {
+    const bindings = editableTextBindings("tui.example", "tui.example.edit", {
+      keys: "space",
+      label: "toggle",
+    });
+    expect(bindings.at(-1)?.help).toEqual({ keys: "space", label: "toggle" });
+    expect(bindings.slice(0, -1).every((binding) => binding.help === undefined)).toBe(true);
   });
 });
 

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { selectWelcomeCanContinue, selectWelcomeVisible } from "./selectors.js";
 import { createStationStore } from "./store.js";
-import { MAIN_PANE_ID, STATION_OVERLAY_ID, type PaneRecord, type PaneRole } from "./types.js";
+import {
+  agentWorktreePaneId,
+  MAIN_PANE_ID,
+  STATION_OVERLAY_ID,
+  type PaneRecord,
+  type PaneRole,
+} from "./types.js";
 
 const AGENT_IDENTITY = { sessionId: "ses_a", terminalTargetId: "native:wt_a" };
 
@@ -720,6 +726,35 @@ describe("createStationStore", () => {
     store.actions.closeOverlay();
     expect(store.getState().input.contextMenu).toBeNull();
     expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: MAIN_PANE_ID });
+  });
+
+  it("keeps a STATION row context menu when another session pane tree is removed", () => {
+    const store = createStationStore({ boot: "empty" });
+    const rowId = "wt-open";
+    const removedRowId = "wt-removed";
+    const paneId = agentWorktreePaneId(rowId);
+    const removedPaneId = agentWorktreePaneId(removedRowId);
+    const menu = {
+      target: { kind: "station" as const, target: { kind: "row" as const, rowId } },
+      anchor: { x: 12, y: 6 },
+      activeIndex: 0,
+    };
+
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, { sessionId: "ses-open", terminalTargetId: "native:wt-open" });
+    store.actions.createPane(removedPaneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(removedPaneId, {
+      sessionId: "ses-removed",
+      terminalTargetId: "native:wt-removed",
+    });
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+    store.actions.openContextMenu(menu.target, menu.anchor);
+
+    store.actions.closePaneTree(removedPaneId);
+
+    expect(store.getState().input.contextMenu).toEqual(menu);
+    expect(store.getState().input.focus).toEqual({ kind: "contextMenu" });
+    expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([paneId]);
   });
 });
 

@@ -56,6 +56,7 @@ export type TuiScreen =
   | { name: "help" }
   | { name: "search"; value: string }
   | { name: "projectCollapse"; value: string }
+  | { name: "projectSettingsPicker"; value: string }
   | { name: "removeWorktree"; step: "chooseSlot" }
   | {
       name: "removeWorktree";
@@ -72,6 +73,23 @@ export type TuiScreen =
       sessionId: SessionId;
       currentTitle: string;
       draftTitle: EditableTextInputState;
+      returnTo?: "dashboard";
+      validationError?: string;
+    }
+  | { name: "fork"; step: "chooseSlot" }
+  | {
+      name: "fork";
+      step: "details";
+      sourceWorktreeId: WorktreeId;
+      projectId: ProjectId;
+      projectLabel: string;
+      sourceBranch: string;
+      sourceDirty: boolean;
+      sourceAgentRunning: boolean;
+      draftBranch: EditableTextInputState;
+      nameSource: "generated" | "edited";
+      copyDirty: boolean;
+      focus: "branch" | "copyDirty" | "submit";
       returnTo?: "dashboard";
       validationError?: string;
     }

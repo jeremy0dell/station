@@ -94,11 +94,6 @@ export type SendCursorHookInput = ProviderHookSenderOptions & {
   env?: NodeJS.ProcessEnv;
 };
 
-export type SendCrushHookInput = ProviderHookSenderOptions & {
-  payload: unknown;
-  env?: NodeJS.ProcessEnv;
-};
-
 export type SendPiHookInput = ProviderHookSenderOptions & {
   eventType: string;
   payload: unknown;
@@ -301,36 +296,6 @@ export async function sendCursorHookPayload(
       hookId: deps.hookId,
     });
   }
-}
-
-export async function sendCrushHookPayload(
-  input: SendCrushHookInput,
-  deps: ProviderHookSenderDeps = {},
-): Promise<ProviderHookReceipt> {
-  const clock = deps.clock ?? systemClock;
-  const enrichedPayload = enrichStationHookIdentityPayload({
-    payload: input.payload,
-    env: input.env ?? process.env,
-  });
-  const eventName = parseCrushHookEventName(enrichedPayload) ?? "unknown";
-  if (!hasStationOwnership(enrichedPayload)) {
-    return ignoredProviderHookReceipt({
-      provider: "crush",
-      event: eventName,
-      clock,
-      hookId: deps.hookId,
-    });
-  }
-  return sendProviderHookEvent(
-    {
-      ...input,
-      provider: "crush",
-      kind: "harness",
-      event: eventName,
-      payload: enrichedPayload,
-    },
-    deps,
-  );
 }
 
 export async function sendPiHookPayload(
@@ -727,14 +692,6 @@ function payloadSummaryFor(payload: unknown): ProviderHookPayloadSummary {
     compacted: false,
     omittedFieldNames: [],
   };
-}
-
-function parseCrushHookEventName(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    return undefined;
-  }
-  const value = (payload as { event?: unknown }).event;
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function compactionSummary(compaction: {

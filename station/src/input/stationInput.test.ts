@@ -21,7 +21,7 @@ import type { AgentPrepareExternalLaunchResult } from "@station/client";
 import type { StationSnapshot, WorktreeRow } from "@station/contracts";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
-import { resolveNewSessionSubmit } from "../station/input/stationActions.js";
+import { resolveForkSessionSubmit, resolveNewSessionSubmit } from "../station/input/stationActions.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
@@ -952,11 +952,29 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
   });
 
+  it("opens the fork details sheet from a row context menu", () => {
+    const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
+
+    rightClickRow();
+    // Menu order: Rename, Fork, Delete Session — one down reaches the fork.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
+    expect(runtime.handleSequence("\r")).toBe(true);
+
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(stationViewStore.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      sourceWorktreeId: "wt_station_idle",
+      returnTo: "dashboard",
+    });
+  });
+
   it("opens the shared remove-session confirmation from a row context menu", () => {
     const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
-    // Menu order: Rename, Delete Session — one down reaches the delete.
+    // Menu order: Rename, Fork, Delete Session — two downs reach the delete.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 
@@ -975,6 +993,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
 
     rightClickRow();
     runtime.handleSequence("\x1b[B");
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
     stationViewStore.getState().handleKey({ input: "y" });
 
@@ -991,6 +1010,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, stationViewStore, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
     stationViewStore.getState().handleKey({ input: "", escape: true });
@@ -1893,6 +1913,174 @@ describe("createStationInputRuntime New Session hosted launch", () => {
         "Created the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.",
     });
     // The launch never proceeded past the missing row.
+    expect(harness.observerService.preparedLaunches).toEqual([]);
+  });
+});
+
+describe("createStationInputRuntime Fork hosted launch", () => {
+  // Driven end to end through the public runtime: open the overlay, "F" + a slot
+  // open the fork details, Enter submits as a Station-hosted launch (worktree.fork
+  // + a background managed launch) instead of the machine's tmux session.fork.
+  function forkPlan(worktreeId: string): AgentPrepareExternalLaunchResult {
+    return {
+      kind: "prepared",
+      sessionId: "ses_fork",
+      terminalTargetId: `native:${worktreeId}`,
+      launchPlan: {
+        provider: "codex",
+        command: "codex",
+        args: ["--exec"],
+        cwd: "/tmp/fork",
+        env: {},
+        mode: "interactive",
+      },
+    };
+  }
+
+  function forkHarness() {
+    const snapshot = manyProjectsSnapshot();
+    const observerService = new FakeTuiObserverService(snapshot);
+    const source = new FakeStationSource(snapshot);
+    const stationViewStore = createTuiStore({
+      source,
+      service: observerService,
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      onDismiss: async () => {},
+      initialState: { terminalRows: 12 },
+    });
+    stationViewStore.getState().start();
+    const scripted = createScriptedTerminal();
+    const registry = createPtyRegistry({ createTerminal: () => scripted.terminal });
+    const store = createStationStore();
+    const runtime = createStationInputRuntime({
+      store,
+      shutdown: () => {},
+      stationViewStore,
+      registry,
+      observerService,
+    });
+    const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
+    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+    return { store, runtime, observerService, source, stationViewStore, pressKey, settle, snapshot };
+  }
+
+  // Open fork details for the first row and read the submit the overlay drives on
+  // Enter (resolveForkSessionSubmit), without coupling to the screen shape.
+  function openForkAndCaptureSubmit(harness: ReturnType<typeof forkHarness>) {
+    harness.store.actions.openOverlay(STATION_OVERLAY_ID);
+    harness.pressKey("F");
+    harness.pressKey("1");
+    const submit = resolveForkSessionSubmit(harness.stationViewStore);
+    if (submit.kind !== "submit") {
+      throw new Error("expected the fork flow to be on the details screen");
+    }
+    return submit;
+  }
+
+  // The harness Station inherits for the fork: the source row's live/recovery
+  // harness, else the project default — the same resolution the executor uses.
+  function inheritedHarness(harness: ReturnType<typeof forkHarness>, submit: { projectId: string; sourceWorktreeId: string }) {
+    const sourceRow = harness.snapshot.rows.find((row) => row.id === submit.sourceWorktreeId);
+    const project = harness.snapshot.projects.find((candidate) => candidate.id === submit.projectId);
+    return sourceRow?.agent?.harness ?? sourceRow?.recovery?.provider ?? project?.defaults.harness;
+  }
+
+  function snapshotWithWorktree(
+    base: StationSnapshot,
+    projectId: string,
+    worktreeId: string,
+    branch: string,
+  ): StationSnapshot {
+    const template = base.rows.find((row) => row.projectId === projectId);
+    if (template === undefined) {
+      throw new Error(`fixture has no ${projectId} row to clone`);
+    }
+    const fresh: WorktreeRow = {
+      ...template,
+      id: worktreeId,
+      branch,
+      path: `/Users/example/.worktrees/${projectId}/${branch}`,
+      display: { ...template.display },
+    };
+    delete fresh.agent;
+    delete fresh.terminal;
+    return { ...base, rows: [...base.rows, fresh] };
+  }
+
+  it("forks the worktree, shows an optimistic row, and launches the inherited agent in the background", async () => {
+    const harness = forkHarness();
+    const worktreeId = "wt_forked";
+    harness.observerService.nextPreparedLaunch = forkPlan(worktreeId);
+    const submit = openForkAndCaptureSubmit(harness);
+    const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
+    const harnessProvider = inheritedHarness(harness, submit);
+
+    expect(harness.pressKey("\r")).toBe(true);
+    // Optimistic row appears synchronously on submit, carrying the inherited harness,
+    // before the real worktree reaches the snapshot (which would prune it).
+    expect(
+      harness.stationViewStore
+        .getState()
+        .localRows.pendingCreate.find((row) => row.localId === localId)?.harnessProvider,
+    ).toBe(harnessProvider);
+
+    await harness.settle();
+    harness.source.setSnapshot(
+      snapshotWithWorktree(harness.snapshot, submit.projectId, worktreeId, submit.branch),
+    );
+    await harness.settle();
+
+    const forkCommand = harness.observerService.dispatched.find(
+      (command) => command.type === "worktree.fork",
+    );
+    expect(forkCommand).toEqual({
+      type: "worktree.fork",
+      payload: {
+        projectId: submit.projectId,
+        sourceWorktreeId: submit.sourceWorktreeId,
+        branch: submit.branch,
+        copyDirty: true,
+      },
+    });
+    // The inherited harness is forwarded to the prepare for the new worktree.
+    expect(harness.observerService.preparedLaunches).toEqual([
+      { projectId: submit.projectId, worktreeId, harness: harnessProvider },
+    ]);
+    const agentPaneId = agentWorktreePaneId(worktreeId);
+    expect(harness.store.getState().workspace.panes.some((pane) => pane.id === agentPaneId)).toBe(
+      true,
+    );
+    // Background launch: the dashboard overlay stays up.
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("removes the optimistic row and toasts when the worktree fork is rejected", async () => {
+    const harness = forkHarness();
+    harness.observerService.nextReceipt = {
+      commandId: "cmd_tui_1",
+      accepted: false,
+      status: "rejected",
+      error: {
+        tag: "WorktreeProviderError",
+        code: "WORKTREE_CREATE_FAILED",
+        message: "Could not seed the fork.",
+      },
+    };
+    const submit = openForkAndCaptureSubmit(harness);
+    const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
+
+    expect(harness.pressKey("\r")).toBe(true);
+    await harness.settle();
+
+    expect(
+      harness.stationViewStore
+        .getState()
+        .localRows.pendingCreate.some((row) => row.localId === localId),
+    ).toBe(false);
+    const toast = harness.stationViewStore.getState().toasts.at(-1)?.toast;
+    expect(toast?.kind).toBe("error");
+    expect(toast?.message).toContain("Could not seed the fork.");
     expect(harness.observerService.preparedLaunches).toEqual([]);
   });
 });

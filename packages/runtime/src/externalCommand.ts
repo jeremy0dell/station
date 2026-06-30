@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { constants as fsConstants } from "node:fs";
 import { access as defaultAccess, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -238,7 +239,12 @@ export async function resolveExecutablePath(
   command: string,
   options: ResolveExecutablePathOptions = {},
 ): Promise<string | undefined> {
-  const access = options.access ?? defaultAccess;
+  // Resolve only executables the caller can actually run. A file that exists but
+  // lacks the execute bit (partial install, wrong perms, broken symlink target)
+  // must not resolve as a usable tool — the function name promises an *executable*
+  // path. Tests inject `access` and are unaffected.
+  const access =
+    options.access ?? ((candidate: string) => defaultAccess(candidate, fsConstants.X_OK));
   if (isPathLikeCommand(command)) {
     return (await canAccess(command, access)) ? command : undefined;
   }

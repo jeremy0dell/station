@@ -7,14 +7,14 @@ export const defaultDiffnavCommand = "diffnav";
 
 export function diffnavInstallHint(command = defaultDiffnavCommand): string {
   return [
-    "Optional: install diffnav with brew install dlvhdr/formulae/diffnav for the station 'See diff' automation.",
-    `station tried ${command}.`,
+    "Install diffnav with brew install dlvhdr/formulae/diffnav for the STATION 'See diff' automation.",
+    `stn tried ${command}.`,
   ].join(" ");
 }
 
 /**
- * Optional diffnav probe for Station's "See diff" automation. Presence of the
- * literal command on PATH is enough; absence is not a setup blocker.
+ * Required diffnav probe for STATION's "See diff" automation. Presence of the
+ * literal command on PATH is enough; absence blocks core setup.
  */
 export async function checkSetupDiffnav(
   options: SetupDependencyCheckOptions = {},

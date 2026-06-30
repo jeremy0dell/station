@@ -256,11 +256,6 @@ station --config /path/to/config.toml hooks doctor cursor
 station --config /path/to/config.toml hooks install cursor --yes
 station --config /path/to/config.toml hooks uninstall cursor --yes
 
-station --config /path/to/config.toml hooks plan crush
-station --config /path/to/config.toml hooks doctor crush
-station --config /path/to/config.toml hooks install crush --yes
-station --config /path/to/config.toml hooks uninstall crush --yes
-
 station --config /path/to/config.toml hooks plan opencode
 station --config /path/to/config.toml hooks doctor opencode
 station --config /path/to/config.toml hooks install opencode --yes

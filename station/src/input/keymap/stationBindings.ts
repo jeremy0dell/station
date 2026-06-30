@@ -5,6 +5,7 @@ import { routeStationMouse } from "../../station/input/stationMouse.js";
 import type { TuiStore } from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
+  paneLaunchForkSessionOutcome,
   paneLaunchManagedOutcome,
   paneLaunchNewSessionOutcome,
   type MouseBindings,
@@ -282,6 +283,9 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
       }
       if (outcome.kind === "launch-new-session") {
         return paneLaunchNewSessionOutcome(outcome);
+      }
+      if (outcome.kind === "launch-fork") {
+        return paneLaunchForkSessionOutcome(outcome);
       }
       if (outcome.kind === "open-url") {
         return { kind: "open-url", url: outcome.url };

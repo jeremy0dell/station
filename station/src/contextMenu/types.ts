@@ -22,6 +22,7 @@ export type ContextMenuItemId =
   | "pane.splitBelow"
   | "pane.close"
   | "station.renameSession"
+  | "station.forkSession"
   | "station.removeWorktree"
   | "project.setDefaultAgent"
   | "project.openSettings"
@@ -34,6 +35,7 @@ export type ContextMenuItemAction =
   | { kind: "splitPane"; paneId: PaneId; direction: PaneSplitDirection }
   | { kind: "closePane"; paneId: PaneId }
   | { kind: "renameSession"; rowId: string }
+  | { kind: "forkSession"; rowId: string }
   | { kind: "removeWorktree"; rowId: string }
   | { kind: "setProjectDefaultAgent"; projectId: string }
   | { kind: "openProjectSettings"; projectId: string }

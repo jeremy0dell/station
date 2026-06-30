@@ -331,9 +331,7 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   disturb your global agents.
   `pnpm dev` / `pnpm station:tui-dev` and `pnpm station:devbox` both do this
   preflight for Codex, Claude, Cursor, and OpenCode under their own `.dev-state`
-  roots, and launched agents carry the same isolated provider-home env. Crush is
-  cwd-config based (`.crush.json`), so a central dev launcher cannot preconfigure
-  every worktree without writing into those worktrees.
+  roots, and launched agents carry the same isolated provider-home env.
 - **Station connects to the wrong observer** → it reads `STATION_OBSERVER_SOCKET_PATH`;
   point it at the isolated socket. `station:isolated` exports it and prints it.
 - **`observer stop` hangs / `OBSERVER_STOP_FAILED`** → an observer mid-reconcile
