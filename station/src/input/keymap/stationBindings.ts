@@ -167,7 +167,7 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
   ],
 };
 
-/** The Phase 1 registration site: adding a Station chord is one binding here. */
+/** The registration site: adding a Station chord is one binding here. */
 export function createStationKeymap(
   stationViewStore?: StoreApi<TuiStore>,
 ): KeymapStack<RouteOutcome> {
