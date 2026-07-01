@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { join, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { StationConfig } from "@station/config";
 import { createObserverClient } from "@station/protocol";
 import { parsePositiveIntegerOption } from "../args.js";
@@ -11,6 +9,7 @@ import {
   startObserver,
 } from "../observerProcess.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
+import { resolveStationWorkspaceDir } from "../stationWorkspace.js";
 
 /** The renderer subprocess exited with this code (the CLI's `tui` result). */
 export type TuiRunResult = {
@@ -135,7 +134,7 @@ function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiRunResu
   const child =
     override !== undefined
       ? spawn(override, { shell: true, stdio: "inherit", env: childEnv })
-      : spawn("bun", ["run", "--cwd", resolveStationAppDir(), entry], {
+      : spawn("bun", ["run", "--cwd", resolveStationWorkspaceDir(), entry], {
           stdio: "inherit",
           env: childEnv,
         });
@@ -143,16 +142,6 @@ function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiRunResu
     child.once("error", () => resolve({ status: "exited", code: 1 }));
     child.once("exit", (code) => resolve({ status: "exited", code: code ?? 0 }));
   });
-}
-
-// The Bun renderer lives in the isolated station/ workspace; resolve it relative
-// to this CLI module so both a built (dist) and a source run find it.
-function resolveStationAppDir(): string {
-  const here = fileURLToPath(import.meta.url);
-  const marker = `${sep}apps${sep}cli${sep}`;
-  const index = here.indexOf(marker);
-  const repoRoot = index >= 0 ? here.slice(0, index) : process.cwd();
-  return join(repoRoot, "station");
 }
 
 function scheduleReconcileBeforeTui(input: {
