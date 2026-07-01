@@ -24,13 +24,16 @@ export const stationUiInstallHint =
  * check cannot see this: bare `stn` on an uninstalled lane dies at launch with
  * "@opentui not found" while `bun --version` still succeeds.
  */
-export async function isStationUiInstalled(
-  options: { workspaceDir?: string; access?: (path: string) => Promise<void> } = {},
-): Promise<boolean> {
-  const workspaceDir = options.workspaceDir ?? resolveStationWorkspaceDir();
-  const probe = options.access ?? ((path: string) => access(path));
+export async function isStationUiInstalled(): Promise<boolean> {
+  const marker = join(
+    resolveStationWorkspaceDir(),
+    "node_modules",
+    "@opentui",
+    "core",
+    "package.json",
+  );
   try {
-    await probe(join(workspaceDir, "node_modules", "@opentui", "core", "package.json"));
+    await access(marker);
     return true;
   } catch {
     return false;

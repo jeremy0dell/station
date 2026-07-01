@@ -9,7 +9,11 @@ import {
   startObserver,
 } from "../observerProcess.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
-import { resolveStationWorkspaceDir } from "../stationWorkspace.js";
+import {
+  isStationUiInstalled,
+  resolveStationWorkspaceDir,
+  stationUiInstallHint,
+} from "../stationWorkspace.js";
 
 /** The renderer subprocess exited with this code (the CLI's `tui` result). */
 export type TuiRunResult = {
@@ -128,9 +132,16 @@ function runRenderer(
   return (deps.spawnRenderer ?? spawnRenderer)({ env, entry });
 }
 
-function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiRunResult> {
+async function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiRunResult> {
   const childEnv = { ...process.env, ...env };
   const override = process.env.STATION_DASHBOARD_COMMAND;
+  // Bare stn shells into `bun run` against the station/ lane; if it was never
+  // bun-installed the child dies with a raw "@opentui not found", so pre-flight the
+  // lane and surface the same remediation doctor gives (STATION_UI_NOT_INSTALLED).
+  if (override === undefined && !(await isStationUiInstalled())) {
+    process.stderr.write(`${stationUiInstallHint} Or run stn doctor.\n`);
+    return { status: "exited", code: 1 };
+  }
   const child =
     override !== undefined
       ? spawn(override, { shell: true, stdio: "inherit", env: childEnv })

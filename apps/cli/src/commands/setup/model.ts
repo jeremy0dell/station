@@ -228,6 +228,13 @@ export type SetupTmuxBindingFact =
       message: string;
     };
 
+export type SetupStationUiFact = {
+  // "missing": Bun works but station/ was never `bun install`ed, so bare stn cannot
+  // render. "skipped": a renderer override is set or Bun itself is unavailable (its
+  // own required row already covers that), so the station/ Bun lane is not relevant.
+  status: "installed" | "missing" | "skipped";
+};
+
 export type SetupFacts = {
   generatedAt: string;
   mode: SetupMode;
@@ -237,6 +244,7 @@ export type SetupFacts = {
   worktrunkAutomation: SetupWorktrunkAutomationFact;
   tmux: SetupDependencyFact;
   bun: SetupDependencyFact;
+  stationUi: SetupStationUiFact;
   diffnav: SetupDependencyFact;
   gitDelta: SetupDependencyFact;
   brew: SetupBrewFact;

@@ -73,13 +73,24 @@ describe("CLI diagnostic commands", () => {
   });
 
   it("stays silent when Bun is resolvable and the station UI lane is installed", async () => {
-    await expect(
-      rendererRuntimeCheck(
-        async () => "/usr/local/bin/bun",
-        undefined,
-        async () => true,
-      ),
-    ).resolves.toBeUndefined();
+    // Passing undefined for dashboardCommandOverride re-triggers its
+    // process.env.STATION_DASHBOARD_COMMAND default, whose override short-circuit
+    // would mask this installed-silent path; clear it so the assertion exercises the
+    // real branch. Restore in finally.
+    const saved = process.env.STATION_DASHBOARD_COMMAND;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+    try {
+      await expect(
+        rendererRuntimeCheck(
+          async () => "/usr/local/bin/bun",
+          undefined,
+          async () => true,
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      if (saved === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = saved;
+    }
   });
 
   it("warns when Bun is present but the station UI lane was never bun-installed", async () => {

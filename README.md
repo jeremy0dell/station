@@ -42,7 +42,7 @@ station keeps track of everything that's running and makes it visible:
 
 ## Getting started
 
-**Requirements:** Node.js 24.x, pnpm 11, and Bun (Bun renders the terminal UI). A `.node-version` / `.nvmrc` pins Node for fnm/nvm/asdf. External tools (Worktrunk `wt`, tmux, agent CLIs) are optional and checked by `stn doctor`.
+**Requirements:** Node.js 24.x, pnpm 11, and Bun (Bun renders the terminal UI). A `.node-version` / `.nvmrc` pins Node for fnm/nvm (asdf needs `legacy_version_file = yes`). External tools (Worktrunk `wt`, tmux, agent CLIs) are optional and checked by `stn doctor`.
 
 ### macOS: one command
 
