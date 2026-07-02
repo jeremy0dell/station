@@ -193,6 +193,10 @@ export function parseCodexAppServerEvent(input: unknown): CodexAppServerEvent {
   }
 }
 
+export function isCodexAppServerMessage(input: unknown): boolean {
+  return CodexAppServerMessageSchema.safeParse(input).success;
+}
+
 function parseMessage(input: unknown): z.infer<typeof CodexAppServerMessageSchema> {
   const result = CodexAppServerMessageSchema.safeParse(input);
   if (!result.success) {

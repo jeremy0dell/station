@@ -16,9 +16,14 @@ import {
   reportCorrelation,
 } from "@station/harness-shared";
 import { z } from "zod";
+import {
+  codexAppServerEventToHarnessEventObservation,
+  isCodexAppServerMessage,
+} from "./appServer/index.js";
 import { codexHarnessError } from "./errors.js";
 
 const nonEmptyStringSchema = z.string().min(1);
+const USER_INPUT_TOOL = "request_user_input";
 const nullableStringSchema = z.string().nullable();
 const permissionModeSchema = z
   .enum(["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"])
@@ -188,8 +193,19 @@ export function normalizeCodexRawEvent(
   raw: RawHarnessEvent,
   context: HarnessEventContext,
 ): HarnessEventObservation[] {
-  const event = parseCodexHookEvent(raw.event);
   const observedAt = raw.observedAt ?? new Date().toISOString();
+  const hookEvent = CodexHookEventSchema.safeParse(raw.event);
+  if (!hookEvent.success) {
+    if (isCodexAppServerMessage(raw.event)) {
+      return codexAppServerEventToHarnessEventObservation(raw.event, { observedAt });
+    }
+    throw codexHarnessError(
+      "HARNESS_CODEX_EVENT_INVALID",
+      "Codex hook event did not match a supported strict schema.",
+      hookEvent.error,
+    );
+  }
+  const event = hookEvent.data;
   const correlation = correlateTerminalBoundHarnessEvent({
     provider: "codex",
     identity: event,
@@ -266,6 +282,7 @@ export function statusFromCodexHookEvent(
       reason: `Codex requested permission for ${event.tool_name}.`,
       source: "harness_event",
       updatedAt: observedAt,
+      attention: "tool_approval",
     };
   }
   if (event.hook_event_name === "Stop") {
@@ -287,6 +304,15 @@ export function statusFromCodexHookEvent(
     };
   }
   if (event.hook_event_name === "PostToolUse") {
+    if (event.tool_name === USER_INPUT_TOOL) {
+      return {
+        value: "working",
+        confidence: "high",
+        reason: "Codex received user input.",
+        source: "harness_event",
+        updatedAt: observedAt,
+      };
+    }
     return {
       value: "working",
       confidence: "medium",
@@ -323,6 +349,18 @@ export function statusFromCodexHookEvent(
     };
   }
   if (event.hook_event_name === "PreToolUse") {
+    // request_user_input blocks the turn on the user: the "tool call" IS the
+    // clarifying question, so it must read as attention, not tool activity.
+    if (event.tool_name === USER_INPUT_TOOL) {
+      return {
+        value: "needs_attention",
+        confidence: "high",
+        reason: "Codex requested user input.",
+        source: "harness_event",
+        updatedAt: observedAt,
+        attention: "question",
+      };
+    }
     return {
       value: "working",
       confidence: "medium",

@@ -353,6 +353,7 @@ function rowAgent(harnessRun: ObserverHarnessRun): WorktreeRow["agent"] {
     reason: status.reason,
     updatedAt: status.updatedAt,
   };
+  if (status.attention !== undefined) agent.attention = status.attention;
   if (run.pid !== undefined) agent.pid = run.pid;
   if (run.sessionId !== undefined) agent.sessionId = run.sessionId;
   return agent;

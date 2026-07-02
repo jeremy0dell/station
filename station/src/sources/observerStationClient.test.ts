@@ -109,6 +109,83 @@ describe("createObserverStationClient", () => {
     expect(notified).toBeGreaterThan(0);
   });
 
+  it("notifies the attention handler only for input-request attention events", async () => {
+    const fake = createFakeObserverService(mockObserverSnapshot);
+    const attentionEvents: StationEvent[] = [];
+    const client = track(
+      createObserverStationClient({
+        service: fake.service,
+        onAttentionNeeded: (event) => {
+          attentionEvents.push(event);
+        },
+      }),
+    );
+
+    client.start();
+    await waitFor(() => client.state.getState().connection.state === "connected");
+    expect(attentionEvents).toEqual([]);
+    await waitFor(() => fake.hasParkedSubscriber());
+
+    fake.emit(
+      agentStateChangedEvent({
+        state: "needs_attention",
+        reason: "Codex proposed a plan.",
+      }),
+    );
+    await waitFor(
+      () =>
+        client.state.getState().snapshot?.rows.find((row) => row.id === "wt_notify_cleanup")
+          ?.agent?.state === "needs_attention",
+    );
+    expect(attentionEvents).toEqual([]);
+    await waitFor(() => fake.hasParkedSubscriber());
+
+    fake.emit(
+      agentStateChangedEvent({
+        state: "working",
+        reason: "Codex resumed work.",
+      }),
+    );
+    await waitFor(
+      () =>
+        client.state.getState().snapshot?.rows.find((row) => row.id === "wt_notify_cleanup")
+          ?.agent?.state === "working",
+    );
+    await waitFor(() => fake.hasParkedSubscriber());
+
+    fake.emit(
+      agentStateChangedEvent({
+        state: "needs_attention",
+        reason: "Codex requested user input.",
+        attention: "question",
+        harnessEventType: "item/tool/requestUserInput",
+      }),
+    );
+    await waitFor(() => attentionEvents.length === 1);
+    expect(attentionEvents[0]).toMatchObject({
+      type: "worktree.agentStateChanged",
+      worktreeId: "wt_notify_cleanup",
+      harnessEventType: "item/tool/requestUserInput",
+    });
+    await waitFor(() => fake.hasParkedSubscriber());
+
+    fake.emit(
+      agentStateChangedEvent({
+        state: "needs_attention",
+        reason: "Codex requested permission for Bash.",
+        attention: "tool_approval",
+      }),
+    );
+    await waitFor(() => attentionEvents.length === 2);
+    expect(attentionEvents[1]).toMatchObject({
+      type: "worktree.agentStateChanged",
+      worktreeId: "wt_notify_cleanup",
+      agent: {
+        reason: "Codex requested permission for Bash.",
+      },
+    });
+  });
+
   it("requires a socket path or service", () => {
     expect(() => createObserverStationClient({})).toThrow(/socketPath or service/);
   });
@@ -180,6 +257,13 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
     setSnapshot: (next: StationSnapshot) => {
       snapshot = next;
     },
+    emit: (event: StationEvent) => {
+      const waiter = waiters.shift();
+      if (waiter === undefined) {
+        throw new Error("No observer subscriber is waiting for an event.");
+      }
+      waiter.resolve({ done: false, value: event });
+    },
     hasParkedSubscriber: () => waiters.length > 0,
     failSubscription: (error: Error) => {
       for (const waiter of waiters.splice(0)) {
@@ -187,6 +271,32 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
       }
     },
   };
+}
+
+function agentStateChangedEvent(input: {
+  state: "working" | "needs_attention";
+  reason: string;
+  attention?: "question" | "tool_approval";
+  harnessEventType?: string;
+}): StationEvent {
+  const event: StationEvent = {
+    type: "worktree.agentStateChanged",
+    worktreeId: "wt_notify_cleanup",
+    agent: {
+      harness: "codex",
+      state: input.state,
+      runId: "run_notify_cleanup",
+      sessionId: "ses_notify_cleanup",
+      confidence: "high",
+      reason: input.reason,
+      updatedAt: "2026-06-11T12:01:00.000Z",
+      ...(input.attention === undefined ? {} : { attention: input.attention }),
+    },
+  };
+  if (input.harnessEventType !== undefined) {
+    event.harnessEventType = input.harnessEventType;
+  }
+  return event;
 }
 
 function wrappedConnectError(): Error {

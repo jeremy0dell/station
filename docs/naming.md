@@ -84,6 +84,10 @@ id = "notify-agent-state"
 events = ["worktree.agentStateChanged"]
 command = "stn"
 args = ["notify", "agent-state"]
+
+[hooks.event.filter]
+agent_state = "idle"
+change_source = "harness_event_report"
 ```
 
 The config shape can stay `hooks.event`, but code and docs should prefer `observer event hook` when precision matters.

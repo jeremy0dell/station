@@ -159,9 +159,15 @@ export function statusFromOpenCodeEvent(
 ): ObservedStatus | undefined {
   switch (event.event_type) {
     case "permission.asked":
-      return status("needs_attention", "high", permissionAskedReason(event), observedAt);
+      return {
+        ...status("needs_attention", "high", permissionAskedReason(event), observedAt),
+        attention: "tool_approval",
+      };
     case "question.asked":
-      return status("needs_attention", "high", "OpenCode asked a question.", observedAt);
+      return {
+        ...status("needs_attention", "high", "OpenCode asked a question.", observedAt),
+        attention: "question",
+      };
     case "permission.replied":
       return event.permission_reply === "reject"
         ? status("idle", "medium", "OpenCode permission request was rejected.", observedAt)

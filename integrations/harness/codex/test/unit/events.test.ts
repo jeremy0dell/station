@@ -83,9 +83,90 @@ describe("Codex hook event parsing", () => {
         value: "needs_attention",
         confidence: "high",
         reason: "Codex requested permission for Bash.",
+        attention: "tool_approval",
       },
     });
     expect(JSON.stringify(observations[0]?.providerData)).not.toContain("rm -rf");
+  });
+
+  it("maps request_user_input tool hooks to an attention question and back", () => {
+    const hookEvent = (hookEventName: "PreToolUse" | "PostToolUse") => ({
+      provider: "codex" as const,
+      observedAt: now,
+      event: {
+        session_id: "codex_session_123",
+        transcript_path: null,
+        cwd: "/tmp/station/web/task",
+        hook_event_name: hookEventName,
+        model: "gpt-5.4-codex",
+        permission_mode: "default",
+        turn_id: "turn_1",
+        tool_name: "request_user_input",
+        tool_input: { questions: [] },
+        tool_use_id: "call_probe_1",
+        ...(hookEventName === "PostToolUse" ? { tool_response: { answers: {} } } : {}),
+      },
+    });
+
+    const opened = normalizeCodexRawEvent(hookEvent("PreToolUse"), context());
+    expect(opened[0]).toMatchObject({
+      status: {
+        value: "needs_attention",
+        confidence: "high",
+        reason: "Codex requested user input.",
+        attention: "question",
+      },
+    });
+
+    const resolved = normalizeCodexRawEvent(hookEvent("PostToolUse"), context());
+    expect(resolved[0]).toMatchObject({
+      status: {
+        value: "working",
+        confidence: "high",
+        reason: "Codex received user input.",
+      },
+    });
+    expect(resolved[0]?.status?.attention).toBeUndefined();
+  });
+
+  it("normalizes Codex app-server input requests through the harness ingest path", () => {
+    const observations = normalizeCodexRawEvent(
+      {
+        provider: "codex",
+        observedAt: now,
+        event: {
+          method: "item/tool/requestUserInput",
+          id: 7,
+          params: {
+            threadId: "thr_input",
+            turnId: "turn_1",
+            itemId: "item_tool_1",
+            questions: [],
+          },
+        },
+      },
+      context(),
+    );
+
+    expect(observations).toHaveLength(1);
+    expect(HarnessEventObservationSchema.parse(observations[0])).toEqual(observations[0]);
+    expect(observations[0]).toMatchObject({
+      provider: "codex",
+      rawEventType: "item/tool/requestUserInput",
+      harnessRunId: "codex:app-server:thr_input",
+      nativeSessionId: "thr_input",
+      status: {
+        value: "needs_attention",
+        confidence: "high",
+        reason: "Codex requested user input.",
+        attention: "question",
+      },
+      providerData: {
+        transport: "app-server",
+        appServerMethod: "item/tool/requestUserInput",
+        requestId: 7,
+      },
+    });
   });
 
   it("distinguishes repeated PermissionRequest reports in the same turn", () => {

@@ -181,6 +181,16 @@ logs/station-host.jsonl
 station/layout.json
 ```
 
+## Harness Event Census
+
+Attention states (`needs_attention` plus the typed `attention` kind on the agent status: `question`, `plan_approval`, `tool_approval`, `input`) are normalized at each provider boundary. When a harness behavior is unclear — or a new harness/scenario needs mapping — capture what actually happens instead of reasoning from source:
+
+1. Every ingested report is logged as `Harness event report processed.` (or `skipped.`) in `logs/observer.jsonl` with provider, eventType, status value, attention kind, correlation keys, and the projection outcome. `projected: false` on an accepted report means correlation failed — that event silently changed nothing.
+2. Drive one scenario at a time in the harness TUI and watch `stn debug logs "Harness event report"` (or `stn observe --json`) alongside the harness's own native session log (for Codex: the `rollout-*.jsonl` under `$CODEX_HOME/sessions/<y>/<m>/<d>/`).
+3. Scenario matrix worth capturing per harness: clarifying question during planning, plan approval ("run this plan?"), standalone question, tool/permission approval, user answers, user aborts the prompt, turn completes, compaction.
+
+Captured sequences make good fixtures: the status mappers (`statusFrom*Event` in each `integrations/harness/*/src`) are pure, so a captured event list replays in a unit test and the expected status/attention can be asserted per event — no live timing or reconcile-cycle waiting.
+
 ## Detailed References
 
 - Use `docs/diagnostics.md` for full doctor, debug bundle, redaction, retention, hook setup, and injected-failure details.
