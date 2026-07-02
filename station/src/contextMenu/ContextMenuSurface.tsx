@@ -1,6 +1,7 @@
 import type { MouseEvent } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
+import { STATION_COLORS } from "../station/view/theme.js";
 import type { ContextMenuItem } from "./types.js";
 
 export type ContextMenuSurfaceProps = {
@@ -11,12 +12,12 @@ export type ContextMenuSurfaceProps = {
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
 
-const MENU_BACKGROUND = "#15191e";
-const ROW_ACTIVE = "#2f3842";
-const ROW_TEXT = "#f4f4f5";
-const ROW_DISABLED = "#7a828c";
-const ROW_DANGER = "#fca5a5";
-const BORDER_TEXT = "#5b6470";
+const MENU_BACKGROUND = STATION_COLORS.chrome.menuBackground;
+const ROW_ACTIVE = STATION_COLORS.chrome.activeRow;
+const ROW_TEXT = STATION_COLORS.foreground;
+const ROW_DISABLED = STATION_COLORS.chrome.disabledForeground;
+const ROW_DANGER = STATION_COLORS.state.danger;
+const BORDER_TEXT = STATION_COLORS.chrome.border;
 
 export function ContextMenuSurface({
   items,

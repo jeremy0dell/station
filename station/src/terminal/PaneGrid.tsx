@@ -19,6 +19,7 @@ import {
 import { usePaneRegistry } from "./registry/paneTerminalContext.js";
 import type { PtyRegistryView } from "./registry/ptyRegistry.js";
 import { PANE_BORDER_ACTIVE, PANE_BORDER_INACTIVE, TerminalPane } from "./TerminalPane.js";
+import { STATION_COLORS } from "../station/view/theme.js";
 
 export type PaneGridProps = {
   store: StationStore;
@@ -132,10 +133,7 @@ type PaneAccent = {
 };
 
 const SHELL_ACCENTS: readonly PaneAccent[] = [
-  { active: "#34d399", inactive: "#14532d" },
-  { active: "#c084fc", inactive: "#581c87" },
-  { active: "#fbbf24", inactive: "#713f12" },
-  { active: "#22d3ee", inactive: "#164e63" },
+  ...STATION_COLORS.chrome.pane.shellAccents,
 ];
 
 function useStationSnapshot(store: StoreApi<TuiStore> | undefined): StationSnapshot | undefined {

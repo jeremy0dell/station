@@ -1,6 +1,10 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
 import {
-  ROW_COLOR_PURPLE,
+  type MetadataAtom,
+  worktreeMetadataAtoms,
+  worktreeStatusAtom,
+} from "../../tokens/status.js";
+import {
   type RowColor,
   type RowGridCell,
   type RowGridCellImportance,
@@ -23,37 +27,32 @@ export function worktreeRowGridInput({
   slot: string | undefined;
   title?: string | undefined;
 }): RowGridRowInput {
-  const marker = statusMarker(row);
+  const status = worktreeStatusAtom(row);
   const displayTitle = title ?? row.branch;
-  const activity = activityCellForRow(row);
-  const ready = isReadyToRead(row);
-  const color = row.display.alert
-    ? "red"
-    : marker.kind === "text" && marker.text === "?"
-      ? "yellow"
-      : undefined;
   const input: Parameters<typeof worktreeStyleRowGridInput>[0] = {
     id: id ?? row.id,
     slot,
-    marker,
+    marker: status.marker,
     title: displayTitle,
     agent: row.agent?.harness ?? "-",
-    activity: activity.text,
-    activityImportance: activity.importance,
+    activity: status.activity,
+    activityImportance: status.activityImportance,
     // Let the status claim the row's trailing slack so it stretches to the end
     // instead of truncating while empty space remains, matching transient rows.
     activityOverflow: "rowSlack",
     metadataGroups: metadataGroups(row),
   };
-  if (ready) {
-    input.markerColor = "green";
-    input.activityColor = "green";
+  if (status.markerColor !== undefined) {
+    input.markerColor = status.markerColor;
   }
-  return color === undefined
+  if (status.activityColor !== undefined) {
+    input.activityColor = status.activityColor;
+  }
+  return status.rowColor === undefined
     ? worktreeStyleRowGridInput(input)
     : worktreeStyleRowGridInput({
         ...input,
-        color,
+        color: status.rowColor,
       });
 }
 
@@ -139,44 +138,6 @@ function identitySegments(
   return segments;
 }
 
-function activityCellForRow(row: WorktreeRowModel): {
-  text: string;
-  importance: RowGridCellImportance;
-} {
-  if (row.display.alert || row.display.warning === true) {
-    return {
-      text: row.display.reason ?? row.display.statusLabel,
-      importance: "meaningful",
-    };
-  }
-  if (isReadyToRead(row)) {
-    return {
-      text: "ready",
-      importance: "optional",
-    };
-  }
-  return {
-    text: row.display.statusLabel,
-    importance: "optional",
-  };
-}
-
-export function statusMarker(row: WorktreeRowModel): RowMarker {
-  const state = row.agent?.state ?? "none";
-  if (state === "needs_attention" || state === "stuck") return { kind: "text", text: "!" };
-  if (state === "working") return { kind: "throbber", variant: "braille" };
-  if (isReadyToRead(row)) return { kind: "text", text: "●" };
-  if (state === "idle") return { kind: "text", text: "○" };
-  if (state === "starting") return { kind: "text", text: "+" };
-  if (state === "unknown") return { kind: "text", text: "?" };
-  if (state === "exited") return { kind: "text", text: "x" };
-  return { kind: "text", text: "-" };
-}
-
-function isReadyToRead(row: WorktreeRowModel): boolean {
-  return row.agent?.state === "idle" && row.agent.turnReadiness?.state === "ready_to_read";
-}
-
 type MetadataSegment = {
   text: string;
   stale: boolean;
@@ -188,42 +149,7 @@ type MetadataSegment = {
 type MetadataColor = RowColor;
 
 export function metadataSegments(row: WorktreeRowModel): MetadataSegment[] {
-  const segments: MetadataSegment[] = [];
-  const { changeSummary, pr, checks } = row.worktree;
-  if (changeSummary !== undefined && (changeSummary.additions > 0 || changeSummary.deletions > 0)) {
-    if (changeSummary.additions > 0) {
-      segments.push({
-        text: `+${changeSummary.additions}`,
-        stale: changeSummary.stale === true,
-        color: "green",
-      });
-    }
-    if (changeSummary.deletions > 0) {
-      segments.push({
-        text: `-${changeSummary.deletions}`,
-        stale: changeSummary.stale === true,
-        color: "red",
-      });
-    }
-  }
-  if (pr === undefined) {
-    return segments;
-  }
-  segments.push({
-    text: `#${pr.number}`,
-    stale: pr.stale === true,
-    color: prMetadataColor(pr),
-    underline: true,
-    ...(pr.url === undefined ? {} : { url: pr.url }),
-  });
-  if (checks !== undefined) {
-    segments.push({
-      text: checksStateGlyph(checks),
-      stale: checks.stale === true,
-      color: checksStateColor(checks, pr),
-    });
-  }
-  return segments;
+  return worktreeMetadataAtoms(row).map(metadataSegmentFromAtom);
 }
 
 function metadataGroups(row: WorktreeRowModel): WorktreeRowMetadataGroups {
@@ -255,40 +181,17 @@ function rowSegmentFromMetadata(segment: MetadataSegment): RowSegment {
   });
 }
 
+function metadataSegmentFromAtom(atom: MetadataAtom): MetadataSegment {
+  const segment: MetadataSegment = {
+    text: atom.text,
+    stale: atom.stale,
+  };
+  if (atom.color !== undefined) segment.color = atom.color;
+  if (atom.underline === true) segment.underline = true;
+  if (atom.url !== undefined) segment.url = atom.url;
+  return segment;
+}
+
 function diffMetadataSegmentCount(row: WorktreeRowModel): number {
-  const { changeSummary } = row.worktree;
-  if (changeSummary === undefined) {
-    return 0;
-  }
-  let count = 0;
-  if (changeSummary.additions > 0) count += 1;
-  if (changeSummary.deletions > 0) count += 1;
-  return count;
-}
-
-function checksStateGlyph(checks: NonNullable<WorktreeRowModel["worktree"]["checks"]>) {
-  if (checks.state === "pass") return "✓";
-  if (checks.state === "fail") return failedChecksGlyph(checks.failed);
-  if (checks.state === "cancelled") return failedChecksGlyph(checks.cancelled);
-  if (checks.state === "running") return "…";
-  return "-";
-}
-
-function prMetadataColor(pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>): MetadataColor {
-  return pr.state === "merged" ? ROW_COLOR_PURPLE : "blue";
-}
-
-function failedChecksGlyph(count: number | undefined): string {
-  return count === undefined || count <= 0 ? "x" : `x${count}`;
-}
-
-function checksStateColor(
-  checks: NonNullable<WorktreeRowModel["worktree"]["checks"]>,
-  pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>,
-): MetadataColor {
-  if (pr.state === "merged" && checks.state === "pass") return ROW_COLOR_PURPLE;
-  if (checks.state === "pass") return "green";
-  if (checks.state === "fail" || checks.state === "cancelled") return "red";
-  if (checks.state === "running") return "yellow";
-  return "gray";
+  return worktreeMetadataAtoms(row).filter((atom) => atom.group === "diff").length;
 }

@@ -204,6 +204,29 @@ describe("dashboard golden frames", () => {
     expect(((prSpan?.attributes ?? 0) & TextAttributes.UNDERLINE) !== 0).toBe(true);
   });
 
+  it("colors ready status green and merged PR metadata purple", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: readyToReadSnapshot(),
+    });
+    const charFrame = setup.captureCharFrame();
+    const frame = setup.captureSpans();
+    const lines = charFrame.split("\n");
+
+    const readyRow = lines.findIndex((line) => line.includes("● pty-buffer"));
+    expect(readyRow).toBeGreaterThan(0);
+    const markerCol = lines[readyRow]?.indexOf("●") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, readyRow, markerCol))).toBe(STATION_COLORS.state.ready);
+    const readyCol = lines[readyRow]?.indexOf("ready") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, readyRow, readyCol))).toBe(STATION_COLORS.state.ready);
+
+    const prCol = lines[readyRow]?.indexOf("#73") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, readyRow, prCol))).toBe(STATION_COLORS.state.merged);
+    const checkCol = lines[readyRow]?.indexOf("✓") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, readyRow, checkCol))).toBe(STATION_COLORS.state.merged);
+  });
+
   it("routes PR number clicks through the link mouse target", async () => {
     const targets: StationMouseTarget[] = [];
     const setup = await renderDashboard({
@@ -267,3 +290,26 @@ describe("dashboard golden frames", () => {
     expect(spanBgHex(spanAtFrameCell(spans, row, 78))).toBe(STATION_COLORS.hoverBackground);
   });
 });
+
+function readyToReadSnapshot(): StationSnapshot {
+  const snapshot = manyProjectsSnapshot();
+  return {
+    ...snapshot,
+    rows: snapshot.rows.map((row) => {
+      if (row.id !== "wt_station_idle" || row.agent === undefined) {
+        return row;
+      }
+      return {
+        ...row,
+        agent: {
+          ...row.agent,
+          turnReadiness: {
+            state: "ready_to_read",
+            token: "report_ready",
+            completedAt: row.agent.updatedAt,
+          },
+        },
+      };
+    }),
+  };
+}

@@ -20,6 +20,7 @@ import {
   rowColumnsOrdered,
 } from "./vt/selection.js";
 import { lineRangeAt, wordRangeAt } from "./vt/wordBoundary.js";
+import { STATION_COLORS } from "../station/view/theme.js";
 
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
@@ -27,7 +28,7 @@ const MIN_ROWS = 1;
 type MouseModifiers = { shift: boolean; alt: boolean; ctrl: boolean };
 // Consecutive clicks within this window expand to word (2) / line (3).
 const MULTI_CLICK_MS = 400;
-const SELECTION_BG = "#264f78";
+const SELECTION_BG = STATION_COLORS.chrome.terminalSelectionBackground;
 
 export type TerminalScreenOptions = RenderableOptions<TerminalScreenRenderable> & {
   screen?: StationVtScreen | null;

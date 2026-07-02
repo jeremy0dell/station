@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
+import { STATION_COLORS } from "../station/view/theme.js";
 import { DynamicStationButton } from "./DynamicStationButton.js";
 import { ANIM_MS, STATION_ICON } from "./layout.js";
 
@@ -19,6 +22,26 @@ async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<str
   }
 }
 
+async function captureForegroundHexes(node: Parameters<typeof testRender>[0]): Promise<Set<string>> {
+  const setup = await testRender(node, SURFACE);
+  try {
+    await setup.flush();
+    const spans = setup.captureSpans();
+    const hexes = new Set<string>();
+    for (let row = 0; row < SURFACE.height; row += 1) {
+      for (let col = 0; col < SURFACE.width; col += 1) {
+        const span = spanAtFrameCell(spans, row, col);
+        if (span?.fg !== undefined) {
+          hexes.add(rgbToHex(span.fg as Parameters<typeof rgbToHex>[0]));
+        }
+      }
+    }
+    return hexes;
+  } finally {
+    setup.renderer.destroy();
+  }
+}
+
 describe("DynamicStationButton", () => {
   it("collapsed base shows only the station icon", async () => {
     const frame = await captureFrame(
@@ -26,6 +49,24 @@ describe("DynamicStationButton", () => {
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).not.toContain("session");
+  });
+
+  it("uses shared theme colors for base and attention states", async () => {
+    expect(
+      await captureForegroundHexes(
+        <DynamicStationButton attention={false} workingCount={2} idleCount={14} />,
+      ),
+    ).toContain(STATION_COLORS.state.ready);
+    expect(
+      await captureForegroundHexes(
+        <DynamicStationButton attention={true} workingCount={0} idleCount={0} />,
+      ),
+    ).toContain(STATION_COLORS.state.attention);
+    expect(
+      await captureForegroundHexes(
+        <DynamicStationButton attention={true} workingCount={0} idleCount={0} hovered />,
+      ),
+    ).toContain(STATION_COLORS.state.merged);
   });
 
   it("collapsed attention frames the icon with exclamation marks", async () => {

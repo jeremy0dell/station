@@ -3,6 +3,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
+import { STATION_COLORS } from "../station/view/theme.js";
 import { lerpColor } from "../stationButton/colors.js";
 import { useHoverPointer } from "../useHoverPointer.js";
 
@@ -17,12 +18,12 @@ const OPEN_LABEL = "Open project view";
 const CONTINUE_LABEL = "Continue →";
 // Width fits the longest label so both stacked CTAs align.
 const MIN_BUTTON_WIDTH = OPEN_LABEL.length + 8;
-const BUTTON_BG = "#1f2937";
-const BUTTON_BG_MUTED = "#101316";
-const BUTTON_BG_HOVER = "#263142";
+const BUTTON_BG = STATION_COLORS.chrome.welcomeButton.background;
+const BUTTON_BG_MUTED = STATION_COLORS.chrome.welcomeButton.mutedBackground;
+const BUTTON_BG_HOVER = STATION_COLORS.chrome.welcomeButton.hoverBackground;
 // Soft, desaturated peak so the looping shimmer reads as a gentle light pass
 // rather than a saturated cyan band sweeping the label.
-export const WELCOME_BUTTON_SHIMMER_BG = "#4a6a8c";
+export const WELCOME_BUTTON_SHIMMER_BG = STATION_COLORS.chrome.welcomeButton.shimmerBackground;
 const SHIMMER_WIDTH = 6;
 const SHIMMER_INTERVAL_MS = 80;
 const FULL_WORDMARK = [
@@ -118,7 +119,7 @@ function WelcomeButton({
   const shimmerFrame = useShimmerFrame(shimmer && hovered);
   const pointerProps = useHoverPointer({ onHoverChange: setHovered });
   const active = focused || hovered;
-  const borderFg = active ? "#60a5fa" : "#3f4750";
+  const borderFg = active ? STATION_COLORS.blue : STATION_COLORS.chrome.mutedBorder;
   const onMouseDown = (event: MouseEvent): void => {
     event.stopPropagation();
     dispatchMouse(target, normalizeStationMouseEvent(event));
@@ -154,26 +155,26 @@ function welcomeLines(columns: number, rows: number): readonly WelcomeLine[] {
   const canRenderFull = columns >= FULL_WORDMARK[0].length + 4 && rows >= 13;
   if (canRenderFull) {
     return [
-      { text: "+------------------------------+", fg: "#3f4750" },
-      { text: "Welcome to", fg: "#a1a1aa" },
-      ...FULL_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" })),
+      { text: "+------------------------------+", fg: STATION_COLORS.chrome.mutedBorder },
+      { text: "Welcome to", fg: STATION_COLORS.gray },
+      ...FULL_WORDMARK.map((text) => ({ text, fg: STATION_COLORS.foreground })),
     ];
   }
   if (rows >= 7) {
     return [
-      { text: "Welcome to", fg: "#a1a1aa" },
-      ...COMPACT_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" })),
-      { text: "----------------", fg: "#60a5fa" },
+      { text: "Welcome to", fg: STATION_COLORS.gray },
+      ...COMPACT_WORDMARK.map((text) => ({ text, fg: STATION_COLORS.foreground })),
+      { text: "----------------", fg: STATION_COLORS.blue },
     ];
   }
   if (rows >= 5) {
     return [
-      { text: "Welcome to", fg: "#a1a1aa" },
-      ...COMPACT_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" })),
+      { text: "Welcome to", fg: STATION_COLORS.gray },
+      ...COMPACT_WORDMARK.map((text) => ({ text, fg: STATION_COLORS.foreground })),
     ];
   }
   if (rows >= 4) {
-    return COMPACT_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" }));
+    return COMPACT_WORDMARK.map((text) => ({ text, fg: STATION_COLORS.foreground }));
   }
   return [];
 }
@@ -204,10 +205,14 @@ function ShimmerLabel({
             : baseBg;
         const fg =
           intensity > 0
-            ? lerpColor("#f4f4f5", "#ffffff", intensity)
+            ? lerpColor(
+                STATION_COLORS.foreground,
+                STATION_COLORS.chrome.welcomeButton.shimmerForeground,
+                intensity,
+              )
             : focused
-              ? "#f4f4f5"
-              : "#a1a1aa";
+              ? STATION_COLORS.foreground
+              : STATION_COLORS.gray;
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed-width static button label
           <text key={index} fg={fg} bg={bg} onMouseDown={onMouseDown}>

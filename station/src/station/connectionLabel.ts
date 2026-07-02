@@ -1,14 +1,15 @@
 import type { StationClientConnectionState } from "@station/client";
+import { STATION_COLORS } from "./view/theme.js";
 
 export type StationConnectionPresentation = {
   label: string;
   color: string;
 };
 
-const CONNECTED_COLOR = "#4ade80";
-const WAITING_COLOR = "#fbbf24";
-const HALTED_COLOR = "#f87171";
-const IDLE_COLOR = "#9ca3af";
+const CONNECTED_COLOR = STATION_COLORS.state.success;
+const WAITING_COLOR = STATION_COLORS.state.warning;
+const HALTED_COLOR = STATION_COLORS.state.danger;
+const IDLE_COLOR = STATION_COLORS.gray;
 
 /**
  * Calm, static status copy: no spinners and no per-second timers. Failure

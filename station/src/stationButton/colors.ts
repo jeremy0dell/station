@@ -1,6 +1,7 @@
+import { STATION_COLORS } from "../station/view/theme.js";
+
 // Themeable color tokens for the station button. border/icon/text are separate
-// tokens though equal per state, so a theme can diverge them later. Independent
-// status palette (green=healthy, blue=peek, red=alert, purple=actionable).
+// tokens though equal per state, so a theme can diverge them later.
 export type StationButtonStateColors = {
   border: string;
   icon: string;
@@ -12,19 +13,30 @@ export type DynamicStationButtonColors = {
   attention: { collapsed: StationButtonStateColors; expanded: StationButtonStateColors };
 };
 
-const GREEN = "#22c55e";
-const BLUE = "#60a5fa"; // light, readable on the dark background
-const RED = "#ef4444";
-const PURPLE = "#c084fc"; // light + distinctly purple, clearly apart from the blue
-
 export const dynamicStationButtonColors: DynamicStationButtonColors = {
   base: {
-    collapsed: { border: GREEN, icon: GREEN, text: GREEN },
-    expanded: { border: BLUE, icon: BLUE, text: BLUE },
+    collapsed: {
+      border: STATION_COLORS.state.ready,
+      icon: STATION_COLORS.state.ready,
+      text: STATION_COLORS.state.ready,
+    },
+    expanded: {
+      border: STATION_COLORS.blue,
+      icon: STATION_COLORS.blue,
+      text: STATION_COLORS.blue,
+    },
   },
   attention: {
-    collapsed: { border: RED, icon: RED, text: RED },
-    expanded: { border: PURPLE, icon: PURPLE, text: PURPLE },
+    collapsed: {
+      border: STATION_COLORS.state.attention,
+      icon: STATION_COLORS.state.attention,
+      text: STATION_COLORS.state.attention,
+    },
+    expanded: {
+      border: STATION_COLORS.state.merged,
+      icon: STATION_COLORS.state.merged,
+      text: STATION_COLORS.state.merged,
+    },
   },
 };
 

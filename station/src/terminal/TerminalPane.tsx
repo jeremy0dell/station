@@ -1,11 +1,12 @@
 import { basename } from "node:path";
 import "./TerminalScreenRenderable.js";
 import type { PaneId } from "../state/types.js";
+import { STATION_COLORS } from "../station/view/theme.js";
 import { usePaneTerminal } from "./registry/paneTerminalContext.js";
 
 /** Primary-agent blue; split shells use non-blue accents from PaneGrid. */
-export const PANE_BORDER_INACTIVE = "#1d4ed8";
-export const PANE_BORDER_ACTIVE = "#60a5fa";
+export const PANE_BORDER_INACTIVE = STATION_COLORS.chrome.pane.primary.inactive;
+export const PANE_BORDER_ACTIVE = STATION_COLORS.chrome.pane.primary.active;
 
 export type TerminalPaneProps = {
   paneId: PaneId;

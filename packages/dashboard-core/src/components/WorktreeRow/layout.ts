@@ -1,8 +1,8 @@
 import stringWidth from "string-width";
+import type { ColorRole } from "../../tokens/colors.js";
+import { ROW_GRID_CELLS } from "../../tokens/spacing.js";
 
-export const ROW_COLOR_PURPLE = "#d2a8ff";
-
-export type RowColor = "blue" | "gray" | "green" | "red" | "yellow" | typeof ROW_COLOR_PURPLE;
+export type RowColor = ColorRole;
 
 export type RowSegment =
   | {
@@ -106,9 +106,9 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
     {
       key: "identity",
       role: "fixed",
-      minCells: 7,
-      idealCells: 7,
-      maxCells: 7,
+      minCells: ROW_GRID_CELLS.identity,
+      idealCells: ROW_GRID_CELLS.identity,
+      maxCells: ROW_GRID_CELLS.identity,
       gapBefore: 0,
       dropPriority: 0,
       align: "left",
@@ -117,9 +117,9 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
     {
       key: "title",
       role: "flex",
-      minCells: 3,
-      idealCells: 22,
-      maxCells: 40,
+      minCells: ROW_GRID_CELLS.titleMin,
+      idealCells: ROW_GRID_CELLS.titleIdeal,
+      maxCells: ROW_GRID_CELLS.titleMax,
       gapBefore: 0,
       dropPriority: 0,
       align: "left",
@@ -128,10 +128,10 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
     {
       key: "agent",
       role: "soft",
-      minCells: 1,
-      idealCells: 8,
-      maxCells: 10,
-      gapBefore: 2,
+      minCells: ROW_GRID_CELLS.agentMin,
+      idealCells: ROW_GRID_CELLS.agentIdeal,
+      maxCells: ROW_GRID_CELLS.agentMax,
+      gapBefore: ROW_GRID_CELLS.agentGap,
       dropPriority: 30,
       align: "left",
       truncate: "end",
@@ -139,10 +139,10 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
     {
       key: "activity",
       role: "soft",
-      minCells: 4,
-      idealCells: 12,
-      maxCells: 16,
-      gapBefore: 2,
+      minCells: ROW_GRID_CELLS.activityMin,
+      idealCells: ROW_GRID_CELLS.activityIdeal,
+      maxCells: ROW_GRID_CELLS.activityMax,
+      gapBefore: ROW_GRID_CELLS.activityGap,
       dropPriority: 40,
       align: "left",
       truncate: "end",
@@ -151,7 +151,7 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
       key: "metadata",
       role: "right",
       minCells: 0,
-      gapBefore: 1,
+      gapBefore: ROW_GRID_CELLS.metadataGap,
       dropPriority: 20,
       align: "right",
       truncate: "none",

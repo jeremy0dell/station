@@ -1,0 +1,15 @@
+export const ROW_GRID_CELLS = {
+  identity: 7,
+  titleMin: 3,
+  titleIdeal: 22,
+  titleMax: 40,
+  agentMin: 1,
+  agentIdeal: 8,
+  agentMax: 10,
+  activityMin: 4,
+  activityIdeal: 12,
+  activityMax: 16,
+  agentGap: 2,
+  activityGap: 2,
+  metadataGap: 1,
+} as const;
