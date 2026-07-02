@@ -8,47 +8,28 @@
 
 name: tend-mention
 on:
-  issues:
-    types: [edited]
   issue_comment:
     types: [created, edited]
   # Works for same-repo PRs only; secrets unavailable on fork PRs (no _target variant exists)
   pull_request_review:
     types: [submitted]
-  # `created` is intentionally absent. Modern GitHub fires *both*
-  # pull_request_review and pull_request_review_comment for every newly-created
-  # inline comment (the standalone POST /pulls/PR/comments endpoint, the
-  # /replies endpoint, the "Add single comment" UI button, and reviews
-  # submitted with inline comments — all empirically verified). Subscribing to
-  # `created` would produce a duplicate workflow run that collides on the
-  # tend-mention-handle-PR concurrency group, with the loser cancelled and
-  # posted as a CANCELLED check_run on the PR head SHA — which renders the
-  # PR's statusCheckRollup as FAILURE even though the bot did its job from the
-  # sibling run. Edits have no sibling event (review submissions don't fire on
-  # edits), so we still need to listen for `edited` to catch edit-to-summon
-  # ("@bot" added to an existing comment after the fact).
   pull_request_review_comment:
-    types: [edited]
+    types: [created, edited]
 
 jobs:
   verify:
-    # Filter out fork PRs for review events — secrets are unavailable there
-    # (no _target variant exists). The notifications workflow polls for these.
-    # Skip comments on `tend-outage` issues: the action's Report-failure step
-    # auto-comments on those when Claude invocation fails, and without this
-    # guard those comments re-trigger tend-mention during a persistent outage
-    # (e.g. Anthropic 401), producing a self-sustaining ~1 run/minute loop
-    # until the outage clears. The prompt's self-loop guard can't help here
-    # because the model never executes — the action fails before Claude starts.
+    # Keep this workflow as the only manual entrypoint: runner jobs start only
+    # for a fresh @station-bot mention in a comment or review body.
     if: |
-      (github.event_name == 'issues' &&
-        contains(github.event.issue.body, '@station-bot')) ||
       (github.event_name == 'issue_comment' &&
-        !contains(github.event.issue.labels.*.name, 'tend-outage')) ||
+        !contains(github.event.issue.labels.*.name, 'tend-outage') &&
+        contains(github.event.comment.body, '@station-bot')) ||
       (github.event_name == 'pull_request_review_comment' &&
-        github.event.pull_request.head.repo.full_name == github.repository) ||
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.comment.body, '@station-bot')) ||
       (github.event_name == 'pull_request_review' &&
-        github.event.pull_request.head.repo.full_name == github.repository)
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.review.body, '@station-bot'))
     runs-on: ubuntu-24.04
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
