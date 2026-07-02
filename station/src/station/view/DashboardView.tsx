@@ -2,7 +2,7 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes } from "@opentui/core";
-import type { ProjectView, StationSnapshot } from "@station/contracts";
+import type { ProjectView, StationSnapshot, WorktreeId } from "@station/contracts";
 import { useState } from "react";
 import {
   dashboardFooterLabel,
@@ -26,6 +26,7 @@ import {
   QUIT_HINT_CLOSE,
   selectDashboardViewport,
   selectFleetSummary,
+  type DashboardSessionOverflow,
   type DashboardViewportItem,
   type FleetSummary,
 } from "@station/dashboard-core";
@@ -86,7 +87,7 @@ export function DashboardView({
   const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns);
+    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.focusedRowId);
   return (
     <box
       width="100%"
@@ -103,15 +104,20 @@ export function DashboardView({
       {firstRun ? null : <FleetBar summary={fleet} />}
       <Divider columns={contentColumns} />
       {firstRun || headerLayout === undefined ? null : <ColumnHeaderRow layout={headerLayout} />}
-      <ScrollIndicatorRow direction="above" hiddenCount={viewport.hiddenAbove} />
+      <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <text fg={STATION_COLORS.foreground}>{truncateCells(FIRST_RUN_BODY_LABEL, contentColumns)}</text>
         </box>
       ) : (
-        <DashboardBody columns={contentColumns} items={viewport.visibleItems} layoutByItem={layoutByItem} />
+        <DashboardBody
+          columns={contentColumns}
+          items={viewport.visibleItems}
+          layoutByItem={layoutByItem}
+          focusedRowId={viewState.focusedRowId}
+        />
       )}
-      <ScrollIndicatorRow direction="below" hiddenCount={viewport.hiddenBelow} />
+      <ScrollIndicatorRow direction="below" overflow={viewport.sessionOverflow} />
       <Divider columns={contentColumns} />
       <text fg={STATION_COLORS.foreground}>
         {truncateCells(
@@ -193,15 +199,16 @@ function FleetBar({ summary }: { summary: FleetSummary }) {
 
 function ScrollIndicatorRow({
   direction,
-  hiddenCount,
+  overflow,
 }: {
   direction: "above" | "below";
-  hiddenCount: number;
+  overflow: DashboardSessionOverflow;
 }) {
   const dispatch = useStationMouse();
+  const hiddenSessions = direction === "above" ? overflow.above : overflow.below;
   return (
     <box height={1}>
-      {hiddenCount > 0 ? (
+      {hiddenSessions > 0 ? (
         <text
           fg={STATION_COLORS.gray}
           {...stationMouseProps(dispatch, {
@@ -209,7 +216,7 @@ function ScrollIndicatorRow({
             direction: direction === "above" ? "up" : "down",
           })}
         >
-          {scrollIndicatorLabel(direction, hiddenCount)}
+          {scrollIndicatorLabel(direction, overflow)}
         </text>
       ) : null}
     </box>
@@ -236,9 +243,10 @@ function dashboardRowLayouts(
   items: readonly DashboardViewportItem[],
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
+  focusedRowId?: WorktreeId,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
   const rowInputs = items.flatMap((item) => {
-    const input = rowGridInputForViewportItem(item, keyByRow);
+    const input = rowGridInputForViewportItem(item, keyByRow, focusedRowId);
     return input === undefined ? [] : [input];
   });
   const layouts = layoutWorktreeRowGrid({
@@ -266,10 +274,12 @@ function DashboardBody({
   columns,
   items,
   layoutByItem,
+  focusedRowId,
 }: {
   columns: number;
   items: readonly DashboardViewportItem[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  focusedRowId?: WorktreeId | undefined;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -279,6 +289,7 @@ function DashboardBody({
           columns={columns}
           item={item}
           layout={layoutByItem.get(item.id)}
+          focusedRowId={focusedRowId}
         />
       ))}
     </box>
@@ -289,10 +300,12 @@ function DashboardViewportRow({
   columns,
   item,
   layout,
+  focusedRowId,
 }: {
   columns: number;
   item: DashboardViewportItem;
   layout: RowGridLayout | undefined;
+  focusedRowId?: WorktreeId | undefined;
 }) {
   switch (item.type) {
     case "projectGap":
@@ -308,7 +321,7 @@ function DashboardViewportRow({
       );
     case "worktree":
       return layout === undefined ? null : (
-        <WorktreeRowLine rowId={item.row.id} layout={layout} />
+        <WorktreeRowLine rowId={item.row.id} layout={layout} focused={item.row.id === focusedRowId} />
       );
     case "createLocalRow":
       // Local create rows have no slot and no activation target.
@@ -320,16 +333,25 @@ function DashboardViewportRow({
   }
 }
 
-function WorktreeRowLine({ rowId, layout }: { rowId: string; layout: RowGridLayout }) {
+function WorktreeRowLine({
+  rowId,
+  layout,
+  focused,
+}: {
+  rowId: string;
+  layout: RowGridLayout;
+  focused?: boolean;
+}) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
+  // Persistent cursor fill sits under the transient hover fill.
+  const background = hover
+    ? { backgroundColor: HOVER_BG }
+    : focused === true
+      ? { backgroundColor: STATION_COLORS.focusBackground }
+      : {};
   return (
-    <box
-      flexDirection="row"
-      width="100%"
-      height={1}
-      {...(hover ? { backgroundColor: HOVER_BG } : {})}
-    >
+    <box flexDirection="row" width="100%" height={1} {...background}>
       <box flexGrow={1} height={1} onMouseOver={() => setHover(true)} onMouseOut={() => setHover(false)}>
         <text
           width="100%"

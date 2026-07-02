@@ -1,6 +1,9 @@
-import type { ProjectView } from "@station/contracts";
+import type { ProjectView, WorktreeId } from "@station/contracts";
 import stringWidth from "string-width";
-import type { DashboardViewportItem } from "../../selectors/dashboardViewport.js";
+import type {
+  DashboardSessionOverflow,
+  DashboardViewportItem,
+} from "../../selectors/dashboardViewport.js";
 
 export { dashboardFooterLabel } from "../../state/keymap.js";
 
@@ -115,16 +118,23 @@ function plural(count: number, noun: string): string {
 
 export const FIRST_RUN_BODY_LABEL = "No projects configured yet.";
 
-export function scrollIndicatorLabel(direction: "above" | "below", hiddenCount: number): string {
-  const marker = direction === "above" ? "↑" : "↓";
-  return `${marker} ${hiddenCount} hidden`;
+export function scrollIndicatorLabel(
+  direction: "above" | "below",
+  overflow: DashboardSessionOverflow,
+): string {
+  if (direction === "above") {
+    return `▲ ${overflow.above} ${plural(overflow.above, "session")} above`;
+  }
+  return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
 }
 
 export function rowGridInputForViewportItem(
   item: DashboardViewportItem,
   keyByRow: ReadonlyMap<string, string>,
+  focusedRowId?: WorktreeId,
 ): RowGridRowInput | undefined {
   if (item.type === "worktree") {
+    const focused = focusedRowId !== undefined && item.row.id === focusedRowId;
     if (item.pendingRemove !== undefined) {
       return worktreeStyleRowGridInput({
         id: item.id,
@@ -134,6 +144,7 @@ export function rowGridInputForViewportItem(
         activity: "removing session...",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
+        ...(focused ? { focused: true } : {}),
       });
     }
     if (item.pendingStart !== undefined) {
@@ -147,6 +158,7 @@ export function rowGridInputForViewportItem(
         activity,
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
+        ...(focused ? { focused: true } : {}),
       });
     }
     return worktreeRowGridInput({
@@ -154,6 +166,7 @@ export function rowGridInputForViewportItem(
       row: item.row,
       slot: keyByRow.get(item.row.id),
       title: item.displayTitle,
+      focused,
     });
   }
   if (item.type !== "createLocalRow") {

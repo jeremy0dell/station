@@ -134,16 +134,32 @@ const slotHelp = { keys: "1-9 a-z", label: "start or focus visible row" };
 export const TUI_KEYMAP = {
   dashboard: [
     {
-      id: "tui.dashboard.scrollUp",
+      id: "tui.dashboard.focusUp",
       pattern: { kind: "named", named: "up" },
-      action: "tui.view.scrollUp",
+      action: "tui.focus.up",
       outcome: "handled",
     },
     {
-      id: "tui.dashboard.scrollDown",
+      id: "tui.dashboard.focusDown",
       pattern: { kind: "named", named: "down" },
-      action: "tui.view.scrollDown",
+      action: "tui.focus.down",
       outcome: "handled",
+    },
+    {
+      id: "tui.dashboard.focusActivate",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.focus.activate",
+      outcome: "handled",
+      help: { keys: "↵", label: "open focused session" },
+    },
+    {
+      // Tab reaches the dashboard as legacy \t, which the byte path folds to
+      // Ctrl-I (sequenceToTuiKey) — the two are indistinguishable by design.
+      id: "tui.dashboard.nextNeedsMe",
+      pattern: { kind: "char", char: "i", ctrl: true },
+      action: "tui.focus.nextNeedsMe",
+      outcome: "handled",
+      help: { keys: "⇥", label: "next session needing you" },
     },
     {
       id: "tui.dashboard.help",
@@ -707,7 +723,10 @@ export type TuiBinding<M extends TuiInputMode = TuiInputMode> =
 export const TUI_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
   { text: "" },
-  { key: "↑/↓ wheel", description: "scroll dashboard" },
+  { key: "↑/↓", description: "move cursor" },
+  { key: "↵", description: "open focused session" },
+  { key: "tab", description: "next session needing you" },
+  { key: "wheel", description: "scroll dashboard" },
   { key: "1-9/a-z", description: "choose visible item" },
   { key: "N", description: "new session" },
   { key: "R", description: "rename session" },
@@ -738,16 +757,23 @@ export function dashboardFooterLabel({
   quitHint: string;
   firstRun?: boolean;
 }): string {
+  // Spec A5 triage keybar: the visible chords are the triage loop; everything
+  // else lives behind "? help".
   const full = firstRun
-    ? `A:Add Project ${quitHint}`
-    : `N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold P:settings H:help ${quitHint}`;
-  const compactClose = `${QUIT_HINT_CLOSE} N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help`;
+    ? `A add project  ${quitHint}`
+    : `↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
+  const compactClose = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${QUIT_HINT_CLOSE}`;
   return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
 }
 
 export function isSlotKey(key: TuiKey): boolean {
   // Ctrl is deliberately not excluded: row choice dispatch reads key.input, so
   // Ctrl-A still targets slot "a" after the global Ctrl-C exit binding runs.
+  // Ctrl-I is the exception — Tab folds to it in legacy encoding and the
+  // next-needs-me chord owns it; slot "i" stays reachable without ctrl.
+  if (key.ctrl === true && key.input === "i") {
+    return false;
+  }
   return (
     key.return !== true && key.escape !== true && SELECTION_KEYS.includes(key.input as SelectionKey)
   );

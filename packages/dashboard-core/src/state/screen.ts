@@ -19,6 +19,9 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
   if (options.initialSnapshot !== undefined) {
     state.snapshot = options.initialSnapshot;
   }
+  if (options.focusedRowId !== undefined) {
+    state.focusedRowId = options.focusedRowId;
+  }
   return state;
 }
 

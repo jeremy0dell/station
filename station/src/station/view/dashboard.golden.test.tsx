@@ -284,6 +284,38 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("[ + add session ]");
   });
 
+  it("renders the focus cursor and jumps it to the next session needing you", async () => {
+    const { store } = makeStationTestStore({
+      snapshot: attentionAndFailuresSnapshot(),
+      seedInitialSnapshot: false,
+    });
+    store.getState().start();
+    const setup = await testRender(<DashboardRoot store={store} columns={80} rows={24} />, {
+      width: 80,
+      height: 24,
+    });
+    teardowns.push(() => {
+      setup.renderer.destroy();
+    });
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).not.toContain("▏");
+
+    store.getState().handleKey({ input: "", downArrow: true });
+    await setup.flush();
+    let lines = setup.captureCharFrame().split("\n");
+    const cursorRow = lines.findIndex((line) => line.startsWith("▏"));
+    expect(lines[cursorRow]).toContain("hook-scope");
+    const spans = setup.captureSpans();
+    expect(spanHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(STATION_COLORS.cyan);
+    expect(spanBgHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(STATION_COLORS.focusBackground);
+
+    // Tab (Ctrl-I) jumps past the working/unknown rows to the stuck one.
+    store.getState().handleKey({ input: "i", ctrl: true });
+    await setup.flush();
+    lines = setup.captureCharFrame().split("\n");
+    expect(lines.find((line) => line.startsWith("▏"))).toContain("popup-latency");
+  });
+
   it("paints hovered worktree rows through the trailing action column", async () => {
     const setup = await renderDashboard({ width: 80, height: 24, snapshot: manyProjectsSnapshot() });
     const before = setup.captureCharFrame();

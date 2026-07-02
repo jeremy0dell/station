@@ -18,6 +18,7 @@ export const STATION_COLORS = {
   overlayBackdrop: "#000000",
   hairline: "#20252c",
   frozenSurface: "#12161b",
+  focusBackground: "#15222e",
 } as const;
 
 export function rowColorToHex(color: RowColor | undefined): string | undefined {
@@ -34,6 +35,8 @@ export function rowColorToHex(color: RowColor | undefined): string | undefined {
       return STATION_COLORS.green;
     case "blue":
       return STATION_COLORS.blue;
+    case "cyan":
+      return STATION_COLORS.cyan;
     case "purple":
       return STATION_COLORS.purple;
   }
