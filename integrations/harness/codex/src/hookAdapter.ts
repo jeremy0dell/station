@@ -66,8 +66,8 @@ function codexHookEventReport(input: ProviderHookReportInput): HarnessEventRepor
     return {
       ok: true as const,
       report: codexHookPayloadToHarnessEventReport({
-        reportId: codexHookPayloadReportId(input.event.payload),
         observedAt: input.event.receivedAt,
+        reportId: codexHookPayloadReportId(input.event.payload, input.event.receivedAt),
         payload: input.event.payload,
         diagnostics: {
           payloadBytes: input.payloadSummary.originalBytes,

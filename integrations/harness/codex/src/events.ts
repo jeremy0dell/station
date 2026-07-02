@@ -234,7 +234,7 @@ export function codexHookPayloadToHarnessEventReport(
     report.correlation = correlation;
   }
   report.diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
-  const coalesceKey = reportCoalesceKeyFromCodexEvent(event);
+  const coalesceKey = reportCoalesceKeyFromCodexEvent(event, input.reportId);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;
   }
@@ -242,8 +242,8 @@ export function codexHookPayloadToHarnessEventReport(
   return HarnessEventReportSchema.parse(report);
 }
 
-export function codexHookPayloadReportId(payload: unknown): string {
-  return codexHookEventReportId(parseCodexHookEvent(payload));
+export function codexHookPayloadReportId(payload: unknown, observedAt: string): string {
+  return codexHookEventReportId(parseCodexHookEvent(payload), observedAt);
 }
 
 export function statusFromCodexHookEvent(
@@ -417,7 +417,13 @@ function reportCorrelationFromCodexEvent(
   });
 }
 
-function reportCoalesceKeyFromCodexEvent(event: CodexHookEvent): string | undefined {
+function reportCoalesceKeyFromCodexEvent(
+  event: CodexHookEvent,
+  reportId: string,
+): string | undefined {
+  if (event.hook_event_name === "PermissionRequest") {
+    return `report:${reportId}`;
+  }
   const parts: string[] = [];
   if ("turn_id" in event) {
     parts.push(`turn:${event.turn_id}`);
@@ -430,7 +436,7 @@ function reportCoalesceKeyFromCodexEvent(event: CodexHookEvent): string | undefi
   return parts.length === 0 ? undefined : parts.join(":");
 }
 
-function codexHookEventReportId(event: CodexHookEvent): string {
+function codexHookEventReportId(event: CodexHookEvent, observedAt: string): string {
   const parts = ["codex", event.session_id, event.hook_event_name];
   if ("turn_id" in event) {
     parts.push(event.turn_id);
@@ -445,6 +451,9 @@ function codexHookEventReportId(event: CodexHookEvent): string {
   }
   if ("trigger" in event) {
     parts.push(`trigger:${event.trigger}`);
+  }
+  if (event.hook_event_name === "PermissionRequest") {
+    parts.push(`request:${observedAt}`);
   }
   if ("source" in event) {
     parts.push(`source:${event.source}`);
