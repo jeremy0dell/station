@@ -6,6 +6,8 @@ For configuration — the runtime `config.toml` (all sections, including `[works
 
 For development, test, and documentation workflow, read `docs/development.md`.
 
+For harness status, attention, and event semantics, read `docs/harness-signals.md`. For adding or upgrading a harness integration, read `docs/harness-authoring.md`.
+
 For runtime trace IDs, command IDs, diagnostic IDs, or live debugging, read `docs/debugging.md`.
 For diagnosis, start with the debugging, diagnostics, and observability tools documented there before reading source code.
 

@@ -183,7 +183,7 @@ station/layout.json
 
 ## Harness Event Census
 
-Attention states (`needs_attention` plus the typed `attention` kind on the agent status: `question`, `plan_approval`, `tool_approval`, `input`) are normalized at each provider boundary. When a harness behavior is unclear — or a new harness/scenario needs mapping — capture what actually happens instead of reasoning from source:
+The contract these events implement is `docs/harness-signals.md`; the integration workflow is `docs/harness-authoring.md`. Attention states (`needs_attention` plus the typed `attention` kind on the agent status: `question`, `plan_approval`, `tool_approval`, `input`) are normalized at each provider boundary. When a harness behavior is unclear — or a new harness/scenario needs mapping — capture what actually happens instead of reasoning from source:
 
 1. Every ingested report is logged as `Harness event report processed.` (or `skipped.`) in `logs/observer.jsonl` with provider, eventType, status value, attention kind, correlation keys, and the projection outcome. `projected: false` on an accepted report means correlation failed — that event silently changed nothing.
 2. Drive one scenario at a time in the harness TUI and watch `stn debug logs "Harness event report"` (or `stn observe --json`) alongside the harness's own native session log (for Codex: the `rollout-*.jsonl` under `$CODEX_HOME/sessions/<y>/<m>/<d>/`).
