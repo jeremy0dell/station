@@ -11,30 +11,27 @@ type ExternalCommandCall = {
 describe("CLI notify command", () => {
   it("plays a sound and sends a clickable terminal-notifier notification for idle agent state events", async () => {
     const calls: ExternalCommandCall[] = [];
-    const result = await runCli(
-      ["--config", "/tmp/station-test.toml", "notify", "turn-completion"],
-      {
-        stdin: JSON.stringify(invocation("idle", { sessionId: "ses_web_task" })),
-        notifyDeps: {
-          cliCommandParts: ["station-test"],
-          platform: "darwin",
-          commandRunner: async (input) => {
-            calls.push({
-              command: input.command,
-              args: input.args ?? [],
-              timeoutMs: input.timeoutMs,
-            });
-            return {
-              command: input.command,
-              args: input.args ?? [],
-              stdout: "",
-              stderr: "",
-              exitCode: 0,
-            };
-          },
+    const result = await runCli(["--config", "/tmp/station-test.toml", "notify", "agent-state"], {
+      stdin: JSON.stringify(invocation("idle", { sessionId: "ses_web_task" })),
+      notifyDeps: {
+        cliCommandParts: ["station-test"],
+        platform: "darwin",
+        commandRunner: async (input) => {
+          calls.push({
+            command: input.command,
+            args: input.args ?? [],
+            timeoutMs: input.timeoutMs,
+          });
+          return {
+            command: input.command,
+            args: input.args ?? [],
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+          };
         },
       },
-    );
+    });
 
     expect(result).toMatchObject({
       code: 0,
@@ -76,7 +73,7 @@ describe("CLI notify command", () => {
 
   it("falls back to osascript when terminal-notifier is not available", async () => {
     const calls: ExternalCommandCall[] = [];
-    const result = await runCli(["notify", "turn-completion"], {
+    const result = await runCli(["notify", "agent-state"], {
       stdin: JSON.stringify(invocation("idle")),
       notifyDeps: {
         platform: "darwin",
@@ -132,7 +129,7 @@ describe("CLI notify command", () => {
 
   it("labels attention notifications and uses the attention sound", async () => {
     const calls: ExternalCommandCall[] = [];
-    const result = await runCli(["notify", "turn-completion"], {
+    const result = await runCli(["notify", "agent-state"], {
       stdin: JSON.stringify(invocation("needs_attention")),
       notifyDeps: {
         cliCommandParts: ["station-test"],
@@ -170,7 +167,7 @@ describe("CLI notify command", () => {
   });
 
   it("skips non-notifiable agent state events", async () => {
-    const result = await runCli(["notify", "turn-completion"], {
+    const result = await runCli(["notify", "agent-state"], {
       stdin: JSON.stringify(invocation("working")),
       notifyDeps: { platform: "darwin" },
     });
@@ -186,7 +183,7 @@ describe("CLI notify command", () => {
   });
 
   it("skips reconcile-driven idle state changes", async () => {
-    const result = await runCli(["notify", "turn-completion"], {
+    const result = await runCli(["notify", "agent-state"], {
       stdin: JSON.stringify(invocation("idle", { changeSource: "reconcile" })),
       notifyDeps: { platform: "darwin" },
     });
@@ -237,7 +234,7 @@ function invocation(
   }
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
-    hookId: "notify-agent-idle",
+    hookId: "notify-agent-state",
     observedAt: "2026-06-01T12:00:00.000Z",
     event,
   };

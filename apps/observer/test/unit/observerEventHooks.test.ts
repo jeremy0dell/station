@@ -66,12 +66,12 @@ describe("observer event hooks", () => {
 
     expect(calls[0]).toMatchObject({
       command: "notify-bin",
-      args: ["turn-completion"],
+      args: ["agent-state"],
       timeoutMs: 1000,
     });
     const invocation = parseInvocation(calls[0]?.stdin);
     expect(invocation).toMatchObject({
-      hookId: "notify-agent-idle",
+      hookId: "notify-agent-state",
       event: {
         type: "worktree.agentStateChanged",
         agent: {
@@ -134,10 +134,10 @@ const now = "2026-06-01T12:00:00.000Z";
 
 function notifyIdleHook(): ObserverEventHookConfig {
   return {
-    id: "notify-agent-idle",
+    id: "notify-agent-state",
     events: ["worktree.agentStateChanged"],
     command: "notify-bin",
-    args: ["turn-completion"],
+    args: ["agent-state"],
     timeoutMs: 1000,
     filter: {
       agentState: "idle",

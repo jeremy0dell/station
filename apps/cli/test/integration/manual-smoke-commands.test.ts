@@ -233,7 +233,7 @@ const blockedExamplePatterns = [
   /~\/Developer\//,
   /\bstation command get \S+/,
   /\bstation project (?:remove|doctor) [A-Za-z0-9._-]+\b/,
-  /\bstation notify turn-completion$/,
+  /\bstation notify agent-state$/,
 ] as const;
 
 function collectRegistryExamples(

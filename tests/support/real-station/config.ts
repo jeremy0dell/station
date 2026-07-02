@@ -110,7 +110,7 @@ function eventHookConfigLines(options: WriteRealStationConfigOptions): string[] 
   }
   return [
     "[[hooks.event]]",
-    'id = "notify-agent-idle"',
+    'id = "notify-agent-state"',
     'events = ["worktree.agentStateChanged"]',
     `command = ${tomlString(options.eventHook.command)}`,
     `args = [${(options.eventHook.args ?? []).map(tomlString).join(", ")}]`,
