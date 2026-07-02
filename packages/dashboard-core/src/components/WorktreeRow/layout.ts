@@ -15,6 +15,7 @@ export type RowSegment =
   | {
       kind: "throbber";
       variant: "braille" | "circle";
+      color?: RowColor;
     };
 
 export type RowMarker =

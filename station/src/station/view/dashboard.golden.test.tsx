@@ -204,6 +204,37 @@ describe("dashboard golden frames", () => {
     expect(((prSpan?.attributes ?? 0) & TextAttributes.UNDERLINE) !== 0).toBe(true);
   });
 
+  it("colours working rows blue and calm rows gray, leaving the name foreground", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: attentionAndFailuresSnapshot(),
+    });
+    const frame = setup.captureSpans();
+    const lines = setup.captureCharFrame().split("\n");
+
+    // Working row: the braille throbber (first frame ⠋) + the "working" label read
+    // blue; the session name is not swept into the status colour.
+    const workingRow = lines.findIndex((line) => line.includes("pr-info"));
+    expect(workingRow).toBeGreaterThan(0);
+    const throbberCol = lines[workingRow]?.indexOf("⠋") ?? -1;
+    expect(throbberCol).toBeGreaterThan(0);
+    expect(spanHex(spanAtFrameCell(frame, workingRow, throbberCol))).toBe(STATION_COLORS.blue);
+    const workingWordCol = lines[workingRow]?.indexOf("working") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, workingRow, workingWordCol))).toBe(STATION_COLORS.blue);
+    const workingNameCol = lines[workingRow]?.indexOf("pr-info") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, workingRow, workingNameCol))).not.toBe(STATION_COLORS.blue);
+
+    // Calm (exited) row: the status label recedes to gray; the name does not.
+    const exitedRow = lines.findIndex((line) => line.includes("done-run"));
+    expect(exitedRow).toBeGreaterThan(0);
+    const exitedWordCol = lines[exitedRow]?.indexOf("exited") ?? -1;
+    expect(exitedWordCol).toBeGreaterThan(0);
+    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedWordCol))).toBe(STATION_COLORS.gray);
+    const exitedNameCol = lines[exitedRow]?.indexOf("done-run") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedNameCol))).not.toBe(STATION_COLORS.gray);
+  });
+
   it("routes PR number clicks through the link mouse target", async () => {
     const targets: StationMouseTarget[] = [];
     const setup = await renderDashboard({

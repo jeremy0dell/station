@@ -26,6 +26,8 @@ export function worktreeRowGridInput({
   const displayTitle = title ?? row.branch;
   const activity = activityCellForRow(row);
   const ready = isReadyToRead(row);
+  const state = row.agent?.state ?? "none";
+  // Colour reinforces the glyph + status label; the session name stays foreground.
   const color = row.display.alert
     ? "red"
     : marker.kind === "text" && marker.text === "?"
@@ -47,13 +49,18 @@ export function worktreeRowGridInput({
   if (ready) {
     input.markerColor = "green";
     input.activityColor = "green";
+  } else if (state === "working") {
+    input.markerColor = "blue";
+    input.activityColor = "blue";
+  } else if (!row.display.alert && state !== "unknown") {
+    // Calm states (idle · starting · exited · no agent): status + agent recede to gray.
+    input.activityColor = "gray";
+    input.agentColor = "gray";
   }
-  return color === undefined
-    ? worktreeStyleRowGridInput(input)
-    : worktreeStyleRowGridInput({
-        ...input,
-        color,
-      });
+  if (color !== undefined) {
+    input.color = color;
+  }
+  return worktreeStyleRowGridInput(input);
 }
 
 export function worktreeStyleRowGridInput(input: {
@@ -68,6 +75,7 @@ export function worktreeStyleRowGridInput(input: {
   color?: RowColor;
   markerColor?: RowColor;
   activityColor?: RowColor;
+  agentColor?: RowColor;
   metadataGroups?: WorktreeRowMetadataGroups;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
@@ -84,7 +92,7 @@ export function worktreeStyleRowGridInput(input: {
   if (input.agent !== undefined) {
     cells.agent = {
       key: "agent",
-      segments: [textSegment(input.agent, { color: input.color })],
+      segments: [textSegment(input.agent, { color: input.agentColor ?? input.color })],
       importance: "optional",
     };
   }
@@ -130,7 +138,12 @@ function identitySegments(
 ): RowSegment[] {
   const segments: RowSegment[] = [textSegment(` [${slot ?? " "}] `, { color })];
   if (marker.kind === "throbber") {
-    segments.push({ kind: "throbber", variant: marker.variant });
+    const throbberColor = markerColor ?? color;
+    segments.push(
+      throbberColor === undefined
+        ? { kind: "throbber", variant: marker.variant }
+        : { kind: "throbber", variant: marker.variant, color: throbberColor },
+    );
   } else {
     segments.push(textSegment(marker.text, { color: markerColor ?? color }));
   }
