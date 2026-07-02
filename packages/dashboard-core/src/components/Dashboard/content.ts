@@ -106,7 +106,7 @@ export function projectHeaderLabel(project: ProjectView, collapsed: boolean): st
 }
 
 export function emptyProjectLabel(): string {
-  return " no sessions yet · press A to add one";
+  return " no sessions yet · ";
 }
 
 function plural(count: number, noun: string): string {

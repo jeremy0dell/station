@@ -52,9 +52,9 @@ const SCROLL_UP: StationMouseEvent = {
 };
 
 function makeStore(snapshot?: StationSnapshot): StoreApi<TuiStore> {
-  // 13 rows keeps the same visible window as before the pinned fleet bar (which
-  // consumes one body row) so the station-project rows stay slot-addressable.
-  return makeStationTestStore({ terminalRows: 13, ...(snapshot === undefined ? {} : { snapshot }) })
+  // Enough rows to keep the same visible window as before the pinned fleet bar +
+  // column header, so the station-project rows stay slot-addressable.
+  return makeStationTestStore({ terminalRows: 14, ...(snapshot === undefined ? {} : { snapshot }) })
     .store;
 }
 

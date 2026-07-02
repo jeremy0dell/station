@@ -17,8 +17,10 @@ import {
 } from "@station/dashboard-core";
 import {
   layoutWorktreeRowGrid,
+  textSegment,
   truncateCells,
   type RowGridLayout,
+  type RowGridRowInput,
 } from "@station/dashboard-core";
 import {
   QUIT_HINT_CLOSE,
@@ -30,6 +32,7 @@ import {
 import type { TuiViewState } from "@station/dashboard-core";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
+import { Throbber } from "./Throbber.js";
 import { STATION_COLORS } from "./theme.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
@@ -80,6 +83,10 @@ export function DashboardView({
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
+  const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
+  const { headerLayout, layoutByItem } = firstRun
+    ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
+    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns);
   return (
     <box
       width="100%"
@@ -95,17 +102,14 @@ export function DashboardView({
       />
       {firstRun ? null : <FleetBar summary={fleet} />}
       <Divider columns={contentColumns} />
+      {firstRun || headerLayout === undefined ? null : <ColumnHeaderRow layout={headerLayout} />}
       <ScrollIndicatorRow direction="above" hiddenCount={viewport.hiddenAbove} />
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <text fg={STATION_COLORS.foreground}>{truncateCells(FIRST_RUN_BODY_LABEL, contentColumns)}</text>
         </box>
       ) : (
-        <DashboardBody
-          columns={contentColumns}
-          items={viewport.visibleItems}
-          keyByRow={new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]))}
-        />
+        <DashboardBody columns={contentColumns} items={viewport.visibleItems} layoutByItem={layoutByItem} />
       )}
       <ScrollIndicatorRow direction="below" hiddenCount={viewport.hiddenBelow} />
       <Divider columns={contentColumns} />
@@ -150,9 +154,14 @@ export function Divider({ columns }: { columns: number }) {
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
 // working/needs-you/idle always show; unknown/exited appear only when non-zero.
 function FleetBar({ summary }: { summary: FleetSummary }) {
-  const parts: { glyph: string; color: string; label: string }[] = [
+  const parts: { glyph: string; color: string; label: string; animate?: boolean }[] = [
     { glyph: "●", color: STATION_COLORS.green, label: `${summary.ready} ready` },
-    { glyph: "⠿", color: STATION_COLORS.blue, label: `${summary.working} working` },
+    {
+      glyph: "⠿",
+      color: STATION_COLORS.blue,
+      label: `${summary.working} working`,
+      animate: summary.working > 0,
+    },
     { glyph: "!", color: STATION_COLORS.red, label: `${summary.needsYou} needs you` },
     { glyph: "○", color: STATION_COLORS.gray, label: `${summary.idle} idle` },
   ];
@@ -169,7 +178,11 @@ function FleetBar({ summary }: { summary: FleetSummary }) {
         {parts.map((part) => (
           <span key={part.label}>
             {"  "}
-            <span fg={part.color}>{part.glyph}</span>
+            {part.animate === true ? (
+              <Throbber variant="braille" fg={part.color} />
+            ) : (
+              <span fg={part.color}>{part.glyph}</span>
+            )}
             {` ${part.label}`}
           </span>
         ))}
@@ -203,25 +216,61 @@ function ScrollIndicatorRow({
   );
 }
 
-function DashboardBody({
-  columns,
-  items,
-  keyByRow,
-}: {
-  columns: number;
-  items: readonly DashboardViewportItem[];
-  keyByRow: ReadonlyMap<string, string>;
-}) {
+const COLUMN_HEADER_ROW_ID = "__column_header__";
+
+function columnHeaderRowInput(): RowGridRowInput {
+  return {
+    id: COLUMN_HEADER_ROW_ID,
+    cells: {
+      identity: { key: "identity", segments: [textSegment(" ".repeat(7))], importance: "required" },
+      title: { key: "title", segments: [textSegment("SESSION")], importance: "required" },
+      agent: { key: "agent", segments: [textSegment("AGENT")], importance: "optional" },
+      activity: { key: "activity", segments: [textSegment("STATUS")], importance: "optional" },
+    },
+    metadataGroups: { diff: [textSegment("DIFF")], pr: [textSegment("PR")] },
+  };
+}
+
+// The header shares the rows' grid layout so its columns align and shed in lockstep.
+function dashboardRowLayouts(
+  items: readonly DashboardViewportItem[],
+  keyByRow: ReadonlyMap<string, string>,
+  columns: number,
+): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
   const rowInputs = items.flatMap((item) => {
     const input = rowGridInputForViewportItem(item, keyByRow);
     return input === undefined ? [] : [input];
   });
-  // Rows use the full content width: the per-row [shell] affordance was removed
-  // (it lives on the project header now), so the diff/PR metadata reclaims the
-  // right-hand column that used to be reserved for it.
-  const gridColumns = Math.max(1, columns);
-  const rowLayouts = layoutWorktreeRowGrid({ columns: gridColumns, rows: rowInputs });
-  const layoutByItem = new Map(rowLayouts.map((layout) => [layout.id, layout]));
+  const layouts = layoutWorktreeRowGrid({
+    columns: Math.max(1, columns),
+    rows: [columnHeaderRowInput(), ...rowInputs],
+  });
+  const headerLayout = layouts.find((layout) => layout.id === COLUMN_HEADER_ROW_ID);
+  const layoutByItem = new Map(
+    layouts.filter((layout) => layout.id !== COLUMN_HEADER_ROW_ID).map((layout) => [layout.id, layout]),
+  );
+  return { headerLayout, layoutByItem };
+}
+
+function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
+  return (
+    <box height={1} width="100%" backgroundColor={STATION_COLORS.frozenSurface} overflow="hidden">
+      <text fg={STATION_COLORS.gray}>
+        <Segments segments={layout.segments} />
+      </text>
+    </box>
+  );
+}
+
+function DashboardBody({
+  columns,
+  items,
+  layoutByItem,
+}: {
+  columns: number;
+  items: readonly DashboardViewportItem[];
+  layoutByItem: ReadonlyMap<string, RowGridLayout>;
+}) {
   return (
     <box flexDirection="column" flexGrow={1}>
       {items.map((item) => (
@@ -251,7 +300,12 @@ function DashboardViewportRow({
     case "projectHeader":
       return <ProjectHeaderLine columns={columns} project={item.project} collapsed={item.collapsed} />;
     case "emptyProject":
-      return <text fg={STATION_COLORS.gray}>{truncateCells(emptyProjectLabel(), columns)}</text>;
+      return (
+        <box flexDirection="row" height={1}>
+          <text fg={STATION_COLORS.gray}>{emptyProjectLabel()}</text>
+          <EmptySessionButton projectId={item.project.id} />
+        </box>
+      );
     case "worktree":
       return layout === undefined ? null : (
         <WorktreeRowLine rowId={item.row.id} layout={layout} />
@@ -366,6 +420,27 @@ function QuickSessionAffordance({
         {" [▾]"}
       </text>
     </>
+  );
+}
+
+const EMPTY_SESSION_BUTTON_LABEL = "[ + add session ]";
+
+// Mouse-native empty-state action: one click creates a session (default agent)
+// for the project — the same command as the project header's [quick session].
+function EmptySessionButton({ projectId }: { projectId: string }) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useState(false);
+  return (
+    <text
+      flexShrink={0}
+      fg={hover ? STATION_COLORS.background : STATION_COLORS.cyan}
+      {...(hover ? { backgroundColor: STATION_COLORS.cyan } : {})}
+      {...stationMouseProps(dispatch, { kind: "quickSessionForProject", projectId })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {EMPTY_SESSION_BUTTON_LABEL}
+    </text>
   );
 }
 
