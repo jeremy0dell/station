@@ -550,6 +550,62 @@ ${projectToml("web", root)}
     expect(omitted.config.tui).toEqual({});
   });
 
+  it("loads the snapshot/clock widget types with snake_case keys", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    const loaded = await loadConfigFromToml(
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[[tui.widgets]]
+type = "fleet"
+
+[[tui.widgets]]
+type = "prs"
+enabled = false
+
+[[tui.widgets]]
+type = "tz"
+time_format = "24h"
+
+[[tui.widgets.zones]]
+label = "NYC"
+time_zone = "America/New_York"
+
+[[tui.widgets.zones]]
+label = "TYO"
+time_zone = "Asia/Tokyo"
+
+[[tui.widgets]]
+type = "moon"
+
+${projectToml("web", root)}
+`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.tui?.widgets).toEqual([
+      { type: "fleet" },
+      { type: "prs", enabled: false },
+      {
+        type: "tz",
+        timeFormat: "24h",
+        zones: [
+          { label: "NYC", timeZone: "America/New_York" },
+          { label: "TYO", timeZone: "Asia/Tokyo" },
+        ],
+      },
+      { type: "moon" },
+    ]);
+  });
+
   it("loads [tui.island] display modes with snake_case keys", async () => {
     const tempDir = await makeTempDir();
     const root = await makeProjectRoot(tempDir, "web");
@@ -581,7 +637,7 @@ ${projectToml("web", root)}
       "unknown widget type",
       `
 [[tui.widgets]]
-type = "moon"
+type = "crypto"
 `,
     ],
     [

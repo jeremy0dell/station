@@ -31,6 +31,8 @@ import {
   type FleetSummary,
 } from "@station/dashboard-core";
 import type { TuiViewState } from "@station/dashboard-core";
+import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
@@ -65,7 +67,7 @@ export type DashboardViewProps = {
   snapshot: StationSnapshot;
   viewState: TuiViewState;
   columns?: number;
-  topRowWidgets?: readonly TopRowWidgetText[];
+  topRowWidgets?: readonly TopRowWidgetView[];
   observerStatus?: DashboardHeaderStatus;
 };
 
@@ -98,7 +100,7 @@ export function DashboardView({
     >
       <DashboardHeaderRow
         columns={contentColumns}
-        widgets={topRowWidgets}
+        widgets={resolveTopRowWidgets(topRowWidgets, snapshot)}
         {...(observerStatus === undefined ? {} : { status: observerStatus })}
       />
       {firstRun ? null : <FleetBar summary={fleet} />}
@@ -148,7 +150,8 @@ export function DashboardHeaderRow({
   return (
     <text fg={STATION_COLORS.foreground}>
       <span attributes={TextAttributes.BOLD}>{PRODUCT_LABEL}</span>
-      {suffix}
+      {/* Widgets/status are calm chrome: gray, so the body's status colours stay the loud ones. */}
+      <span fg={STATION_COLORS.gray}>{suffix}</span>
     </text>
   );
 }

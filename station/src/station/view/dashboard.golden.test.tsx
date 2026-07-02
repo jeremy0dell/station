@@ -16,7 +16,7 @@ import {
 } from "../fixtures/scenarios.js";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
-import type { TopRowWidgetText } from "@station/dashboard-core";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { DashboardRoot } from "./DashboardRoot.js";
 import { STATION_COLORS } from "./theme.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
@@ -57,7 +57,7 @@ describe("dashboard golden frames", () => {
     height: number;
     snapshot?: StationSnapshot;
     connection?: StationClientConnectionState;
-    topRowWidgets?: readonly TopRowWidgetText[];
+    topRowWidgets?: readonly TopRowWidgetView[];
     dispatchMouse?: (target: StationMouseTarget) => void;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
@@ -111,16 +111,23 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("Q/esc:close");
   });
 
-  it("renders widgets in the loading-state header", async () => {
+  it("renders widgets in the loading-state header as gray chrome", async () => {
     const setup = await renderDashboard({
       width: 80,
       height: 24,
       connection: { state: "loading", since: Date.now() },
-      topRowWidgets: [{ text: "10:42 AM" }],
+      topRowWidgets: [{ id: "time:0", text: "10:42 AM" }],
     });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("10:42 AM");
     expect(frame).toContain("Loading observer snapshot...");
+
+    const lines = frame.split("\n");
+    const headerRow = lines.findIndex((line) => line.includes("10:42 AM"));
+    const widgetCol = lines[headerRow]?.indexOf("10:42 AM") ?? -1;
+    expect(widgetCol).toBeGreaterThan(0);
+    const spans = setup.captureSpans();
+    expect(spanHex(spanAtFrameCell(spans, headerRow, widgetCol))).toBe(STATION_COLORS.gray);
   });
 
   it("renders the waiting-for-observer state on cold reconnects", async () => {

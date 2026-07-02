@@ -28,9 +28,21 @@
       "types": "./dist/state/*.d.ts",
       "import": "./dist/state/*.js"
     },
+    "./widgets/moon": {
+      "types": "./dist/widgets/moon.d.ts",
+      "import": "./dist/widgets/moon.js"
+    },
+    "./widgets/snapshotWidgets": {
+      "types": "./dist/widgets/snapshotWidgets.d.ts",
+      "import": "./dist/widgets/snapshotWidgets.js"
+    },
     "./widgets/time": {
       "types": "./dist/widgets/time.d.ts",
       "import": "./dist/widgets/time.js"
+    },
+    "./widgets/timezone": {
+      "types": "./dist/widgets/timezone.d.ts",
+      "import": "./dist/widgets/timezone.js"
     },
     "./widgets/types": {
       "types": "./dist/widgets/types.d.ts",

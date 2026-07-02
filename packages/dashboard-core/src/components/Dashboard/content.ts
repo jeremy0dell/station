@@ -18,6 +18,8 @@ export type DashboardHeaderStatus = {
 
 export type TopRowWidgetText = {
   text: string;
+  /** Narrower form tried before the strip starts dropping widgets outright. */
+  compact?: string;
 };
 
 export function dashboardHeaderLine({
@@ -51,8 +53,7 @@ export function dashboardHeaderLine({
     return productLabel;
   }
 
-  for (let visibleCount = widgets.length; visibleCount > 0; visibleCount -= 1) {
-    const strip = widgetStrip(widgets, visibleCount);
+  for (const strip of widgetStripCandidates(widgets)) {
     const stripWidth = stringWidth(strip);
     const gapWidth = safeColumns - productWidth - stripWidth;
     if (gapWidth >= 1) {
@@ -71,8 +72,7 @@ function dashboardHeaderLineWithStatus(input: {
   widgets: readonly TopRowWidgetText[];
 }): string {
   for (const statusText of statusTextCandidates(input.status)) {
-    for (let visibleCount = input.widgets.length; visibleCount >= 0; visibleCount -= 1) {
-      const widgets = widgetStrip(input.widgets, visibleCount);
+    for (const widgets of [...widgetStripCandidates(input.widgets), ""]) {
       const strip = widgets.length === 0 ? statusText : `${statusText}  ${widgets}`;
       const stripWidth = stringWidth(strip);
       const gapWidth = input.safeColumns - input.productWidth - stripWidth;
@@ -91,11 +91,24 @@ function statusTextCandidates(status: DashboardHeaderStatus): string[] {
   return [status.full, status.compact];
 }
 
-function widgetStrip(widgets: readonly TopRowWidgetText[], visibleCount: number): string {
-  return widgets
-    .slice(0, visibleCount)
-    .map((widget) => widget.text)
-    .join("  ");
+/**
+ * Widest-first strip candidates: every widget full, then every widget in its
+ * compact form, then dropping widgets from the right (still compact) — so the
+ * strip narrows before it loses information.
+ */
+function* widgetStripCandidates(widgets: readonly TopRowWidgetText[]): Generator<string> {
+  if (widgets.length === 0) {
+    return;
+  }
+  const full = widgets.map((widget) => widget.text);
+  const compact = widgets.map((widget) => widget.compact ?? widget.text);
+  yield full.join("  ");
+  if (compact.some((text, i) => text !== full[i])) {
+    yield compact.join("  ");
+  }
+  for (let visibleCount = widgets.length - 1; visibleCount > 0; visibleCount -= 1) {
+    yield compact.slice(0, visibleCount).join("  ");
+  }
 }
 
 export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {
