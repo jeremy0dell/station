@@ -1,5 +1,6 @@
 import type {
   HarnessProvider,
+  ProviderHookAdapter,
   ProviderId,
   RepositoryProvider,
   TerminalProvider,
@@ -18,6 +19,7 @@ export type ProviderRegistryInput = {
   terminals?: Iterable<TerminalProvider> | undefined;
   harnesses: Iterable<HarnessProvider> | Map<string, HarnessProvider>;
   repositories?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
+  hookAdapters?: Iterable<ProviderHookAdapter> | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
 };
 
@@ -29,6 +31,7 @@ export class ProviderRegistry {
   readonly defaultTerminalId: ProviderId;
   readonly harnesses: Map<string, HarnessProvider>;
   readonly repositories: Map<string, RepositoryProvider>;
+  readonly hookAdapters: Map<string, ProviderHookAdapter>;
   readonly terminalIntentRunner: TerminalIntentRunner;
 
   constructor(input: ProviderRegistryInput) {
@@ -65,6 +68,14 @@ export class ProviderRegistry {
         }
         this.repositories.set(provider.id, provider);
       }
+    }
+
+    this.hookAdapters = new Map();
+    for (const adapter of input.hookAdapters ?? []) {
+      if (this.hookAdapters.has(adapter.provider)) {
+        throw new Error(`Duplicate provider hook adapter id: ${adapter.provider}`);
+      }
+      this.hookAdapters.set(adapter.provider, adapter);
     }
 
     this.terminalIntentRunner =

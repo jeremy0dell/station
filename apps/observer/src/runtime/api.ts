@@ -111,7 +111,20 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
   }
   const reconcileScheduler = createReconcileScheduler(schedulerOptions);
   const metadataRefresh = buildMetadataRefresh(options, clock, reconcileScheduler);
-  const providerHookIngress = buildProviderHookIngress(options, clock, reconcileScheduler);
+  // The ingress needs the harness report queue for adapter-normalized events,
+  // but the queue is built after it — resolve through a late-bound reference.
+  let harnessIngressQueueRef: HarnessIngressQueue | undefined;
+  const providerHookIngress = buildProviderHookIngress(
+    options,
+    clock,
+    reconcileScheduler,
+    async (report) => {
+      if (harnessIngressQueueRef === undefined) {
+        throw new Error("Harness ingress queue is not initialized.");
+      }
+      return harnessIngressQueueRef.enqueue(report);
+    },
+  );
   const harnessEventReportIngestion = buildHarnessEventReportIngestion(
     options,
     clock,
@@ -132,6 +145,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     clock,
     reconcileScheduler,
   );
+  harnessIngressQueueRef = harnessIngressQueue;
 
   const spoolDrainDeps: SpoolDrainDeps = {
     persistence: options.persistence,
@@ -276,6 +290,7 @@ function buildProviderHookIngress(
   options: CreateObserverApiOptions,
   clock: RuntimeClock,
   scheduler: ReturnType<typeof createReconcileScheduler>,
+  reportHarnessEvent: (report: HarnessEventReport) => Promise<HarnessEventReportReceipt>,
 ): ProviderHookIngress {
   if (options.providerHookIngress !== undefined) return options.providerHookIngress;
   return createProviderHookIngress({
@@ -288,6 +303,7 @@ function buildProviderHookIngress(
       ? {}
       : { retention: options.config.observability.retention }),
     requestReconcile: scheduler.request,
+    reportHarnessEvent,
   });
 }
 
