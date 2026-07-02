@@ -96,11 +96,21 @@ function widgetStrip(widgets: readonly TopRowWidgetText[], visibleCount: number)
 }
 
 export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {
-  return `${collapsed ? "▶" : "▼"} ${project.label} - ${project.counts.worktrees} worktrees`;
+  const caret = collapsed ? "▶" : "▼";
+  const sessions = `${project.counts.worktrees} ${plural(project.counts.worktrees, "session")}`;
+  const agents =
+    project.counts.agents > 0
+      ? ` · ${project.counts.agents} ${plural(project.counts.agents, "agent")}`
+      : "";
+  return `${caret} ${project.label}  ${sessions}${agents}`;
 }
 
-export function emptyProjectLabel(project: ProjectView): string {
-  return ` ${project.counts.worktrees} worktrees`;
+export function emptyProjectLabel(): string {
+  return " no sessions yet · press A to add one";
+}
+
+function plural(count: number, noun: string): string {
+  return count === 1 ? noun : `${noun}s`;
 }
 
 export const FIRST_RUN_BODY_LABEL = "No projects configured yet.";

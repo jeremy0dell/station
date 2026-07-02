@@ -94,7 +94,9 @@ describe("StationOverlay", () => {
     });
     const frame = setup.captureCharFrame();
     const lines = frame.split("\n");
-    const row = lines.findIndex((line) => line.includes("working"));
+    // Exclude the pinned FLEET bar (which also contains "working") so we target
+    // an actual working session row.
+    const row = lines.findIndex((line) => line.includes("working") && !line.includes("FLEET"));
     const col = lines[row]?.indexOf("working") ?? -1;
     expect(row).toBeGreaterThan(0);
     expect(col).toBeGreaterThan(0);
