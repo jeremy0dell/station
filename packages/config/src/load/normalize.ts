@@ -121,7 +121,15 @@ function normalizeHooksConfig(value: unknown): unknown {
 }
 
 function normalizeTuiConfig(value: unknown): unknown {
-  return normalizeObject(value, {}, { widgets: normalizeTuiWidgetConfigs });
+  return normalizeObject(
+    value,
+    {},
+    { widgets: normalizeTuiWidgetConfigs, island: normalizeTuiIslandConfig },
+  );
+}
+
+function normalizeTuiIslandConfig(value: unknown): unknown {
+  return normalizeObject(value);
 }
 
 function normalizeTuiWidgetConfigs(value: unknown): unknown {

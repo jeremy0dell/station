@@ -1,7 +1,7 @@
-import type { TuiConfig, TuiWidgetConfig } from "@station/config";
+import type { TuiConfig, TuiIslandConfig, TuiWidgetConfig } from "@station/config";
 import type { TopRowWidgetText } from "../components/Dashboard/content.js";
 
-export type { TuiConfig, TuiWidgetConfig };
+export type { TuiConfig, TuiIslandConfig, TuiWidgetConfig };
 
 export type TopRowWidgetView = TopRowWidgetText & {
   id: string;

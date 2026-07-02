@@ -260,6 +260,14 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 - **`type = "weather"`** — required `city`; optional `label`, `temperature_unit`
   (`fahrenheit` \| `celsius`), `refresh_interval_minutes` (int > 0).
 
+`[tui.island]` — opt-in display modes for the floating Station island (top-right
+button). Both default off:
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `rest_counts` | bool | Collapsed island shows live fleet counts (`⠿ working · ● ready · ○ idle`) instead of the bare mark. |
+| `project_rollup` | bool | Hovering the island lists each project's worst agent status instead of the working/idle totals. |
+
 ### `[repository.github]` — repository metadata provider (optional)
 
 Enabled by default when omitted. Set `enabled = false` to disable GitHub metadata.

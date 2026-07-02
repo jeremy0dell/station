@@ -1,5 +1,6 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import type { StoreApi } from "zustand/vanilla";
+import type { TuiIslandConfig } from "@station/config";
 import type { TuiStore } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
@@ -12,6 +13,7 @@ import {
   type StationButtonStatus,
   stationButtonStatusEqual,
 } from "./status.js";
+import { useMergeCelebration } from "./useMergeCelebration.js";
 
 export type StationButtonProps = {
   /** Coordination store: pane focus + STATION overlay visibility. */
@@ -20,18 +22,21 @@ export type StationButtonProps = {
   stationViewStore: StoreApi<TuiStore>;
   /** Station input runtime entry point, reused for the header toggle/context menu. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
+  /** Opt-in island display modes from `[tui.island]`. */
+  island?: TuiIslandConfig | undefined;
 };
 
 // Reuses the existing `{ kind: "header" }` mouse path so the route to STATION mode
 // survives the header's removal (some terminals never deliver Ctrl-O). Attention
 // clicks focus the flagged session instead of toggling.
-export function StationButton({ store, stationViewStore, dispatchMouse }: StationButtonProps) {
-  const getStatus = useStableStatus(stationViewStore);
+export function StationButton({ store, stationViewStore, dispatchMouse, island }: StationButtonProps) {
+  const getStatus = useStableStatus(stationViewStore, island?.projectRollup === true);
   const subscribe = useCallback(
     (onChange: () => void) => stationViewStore.subscribe(onChange),
     [stationViewStore],
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
+  const celebration = useMergeCelebration(stationViewStore);
 
   const onHeader = useCallback(
     (event: StationMouseEvent) => {
@@ -68,9 +73,15 @@ export function StationButton({ store, stationViewStore, dispatchMouse }: Statio
   return (
     <DynamicStationButton
       attention={status.attention}
+      needsYouCount={status.needsYouCount}
       workingCount={status.workingCount}
+      readyCount={status.readyCount}
       idleCount={status.idleCount}
       sessionName={status.sessionName}
+      restCounts={island?.restCounts}
+      projectRollup={status.projectRollup}
+      celebration={celebration}
+      onHoverChange={store.actions.setStationButtonHover}
       onToggleStation={onHeader}
       onContextMenu={onHeader}
       onFocusSession={onFocusSession}
@@ -80,15 +91,18 @@ export function StationButton({ store, stationViewStore, dispatchMouse }: Statio
 
 // Returns the same reference until a field changes, so useSyncExternalStore
 // (Object.is-compared) doesn't loop on the fresh object built each call.
-function useStableStatus(stationViewStore: StoreApi<TuiStore>): () => StationButtonStatus {
+function useStableStatus(
+  stationViewStore: StoreApi<TuiStore>,
+  projectRollup: boolean,
+): () => StationButtonStatus {
   const cache = useRef<StationButtonStatus | undefined>(undefined);
   return useCallback(() => {
-    const next = selectStationButtonStatus(stationViewStore.getState());
+    const next = selectStationButtonStatus(stationViewStore.getState(), { projectRollup });
     const prev = cache.current;
     if (prev !== undefined && stationButtonStatusEqual(prev, next)) {
       return prev;
     }
     cache.current = next;
     return next;
-  }, [stationViewStore]);
+  }, [stationViewStore, projectRollup]);
 }

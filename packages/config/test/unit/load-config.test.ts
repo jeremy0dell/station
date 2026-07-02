@@ -550,6 +550,32 @@ ${projectToml("web", root)}
     expect(omitted.config.tui).toEqual({});
   });
 
+  it("loads [tui.island] display modes with snake_case keys", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+
+    const loaded = await loadConfigFromToml(
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[tui.island]
+rest_counts = true
+project_rollup = false
+
+${projectToml("web", root)}
+`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.tui?.island).toEqual({ restCounts: true, projectRollup: false });
+  });
+
   it.each([
     [
       "unknown widget type",
