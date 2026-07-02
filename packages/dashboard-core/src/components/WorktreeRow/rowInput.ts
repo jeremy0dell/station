@@ -1,6 +1,5 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
 import {
-  ROW_COLOR_PURPLE,
   type RowColor,
   type RowGridCell,
   type RowGridCellImportance,
@@ -275,7 +274,7 @@ function checksStateGlyph(checks: NonNullable<WorktreeRowModel["worktree"]["chec
 }
 
 function prMetadataColor(pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>): MetadataColor {
-  return pr.state === "merged" ? ROW_COLOR_PURPLE : "blue";
+  return pr.state === "merged" ? "purple" : "blue";
 }
 
 function failedChecksGlyph(count: number | undefined): string {
@@ -286,7 +285,7 @@ function checksStateColor(
   checks: NonNullable<WorktreeRowModel["worktree"]["checks"]>,
   pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>,
 ): MetadataColor {
-  if (pr.state === "merged" && checks.state === "pass") return ROW_COLOR_PURPLE;
+  if (pr.state === "merged" && checks.state === "pass") return "purple";
   if (checks.state === "pass") return "green";
   if (checks.state === "fail" || checks.state === "cancelled") return "red";
   if (checks.state === "running") return "yellow";

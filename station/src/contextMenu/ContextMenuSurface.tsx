@@ -1,6 +1,7 @@
 import type { MouseEvent } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
+import { MENU_COLORS } from "../station/view/theme.js";
 import type { ContextMenuItem } from "./types.js";
 
 export type ContextMenuSurfaceProps = {
@@ -10,13 +11,6 @@ export type ContextMenuSurfaceProps = {
   height: number;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
-
-const MENU_BACKGROUND = "#15191e";
-const ROW_ACTIVE = "#2f3842";
-const ROW_TEXT = "#f4f4f5";
-const ROW_DISABLED = "#7a828c";
-const ROW_DANGER = "#fca5a5";
-const BORDER_TEXT = "#5b6470";
 
 export function ContextMenuSurface({
   items,
@@ -31,14 +25,14 @@ export function ContextMenuSurface({
     <box
       width={width}
       height={height}
-      backgroundColor={MENU_BACKGROUND}
+      backgroundColor={MENU_COLORS.surface}
       flexDirection="column"
       overflow="hidden"
       onMouseDown={(event: MouseEvent) => {
         event.stopPropagation();
       }}
     >
-      <text fg={BORDER_TEXT}>{borderLine(contentWidth)}</text>
+      <text fg={MENU_COLORS.borderText}>{borderLine(contentWidth)}</text>
       {items.slice(0, visibleRows).map((item, index) => {
         const active = index === activeIndex;
         const disabled = item.disabled === true;
@@ -67,7 +61,7 @@ export function ContextMenuSurface({
             key={item.id}
             width="100%"
             height={1}
-            backgroundColor={active ? ROW_ACTIVE : MENU_BACKGROUND}
+            backgroundColor={active ? MENU_COLORS.selected : MENU_COLORS.surface}
             onMouseDown={onItemMouseDown}
             onMouseMove={onItemMouseMove}
           >
@@ -77,7 +71,7 @@ export function ContextMenuSurface({
           </box>
         );
       })}
-      <text fg={BORDER_TEXT}>{borderLine(contentWidth)}</text>
+      <text fg={MENU_COLORS.borderText}>{borderLine(contentWidth)}</text>
     </box>
   );
 }
@@ -88,9 +82,9 @@ function borderLine(width: number): string {
 
 function rowColor(item: ContextMenuItem, disabled: boolean): string {
   if (disabled) {
-    return ROW_DISABLED;
+    return MENU_COLORS.disabledText;
   }
-  return item.danger === true ? ROW_DANGER : ROW_TEXT;
+  return item.danger === true ? MENU_COLORS.danger : MENU_COLORS.text;
 }
 
 function fitLabel(label: string, width: number): string {

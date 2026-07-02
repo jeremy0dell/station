@@ -1,8 +1,7 @@
 import stringWidth from "string-width";
 
-export const ROW_COLOR_PURPLE = "#d2a8ff";
-
-export type RowColor = "blue" | "gray" | "green" | "red" | "yellow" | typeof ROW_COLOR_PURPLE;
+// Semantic only — dashboard-core stays hex-free; view/theme.ts resolves to hex.
+export type RowColor = "blue" | "gray" | "green" | "red" | "yellow" | "purple";
 
 export type RowSegment =
   | {
