@@ -22,6 +22,7 @@ import { emptyConfig } from "./emptyConfig.js";
 import { createObserverEventBus } from "./eventBus.js";
 import { createObserverLogger } from "./logging.js";
 import { type ObserverServer, startObserverServer } from "./server.js";
+import { type SocketOwnershipWatch, watchSocketOwnership } from "./socketOwnership.js";
 
 export type ObserverProviderRegistryFactoryOptions = {
   configPath?: string | undefined;
@@ -110,6 +111,7 @@ export async function runObserverMain(
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
 
   let server: ObserverServer | undefined;
+  let ownership: SocketOwnershipWatch | undefined;
   let stopResolve: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
     stopResolve = resolve;
@@ -117,6 +119,7 @@ export async function runObserverMain(
   let stopping: Promise<void> | undefined;
   const stopObserver = async () => {
     stopping ??= (async () => {
+      ownership?.stop();
       await commandQueue.shutdown();
       await eventHooks?.shutdown();
       await server?.close();
@@ -148,6 +151,19 @@ export async function runObserverMain(
   });
 
   server = await startObserverServer({ socketPath, api, clock: systemClock });
+  ownership = watchSocketOwnership({
+    socketPath,
+    onLost: () => {
+      void logger.warn("Observer socket was taken over by another process; shutting down.", {
+        socketPath,
+        pid: process.pid,
+      });
+      // A displaced observer must not linger: its loops would keep draining
+      // spool events and firing hooks for a state dir it no longer serves.
+      setTimeout(() => process.exit(0), 5000).unref();
+      void api.stop();
+    },
+  });
   const stopFromSignal = () => {
     void api.stop();
   };
