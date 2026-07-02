@@ -35,5 +35,5 @@ Station is the OpenTUI/React terminal workspace under `station/`. See `docs/loca
 
 ## Test Coverage Gaps
 
-- `packages/provider-hooks` has focused delivery and autostart-lock tests, but lacks direct coverage for stale socket removal, child cleanup after observer startup timeout, missing observer entry path failures, and stdin byte-limit enforcement.
+- `apps/cli/src/ingress` has focused delivery and autostart-lock tests, but lacks direct coverage for stale socket removal, child cleanup after observer startup timeout, missing observer entry path failures, and stdin byte-limit enforcement.
 - `packages/observability` has redaction and evidence-index tests, but lacks focused regression coverage for malformed JSONL log handling, retention enforcement wiring, and manifest completeness for nested bundle files.

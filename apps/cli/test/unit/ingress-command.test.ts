@@ -1,8 +1,8 @@
 import type { ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
-import { runProviderIngressCommand } from "@station/provider-hooks";
 import { describe, expect, it } from "vitest";
 import { listHookSpoolFiles, readHookSpoolRecord } from "../../../../tests/support/spool";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { runProviderIngressCommand } from "../../src/ingress/command.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 

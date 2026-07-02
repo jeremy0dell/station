@@ -104,7 +104,7 @@ The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the 
   <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
 </p>
 
-**`@station/provider-hooks`**: the `stn-ingress` sender used by generated hook commands. Delivers compact provider reports to the observer socket with bounded delivery and local spooling when the observer is unavailable.
+**`stn-ingress`** (`apps/cli/src/ingress`): the sender used by generated hook commands. Delivers raw provider hook events to the observer socket with bounded delivery and local spooling when the observer is unavailable; the observer normalizes them via provider hook adapters.
 
 ---
 

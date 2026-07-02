@@ -45,7 +45,7 @@ The current install is source-tree based, not a single binary. The formula must
 preserve the repository-relative layout because:
 
 - `bin/stn` resolves `apps/cli/dist/main.js` relative to the launcher.
-- `bin/stn-ingress` resolves `packages/provider-hooks/dist/main.js`.
+- `bin/stn-ingress` resolves `apps/cli/dist/ingressMain.js`.
 - The CLI resolves the Bun TUI workspace at `station/`.
 - `station/` needs its own Bun `node_modules` and linked built `@station/*`
   packages.
