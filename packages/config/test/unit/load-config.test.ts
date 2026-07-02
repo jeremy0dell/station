@@ -399,10 +399,10 @@ harness = "codex"
 layout = "agent-build-shell"
 
 [[hooks.event]]
-id = "notify-agent-idle"
+id = "notify-agent-state"
 events = ["worktree.agentStateChanged"]
 command = "stn"
-args = ["notify", "turn-completion"]
+args = ["notify", "agent-state"]
 timeout_ms = 3000
 
 [hooks.event.filter]
@@ -418,10 +418,10 @@ ${projectToml("web", root)}
 
     expect(loaded.config.hooks?.event).toEqual([
       {
-        id: "notify-agent-idle",
+        id: "notify-agent-state",
         events: ["worktree.agentStateChanged"],
         command: "stn",
-        args: ["notify", "turn-completion"],
+        args: ["notify", "agent-state"],
         timeoutMs: 3000,
         filter: {
           agentState: "idle",

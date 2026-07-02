@@ -44,6 +44,8 @@ type NotifiableAgentEvent = {
   kind: NotificationKind;
 };
 
+const notifyKind = "agent-state";
+
 function notificationMessage(agent: WorktreeAgent): string {
   const harness = agent.harness;
   return agent.reason === undefined ? `${harness} is idle.` : agent.reason;
@@ -83,12 +85,12 @@ export async function runNotifyCommand(
   deps: NotifyCommandDeps = {},
 ): Promise<NotifyCommandResult> {
   const [kind] = args;
-  if (kind !== "turn-completion") {
-    throw new Error("Usage: station notify turn-completion");
+  if (kind !== notifyKind) {
+    throw new Error("Usage: station notify agent-state");
   }
   const source = options.stdin?.trim();
   if (source === undefined || source.length === 0) {
-    throw new Error("stn notify turn-completion requires an event hook invocation on stdin.");
+    throw new Error("stn notify agent-state requires an event hook invocation on stdin.");
   }
   const invocation = ObserverEventHookInvocationSchema.parse(JSON.parse(source));
   if (invocation.event.type !== "worktree.agentStateChanged") {

@@ -88,6 +88,39 @@ describe("Codex hook event parsing", () => {
     expect(JSON.stringify(observations[0]?.providerData)).not.toContain("rm -rf");
   });
 
+  it("distinguishes repeated PermissionRequest reports in the same turn", () => {
+    const payload = {
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "PermissionRequest",
+      model: "gpt-5.4-codex",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      tool_name: "Bash",
+      tool_input: {
+        compacted: true,
+        originalBytes: 256,
+      },
+    };
+    const firstAt = "2026-05-21T12:00:00.000Z";
+    const secondAt = "2026-05-21T12:00:01.000Z";
+
+    const firstId = codexHookPayloadReportId(payload, firstAt);
+    const secondId = codexHookPayloadReportId(payload, secondAt);
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: firstId,
+      observedAt: firstAt,
+      payload,
+    });
+
+    expect(firstId).toBe(
+      "codex:codex_session_123:PermissionRequest:turn_1:tool%3ABash:request%3A2026-05-21T12%3A00%3A00.000Z",
+    );
+    expect(secondId).not.toBe(firstId);
+    expect(report.coalesceKey).toBe(`report:${firstId}`);
+  });
+
   it("uses STATION hook context fields before cwd correlation", () => {
     const observations = normalizeCodexRawEvent(
       {
@@ -439,7 +472,7 @@ describe("Codex hook event parsing", () => {
     });
     expect(JSON.stringify(report)).not.toContain(rawOutput);
     expect(JSON.stringify(report)).not.toContain("pnpm test");
-    expect(codexHookPayloadReportId(compacted.payload)).toBe(
+    expect(codexHookPayloadReportId(compacted.payload, now)).toBe(
       "codex:codex_session_123:PostToolUse:turn_1:tool%3Acall_test",
     );
   });

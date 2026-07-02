@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import {
   appendObserverEventHookBlock,
-  removeObserverEventHookBlocksById,
+  removeObserverEventHookBlocksByIdPredicate,
   type StationConfig,
 } from "@station/config";
 import { type ObserverEventHookConfig, STATION_SCHEMA_VERSION } from "@station/contracts";
@@ -56,13 +56,11 @@ type ParsedFlags = {
   force: boolean;
 };
 
-const builtInHookName = "notify-turn-completion";
-const builtInHookId = "notify-agent-idle";
+const builtInHookName = "notify-agent-state";
+const builtInHookId = "notify-agent-state";
 const builtInHookTimeoutMs = 8000;
 const builtInHookFilter = {
-  agentState: "idle",
   changeSource: "harness_event_report",
-  harnessEventType: "Stop",
 } satisfies NonNullable<ObserverEventHookConfig["filter"]>;
 
 async function planBuiltInEventHook(
@@ -72,8 +70,13 @@ async function planBuiltInEventHook(
   const configPath = requiredConfigPath(options);
   const before = await readFile(configPath, "utf8");
   const hooks = options.config?.hooks?.event ?? [];
-  const installed = hooks.some((hook) => hook.id === builtInHookId);
-  const current = builtInHookIsCurrent(hooks, configPath);
+  const resetBase = removeObserverEventHookBlocksByIdPredicate(
+    before,
+    isGeneratedAgentNotificationHookId,
+  );
+  const resetChanged = resetBase !== before;
+  const installed = resetChanged || hooks.some((hook) => hook.id === builtInHookId);
+  const current = !resetChanged && builtInHookIsCurrent(hooks, configPath);
   if (current && !flags.force) {
     return {
       category: "observer-event-hook",
@@ -85,8 +88,7 @@ async function planBuiltInEventHook(
       after: before,
     };
   }
-  const base = installed ? removeObserverEventHookBlocksById(before, builtInHookId) : before;
-  const after = appendObserverEventHookBlock(base, builtInEventHookToml(configPath));
+  const after = appendObserverEventHookBlock(resetBase, builtInEventHookToml(configPath));
   return {
     category: "observer-event-hook",
     hookId: builtInHookId,
@@ -109,7 +111,7 @@ async function doctorEventHooks(options: EventHooksCommandOptions): Promise<Even
       status: "warn",
       installed: false,
       hooks: ids,
-      message: "Built-in turn completion notification event hook is not installed.",
+      message: "Built-in agent state notification event hook is not installed.",
     };
   }
   if (builtInHooks.length > 1) {
@@ -121,10 +123,10 @@ async function doctorEventHooks(options: EventHooksCommandOptions): Promise<Even
       commandCheck: {
         status: "warn",
         command: builtInHooks.map(formatHookCommand).join(" ; "),
-        message: "Built-in turn completion notification event hook is installed more than once.",
+        message: "Built-in agent state notification event hook is installed more than once.",
       },
       message:
-        "Built-in turn completion notification event hook has duplicate config entries. Run install to replace them.",
+        "Built-in agent state notification event hook has duplicate config entries. Run install to replace them.",
     };
   }
   const hook = builtInHooks[0];
@@ -141,10 +143,9 @@ async function doctorEventHooks(options: EventHooksCommandOptions): Promise<Even
         status: "warn",
         command: formatHookCommand(hook),
         message:
-          "Configured notification command does not match the current built-in turn completion notification hook.",
+          "Configured notification command does not match the current built-in agent state notification hook.",
       },
-      message:
-        "Built-in turn completion notification event hook is stale. Run install to update it.",
+      message: "Built-in agent state notification event hook is stale. Run install to update it.",
     };
   }
   const notifyCommandInput: {
@@ -173,7 +174,7 @@ async function doctorEventHooks(options: EventHooksCommandOptions): Promise<Even
       hooks: ids,
       commandCheck,
       message:
-        "Built-in turn completion notification event hook is installed, but its command is not usable.",
+        "Built-in agent state notification event hook is installed, but its command is not usable.",
     };
   }
   return {
@@ -182,7 +183,7 @@ async function doctorEventHooks(options: EventHooksCommandOptions): Promise<Even
     installed: true,
     hooks: ids,
     commandCheck,
-    message: "Built-in turn completion notification event hook is installed.",
+    message: "Built-in agent state notification event hook is installed.",
   };
 }
 
@@ -302,14 +303,12 @@ function builtInEventHookToml(configPath: string): string {
     `timeout_ms = ${builtInHookTimeoutMs}`,
     "",
     "[hooks.event.filter]",
-    `agent_state = ${JSON.stringify(builtInHookFilter.agentState)}`,
     `change_source = ${JSON.stringify(builtInHookFilter.changeSource)}`,
-    `harness_event_type = ${JSON.stringify(builtInHookFilter.harnessEventType)}`,
   ].join("\n");
 }
 
 function builtInEventHookArgs(configPath: string): string[] {
-  return ["--config", configPath, "notify", "turn-completion"];
+  return ["--config", configPath, "notify", "agent-state"];
 }
 
 function builtInHookIsCurrent(hooks: ObserverEventHookConfig[], configPath: string): boolean {
@@ -319,6 +318,10 @@ function builtInHookIsCurrent(hooks: ObserverEventHookConfig[], configPath: stri
   }
   const hook = matches[0];
   return hook !== undefined && hookMatchesBuiltIn(hook, configPath);
+}
+
+function isGeneratedAgentNotificationHookId(hookId: string): boolean {
+  return hookId.startsWith("notify-agent-");
 }
 
 function hookMatchesBuiltIn(hook: ObserverEventHookConfig, configPath: string): boolean {
@@ -334,10 +337,11 @@ function hookMatchesBuiltIn(hook: ObserverEventHookConfig, configPath: string): 
 
 function hookFilterMatchesBuiltIn(filter: ObserverEventHookConfig["filter"]): boolean {
   return (
-    filter?.agentState === builtInHookFilter.agentState &&
+    filter !== undefined &&
+    filter.agentState === undefined &&
     filter.harness === undefined &&
     filter.changeSource === builtInHookFilter.changeSource &&
-    filter.harnessEventType === builtInHookFilter.harnessEventType
+    filter.harnessEventType === undefined
   );
 }
 
@@ -398,6 +402,6 @@ export async function runEventHooksCommand(
     return { ...plan, installed: true };
   }
   throw new Error(
-    "Usage: station event-hooks plan|install notify-turn-completion [--yes] or station event-hooks doctor",
+    "Usage: station event-hooks plan|install notify-agent-state [--yes] or station event-hooks doctor",
   );
 }

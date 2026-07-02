@@ -236,10 +236,11 @@ export async function sendCodexHookPayload(
 
   const compaction = compactCodexHookPayload(enrichedPayload);
   try {
-    const reportId = deps.hookId?.() ?? codexHookPayloadReportId(compaction.payload);
+    const observedAt = toIsoTimestamp(clock.now());
+    const reportId = deps.hookId?.() ?? codexHookPayloadReportId(compaction.payload, observedAt);
     const report = codexHookPayloadToHarnessEventReport({
       reportId,
-      observedAt: toIsoTimestamp(clock.now()),
+      observedAt,
       payload: compaction.payload,
       diagnostics: diagnosticsFromCompaction(compaction),
     });

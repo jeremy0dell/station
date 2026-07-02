@@ -77,15 +77,15 @@ exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
 ─────────────────────────────────────────────────────────── 
                                                             
 ▼ station - 5 worktrees                       [sh] [qs] [▾] 
- [1] ○ cli-…  codex     idle           +14 -6 #70 ✓ [shell] 
- [2] - docs…  -         no agent                    [shell] 
- [3] ○ pty-…  codex     idle                  #73 ✓ [shell] 
- [4] + sess…  codex     starting                    [shell] 
- [5] ⠋ stat…  codex     working      +412 -96 #76 … [shell] 
+ [1] ○ cli-help-man          codex     idle         [shell] 
+ [2] - docs-cleanup          -         no agent     [shell] 
+ [3] ○ pty-buffer            codex     idle         [shell] 
+ [4] + session-resume        codex     starting     [shell] 
+ [5] ⠋ station-overlay       codex     working      [shell] 
                                                             
 ▼ observer - 3 worktrees                      [sh] [qs] [▾] 
- [6] x batc…  opencode  exited                 #8 ✓ [shell] 
- [7] ⠋ prov…  opencode  working        +32 -8 #16 … [shell] 
+ [6] x batch-export          opencode  exited       [shell] 
+ [7] ⠋ provider-hooks        opencode  working      [shell] 
 ↓ 9 hidden                                                  
 ─────────────────────────────────────────────────────────── 
 Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete se… 
@@ -97,11 +97,11 @@ exports[`dashboard golden frames renders many-projects at 40x12 1`] = `
 ─────────────────────────────────────── 
                                         
 ▼ station - 5 worktrees   [sh] [qs] [▾] 
- [1] ○ cli-help…   +14 -6 #70 ✓ [shell] 
- [2] - docs-cle…                [shell] 
- [3] ○ pty-buff…          #73 ✓ [shell] 
- [4] + session-…                [shell] 
- [5] ⠋ station-… +412 -96 #76 … [shell] 
+ [1] ○ cli-help-man             [shell] 
+ [2] - docs-cleanup             [shell] 
+ [3] ○ pty-buffer               [shell] 
+ [4] + session-resume           [shell] 
+ [5] ⠋ station-overlay          [shell] 
 ↓ 13 hidden                             
 ─────────────────────────────────────── 
 Q/esc:close N:new A:add Z:refresh 1-9/… 
@@ -185,14 +185,14 @@ exports[`dashboard golden frames renders attention-and-failures at 60x16 1`] = `
 ─────────────────────────────────────────────────────────── 
                                                             
 ▼ station - 4 worktrees                       [sh] [qs] [▾] 
- [1] ! hook-scope   Agent needs appro… +8 -2 #12 x2 [shell] 
- [2] ? metadata-r…  unknown                   +3 -1 [shell] 
- [3] ! popup-late…  No progress was… +120 -44 #13 … [shell] 
- [4] ⠋ pr-info      working                   #11 ✓ [shell] 
+ [1] ! hook-scope        codex     Agent needs app… [shell] 
+ [2] ? metadata-refresh  codex     unknown          [shell] 
+ [3] ! popup-latency     codex     No progress was… [shell] 
+ [4] ⠋ pr-info           codex     working          [shell] 
                                                             
 ▼ observer - 2 worktrees                      [sh] [qs] [▾] 
- [5] x done-run     exited                          [shell] 
- [6] ! sqlite-cle…  Agent needs appro… +19 -2 #6 x1 [shell] 
+ [5] x done-run          opencode  exited           [shell] 
+ [6] ! sqlite-cleanup    opencode  Agent needs app… [shell] 
                                                             
                                                             
 ─────────────────────────────────────────────────────────── 
@@ -205,10 +205,10 @@ exports[`dashboard golden frames renders attention-and-failures at 40x12 1`] = `
 ─────────────────────────────────────── 
                                         
 ▼ station - 4 worktrees   [sh] [qs] [▾] 
- [1] ! hook-sco…   +8 -2 #12 x2 [shell] 
- [2] ? metadata…          +3 -1 [shell] 
- [3] ! popup-la… +120 -44 #13 … [shell] 
- [4] ⠋ pr-info            #11 ✓ [shell] 
+ [1] ! hook-scope               [shell] 
+ [2] ? metadata-refresh         [shell] 
+ [3] ! popup-latency            [shell] 
+ [4] ⠋ pr-info                  [shell] 
                                         
 ↓ 3 hidden                              
 ─────────────────────────────────────── 

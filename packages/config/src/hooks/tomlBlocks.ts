@@ -11,10 +11,18 @@ export function appendObserverEventHookBlock(source: string, blockToml: string):
 }
 
 export function removeObserverEventHookBlocksById(source: string, hookId: string): string {
+  return removeObserverEventHookBlocksByIdPredicate(source, (candidate) => candidate === hookId);
+}
+
+export function removeObserverEventHookBlocksByIdPredicate(
+  source: string,
+  predicate: (hookId: string) => boolean,
+): string {
   const lines = source.split("\n");
-  const blocks = observerEventHookBlocks(lines).filter(
-    (block) => observerEventHookBlockId(block.lines) === hookId,
-  );
+  const blocks = observerEventHookBlocks(lines).filter((block) => {
+    const hookId = observerEventHookBlockId(block.lines);
+    return hookId !== undefined && predicate(hookId);
+  });
   if (blocks.length === 0) {
     return source;
   }

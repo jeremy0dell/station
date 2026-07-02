@@ -71,7 +71,8 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
 
 function Segment({ segment }: { segment: RowSegment }) {
   if (segment.kind === "throbber") {
-    return <Throbber variant={segment.variant} />;
+    const fg = rowColorToHex(segment.color);
+    return <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
   }
   const attributes = textSegmentAttributes(segment);
   const fg = rowColorToHex(segment.color);

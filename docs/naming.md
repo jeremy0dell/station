@@ -80,10 +80,10 @@ The existing TOML shape is:
 
 ```toml
 [[hooks.event]]
-id = "notify-agent-idle"
+id = "notify-agent-state"
 events = ["worktree.agentStateChanged"]
 command = "stn"
-args = ["notify", "turn-completion"]
+args = ["notify", "agent-state"]
 ```
 
 The config shape can stay `hooks.event`, but code and docs should prefer `observer event hook` when precision matters.

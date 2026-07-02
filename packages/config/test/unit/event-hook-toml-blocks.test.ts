@@ -1,4 +1,8 @@
-import { appendObserverEventHookBlock, removeObserverEventHookBlocksById } from "@station/config";
+import {
+  appendObserverEventHookBlock,
+  removeObserverEventHookBlocksById,
+  removeObserverEventHookBlocksByIdPredicate,
+} from "@station/config";
 import { describe, expect, it } from "vitest";
 
 describe("observer event hook TOML blocks", () => {
@@ -9,7 +13,7 @@ describe("observer event hook TOML blocks", () => {
       source,
       [
         "[[hooks.event]]",
-        'id = "notify-agent-idle"',
+        'id = "notify-agent-state"',
         'events = ["worktree.agentStateChanged"]',
       ].join("\n"),
     );
@@ -20,7 +24,7 @@ describe("observer event hook TOML blocks", () => {
         "projects = []",
         "",
         "[[hooks.event]]",
-        'id = "notify-agent-idle"',
+        'id = "notify-agent-state"',
         'events = ["worktree.agentStateChanged"]',
         "",
       ].join("\n"),
@@ -33,14 +37,14 @@ describe("observer event hook TOML blocks", () => {
       "projects = []",
       "",
       "[[hooks.event]]",
-      'id = "notify-agent-idle"',
+      'id = "notify-agent-state"',
       'command = "osascript"',
       "",
       "[hooks.event.filter]",
       'agent_state = "idle"',
       "",
       "[[hooks.event]]",
-      "id = 'notify-agent-idle'",
+      "id = 'notify-agent-state'",
       'command = "stn"',
       "",
       "[hooks.event.filter]",
@@ -55,7 +59,7 @@ describe("observer event hook TOML blocks", () => {
       "",
     ].join("\n");
 
-    const result = removeObserverEventHookBlocksById(source, "notify-agent-idle");
+    const result = removeObserverEventHookBlocksById(source, "notify-agent-state");
 
     expect(result).toBe(
       [
@@ -83,5 +87,32 @@ describe("observer event hook TOML blocks", () => {
     ].join("\n");
 
     expect(removeObserverEventHookBlocksById(source, "missing")).toBe(source);
+  });
+
+  it("removes observer event hook blocks selected by id predicate", () => {
+    const source = [
+      "schema_version = 1",
+      "",
+      "[[hooks.event]]",
+      'id = "notify-agent-state"',
+      'command = "stn"',
+      "",
+      "[[hooks.event]]",
+      'id = "notify-agent-stale"',
+      'command = "osascript"',
+      "",
+      "[[hooks.event]]",
+      'id = "keep-me"',
+      'command = "stn"',
+      "",
+    ].join("\n");
+
+    const result = removeObserverEventHookBlocksByIdPredicate(source, (hookId) =>
+      hookId.startsWith("notify-agent-"),
+    );
+
+    expect(result).toBe(
+      ["schema_version = 1", "", "[[hooks.event]]", 'id = "keep-me"', 'command = "stn"'].join("\n"),
+    );
   });
 });
