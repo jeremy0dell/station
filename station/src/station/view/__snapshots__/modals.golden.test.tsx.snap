@@ -16,15 +16,15 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 ▼ observ│  Esc/↑↓     context menu close/move                          │qs] [▾] 
  [6] x b│  Enter/Sp   context menu select                              │   #8 ✓ 
  [7] ⠋ p│                     station project view                     │8 #16 … 
- [8] ○ t│  ↑/↓ wheel  scroll project list                              │-1 #4 ✓ 
-        │  1-9/a-z    start or focus row                               │        
-▼ script│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │qs] [▾] 
- [9] ○ a│  X          delete session                                   │6 #5 x1 
- [a] ? m│  /, Z       search / refresh snapshot                        │ -1 #10 
- [b] - o│  H/?        help                                             │        
-↓ 3 hidd╰──────────────────────────────────────────────────────────────╯        
+ [8] ○ t│  ↑/↓        move cursor                                      │-1 #4 ✓ 
+        │  ↵          open focused session                             │        
+▼ script│  tab        next session needing you                         │qs] [▾] 
+ [9] ○ a│  wheel      scroll project list                              │6 #5 x1 
+ [a] ? m│  1-9/a-z    start or focus row                               │ -1 #10 
+ [b] - o│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │        
+        ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -50,9 +50,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
 search: apiexperiment                     -         no agent                    
-↓ 3 hidden                                                                      
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -78,9 +78,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
 collapse project: 1:station 2:observer 3:scripts 4:empty-project                
-↓ 3 hidden                                                                      
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -106,9 +106,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
 settings for project: 1:station 2:observer 3:scripts 4:empty-project            
-↓ 3 hidden                                                                      
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -134,9 +134,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
  [b│ ↑↓ move   →/enter edit   esc close                                     │   
-↓ 3└────────────────────────────────────────────────────────────────────────┘   
+   └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -162,9 +162,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
  [b│ ←/esc back                                                             │   
-↓ 3└────────────────────────────────────────────────────────────────────────┘   
+   └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -190,9 +190,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
  [b│ ↑↓ move   →/enter edit   esc close                                     │   
-↓ 3└────────────────────────────────────────────────────────────────────────┘   
+   └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -220,7 +220,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 │ Click a row or press slot key              │      no agent                    
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘ X:delete session /:search H:help 
+└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -248,7 +248,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 │ Yes (y)     No (n)                         │      no agent                    
 │ Esc/Enter:cancel                           │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘ X:delete session /:search H:help 
+└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -274,9 +274,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
 Choose the slot to rename: 1-9/a-z        -         no agent                    
-↓ 3 hidden                                                                      
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -332,7 +332,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 │ Click a row or press slot key              │      no agent                    
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘ X:delete session /:search H:help 
+└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -360,7 +360,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 │                                            │      no agent                    
 │ Fork (enter)                               │                                  
 │ ↑↓:field space:toggle enter:fork esc:back  │───────────────────────────────── 
-└────────────────────────────────────────────┘ X:delete session /:search H:help 
+└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
 "
 `;
 

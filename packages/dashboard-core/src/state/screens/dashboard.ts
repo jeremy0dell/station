@@ -2,6 +2,11 @@ import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/new
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
+import {
+  activateFocusedDashboardRow,
+  focusNextNeedsMe,
+  moveDashboardFocus,
+} from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { matchTuiBinding, type TuiBinding } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
@@ -39,13 +44,19 @@ function handleDashboardBinding(
   context: TuiKeyRuntimeContext,
 ): TuiTransition {
   switch (binding.action) {
-    case "tui.view.scrollUp":
+    case "tui.focus.up":
       return {
-        state: scrollDashboard(state, -1),
+        state: moveDashboardFocus(state, -1),
       };
-    case "tui.view.scrollDown":
+    case "tui.focus.down":
       return {
-        state: scrollDashboard(state, 1),
+        state: moveDashboardFocus(state, 1),
+      };
+    case "tui.focus.activate":
+      return activateFocusedDashboardRow(state);
+    case "tui.focus.nextNeedsMe":
+      return {
+        state: focusNextNeedsMe(state),
       };
     case "tui.help.open":
       return {

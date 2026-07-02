@@ -16,11 +16,13 @@ export function worktreeRowGridInput({
   row,
   slot,
   title,
+  focused,
 }: {
   id?: string;
   row: WorktreeRowModel;
   slot: string | undefined;
   title?: string | undefined;
+  focused?: boolean | undefined;
 }): RowGridRowInput {
   const marker = statusMarker(row);
   const displayTitle = title ?? row.branch;
@@ -60,6 +62,9 @@ export function worktreeRowGridInput({
   if (color !== undefined) {
     input.color = color;
   }
+  if (focused === true) {
+    input.focused = true;
+  }
   return worktreeStyleRowGridInput(input);
 }
 
@@ -77,11 +82,18 @@ export function worktreeStyleRowGridInput(input: {
   activityColor?: RowColor;
   agentColor?: RowColor;
   metadataGroups?: WorktreeRowMetadataGroups;
+  focused?: true;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
   cells.identity = {
     key: "identity",
-    segments: identitySegments(input.slot, input.marker, input.color, input.markerColor),
+    segments: identitySegments(
+      input.slot,
+      input.marker,
+      input.color,
+      input.markerColor,
+      input.focused,
+    ),
     importance: "required",
   };
   cells.title = {
@@ -135,8 +147,14 @@ function identitySegments(
   marker: RowMarker,
   color: RowColor | undefined,
   markerColor: RowColor | undefined,
+  focused: true | undefined,
 ): RowSegment[] {
-  const segments: RowSegment[] = [textSegment(` [${slot ?? " "}] `, { color })];
+  // The cursor reuses the identity cell's leading pad cell, so a focused row
+  // never shifts the shared grid geometry.
+  const segments: RowSegment[] = [
+    focused === true ? textSegment("▏", { color: "cyan" }) : textSegment(" ", { color }),
+    textSegment(`[${slot ?? " "}] `, { color }),
+  ];
   if (marker.kind === "throbber") {
     const throbberColor = markerColor ?? color;
     segments.push(

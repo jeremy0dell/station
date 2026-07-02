@@ -28,18 +28,18 @@ describe("TUI screen transitions", () => {
     expect(refresh.reconcileReason).toBe("tui-refresh");
   });
 
-  it("scrolls dashboard rows with arrow keys and mouse wheel events", () => {
+  it("scrolls dashboard rows with mouse wheel events", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       terminalRows: 10,
     });
 
-    const down = handleTuiKey(state, { input: "", downArrow: true });
-    const wheelDown = handleTuiKey(down.state, { input: "", mouseScroll: "down" });
-    const wheelUp = handleTuiKey(wheelDown.state, { input: "", mouseScroll: "up" });
+    const wheelDown = handleTuiKey(state, { input: "", mouseScroll: "down" });
+    const wheelDownAgain = handleTuiKey(wheelDown.state, { input: "", mouseScroll: "down" });
+    const wheelUp = handleTuiKey(wheelDownAgain.state, { input: "", mouseScroll: "up" });
 
-    expect(down.state.scrollOffset).toBe(1);
-    expect(wheelDown.state.scrollOffset).toBe(2);
+    expect(wheelDown.state.scrollOffset).toBe(1);
+    expect(wheelDownAgain.state.scrollOffset).toBe(2);
     expect(wheelUp.state.scrollOffset).toBe(1);
   });
 
@@ -50,9 +50,10 @@ describe("TUI screen transitions", () => {
       terminalRows: 10,
     });
 
-    expect(handleTuiKey(state, { input: "", downArrow: true }).state.scrollOffset).toBe(9);
+    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state.scrollOffset).toBe(9);
     expect(
-      handleTuiKey({ ...state, scrollOffset: 0 }, { input: "", upArrow: true }).state.scrollOffset,
+      handleTuiKey({ ...state, scrollOffset: 0 }, { input: "", mouseScroll: "up" }).state
+        .scrollOffset,
     ).toBe(0);
   });
 
@@ -262,9 +263,9 @@ describe("TUI screen transitions", () => {
             initialSnapshot: createDashboardSnapshot(),
             terminalRows: 10,
           }),
-          { input: "", downArrow: true },
+          { input: "", mouseScroll: "down" },
         ).state,
-        { input: "", downArrow: true },
+        { input: "", mouseScroll: "down" },
       ).state,
       { input: "X" },
     );
@@ -286,9 +287,9 @@ describe("TUI screen transitions", () => {
             initialSnapshot: createDashboardSnapshot(),
             terminalRows: 10,
           }),
-          { input: "", downArrow: true },
+          { input: "", mouseScroll: "down" },
         ).state,
-        { input: "", downArrow: true },
+        { input: "", mouseScroll: "down" },
       ).state,
       { input: "R" },
     );

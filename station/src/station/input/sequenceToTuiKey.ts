@@ -36,9 +36,9 @@ export function sequenceToTuiKey(sequence: string): TuiKey | undefined {
   if (sequence.length === 1) {
     const code = sequence.charCodeAt(0);
     // Control bytes map to ctrl+letter (Ctrl-C = \x03 -> {input:"c", ctrl}).
-    // \t (Ctrl-I), \r/\n, and \x1b are named above or deliberately absent;
-    // legacy encoding cannot distinguish Tab from Ctrl-I, and the dashboard
-    // binds neither.
+    // \r/\n and \x1b are named above. Legacy encoding cannot distinguish Tab
+    // from Ctrl-I: \t reaches the dashboard as {input:"i", ctrl}, which the
+    // keymap's next-needs-me binding deliberately matches.
     if (code >= 0x01 && code <= 0x1a) {
       return { input: String.fromCharCode(code + 0x60), ctrl: true };
     }

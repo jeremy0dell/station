@@ -22,9 +22,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
  [b] - old-experiment                     -         no agent                    
-↓ 3 hidden                                                                      
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -68,7 +68,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold P:settings H:help Q/esc:close       
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                          
 "
 `;
 
@@ -86,9 +86,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ?
  [5] ⠋ station-overlay         codex     working      #76 … 
                                                             
 ▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
-↓ 11 hidden                                                 
+▼ 6 below · showing 5 of 11                                 
 ─────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete se… 
+↵ open  N new  ⇥ next  / search  X delete  ? help  Q/esc:c… 
 "
 `;
 
@@ -102,9 +102,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
  [1] ○ cli-help-man        idle         
  [2] - docs-cleanup        no agent     
  [3] ○ pty-buffer          idle         
-↓ 15 hidden                             
+▼ 8 below · showing 3 of 11             
 ─────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/… 
+↵ open  N new  ⇥ next  / search  X del… 
 "
 `;
 
@@ -132,7 +132,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
                                                                                 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete session /:search H:help 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
@@ -176,7 +176,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-N:new A:add R:rename F:fork Z:refresh 1-9/a-z:open X:delete session /:search C:fold P:settings H:help Q/esc:close       
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                          
 "
 `;
 
@@ -194,9 +194,9 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ?
                                                             
 ▼ observer  2 sessions · 2 agents             [sh] [qs] [▾] 
  [5] x done-run           opencode  exited                  
-↓ 1 hidden                                                  
+▼ 1 below · showing 5 of 6                                  
 ─────────────────────────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/a-z:open X:delete se… 
+↵ open  N new  ⇥ next  / search  X delete  ? help  Q/esc:c… 
 "
 `;
 
@@ -210,9 +210,9 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3
  [1] ! hook-scope                       
  [2] ? metadata-refresh                 
  [3] ! popup-latency                    
-↓ 5 hidden                              
+▼ 3 below · showing 3 of 6              
 ─────────────────────────────────────── 
-Q/esc:close N:new A:add Z:refresh 1-9/… 
+↵ open  N new  ⇥ next  / search  X del… 
 "
 `;
 
@@ -240,7 +240,7 @@ No projects configured yet.
                                                                                 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-A:Add Project Q/esc:close                                                       
+A add project  Q/esc:close                                                      
 "
 `;
 
@@ -284,7 +284,7 @@ No projects configured yet.
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-A:Add Project Q/esc:close                                                                                               
+A add project  Q/esc:close                                                                                              
 "
 `;
 
@@ -304,7 +304,7 @@ No projects configured yet.
                                                             
                                                             
 ─────────────────────────────────────────────────────────── 
-A:Add Project Q/esc:close                                   
+A add project  Q/esc:close                                  
 "
 `;
 
@@ -320,6 +320,6 @@ No projects configured yet.
                                         
                                         
 ─────────────────────────────────────── 
-A:Add Project Q/esc:close               
+A add project  Q/esc:close              
 "
 `;
