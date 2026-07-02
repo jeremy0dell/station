@@ -9,11 +9,14 @@ import {
 } from "../input/mouse.js";
 import { useHoverPointer } from "../useHoverPointer.js";
 import { STATION_COLORS } from "../station/view/theme.js";
+import { Throbber } from "../station/view/Throbber.js";
 import { lerpColor, type StationButtonStateColors, stationButtonColors } from "./colors.js";
+import type { ProjectRollupEntry, ProjectRollupStatus } from "./status.js";
 import {
   ANIM_MS,
-  ATTENTION_LINES,
   ATTENTION_MARK,
+  attentionLines,
+  celebrationText,
   clampSessionName,
   COLLAPSED_ATTENTION_COLS,
   COLLAPSED_BASE_COLS,
@@ -23,7 +26,11 @@ import {
   FRAME_MS,
   GRADIENT_EDGE,
   ICON_COLS,
+  ICON_PAD,
+  type IslandCelebration,
   lerp,
+  paintedCount,
+  ROLLUP_MAX_LINES,
   sessionSummary,
   STATION_BUTTON_Z_INDEX,
   STATION_ICON,
@@ -32,12 +39,23 @@ import {
 
 export type DynamicStationButtonProps = {
   attention: boolean;
+  /** Sessions asking for the user; >1 swaps the attention card to the queue line. */
+  needsYouCount: number;
   workingCount: number;
+  readyCount: number;
   idleCount: number;
   sessionName?: string | undefined;
+  /** C3 opt-in: the collapsed rest state paints fleet counts, not the bare mark. */
+  restCounts?: boolean | undefined;
+  /** C2 opt-in: the hovered card lists each project's worst status. */
+  projectRollup?: readonly ProjectRollupEntry[] | undefined;
+  /** A just-merged PR to celebrate; replaces the collapsed rest content while set. */
+  celebration?: IslandCelebration | undefined;
   /** Force-expand from external hover state; internal mouse hover also expands. */
   hovered?: boolean | undefined;
   focused?: boolean | undefined;
+  /** Reports mouse-over so the app can scope island keyboard actions to hover. */
+  onHoverChange?: ((hovered: boolean) => void) | undefined;
   /** Left-click in a base state (no attention) — opens/closes the STATION overlay. */
   onToggleStation?: ((event: StationMouseEvent) => void) | undefined;
   /** Left-click in an attention state — focus the flagged session. */
@@ -47,10 +65,14 @@ export type DynamicStationButtonProps = {
 };
 
 export function DynamicStationButton(props: DynamicStationButtonProps): ReactNode {
-  const { attention, workingCount, idleCount, sessionName } = props;
+  const { attention, onHoverChange } = props;
   const [internalHover, setInternalHover] = useState(false);
   const expanded = (props.hovered ?? false) || (props.focused ?? false) || internalHover;
-  const pointerProps = useHoverPointer({ onHoverChange: setInternalHover });
+  const handleHoverChange = (hovering: boolean): void => {
+    setInternalHover(hovering);
+    onHoverChange?.(hovering);
+  };
+  const pointerProps = useHoverPointer({ onHoverChange: handleHoverChange });
 
   const open = useOpenAmount(expanded ? 1 : 0);
   const collapsed = targetDims(false, props);
@@ -122,9 +144,14 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
         iconPadX={iconPadX}
         iconPadY={iconPadY}
         reveal={textReveal}
-        workingCount={workingCount}
-        idleCount={idleCount}
-        sessionName={sessionName}
+        needsYouCount={props.needsYouCount}
+        workingCount={props.workingCount}
+        readyCount={props.readyCount}
+        idleCount={props.idleCount}
+        sessionName={props.sessionName}
+        restCounts={props.restCounts}
+        projectRollup={props.projectRollup}
+        celebration={props.celebration}
       />
       {/* Keeps one stable hit target above morphing text/icon children during expand/collapse. */}
       <box
@@ -147,17 +174,34 @@ function StationButtonContent(props: {
   iconPadX: number;
   iconPadY: number;
   reveal: number;
+  needsYouCount: number;
   workingCount: number;
+  readyCount: number;
   idleCount: number;
   sessionName?: string | undefined;
+  restCounts?: boolean | undefined;
+  projectRollup?: readonly ProjectRollupEntry[] | undefined;
+  celebration?: IslandCelebration | undefined;
 }): ReactNode {
   const { attention, expanded, color, iconPadX, iconPadY, reveal } = props;
   if (!expanded) {
-    return attention ? (
-      <CollapsedAttention color={color} />
-    ) : (
-      <CollapsedBase color={color} iconPadX={iconPadX} iconPadY={iconPadY} />
-    );
+    if (attention) {
+      return <CollapsedAttention color={color} />;
+    }
+    if (props.celebration !== undefined) {
+      return <CollapsedCelebration celebration={props.celebration} />;
+    }
+    if (props.restCounts === true) {
+      return (
+        <CollapsedCounts
+          iconColor={color.icon}
+          workingCount={props.workingCount}
+          readyCount={props.readyCount}
+          idleCount={props.idleCount}
+        />
+      );
+    }
+    return <CollapsedBase color={color} iconPadX={iconPadX} iconPadY={iconPadY} />;
   }
   if (attention) {
     return (
@@ -166,7 +210,19 @@ function StationButtonContent(props: {
         iconPadX={iconPadX}
         iconPadY={iconPadY}
         reveal={reveal}
+        needsYouCount={props.needsYouCount}
         sessionName={props.sessionName}
+      />
+    );
+  }
+  if (props.projectRollup !== undefined && props.projectRollup.length > 0) {
+    return (
+      <ExpandedRollup
+        color={color}
+        iconPadX={iconPadX}
+        iconPadY={iconPadY}
+        reveal={reveal}
+        entries={props.projectRollup}
       />
     );
   }
@@ -177,6 +233,7 @@ function StationButtonContent(props: {
       iconPadY={iconPadY}
       reveal={reveal}
       workingCount={props.workingCount}
+      readyCount={props.readyCount}
       idleCount={props.idleCount}
     />
   );
@@ -264,12 +321,48 @@ function CollapsedAttention({ color }: { color: StationButtonStateColors }): Rea
   );
 }
 
+// Fleet-lane vocabulary shared with the dashboard's FLEET bar: ⠿ working (blue,
+// animated while any), ● ready (green), ○ idle (gray).
+function CollapsedCounts(props: {
+  iconColor: string;
+  workingCount: number;
+  readyCount: number;
+  idleCount: number;
+}): ReactNode {
+  return (
+    <box flexDirection="row" paddingLeft={ICON_PAD}>
+      <IconGlyph color={props.iconColor} />
+      <text>
+        <span> </span>
+        {props.workingCount > 0 ? (
+          <Throbber variant="braille" fg={STATION_COLORS.blue} />
+        ) : (
+          <span fg={STATION_COLORS.blue}>⠿</span>
+        )}
+        <span fg={STATION_COLORS.blue}>{`${paintedCount(props.workingCount)} `}</span>
+        <span fg={STATION_COLORS.green}>{`●${paintedCount(props.readyCount)} `}</span>
+        <span fg={STATION_COLORS.gray}>{`○${paintedCount(props.idleCount)}`}</span>
+      </text>
+    </box>
+  );
+}
+
+function CollapsedCelebration({ celebration }: { celebration: IslandCelebration }): ReactNode {
+  return (
+    <box flexDirection="row" paddingLeft={ICON_PAD}>
+      <IconGlyph color={STATION_COLORS.green} />
+      <text fg={STATION_COLORS.green}>{` ${celebrationText(celebration)}`}</text>
+    </box>
+  );
+}
+
 function ExpandedBase(props: {
   color: StationButtonStateColors;
   iconPadX: number;
   iconPadY: number;
   reveal: number;
   workingCount: number;
+  readyCount: number;
   idleCount: number;
 }): ReactNode {
   const { color, reveal } = props;
@@ -283,10 +376,58 @@ function ExpandedBase(props: {
           color={color.text}
         />
         <GradientText
-          text={sessionSummary(props.idleCount, "idle")}
+          // Ready sessions read as idle in the totals (the fleet breakdown keeps them disjoint).
+          text={sessionSummary(props.readyCount + props.idleCount, "idle")}
           reveal={reveal}
           color={color.text}
         />
+      </box>
+    </box>
+  );
+}
+
+const ROLLUP_MARKS: Record<Exclude<ProjectRollupStatus, "working">, { glyph: string; color: string }> = {
+  needsYou: { glyph: "!", color: STATION_COLORS.red },
+  ready: { glyph: "●", color: STATION_COLORS.green },
+  idle: { glyph: "○", color: STATION_COLORS.gray },
+};
+
+function RollupGlyph({ status }: { status: ProjectRollupStatus }): ReactNode {
+  if (status === "working") {
+    return (
+      <text>
+        <Throbber variant="braille" fg={STATION_COLORS.blue} />
+        <span> </span>
+      </text>
+    );
+  }
+  const mark = ROLLUP_MARKS[status];
+  return <text fg={mark.color}>{`${mark.glyph} `}</text>;
+}
+
+function ExpandedRollup(props: {
+  color: StationButtonStateColors;
+  iconPadX: number;
+  iconPadY: number;
+  reveal: number;
+  entries: readonly ProjectRollupEntry[];
+}): ReactNode {
+  const { color, reveal, entries } = props;
+  const shown = entries.slice(0, ROLLUP_MAX_LINES);
+  const folded = entries.length - shown.length;
+  return (
+    <box flexDirection="column">
+      <IconRow color={color.icon} padX={props.iconPadX} padY={props.iconPadY} />
+      <box flexDirection="column" paddingLeft={CONTENT_INDENT}>
+        {shown.map((entry) => (
+          <box key={entry.projectId} flexDirection="row">
+            <RollupGlyph status={entry.status} />
+            <GradientText text={clampSessionName(entry.name)} reveal={reveal} color={color.text} />
+          </box>
+        ))}
+        {folded > 0 ? (
+          <GradientText text={`+${folded} more`} reveal={reveal} color={color.text} />
+        ) : null}
       </box>
     </box>
   );
@@ -297,6 +438,7 @@ function ExpandedAttention(props: {
   iconPadX: number;
   iconPadY: number;
   reveal: number;
+  needsYouCount: number;
   sessionName?: string | undefined;
 }): ReactNode {
   const { color, reveal } = props;
@@ -309,7 +451,7 @@ function ExpandedAttention(props: {
           reveal={reveal}
           color={color.text}
         />
-        {ATTENTION_LINES.map((line) => (
+        {attentionLines(props.needsYouCount).map((line) => (
           <GradientText
             key={line}
             text={line}

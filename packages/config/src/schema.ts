@@ -244,9 +244,21 @@ export const TuiWidgetConfigSchema = z.discriminatedUnion("type", [
 
 export type TuiWidgetConfig = z.infer<typeof TuiWidgetConfigSchema>;
 
+export const TuiIslandConfigSchema = z
+  .object({
+    /** Collapsed island shows live fleet counts (working/ready/idle) instead of the bare mark. */
+    restCounts: z.boolean().optional(),
+    /** Hovered island lists each project's worst agent status instead of the totals summary. */
+    projectRollup: z.boolean().optional(),
+  })
+  .strict();
+
+export type TuiIslandConfig = z.infer<typeof TuiIslandConfigSchema>;
+
 export const TuiConfigSchema = z
   .object({
     widgets: z.array(TuiWidgetConfigSchema).optional(),
+    island: TuiIslandConfigSchema.optional(),
   })
   .strict();
 

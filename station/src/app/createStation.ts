@@ -315,6 +315,10 @@ function buildViewProps(
   if (widgets !== undefined) {
     viewProps.widgets = widgets;
   }
+  const island = options.tuiConfig?.island;
+  if (island !== undefined) {
+    viewProps.island = island;
+  }
   if (options.topRowWidgetDeps !== undefined) {
     viewProps.topRowWidgetDeps = options.topRowWidgetDeps;
   }
