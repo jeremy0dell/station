@@ -45,8 +45,8 @@ describe("Station app composition", () => {
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("station - 5 worktrees"))).toContain(
-      "station - 5 worktrees",
+    expect(await waitForFrame(station, (frame) => frame.includes("station  5 sessions"))).toContain(
+      "station  5 sessions",
     );
 
     await station.setup.mockInput.typeText("blocked");
@@ -207,8 +207,8 @@ describe("Station app composition", () => {
 
     station.composition.stationInput.dispatchMouse({ kind: "welcomeOpenProjectView" }, LEFT_DOWN);
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("station - 5 worktrees"))).toContain(
-      "station - 5 worktrees",
+    expect(await waitForFrame(station, (frame) => frame.includes("station  5 sessions"))).toContain(
+      "station  5 sessions",
     );
     expect(station.spawnCount()).toBe(0);
 

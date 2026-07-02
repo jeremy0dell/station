@@ -185,7 +185,7 @@ export function statusMarker(row: WorktreeRowModel): RowMarker {
   return { kind: "text", text: "-" };
 }
 
-function isReadyToRead(row: WorktreeRowModel): boolean {
+export function isReadyToRead(row: WorktreeRowModel): boolean {
   return row.agent?.state === "idle" && row.agent.turnReadiness?.state === "ready_to_read";
 }
 

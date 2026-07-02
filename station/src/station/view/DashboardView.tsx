@@ -23,7 +23,9 @@ import {
 import {
   QUIT_HINT_CLOSE,
   selectDashboardViewport,
+  selectFleetSummary,
   type DashboardViewportItem,
+  type FleetSummary,
 } from "@station/dashboard-core";
 import type { TuiViewState } from "@station/dashboard-core";
 import type { StationMouseTarget } from "../input/stationMouse.js";
@@ -77,6 +79,7 @@ export function DashboardView({
   const viewport = selectDashboardViewport(snapshot, viewState);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
+  const fleet = selectFleetSummary(snapshot);
   return (
     <box
       width="100%"
@@ -90,6 +93,7 @@ export function DashboardView({
         widgets={topRowWidgets}
         {...(observerStatus === undefined ? {} : { status: observerStatus })}
       />
+      {firstRun ? null : <FleetBar summary={fleet} />}
       <Divider columns={contentColumns} />
       <ScrollIndicatorRow direction="above" hiddenCount={viewport.hiddenAbove} />
       {firstRun ? (
@@ -143,6 +147,37 @@ export function Divider({ columns }: { columns: number }) {
   return <text fg={STATION_COLORS.gray}>{"─".repeat(Math.max(1, columns))}</text>;
 }
 
+// Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
+// working/needs-you/idle always show; unknown/exited appear only when non-zero.
+function FleetBar({ summary }: { summary: FleetSummary }) {
+  const parts: { glyph: string; color: string; label: string }[] = [
+    { glyph: "●", color: STATION_COLORS.green, label: `${summary.ready} ready` },
+    { glyph: "⠿", color: STATION_COLORS.blue, label: `${summary.working} working` },
+    { glyph: "!", color: STATION_COLORS.red, label: `${summary.needsYou} needs you` },
+    { glyph: "○", color: STATION_COLORS.gray, label: `${summary.idle} idle` },
+  ];
+  if (summary.unknown > 0) {
+    parts.push({ glyph: "?", color: STATION_COLORS.yellow, label: `${summary.unknown} unknown` });
+  }
+  if (summary.exited > 0) {
+    parts.push({ glyph: "x", color: STATION_COLORS.gray, label: `${summary.exited} exited` });
+  }
+  return (
+    <box height={1} width="100%" backgroundColor={STATION_COLORS.frozenSurface} overflow="hidden">
+      <text fg={STATION_COLORS.gray}>
+        <span attributes={TextAttributes.BOLD}>FLEET</span>
+        {parts.map((part) => (
+          <span key={part.label}>
+            {"  "}
+            <span fg={part.color}>{part.glyph}</span>
+            {` ${part.label}`}
+          </span>
+        ))}
+      </text>
+    </box>
+  );
+}
+
 function ScrollIndicatorRow({
   direction,
   hiddenCount,
@@ -181,10 +216,10 @@ function DashboardBody({
     const input = rowGridInputForViewportItem(item, keyByRow);
     return input === undefined ? [] : [input];
   });
-  // Lay rows out one affordance-width narrower so every row reserves the same
-  // right-hand column for `[+sh]`; rows keep their alignment whether or not
-  // the trailing affordance renders (worktree rows have it, create rows don't).
-  const gridColumns = Math.max(1, columns - SHELL_AFFORDANCE_WIDTH);
+  // Rows use the full content width: the per-row [shell] affordance was removed
+  // (it lives on the project header now), so the diff/PR metadata reclaims the
+  // right-hand column that used to be reserved for it.
+  const gridColumns = Math.max(1, columns);
   const rowLayouts = layoutWorktreeRowGrid({ columns: gridColumns, rows: rowInputs });
   const layoutByItem = new Map(rowLayouts.map((layout) => [layout.id, layout]));
   return (
@@ -216,7 +251,7 @@ function DashboardViewportRow({
     case "projectHeader":
       return <ProjectHeaderLine columns={columns} project={item.project} collapsed={item.collapsed} />;
     case "emptyProject":
-      return <text fg={STATION_COLORS.gray}>{truncateCells(emptyProjectLabel(item.project), columns)}</text>;
+      return <text fg={STATION_COLORS.gray}>{truncateCells(emptyProjectLabel(), columns)}</text>;
     case "worktree":
       return layout === undefined ? null : (
         <WorktreeRowLine rowId={item.row.id} layout={layout} />
@@ -251,7 +286,6 @@ function WorktreeRowLine({ rowId, layout }: { rowId: string; layout: RowGridLayo
         </text>
         <SegmentLinkTargets segments={layout.segments} />
       </box>
-      <ShellAffordance target={{ kind: "openShellForRow", rowId }} onHoverChange={setHover} />
     </box>
   );
 }

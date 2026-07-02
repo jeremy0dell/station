@@ -173,9 +173,9 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("x2");
     expect(frame).toContain("✓");
     expect(frame).toContain("…");
-    // Project headers with the disclosure marker and harness suffix.
-    expect(frame).toContain("▼ station - 4 worktrees");
-    expect(frame).toContain("▼ observer - 2 worktrees");
+    // Project headers with the disclosure marker and session/agent counts.
+    expect(frame).toContain("▼ station  4 sessions");
+    expect(frame).toContain("▼ observer  2 sessions");
   });
 
   it("colors alert rows red and check glyphs by state", async () => {
@@ -274,12 +274,12 @@ describe("dashboard golden frames", () => {
   });
 
   it("assigns slots only to visible actionable rows", async () => {
-    const setup = await renderDashboard({ width: 80, height: 24, snapshot: manyProjectsSnapshot() });
+    const setup = await renderDashboard({ width: 80, height: 40, snapshot: manyProjectsSnapshot() });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("[1]");
     // The starting row gets a slot too (it has a focusable terminal), but the
-    // empty project renders its zero-count line with no slot cell.
-    expect(frame).toContain("0 worktrees");
+    // empty project renders its calm empty-state line with no slot cell.
+    expect(frame).toContain("no sessions yet · press A to add one");
   });
 
   it("paints hovered worktree rows through the trailing action column", async () => {
