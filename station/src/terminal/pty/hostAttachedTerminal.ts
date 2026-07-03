@@ -11,6 +11,7 @@ import type {
   StationTerminalDisposable,
   StationTerminalExit,
   StationTerminalProcess,
+  StationTerminalReplay,
   StationTerminalSize,
 } from "../types.js";
 
@@ -85,6 +86,7 @@ export function createHostAttachedTerminal(
   const dataListeners = new Set<(data: string) => void>();
   const exitListeners = new Set<(event: StationTerminalExit) => void>();
   const diagnosticListeners = new Set<(message: string) => void>();
+  const replayListeners = new Set<(replay: StationTerminalReplay) => void | Promise<void>>();
   const pendingData: string[] = [];
   const pendingWrites: string[] = [];
   let attachment: HostAttachment | undefined;
@@ -136,6 +138,25 @@ export function createHostAttachedTerminal(
       listener(message);
     }
   };
+  // Snapshot bytes were painted for the host PTY's recorded size, not this
+  // pane's. A wired replay listener gets them with that size and is awaited so
+  // live frames never interleave with the replay parse; with no listener the
+  // chunks fall back to the plain data path (recorded size unknown to it).
+  const emitReplay = async (
+    chunks: readonly string[],
+    recordedSize: StationTerminalSize,
+  ): Promise<void> => {
+    if (disposed) {
+      return;
+    }
+    if (replayListeners.size === 0) {
+      for (const chunk of chunks) {
+        emitData(chunk);
+      }
+      return;
+    }
+    await Promise.all([...replayListeners].map((listener) => listener({ size: recordedSize, chunks })));
+  };
 
   // Attach, replay scrollback once, then stream frames. A transient transport
   // failure — or the stream ending with no exit frame — reconnects with backoff;
@@ -166,22 +187,29 @@ export function createHostAttachedTerminal(
         // On a RECONNECT the ack snapshot is the current ring — it captured output
         // produced while we were detached — so repaint from it (clearing first so
         // the already-shown history isn't duplicated) rather than dropping the gap.
+        const recordedSize = { cols: opened.ack.cols, rows: opened.ack.rows };
         if (!replayed) {
-          for (const chunk of opened.ack.scrollback) {
-            emitData(chunk);
-          }
+          await emitReplay(opened.ack.scrollback, recordedSize);
           replayed = true;
         } else {
-          emitData(RECONNECT_REPAINT);
-          for (const chunk of opened.ack.scrollback) {
-            emitData(chunk);
-          }
+          await emitReplay([RECONNECT_REPAINT, ...opened.ack.scrollback], recordedSize);
         }
         // Sync the host PTY to THIS client's pane size on (re)attach — the host may
         // have spawned it at a different size — then flush input typed before attach
         // resolved. Expose `attachment` only AFTER the flush so later writes order
         // after the buffered ones.
         await opened.resize(size.cols, size.rows);
+        // A same-size resize is a no-op TIOCSWINSZ — no SIGWINCH — so a child
+        // whose replayed frame may be stale would never repaint; flap the rows
+        // to force one. A real size change above already delivers the signal.
+        if (
+          opened.ack.scrollback.length > 0 &&
+          opened.ack.cols === size.cols &&
+          opened.ack.rows === size.rows
+        ) {
+          await opened.resize(size.cols, size.rows > 1 ? size.rows - 1 : size.rows + 1);
+          await opened.resize(size.cols, size.rows);
+        }
         // Drain front-to-back so a mid-flush failure leaves only the un-sent
         // writes to retry (no double-send on reconnect). New writes keep arriving
         // at the back while attachment is still undefined, preserving order.
@@ -311,6 +339,10 @@ export function createHostAttachedTerminal(
       diagnosticListeners.add(listener);
       return disposableFor(diagnosticListeners, listener);
     },
+    onReplay(listener) {
+      replayListeners.add(listener);
+      return disposableFor(replayListeners, listener);
+    },
     write(data) {
       if (disposed || exited) {
         return;
@@ -355,6 +387,7 @@ export function createHostAttachedTerminal(
       dataListeners.clear();
       exitListeners.clear();
       diagnosticListeners.clear();
+      replayListeners.clear();
       // DETACH, never kill: closing this pane's connection makes the host release
       // the stream (its socket-close handler) while keeping the PTY alive for the
       // next reattach. (Each pane owns its own client/connection, so closing it
