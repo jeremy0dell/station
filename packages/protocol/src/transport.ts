@@ -43,7 +43,9 @@ export async function isSocketStale(socketPath: string): Promise<boolean> {
   }
 
   try {
-    const connection = await connectUnixSocket(socketPath, { timeoutMs: 100 });
+    // Generous timeout: misclassifying a busy-but-live observer as stale makes
+    // the caller unlink its socket and silently orphan the running process.
+    const connection = await connectUnixSocket(socketPath, { timeoutMs: 1000 });
     connection.close();
     return false;
   } catch {

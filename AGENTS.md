@@ -6,6 +6,8 @@ For configuration — the runtime `config.toml` (all sections, including `[works
 
 For development, test, and documentation workflow, read `docs/development.md`.
 
+For harness status, attention, and event semantics, read `docs/harness-signals.md`. For adding or upgrading a harness integration, read `docs/harness-authoring.md`.
+
 For runtime trace IDs, command IDs, diagnostic IDs, or live debugging, read `docs/debugging.md`.
 For diagnosis, start with the debugging, diagnostics, and observability tools documented there before reading source code.
 
@@ -21,6 +23,10 @@ Prefer self-documenting code. Add a comment when it protects non-obvious intent 
 
 Prefer one precise comment near the protected code over leaving the rationale in a planning doc or review thread. Do not add comments that restate the branch condition, variable name, or TypeScript type. If a comment would need to narrate several steps of ordinary code, simplify or extract the code first.
 
+Keep load-bearing comments; do not strip them chasing a zero-comment ideal. The target is the necessary minimum, which is almost always SOME, not NONE — a file with real ordering, concurrency, or boundary subtlety should carry the comments that protect it.
+
+Voice: one sentence by default (needing two usually means the code wants renaming or extracting). State the mechanism or invariant, not a narrative. Cut storytelling and anthropomorphizing ("brings the user there", "yanked into the pane", "lands the user in the pane") and anything that restates a named flag or type. At most one parenthetical per comment.
+
 ## Optional Object Construction
 
 `exactOptionalPropertyTypes` is intentional. Preserve the difference between absent optional fields and fields set to `undefined`.
@@ -34,6 +40,8 @@ Provider-specific diagnostics and behavior must stay behind provider or integrat
 Use strict schemas for untrusted input and shared payload formats. Avoid maintaining parallel hand-written validators for the same shape.
 
 Treat `unknown` as a boundary-only type. At JSON/TOML/CLI/hook/provider boundaries, parse once with a strict Zod schema or contract parser, then pass typed values inward.
+
+Use idiomatic TypeScript and `SafeError` shapes. At error boundaries, convert unknown failures through the repo's SafeError helpers instead of probing Error-like objects by hand. If code is `===`-checking JavaScript primitive type strings (`"string"`, `"number"`, `"boolean"`, `"object"`), it is usually the wrong shape even in small helpers: use a schema, discriminated union, inferred type, or typed builder instead. Keep primitive `typeof` checks only for truly generic JavaScript interop, recursion, or error-normalization boundaries where no typed contract can exist, and keep them local.
 
 Do not add local JavaScript-style type helper clusters such as `isRecord`, `asRecord`, `stringField`, `numberField`, or repeated `"key" in value`/`typeof value.foo === ...` checks for shapes that already have, or should have, a schema or discriminated TypeScript type. If the shape is shared, put the schema in `packages/contracts`; if it is provider-private, keep a provider-local schema beside the adapter/parser.
 

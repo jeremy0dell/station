@@ -121,6 +121,12 @@ export type WorktreeChangeSummary = z.infer<typeof WorktreeChangeSummarySchema>;
 export type WorktreeChecksState = z.infer<typeof WorktreeChecksStateSchema>;
 export type WorktreeChecksSummary = z.infer<typeof WorktreeChecksSummarySchema>;
 
+// Closed taxonomy for user-blocking states, normalized at each provider
+// boundary so core and the TUI never match on provider prose.
+export const AttentionKindSchema = z.enum(["question", "plan_approval", "tool_approval", "input"]);
+
+export type AttentionKind = z.infer<typeof AttentionKindSchema>;
+
 export const ObservedStatusSchema = z
   .object({
     value: AgentStateSchema,
@@ -128,6 +134,7 @@ export const ObservedStatusSchema = z
     reason: nonEmptyStringSchema,
     source: ObservedStatusSourceSchema,
     updatedAt: TimestampSchema,
+    attention: AttentionKindSchema.optional(),
   })
   .strict();
 

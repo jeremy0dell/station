@@ -11,15 +11,6 @@ export function statusFromCodexAppServerEvent(
     case "turn-completed":
       return statusFromTurnCompletion(event.turnStatus, observedAt);
     case "item-completed":
-      if (event.itemType === "plan") {
-        return {
-          value: "needs_attention",
-          confidence: "high",
-          reason: "Codex proposed a plan.",
-          source: "harness_event",
-          updatedAt: observedAt,
-        };
-      }
       return undefined;
     case "server-request":
       return statusFromServerRequest(event.method, observedAt);
@@ -52,6 +43,7 @@ function statusFromThreadStatus(
         reason: "Codex is waiting for approval.",
         source: "harness_event",
         updatedAt: observedAt,
+        attention: "tool_approval",
       };
     }
     if (event.activeFlags.includes("waitingOnUserInput")) {
@@ -61,6 +53,7 @@ function statusFromThreadStatus(
         reason: "Codex is waiting for user input.",
         source: "harness_event",
         updatedAt: observedAt,
+        attention: "question",
       };
     }
     return undefined;
@@ -110,6 +103,7 @@ function statusFromServerRequest(method: string, observedAt: string): ObservedSt
       reason: "Codex requested user input.",
       source: "harness_event",
       updatedAt: observedAt,
+      attention: "question",
     };
   }
   return {
@@ -118,5 +112,6 @@ function statusFromServerRequest(method: string, observedAt: string): ObservedSt
     reason: "Codex requested approval.",
     source: "harness_event",
     updatedAt: observedAt,
+    attention: "tool_approval",
   };
 }

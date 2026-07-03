@@ -36,7 +36,7 @@ export type NotifyCommandResult = {
 
 type WorktreeAgent = NonNullable<WorktreeRow["agent"]>;
 type WorktreeAgentStateChangedEvent = Extract<StationEvent, { type: "worktree.agentStateChanged" }>;
-type NotificationKind = "finished" | "needs_attention";
+type NotificationKind = "finished";
 
 type NotifiableAgentEvent = {
   event: WorktreeAgentStateChangedEvent;
@@ -60,7 +60,7 @@ function notificationTitle(input: NotifiableAgentEvent): string {
     return input.event.sessionTitle;
   }
   const identity = notificationIdentity(input.event, input.agent);
-  return input.kind === "needs_attention" ? `${identity} needs attention` : `${identity} finished`;
+  return `${identity} finished`;
 }
 
 function notifiableAgentEvent(
@@ -72,9 +72,6 @@ function notifiableAgentEvent(
   }
   if (agent.state === "idle") {
     return { event, agent, kind: "finished" };
-  }
-  if (agent.state === "needs_attention") {
-    return { event, agent, kind: "needs_attention" };
   }
   return undefined;
 }

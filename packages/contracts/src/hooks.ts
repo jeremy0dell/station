@@ -174,7 +174,7 @@ export type ProviderHookScopeDecision =
     }
   | {
       action: "ignore";
-      reason: "missing-station-env";
+      reason: "missing-station-env" | "event-not-forwarded";
     };
 export type HookScopeDecision = ProviderHookScopeDecision;
 

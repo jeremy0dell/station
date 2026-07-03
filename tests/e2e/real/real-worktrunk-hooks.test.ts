@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { runProviderIngressCommand } from "@station/provider-hooks";
+import { runProviderIngressCommand } from "@station/cli/ingress";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { assertDebugBundleContains } from "../../support/real-station/assertions";
 import {

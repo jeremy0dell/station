@@ -4,6 +4,7 @@ import type {
   HarnessEventObservation,
   HarnessEventReport,
   HarnessEventReportReceipt,
+  ProviderHookAdapter,
   ProviderHookEvent,
   ProviderHookReceipt,
   ProviderProjectConfig,
@@ -21,6 +22,7 @@ import {
 import {
   type RuntimeClock,
   runRuntimeBoundary,
+  safeErrorFromUnknown,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
@@ -61,6 +63,11 @@ export type CreateProviderHookIngressOptions = {
   hookId?: () => string;
   requestReconcile?: (reason: string) => void;
   retention?: ObservabilityRetentionConfig;
+  /**
+   * Harness report handoff for adapter-normalized hook events. Raw payloads are
+   * normalized here (observer-side) so exactly one code version computes status.
+   */
+  reportHarnessEvent?: (report: HarnessEventReport) => Promise<HarnessEventReportReceipt>;
 };
 
 export type CreateHarnessEventReportIngestionOptions = {
@@ -148,6 +155,16 @@ export function createProviderHookIngress(
         });
       }
 
+      const adapter =
+        event.kind === "harness" ? options.providers?.hookAdapters.get(event.provider) : undefined;
+      if (adapter?.toHarnessEventReport !== undefined && options.reportHarnessEvent !== undefined) {
+        return ingestViaHookAdapter({
+          event,
+          adapter,
+          reportHarnessEvent: options.reportHarnessEvent,
+        });
+      }
+
       const providerIngestResult =
         options.providers === undefined
           ? undefined
@@ -182,6 +199,103 @@ export function createProviderHookIngress(
       return ProviderHookReceiptSchema.parse(receipt);
     },
   };
+}
+
+type IngestViaHookAdapterInput = {
+  event: ProviderHookEvent;
+  adapter: ProviderHookAdapter;
+  reportHarnessEvent: (report: HarnessEventReport) => Promise<HarnessEventReportReceipt>;
+};
+
+async function ingestViaHookAdapter(
+  input: IngestViaHookAdapterInput,
+): Promise<ProviderHookReceipt> {
+  const event =
+    input.adapter.normalizeEventName === undefined
+      ? input.event
+      : ProviderHookEventSchema.parse({
+          ...input.event,
+          event: input.adapter.normalizeEventName(input.event.event),
+        });
+
+  const scope = input.adapter.decideScope?.(event);
+  if (scope?.action === "ignore") {
+    return ProviderHookReceiptSchema.parse({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: event.hookId,
+      provider: event.provider,
+      event: event.event,
+      accepted: false,
+      status: "ignored",
+      receivedAt: event.receivedAt,
+    });
+  }
+
+  const compaction = input.adapter.compactPayload?.(event) ?? {
+    event,
+    payloadSummary: {
+      present: event.payload !== undefined,
+      originalBytes: null,
+      compactedBytes: null,
+      compacted: false,
+      omittedFieldNames: [],
+    },
+  };
+
+  const result = input.adapter.toHarnessEventReport?.({
+    event: compaction.event,
+    payloadSummary: compaction.payloadSummary,
+    // hookId is stamped once at the ingress writer, so retries of a spooled
+    // event resolve to the same report id and dedupe instead of duplicating.
+    fallbackReportId: () => event.hookId ?? `hook_${randomUUID()}`,
+  });
+  if (result === undefined || !result.ok) {
+    return ProviderHookReceiptSchema.parse({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: event.hookId,
+      provider: event.provider,
+      event: event.event,
+      accepted: false,
+      status: "rejected",
+      receivedAt: event.receivedAt,
+      error: safeErrorFromUnknown(result === undefined ? undefined : result.error, {
+        tag: "HookPayloadError",
+        code: "HOOK_REPORT_INVALID",
+        message: "Provider hook payload could not be normalized to a harness event report.",
+        provider: event.provider,
+      }),
+    });
+  }
+
+  const receipt = await input.reportHarnessEvent(result.report);
+  const status =
+    receipt.status === "accepted"
+      ? "ingested"
+      : receipt.status === "spooled"
+        ? "spooled"
+        : receipt.status;
+  const hookReceipt: ProviderHookReceipt = {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    hookId: event.hookId ?? receipt.reportId,
+    provider: event.provider,
+    event: event.event,
+    accepted: receipt.accepted,
+    status,
+    receivedAt: event.receivedAt,
+  };
+  if (status === "ingested") {
+    hookReceipt.reconciled = false;
+  }
+  if (status === "spooled") {
+    hookReceipt.spooled = true;
+  }
+  if (receipt.deduped !== undefined) {
+    hookReceipt.deduped = receipt.deduped;
+  }
+  if (receipt.error !== undefined) {
+    hookReceipt.error = receipt.error;
+  }
+  return ProviderHookReceiptSchema.parse(hookReceipt);
 }
 
 export function createHarnessEventReportIngestion(

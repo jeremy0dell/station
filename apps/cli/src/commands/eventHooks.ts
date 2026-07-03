@@ -60,6 +60,7 @@ const builtInHookName = "notify-agent-state";
 const builtInHookId = "notify-agent-state";
 const builtInHookTimeoutMs = 8000;
 const builtInHookFilter = {
+  agentState: "idle",
   changeSource: "harness_event_report",
 } satisfies NonNullable<ObserverEventHookConfig["filter"]>;
 
@@ -303,6 +304,7 @@ function builtInEventHookToml(configPath: string): string {
     `timeout_ms = ${builtInHookTimeoutMs}`,
     "",
     "[hooks.event.filter]",
+    `agent_state = ${JSON.stringify(builtInHookFilter.agentState)}`,
     `change_source = ${JSON.stringify(builtInHookFilter.changeSource)}`,
   ].join("\n");
 }
@@ -338,7 +340,7 @@ function hookMatchesBuiltIn(hook: ObserverEventHookConfig, configPath: string): 
 function hookFilterMatchesBuiltIn(filter: ObserverEventHookConfig["filter"]): boolean {
   return (
     filter !== undefined &&
-    filter.agentState === undefined &&
+    filter.agentState === builtInHookFilter.agentState &&
     filter.harness === undefined &&
     filter.changeSource === builtInHookFilter.changeSource &&
     filter.harnessEventType === undefined

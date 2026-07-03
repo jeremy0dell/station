@@ -127,7 +127,7 @@ describe("CLI notify command", () => {
     });
   });
 
-  it("labels attention notifications and uses the attention sound", async () => {
+  it("skips attention events because Station UI owns input-request alerts", async () => {
     const calls: ExternalCommandCall[] = [];
     const result = await runCli(["notify", "agent-state"], {
       stdin: JSON.stringify(invocation("needs_attention")),
@@ -154,16 +154,12 @@ describe("CLI notify command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        notified: true,
-        title: "wt_web_task needs attention",
+        notified: false,
+        skipped: true,
+        reason: "agent-not-notifiable",
       },
     });
-    expect(calls[0]).toEqual({
-      command: "/usr/bin/afplay",
-      args: ["/System/Library/Sounds/Ping.aiff"],
-      timeoutMs: 5000,
-    });
-    expect(calls[1]?.args).toContain("wt_web_task needs attention");
+    expect(calls).toEqual([]);
   });
 
   it("skips non-notifiable agent state events", async () => {

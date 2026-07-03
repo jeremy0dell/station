@@ -42,31 +42,39 @@ station keeps track of everything that's running and makes it visible:
 
 ## Getting started
 
-**Requirements:** Node.js 24.x, pnpm 11. External tools (Worktrunk `wt`, tmux, agent CLIs) are optional and checked by `stn doctor`.
+**Requirements:** Node.js 24.x, pnpm 11, and Bun (Bun renders the terminal UI). A `.node-version` / `.nvmrc` pins Node for fnm/nvm (asdf needs `legacy_version_file = yes`). External tools (Worktrunk `wt`, tmux, agent CLIs) are optional and checked by `stn doctor`.
+
+### macOS: one command
+
+From a fresh clone, one script installs the system dependencies via Homebrew, builds **both** lanes (the pnpm/Node CLI + observer *and* the Bun terminal UI), and links `stn`:
 
 ```sh
-# Install dependencies and build
+./scripts/setup/bootstrap.sh
+stn setup     # required tools, an agent CLI, and your first project
+stn           # launch the workspace
+```
+
+### Manual / non-macOS
+
+station has two lanes and both must be installed: the **CLI + observer** on pnpm/Node, and the **terminal UI** on Bun (a separate workspace, *not* a pnpm-workspace member, so `pnpm install` does not touch it).
+
+```sh
+# Lane 1 — CLI + observer (pnpm/Node)
 pnpm install
 pnpm build
 
-# Run the smoke suite to verify the build
+# Lane 2 — terminal UI (Bun). Without this, bare `stn` refuses to launch ("@opentui not found").
+cd station && bun install && cd ..
+
+# Verify, configure, and launch
 pnpm smoke:release
-
-# Guided setup: writes a config, enables hooks, installs the tmux popup binding
-pnpm stn setup
-
-# Check everything is wired up
-pnpm stn doctor
-```
-
-After setup, reconcile your projects and launch the TUI:
-
-```sh
+pnpm stn setup            # writes a config, enables hooks, installs the tmux popup binding
+pnpm stn doctor           # checks everything is wired up (incl. the Bun UI lane)
 pnpm stn reconcile --reason manual
 pnpm stn
 ```
 
-To use bare `stn` from any directory, link the CLI globally:
+To use bare `stn` from any directory, link the CLI globally (the macOS script already does this):
 
 ```sh
 pnpm station:link
@@ -104,7 +112,7 @@ The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the 
   <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
 </p>
 
-**`@station/provider-hooks`**: the `stn-ingress` sender used by generated hook commands. Delivers compact provider reports to the observer socket with bounded delivery and local spooling when the observer is unavailable.
+**`stn-ingress`** (`apps/cli/src/ingress`): the sender used by generated hook commands. Delivers raw provider hook events to the observer socket with bounded delivery and local spooling when the observer is unavailable; the observer normalizes them via provider hook adapters.
 
 ---
 
@@ -166,6 +174,7 @@ station is under active development. The current build supports local setup, dia
 |-----|---------------|
 | [Overview](docs/overview.md) | What station is, why it exists, and the mental model behind it |
 | [Install](docs/install.md) | Full checkout setup, smoke options, local CLI linking |
+| [Homebrew packaging](docs/homebrew.md) | Draft tap formula path and release checklist |
 | [Architecture](docs/architecture.md) | Authoritative boundary map for architecture decisions |
 | [Development](docs/development.md) | Environment, test gates, data-shape conventions |
 | [TUI](docs/tui.md) | OpenTUI/React Station UI coding, terminal layout, test expectations |

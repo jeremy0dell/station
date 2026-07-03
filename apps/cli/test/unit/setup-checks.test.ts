@@ -57,6 +57,7 @@ describe("setup dependency checks", () => {
       ]),
       fs,
       now: () => new Date("2026-06-08T12:00:00.000Z"),
+      stationUiInstalled: async () => false,
     });
 
     expect(facts.worktrunk).toMatchObject({ status: "ok", command: "wt", version: "1.2.3" });
@@ -99,6 +100,7 @@ describe("setup dependency checks", () => {
       access: fakeAccess([]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
+      stationUiInstalled: async () => false,
     });
     const plan = buildSetupPlan(facts);
 
@@ -106,6 +108,40 @@ describe("setup dependency checks", () => {
     expect(
       plan.checks.filter((check) => check.status === "missing").map((check) => check.id),
     ).toEqual(["worktrunk", "tmux", "bun", "config", "diffnav", "git-delta"]);
+  });
+
+  it("warns in setup check when Bun works but the station UI lane is not installed", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const base = {
+      mode: "check" as const,
+      cwd: repo,
+      homeDir: join(root, "home"),
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner([], {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      }),
+      access: fakeAccess(["/fake/bin/bun"]),
+      fs: readOnlyFs({}),
+    };
+
+    const missing = buildSetupPlan(
+      await collectSetupFacts({ ...base, stationUiInstalled: async () => false }),
+    );
+    expect(missing.checks.find((check) => check.id === "station-ui")).toMatchObject({
+      tier: "recommended",
+      status: "warning",
+    });
+
+    const installed = buildSetupPlan(
+      await collectSetupFacts({ ...base, stationUiInstalled: async () => true }),
+    );
+    expect(installed.checks.find((check) => check.id === "station-ui")).toMatchObject({
+      tier: "recommended",
+      status: "ok",
+    });
   });
 
   it("selects the first available harness from detection order", async () => {
@@ -136,6 +172,7 @@ describe("setup dependency checks", () => {
       ]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
+      stationUiInstalled: async () => false,
     });
     const plan = buildSetupPlan(facts);
 
@@ -168,6 +205,7 @@ describe("setup dependency checks", () => {
       ]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
+      stationUiInstalled: async () => false,
     });
     const plan = buildSetupPlan(facts);
 

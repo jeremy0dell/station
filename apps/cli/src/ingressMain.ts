@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { runProviderIngressMain } from "./command.js";
-import { readStdinIfAvailable } from "./stdin.js";
+import { runProviderIngressMain } from "./ingress/command.js";
+import { readStdinIfAvailable } from "./ingress/stdin.js";
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const stdin = await readStdinIfAvailable();

@@ -243,6 +243,7 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
     },
     tmux: { status: "ok", command: "tmux" },
     bun: { status: "ok", command: "bun" },
+    stationUi: { status: "installed" },
     diffnav: { status: "ok", command: "diffnav" },
     gitDelta: { status: "ok", command: "delta" },
     brew: { status: "ok", command: "brew" },

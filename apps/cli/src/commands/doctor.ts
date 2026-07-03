@@ -12,6 +12,7 @@ import {
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
+import { isStationUiInstalled, stationUiInstallHint } from "../stationWorkspace.js";
 
 export type DoctorCommandOptions = {
   config?: StationConfig;
@@ -81,34 +82,52 @@ export async function runDoctorCommand(
 
 /**
  * Bare `stn` renders the TUI by shelling out to `bun run` against the station
- * workspace, so a missing Bun leaves the primary terminal UI silently broken even
- * when the observer is healthy. Surface it as a degraded (warn) doctor finding.
+ * workspace, so a missing Bun — or an installed Bun whose station/ lane was never
+ * `bun install`ed — leaves the primary terminal UI silently broken even when the
+ * observer is healthy. Surface either as a degraded (warn) doctor finding.
  */
 export async function rendererRuntimeCheck(
   resolve: (command: string) => Promise<string | undefined> = (command) =>
     resolveExecutablePath(command),
   dashboardCommandOverride: string | undefined = process.env.STATION_DASHBOARD_COMMAND,
+  uiInstalled: () => Promise<boolean> = () => isStationUiInstalled(),
 ): Promise<DoctorCheck | undefined> {
   // Mirror tui.ts: STATION_DASHBOARD_COMMAND replaces `bun run` with a custom
-  // renderer command, so Bun is not required when that override is set.
+  // renderer command, so neither Bun nor the station/ lane is required when set.
   if (dashboardCommandOverride !== undefined) {
     return undefined;
   }
   const bunPath = await resolve("bun");
-  if (bunPath !== undefined) {
-    return undefined;
+  if (bunPath === undefined) {
+    return {
+      name: "renderer-runtime",
+      status: "warn",
+      message: "Bun is not installed; bare stn cannot render the STATION terminal UI.",
+      error: {
+        tag: "RendererRuntimeError",
+        code: "BUN_RUNTIME_MISSING",
+        message: "The station TUI renderer runs on Bun (bun run), which is not on PATH.",
+        hint: "Install Bun (brew install bun), then run stn doctor.",
+      },
+    };
   }
-  return {
-    name: "renderer-runtime",
-    status: "warn",
-    message: "Bun is not installed; bare stn cannot render the STATION terminal UI.",
-    error: {
-      tag: "RendererRuntimeError",
-      code: "BUN_RUNTIME_MISSING",
-      message: "The station TUI renderer runs on Bun (bun run), which is not on PATH.",
-      hint: "Install Bun (brew install bun), then run stn doctor.",
-    },
-  };
+  // Bun is present but the station/ workspace is a separate Bun install that root
+  // `pnpm install` never touches; without it bare stn dies with "@opentui not found".
+  if (!(await uiInstalled())) {
+    return {
+      name: "renderer-runtime",
+      status: "warn",
+      message:
+        "The STATION UI dependencies are not installed; bare stn cannot render the terminal UI.",
+      error: {
+        tag: "RendererRuntimeError",
+        code: "STATION_UI_NOT_INSTALLED",
+        message: "The station/ Bun lane has no node_modules (@opentui is missing).",
+        hint: `${stationUiInstallHint} (scripts/setup/bootstrap.sh does this for you.)`,
+      },
+    };
+  }
+  return undefined;
 }
 
 function parseDoctorOptions(args: string[]): DoctorOptions {

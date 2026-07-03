@@ -13,7 +13,7 @@ import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { routeKey } from "./router.js";
-import { createStationKeymap, OVERLAY_TOGGLE_LEGACY, STATION_EXIT_LEGACY } from "./stationBindings.js";
+import { createStationKeymap, OVERLAY_TOGGLE_LEGACY, STATION_EXIT_LEGACY } from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
 function makeViewStore(): StoreApi<TuiStore> {

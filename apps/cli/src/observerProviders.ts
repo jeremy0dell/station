@@ -1,7 +1,15 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type ClaudeHarnessProviderOptions, createClaudeHarnessProvider } from "@station/claude";
-import { type CodexHarnessProviderOptions, createCodexHarnessProvider } from "@station/codex";
+import {
+  type ClaudeHarnessProviderOptions,
+  claudeHookAdapter,
+  createClaudeHarnessProvider,
+} from "@station/claude";
+import {
+  type CodexHarnessProviderOptions,
+  codexHookAdapter,
+  createCodexHarnessProvider,
+} from "@station/codex";
 import {
   type ClaudeHarnessProviderConfig,
   type HarnessProviderConfig,
@@ -25,7 +33,11 @@ import type {
   WorktreeObservation,
   WorktreeProvider,
 } from "@station/contracts";
-import { type CursorHarnessProviderOptions, createCursorHarnessProvider } from "@station/cursor";
+import {
+  type CursorHarnessProviderOptions,
+  createCursorHarnessProvider,
+  cursorHookAdapter,
+} from "@station/cursor";
 import { GithubRepositoryProvider } from "@station/github-repository";
 import type { JsonlLogger } from "@station/observability";
 import { createTerminalIntentRunner, ProviderRegistry } from "@station/observer/internal";
@@ -33,12 +45,12 @@ import {
   createOpenCodeHarnessProvider,
   type OpenCodeHarnessProviderOptions,
 } from "@station/opencode";
-import { createPiHarnessProvider, type PiHarnessProviderOptions } from "@station/pi";
+import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
-import { WorktrunkProvider } from "@station/worktrunk";
+import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
 
 export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
@@ -88,6 +100,13 @@ export function createProviderRegistry(
     terminals: [station],
     harnesses: harnessMap,
     repositories,
+    hookAdapters: [
+      claudeHookAdapter,
+      codexHookAdapter,
+      cursorHookAdapter,
+      piHookAdapter,
+      worktrunkHookAdapter,
+    ],
     terminalIntentRunner,
   });
 }

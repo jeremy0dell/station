@@ -12,6 +12,7 @@ import {
 } from "./ids.js";
 import {
   AgentStateSchema,
+  AttentionKindSchema,
   ConfidenceSchema,
   GitShaSchema,
   ObservedStatusSchema,
@@ -109,6 +110,7 @@ export const WorktreeAgentSchema = z
     confidence: ConfidenceSchema,
     reason: nonEmptyStringSchema,
     updatedAt: TimestampSchema,
+    attention: AttentionKindSchema.optional(),
     turnReadiness: TurnReadinessSchema.optional(),
   })
   .strict();
