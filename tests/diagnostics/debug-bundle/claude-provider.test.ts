@@ -30,29 +30,31 @@ describe("Claude provider debug bundle diagnostics", () => {
       clock,
       idFactory: ids(),
     });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [
+        createClaudeHarnessProvider({
+          command: "claude-missing",
+          now: () => new Date(now),
+          runner: async () => {
+            throw Object.assign(new Error("ANTHROPIC_API_KEY=sk-claudeSecret000000 missing"), {
+              code: "ENOENT",
+              stderr: "ANTHROPIC_API_KEY=sk-claudeSecret000000 claude-missing: not found",
+            });
+          },
+        }),
+      ],
+    });
     const core = createObserverCore({
       config,
-      providers: new ProviderRegistry({
-        worktree: new FakeWorktreeProvider({ now }),
-        terminal: new FakeTerminalProvider({ now }),
-        harnesses: [
-          createClaudeHarnessProvider({
-            command: "claude-missing",
-            now: () => new Date(now),
-            runner: async () => {
-              throw Object.assign(new Error("ANTHROPIC_API_KEY=sk-claudeSecret000000 missing"), {
-                code: "ENOENT",
-                stderr: "ANTHROPIC_API_KEY=sk-claudeSecret000000 claude-missing: not found",
-              });
-            },
-          }),
-        ],
-      }),
+      providers,
       persistence,
       sqlite,
       clock,
     });
 
+    await providers.healthCache.refreshAll();
     await core.reconcile("claude-health-failure");
     const snapshot = await collectDiagnosticSnapshot({
       config,

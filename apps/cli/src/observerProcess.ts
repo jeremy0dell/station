@@ -302,7 +302,7 @@ function defaultSpawnObserver(input: SpawnObserverInput): ChildProcessLike {
   });
 }
 
-async function logObserverLifecycleFailure(input: {
+export async function logObserverLifecycleFailure(input: {
   paths: ObserverPaths;
   operation: string;
   trace: RuntimeTraceContext;

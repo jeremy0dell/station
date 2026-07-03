@@ -32,51 +32,53 @@ describe("observer reconcile with Codex harness", () => {
         exitCode: 0,
       }),
     });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({
+        now,
+        worktrees: [
+          createFakeWorktree({
+            id: "wt_web_task",
+            projectId: "web",
+            branch: "task",
+            path: "/tmp/station/web/task",
+            now,
+          }),
+        ],
+      }),
+      terminal: new FakeTerminalProvider({
+        now,
+        targets: [
+          createFakeTerminalTarget({
+            id: "tmux:station:@1:%2",
+            provider: "tmux",
+            projectId: "web",
+            worktreeId: "wt_web_task",
+            sessionId: "ses_web_task",
+            now,
+            harnessBinding: {
+              role: "main-agent",
+              harnessProvider: "codex",
+              currentCommand: "codex",
+            },
+            providerData: {
+              sessionName: "station",
+              windowId: "@1",
+              paneId: "%2",
+            },
+          }),
+        ],
+      }),
+      harnesses: [provider],
+    });
     const core = createObserverCore({
       config,
-      providers: new ProviderRegistry({
-        worktree: new FakeWorktreeProvider({
-          now,
-          worktrees: [
-            createFakeWorktree({
-              id: "wt_web_task",
-              projectId: "web",
-              branch: "task",
-              path: "/tmp/station/web/task",
-              now,
-            }),
-          ],
-        }),
-        terminal: new FakeTerminalProvider({
-          now,
-          targets: [
-            createFakeTerminalTarget({
-              id: "tmux:station:@1:%2",
-              provider: "tmux",
-              projectId: "web",
-              worktreeId: "wt_web_task",
-              sessionId: "ses_web_task",
-              now,
-              harnessBinding: {
-                role: "main-agent",
-                harnessProvider: "codex",
-                currentCommand: "codex",
-              },
-              providerData: {
-                sessionName: "station",
-                windowId: "@1",
-                paneId: "%2",
-              },
-            }),
-          ],
-        }),
-        harnesses: [provider],
-      }),
+      providers,
       clock: {
         now: () => new Date(now),
       },
     });
 
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("codex-terminal-binding");
 
     expect(snapshot.rows[0]?.agent).toMatchObject({

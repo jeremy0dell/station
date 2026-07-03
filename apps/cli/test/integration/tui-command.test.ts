@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { runCli } from "@station/cli";
 import { runTuiCommand } from "@station/cli/internal";
 import type { TuiConfig } from "@station/config";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -50,7 +50,7 @@ function emptySnapshot(reason: string) {
 }
 
 // A running observer whose health check passes once spawned. `reconcile`
-// records its reason (or hangs, to model the non-blocking popup path).
+// records its reason (or hangs, to model the non-blocking startup reconcile).
 function runningObserverDeps(options: { reconciles?: string[]; hangReconcile?: boolean } = {}) {
   let running = false;
   return {
@@ -102,7 +102,10 @@ describe("CLI tui command", () => {
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
     expect(envs).toEqual([{ STATION_OBSERVER_SOCKET_PATH: fixture.socketPath }]);
-    expect(reconciles).toEqual(["tui-startup"]);
+    // The startup reconcile is deferred and never awaited: not yet run when the
+    // renderer resolves, then fires as "tui-startup".
+    expect(reconciles).toEqual([]);
+    await vi.waitFor(() => expect(reconciles).toEqual(["tui-startup"]));
   });
 
   it("defaults bare station to the fullscreen renderer outside tmux", async () => {
@@ -218,6 +221,30 @@ describe("CLI tui command", () => {
 
     const result = await expectWithin(
       runCli(["--config", configPath, "tui", "--popup"], {
+        observerDeps: runningObserverDeps({ reconciles, hangReconcile: true }),
+        tuiDeps: {
+          spawnRenderer: async ({ env }) => {
+            envs.push(env);
+            return { status: "exited", code: 0 };
+          },
+        },
+      }),
+      100,
+    );
+
+    expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
+    expect(envs).toHaveLength(1);
+    expect(reconciles).toEqual([]);
+  });
+
+  it("does not block native renderer startup on observer reconcile", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const envs: Array<Record<string, string>> = [];
+    const reconciles: string[] = [];
+
+    const result = await expectWithin(
+      runCli(["--config", configPath, "tui"], {
         observerDeps: runningObserverDeps({ reconciles, hangReconcile: true }),
         tuiDeps: {
           spawnRenderer: async ({ env }) => {
