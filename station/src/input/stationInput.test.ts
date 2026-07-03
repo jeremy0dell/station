@@ -131,9 +131,10 @@ describe("createStationInputRuntime", () => {
     expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
   });
 
-  it.each(["codex", "pi"] as const)(
-    "preserves xterm Shift+Enter for a warm-attached %s primary-agent pane",
-    (provider) => {
+  // Plain loop, not it.each: bun's bundled `it` type has no `.each`, so the
+  // station-bun typecheck step rejects it even though it runs.
+  for (const provider of ["codex", "pi"] as const) {
+    it(`preserves xterm Shift+Enter for a warm-attached ${provider} primary-agent pane`, () => {
       const baseSnapshot = manyProjectsSnapshot();
       const snapshot = {
         ...baseSnapshot,
@@ -169,8 +170,8 @@ describe("createStationInputRuntime", () => {
 
       expect(runtime.handleSequence("\x1b[27;2;13~")).toBe(true);
       expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
-    },
-  );
+    });
+  }
 
   it("matches arrow-key bytes to the focused pane's cursor-key mode", async () => {
     const { runtime, scripted, registry } = harness();
