@@ -36,8 +36,12 @@ export function createStation(options: CreateStationOptions): Station {
   const { store, stationClient } = options;
   const automations = options.automations ?? [];
 
-  // The view store and live-PTY registry everything else wires around.
-  const stationViewStore = createStationViewStore(stationClient);
+  // The view store and live-PTY registry everything else wires around. The
+  // config widget set seeds the store's live session copy (the widget-settings
+  // panel edits state only; config.toml stays the durable source).
+  const stationViewStore = createStationViewStore(stationClient, {
+    ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
+  });
   const registry = setupRegistry(options, store, stationClient);
 
   // Source → store/registry bridges, plus debounced disk layout (production only).
@@ -311,10 +315,6 @@ function buildViewProps(
     onCopySelection: deps.onCopySelection,
     automations: deps.automations,
   };
-  const widgets = options.tuiConfig?.widgets;
-  if (widgets !== undefined) {
-    viewProps.widgets = widgets;
-  }
   const island = options.tuiConfig?.island;
   if (island !== undefined) {
     viewProps.island = island;

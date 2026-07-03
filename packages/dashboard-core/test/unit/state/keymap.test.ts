@@ -95,6 +95,15 @@ function representativeStates(): Record<TuiInputMode, TuiState> {
     newSessionPickAgent: drive(base, [{ input: "N" }, { input: "A" }]),
     projectDefaultAgent: openProjectDefaultAgentPicker(base, "web"),
     addProject: drive(base, [{ input: "A" }]),
+    // Mid-list cursor over three widgets so every list binding (toggle,
+    // both reorder directions, remove) visibly acts.
+    widgetSettings: drive(
+      createInitialTuiState({
+        initialSnapshot: createDashboardSnapshot(),
+        widgets: [{ type: "time" }, { type: "fleet" }, { type: "moon" }],
+      }),
+      [{ input: "W" }, { input: "", downArrow: true }],
+    ),
   };
 }
 

@@ -16,8 +16,13 @@ import {
   focusProjectSettingsItem as focusProjectSettingsItemState,
   generatedSessionBranch,
   openProjectDefaultAgentPicker,
+  openWidgetSettings as openWidgetSettingsState,
   selectDashboardItems,
   selectDashboardViewport,
+  widgetSettingsAddFromPicker,
+  widgetSettingsOpenPicker,
+  widgetSettingsRemoveAt,
+  widgetSettingsToggleAt,
   type ProjectSettingsItemId,
 } from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
@@ -378,6 +383,27 @@ export function focusProjectSettingsItem(
   itemId: ProjectSettingsItemId,
 ): void {
   store.setState(focusProjectSettingsItemState(store.getState(), itemId));
+}
+
+/** Header `[+]` affordance: open the widget-settings panel from the dashboard. */
+export function openWidgetSettingsPanel(store: StoreApi<TuiStore>): void {
+  store.setState(openWidgetSettingsState(store.getState()));
+}
+
+export function toggleWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
+  store.setState(widgetSettingsToggleAt(store.getState(), index));
+}
+
+export function removeWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
+  store.setState(widgetSettingsRemoveAt(store.getState(), index));
+}
+
+export function openWidgetSettingsPicker(store: StoreApi<TuiStore>): void {
+  store.setState(widgetSettingsOpenPicker(store.getState()));
+}
+
+export function addWidgetSettingsPickerChoice(store: StoreApi<TuiStore>, index: number): void {
+  store.setState(widgetSettingsAddFromPicker(store.getState(), index));
 }
 
 /**
