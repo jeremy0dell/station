@@ -47,6 +47,7 @@ const checksStatusExitCodes = [1, 8];
 const GithubPullRequestSchema = z
   .object({
     number: z.number().int().positive(),
+    title: z.string().nullable().optional(),
     url: z.string().nullable().optional(),
     state: z.string().nullable().optional(),
     baseRefName: z.string().nullable().optional(),
@@ -156,6 +157,7 @@ export class GithubRepositoryProvider implements RepositoryProvider {
           "--json",
           [
             "number",
+            "title",
             "url",
             "state",
             "baseRefName",
@@ -350,6 +352,10 @@ function toWorktreePullRequest(
   };
   if (pullRequest.url !== undefined && pullRequest.url !== null && pullRequest.url.length > 0) {
     result.url = pullRequest.url;
+  }
+  const title = pullRequest.title?.trim();
+  if (title !== undefined && title.length > 0) {
+    result.title = title;
   }
   const state = pullRequestState(pullRequest);
   if (state !== undefined) result.state = state;

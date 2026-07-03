@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { DynamicStationButton } from "./DynamicStationButton.js";
-import { ANIM_MS, STATION_ICON } from "./layout.js";
+import { ANIM_MS, STATION_ICON, type IslandDisplayInput } from "./layout.js";
+import type { StationButtonStatus } from "./status.js";
 
 // OpenTUI's reconciler commits async layout updates outside React's act(),
 // matching the StationApp integration test's stance for these render checks.
@@ -9,7 +10,20 @@ import { ANIM_MS, STATION_ICON } from "./layout.js";
 
 const SURFACE = { width: 40, height: 12 };
 
-const CALM = { attention: false, needsYouCount: 0, workingCount: 0, readyCount: 0, idleCount: 0 };
+const CALM_STATUS: StationButtonStatus = {
+  attention: false,
+  needsYouCount: 0,
+  workingCount: 0,
+  readyCount: 0,
+  idleCount: 0,
+};
+
+function input(
+  status: Partial<StationButtonStatus> = {},
+  extra: Omit<IslandDisplayInput, "status"> = {},
+): IslandDisplayInput {
+  return { status: { ...CALM_STATUS, ...status }, ...extra };
+}
 
 async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<string> {
   const setup = await testRender(node, SURFACE);
@@ -24,7 +38,7 @@ async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<str
 describe("DynamicStationButton", () => {
   it("collapsed base shows only the station icon", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton {...CALM} workingCount={2} idleCount={14} />,
+      <DynamicStationButton input={input({ workingCount: 2, idleCount: 14 })} />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).not.toContain("session");
@@ -33,10 +47,7 @@ describe("DynamicStationButton", () => {
   it("collapsed attention frames the icon with exclamation marks", async () => {
     const frame = await captureFrame(
       <DynamicStationButton
-        {...CALM}
-        attention={true}
-        needsYouCount={1}
-        sessionName="hook-scope"
+        input={input({ attention: true, needsYouCount: 1, sessionName: "hook-scope" })}
       />,
     );
     expect(frame).toContain(STATION_ICON);
@@ -47,7 +58,7 @@ describe("DynamicStationButton", () => {
 
   it("collapsed rest counts paint the fleet lanes", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton {...CALM} readyCount={1} idleCount={6} restCounts={true} />,
+      <DynamicStationButton input={input({ readyCount: 1, idleCount: 6 }, { restCounts: true })} />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("⠿0 ●1 ○6");
@@ -56,7 +67,7 @@ describe("DynamicStationButton", () => {
 
   it("collapsed celebration announces the merged PR", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton {...CALM} idleCount={3} celebration={{ prNumber: 42 }} />,
+      <DynamicStationButton input={input({ idleCount: 3 }, { celebration: { prNumber: 42 } })} />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("✓ #42 merged");
@@ -65,11 +76,10 @@ describe("DynamicStationButton", () => {
   it("attention wins over the celebration", async () => {
     const frame = await captureFrame(
       <DynamicStationButton
-        {...CALM}
-        attention={true}
-        needsYouCount={1}
-        sessionName="hook-scope"
-        celebration={{ prNumber: 42 }}
+        input={input(
+          { attention: true, needsYouCount: 1, sessionName: "hook-scope" },
+          { celebration: { prNumber: 42 } },
+        )}
       />,
     );
     expect(frame).toContain("!!!!");
@@ -78,7 +88,7 @@ describe("DynamicStationButton", () => {
 
   it("expanded base shows the working/idle summary", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton {...CALM} workingCount={2} readyCount={5} idleCount={9} hovered />,
+      <DynamicStationButton input={input({ workingCount: 2, readyCount: 5, idleCount: 9 })} hovered />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("2 sessions working");
@@ -97,7 +107,7 @@ describe("DynamicStationButton", () => {
       { projectId: "p7", name: "tools", status: "idle" as const },
     ];
     const frame = await captureFrame(
-      <DynamicStationButton {...CALM} projectRollup={projects} hovered />,
+      <DynamicStationButton input={input({ projectRollup: projects })} hovered />,
     );
     expect(frame).toContain("! station");
     expect(frame).toContain("○ docs");
@@ -110,10 +120,7 @@ describe("DynamicStationButton", () => {
   it("expanded attention shows the session name and intervention message", async () => {
     const frame = await captureFrame(
       <DynamicStationButton
-        {...CALM}
-        attention={true}
-        needsYouCount={1}
-        sessionName="hook-scope"
+        input={input({ attention: true, needsYouCount: 1, sessionName: "hook-scope" })}
         hovered
       />,
     );
@@ -136,10 +143,7 @@ describe("DynamicStationButton", () => {
   it("expanded attention shows the queue when several sessions ask", async () => {
     const frame = await captureFrame(
       <DynamicStationButton
-        {...CALM}
-        attention={true}
-        needsYouCount={3}
-        sessionName="hook-scope"
+        input={input({ attention: true, needsYouCount: 3, sessionName: "hook-scope" })}
         hovered
       />,
     );
@@ -149,7 +153,7 @@ describe("DynamicStationButton", () => {
 
   it("switches the mouse pointer to a hand on hover and back on leave", async () => {
     const setup = await testRender(
-      <DynamicStationButton {...CALM} workingCount={1} idleCount={2} />,
+      <DynamicStationButton input={input({ workingCount: 1, idleCount: 2 })} />,
       SURFACE,
     );
     try {

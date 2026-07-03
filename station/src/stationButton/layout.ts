@@ -1,5 +1,7 @@
 // Geometry and sizing math for the station button (no React, no colors).
 
+import type { ProjectRollupEntry, StationButtonStatus } from "./status.js";
+
 // Terminal glyph form of the black vector mark in station/assets/station-icon.svg.
 export const STATION_ICON = "⧉";
 export const ATTENTION_MARK = "!";
@@ -38,6 +40,7 @@ const MAX_PAINTED_COUNT = 99;
 /** Per-project roll-up lines before the card folds the rest into "+N more". */
 export const ROLLUP_MAX_LINES = 5;
 const ROLLUP_GLYPH_COLS = 2; // status glyph + space before the project name
+const CELEBRATION_TITLE_COLS = 28;
 
 // Above the panes and the centered STATION popup (z30); below the app toast (z100).
 export const STATION_BUTTON_Z_INDEX = 50;
@@ -48,20 +51,62 @@ export const GRADIENT_EDGE = 4; // chars of soft fade at the text's revealing fr
 
 export type Dims = { width: number; height: number };
 
-export type IslandCelebration = { prNumber: number };
+export type IslandCelebration = { prNumber: number; title?: string | undefined };
 
-export type ButtonContent = {
-  attention: boolean;
-  workingCount: number;
-  readyCount: number;
-  idleCount: number;
-  sessionName?: string | undefined;
+export type IslandDisplayInput = {
+  status: StationButtonStatus;
   /** C3 opt-in: the collapsed rest state paints fleet counts, not the bare mark. */
   restCounts?: boolean | undefined;
-  /** C2 opt-in roll-up entries; the count drives the expanded card's height. */
-  projectRollup?: readonly unknown[] | undefined;
   celebration?: IslandCelebration | undefined;
 };
+
+/** What the island paints; one value drives both the content and targetDims. */
+export type IslandDisplay =
+  | { kind: "mark" }
+  | { kind: "alertMark" }
+  | { kind: "counts"; working: number; ready: number; idle: number }
+  | { kind: "celebration"; celebration: IslandCelebration }
+  | { kind: "alertCard"; sessionName: string; needsYouCount: number }
+  | { kind: "rollup"; entries: readonly ProjectRollupEntry[] }
+  | { kind: "summary"; working: number; idle: number };
+
+/** The island's single display-priority ladder, per hover state. */
+export function islandDisplay(input: IslandDisplayInput, expanded: boolean): IslandDisplay {
+  const status = input.status;
+  if (expanded) {
+    if (status.attention) {
+      return {
+        kind: "alertCard",
+        sessionName: status.sessionName ?? "session",
+        needsYouCount: status.needsYouCount,
+      };
+    }
+    if (status.projectRollup !== undefined && status.projectRollup.length > 0) {
+      return { kind: "rollup", entries: status.projectRollup };
+    }
+    return {
+      kind: "summary",
+      working: status.workingCount,
+      // Ready sessions read as idle in the totals (the fleet breakdown keeps them disjoint).
+      idle: status.readyCount + status.idleCount,
+    };
+  }
+  if (status.attention) {
+    return { kind: "alertMark" };
+  }
+  if (input.celebration !== undefined) {
+    return { kind: "celebration", celebration: input.celebration };
+  }
+  if (input.restCounts === true) {
+    return {
+      kind: "counts",
+      working: status.workingCount,
+      ready: status.readyCount,
+      idle: status.idleCount,
+    };
+  }
+  return { kind: "mark" };
+}
 
 export function sessionSummary(count: number, verb: string): string {
   return `${count} session${count === 1 ? "" : "s"} ${verb}`;
@@ -79,7 +124,16 @@ export function attentionLines(needsYouCount: number): readonly [string, string]
 }
 
 export function celebrationText(celebration: IslandCelebration): string {
-  return `✓ #${celebration.prNumber} merged`;
+  const base = `✓ #${celebration.prNumber} merged`;
+  const title = celebration.title?.trim();
+  if (title === undefined || title.length === 0) {
+    return base;
+  }
+  const clamped =
+    title.length <= CELEBRATION_TITLE_COLS
+      ? title
+      : `${title.slice(0, CELEBRATION_TITLE_COLS - 1)}…`;
+  return `${base} · ${clamped}`;
 }
 
 /** Painted roll-up rows: the first ROLLUP_MAX_LINES entries, plus one "+N more" fold. */
@@ -93,25 +147,48 @@ export function clampSessionName(name: string): string {
   return name.length <= STABLE_NAME_COLS ? name : `${name.slice(0, STABLE_NAME_COLS - 1)}…`;
 }
 
-export function targetDims(expanded: boolean, content: ButtonContent): Dims {
-  const { attention } = content;
-  if (!expanded) {
-    if (attention) {
+export function targetDims(display: IslandDisplay): Dims {
+  switch (display.kind) {
+    case "mark":
+      return { width: COLLAPSED_BASE_COLS, height: COLLAPSED_BASE_ROWS };
+    case "alertMark":
       return { width: COLLAPSED_ATTENTION_COLS, height: COLLAPSED_ATTENTION_ROWS };
-    }
-    if (content.celebration !== undefined) {
-      const interior = ICON_COLS + 1 + celebrationText(content.celebration).length;
+    case "counts":
+      return { width: COLLAPSED_COUNTS_COLS, height: COLLAPSED_BASE_ROWS };
+    case "celebration": {
+      const interior = ICON_COLS + 1 + celebrationText(display.celebration).length;
       return { width: interior + 2 * ICON_PAD + 2, height: COLLAPSED_BASE_ROWS };
     }
-    if (content.restCounts === true) {
-      return { width: COLLAPSED_COUNTS_COLS, height: COLLAPSED_BASE_ROWS };
+    case "alertCard": {
+      // Clamp the name's contribution so the card width never tracks the live
+      // session name (the painted name is truncated to match — clampSessionName).
+      const nameCols = Math.min(display.sessionName.length, STABLE_NAME_COLS);
+      const iconRow = ICON_COLS + 1 + nameCols;
+      const body = CONTENT_INDENT + longest(ATTENTION_LINES);
+      return {
+        width: Math.max(iconRow, body) + EXPANDED_RIGHT_PAD + 2,
+        height: EXPANDED_ATTENTION_ROWS,
+      };
     }
-    return { width: COLLAPSED_BASE_COLS, height: COLLAPSED_BASE_ROWS };
+    case "rollup":
+      // Fixed name budget (names clamp to match), so renames/new projects only
+      // ever change the card's height, never its width.
+      return {
+        width: CONTENT_INDENT + ROLLUP_GLYPH_COLS + STABLE_NAME_COLS + EXPANDED_RIGHT_PAD + 2,
+        height:
+          EXPANDED_BORDER_ROWS + 1 + rollupLineCount(display.entries.length) + EXPANDED_BOTTOM_PAD_ROWS,
+      };
+    case "summary": {
+      // Measure with a stable count, not the live values: the card is anchored top-right, so a width
+      // change on a count tick slides it out from under a stationary cursor and reads as a hover leave.
+      const body =
+        CONTENT_INDENT + Math.max(summaryColumns("working"), summaryColumns("idle"));
+      return {
+        width: Math.max(ICON_COLS, body) + EXPANDED_RIGHT_PAD + 2,
+        height: EXPANDED_BASE_ROWS,
+      };
+    }
   }
-  return {
-    width: expandedInteriorWidth(content) + EXPANDED_RIGHT_PAD + 2,
-    height: expandedRows(content),
-  };
 }
 
 // The collapsed counts row measures with 2-digit lanes (`⠿88 ●88 ○88`) so live
@@ -119,40 +196,6 @@ export function targetDims(expanded: boolean, content: ButtonContent): Dims {
 const STABLE_COUNT_LANES_COLS = 3 * (1 + 2) + 2;
 export const COLLAPSED_COUNTS_COLS =
   ICON_COLS + 1 + STABLE_COUNT_LANES_COLS + 2 * ICON_PAD + 2;
-
-function expandedRows(content: ButtonContent): number {
-  if (content.attention) {
-    return EXPANDED_ATTENTION_ROWS;
-  }
-  const rollupLines = rollupLineCount(content.projectRollup?.length ?? 0);
-  if (rollupLines > 0) {
-    return EXPANDED_BORDER_ROWS + 1 + rollupLines + EXPANDED_BOTTOM_PAD_ROWS;
-  }
-  return EXPANDED_BASE_ROWS;
-}
-
-// Widest content row inside the card (borders/right pad excluded).
-function expandedInteriorWidth(content: ButtonContent): number {
-  if (content.attention) {
-    // Clamp the name's contribution so the card width never tracks the live
-    // session name (the painted name is truncated to match — clampSessionName).
-    const nameCols = Math.min((content.sessionName ?? "session").length, STABLE_NAME_COLS);
-    const iconRow = ICON_COLS + 1 + nameCols;
-    const body = CONTENT_INDENT + longest(ATTENTION_LINES);
-    return Math.max(iconRow, body);
-  }
-  if ((content.projectRollup?.length ?? 0) > 0) {
-    // Fixed name budget (names clamp to match), so renames/new projects only
-    // ever change the card's height, never its width.
-    return CONTENT_INDENT + ROLLUP_GLYPH_COLS + STABLE_NAME_COLS;
-  }
-  // Measure with a stable count, not the live values: the card is anchored top-right, so a width
-  // change on a count tick slides it out from under a stationary cursor and reads as a hover leave.
-  const body =
-    CONTENT_INDENT +
-    Math.max(summaryColumns("working"), summaryColumns("idle"));
-  return Math.max(ICON_COLS, body);
-}
 
 function summaryColumns(verb: string): number {
   return sessionSummary(STABLE_SUMMARY_COUNT, verb).length;

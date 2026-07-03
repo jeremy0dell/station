@@ -44,7 +44,7 @@ export function useMergeCelebration(
           before.number === pr.number &&
           before.state !== "merged"
         ) {
-          merged = { prNumber: pr.number };
+          merged = { prNumber: pr.number, ...(pr.title === undefined ? {} : { title: pr.title }) };
         }
       }
       seen.current = next;
