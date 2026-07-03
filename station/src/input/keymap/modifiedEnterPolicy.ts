@@ -1,6 +1,6 @@
-import { selectPaneRecord } from "../state/selectors.js";
-import type { AgentIdentity, StationState } from "../state/types.js";
-import type { PtyRegistryView } from "../terminal/registry/ptyRegistry.js";
+import { selectPaneRecord } from "../../state/selectors.js";
+import type { AgentIdentity, StationState } from "../../state/types.js";
+import type { PtyRegistryView } from "../../terminal/registry/ptyRegistry.js";
 import type { ProviderId } from "@station/contracts";
 
 export type ModifiedEnterSupport = (providerId: ProviderId) => boolean;

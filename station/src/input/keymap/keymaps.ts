@@ -1,4 +1,4 @@
-import type { StationState } from "../state/types.js";
+import type { StationState } from "../../state/types.js";
 
 export type LayerId =
   | "resize-drag"

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { createStationStore } from "../state/store.js";
+import { createStationStore } from "../../state/store.js";
 import { focusedPaneAcceptsModifiedEnter } from "./modifiedEnterPolicy.js";
-import type { PtyRegistryView } from "../terminal/registry/ptyRegistry.js";
+import type { PtyRegistryView } from "../../terminal/registry/ptyRegistry.js";
 
 const negotiatedRegistry = {
   get: () => ({
