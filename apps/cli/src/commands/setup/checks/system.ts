@@ -1,7 +1,8 @@
 import { homedir } from "node:os";
 import type { ExternalCommandRunner } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupFacts, SetupMode } from "../model.js";
+import { isStationUiInstalled } from "../../../stationWorkspace.js";
+import type { SetupDependencyFact, SetupFacts, SetupMode, SetupStationUiFact } from "../model.js";
 import { checkBrewDependency } from "./brew.js";
 import { checkSetupBun } from "./bun.js";
 import {
@@ -38,6 +39,9 @@ export type CollectSetupFactsOptions = {
   fs?: SetupFileSystemReader;
   now?: () => Date;
   noBrew?: boolean;
+  // Injectable so tests drive the station/ Bun-lane probe deterministically instead
+  // of touching this checkout's real node_modules.
+  stationUiInstalled?: () => Promise<boolean>;
   // Defaults to process.platform; injectable so machine-state tests can drive the
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
@@ -109,6 +113,11 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     ...(options.runner === undefined ? {} : { runner: options.runner }),
     tmuxCommand: tmux.command,
   });
+  const stationUi = await resolveStationUiFact({
+    env,
+    bunStatus: bun.status,
+    uiInstalled: options.stationUiInstalled ?? isStationUiInstalled,
+  });
 
   return {
     generatedAt,
@@ -119,6 +128,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     worktrunkAutomation,
     tmux,
     bun,
+    stationUi,
     diffnav,
     gitDelta,
     brew,
@@ -129,6 +139,19 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     config,
     tmuxBinding,
   };
+}
+
+// Mirrors doctor's rendererRuntimeCheck: the station/ Bun lane only matters when Bun
+// runs the renderer, so a renderer override or a missing Bun (covered by its own
+// required row) makes the lane irrelevant. Otherwise its install state is the signal.
+async function resolveStationUiFact(input: {
+  env: CliEnv;
+  bunStatus: SetupDependencyFact["status"];
+  uiInstalled: () => Promise<boolean>;
+}): Promise<SetupStationUiFact> {
+  if (input.env.STATION_DASHBOARD_COMMAND !== undefined) return { status: "skipped" };
+  if (input.bunStatus !== "ok") return { status: "skipped" };
+  return (await input.uiInstalled()) ? { status: "installed" } : { status: "missing" };
 }
 
 function setupConfigOptions(input: {

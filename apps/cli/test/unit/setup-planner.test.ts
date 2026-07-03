@@ -25,6 +25,7 @@ describe("setup planner", () => {
       ["harness", "ok"],
       ["config", "ok"],
       ["station-launchers", "ok"],
+      ["station-ui", "ok"],
       ["worktrunk-shell-integration", "warning"],
       ["tmux-popup-binding", "warning"],
       ["worktrunk-hooks", "ok"],
@@ -344,6 +345,7 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       command: "bun",
       resolvedPath: "/tmp/bin/bun",
     },
+    stationUi: { status: "installed" },
     diffnav: {
       status: "ok",
       command: "diffnav",

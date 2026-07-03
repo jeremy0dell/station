@@ -62,6 +62,18 @@ pnpm install
 step "Building"
 pnpm build
 
+# The station/ terminal UI is a separate Bun workspace, not a pnpm-workspace member,
+# so `pnpm install` never installs it. Bare `stn` renders the TUI by shelling into
+# `bun run` here, so without this step the first `stn` dies with "@opentui not found".
+# link:station needs the just-built @station dist; repair:node-pty needs the install.
+step "Installing the Station UI (Bun workspace)"
+(
+  cd "$repo_root/station"
+  bun install
+  bun run link:station
+  bun run repair:node-pty
+)
+
 step "Linking 'stn' onto your PATH"
 pnpm link --global
 
