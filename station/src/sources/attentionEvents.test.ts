@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isUserInputRequestAttentionEvent } from "./attentionEvents.js";
+import { isNeedsAttentionEvent } from "./attentionEvents.js";
 
 const agent = {
   harness: "codex",
@@ -9,10 +9,10 @@ const agent = {
   updatedAt: "2026-07-02T00:00:00.000Z",
 } as const;
 
-describe("isUserInputRequestAttentionEvent", () => {
+describe("isNeedsAttentionEvent", () => {
   it("matches needs_attention events carrying a typed attention kind", () => {
     expect(
-      isUserInputRequestAttentionEvent({
+      isNeedsAttentionEvent({
         type: "worktree.agentStateChanged",
         worktreeId: "wt_1",
         agent: { ...agent, attention: "question" },
@@ -20,19 +20,19 @@ describe("isUserInputRequestAttentionEvent", () => {
     ).toBe(true);
   });
 
-  it("ignores needs_attention events without an attention kind", () => {
+  it("matches needs_attention events without a typed attention kind", () => {
     expect(
-      isUserInputRequestAttentionEvent({
+      isNeedsAttentionEvent({
         type: "worktree.agentStateChanged",
         worktreeId: "wt_1",
         agent,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("ignores non-attention states", () => {
     expect(
-      isUserInputRequestAttentionEvent({
+      isNeedsAttentionEvent({
         type: "worktree.agentStateChanged",
         worktreeId: "wt_1",
         agent: { ...agent, state: "working", attention: "question" },

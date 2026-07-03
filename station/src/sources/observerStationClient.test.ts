@@ -109,7 +109,7 @@ describe("createObserverStationClient", () => {
     expect(notified).toBeGreaterThan(0);
   });
 
-  it("notifies the attention handler only for input-request attention events", async () => {
+  it("notifies the attention handler for needs_attention state changes", async () => {
     const fake = createFakeObserverService(mockObserverSnapshot);
     const attentionEvents: StationEvent[] = [];
     const client = track(
@@ -137,7 +137,12 @@ describe("createObserverStationClient", () => {
         client.state.getState().snapshot?.rows.find((row) => row.id === "wt_notify_cleanup")
           ?.agent?.state === "needs_attention",
     );
-    expect(attentionEvents).toEqual([]);
+    await waitFor(() => attentionEvents.length === 1);
+    expect(attentionEvents[0]).toMatchObject({
+      type: "worktree.agentStateChanged",
+      worktreeId: "wt_notify_cleanup",
+      agent: { reason: "Codex proposed a plan." },
+    });
     await waitFor(() => fake.hasParkedSubscriber());
 
     fake.emit(
@@ -161,8 +166,8 @@ describe("createObserverStationClient", () => {
         harnessEventType: "item/tool/requestUserInput",
       }),
     );
-    await waitFor(() => attentionEvents.length === 1);
-    expect(attentionEvents[0]).toMatchObject({
+    await waitFor(() => attentionEvents.length === 2);
+    expect(attentionEvents[1]).toMatchObject({
       type: "worktree.agentStateChanged",
       worktreeId: "wt_notify_cleanup",
       harnessEventType: "item/tool/requestUserInput",
@@ -176,8 +181,8 @@ describe("createObserverStationClient", () => {
         attention: "tool_approval",
       }),
     );
-    await waitFor(() => attentionEvents.length === 2);
-    expect(attentionEvents[1]).toMatchObject({
+    await waitFor(() => attentionEvents.length === 3);
+    expect(attentionEvents[2]).toMatchObject({
       type: "worktree.agentStateChanged",
       worktreeId: "wt_notify_cleanup",
       agent: {

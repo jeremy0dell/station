@@ -360,6 +360,7 @@ function sessionStatusEqual(left: SessionView, right: SessionView): boolean {
   return (
     left.updatedAt === right.updatedAt &&
     left.status.value === right.status.value &&
+    left.status.attention === right.status.attention &&
     left.status.confidence === right.status.confidence &&
     left.status.reason === right.status.reason &&
     left.status.source === right.status.source &&

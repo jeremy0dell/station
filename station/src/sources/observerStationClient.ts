@@ -4,7 +4,7 @@ import {
   type ObserverService,
 } from "@station/client";
 import { bridgeOperationService } from "@station/dashboard-core";
-import { isUserInputRequestAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
+import { isNeedsAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
 import type { StationClient } from "./types.js";
 
 export type CreateObserverStationClientOptions = {
@@ -33,7 +33,7 @@ export function createObserverStationClient(
     clientLabel: "Station",
     hooks: {
       onEvent: (event) => {
-        if (!isUserInputRequestAttentionEvent(event)) {
+        if (!isNeedsAttentionEvent(event)) {
           return;
         }
         try {

@@ -50,6 +50,11 @@ export function watchSocketOwnership(options: WatchSocketOwnershipOptions): Sock
   void probe();
 
   return {
-    stop: () => clearInterval(interval),
+    // Mark fired so a probe already in flight cannot report a takeover
+    // after a normal shutdown unlinks the socket.
+    stop: () => {
+      fired = true;
+      clearInterval(interval);
+    },
   };
 }
