@@ -13,6 +13,7 @@ import {
 } from "../protocol/mouse.js";
 
 const DEFAULT_FLUSH_INTERVAL_MS = 33;
+const SYNC_OUTPUT_HOLD_MAX_MS = 1000;
 // Scrollback is now viewable (wheel + copy-mode), but a modest buffer still
 // keeps resize reflow cheap; the depth is intentionally not yet configurable.
 const DEFAULT_SCROLLBACK_LINES = 1000;
@@ -201,6 +202,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   let disposed = false;
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let lastFlushAt = 0;
+  let syncHoldUntil: number | undefined;
   // Lines scrolled up from the live bottom (0 = at the bottom).
   let scrollOffset = 0;
   let kittyKeyboardFlags = 0;
@@ -374,6 +376,19 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     flushTimer = undefined;
     if (disposed) {
       return;
+    }
+    // DECSET 2026 (synchronized output): between BSU and ESU the app is
+    // mid-frame, so hold listener notification rather than snapshot a torn
+    // buffer. Bounded so a client that never sends ESU cannot freeze the pane;
+    // once expired, flush at normal cadence until the mode clears.
+    if (terminal.modes.synchronizedOutputMode) {
+      syncHoldUntil ??= Date.now() + SYNC_OUTPUT_HOLD_MAX_MS;
+      if (Date.now() < syncHoldUntil) {
+        flushTimer = setTimeout(flush, flushIntervalMs);
+        return;
+      }
+    } else {
+      syncHoldUntil = undefined;
     }
     lastFlushAt = Date.now();
     applyScrollOnOutput();
