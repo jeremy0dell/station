@@ -144,6 +144,33 @@ const CASES: ModalCase[] = [
     keys: [{ input: "A" }],
     expect: ["Add Project", "Start location", "Enter:open Right:open Esc:cancel"],
   },
+  {
+    name: "widget settings panel",
+    keys: [{ input: "W" }],
+    prepare: (store) => {
+      store.setState({
+        widgets: [
+          { type: "time" },
+          { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
+          { type: "moon" },
+        ],
+      });
+    },
+    expect: [
+      "widgets",
+      "session only · persist in config.toml",
+      "[on ] time",
+      "[off] weather NYC",
+      "[on ] moon",
+      "[ + add widget ]",
+      "↵ toggle   [ ] reorder   x remove   a add",
+    ],
+  },
+  {
+    name: "widget settings picker",
+    keys: [{ input: "W" }, { input: "a" }],
+    expect: ["add widget", "weather and tz are added in config.toml", "time", "fleet", "open PRs", "moon", "↵ add   esc back"],
+  },
 ];
 
 describe("modal flow golden frames", () => {

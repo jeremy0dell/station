@@ -41,6 +41,7 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
   const scrollOffset = useStore(store, (state) => state.scrollOffset);
   const focusedRowId = useStore(store, (state) => state.focusedRowId);
   const localRows = useStore(store, (state) => state.localRows);
+  const liveWidgets = useStore(store, (state) => state.widgets);
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
   const activeToast = useStore(store, activeTuiToast);
   const nextExpiry = useStore(store, nextTuiToastExpiry);
@@ -134,6 +135,7 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
         columns={columns}
         rows={rows}
         localRows={localRows}
+        widgets={liveWidgets}
       />
     </box>
   );

@@ -27,7 +27,6 @@ export type StationAppProps = {
   onCopySelection: (text: string) => void;
   /** Configured automations surfaced in the pane context menu. */
   automations: readonly Automation[];
-  widgets?: readonly TuiWidgetConfig[];
   /** Opt-in island display modes from `[tui.island]`. */
   island?: TuiIslandConfig;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;

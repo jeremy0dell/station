@@ -1,7 +1,7 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`dashboard golden frames renders many-projects at 80x24 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -29,7 +29,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`dashboard golden frames renders many-projects at 120x40 1`] = `
-"station                                                                                                                 
+"station                                                                                                             [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
        SESSION                                   AGENT     STATUS                                               DIFF PR 
@@ -73,7 +73,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
-"station                                                     
+"station                                                 [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ?   
 ─────────────────────────────────────────────────────────── 
        SESSION                 AGENT     STATUS          PR 
@@ -93,7 +93,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ?
 `;
 
 exports[`dashboard golden frames renders many-projects at 40x12 1`] = `
-"station                                 
+"station                             [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
        SESSION             STATUS       
@@ -109,7 +109,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 80x24 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                        AGENT     STATUS                  DIFF PR 
@@ -137,7 +137,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 120x40 1`] = `
-"station                                                                                                                 
+"station                                                                                                             [+] 
 FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 exited                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
        SESSION                                   AGENT     STATUS                                               DIFF PR 
@@ -181,7 +181,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 60x16 1`] = `
-"station                                                     
+"station                                                 [+] 
 FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ?   
 ─────────────────────────────────────────────────────────── 
        SESSION            AGENT     STATUS               PR 
@@ -201,7 +201,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ?
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 40x12 1`] = `
-"station                                 
+"station                             [+] 
 FLEET  ● 0 ready  ⠋ 1 working  ! 3      
 ─────────────────────────────────────── 
        SESSION                          
@@ -217,7 +217,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3
 `;
 
 exports[`dashboard golden frames renders no-projects at 80x24 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 No projects configured yet.                                                     
@@ -245,7 +245,7 @@ A add project  Q/esc:close
 `;
 
 exports[`dashboard golden frames renders no-projects at 120x40 1`] = `
-"station                                                                                                                 
+"station                                                                                                             [+] 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
                                                                                                                         
 No projects configured yet.                                                                                             
@@ -289,7 +289,7 @@ A add project  Q/esc:close
 `;
 
 exports[`dashboard golden frames renders no-projects at 60x16 1`] = `
-"station                                                     
+"station                                                 [+] 
 ─────────────────────────────────────────────────────────── 
                                                             
 No projects configured yet.                                 
@@ -309,7 +309,7 @@ A add project  Q/esc:close
 `;
 
 exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
-"station                                 
+"station                             [+] 
 ─────────────────────────────────────── 
                                         
 No projects configured yet.             

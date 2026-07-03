@@ -13,6 +13,7 @@ import { handleProjectSettingsPickerKey } from "./screens/projectSettingsPicker.
 import { handleRemoveWorktreeKey } from "./screens/removeWorktree.js";
 import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleSearchKey } from "./screens/search.js";
+import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import type { TuiState } from "./types.js";
 
 export type TuiTransition = {
@@ -66,5 +67,7 @@ export function handleTuiKey(
       return handleProjectSettingsKey(state, key);
     case "addProject":
       return handleAddProjectKey(state, key);
+    case "widgetSettings":
+      return handleWidgetSettingsKey(state, key);
   }
 }

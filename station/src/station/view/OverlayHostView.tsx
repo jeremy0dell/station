@@ -3,11 +3,13 @@
 // dashboard. The dashboard never reflows for overlays.
 import type { StationSnapshot } from "@station/contracts";
 import type { TuiLocalRows, TuiScreen } from "@station/dashboard-core";
+import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
+import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
@@ -18,6 +20,8 @@ export type OverlayHostViewProps = {
   columns: number;
   rows: number;
   localRows: TuiLocalRows;
+  /** Live session widget set for the widget-settings panel. */
+  widgets?: readonly TuiWidgetConfig[];
 };
 
 export function OverlayHostView({
@@ -26,9 +30,15 @@ export function OverlayHostView({
   columns,
   rows,
   localRows,
+  widgets = [],
 }: OverlayHostViewProps) {
   if (screen.name === "help") {
     return <HelpOverlayView columns={columns} rows={rows} />;
+  }
+  if (screen.name === "widgetSettings") {
+    return (
+      <WidgetSettingsPanelView screen={screen} widgets={widgets} columns={columns} rows={rows} />
+    );
   }
   if (screen.name === "addProject") {
     return <AddProjectSheetView columns={columns} rows={rows} state={screen.flow} />;

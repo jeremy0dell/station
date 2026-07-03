@@ -1,3 +1,4 @@
+import type { TuiWidgetConfig } from "@station/config";
 import type {
   ProjectId,
   SafeError,
@@ -38,6 +39,11 @@ export type TuiState = TuiViewState & {
   toasts: TuiToastEntry[];
   observerConnectionStatus: TuiObserverConnectionStatus;
   runtime: TuiRuntimeState;
+  /**
+   * Live top-row widget set, seeded from `[tui].widgets`. The widget-settings
+   * panel edits this session copy only; config.toml stays the durable source.
+   */
+  widgets: readonly TuiWidgetConfig[];
 };
 
 export type TuiToastEntry = {
@@ -104,7 +110,11 @@ export type TuiScreen =
       focus: ProjectSettingsFocus;
       activeId: ProjectSettingsItemId;
       removeDraft: EditableTextInputState;
-    };
+    }
+  | { name: "widgetSettings"; focus: WidgetSettingsFocus; cursor: number; pickerCursor: number };
+
+/** Whether the widget list or the add-widget picker owns keyboard input. */
+export type WidgetSettingsFocus = "list" | "picker";
 
 /** Which pane of the two-pane settings panel owns keyboard input. */
 export type ProjectSettingsFocus = "list" | "detail";
@@ -119,5 +129,6 @@ export type CreateInitialTuiStateOptions = {
   terminalRows?: number;
   localRows?: TuiLocalRows;
   focusedRowId?: WorktreeId;
+  widgets?: readonly TuiWidgetConfig[];
   runtime?: Partial<TuiRuntimeState>;
 };

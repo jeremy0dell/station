@@ -11,12 +11,17 @@ import type { ProjectSettingsItemId, TuiStore } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
+  addWidgetSettingsPickerChoice,
   dismissStationToasts,
   dispatchBindingClick,
   dispatchRowSlot,
   dispatchStationKey,
   focusProjectSettingsItem,
   openDefaultAgentPickerForProject,
+  openWidgetSettingsPanel,
+  openWidgetSettingsPicker,
+  removeWidgetSettingsRow,
+  toggleWidgetSettingsRow,
   representativeKeyForBinding,
   resolveForkSessionSubmit,
   resolveNewSessionSubmit,
@@ -56,6 +61,16 @@ export type StationMouseTarget =
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   /** The armed "Remove project (R)" action in the panel's detail pane. */
   | { kind: "projectSettingsConfirmRemove" }
+  /** The header `[+]` affordance: opens the widget-settings panel. */
+  | { kind: "widgetSettingsOpen" }
+  /** A widget row in the settings panel; clicking toggles it on/off. */
+  | { kind: "widgetSettingsRow"; index: number }
+  /** The per-row `×` in the settings panel. */
+  | { kind: "widgetSettingsRemove"; index: number }
+  /** The panel's trailing "[ + add widget ]" line. */
+  | { kind: "widgetSettingsAdd" }
+  /** A choice row in the add-widget picker. */
+  | { kind: "widgetSettingsPickerChoice"; index: number }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
@@ -231,6 +246,36 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       focusProjectSettingsItem(store, target.itemId);
+      return { kind: "handled" };
+    case "widgetSettingsOpen":
+      if (mode !== "dashboard") {
+        return { kind: "handled" };
+      }
+      openWidgetSettingsPanel(store);
+      return { kind: "handled" };
+    case "widgetSettingsRow":
+      if (mode !== "widgetSettings") {
+        return { kind: "handled" };
+      }
+      toggleWidgetSettingsRow(store, target.index);
+      return { kind: "handled" };
+    case "widgetSettingsRemove":
+      if (mode !== "widgetSettings") {
+        return { kind: "handled" };
+      }
+      removeWidgetSettingsRow(store, target.index);
+      return { kind: "handled" };
+    case "widgetSettingsAdd":
+      if (mode !== "widgetSettings") {
+        return { kind: "handled" };
+      }
+      openWidgetSettingsPicker(store);
+      return { kind: "handled" };
+    case "widgetSettingsPickerChoice":
+      if (mode !== "widgetSettings") {
+        return { kind: "handled" };
+      }
+      addWidgetSettingsPickerChoice(store, target.index);
       return { kind: "handled" };
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {

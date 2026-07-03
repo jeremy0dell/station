@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
+import { useStore } from "zustand/react";
 import { ContextMenuRoot } from "../contextMenu/index.js";
 import {
   selectPaneCount,
@@ -18,8 +18,6 @@ import { STATION_COLORS } from "../station/view/theme.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import type { StationAppProps } from "./types.js";
 
-const EMPTY_WIDGETS: readonly TuiWidgetConfig[] = [];
-
 // Select scalars only — useSyncExternalStore Object.is-compares snapshots, so an
 // object-building selector would loop. Selectors are module-level (stable), so
 // the memoized getter backs both the client and (unused, no-SSR) server slots.
@@ -35,7 +33,6 @@ export function StationApp({
   dispatchMouse,
   onCopySelection,
   automations,
-  widgets = EMPTY_WIDGETS,
   island,
   topRowWidgetDeps,
 }: StationAppProps) {
@@ -43,6 +40,8 @@ export function StationApp({
   const hasPanes = useStoreValue(store, selectPaneCount) > 0;
   const welcomeVisible = useStoreValue(store, selectWelcomeVisible);
   const welcomeCanContinue = useStoreValue(store, selectWelcomeCanContinue);
+  // The live session widget set: seeded from config, edited by the panel.
+  const widgets = useStore(stationViewStore, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets, topRowWidgetDeps);
 
   return (

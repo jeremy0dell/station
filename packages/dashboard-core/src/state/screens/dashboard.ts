@@ -16,6 +16,7 @@ import type { TuiKeyRuntimeContext, TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
+import { openWidgetSettings } from "./widgetSettings.js";
 
 export function handleDashboardKey(
   state: TuiState,
@@ -114,6 +115,8 @@ function handleDashboardBinding(
       return openProjectSlotPicker(state, "projectCollapse");
     case "tui.projectSettings.openPicker":
       return openProjectSlotPicker(state, "projectSettingsPicker");
+    case "tui.widgetSettings.open":
+      return { state: openWidgetSettings(state) };
     case "tui.row.activateSlot":
       return activateDashboardSlot(state, key);
     default:

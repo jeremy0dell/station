@@ -4,6 +4,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProjectView, StationSnapshot, WorktreeId } from "@station/contracts";
 import { useState } from "react";
+import stringWidth from "string-width";
 import {
   dashboardFooterLabel,
   dashboardHeaderLine,
@@ -131,6 +132,9 @@ export function DashboardView({
   );
 }
 
+// Width reserved for the trailing " [+]" widget-settings affordance.
+const WIDGET_SETTINGS_AFFORDANCE = " [+]";
+
 export function DashboardHeaderRow({
   columns,
   widgets,
@@ -140,19 +144,34 @@ export function DashboardHeaderRow({
   widgets: readonly TopRowWidgetText[];
   status?: DashboardHeaderStatus;
 }) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useState(false);
+  const stripColumns = columns - WIDGET_SETTINGS_AFFORDANCE.length;
   const headerLine = dashboardHeaderLine({
     productLabel: PRODUCT_LABEL,
-    columns,
+    columns: stripColumns,
     widgets,
     ...(status === undefined ? {} : { status }),
   });
+  // Right-anchor the affordance even when no widgets/status fill the line.
+  const pad = " ".repeat(Math.max(0, stripColumns - stringWidth(headerLine)));
   const suffix = headerLine.startsWith(PRODUCT_LABEL) ? headerLine.slice(PRODUCT_LABEL.length) : "";
   return (
-    <text fg={STATION_COLORS.foreground}>
-      <span attributes={TextAttributes.BOLD}>{PRODUCT_LABEL}</span>
-      {/* Widgets/status are calm chrome: gray, so the body's status colours stay the loud ones. */}
-      <span fg={STATION_COLORS.gray}>{suffix}</span>
-    </text>
+    <box flexDirection="row">
+      <text fg={STATION_COLORS.foreground}>
+        <span attributes={TextAttributes.BOLD}>{PRODUCT_LABEL}</span>
+        {/* Widgets/status are calm chrome: gray, so the body's status colours stay the loud ones. */}
+        <span fg={STATION_COLORS.gray}>{`${suffix}${pad}`}</span>
+      </text>
+      <text
+        fg={hover ? STATION_COLORS.cyan : STATION_COLORS.gray}
+        {...stationMouseProps(dispatch, { kind: "widgetSettingsOpen" })}
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+      >
+        {WIDGET_SETTINGS_AFFORDANCE}
+      </text>
+    </box>
   );
 }
 

@@ -19,7 +19,8 @@ export type TuiInputMode =
   | "newSessionPickProject"
   | "newSessionPickAgent"
   | "projectDefaultAgent"
-  | "addProject";
+  | "addProject"
+  | "widgetSettings";
 
 export function deriveTuiInputMode(state: TuiState): TuiInputMode {
   const screen = state.screen;
@@ -56,6 +57,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return "addProject";
     case "projectDefaultAgent":
       return "projectDefaultAgent";
+    case "widgetSettings":
+      return "widgetSettings";
   }
   return "dashboard";
 }
@@ -235,6 +238,13 @@ export const TUI_KEYMAP = {
       action: "tui.addProject.open",
       outcome: "handled",
       help: { keys: "A", label: "add" },
+    },
+    {
+      id: "tui.dashboard.widgetSettings",
+      pattern: { kind: "char", char: "W" },
+      action: "tui.widgetSettings.open",
+      outcome: "handled",
+      help: { keys: "W", label: "widgets" },
     },
     {
       id: "tui.dashboard.collapse",
@@ -637,6 +647,68 @@ export const TUI_KEYMAP = {
       action: "tui.projectDefaultAgent.choose",
       outcome: "handled",
       help: { keys: "1-9 a-z", label: "choose agent" },
+    },
+  ],
+  // One action; the widgetSettings screen handler decodes list-vs-picker focus.
+  widgetSettings: [
+    {
+      id: "tui.widgetSettings.close",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+      help: { keys: "esc", label: "close" },
+    },
+    {
+      id: "tui.widgetSettings.cursorUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.widgetSettings.cursorDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.widgetSettings.toggle",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+      help: { keys: "↵", label: "toggle on/off" },
+    },
+    {
+      id: "tui.widgetSettings.toggleSpace",
+      pattern: { kind: "char", char: " " },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.widgetSettings.moveUp",
+      pattern: { kind: "char", char: "[" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+      help: { keys: "[ ]", label: "reorder" },
+    },
+    {
+      id: "tui.widgetSettings.moveDown",
+      pattern: { kind: "char", char: "]" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.widgetSettings.remove",
+      pattern: { kind: "char", char: "x" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+      help: { keys: "x", label: "remove" },
+    },
+    {
+      id: "tui.widgetSettings.add",
+      pattern: { kind: "char", char: "a" },
+      action: "tui.widgetSettings.key",
+      outcome: "handled",
+      help: { keys: "a", label: "add widget" },
     },
   ],
   addProject: [

@@ -642,3 +642,58 @@ async function waitFor(assertion: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
+
+describe("routeStationMouse widget settings", () => {
+  function panelStore(): StoreApi<TuiStore> {
+    const store = makeStore();
+    store.setState({ widgets: [{ type: "time" }, { type: "moon" }] });
+    store.getState().handleKey({ input: "W" });
+    return store;
+  }
+
+  it("opens the panel from the header [+] on the dashboard only", () => {
+    const store = makeStore();
+    expect(routeStationMouse({ kind: "widgetSettingsOpen" }, LEFT_DOWN, store)).toEqual({
+      kind: "handled",
+    });
+    expect(store.getState().screen.name).toBe("widgetSettings");
+
+    // In any other mode the click is absorbed without opening.
+    const busy = makeStore();
+    busy.getState().handleKey({ input: "H" });
+    routeStationMouse({ kind: "widgetSettingsOpen" }, LEFT_DOWN, busy);
+    expect(busy.getState().screen.name).toBe("help");
+  });
+
+  it("toggles a clicked row and moves the cursor onto it", () => {
+    const store = panelStore();
+    routeStationMouse({ kind: "widgetSettingsRow", index: 1 }, LEFT_DOWN, store);
+    expect(store.getState().widgets[1]).toEqual({ type: "moon", enabled: false });
+    const screen = store.getState().screen;
+    expect(screen.name === "widgetSettings" && screen.cursor).toBe(1);
+  });
+
+  it("removes via the row's ×", () => {
+    const store = panelStore();
+    routeStationMouse({ kind: "widgetSettingsRemove", index: 0 }, LEFT_DOWN, store);
+    expect(store.getState().widgets.map((widget) => widget.type)).toEqual(["moon"]);
+  });
+
+  it("adds from the picker via [ + add widget ] then a choice row", () => {
+    const store = panelStore();
+    routeStationMouse({ kind: "widgetSettingsAdd" }, LEFT_DOWN, store);
+    const picking = store.getState().screen;
+    expect(picking.name === "widgetSettings" && picking.focus).toBe("picker");
+    routeStationMouse({ kind: "widgetSettingsPickerChoice", index: 1 }, LEFT_DOWN, store);
+    expect(store.getState().widgets.at(-1)).toEqual({ type: "fleet" });
+    const done = store.getState().screen;
+    expect(done.name === "widgetSettings" && done.focus).toBe("list");
+  });
+
+  it("ignores panel targets outside the widgetSettings mode", () => {
+    const store = makeStore();
+    store.setState({ widgets: [{ type: "time" }] });
+    routeStationMouse({ kind: "widgetSettingsRow", index: 0 }, LEFT_DOWN, store);
+    expect(store.getState().widgets[0]).toEqual({ type: "time" });
+  });
+});

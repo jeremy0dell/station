@@ -30,7 +30,8 @@ export type StationInputMode =
   | "newSessionPickAgent"
   | "projectDefaultAgent"
   | "projectSettings"
-  | "addProject";
+  | "addProject"
+  | "widgetSettings";
 
 export function deriveStationMode(state: TuiState): StationInputMode {
   const screen = state.screen;
@@ -69,6 +70,8 @@ export function deriveStationMode(state: TuiState): StationInputMode {
       return "projectDefaultAgent";
     case "projectSettings":
       return "projectSettings";
+    case "widgetSettings":
+      return "widgetSettings";
   }
   return "dashboard";
 }
@@ -149,6 +152,7 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     { id: "station.dashboard.remove", pattern: { kind: "char", char: "X" }, action: "station.remove.open", outcome: "handled", help: { keys: "X", label: "delete session" } },
     { id: "station.dashboard.newSession", pattern: { kind: "char", char: "N" }, action: "station.newSession.open", outcome: "handled", help: { keys: "N", label: "new" } },
     { id: "station.dashboard.addProject", pattern: { kind: "char", char: "A" }, action: "station.addProject.open", outcome: "handled", help: { keys: "A", label: "add" } },
+    { id: "station.dashboard.widgetSettings", pattern: { kind: "char", char: "W" }, action: "station.widgetSettings.open", outcome: "handled", help: { keys: "W", label: "widgets" } },
     { id: "station.dashboard.collapse", pattern: { kind: "char", char: "C" }, action: "station.collapse.open", outcome: "handled", help: { keys: "C", label: "fold" } },
     { id: "station.dashboard.projectSettings", pattern: { kind: "char", char: "P" }, action: "station.projectSettings.openPicker", outcome: "handled", help: { keys: "P", label: "settings" } },
     { id: "station.dashboard.slotActivate", pattern: { kind: "slot" }, action: "station.row.activateSlot", outcome: "handled", help: slotHelp },
@@ -272,6 +276,18 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     { id: "station.addProject.clearLine", pattern: { kind: "char", char: "u", ctrl: true }, action: "station.addProject.key", outcome: "handled" },
     { id: "station.addProject.type", pattern: { kind: "text" }, action: "station.addProject.key", outcome: "handled" },
   ],
+  // One action; the widgetSettings screen handler decodes list-vs-picker focus.
+  widgetSettings: [
+    { id: "station.widgetSettings.close", pattern: { kind: "named", named: "escape" }, action: "station.widgetSettings.key", outcome: "handled", help: { keys: "esc", label: "close" } },
+    { id: "station.widgetSettings.cursorUp", pattern: { kind: "named", named: "up" }, action: "station.widgetSettings.key", outcome: "handled" },
+    { id: "station.widgetSettings.cursorDown", pattern: { kind: "named", named: "down" }, action: "station.widgetSettings.key", outcome: "handled" },
+    { id: "station.widgetSettings.toggle", pattern: { kind: "named", named: "return" }, action: "station.widgetSettings.key", outcome: "handled", help: { keys: "↵", label: "toggle on/off" } },
+    { id: "station.widgetSettings.toggleSpace", pattern: { kind: "char", char: " " }, action: "station.widgetSettings.key", outcome: "handled" },
+    { id: "station.widgetSettings.moveUp", pattern: { kind: "char", char: "[" }, action: "station.widgetSettings.key", outcome: "handled", help: { keys: "[ ]", label: "reorder" } },
+    { id: "station.widgetSettings.moveDown", pattern: { kind: "char", char: "]" }, action: "station.widgetSettings.key", outcome: "handled" },
+    { id: "station.widgetSettings.remove", pattern: { kind: "char", char: "x" }, action: "station.widgetSettings.key", outcome: "handled", help: { keys: "x", label: "remove" } },
+    { id: "station.widgetSettings.add", pattern: { kind: "char", char: "a" }, action: "station.widgetSettings.key", outcome: "handled", help: { keys: "a", label: "add widget" } },
+  ],
 };
 
 /** Station's compact keyboard reference: app-level chords first, then STATION view keys. */
@@ -294,6 +310,7 @@ export const STATION_HELP_CONTENT = [
   { key: "wheel", description: "scroll project list" },
   { key: "1-9/a-z", description: "start or focus row" },
   { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
+  { key: "W", description: "widgets" },
   { key: "X", description: "delete session" },
   { key: "/, Z", description: "search / refresh snapshot" },
   { key: "H/?", description: "help" },

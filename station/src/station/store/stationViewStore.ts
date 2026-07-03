@@ -10,9 +10,12 @@ import type { StoreApi } from "zustand/vanilla";
 import type { StationClient } from "../../sources/types.js";
 import type { TuiFolderService } from "@station/dashboard-core";
 import { createTuiStore, type TuiStore } from "@station/dashboard-core";
+import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 
 export type CreateStationViewStoreOptions = {
   folderService?: TuiFolderService;
+  /** `[tui].widgets` seed for the session's live widget set. */
+  widgets?: readonly TuiWidgetConfig[];
 };
 
 export function createStationViewStore(
@@ -33,6 +36,9 @@ export function createStationViewStore(
   };
   if (options.folderService !== undefined) {
     storeOptions.folderService = options.folderService;
+  }
+  if (options.widgets !== undefined) {
+    storeOptions.initialState = { widgets: options.widgets };
   }
   return createTuiStore(storeOptions);
 }

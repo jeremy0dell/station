@@ -127,6 +127,15 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     newSessionPickAgent: drive(base, [{ input: "N" }, { input: "A" }]),
     projectDefaultAgent: openProjectDefaultAgentPicker(base, "station"),
     addProject: drive(base, [{ input: "A" }]),
+    // Mid-list cursor over three widgets so every list binding visibly acts.
+    widgetSettings: drive(
+      createInitialTuiState({
+        initialSnapshot: manyProjectsSnapshot(),
+        widgets: [{ type: "time" }, { type: "fleet" }, { type: "moon" }],
+        runtime: { persistentPopup: true, canDismissPopup: true },
+      }),
+      [{ input: "W" }, { input: "", downArrow: true }],
+    ),
   };
 }
 

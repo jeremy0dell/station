@@ -1,7 +1,7 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`modal flow golden frames renders the help overlay 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
        S│                         station help                         │DIFF PR 
@@ -29,7 +29,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the search prompt 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -57,7 +57,7 @@ search: apiexperiment                     -         no agent
 `;
 
 exports[`modal flow golden frames renders the collapse prompt 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -85,7 +85,7 @@ collapse project: 1:station 2:observer 3:scripts 4:empty-project
 `;
 
 exports[`modal flow golden frames renders the project settings picker prompt 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -113,7 +113,7 @@ settings for project: 1:station 2:observer 3:scripts 4:empty-project
 `;
 
 exports[`modal flow golden frames renders the project settings panel 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Project settings                                                       │PR 
@@ -141,7 +141,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the project settings remove pane 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Project settings                                                       │PR 
@@ -169,7 +169,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the project settings optimistic default 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ───┌────────────────────────────────────────────────────────────────────────┐── 
    │ Project settings                                                       │PR 
@@ -197,7 +197,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the remove slot sheet 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -225,7 +225,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -253,7 +253,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the rename slot prompt 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -281,7 +281,7 @@ Choose the slot to rename: 1-9/a-z        -         no agent
 `;
 
 exports[`modal flow golden frames renders the rename sheet 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                        AGENT     STATUS                  DIFF PR 
@@ -309,7 +309,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the fork slot sheet 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -337,7 +337,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the fork details sheet 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -365,7 +365,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the new session review 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -393,7 +393,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the new session edit name 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -421,7 +421,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the new session pick project 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -449,7 +449,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the new session pick agent 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -477,7 +477,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the project default agent picker 1`] = `
-"station
+"station                                                                     [+]
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited
 ───────────────────────────────────────────────────────────────────────────────
        SESSION                            AGENT     STATUS              DIFF PR
@@ -505,7 +505,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 `;
 
 exports[`modal flow golden frames renders the add project sheet 1`] = `
-"station                                                                         
+"station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
        SESSION                            AGENT     STATUS              DIFF PR 
@@ -529,5 +529,61 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
 │                                                                              │
 │ Enter:open Right:open Esc:cancel                                             │
 └──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the widget settings panel 1`] = `
+"station                                                                     [+] 
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                            AGENT     STATUS              DIFF PR 
+                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-clea┌──────────────────────────────────────────────┐                
+ [3] ○ pty-buffe│ widgets                                      │          #73 ✓ 
+ [4] + session-r│ session only · persist in config.toml        │                
+ [5] ⠋ station-o│ ▸ [on ] time                               × │ +412 -96 #76 … 
+                │   [off] weather NYC                        × │                
+▼ observer  3 se│   [on ] moon                               × │  [sh] [qs] [▾] 
+ [6] x batch-exp│   [ + add widget ]                           │           #8 ✓ 
+ [7] ⠋ provider-│ ↵ toggle   [ ] reorder   x remove   a add   e│   +32 -8 #16 … 
+ [8] ○ trace-bun└──────────────────────────────────────────────┘     +1 -1 #4 ✓ 
+                                                                                
+▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
+ [b] - old-experiment                     -         no agent                    
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+"
+`;
+
+exports[`modal flow golden frames renders the widget settings picker 1`] = `
+"station                                                                     [+] 
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                            AGENT     STATUS              DIFF PR 
+                                                                                
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-clea┌──────────────────────────────────────────────┐                
+ [3] ○ pty-buffe│ add widget                                   │          #73 ✓ 
+ [4] + session-r│ weather and tz are added in config.toml      │                
+ [5] ⠋ station-o│ ▸ time                                       │ +412 -96 #76 … 
+                │   fleet                                      │                
+▼ observer  3 se│   open PRs                                   │  [sh] [qs] [▾] 
+ [6] x batch-exp│   moon                                       │           #8 ✓ 
+ [7] ⠋ provider-│ ↵ add   esc back                             │   +32 -8 #16 … 
+ [8] ○ trace-bun└──────────────────────────────────────────────┘     +1 -1 #4 ✓ 
+                                                                                
+▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
+ [b] - old-experiment                     -         no agent                    
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
