@@ -92,7 +92,7 @@ export function DashboardView({
       {firstRun ? null : (
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
-      <text> </text>
+      <Divider columns={contentColumns} />
       <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>

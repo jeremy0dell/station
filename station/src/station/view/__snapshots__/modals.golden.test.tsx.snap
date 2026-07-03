@@ -2,7 +2,7 @@
 
 exports[`modal flow golden frames renders the help overlay 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
         ╭──────────────────────────────────────────────────────────────╮        
 ▼ statio│                         station help                         │qs] [▾] 
  [1] ○ c│                                                              │6 #70 ✓ 
@@ -30,7 +30,7 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
 
 exports[`modal flow golden frames renders the search prompt 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -58,7 +58,7 @@ search: apiject  0 sessions                                       [sh] [qs] [▾
 
 exports[`modal flow golden frames renders the collapse prompt 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -86,7 +86,7 @@ collapse project: 1:station 2:observer 3:scripts 4:empty-project  [sh] [qs] [▾
 
 exports[`modal flow golden frames renders the project settings picker prompt 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -114,7 +114,7 @@ settings for project: 1:station 2:observer 3:scripts 4:empty-projecth] [qs] [▾
 
 exports[`modal flow golden frames renders the project settings panel 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
    ┌────────────────────────────────────────────────────────────────────────┐   
 ▼ s│ Project settings                                                       │▾] 
  [1│ station                  │ Default agent                               │ ✓ 
@@ -142,7 +142,7 @@ exports[`modal flow golden frames renders the project settings panel 1`] = `
 
 exports[`modal flow golden frames renders the project settings remove pane 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
    ┌────────────────────────────────────────────────────────────────────────┐   
 ▼ s│ Project settings                                                       │▾] 
  [1│ station                  │ Remove project                              │ ✓ 
@@ -170,7 +170,7 @@ exports[`modal flow golden frames renders the project settings remove pane 1`] =
 
 exports[`modal flow golden frames renders the project settings optimistic default 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
    ┌────────────────────────────────────────────────────────────────────────┐   
 ▼ s│ Project settings                                                       │▾] 
  [1│ station                  │ Default agent                               │ ✓ 
@@ -198,7 +198,7 @@ exports[`modal flow golden frames renders the project settings optimistic defaul
 
 exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -226,7 +226,7 @@ exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 
 exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -254,7 +254,7 @@ exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 
 exports[`modal flow golden frames renders the rename slot prompt 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -282,7 +282,7 @@ Choose the slot to rename: 1-9/a-z                                [sh] [qs] [▾
 
 exports[`modal flow golden frames renders the rename sheet 1`] = `
 "FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  4 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ! hook-scope                     codex     Agent needs appro… +8 -2 #12 x2 
@@ -310,7 +310,7 @@ exports[`modal flow golden frames renders the rename sheet 1`] = `
 
 exports[`modal flow golden frames renders the fork slot sheet 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -338,7 +338,7 @@ exports[`modal flow golden frames renders the fork slot sheet 1`] = `
 
 exports[`modal flow golden frames renders the fork details sheet 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -366,7 +366,7 @@ exports[`modal flow golden frames renders the fork details sheet 1`] = `
 
 exports[`modal flow golden frames renders the new session review 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -394,7 +394,7 @@ exports[`modal flow golden frames renders the new session review 1`] = `
 
 exports[`modal flow golden frames renders the new session edit name 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -422,7 +422,7 @@ exports[`modal flow golden frames renders the new session edit name 1`] = `
 
 exports[`modal flow golden frames renders the new session pick project 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -450,7 +450,7 @@ exports[`modal flow golden frames renders the new session pick project 1`] = `
 
 exports[`modal flow golden frames renders the new session pick agent 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -478,7 +478,7 @@ exports[`modal flow golden frames renders the new session pick agent 1`] = `
 
 exports[`modal flow golden frames renders the project default agent picker 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
-
+───────────────────────────────────────────────────────────────────────────────
 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
@@ -506,7 +506,7 @@ exports[`modal flow golden frames renders the project default agent picker 1`] =
 
 exports[`modal flow golden frames renders the add project sheet 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -534,7 +534,7 @@ exports[`modal flow golden frames renders the add project sheet 1`] = `
 
 exports[`modal flow golden frames renders the widget settings panel 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
@@ -562,7 +562,7 @@ exports[`modal flow golden frames renders the widget settings panel 1`] = `
 
 exports[`modal flow golden frames renders the widget settings picker 1`] = `
 "FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
