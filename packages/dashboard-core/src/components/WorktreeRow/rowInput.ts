@@ -29,12 +29,6 @@ export function worktreeRowGridInput({
   const activity = activityCellForRow(row);
   const ready = isReadyToRead(row);
   const state = row.agent?.state ?? "none";
-  // Colour reinforces the glyph + status label; the session name stays foreground.
-  const color = row.display.alert
-    ? "red"
-    : marker.kind === "text" && marker.text === "?"
-      ? "yellow"
-      : undefined;
   const input: Parameters<typeof worktreeStyleRowGridInput>[0] = {
     id: id ?? row.id,
     slot,
@@ -48,19 +42,15 @@ export function worktreeRowGridInput({
     activityOverflow: "rowSlack",
     metadataGroups: metadataGroups(row),
   };
-  if (ready) {
-    input.markerColor = "green";
-    input.activityColor = "green";
-  } else if (state === "working") {
-    input.markerColor = "blue";
-    input.activityColor = "blue";
-  } else if (!row.display.alert && state !== "unknown") {
-    // Calm states (idle · starting · exited · no agent): status + agent recede to gray.
+  // Tone colors the glyph + status label only — the session name must stay
+  // foreground in every state (D12/D13).
+  const tone = rowStatusTone(row, ready, state);
+  if (tone === "gray") {
     input.activityColor = "gray";
     input.agentColor = "gray";
-  }
-  if (color !== undefined) {
-    input.color = color;
+  } else {
+    input.markerColor = tone;
+    input.activityColor = tone;
   }
   if (focused === true) {
     input.focused = true;
@@ -181,7 +171,7 @@ function activityCellForRow(row: WorktreeRowModel): {
   }
   if (isReadyToRead(row)) {
     return {
-      text: "ready",
+      text: "idle · ready",
       importance: "optional",
     };
   }
@@ -189,6 +179,19 @@ function activityCellForRow(row: WorktreeRowModel): {
     text: row.display.statusLabel,
     importance: "optional",
   };
+}
+
+// Keep the branch order in sync with statusMarker's ladder.
+function rowStatusTone(
+  row: WorktreeRowModel,
+  ready: boolean,
+  state: string,
+): "red" | "yellow" | "green" | "blue" | "gray" {
+  if (row.display.alert) return "red";
+  if (state === "working") return "blue";
+  if (ready) return "green";
+  if (state === "unknown") return "yellow";
+  return "gray";
 }
 
 export function statusMarker(row: WorktreeRowModel): RowMarker {
@@ -240,7 +243,7 @@ export function metadataSegments(row: WorktreeRowModel): MetadataSegment[] {
     return segments;
   }
   segments.push({
-    text: `#${pr.number}`,
+    text: pr.state === "merged" ? `#${pr.number} merged` : `#${pr.number}`,
     stale: pr.stale === true,
     color: prMetadataColor(pr),
     underline: true,

@@ -4,12 +4,12 @@ exports[`modal flow golden frames renders the help overlay 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│                         station help                         │DIFF PR 
+       S│                         station help                         │FF · PR 
         │                                                              │        
 ▼ statio│  Ctrl-O     open/close project view                          │qs] [▾] 
  [1] ○ c│  Ctrl-Q     quit Station                                     │6 #70 ✓ 
  [2] - d│  Ctrl-\\     split pane right                                 │        
- [3] ○ p│  Ctrl-^     split pane below (Ctrl-6)                        │  #73 ✓ 
+ [3] ○ p│  Ctrl-^     split pane below (Ctrl-6)                        │erged ✓ 
  [4] + s│  Ctrl-]     focus next pane                                  │        
  [5] ⠋ s│  Ctrl-/     close split pane (Ctrl-_)                        │6 #76 … 
         │  Enter/Sp   open project view on welcome                     │        
@@ -32,12 +32,12 @@ exports[`modal flow golden frames renders the search prompt 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -60,12 +60,12 @@ exports[`modal flow golden frames renders the collapse prompt 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -88,12 +88,12 @@ exports[`modal flow golden frames renders the project settings picker prompt 1`]
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -200,12 +200,12 @@ exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -228,12 +228,12 @@ exports[`modal flow golden frames renders the remove confirm sheet 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -256,12 +256,12 @@ exports[`modal flow golden frames renders the rename slot prompt 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -284,7 +284,7 @@ exports[`modal flow golden frames renders the rename sheet 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                        AGENT     STATUS                  DIFF PR 
+       SESSION                        AGENT     STATUS                DIFF · PR 
                                                                                 
 ▼ station  4 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ! hook-scope                     codex     Agent needs appro… +8 -2 #12 x2 
@@ -312,12 +312,12 @@ exports[`modal flow golden frames renders the fork slot sheet 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -340,12 +340,12 @@ exports[`modal flow golden frames renders the fork details sheet 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -368,12 +368,12 @@ exports[`modal flow golden frames renders the new session review 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -396,12 +396,12 @@ exports[`modal flow golden frames renders the new session edit name 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -424,12 +424,12 @@ exports[`modal flow golden frames renders the new session pick project 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -452,12 +452,12 @@ exports[`modal flow golden frames renders the new session pick agent 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
                                                                                 
@@ -480,12 +480,12 @@ exports[`modal flow golden frames renders the project default agent picker 1`] =
 "station                                                                     [+]
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited
 ───────────────────────────────────────────────────────────────────────────────
-       SESSION                            AGENT     STATUS              DIFF PR
+       SESSION                            AGENT     STATUS            DIFF · PR
 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
  [2] - docs-cleanup                       -         no agent
- [3] ○ pty-buffer                         codex     idle                  #73 ✓
+ [3] ○ pty-buffer                         codex     idle           #73 merged ✓
  [4] + session-resume                     codex     starting
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
 
@@ -508,7 +508,7 @@ exports[`modal flow golden frames renders the add project sheet 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -536,12 +536,12 @@ exports[`modal flow golden frames renders the widget settings panel 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-clea┌──────────────────────────────────────────────┐                
- [3] ○ pty-buffe│ widgets                                      │          #73 ✓ 
+ [3] ○ pty-buffe│ widgets                                      │   #73 merged ✓ 
  [4] + session-r│ session only · persist in config.toml        │                
  [5] ⠋ station-o│ ▸ [on ] time                               × │ +412 -96 #76 … 
                 │   [off] weather NYC                        × │                
@@ -564,12 +564,12 @@ exports[`modal flow golden frames renders the widget settings picker 1`] = `
 "station                                                                     [+] 
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
 ─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS              DIFF PR 
+       SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-clea┌──────────────────────────────────────────────┐                
- [3] ○ pty-buffe│ add widget                                   │          #73 ✓ 
+ [3] ○ pty-buffe│ add widget                                   │   #73 merged ✓ 
  [4] + session-r│ weather and tz are added in config.toml      │                
  [5] ⠋ station-o│ ▸ time                                       │ +412 -96 #76 … 
                 │   fleet                                      │                

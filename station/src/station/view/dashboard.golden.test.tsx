@@ -242,6 +242,34 @@ describe("dashboard golden frames", () => {
     expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedNameCol))).not.toBe(STATION_COLORS.gray);
   });
 
+  it("keeps alert and unknown session names foreground while their status carries the colour", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: attentionAndFailuresSnapshot(),
+    });
+    const frame = setup.captureSpans();
+    const lines = setup.captureCharFrame().split("\n");
+
+    const attentionRow = lines.findIndex((line) => line.includes("hook-scope"));
+    expect(attentionRow).toBeGreaterThan(0);
+    const attentionNameCol = lines[attentionRow]?.indexOf("hook-scope") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, attentionRow, attentionNameCol))).toBe(
+      STATION_COLORS.foreground,
+    );
+
+    const unknownRow = lines.findIndex((line) => line.includes("metadata-refresh"));
+    expect(unknownRow).toBeGreaterThan(0);
+    const unknownWordCol = lines[unknownRow]?.indexOf("unknown") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownWordCol))).toBe(STATION_COLORS.yellow);
+    const unknownMarkCol = lines[unknownRow]?.indexOf("?") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownMarkCol))).toBe(STATION_COLORS.yellow);
+    const unknownNameCol = lines[unknownRow]?.indexOf("metadata-refresh") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownNameCol))).toBe(
+      STATION_COLORS.foreground,
+    );
+  });
+
   it("routes PR number clicks through the link mouse target", async () => {
     const targets: StationMouseTarget[] = [];
     const setup = await renderDashboard({
