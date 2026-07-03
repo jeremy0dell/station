@@ -46,6 +46,13 @@ function allowedNoOpBinding(mode: StationInputMode, binding: StationBinding): bo
   if (binding.pattern.kind === "slot") {
     return true;
   }
+  // Return only acts once a row is focused; Tab only when a row needs attention.
+  if (
+    binding.id === "station.dashboard.focusActivate" ||
+    binding.id === "station.dashboard.nextNeedsMe"
+  ) {
+    return true;
+  }
   if (mode === "addProject" && binding.action === ADD_PROJECT_KEY_ACTION) {
     return true;
   }

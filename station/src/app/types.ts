@@ -2,6 +2,7 @@ import type { TuiStore } from "@station/dashboard-core";
 import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
+  TuiIslandConfig,
   TuiWidgetConfig,
 } from "@station/dashboard-core/widgets/types";
 import type { StoreApi } from "zustand/vanilla";
@@ -27,6 +28,8 @@ export type StationAppProps = {
   /** Configured automations surfaced in the pane context menu. */
   automations: readonly Automation[];
   widgets?: readonly TuiWidgetConfig[];
+  /** Opt-in island display modes from `[tui.island]`. */
+  island?: TuiIslandConfig;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
 };
 

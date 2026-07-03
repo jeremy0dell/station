@@ -1,6 +1,9 @@
-import type { ProjectView } from "@station/contracts";
+import type { ProjectView, WorktreeId } from "@station/contracts";
 import stringWidth from "string-width";
-import type { DashboardViewportItem } from "../../selectors/dashboardViewport.js";
+import type {
+  DashboardSessionOverflow,
+  DashboardViewportItem,
+} from "../../selectors/dashboardViewport.js";
 
 export { dashboardFooterLabel } from "../../state/keymap.js";
 
@@ -15,6 +18,8 @@ export type DashboardHeaderStatus = {
 
 export type TopRowWidgetText = {
   text: string;
+  /** Narrower form tried before the strip starts dropping widgets outright. */
+  compact?: string;
 };
 
 export function dashboardHeaderLine({
@@ -48,8 +53,7 @@ export function dashboardHeaderLine({
     return productLabel;
   }
 
-  for (let visibleCount = widgets.length; visibleCount > 0; visibleCount -= 1) {
-    const strip = widgetStrip(widgets, visibleCount);
+  for (const strip of widgetStripCandidates(widgets)) {
     const stripWidth = stringWidth(strip);
     const gapWidth = safeColumns - productWidth - stripWidth;
     if (gapWidth >= 1) {
@@ -68,8 +72,7 @@ function dashboardHeaderLineWithStatus(input: {
   widgets: readonly TopRowWidgetText[];
 }): string {
   for (const statusText of statusTextCandidates(input.status)) {
-    for (let visibleCount = input.widgets.length; visibleCount >= 0; visibleCount -= 1) {
-      const widgets = widgetStrip(input.widgets, visibleCount);
+    for (const widgets of [...widgetStripCandidates(input.widgets), ""]) {
       const strip = widgets.length === 0 ? statusText : `${statusText}  ${widgets}`;
       const stripWidth = stringWidth(strip);
       const gapWidth = input.safeColumns - input.productWidth - stripWidth;
@@ -88,33 +91,63 @@ function statusTextCandidates(status: DashboardHeaderStatus): string[] {
   return [status.full, status.compact];
 }
 
-function widgetStrip(widgets: readonly TopRowWidgetText[], visibleCount: number): string {
-  return widgets
-    .slice(0, visibleCount)
-    .map((widget) => widget.text)
-    .join("  ");
+/**
+ * Widest-first strip candidates: every widget full, then every widget in its
+ * compact form, then dropping widgets from the right (still compact) — so the
+ * strip narrows before it loses information.
+ */
+function* widgetStripCandidates(widgets: readonly TopRowWidgetText[]): Generator<string> {
+  if (widgets.length === 0) {
+    return;
+  }
+  const full = widgets.map((widget) => widget.text);
+  const compact = widgets.map((widget) => widget.compact ?? widget.text);
+  yield full.join("  ");
+  if (compact.some((text, i) => text !== full[i])) {
+    yield compact.join("  ");
+  }
+  for (let visibleCount = widgets.length - 1; visibleCount > 0; visibleCount -= 1) {
+    yield compact.slice(0, visibleCount).join("  ");
+  }
 }
 
 export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {
-  return `${collapsed ? "▶" : "▼"} ${project.label} - ${project.counts.worktrees} worktrees`;
+  const caret = collapsed ? "▶" : "▼";
+  const sessions = `${project.counts.worktrees} ${plural(project.counts.worktrees, "session")}`;
+  const agents =
+    project.counts.agents > 0
+      ? ` · ${project.counts.agents} ${plural(project.counts.agents, "agent")}`
+      : "";
+  return `${caret} ${project.label}  ${sessions}${agents}`;
 }
 
-export function emptyProjectLabel(project: ProjectView): string {
-  return ` ${project.counts.worktrees} worktrees`;
+export function emptyProjectLabel(): string {
+  return " no sessions yet · ";
+}
+
+function plural(count: number, noun: string): string {
+  return count === 1 ? noun : `${noun}s`;
 }
 
 export const FIRST_RUN_BODY_LABEL = "No projects configured yet.";
 
-export function scrollIndicatorLabel(direction: "above" | "below", hiddenCount: number): string {
-  const marker = direction === "above" ? "↑" : "↓";
-  return `${marker} ${hiddenCount} hidden`;
+export function scrollIndicatorLabel(
+  direction: "above" | "below",
+  overflow: DashboardSessionOverflow,
+): string {
+  if (direction === "above") {
+    return `▲ ${overflow.above} ${plural(overflow.above, "session")} above`;
+  }
+  return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
 }
 
 export function rowGridInputForViewportItem(
   item: DashboardViewportItem,
   keyByRow: ReadonlyMap<string, string>,
+  focusedRowId?: WorktreeId,
 ): RowGridRowInput | undefined {
   if (item.type === "worktree") {
+    const focused = focusedRowId !== undefined && item.row.id === focusedRowId;
     if (item.pendingRemove !== undefined) {
       return worktreeStyleRowGridInput({
         id: item.id,
@@ -124,6 +157,7 @@ export function rowGridInputForViewportItem(
         activity: "removing session...",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
+        ...(focused ? { focused: true } : {}),
       });
     }
     if (item.pendingStart !== undefined) {
@@ -137,6 +171,7 @@ export function rowGridInputForViewportItem(
         activity,
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
+        ...(focused ? { focused: true } : {}),
       });
     }
     return worktreeRowGridInput({
@@ -144,6 +179,7 @@ export function rowGridInputForViewportItem(
       row: item.row,
       slot: keyByRow.get(item.row.id),
       title: item.displayTitle,
+      focused,
     });
   }
   if (item.type !== "createLocalRow") {

@@ -1,6 +1,19 @@
 import { describe, expect, it } from "bun:test";
+import { createTuiStore } from "@station/dashboard-core";
+import type { StationSnapshot } from "@station/contracts";
+import {
+  attentionAndFailuresSnapshot,
+  manyProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
+import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
+import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { createStationStore } from "../state/store.js";
-import { MAIN_PANE_ID, STATION_OVERLAY_ID, type StationState } from "../state/types.js";
+import {
+  agentWorktreePaneId,
+  MAIN_PANE_ID,
+  STATION_OVERLAY_ID,
+  type StationState,
+} from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { routeKey, routeMouse, routePaste, type StationCommandId } from "./router.js";
 import {
@@ -322,5 +335,84 @@ describe("routePaste", () => {
 
   it("swallows paste while on welcome with no pane", () => {
     expect(routePaste("hello", welcomeState())).toEqual({ kind: "swallowed" });
+  });
+});
+
+describe("the station-button layer (island ↵ jump)", () => {
+  function keymapFor(snapshot: StationSnapshot) {
+    const stationViewStore = createTuiStore({
+      source: new FakeStationSource(snapshot),
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      onDismiss: async () => {},
+    });
+    return createStationKeymap(stationViewStore);
+  }
+
+  function flaggedRowId(snapshot: StationSnapshot): string {
+    const row = snapshot.rows.find(
+      (candidate) =>
+        candidate.display.statusLabel === "needs attention" ||
+        candidate.display.statusLabel === "stuck",
+    );
+    if (row === undefined) {
+      throw new Error("fixture is expected to contain a flagged row");
+    }
+    return row.id;
+  }
+
+  it("opens the overlay on ↵ while hovering the alerting island with no local agent pane", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const store = createStationStore();
+    store.actions.setStationButtonHover(true);
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "overlay-open",
+      overlayId: STATION_OVERLAY_ID,
+    });
+  });
+
+  it("focuses the flagged session's agent pane on ↵ when it is hosted locally", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const paneId = agentWorktreePaneId(flaggedRowId(snapshot));
+    const store = createStationStore();
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setStationButtonHover(true);
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "focus",
+      target: { kind: "pane", paneId },
+    });
+  });
+
+  it("leaves ↵ with the focused pane when the island is not hovered", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const store = createStationStore();
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "terminal-write",
+      paneId: MAIN_PANE_ID,
+      bytes: "\r",
+    });
+  });
+
+  it("leaves ↵ with the focused pane when nothing needs the user", () => {
+    const snapshot = manyProjectsSnapshot();
+    const store = createStationStore();
+    store.actions.setStationButtonHover(true);
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "terminal-write",
+      paneId: MAIN_PANE_ID,
+      bytes: "\r",
+    });
+  });
+
+  it("passes other keys through to the pane even while the jump is armed", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const store = createStationStore();
+    store.actions.setStationButtonHover(true);
+    expect(routeKey("a", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "terminal-write",
+      paneId: MAIN_PANE_ID,
+      bytes: "a",
+    });
   });
 });

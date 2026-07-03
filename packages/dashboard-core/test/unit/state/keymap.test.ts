@@ -40,6 +40,8 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   "tui.addProject.type",
   // Esc only dismisses when the runtime is showing a dismissible persistent popup.
   "tui.dashboard.dismissEsc",
+  // Return only activates once a row is focused.
+  "tui.dashboard.focusActivate",
 ]);
 
 function probeKeys(): TuiKey[] {

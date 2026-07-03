@@ -9,6 +9,8 @@ import { ANIM_MS, STATION_ICON } from "./layout.js";
 
 const SURFACE = { width: 40, height: 12 };
 
+const CALM = { attention: false, needsYouCount: 0, workingCount: 0, readyCount: 0, idleCount: 0 };
+
 async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<string> {
   const setup = await testRender(node, SURFACE);
   try {
@@ -22,7 +24,7 @@ async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<str
 describe("DynamicStationButton", () => {
   it("collapsed base shows only the station icon", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton attention={false} workingCount={2} idleCount={14} />,
+      <DynamicStationButton {...CALM} workingCount={2} idleCount={14} />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).not.toContain("session");
@@ -30,7 +32,12 @@ describe("DynamicStationButton", () => {
 
   it("collapsed attention frames the icon with exclamation marks", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton attention={true} workingCount={0} idleCount={0} sessionName="hook-scope" />,
+      <DynamicStationButton
+        {...CALM}
+        attention={true}
+        needsYouCount={1}
+        sessionName="hook-scope"
+      />,
     );
     expect(frame).toContain(STATION_ICON);
     // Framed alert: solid "!" rows top and bottom around the centered icon.
@@ -38,28 +45,81 @@ describe("DynamicStationButton", () => {
     expect(frame).not.toContain("needs user");
   });
 
+  it("collapsed rest counts paint the fleet lanes", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton {...CALM} readyCount={1} idleCount={6} restCounts={true} />,
+    );
+    expect(frame).toContain(STATION_ICON);
+    expect(frame).toContain("⠿0 ●1 ○6");
+    expect(frame).not.toContain("session");
+  });
+
+  it("collapsed celebration announces the merged PR", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton {...CALM} idleCount={3} celebration={{ prNumber: 42 }} />,
+    );
+    expect(frame).toContain(STATION_ICON);
+    expect(frame).toContain("✓ #42 merged");
+  });
+
+  it("attention wins over the celebration", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton
+        {...CALM}
+        attention={true}
+        needsYouCount={1}
+        sessionName="hook-scope"
+        celebration={{ prNumber: 42 }}
+      />,
+    );
+    expect(frame).toContain("!!!!");
+    expect(frame).not.toContain("#42");
+  });
+
   it("expanded base shows the working/idle summary", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton attention={false} workingCount={2} idleCount={14} hovered />,
+      <DynamicStationButton {...CALM} workingCount={2} readyCount={5} idleCount={9} hovered />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("2 sessions working");
+    // Ready sessions read as idle in the totals card (5 ready + 9 idle).
     expect(frame).toContain("14 sessions idle");
+  });
+
+  it("expanded roll-up lists each project's worst status and folds the rest", async () => {
+    const projects = [
+      { projectId: "p1", name: "station", status: "needsYou" as const },
+      { projectId: "p2", name: "docs", status: "idle" as const },
+      { projectId: "p3", name: "web", status: "ready" as const },
+      { projectId: "p4", name: "cli", status: "idle" as const },
+      { projectId: "p5", name: "api", status: "idle" as const },
+      { projectId: "p6", name: "infra", status: "idle" as const },
+      { projectId: "p7", name: "tools", status: "idle" as const },
+    ];
+    const frame = await captureFrame(
+      <DynamicStationButton {...CALM} projectRollup={projects} hovered />,
+    );
+    expect(frame).toContain("! station");
+    expect(frame).toContain("○ docs");
+    expect(frame).toContain("● web");
+    expect(frame).toContain("+2 more");
+    expect(frame).not.toContain("tools");
+    expect(frame).not.toContain("sessions working");
   });
 
   it("expanded attention shows the session name and intervention message", async () => {
     const frame = await captureFrame(
       <DynamicStationButton
+        {...CALM}
         attention={true}
-        workingCount={0}
-        idleCount={0}
+        needsYouCount={1}
         sessionName="hook-scope"
         hovered
       />,
     );
     expect(frame).toContain("hook-scope");
     expect(frame).toContain("needs your attention");
-    expect(frame).toContain("click to focus");
+    expect(frame).toContain("↵ or click to focus");
 
     const lines = frame.split("\n");
     const [topBorder, iconRow, titleRow] = lines;
@@ -73,9 +133,23 @@ describe("DynamicStationButton", () => {
     expect(lines[bottomBorder - 1]?.slice(buttonLeft).replace(/[│ ]/g, "")).toBe("");
   });
 
+  it("expanded attention shows the queue when several sessions ask", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton
+        {...CALM}
+        attention={true}
+        needsYouCount={3}
+        sessionName="hook-scope"
+        hovered
+      />,
+    );
+    expect(frame).toContain("! 3 need you ›");
+    expect(frame).not.toContain("needs your attention");
+  });
+
   it("switches the mouse pointer to a hand on hover and back on leave", async () => {
     const setup = await testRender(
-      <DynamicStationButton attention={false} workingCount={1} idleCount={2} />,
+      <DynamicStationButton {...CALM} workingCount={1} idleCount={2} />,
       SURFACE,
     );
     try {

@@ -31,7 +31,6 @@
       "@station/opencode": ["integrations/harness/opencode/src/index.ts"],
       "@station/observability": ["packages/observability/src/index.ts"],
       "@station/pi": ["integrations/harness/pi/src/index.ts"],
-      "@station/provider-hooks": ["packages/provider-hooks/src/index.ts"],
       "@station/protocol": ["packages/protocol/src/index.ts"],
       "@station/runtime": ["packages/runtime/src/index.ts"],
       "@station/scripted-harness": ["integrations/harness/scripted/src/index.ts"],

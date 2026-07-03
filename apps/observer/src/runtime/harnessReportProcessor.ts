@@ -19,6 +19,22 @@ export type HarnessReportProcessResult = {
   reconcileReason?: string;
 };
 
+function reportDecisionFields(report: HarnessEventReport): Record<string, unknown> {
+  return {
+    provider: report.provider,
+    reportId: report.reportId,
+    eventType: report.eventType,
+    statusValue: report.status?.value,
+    attention: report.status?.attention,
+    correlation: {
+      harnessRunId: report.correlation?.harnessRunId,
+      sessionId: report.correlation?.sessionId,
+      worktreeId: report.correlation?.worktreeId,
+      cwd: report.correlation?.cwd,
+    },
+  };
+}
+
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,
   report: HarnessEventReport,
@@ -27,6 +43,11 @@ export async function processHarnessIngressReport(
     triggerReconcile: false,
   });
   if (!receipt.accepted || receipt.deduped === true) {
+    await deps.logger?.info("Harness event report skipped.", {
+      ...reportDecisionFields(report),
+      accepted: receipt.accepted,
+      deduped: receipt.deduped === true,
+    });
     return { receipt };
   }
   const projection = await runRuntimeBoundary(
@@ -58,6 +79,15 @@ export async function processHarnessIngressReport(
       reconcileReason: `harness-report:${report.provider}:${report.eventType}`,
     };
   }
+  // Census/debug trail: one line per report with the projection decision, so
+  // unprojected (correlation-failed) reports are visible instead of vanishing.
+  await deps.logger?.info("Harness event report processed.", {
+    ...reportDecisionFields(report),
+    projected: projection.value.projected,
+    correlatedBy: projection.value.correlatedBy,
+    worktreeId: projection.value.worktreeId,
+    publishedEvents: projection.value.events.length,
+  });
   for (const event of projection.value.events) {
     deps.eventBus.publish(event);
   }

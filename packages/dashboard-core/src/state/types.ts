@@ -27,6 +27,8 @@ export type TuiViewState = {
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
+  /** Persistent list cursor; a stale id (row gone) is harmless and simply unfocused. */
+  focusedRowId?: WorktreeId;
 };
 
 export type TuiState = TuiViewState & {
@@ -116,5 +118,6 @@ export type CreateInitialTuiStateOptions = {
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;
+  focusedRowId?: WorktreeId;
   runtime?: Partial<TuiRuntimeState>;
 };

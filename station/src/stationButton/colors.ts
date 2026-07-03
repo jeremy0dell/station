@@ -1,6 +1,7 @@
+import { STATION_COLORS } from "../station/view/theme.js";
+
 // Themeable color tokens for the station button. border/icon/text are separate
-// tokens though equal per state, so a theme can diverge them later. Independent
-// status palette (green=healthy, blue=peek, red=alert, purple=actionable).
+// tokens though equal per state, so a theme can diverge them later.
 export type StationButtonStateColors = {
   border: string;
   icon: string;
@@ -12,10 +13,12 @@ export type DynamicStationButtonColors = {
   attention: { collapsed: StationButtonStateColors; expanded: StationButtonStateColors };
 };
 
-const GREEN = "#22c55e";
-const BLUE = "#60a5fa"; // light, readable on the dark background
-const RED = "#ef4444";
-const PURPLE = "#c084fc"; // light + distinctly purple, clearly apart from the blue
+// green=rest, blue=expanded, red=alert, purple=actionable; the hover morph
+// lerps between the resting and expanded roles.
+const GREEN = STATION_COLORS.green;
+const BLUE = STATION_COLORS.blue;
+const RED = STATION_COLORS.red;
+const PURPLE = STATION_COLORS.purple;
 
 export const dynamicStationButtonColors: DynamicStationButtonColors = {
   base: {

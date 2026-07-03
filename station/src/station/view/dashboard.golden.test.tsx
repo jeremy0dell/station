@@ -16,7 +16,7 @@ import {
 } from "../fixtures/scenarios.js";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
-import type { TopRowWidgetText } from "@station/dashboard-core";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { DashboardRoot } from "./DashboardRoot.js";
 import { STATION_COLORS } from "./theme.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
@@ -57,7 +57,7 @@ describe("dashboard golden frames", () => {
     height: number;
     snapshot?: StationSnapshot;
     connection?: StationClientConnectionState;
-    topRowWidgets?: readonly TopRowWidgetText[];
+    topRowWidgets?: readonly TopRowWidgetView[];
     dispatchMouse?: (target: StationMouseTarget) => void;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
@@ -111,16 +111,23 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("Q/esc:close");
   });
 
-  it("renders widgets in the loading-state header", async () => {
+  it("renders widgets in the loading-state header as gray chrome", async () => {
     const setup = await renderDashboard({
       width: 80,
       height: 24,
       connection: { state: "loading", since: Date.now() },
-      topRowWidgets: [{ text: "10:42 AM" }],
+      topRowWidgets: [{ id: "time:0", text: "10:42 AM" }],
     });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("10:42 AM");
     expect(frame).toContain("Loading observer snapshot...");
+
+    const lines = frame.split("\n");
+    const headerRow = lines.findIndex((line) => line.includes("10:42 AM"));
+    const widgetCol = lines[headerRow]?.indexOf("10:42 AM") ?? -1;
+    expect(widgetCol).toBeGreaterThan(0);
+    const spans = setup.captureSpans();
+    expect(spanHex(spanAtFrameCell(spans, headerRow, widgetCol))).toBe(STATION_COLORS.gray);
   });
 
   it("renders the waiting-for-observer state on cold reconnects", async () => {
@@ -173,9 +180,9 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("x2");
     expect(frame).toContain("✓");
     expect(frame).toContain("…");
-    // Project headers with the disclosure marker and harness suffix.
-    expect(frame).toContain("▼ station - 4 worktrees");
-    expect(frame).toContain("▼ observer - 2 worktrees");
+    // Project headers with the disclosure marker and session/agent counts.
+    expect(frame).toContain("▼ station  4 sessions");
+    expect(frame).toContain("▼ observer  2 sessions");
   });
 
   it("colors alert rows red and check glyphs by state", async () => {
@@ -202,6 +209,37 @@ describe("dashboard golden frames", () => {
     const prSpan = spanAtFrameCell(frame, attentionRow, prCol);
     expect(spanHex(prSpan)).toBe(STATION_COLORS.blue);
     expect(((prSpan?.attributes ?? 0) & TextAttributes.UNDERLINE) !== 0).toBe(true);
+  });
+
+  it("colours working rows blue and calm rows gray, leaving the name foreground", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: attentionAndFailuresSnapshot(),
+    });
+    const frame = setup.captureSpans();
+    const lines = setup.captureCharFrame().split("\n");
+
+    // Working row: the braille throbber (first frame ⠋) + the "working" label read
+    // blue; the session name is not swept into the status colour.
+    const workingRow = lines.findIndex((line) => line.includes("pr-info"));
+    expect(workingRow).toBeGreaterThan(0);
+    const throbberCol = lines[workingRow]?.indexOf("⠋") ?? -1;
+    expect(throbberCol).toBeGreaterThan(0);
+    expect(spanHex(spanAtFrameCell(frame, workingRow, throbberCol))).toBe(STATION_COLORS.blue);
+    const workingWordCol = lines[workingRow]?.indexOf("working") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, workingRow, workingWordCol))).toBe(STATION_COLORS.blue);
+    const workingNameCol = lines[workingRow]?.indexOf("pr-info") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, workingRow, workingNameCol))).not.toBe(STATION_COLORS.blue);
+
+    // Calm (exited) row: the status label recedes to gray; the name does not.
+    const exitedRow = lines.findIndex((line) => line.includes("done-run"));
+    expect(exitedRow).toBeGreaterThan(0);
+    const exitedWordCol = lines[exitedRow]?.indexOf("exited") ?? -1;
+    expect(exitedWordCol).toBeGreaterThan(0);
+    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedWordCol))).toBe(STATION_COLORS.gray);
+    const exitedNameCol = lines[exitedRow]?.indexOf("done-run") ?? -1;
+    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedNameCol))).not.toBe(STATION_COLORS.gray);
   });
 
   it("routes PR number clicks through the link mouse target", async () => {
@@ -243,12 +281,46 @@ describe("dashboard golden frames", () => {
   });
 
   it("assigns slots only to visible actionable rows", async () => {
-    const setup = await renderDashboard({ width: 80, height: 24, snapshot: manyProjectsSnapshot() });
+    const setup = await renderDashboard({ width: 80, height: 40, snapshot: manyProjectsSnapshot() });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("[1]");
     // The starting row gets a slot too (it has a focusable terminal), but the
-    // empty project renders its zero-count line with no slot cell.
-    expect(frame).toContain("0 worktrees");
+    // empty project renders its calm empty-state line (with a click-to-add
+    // button) and no slot cell.
+    expect(frame).toContain("no sessions yet · ");
+    expect(frame).toContain("[ + add session ]");
+  });
+
+  it("renders the focus cursor and jumps it to the next session needing you", async () => {
+    const { store } = makeStationTestStore({
+      snapshot: attentionAndFailuresSnapshot(),
+      seedInitialSnapshot: false,
+    });
+    store.getState().start();
+    const setup = await testRender(<DashboardRoot store={store} columns={80} rows={24} />, {
+      width: 80,
+      height: 24,
+    });
+    teardowns.push(() => {
+      setup.renderer.destroy();
+    });
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).not.toContain("▏");
+
+    store.getState().handleKey({ input: "", downArrow: true });
+    await setup.flush();
+    let lines = setup.captureCharFrame().split("\n");
+    const cursorRow = lines.findIndex((line) => line.startsWith("▏"));
+    expect(lines[cursorRow]).toContain("hook-scope");
+    const spans = setup.captureSpans();
+    expect(spanHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(STATION_COLORS.cyan);
+    expect(spanBgHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(STATION_COLORS.focusBackground);
+
+    // Tab (Ctrl-I) jumps past the working/unknown rows to the stuck one.
+    store.getState().handleKey({ input: "i", ctrl: true });
+    await setup.flush();
+    lines = setup.captureCharFrame().split("\n");
+    expect(lines.find((line) => line.startsWith("▏"))).toContain("popup-latency");
   });
 
   it("paints hovered worktree rows through the trailing action column", async () => {

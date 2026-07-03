@@ -1,10 +1,15 @@
-import type { TuiConfig, TuiWidgetConfig } from "@station/config";
+import type { TuiConfig, TuiIslandConfig, TuiWidgetConfig } from "@station/config";
 import type { TopRowWidgetText } from "../components/Dashboard/content.js";
 
-export type { TuiConfig, TuiWidgetConfig };
+export type { TuiConfig, TuiIslandConfig, TuiWidgetConfig };
+
+/** Widgets whose text is derived from the observer snapshot at render time. */
+export type SnapshotWidgetKind = "fleet" | "prs";
 
 export type TopRowWidgetView = TopRowWidgetText & {
   id: string;
+  /** Set for snapshot-derived widgets; resolveTopRowWidgets fills their text. */
+  data?: SnapshotWidgetKind;
 };
 
 export type TimeWidgetRuntime = {

@@ -18,6 +18,7 @@ export * from "./flows/newSession.js";
 export * from "./flows/stepWizard.js";
 export * from "./selectors/dashboardViewport.js";
 export * from "./selectors/featureFlags.js";
+export * from "./selectors/fleetSummary.js";
 export * from "./selectors/selectors.js";
 export * from "./services/errors/errors.js";
 export * from "./services/folderService.js";

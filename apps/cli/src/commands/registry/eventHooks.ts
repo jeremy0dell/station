@@ -3,7 +3,7 @@ import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.j
 import type { EventHooksCommandOptions } from "../eventHooks.js";
 import { runEventHooksCommand } from "../eventHooks.js";
 
-const eventHookExamples = ["notify-turn-completion"] as const;
+const eventHookExamples = ["notify-agent-state"] as const;
 
 export const eventHooksCliCommand: CliCommandNode = {
   name: "event-hooks",
@@ -11,36 +11,36 @@ export const eventHooksCliCommand: CliCommandNode = {
   requiresConfig: true,
   run: runEventHooksCliCommand,
   usage: [
-    "stn event-hooks plan notify-turn-completion [--force]",
-    "stn event-hooks install notify-turn-completion --yes [--force]",
+    "stn event-hooks plan notify-agent-state [--force]",
+    "stn event-hooks install notify-agent-state --yes [--force]",
     "stn event-hooks doctor",
   ],
   options: [
     { name: "--yes, -y", description: "Confirm event hook installation." },
     { name: "--force", description: "Replace an installed hook even if it already matches." },
   ],
-  examples: ["pnpm stn event-hooks plan notify-turn-completion", "pnpm stn event-hooks doctor"],
+  examples: ["pnpm stn event-hooks plan notify-agent-state", "pnpm stn event-hooks doctor"],
   children: [
     {
       name: "plan",
-      displayName: "plan notify-turn-completion",
-      description: "Preview the built-in turn-completion observer event hook.",
+      displayName: "plan notify-agent-state",
+      description: "Preview the built-in agent state notification observer event hook.",
       topicArguments: eventHookExamples,
-      usage: ["stn event-hooks plan notify-turn-completion [--force]"],
+      usage: ["stn event-hooks plan notify-agent-state [--force]"],
       options: [
         {
           name: "--force",
           description: "Show the replacement block even when the hook matches.",
         },
       ],
-      examples: ["pnpm stn event-hooks plan notify-turn-completion"],
+      examples: ["pnpm stn event-hooks plan notify-agent-state"],
     },
     {
       name: "install",
-      displayName: "install notify-turn-completion",
-      description: "Install or replace the built-in turn-completion observer event hook.",
+      displayName: "install notify-agent-state",
+      description: "Install or replace the built-in agent state notification observer event hook.",
       topicArguments: eventHookExamples,
-      usage: ["stn event-hooks install notify-turn-completion --yes [--force]"],
+      usage: ["stn event-hooks install notify-agent-state --yes [--force]"],
       options: [
         { name: "--yes, -y", description: "Confirm writing the config file." },
         {
@@ -48,11 +48,11 @@ export const eventHooksCliCommand: CliCommandNode = {
           description: "Replace an installed hook even if it already matches.",
         },
       ],
-      examples: ["pnpm stn event-hooks install notify-turn-completion --yes"],
+      examples: ["pnpm stn event-hooks install notify-agent-state --yes"],
     },
     {
       name: "doctor",
-      description: "Check whether the built-in turn-completion event hook is usable.",
+      description: "Check whether the built-in agent state notification event hook is usable.",
       usage: ["stn event-hooks doctor"],
       examples: ["pnpm stn event-hooks doctor"],
     },

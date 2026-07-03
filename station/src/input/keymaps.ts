@@ -6,14 +6,16 @@ export type LayerId =
   | "command-palette"
   | "context-menu"
   | "overlay"
+  | "station-button"
   | "terminal"
   | "workspace"
   | "base";
 
 /**
- * The documented priority order, highest first. All seven slots are named so
- * a future layer is a registration into an existing slot; only layers that
- * are actually registered participate in resolution.
+ * The documented priority order, highest first. All slots are named so a
+ * future layer is a registration into an existing slot; only layers that
+ * are actually registered participate in resolution. station-button sits
+ * above terminal so the hovered island can claim ↵ before pane passthrough.
  */
 export const LAYER_PRIORITY: readonly LayerId[] = [
   "resize-drag",
@@ -21,6 +23,7 @@ export const LAYER_PRIORITY: readonly LayerId[] = [
   "command-palette",
   "context-menu",
   "overlay",
+  "station-button",
   "terminal",
   "workspace",
   "base",

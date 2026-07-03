@@ -1,19 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-  claudeHookPayloadReportId,
-  claudeHookPayloadToHarnessEventReport,
-  compactClaudeHookPayload,
-  isClaudeForwardedEventType,
-} from "@station/claude";
-import {
-  codexHookPayloadReportId,
-  codexHookPayloadToHarnessEventReport,
-  compactCodexHookPayload,
-} from "@station/codex";
+import { isClaudeForwardedEventType } from "@station/claude";
 import type { ObserverPaths } from "@station/config";
 import type {
-  HarnessEventReport,
-  HarnessEventReportReceipt,
   ProviderHookEvent,
   ProviderHookPayloadSummary,
   ProviderHookReceipt,
@@ -27,12 +15,7 @@ import {
   parseStationHookIdentityPayload,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
-import {
-  compactCursorProviderHookPayload,
-  cursorProviderHookPayloadToHarnessEventReport,
-} from "@station/cursor";
 import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
-import { compactPiHookPayload, piHookPayloadToHarnessEventReport } from "@station/pi";
 import { createObserverClient } from "@station/protocol";
 import {
   type RuntimeClock,
@@ -44,7 +27,7 @@ import {
 import { normalizeWorktrunkLifecycleEvent } from "@station/worktrunk";
 import { deliverProviderHookWithSpooling, type ProviderDeliveryAttempt } from "./deliveryPolicy.js";
 import type { ProviderHookObserverStartupDeps } from "./observerStartup.js";
-import { writeHarnessEventReportSpoolRecord, writeProviderHookSpoolRecord } from "./spool.js";
+import { writeProviderHookSpoolRecord } from "./spool.js";
 
 export type ProviderHookSenderOptions = {
   paths: ObserverPaths;
@@ -67,7 +50,6 @@ export type ProviderHookSenderDeps = ProviderHookObserverStartupDeps & {
   ) => ReturnType<typeof createObserverClient>;
   clock?: RuntimeClock;
   writeSpool?: typeof writeProviderHookSpoolRecord;
-  writeReportSpool?: typeof writeHarnessEventReportSpoolRecord;
   hookId?: () => string;
   logger?: JsonlLogger;
 };
@@ -182,6 +164,8 @@ export async function sendClaudeHookPayload(
   }
   // Claude installs only rule-derived hook events, but a fallback global install can
   // surface user-added events; unlisted event types are dropped, never errors.
+  // Writer-side filter only saves spool noise — the claude adapter re-enforces it
+  // observer-side, where all normalization now runs.
   if (!isClaudeForwardedEventType(eventName)) {
     return ignoredProviderHookReceipt({
       provider: "claude",
@@ -191,28 +175,16 @@ export async function sendClaudeHookPayload(
     });
   }
 
-  const compaction = compactClaudeHookPayload(enrichedPayload);
-  try {
-    const observedAt = toIsoTimestamp(clock.now());
-    const reportId = deps.hookId?.() ?? claudeHookPayloadReportId(compaction.payload, observedAt);
-    const report = claudeHookPayloadToHarnessEventReport({
-      reportId,
-      observedAt,
-      payload: compaction.payload,
-      diagnostics: diagnosticsFromCompaction(compaction),
-    });
-    return providerHookReceiptFromHarnessReportReceipt(
-      await sendHarnessEventReport(input, report, compactionSummary(compaction), deps),
-    );
-  } catch (error) {
-    return rejectedProviderHookReceipt({
+  return sendProviderHookEvent(
+    {
+      ...input,
       provider: "claude",
+      kind: "harness",
       event: eventName,
-      clock,
-      error,
-      hookId: deps.hookId,
-    });
-  }
+      payload: enrichedPayload,
+    },
+    deps,
+  );
 }
 
 export async function sendCodexHookPayload(
@@ -234,27 +206,16 @@ export async function sendCodexHookPayload(
     });
   }
 
-  const compaction = compactCodexHookPayload(enrichedPayload);
-  try {
-    const reportId = deps.hookId?.() ?? codexHookPayloadReportId(compaction.payload);
-    const report = codexHookPayloadToHarnessEventReport({
-      reportId,
-      observedAt: toIsoTimestamp(clock.now()),
-      payload: compaction.payload,
-      diagnostics: diagnosticsFromCompaction(compaction),
-    });
-    return providerHookReceiptFromHarnessReportReceipt(
-      await sendHarnessEventReport(input, report, compactionSummary(compaction), deps),
-    );
-  } catch (error) {
-    return rejectedProviderHookReceipt({
+  return sendProviderHookEvent(
+    {
+      ...input,
       provider: "codex",
+      kind: "harness",
       event: eventName,
-      clock,
-      error,
-      hookId: deps.hookId,
-    });
-  }
+      payload: enrichedPayload,
+    },
+    deps,
+  );
 }
 
 export async function sendCursorHookPayload(
@@ -276,26 +237,16 @@ export async function sendCursorHookPayload(
     });
   }
 
-  const compaction = compactCursorProviderHookPayload(enrichedPayload);
-  try {
-    const report = cursorProviderHookPayloadToHarnessEventReport({
-      reportId: deps.hookId?.() ?? defaultHookId(),
-      observedAt: toIsoTimestamp(clock.now()),
-      payload: compaction.payload,
-      diagnostics: diagnosticsFromCompaction(compaction),
-    });
-    return providerHookReceiptFromHarnessReportReceipt(
-      await sendHarnessEventReport(input, report, compactionSummary(compaction), deps),
-    );
-  } catch (error) {
-    return rejectedProviderHookReceipt({
+  return sendProviderHookEvent(
+    {
+      ...input,
       provider: "cursor",
+      kind: "harness",
       event: eventName,
-      clock,
-      error,
-      hookId: deps.hookId,
-    });
-  }
+      payload: enrichedPayload,
+    },
+    deps,
+  );
 }
 
 export async function sendPiHookPayload(
@@ -316,74 +267,16 @@ export async function sendPiHookPayload(
     });
   }
 
-  const compaction = compactPiHookPayload(input.eventType, enrichedPayload);
-  try {
-    const report = piHookPayloadToHarnessEventReport({
-      reportId: deps.hookId?.() ?? defaultHookId(),
-      eventType: input.eventType,
-      observedAt: toIsoTimestamp(clock.now()),
-      payload: compaction.payload,
-      diagnostics: diagnosticsFromCompaction(compaction),
-    });
-    return providerHookReceiptFromHarnessReportReceipt(
-      await sendHarnessEventReport(input, report, compactionSummary(compaction), deps),
-    );
-  } catch (error) {
-    return rejectedProviderHookReceipt({
+  return sendProviderHookEvent(
+    {
+      ...input,
       provider: "pi",
+      kind: "harness",
       event: input.eventType,
-      clock,
-      error,
-      hookId: deps.hookId,
-    });
-  }
-}
-
-export async function sendHarnessEventReport(
-  options: ProviderHookSenderOptions,
-  report: HarnessEventReport,
-  payloadSummary: ProviderHookPayloadSummary,
-  deps: ProviderHookSenderDeps = {},
-): Promise<HarnessEventReportReceipt> {
-  const syntheticEvent = ProviderHookEventSchema.parse({
-    schemaVersion: STATION_SCHEMA_VERSION,
-    hookId: report.reportId,
-    provider: report.provider,
-    kind: "harness",
-    event: report.eventType,
-    receivedAt: report.observedAt,
-    ...(report.providerData === undefined ? {} : { payload: report.providerData }),
-  });
-  const deliveryInput: Parameters<typeof deliverProviderHookWithSpooling>[0] = {
-    paths: options.paths,
-    event: syntheticEvent,
-    payloadSummary,
-    autoStart: options.autoStart ?? true,
-    startupTimeoutMs: options.startupTimeoutMs ?? 1500,
-    rateLimitMs: options.rateLimitMs ?? 2000,
+      payload: enrichedPayload,
+    },
     deps,
-    deliver: () =>
-      attemptHarnessEventReportDelivery(
-        options.paths,
-        report,
-        options.deliveryTimeoutMs ?? defaultDeliveryTimeoutMs,
-        deps,
-      ),
-    spoolReceipt: async (error) =>
-      providerHookReceiptFromHarnessReportReceipt(
-        await spoolHarnessEventReport(options.paths, report, error, deps),
-      ),
-    recordReceipt: ({ paths, event, payloadSummary, receipt }) =>
-      logAndReturn(paths, event, receipt, payloadSummary, deps),
-  };
-  if (options.configPath !== undefined) {
-    deliveryInput.configPath = options.configPath;
-  }
-  if (options.observerEntryPath !== undefined) {
-    deliveryInput.observerEntryPath = options.observerEntryPath;
-  }
-  const receipt = await deliverProviderHookWithSpooling(deliveryInput);
-  return harnessReportReceiptFromProviderHookReceipt(report, receipt);
+  );
 }
 
 async function attemptHookDelivery(
@@ -395,26 +288,6 @@ async function attemptHookDelivery(
   const delivery = await deliverHook(paths, event, timeoutMs, deps);
   if (delivery.ok && delivery.value.status === "ingested") {
     return { receipt: delivery.value };
-  }
-  if (delivery.ok) {
-    const attempt: ProviderDeliveryAttempt = {};
-    if (delivery.value.error !== undefined) {
-      attempt.error = delivery.value.error;
-    }
-    return attempt;
-  }
-  return { error: delivery.error };
-}
-
-async function attemptHarnessEventReportDelivery(
-  paths: ObserverPaths,
-  report: HarnessEventReport,
-  timeoutMs: number,
-  deps: ProviderHookSenderDeps,
-): Promise<ProviderDeliveryAttempt> {
-  const delivery = await deliverHarnessEventReport(paths, report, timeoutMs, deps);
-  if (delivery.ok && delivery.value.status === "accepted") {
-    return { receipt: providerHookReceiptFromHarnessReportReceipt(delivery.value) };
   }
   if (delivery.ok) {
     const attempt: ProviderDeliveryAttempt = {};
@@ -469,49 +342,6 @@ async function deliverHook(
   );
 }
 
-async function deliverHarnessEventReport(
-  paths: ObserverPaths,
-  report: HarnessEventReport,
-  timeoutMs: number,
-  deps: ProviderHookSenderDeps,
-) {
-  return runRuntimeBoundaryWithTimeout(
-    {
-      operation: "providerHooks.harnessEventReport.deliver",
-      clock: deps.clock,
-      timeoutMs,
-      error: {
-        tag: "HookDeliveryError",
-        code: "HOOK_REPORT_DELIVERY_FAILED",
-        message: "Harness event report could not be delivered to the observer.",
-        provider: report.provider,
-      },
-      timeoutError: {
-        tag: "TimeoutError",
-        code: "HOOK_REPORT_DELIVERY_TIMEOUT",
-        message: "Harness event report delivery timed out.",
-        provider: report.provider,
-      },
-    },
-    async () => {
-      const client = observerClient(paths.socketPath, timeoutMs, deps);
-      const receipt = await client.reportHarnessEvent(report);
-      if (receipt.status !== "accepted") {
-        throw (
-          receipt.error ??
-          safeErrorFromUnknown(receipt, {
-            tag: "HookDeliveryError",
-            code: "HOOK_REPORT_REJECTED",
-            message: "Observer rejected the harness event report.",
-            provider: report.provider,
-          })
-        );
-      }
-      return receipt;
-    },
-  );
-}
-
 async function spool(
   paths: ObserverPaths,
   event: ProviderHookEvent,
@@ -521,20 +351,6 @@ async function spool(
   return (deps.writeSpool ?? writeProviderHookSpoolRecord)({
     spoolDir: paths.hookSpoolDir,
     event,
-    ...(error === undefined ? {} : { error }),
-    ...(deps.clock === undefined ? {} : { clock: deps.clock }),
-  });
-}
-
-async function spoolHarnessEventReport(
-  paths: ObserverPaths,
-  report: HarnessEventReport,
-  error: SafeError | undefined,
-  deps: ProviderHookSenderDeps,
-): Promise<HarnessEventReportReceipt> {
-  return (deps.writeReportSpool ?? writeHarnessEventReportSpoolRecord)({
-    spoolDir: paths.hookSpoolDir,
-    report,
     ...(error === undefined ? {} : { error }),
     ...(deps.clock === undefined ? {} : { clock: deps.clock }),
   });
@@ -581,58 +397,6 @@ async function logAndReturn(
   return receipt;
 }
 
-function providerHookReceiptFromHarnessReportReceipt(
-  receipt: HarnessEventReportReceipt,
-): ProviderHookReceipt {
-  const status = receipt.status === "accepted" ? "ingested" : receipt.status;
-  const hookReceipt: ProviderHookReceipt = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    hookId: receipt.reportId,
-    provider: receipt.provider,
-    event: receipt.eventType,
-    accepted: receipt.accepted,
-    status,
-    receivedAt: receipt.receivedAt,
-  };
-  if (status === "ingested") {
-    hookReceipt.reconciled = false;
-  }
-  if (status === "spooled") {
-    hookReceipt.spooled = true;
-  }
-  if (receipt.deduped !== undefined) {
-    hookReceipt.deduped = receipt.deduped;
-  }
-  if (receipt.error !== undefined) {
-    hookReceipt.error = receipt.error;
-  }
-  return ProviderHookReceiptSchema.parse(hookReceipt);
-}
-
-function harnessReportReceiptFromProviderHookReceipt(
-  report: HarnessEventReport,
-  receipt: ProviderHookReceipt,
-): HarnessEventReportReceipt {
-  return {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: report.reportId,
-    provider: report.provider,
-    eventType: report.eventType,
-    accepted: receipt.accepted,
-    status:
-      receipt.status === "ingested"
-        ? "accepted"
-        : receipt.status === "spooled"
-          ? "spooled"
-          : "rejected",
-    receivedAt: receipt.receivedAt,
-    projected: false,
-    scheduledReconcile: false,
-    ...(receipt.deduped === undefined ? {} : { deduped: receipt.deduped }),
-    ...(receipt.error === undefined ? {} : { error: receipt.error }),
-  };
-}
-
 function ignoredProviderHookReceipt(input: {
   provider: string;
   event: string;
@@ -647,30 +411,6 @@ function ignoredProviderHookReceipt(input: {
     accepted: false,
     status: "ignored",
     receivedAt: toIsoTimestamp(input.clock.now()),
-  });
-}
-
-function rejectedProviderHookReceipt(input: {
-  provider: string;
-  event: string;
-  clock: RuntimeClock;
-  error: unknown;
-  hookId?: (() => string) | undefined;
-}): ProviderHookReceipt {
-  return ProviderHookReceiptSchema.parse({
-    schemaVersion: STATION_SCHEMA_VERSION,
-    hookId: input.hookId?.() ?? defaultHookId(),
-    provider: input.provider,
-    event: input.event,
-    accepted: false,
-    status: "rejected",
-    receivedAt: toIsoTimestamp(input.clock.now()),
-    error: safeErrorFromUnknown(input.error, {
-      tag: "HookPayloadError",
-      code: "HOOK_REPORT_INVALID",
-      message: "Provider hook payload could not be normalized to a harness event report.",
-      provider: input.provider,
-    }),
   });
 }
 
@@ -691,36 +431,6 @@ function payloadSummaryFor(payload: unknown): ProviderHookPayloadSummary {
     compactedBytes: bytes,
     compacted: false,
     omittedFieldNames: [],
-  };
-}
-
-function compactionSummary(compaction: {
-  originalByteCount: number | null;
-  compactedByteCount: number | null;
-  compacted: boolean;
-  omittedFieldNames: string[];
-}): ProviderHookPayloadSummary {
-  return {
-    present: true,
-    originalBytes: compaction.originalByteCount,
-    compactedBytes: compaction.compactedByteCount,
-    compacted: compaction.compacted,
-    omittedFieldNames: compaction.omittedFieldNames,
-  };
-}
-
-function diagnosticsFromCompaction(compaction: {
-  originalByteCount: number | null;
-  compactedByteCount: number | null;
-  compacted: boolean;
-  omittedFieldNames: string[];
-}) {
-  return {
-    payloadBytes: compaction.originalByteCount,
-    compactedBytes: compaction.compactedByteCount,
-    compacted: compaction.compacted,
-    truncated: false,
-    omittedFieldNames: compaction.omittedFieldNames,
   };
 }
 

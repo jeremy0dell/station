@@ -111,6 +111,15 @@ function buildLaunch(
   if (options.noAltScreen !== undefined) {
     launchOptions.noAltScreen = options.noAltScreen;
   }
+  if (options.observerSocketPath !== undefined) {
+    launchOptions.observerSocketPath = options.observerSocketPath;
+  }
+  if (options.stateDir !== undefined) {
+    launchOptions.stateDir = options.stateDir;
+  }
+  if (options.hookSpoolDir !== undefined) {
+    launchOptions.hookSpoolDir = options.hookSpoolDir;
+  }
   return buildCodexLaunchPlan(request, launchOptions);
 }
 

@@ -1,8 +1,7 @@
 import stringWidth from "string-width";
 
-export const ROW_COLOR_PURPLE = "#d2a8ff";
-
-export type RowColor = "blue" | "gray" | "green" | "red" | "yellow" | typeof ROW_COLOR_PURPLE;
+// Semantic only — dashboard-core stays hex-free; view/theme.ts resolves to hex.
+export type RowColor = "blue" | "cyan" | "gray" | "green" | "red" | "yellow" | "purple";
 
 export type RowSegment =
   | {
@@ -16,6 +15,7 @@ export type RowSegment =
   | {
       kind: "throbber";
       variant: "braille" | "circle";
+      color?: RowColor;
     };
 
 export type RowMarker =
@@ -132,7 +132,8 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
       idealCells: 8,
       maxCells: 10,
       gapBefore: 2,
-      dropPriority: 30,
+      // Spec narrowing ladder: agent sheds before the status word (activity).
+      dropPriority: 40,
       align: "left",
       truncate: "end",
     },
@@ -143,7 +144,7 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
       idealCells: 12,
       maxCells: 16,
       gapBefore: 2,
-      dropPriority: 40,
+      dropPriority: 30,
       align: "left",
       truncate: "end",
     },
@@ -200,7 +201,12 @@ export function layoutWorktreeRowGrid(input: {
   const config = input.config ?? DEFAULT_WORKTREE_ROW_GRID;
   const specs = config.columns;
   const rightSpec = specs.find((spec) => spec.key === "metadata");
+  const allLeftColumns = activeLeftColumnSets(config, input.rows);
+  const fullLeftSet = allLeftColumns[0] ?? [];
 
+  // Narrowing ladder (spec): keep the jump key, status glyph and session NAME
+  // intact, shedding lanes in order — diff, then PR (the metadata modes), then
+  // agent, then the status word (soft columns) — before ever truncating the name.
   for (const metadataMode of METADATA_MODES) {
     const metadata = input.rows.map((row) => metadataForMode(row, metadataMode));
     const rightReserve = Math.max(0, ...metadata.map((layout) => segmentsWidth(layout.segments)));
@@ -211,9 +217,10 @@ export function layoutWorktreeRowGrid(input: {
       continue;
     }
 
-    const activeSets = activeLeftColumnSets(config, input.rows);
-    const protectedKeys = meaningfulSoftColumnKeys(config, input.rows);
-    const desiredLayouts = layoutActiveSets({
+    // While any metadata remains, hold every left column; only once metadata is
+    // gone do we start dropping agent, then the status word.
+    const activeSets = metadataMode === "none" ? allLeftColumns : [fullLeftSet];
+    const layouts = layoutActiveSets({
       activeSets,
       columns,
       config,
@@ -221,29 +228,35 @@ export function layoutWorktreeRowGrid(input: {
       metadata,
       rows: input.rows,
       widthMode: "desired",
+      requireFullTitle: true,
     });
-    if (desiredLayouts !== undefined) {
-      return desiredLayouts;
+    if (layouts !== undefined) {
+      return layouts;
     }
+  }
 
-    const minimumSets =
-      protectedKeys.length === 0
-        ? activeSets
-        : activeSets
-            .filter((keys) => protectedKeys.every((key) => keys.includes(key)))
-            .sort((left, right) => left.length - right.length);
-    const minimumLayouts = layoutActiveSets({
-      activeSets: minimumSets,
-      columns,
-      config,
-      leftBudget,
-      metadata,
-      rows: input.rows,
-      widthMode: "minimum",
-    });
-    if (minimumLayouts !== undefined) {
-      return minimumLayouts;
-    }
+  // Last resort: nothing kept the name intact, so truncate the title with
+  // metadata gone and soft columns minimized (meaningful ones still protected).
+  const noneMetadata = input.rows.map((row) => metadataForMode(row, "none"));
+  const protectedKeys = meaningfulSoftColumnKeys(config, input.rows);
+  const minimumSets =
+    protectedKeys.length === 0
+      ? allLeftColumns
+      : allLeftColumns
+          .filter((keys) => protectedKeys.every((key) => keys.includes(key)))
+          .sort((left, right) => left.length - right.length);
+  const minimumLayouts = layoutActiveSets({
+    activeSets: minimumSets,
+    columns,
+    config,
+    leftBudget: columns,
+    metadata: noneMetadata,
+    rows: input.rows,
+    widthMode: "minimum",
+    requireFullTitle: false,
+  });
+  if (minimumLayouts !== undefined) {
+    return minimumLayouts;
   }
 
   return fallbackLayouts(columns, input.rows);
@@ -340,6 +353,7 @@ function layoutActiveSets(input: {
   metadata: readonly MetadataLayout[];
   rows: readonly RowGridRowInput[];
   widthMode: WidthMode;
+  requireFullTitle: boolean;
 }): RowGridLayout[] | undefined {
   for (const activeKeys of input.activeSets) {
     const widths = assignLeftWidths({
@@ -348,6 +362,7 @@ function layoutActiveSets(input: {
       leftBudget: input.leftBudget,
       rows: input.rows,
       widthMode: input.widthMode,
+      requireFullTitle: input.requireFullTitle,
     });
     if (widths === undefined) {
       continue;
@@ -421,6 +436,7 @@ function assignLeftWidths(input: {
   leftBudget: number;
   rows: readonly RowGridRowInput[];
   widthMode: WidthMode;
+  requireFullTitle: boolean;
 }): Map<RowGridCellKey, number> | undefined {
   const activeSpecs = sortKeysByConfig(input.config, [...input.activeKeys]).map((key) =>
     requiredSpec(input.config, key),
@@ -464,6 +480,10 @@ function assignLeftWidths(input: {
     const available = remaining - laterMin;
     const min = normalizeCells(spec.minCells);
     if (available < min) {
+      return undefined;
+    }
+    // Title priority: fail (so an upstream lane sheds) rather than truncate the name.
+    if (input.requireFullTitle && available < flexDesiredWidth(spec, input.rows)) {
       return undefined;
     }
     const max = spec.maxCells === undefined ? available : normalizeCells(spec.maxCells);
@@ -788,6 +808,18 @@ function desiredSoftColumnWidth(spec: RowGridColumnSpec, rows: readonly RowGridR
     return desired;
   }
   return Math.min(desired, normalizeCells(spec.maxCells));
+}
+
+// Width the flex title needs to show its content untruncated (clamped to the
+// column's min/max). Used to keep the name intact until droppable lanes shed.
+function flexDesiredWidth(spec: RowGridColumnSpec, rows: readonly RowGridRowInput[]): number {
+  const content = Math.max(
+    0,
+    ...rows.map((row) => segmentsWidth(row.cells[spec.key]?.segments ?? [])),
+  );
+  const min = normalizeCells(spec.minCells);
+  const max = spec.maxCells === undefined ? content : normalizeCells(spec.maxCells);
+  return Math.min(max, Math.max(min, content));
 }
 
 function fixedColumnWidth(spec: RowGridColumnSpec): number {

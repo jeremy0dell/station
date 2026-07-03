@@ -58,6 +58,15 @@ export type DashboardViewport = {
   visibleItems: DashboardViewportItem[];
   rowChoices: Array<KeyedChoice<WorktreeRow>>;
   displayRowChoices: Array<KeyedChoice<WorktreeRow>>;
+  sessionOverflow: DashboardSessionOverflow;
+};
+
+/** Session-row counts (not raw item counts) for the scroll-overflow labels. */
+export type DashboardSessionOverflow = {
+  above: number;
+  below: number;
+  visible: number;
+  total: number;
 };
 
 export function selectDashboardViewport(
@@ -80,6 +89,9 @@ export function selectDashboardViewport(
       item.type === "worktree" && item.pendingStart !== undefined ? [item.row.id] : [],
     ),
   );
+  const above = countSessionRows(items.slice(0, clampedScrollOffset));
+  const visible = countSessionRows(visibleItems);
+  const total = countSessionRows(items);
   return {
     bodyRows,
     clampedScrollOffset,
@@ -89,7 +101,12 @@ export function selectDashboardViewport(
     visibleItems,
     rowChoices: displayRowChoices.filter((choice) => !pendingStartWorktreeIds.has(choice.value.id)),
     displayRowChoices,
+    sessionOverflow: { above, below: total - above - visible, visible, total },
   };
+}
+
+function countSessionRows(items: readonly DashboardViewportItem[]): number {
+  return items.filter((item) => item.type === "worktree" || item.type === "createLocalRow").length;
 }
 
 export function selectDashboardItems(

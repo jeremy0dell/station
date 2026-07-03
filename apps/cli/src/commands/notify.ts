@@ -36,13 +36,15 @@ export type NotifyCommandResult = {
 
 type WorktreeAgent = NonNullable<WorktreeRow["agent"]>;
 type WorktreeAgentStateChangedEvent = Extract<StationEvent, { type: "worktree.agentStateChanged" }>;
-type NotificationKind = "finished" | "needs_attention";
+type NotificationKind = "finished";
 
 type NotifiableAgentEvent = {
   event: WorktreeAgentStateChangedEvent;
   agent: WorktreeAgent;
   kind: NotificationKind;
 };
+
+const notifyKind = "agent-state";
 
 function notificationMessage(agent: WorktreeAgent): string {
   const harness = agent.harness;
@@ -58,7 +60,7 @@ function notificationTitle(input: NotifiableAgentEvent): string {
     return input.event.sessionTitle;
   }
   const identity = notificationIdentity(input.event, input.agent);
-  return input.kind === "needs_attention" ? `${identity} needs attention` : `${identity} finished`;
+  return `${identity} finished`;
 }
 
 function notifiableAgentEvent(
@@ -71,9 +73,6 @@ function notifiableAgentEvent(
   if (agent.state === "idle") {
     return { event, agent, kind: "finished" };
   }
-  if (agent.state === "needs_attention") {
-    return { event, agent, kind: "needs_attention" };
-  }
   return undefined;
 }
 
@@ -83,12 +82,12 @@ export async function runNotifyCommand(
   deps: NotifyCommandDeps = {},
 ): Promise<NotifyCommandResult> {
   const [kind] = args;
-  if (kind !== "turn-completion") {
-    throw new Error("Usage: station notify turn-completion");
+  if (kind !== notifyKind) {
+    throw new Error("Usage: station notify agent-state");
   }
   const source = options.stdin?.trim();
   if (source === undefined || source.length === 0) {
-    throw new Error("stn notify turn-completion requires an event hook invocation on stdin.");
+    throw new Error("stn notify agent-state requires an event hook invocation on stdin.");
   }
   const invocation = ObserverEventHookInvocationSchema.parse(JSON.parse(source));
   if (invocation.event.type !== "worktree.agentStateChanged") {

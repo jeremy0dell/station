@@ -50,10 +50,10 @@ approval_policy = "on-request"
 install_hooks = true
 
 [[hooks.event]]
-id = "notify-agent-idle"
+id = "notify-agent-state"
 events = ["worktree.agentStateChanged"]
 command = "stn"
-args = ["notify", "turn-completion"]
+args = ["notify", "agent-state"]
 timeout_ms = 3000
 
 [[projects]]

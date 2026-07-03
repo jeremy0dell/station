@@ -1,5 +1,7 @@
 import type { TuiWeatherWidgetConfig, TuiWidgetConfig } from "@station/config";
+import { formatMoonWidget } from "./moon.js";
 import { formatTimeWidget, millisecondsUntilNextMinute } from "./time.js";
+import { formatTimezoneWidget } from "./timezone.js";
 import type {
   TopRowWidgetRuntimeDeps,
   TopRowWidgetView,
@@ -55,17 +57,28 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
       });
     }, []);
 
-    const hasTimeWidget = widgets.some((widget) => widget.type === "time");
+    // Disabled widgets drop out entirely; ids keep the config index so a
+    // toggle elsewhere in the array never re-keys live widget state.
+    const activeWidgets = hooks.useMemo(
+      () =>
+        widgets
+          .map((widget, index) => ({ widget, index }))
+          .filter((entry) => entry.widget.enabled !== false),
+      [widgets],
+    );
+    const needsClock = activeWidgets.some(
+      ({ widget }) => widget.type === "time" || widget.type === "tz" || widget.type === "moon",
+    );
     const weatherEntries = hooks.useMemo(
       () =>
-        widgets.flatMap((widget, index): WeatherWidgetEntry[] =>
+        activeWidgets.flatMap(({ widget, index }): WeatherWidgetEntry[] =>
           widget.type === "weather" ? [{ id: `weather:${index}`, config: widget }] : [],
         ),
-      [widgets],
+      [activeWidgets],
     );
 
     hooks.useEffect(() => {
-      if (!hasTimeWidget) {
+      if (!needsClock) {
         return;
       }
 
@@ -83,7 +96,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
           clearInterval(interval);
         }
       };
-    }, [hasTimeWidget, now]);
+    }, [needsClock, now]);
 
     hooks.useEffect(() => {
       if (weatherEntries.length === 0) {
@@ -133,7 +146,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
 
     return hooks.useMemo(
       () =>
-        widgets.map((widget, index): TopRowWidgetView => {
+        activeWidgets.map(({ widget, index }): TopRowWidgetView => {
           switch (widget.type) {
             case "time":
               return {
@@ -147,11 +160,21 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
                 text: weatherTexts[id] ?? renderWeatherLoading(widget),
               };
             }
+            case "tz":
+              return { id: `tz:${index}`, ...formatTimezoneWidget(currentMinute, widget) };
+            case "moon":
+              return { id: `moon:${index}`, ...formatMoonWidget(currentMinute) };
+            // Snapshot-derived widgets: text resolves at render, where the
+            // snapshot lives (resolveTopRowWidgets).
+            case "fleet":
+              return { id: `fleet:${index}`, text: "", data: "fleet" };
+            case "prs":
+              return { id: `prs:${index}`, text: "", data: "prs" };
           }
           const exhaustive: never = widget;
           return exhaustive;
         }),
-      [currentMinute, weatherTexts, widgets],
+      [activeWidgets, currentMinute, weatherTexts],
     );
   };
 }

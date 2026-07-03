@@ -1,6 +1,6 @@
 {
   "name": "station",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -33,7 +33,7 @@
     "station:devbox": "node scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
     "typecheck": "turbo run typecheck",
-    "lint": "biome check . && node tools/lint/check-source-order.mjs",
+    "lint": "biome check . && node tools/lint/check-source-order.mjs && node tools/lint/check-no-raw-hex.mjs",
     "format": "biome format --write .",
     "test:unit": "vitest run --config config/vitest/vitest.unit.config.ts",
     "test:contracts": "vitest run --config config/vitest/vitest.contracts.config.ts",

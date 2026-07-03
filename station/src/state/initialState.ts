@@ -48,6 +48,7 @@ function workspaceState(workspace: WorkspaceSlice): StationState {
       activeOverlay: null,
       overlayReturnFocus: null,
       contextMenu: null,
+      stationButtonHover: false,
     },
     feedback: { toast: null },
   };
@@ -65,6 +66,7 @@ function emptyInitialState(): StationState {
       activeOverlay: null,
       overlayReturnFocus: null,
       contextMenu: null,
+      stationButtonHover: false,
     },
     feedback: { toast: null },
   };

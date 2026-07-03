@@ -4,7 +4,6 @@
 import { TextAttributes } from "@opentui/core";
 import {
   toastBorderColor,
-  type ToastBorderColorName,
   toastDetail,
   toastOverlayLayout,
   toastTextWidth,
@@ -12,7 +11,7 @@ import {
   truncateCells,
   type TuiToastEntry,
 } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import { STATION_COLORS, toastBorderColorHex } from "./theme.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export type ToastOverlayViewProps = {
@@ -56,7 +55,7 @@ export function ToastOverlayView({
       height={layout.height}
       zIndex={20}
       border
-      borderColor={borderColorHex(toastBorderColor(toast))}
+      borderColor={toastBorderColorHex(toastBorderColor(toast))}
       backgroundColor={STATION_COLORS.background}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "toast" })}
@@ -72,14 +71,4 @@ export function ToastOverlayView({
       </box>
     </box>
   );
-}
-
-function borderColorHex(name: ToastBorderColorName): string {
-  if (name === "red") {
-    return STATION_COLORS.red;
-  }
-  if (name === "gray") {
-    return STATION_COLORS.gray;
-  }
-  return STATION_COLORS.green;
 }
