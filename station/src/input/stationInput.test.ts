@@ -131,29 +131,46 @@ describe("createStationInputRuntime", () => {
     expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
   });
 
-  it("preserves xterm Shift+Enter for a warm-attached Codex primary-agent pane", () => {
-    const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
-      source: new FakeStationSource(snapshot),
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-    });
-    const { runtime, scripted, store, registry } = harness({ stationViewStore });
-    const paneId = agentWorktreePaneId("wt_station_idle");
-    store.actions.createPane(paneId, { role: "primary-agent" });
-    store.actions.setPrimaryAgent(paneId, {
-      sessionId: "ses_wt_station_idle",
-      terminalTargetId: "native:wt_station_idle",
-      harnessProvider: "codex",
-    });
-    store.actions.focusPane(paneId);
-    registry.resize(paneId, { cols: 36, rows: 8 });
+  it.each(["codex", "pi"] as const)(
+    "preserves xterm Shift+Enter for a warm-attached %s primary-agent pane",
+    (provider) => {
+      const baseSnapshot = manyProjectsSnapshot();
+      const snapshot = {
+        ...baseSnapshot,
+        sessions: baseSnapshot.sessions.map((session) => ({
+          ...session,
+          harness: {
+            ...session.harness,
+            provider,
+            capabilities: {
+              ...session.harness.capabilities,
+              supportsModifiedEnterSoftNewline: session.id === "ses_wt_station_idle",
+            },
+          },
+        })),
+      };
+      const stationViewStore = createTuiStore({
+        source: new FakeStationSource(snapshot),
+        service: new FakeTuiObserverService(snapshot),
+        initialSnapshot: snapshot,
+        persistentPopup: true,
+        onDismiss: async () => {},
+      });
+      const { runtime, scripted, store, registry } = harness({ stationViewStore });
+      const paneId = agentWorktreePaneId("wt_station_idle");
+      store.actions.createPane(paneId, { role: "primary-agent" });
+      store.actions.setPrimaryAgent(paneId, {
+        sessionId: "ses_wt_station_idle",
+        terminalTargetId: "native:wt_station_idle",
+        harnessProvider: provider,
+      });
+      store.actions.focusPane(paneId);
+      registry.resize(paneId, { cols: 36, rows: 8 });
 
-    expect(runtime.handleSequence("\x1b[27;2;13~")).toBe(true);
-    expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
-  });
+      expect(runtime.handleSequence("\x1b[27;2;13~")).toBe(true);
+      expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
+    },
+  );
 
   it("matches arrow-key bytes to the focused pane's cursor-key mode", async () => {
     const { runtime, scripted, registry } = harness();

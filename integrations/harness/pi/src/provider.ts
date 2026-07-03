@@ -34,7 +34,7 @@ const baseCapabilities: HarnessCapabilities = {
   canStop: false,
   canRunNonInteractive: false,
   canExposeApprovalState: false,
-  supportsModifiedEnterSoftNewline: false,
+  supportsModifiedEnterSoftNewline: true,
 };
 
 const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {

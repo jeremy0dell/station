@@ -23,7 +23,7 @@ describe("PiHarnessProvider", () => {
       canStop: false,
       canRunNonInteractive: false,
       canExposeApprovalState: false,
-      supportsModifiedEnterSoftNewline: false,
+      supportsModifiedEnterSoftNewline: true,
     });
   });
 
