@@ -127,7 +127,52 @@ describe("observer turn readiness", () => {
     ).resolves.toBeUndefined();
     plainFixture.sqlite.close();
   });
+
+  it("clears ready-to-read when the session becomes active again", async () => {
+    const fixture = fixtureCore();
+    await fixture.core.reconcile("turn-readiness-active-clear");
+
+    await fixture.core.projectHarnessEventStatus(
+      report({ reportId: "report_ready_then_active", turnCompleted: true }),
+    );
+    await expect(
+      fixture.persistence.getSessionTurnReadiness("ses_web_ready"),
+    ).resolves.toMatchObject({ token: "report_ready_then_active" });
+
+    // The user re-engages the harness directly: the new turn's working event
+    // must close the readiness interval without an explicit acknowledgment.
+    const working = await fixture.core.projectHarnessEventStatus(
+      workingReport("report_new_turn_working"),
+    );
+    expect(working.projected).toBe(true);
+    await expect(
+      fixture.persistence.getSessionTurnReadiness("ses_web_ready"),
+    ).resolves.toBeUndefined();
+    expect(fixture.core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
+    fixture.sqlite.close();
+  });
 });
+
+function workingReport(reportId: string): HarnessEventReport {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    reportId,
+    provider: "fake-harness",
+    kind: "harness",
+    eventType: "PreToolUse",
+    observedAt: completedAt,
+    status: {
+      value: "working",
+      confidence: "medium",
+      reason: "Harness is using a tool.",
+      source: "harness_event",
+      updatedAt: completedAt,
+    },
+    correlation: {
+      harnessRunId: "run_web_ready",
+    },
+  };
+}
 
 function fixtureCore() {
   const clock = { now: () => new Date(now) };

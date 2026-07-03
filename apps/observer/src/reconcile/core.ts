@@ -226,6 +226,17 @@ async function persistTurnReadinessForReport(input: {
   updatedAt: string;
 }): Promise<PersistedSessionTurnReadiness | undefined> {
   if (input.report.turn?.kind !== "turn_completed") {
+    // Readiness is an interval: a session active again (new turn, or a request
+    // for the user mid-turn) makes ready_to_read stale. Without this closing
+    // edge the badge survives on a working agent and cannot be acknowledged,
+    // because snapshots only expose readiness on idle agents.
+    const status = input.report.status?.value;
+    if (
+      input.result.sessionId !== undefined &&
+      (status === "working" || status === "starting" || status === "needs_attention")
+    ) {
+      await input.persistence.deleteSessionTurnReadiness({ sessionId: input.result.sessionId });
+    }
     return undefined;
   }
   const sessionId = input.result.sessionId;
