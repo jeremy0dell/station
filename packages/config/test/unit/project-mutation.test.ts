@@ -497,4 +497,69 @@ rest_counts = true
     const loaded = await loadConfig({ configPath, homeDir: tempDir });
     expect(loaded.config.tui).toEqual({ widgets: [], island: { restCounts: true } });
   });
+
+  it("replaces a multi-line inline widgets array with nested brackets", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+    const base = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${base}
+[tui]
+widgets = [
+  { type = "tz", zones = [ { label = "NY", time_zone = "America/New_York" } ] },
+]
+`,
+      "utf8",
+    );
+
+    const result = await setTuiWidgetsInConfig({
+      configPath,
+      homeDir: tempDir,
+      widgets: [{ type: "moon" }],
+    });
+
+    expect(result.status).toBe("updated");
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    expect(loaded.config.tui?.widgets).toEqual([{ type: "moon" }]);
+  });
+
+  it("replaces a top-level dotted tui.widgets assignment", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+    const base = await readFile(configPath, "utf8");
+    await writeFile(configPath, `tui.widgets = [ { type = "time" } ]\n${base}`, "utf8");
+
+    const result = await setTuiWidgetsInConfig({
+      configPath,
+      homeDir: tempDir,
+      widgets: [{ type: "moon" }],
+    });
+
+    expect(result.status).toBe("updated");
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    expect(loaded.config.tui?.widgets).toEqual([{ type: "moon" }]);
+  });
+
+  it("keeps comments that trail the replaced widget blocks", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+    const base = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${base}
+[[tui.widgets]]
+type = "weather"
+city = "NYC"
+# TODO: switch to celsius in winter
+`,
+      "utf8",
+    );
+
+    await setTuiWidgetsInConfig({ configPath, homeDir: tempDir, widgets: [{ type: "moon" }] });
+
+    const source = await readFile(configPath, "utf8");
+    expect(source).toContain("# TODO: switch to celsius in winter");
+    expect(source).not.toContain('type = "weather"');
+  });
 });

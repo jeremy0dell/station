@@ -23,6 +23,7 @@ export type WidgetSettingsPanelModel = {
 export function widgetSettingsPanelModel(
   screen: Extract<TuiState["screen"], { name: "widgetSettings" }>,
   widgets: readonly TuiWidgetConfig[],
+  widgetsPersisted = true,
 ): WidgetSettingsPanelModel {
   if (screen.focus === "picker") {
     return {
@@ -51,7 +52,9 @@ export function widgetSettingsPanelModel(
   lines.push({ kind: "add", label: "[ + add widget ]", active: false });
   return {
     title: "widgets",
-    note: "saved to config.toml",
+    note: widgetsPersisted
+      ? "saved to config.toml"
+      : "session only · create config.toml to persist",
     lines,
     footer: "↵ toggle   [ ] reorder   x remove   a add   esc close",
     focus: "list",

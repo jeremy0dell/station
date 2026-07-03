@@ -1,3 +1,4 @@
+import { quoteTomlString, trimRepeatedBlankLines } from "../tomlEdit.js";
 import { projectConfigSafeError } from "./errors.js";
 import type { MinimalProjectBlock } from "./types.js";
 
@@ -174,20 +175,6 @@ function firstTableLineIndex(lines: readonly string[]): number {
   return index === -1 ? lines.length : index;
 }
 
-function trimRepeatedBlankLines(lines: readonly string[]): string[] {
-  const result: string[] = [];
-  let previousBlank = false;
-  for (const line of lines) {
-    const blank = line.trim().length === 0;
-    if (blank && previousBlank) {
-      continue;
-    }
-    result.push(line);
-    previousBlank = blank;
-  }
-  return result;
-}
-
 function formatMinimalProjectBlock(block: MinimalProjectBlock): string {
   return [
     "[[projects]]",
@@ -195,10 +182,6 @@ function formatMinimalProjectBlock(block: MinimalProjectBlock): string {
     `label = ${quoteTomlString(block.label)}`,
     `root = ${quoteTomlString(block.root)}`,
   ].join("\n");
-}
-
-function quoteTomlString(value: string): string {
-  return JSON.stringify(value);
 }
 
 function replaceTomlStringValue(line: string, key: string, value: string): string {

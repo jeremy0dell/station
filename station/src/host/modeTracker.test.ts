@@ -106,6 +106,37 @@ describe("TerminalModeTracker", () => {
     expect(tracker.restoreSequence()).toBe("\x1b[>1u");
   });
 
+  it("pops the number of kitty stack entries given by the pop count", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[>1u\x1b[>5u\x1b[<2u");
+    expect(tracker.restoreSequence()).toBe("");
+  });
+
+  it("pushes flags 0 when a kitty push omits its flags", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[=1u\x1b[>u");
+    expect(tracker.restoreSequence()).toBe("\x1b[=1u\x1b[>0u");
+  });
+
+  it("applies the kitty set-with-mode form, including OR and clear modes", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[=5;1u");
+    expect(tracker.restoreSequence()).toBe("\x1b[=5u");
+
+    tracker.feed("\x1b[=2;2u"); // mode 2: set the given bits
+    expect(tracker.restoreSequence()).toBe("\x1b[=7u");
+
+    tracker.feed("\x1b[=5;3u"); // mode 3: clear the given bits
+    expect(tracker.restoreSequence()).toBe("\x1b[=2u");
+  });
+
+  it("recognizes a set-with-mode sequence split at the semicolon", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("output\x1b[=5;");
+    tracker.feed("1u");
+    expect(tracker.restoreSequence()).toBe("\x1b[=5u");
+  });
+
   it("clears all tracked modes on a RIS (full reset) in the dropped data", () => {
     const tracker = new TerminalModeTracker();
     tracker.feed("\x1b[?1049h\x1b[?1000hsome output\x1bc"); // alt+mouse, then reset

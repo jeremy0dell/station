@@ -1,6 +1,7 @@
-import { loadConfig, loadConfigFromToml } from "../load/index.js";
+import { loadConfigFromToml } from "../load/index.js";
 import { atomicWriteConfig, loadConfigSource } from "../projects/source.js";
 import type { StationConfig, TuiWidgetConfig } from "../schema.js";
+import { quoteTomlString, trimRepeatedBlankLines } from "../tomlEdit.js";
 
 export type SetTuiWidgetsOptions = {
   widgets: readonly TuiWidgetConfig[];
@@ -29,12 +30,13 @@ export async function setTuiWidgetsInConfig(
     };
   }
 
-  await loadConfigFromToml(candidateSource, {
+  // Parse the candidate before writing so an edit this writer mishandled can
+  // never land on disk; the same parse result then serves as the reload.
+  const after = await loadConfigFromToml(candidateSource, {
     configPath: loaded.configPath,
     homeDir: loaded.homeDir,
   });
   await atomicWriteConfig(loaded.configPath, candidateSource);
-  const after = await loadConfig({ configPath: loaded.configPath, homeDir: loaded.homeDir });
   return {
     status: "updated",
     configPath: loaded.configPath,
@@ -61,6 +63,7 @@ export function replaceTuiWidgets(source: string, widgets: readonly TuiWidgetCon
 function removeExistingTuiWidgets(lines: readonly string[]): string[] {
   const result: string[] = [];
   let inTuiTable = false;
+  let topLevel = true;
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     if (isTuiWidgetsTable(line)) {
@@ -69,8 +72,15 @@ function removeExistingTuiWidgets(lines: readonly string[]): string[] {
     }
     if (isAnyTable(line)) {
       inTuiTable = isTuiTable(line);
+      topLevel = false;
     }
-    if (inTuiTable && /^\s*widgets\s*=/.test(line)) {
+    // `widgets =` inside [tui], or the dotted `tui.widgets =` form before any
+    // table header; the dotted key must go too or the appended [tui] header
+    // would illegally redefine the table.
+    const isWidgetsAssignment =
+      (inTuiTable && /^\s*widgets\s*=/.test(line)) ||
+      (topLevel && /^\s*tui\s*\.\s*widgets\s*=/.test(line));
+    if (isWidgetsAssignment) {
       index = skipInlineWidgetsAssignment(lines, index) - 1;
       continue;
     }
@@ -80,27 +90,58 @@ function removeExistingTuiWidgets(lines: readonly string[]): string[] {
 }
 
 function skipTuiWidgetsBlock(lines: readonly string[], start: number): number {
+  // The block ends after its last key or nested-table line; trailing blank and
+  // comment lines belong to whatever follows, so user annotations survive.
+  let end = start + 1;
   for (let index = start + 1; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     if (isAnyTable(line) && !isTuiWidgetsNestedTable(line)) {
-      return index;
+      break;
+    }
+    const trimmed = line.trim();
+    if (trimmed.length > 0 && !trimmed.startsWith("#")) {
+      end = index + 1;
+    }
+  }
+  return end;
+}
+
+function skipInlineWidgetsAssignment(lines: readonly string[], start: number): number {
+  let depth = 0;
+  for (let index = start; index < lines.length; index += 1) {
+    depth += bracketDepthDelta(lines[index] ?? "");
+    if (depth <= 0) {
+      return index + 1;
     }
   }
   return lines.length;
 }
 
-function skipInlineWidgetsAssignment(lines: readonly string[], start: number): number {
-  const first = lines[start] ?? "";
-  if (first.includes("]")) {
-    return start + 1;
-  }
-  for (let index = start + 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.includes("]")) {
-      return index + 1;
+/** Net `[`/`]` depth of a line, ignoring brackets inside strings and comments. */
+function bracketDepthDelta(line: string): number {
+  let delta = 0;
+  let quote: '"' | "'" | undefined;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote !== undefined) {
+      if (char === "\\" && quote === '"') {
+        index += 1;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === "#") {
+      break;
+    } else if (char === "[") {
+      delta += 1;
+    } else if (char === "]") {
+      delta -= 1;
     }
   }
-  return lines.length;
+  return delta;
 }
 
 function tuiInsertIndex(
@@ -188,22 +229,4 @@ function isTuiWidgetsTable(line: string): boolean {
 
 function isTuiWidgetsNestedTable(line: string): boolean {
   return /^\s*\[\[?\s*tui\.widgets(?:\.|\s*\])/.test(line);
-}
-
-function trimRepeatedBlankLines(lines: readonly string[]): string[] {
-  const result: string[] = [];
-  let previousBlank = false;
-  for (const line of lines) {
-    const blank = line.trim().length === 0;
-    if (blank && previousBlank) {
-      continue;
-    }
-    result.push(line);
-    previousBlank = blank;
-  }
-  return result;
-}
-
-function quoteTomlString(value: string): string {
-  return JSON.stringify(value);
 }

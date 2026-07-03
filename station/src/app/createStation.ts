@@ -39,10 +39,11 @@ export function createStation(options: CreateStationOptions): Station {
   const automations = options.automations ?? [];
 
   // The view store and live-PTY registry everything else wires around. The
-  // config widget set seeds the store's live session copy (the widget-settings
-  // panel edits state only; config.toml stays the durable source).
+  // config widget set seeds the store's live session copy; widget-settings
+  // edits are written back to config.toml when a config path exists.
   const stationViewStore = createStationViewStore(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
+    widgetsPersisted: options.tuiConfigPath !== undefined,
   });
   const registry = setupRegistry(options, store, stationClient);
 
@@ -266,7 +267,9 @@ function createLifecycle(deps: {
         layoutWriter.schedule();
         detachLayoutWriter = store.subscribe(() => layoutWriter.schedule());
       }
-      detachWidgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
+      if (tuiConfigPath !== undefined) {
+        detachWidgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
+      }
       detachStationSource = stationViewStore.getState().start();
       stationClient.start();
     },
@@ -277,12 +280,14 @@ function createLifecycle(deps: {
 
 function startWidgetConfigWrites(
   stationViewStore: StoreApi<TuiStore>,
-  configPath: string | undefined,
+  configPath: string,
 ): () => void {
-  let previous = stationViewStore.getState().widgets;
   let pending: TuiStore["widgets"] | undefined;
   let saving = false;
 
+  // Single-flight writer: `saving` keeps at most one drain running while
+  // `pending` coalesces to the newest widget set, so rapid edits (e.g. held
+  // reorder keys) collapse into sequential whole-file writes, never interleaved.
   const drain = async (): Promise<void> => {
     if (saving) {
       return;
@@ -293,9 +298,6 @@ function startWidgetConfigWrites(
         const widgets = pending;
         pending = undefined;
         try {
-          if (configPath === undefined) {
-            throw new Error("No config.toml path is available.");
-          }
           await setTuiWidgetsInConfig({ configPath, widgets });
         } catch (error) {
           const safeError = safeErrorFromUnknown(error, {
@@ -315,11 +317,10 @@ function startWidgetConfigWrites(
     }
   };
 
-  return stationViewStore.subscribe((state) => {
-    if (state.widgets === previous) {
+  return stationViewStore.subscribe((state, previous) => {
+    if (state.widgets === previous.widgets) {
       return;
     }
-    previous = state.widgets;
     pending = state.widgets;
     void drain();
   });

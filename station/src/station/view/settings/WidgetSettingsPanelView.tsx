@@ -15,6 +15,7 @@ import { stationMouseProps, useStationMouse } from "../stationMouseContext.js";
 export type WidgetSettingsPanelViewProps = {
   screen: Extract<TuiScreen, { name: "widgetSettings" }>;
   widgets: readonly TuiWidgetConfig[];
+  widgetsPersisted: boolean;
   columns: number;
   rows: number;
 };
@@ -22,11 +23,12 @@ export type WidgetSettingsPanelViewProps = {
 export function WidgetSettingsPanelView({
   screen,
   widgets,
+  widgetsPersisted,
   columns,
   rows,
 }: WidgetSettingsPanelViewProps) {
   const dispatch = useStationMouse();
-  const model = widgetSettingsPanelModel(screen, widgets);
+  const model = widgetSettingsPanelModel(screen, widgets, widgetsPersisted);
   const { top, left, width, height, innerWidth } = widgetSettingsPanelLayout(
     columns,
     rows,

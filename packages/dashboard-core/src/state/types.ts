@@ -40,10 +40,13 @@ export type TuiState = TuiViewState & {
   observerConnectionStatus: TuiObserverConnectionStatus;
   runtime: TuiRuntimeState;
   /**
-   * Live top-row widget set, seeded from `[tui].widgets`. The widget-settings
-   * panel edits this session copy only; config.toml stays the durable source.
+   * Live top-row widget set, seeded from `[tui].widgets`. Widget-settings
+   * edits land here first and are written back to config.toml when a config
+   * path exists.
    */
   widgets: readonly TuiWidgetConfig[];
+  /** False when no config.toml path exists to write widget edits back to. */
+  widgetsPersisted: boolean;
 };
 
 export type TuiToastEntry = {
@@ -130,5 +133,6 @@ export type CreateInitialTuiStateOptions = {
   localRows?: TuiLocalRows;
   focusedRowId?: WorktreeId;
   widgets?: readonly TuiWidgetConfig[];
+  widgetsPersisted?: boolean;
   runtime?: Partial<TuiRuntimeState>;
 };

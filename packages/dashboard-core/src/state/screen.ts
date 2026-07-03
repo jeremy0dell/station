@@ -15,6 +15,7 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     terminalRows: options.terminalRows ?? 24,
     localRows: options.localRows ?? createEmptyTuiLocalRows(),
     widgets: options.widgets ?? [],
+    widgetsPersisted: options.widgetsPersisted ?? true,
     runtime,
   };
   if (options.initialSnapshot !== undefined) {
