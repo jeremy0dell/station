@@ -46,7 +46,8 @@ const AutomationSchema = z
 
 export type Automation = z.infer<typeof AutomationSchema>;
 
-// diffnav's default watch command omits untracked files, so Station supplies one.
+// Pane automations are typed into a shell, not executed through an argv API.
+// Keep this POSIX-ish one-liner so diffnav's watcher includes untracked files.
 const DEFAULT_DIFF_WATCH_COMMAND = [
   'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"',
   '[ -n "$base" ] || base=HEAD',
