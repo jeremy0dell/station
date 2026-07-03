@@ -1,5 +1,6 @@
 // The title/widgets live on the frame's top border row, outside these rows.
 export const DASHBOARD_FIXED_ROW_HEIGHTS = {
+  topSpacer: 1,
   fleetBar: 1,
   topDivider: 1,
   topScrollIndicator: 1,
