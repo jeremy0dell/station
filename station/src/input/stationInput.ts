@@ -37,11 +37,6 @@ import { executeOutcome } from "./runtime/executeOutcome.js";
 import { createPaneEffects } from "./runtime/paneEffects.js";
 import { createManagedLaunch, type ManagedLaunchTarget } from "./runtime/managedLaunch.js";
 
-// Re-exported so callers (apps + tests) keep importing them from this module.
-export { executeOutcome, normalizeSequence };
-export { nextSplitSeqFromPanes } from "./runtime/paneEffects.js";
-export type { NormalizedSequence, ManagedLaunchTarget };
-
 /**
  * What an open-pane effect spawns: the cwd plus, for a primary agent, the
  * harness `command`/`args`, the pane `role`, and the `worktreeId` it belongs
