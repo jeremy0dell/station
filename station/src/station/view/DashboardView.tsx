@@ -78,8 +78,8 @@ export function DashboardView({
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
-  const { layoutByItem } = firstRun
-    ? { layoutByItem: new Map<string, RowGridLayout>() }
+  const { headerLayout, layoutByItem } = firstRun
+    ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
     : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.focusedRowId);
   return (
     <box
@@ -89,11 +89,17 @@ export function DashboardView({
       paddingRight={1}
       onMouseScroll={stationMouseProps(dispatch, { kind: "body" }).onMouseScroll}
     >
+      <text> </text>
       {firstRun ? null : (
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
       <Divider columns={contentColumns} />
-      <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
+      {/* One shared row: column headers at rest, the above-overflow count while scrolled. */}
+      {viewport.sessionOverflow.above > 0 || headerLayout === undefined ? (
+        <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
+      ) : (
+        <ColumnHeaderRow layout={headerLayout} />
+      )}
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <text fg={STATION_COLORS.foreground}>{truncateCells(FIRST_RUN_BODY_LABEL, contentColumns)}</text>
@@ -174,6 +180,16 @@ function FleetBar({
         ))}
       </text>
       {totals.length > 0 ? <text fg={STATION_COLORS.gray}>{totals}</text> : null}
+    </box>
+  );
+}
+
+function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
+  return (
+    <box height={1} width="100%" overflow="hidden">
+      <text fg={STATION_COLORS.gray}>
+        <Segments segments={layout.segments} />
+      </text>
     </box>
   );
 }

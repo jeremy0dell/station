@@ -38,15 +38,15 @@ describe("dashboard viewport selector", () => {
     });
     const viewport = selectDashboardViewport(snapshot, state);
 
-    expect(viewport.bodyRows).toBe(4);
+    expect(viewport.bodyRows).toBe(3);
     expect(viewport.clampedScrollOffset).toBe(1);
     expect(viewport.hiddenAbove).toBe(1);
-    expect(viewport.hiddenBelow).toBe(6);
+    expect(viewport.hiddenBelow).toBe(7);
     expect(
       viewport.visibleItems.map((item) =>
         item.type === "worktree" ? item.row.id : `${item.type}:${item.id}`,
       ),
-    ).toEqual(["wt_web_working", "wt_web_attention", "wt_web_exited", "wt_web_no_agent"]);
+    ).toEqual(["wt_web_working", "wt_web_attention", "wt_web_exited"]);
   });
 
   it("uses only viewport-visible worktrees for row choices", () => {
@@ -61,7 +61,6 @@ describe("dashboard viewport selector", () => {
       ["1", "wt_web_no_agent"],
       ["2", "wt_web_idle"],
       ["3", "wt_web_unknown"],
-      ["4", "wt_web_stuck"],
     ]);
   });
 
@@ -75,8 +74,8 @@ describe("dashboard viewport selector", () => {
       }),
     );
 
-    expect(viewport.clampedScrollOffset).toBe(7);
-    expect(viewport.hiddenAbove).toBe(7);
+    expect(viewport.clampedScrollOffset).toBe(8);
+    expect(viewport.hiddenAbove).toBe(8);
     expect(viewport.hiddenBelow).toBe(0);
     expect(viewport.visibleItems.at(-1)?.id).toBe("worktree:wt_api_working");
   });
