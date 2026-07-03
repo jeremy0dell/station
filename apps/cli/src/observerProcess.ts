@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { lstat, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { StationConfig } from "@station/config";
@@ -35,6 +35,8 @@ export type ObserverStatus =
 export type ObserverProcessDeps = {
   clientFactory?: (socketPath: string) => ReturnType<typeof createObserverClient>;
   spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;
+  findSocketOwnerPids?: (socketPath: string) => Promise<number[]>;
+  killProcess?: (pid: number, signal: NodeJS.Signals) => void | Promise<void>;
   clock?: RuntimeClock;
   sleep?: (ms: number) => Promise<void>;
   logger?: JsonlLogger;
@@ -213,6 +215,11 @@ export async function restartObserver(
   const status = await getObserverStatus(options, deps);
   if (status.status === "running") {
     await stopObserver({ ...options, paths: status.paths }, deps);
+  } else if (status.status === "unhealthy" && status.error?.code === "PROTOCOL_SCHEMA_MISMATCH") {
+    // Restart is the explicit replace-owner command. An incompatible observer can
+    // still own the configured socket even though this CLI cannot parse its
+    // response, so terminate only the process bound to that socket before spawn.
+    await terminateIncompatibleObserverOwner({ ...options, paths: status.paths }, deps);
   }
   return startObserver({ ...options, paths: status.paths }, deps);
 }
@@ -300,6 +307,110 @@ function defaultSpawnObserver(input: SpawnObserverInput): ChildProcessLike {
     detached: true,
     stdio: "ignore",
   });
+}
+
+async function terminateIncompatibleObserverOwner(
+  options: ObserverProcessOptions & { paths: ObserverPaths },
+  deps: ObserverProcessDeps,
+): Promise<void> {
+  const pids = await (deps.findSocketOwnerPids ?? defaultFindSocketOwnerPids)(
+    options.paths.socketPath,
+  );
+  const targets = [...new Set(pids)].filter(
+    (pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid,
+  );
+  if (targets.length === 0) {
+    return;
+  }
+
+  const killProcess = deps.killProcess ?? defaultKillProcess;
+  for (const pid of targets) {
+    await killProcess(pid, "SIGTERM");
+  }
+  if (
+    await waitForObserverSocketRelease(options.paths, {
+      timeoutMs: Math.min(options.timeoutMs ?? 2_000, 2_000),
+      deps,
+    })
+  ) {
+    return;
+  }
+
+  for (const pid of targets) {
+    await killProcess(pid, "SIGKILL");
+  }
+  await waitForObserverSocketRelease(options.paths, {
+    timeoutMs: Math.min(options.timeoutMs ?? 2_000, 2_000),
+    deps,
+  });
+}
+
+async function waitForObserverSocketRelease(
+  paths: ObserverPaths,
+  input: { timeoutMs: number; deps: ObserverProcessDeps },
+): Promise<boolean> {
+  const sleep =
+    input.deps.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const deadline = Date.now() + input.timeoutMs;
+  while (Date.now() <= deadline) {
+    if (!(await socketPathExists(paths.socketPath)) || (await isSocketStale(paths.socketPath))) {
+      return true;
+    }
+    await sleep(25);
+  }
+  return false;
+}
+
+async function defaultFindSocketOwnerPids(socketPath: string): Promise<number[]> {
+  // `lsof -F p <path>` is intentionally machine-readable and path-scoped; avoid
+  // broad Unix-socket listings because macOS can ignore the path when `-U` is
+  // mixed in, which risks finding unrelated socket users.
+  const lsofFields = await execFileText("lsof", ["-n", "-F", "p", socketPath]);
+  const fieldPids = parseLsofFieldPids(lsofFields);
+  if (fieldPids.length > 0) {
+    return fieldPids;
+  }
+
+  return parsePidList(await execFileText("lsof", ["-n", "-t", socketPath]));
+}
+
+function defaultKillProcess(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ESRCH") {
+      return;
+    }
+    throw error;
+  }
+}
+
+function execFileText(file: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(file, args, { timeout: 1000 }, (error, stdout) => {
+      if (error !== null) {
+        resolve("");
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}
+
+function parsePidList(output: string): number[] {
+  return output
+    .trim()
+    .split(/\s+/)
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+}
+
+function parseLsofFieldPids(output: string): number[] {
+  return output
+    .split("\n")
+    .filter((line) => line.startsWith("p"))
+    .map((line) => Number(line.slice(1)))
+    .filter((value) => Number.isInteger(value) && value > 0);
 }
 
 async function logObserverLifecycleFailure(input: {

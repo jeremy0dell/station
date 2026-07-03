@@ -35,6 +35,7 @@ export function StationApp({
   dispatchMouse,
   onCopySelection,
   automations,
+  overlaySize,
   widgets = EMPTY_WIDGETS,
   topRowWidgetDeps,
 }: StationAppProps) {
@@ -68,6 +69,8 @@ export function StationApp({
         <StationOverlay
           store={stationViewStore}
           topRowWidgets={topRowWidgets}
+          overlayWidthPercent={overlaySize.widthPercent}
+          overlayHeightPercent={overlaySize.heightPercent}
           dispatchMouse={dispatchMouse}
         />
       ) : null}

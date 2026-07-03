@@ -185,6 +185,10 @@ const station = createStation({
   registry: stationRuntime.registry,
   scrollOnOutput: stationConfig.config.scroll_on_output,
   automations: stationConfig.config.automations,
+  overlaySize: {
+    widthPercent: stationConfig.config.overlay_width_percent,
+    heightPercent: stationConfig.config.overlay_height_percent,
+  },
   clipboardEffects,
   openExternalUrl,
   ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),

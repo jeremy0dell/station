@@ -12,6 +12,7 @@ import {
   uninstallConfigScriptHook,
 } from "@station/runtime";
 import {
+  codexHookFeatureEnabled,
   documentContainsCommand,
   generatedStationHookEvents,
   installCodexHookCommands,
@@ -100,6 +101,7 @@ export type CodexHookDoctorResult = {
   hookScriptPath: string;
   status: "ok" | "warn";
   installed: boolean;
+  hookFeatureEnabled: boolean;
   missing: CodexHookEventName[];
   commands: Record<CodexHookEventName, string>;
   generatedGlobalCleanup: CodexGeneratedGlobalHookCleanup;
@@ -260,6 +262,7 @@ export async function doctorCodexHooks(
 ): Promise<CodexHookDoctorResult> {
   const plan = await planCodexHooks(options);
   const generatedGlobalInstalled = plan.generatedGlobalCleanup.stale.length > 0;
+  const hookFeatureEnabled = codexHookFeatureEnabled(parseTomlDocument(plan.before));
   if (options.enabled === false) {
     return {
       provider: "codex",
@@ -270,6 +273,7 @@ export async function doctorCodexHooks(
       hookScriptPath: plan.hookScriptPath,
       status: generatedGlobalInstalled ? "warn" : "ok",
       installed: false,
+      hookFeatureEnabled,
       missing: plan.missing,
       commands: plan.commands,
       generatedGlobalCleanup: plan.generatedGlobalCleanup,
@@ -279,7 +283,7 @@ export async function doctorCodexHooks(
     };
   }
 
-  const installed = plan.missing.length === 0 && !plan.scriptChanged;
+  const installed = hookFeatureEnabled && plan.missing.length === 0 && !plan.scriptChanged;
   return {
     provider: "codex",
     configPath: plan.configPath,
@@ -289,10 +293,11 @@ export async function doctorCodexHooks(
     hookScriptPath: plan.hookScriptPath,
     status: installed && !generatedGlobalInstalled ? "ok" : "warn",
     installed,
+    hookFeatureEnabled,
     missing: plan.missing,
     commands: plan.commands,
     generatedGlobalCleanup: plan.generatedGlobalCleanup,
-    message: doctorMessage({ installed, generatedGlobalInstalled, plan }),
+    message: doctorMessage({ installed, hookFeatureEnabled, generatedGlobalInstalled, plan }),
   };
 }
 
@@ -365,6 +370,7 @@ function missingDescription(plan: CodexHookPlan): string {
 
 function doctorMessage(input: {
   installed: boolean;
+  hookFeatureEnabled: boolean;
   generatedGlobalInstalled: boolean;
   plan: CodexHookPlan;
 }): string {
@@ -376,10 +382,13 @@ function doctorMessage(input: {
   }
 
   const missing = missingDescription(input.plan);
+  const featureSuffix = input.hookFeatureEnabled
+    ? ""
+    : "; Codex hook support is disabled in the station profile";
   if (input.generatedGlobalInstalled) {
-    return `Codex hooks are missing or stale in the station profile: ${missing}; generated global hooks remain in the base config.`;
+    return `Codex hooks are missing or stale in the station profile: ${missing}${featureSuffix}; generated global hooks remain in the base config.`;
   }
-  return `Codex hooks are missing or stale in the station profile: ${missing}.`;
+  return `Codex hooks are missing or stale in the station profile: ${missing}${featureSuffix}.`;
 }
 
 function assignBackupPaths(

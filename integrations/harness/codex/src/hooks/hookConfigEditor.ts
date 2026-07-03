@@ -34,6 +34,7 @@ export function installCodexHookCommands(
   commands: Record<CodexHookEventName, string>,
 ): Record<string, unknown> {
   const next = cloneRecord(document);
+  next.features = withHookFeatureEnabled(next.features);
   const hooksRecord = recordValue(next.hooks);
   const hooks = hooksRecord === undefined ? {} : cloneRecord(hooksRecord);
   for (const eventName of CODEX_HOOK_EVENT_NAMES) {
@@ -76,6 +77,10 @@ export function missingCodexHookEvents(
   return CODEX_HOOK_EVENT_NAMES.filter(
     (eventName) => !hookContainsCommand(document, eventName, commands[eventName]),
   );
+}
+
+export function codexHookFeatureEnabled(document: Record<string, unknown>): boolean {
+  return recordValue(document.features)?.hooks === true;
 }
 
 export function documentContainsCommand(
@@ -130,6 +135,13 @@ function withoutGeneratedHookEntry(value: unknown, command: string): unknown {
     .map((entry) => withoutGeneratedHooksFromEntry(entry, command))
     .filter((entry) => entry !== undefined);
   return nextEntries.length === 0 ? undefined : nextEntries;
+}
+
+function withHookFeatureEnabled(value: unknown): Record<string, unknown> {
+  const features = recordValue(value);
+  const next = features === undefined ? {} : cloneRecord(features);
+  next.hooks = true;
+  return next;
 }
 
 function generatedHookEntry(

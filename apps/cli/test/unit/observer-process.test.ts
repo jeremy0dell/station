@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getObserverStatus, startObserver } from "@station/cli";
+import { getObserverStatus, restartObserver, startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it } from "vitest";
@@ -222,7 +222,76 @@ describe("CLI observer process helpers", () => {
         },
       });
     } finally {
-      await server.close();
+      await server.close().catch(() => undefined);
+    }
+  });
+
+  it("terminates an incompatible socket owner before restarting", async () => {
+    const fixture = await createTempState();
+    const server = await listenUnixSocket({
+      socketPath: fixture.socketPath,
+      onConnection: () => undefined,
+    });
+    let spawned = false;
+    let ownerStopped = false;
+    const signals: string[] = [];
+
+    try {
+      const result = await restartObserver(
+        {
+          config: fixture.config,
+          timeoutMs: 200,
+        },
+        {
+          clock: { now: () => new Date(now) },
+          findSocketOwnerPids: async () => [4321],
+          killProcess: async (_pid, signal) => {
+            signals.push(signal);
+            ownerStopped = true;
+            await server.close();
+          },
+          spawnObserver: async (): Promise<ChildProcessLike> => {
+            spawned = true;
+            return { pid: 1234, unref: () => undefined };
+          },
+          clientFactory: () =>
+            ({
+              health: async () => {
+                if (!ownerStopped) {
+                  throw {
+                    tag: "ProtocolError",
+                    code: "PROTOCOL_SCHEMA_MISMATCH",
+                    message:
+                      "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.6.0.",
+                    hint: "A different STATION checkout may own the observer socket.",
+                  };
+                }
+                if (!spawned) {
+                  throw new Error("not running");
+                }
+                return {
+                  schemaVersion: "0.6.0",
+                  status: "healthy",
+                  pid: 1234,
+                  startedAt: now,
+                  version: "0.0.0",
+                };
+              },
+            }) as never,
+          sleep: async () => undefined,
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "running",
+        health: {
+          status: "healthy",
+        },
+      });
+      expect(spawned).toBe(true);
+      expect(signals).toEqual(["SIGTERM"]);
+    } finally {
+      await server.close().catch(() => undefined);
     }
   });
 

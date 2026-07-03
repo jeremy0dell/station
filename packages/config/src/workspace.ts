@@ -15,6 +15,8 @@ import { z } from "zod";
 export const SCROLL_ON_OUTPUT_MODES = ["freeze", "shift", "follow"] as const;
 export type ScrollOnOutputMode = (typeof SCROLL_ON_OUTPUT_MODES)[number];
 
+const OverlayPercentSchema = z.number().int().min(1).max(100);
+
 /**
  * One automation pane: split from `origin` or `previous`, write or execute its
  * command, and optionally focus it.
@@ -83,6 +85,8 @@ export const WorkspaceConfigSchema = z
     // Show the welcome screen as an intro over the restored layout on every cold
     // boot; dismiss it to drop into your sessions. Off boots straight in.
     welcome_on_boot: z.boolean().default(true),
+    overlay_width_percent: OverlayPercentSchema.default(50),
+    overlay_height_percent: OverlayPercentSchema.default(50),
     // Named pane layouts in the pane context menu; defaults to the single diff automation so an empty
     // section still ships it. Ids must be unique: they key the menu rows and run-dispatch lookup, so a
     // duplicate would shadow a row and collide keys — reject (warn + defaults) rather than ship a dead item.

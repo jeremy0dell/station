@@ -35,6 +35,7 @@ import type { CreateStationOptions, Station, StationAppProps } from "./types.js"
 export function createStation(options: CreateStationOptions): Station {
   const { store, stationClient } = options;
   const automations = options.automations ?? [];
+  const overlaySize = options.overlaySize ?? { widthPercent: 50, heightPercent: 50 };
 
   // The view store and live-PTY registry everything else wires around.
   const stationViewStore = createStationViewStore(stationClient);
@@ -74,6 +75,7 @@ export function createStation(options: CreateStationOptions): Station {
     dispatchMouse: stationInput.dispatchMouse,
     onCopySelection: createCopySelectionHandler(store, options.clipboardEffects),
     automations,
+    overlaySize,
   });
 
   return {
@@ -301,6 +303,7 @@ function buildViewProps(
     dispatchMouse: StationInputRuntime["dispatchMouse"];
     onCopySelection: (text: string) => void;
     automations: readonly Automation[];
+    overlaySize: StationAppProps["overlaySize"];
   },
 ): StationAppProps {
   const viewProps: StationAppProps = {
@@ -310,6 +313,7 @@ function buildViewProps(
     dispatchMouse: deps.dispatchMouse,
     onCopySelection: deps.onCopySelection,
     automations: deps.automations,
+    overlaySize: deps.overlaySize,
   };
   const widgets = options.tuiConfig?.widgets;
   if (widgets !== undefined) {

@@ -260,6 +260,8 @@ describe("workspace config", () => {
 
     expect(workspace.scroll_on_output).toBe("freeze");
     expect(workspace.welcome_on_boot).toBe(true);
+    expect(workspace.overlay_width_percent).toBe(50);
+    expect(workspace.overlay_height_percent).toBe(50);
     expect(workspace.automations).toEqual([
       {
         id: "see-diff",
@@ -281,9 +283,13 @@ describe("workspace config", () => {
   it("accepts the valid scroll-on-output modes and applies per-step automation defaults", () => {
     const workspace = WorkspaceConfigSchema.parse({
       scroll_on_output: "shift",
+      overlay_width_percent: 60,
+      overlay_height_percent: 60,
       automations: [{ id: "build", label: "Build", steps: [{ command: "pnpm build" }] }],
     });
     expect(workspace.scroll_on_output).toBe("shift");
+    expect(workspace.overlay_width_percent).toBe(60);
+    expect(workspace.overlay_height_percent).toBe(60);
     expect(workspace.automations[0]?.steps[0]).toMatchObject({
       command: "pnpm build",
       split: "right",
@@ -364,6 +370,8 @@ describe("workspace config", () => {
 
   it("rejects an unknown scroll mode, unknown keys, stepless and duplicate automations", () => {
     expect(WorkspaceConfigSchema.safeParse({ scroll_on_output: "bounce" }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ overlay_width_percent: 0 }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ overlay_height_percent: 101 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ welcome: true }).success).toBe(false);
     expect(
       WorkspaceConfigSchema.safeParse({ automations: [{ id: "x", label: "X", steps: [] }] })

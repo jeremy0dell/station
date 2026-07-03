@@ -231,6 +231,7 @@ degrades to defaults plus a diagnostic — it never crashes the daemon.
 | --- | --- | --- | --- |
 | `scroll_on_output` | `freeze` \| `shift` \| `follow` | `freeze` | Scroll behavior while scrolled up. `freeze` preserves visible lines; `shift` preserves distance from bottom; `follow` snaps to live. At the bottom, all modes track live. |
 | `welcome_on_boot` | bool | `true` | Show the welcome screen over the restored layout on cold boot. `false` boots straight in. |
+| `overlay_width_percent` / `overlay_height_percent` | int 1–100 | `50` | Native STATION overlay size as a percentage of the terminal area. |
 | `automations` | `Automation[]` | one `see-diff` automation | Named, user-triggerable pane layouts in the pane context menu. Omit the key to keep the built-in `see-diff`; set `automations = []` to disable it. Automation ids must be unique. |
 
 Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under

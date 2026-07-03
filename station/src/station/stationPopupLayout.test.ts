@@ -7,6 +7,11 @@ describe("stationPopupLayout", () => {
     expect(layout).toEqual({ left: 50, top: 16, width: 100, height: 30 });
   });
 
+  it("uses configured width and height percentages", () => {
+    const layout = stationPopupLayout(200, 61, { widthPercent: 60, heightPercent: 60 });
+    expect(layout).toEqual({ left: 40, top: 13, width: 120, height: 36 });
+  });
+
   it("clamps to the minimum size the dashboard needs", () => {
     const layout = stationPopupLayout(100, 30);
     expect(layout.width).toBe(60);

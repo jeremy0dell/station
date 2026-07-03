@@ -17,6 +17,11 @@ import type {
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
 
+export type StationOverlaySize = {
+  widthPercent: number;
+  heightPercent: number;
+};
+
 /** Props for the pure `<StationApp />` view; `createStation` builds these. */
 export type StationAppProps = {
   store: StationStore;
@@ -26,6 +31,7 @@ export type StationAppProps = {
   onCopySelection: (text: string) => void;
   /** Configured automations surfaced in the pane context menu. */
   automations: readonly Automation[];
+  overlaySize: StationOverlaySize;
   widgets?: readonly TuiWidgetConfig[];
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
 };
@@ -46,6 +52,8 @@ export type CreateStationOptions = {
   scrollOnOutput?: ScrollOnOutputMode;
   /** Configured automations surfaced in the pane context menu; default none. */
   automations?: readonly Automation[];
+  /** Native STATION overlay size as percentages of the terminal area. */
+  overlaySize?: StationOverlaySize;
   openExternalUrl?: (url: string) => void;
   tuiConfig?: TuiConfig;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;

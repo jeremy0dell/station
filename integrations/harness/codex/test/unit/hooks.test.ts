@@ -47,6 +47,8 @@ describe("Codex hook setup", () => {
       "Stop",
     ]);
     expect(plan.commands.PreToolUse).toBe(hookScriptPath);
+    expect(plan.after).toContain("[features]");
+    expect(plan.after).toContain("hooks = true");
     expect(plan.after).toContain("[[hooks.PreToolUse]]");
     await expect(readFile(configPath, "utf8")).rejects.toThrow();
     await expect(readFile(baseConfigPath, "utf8")).rejects.toThrow();
@@ -260,6 +262,24 @@ describe("Codex hook setup", () => {
         changed: true,
         stale: ["PreToolUse"],
       },
+    });
+  });
+
+  it("warns when the station profile has hook commands but Codex hook support is disabled", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const codexHome = join(root, "codex-home");
+    const configPath = join(codexHome, "station.config.toml");
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const env = { CODEX_HOME: codexHome };
+    await installCodexHooks({ hookScriptPath, env });
+    const config = await readFile(configPath, "utf8");
+    await writeFile(configPath, config.replace("hooks = true", "hooks = false"), "utf8");
+
+    await expect(doctorCodexHooks({ hookScriptPath, enabled: true, env })).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      hookFeatureEnabled: false,
+      missing: [],
     });
   });
 
