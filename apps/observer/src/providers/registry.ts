@@ -1,5 +1,6 @@
 import type {
   HarnessProvider,
+  HarnessVersionInfo,
   ProviderHookAdapter,
   ProviderId,
   RepositoryProvider,
@@ -96,4 +97,47 @@ export class ProviderRegistry {
     }
     return provider;
   }
+
+  /** Version probe results; snapshots read this synchronously and omit absentees. */
+  readonly harnessVersions = new Map<string, HarnessVersionInfo>();
+
+  /**
+   * Best-effort background probe (D17): fire-and-forget at boot. Each probe is
+   * timeboxed and a failure simply leaves the harness out of the cache, so
+   * reconciliation never waits on a CLI or the network.
+   */
+  async refreshHarnessVersions(options?: { timeoutMs?: number }): Promise<void> {
+    const timeoutMs = options?.timeoutMs ?? 15_000;
+    await Promise.all(
+      Array.from(this.harnesses.values()).map(async (provider) => {
+        if (provider.versionInfo === undefined) {
+          return;
+        }
+        try {
+          const info = await withTimeout(provider.versionInfo(), timeoutMs);
+          if (info.installedVersion !== undefined || info.latestVersion !== undefined) {
+            this.harnessVersions.set(provider.id, info);
+          }
+        } catch {
+          // Unknown stays unknown; consumers omit the badge.
+        }
+      }),
+    );
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("version probe timed out")), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }

@@ -225,10 +225,20 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 }
 
 export function harnessesFromRegistry(providers: ProviderRegistry): SnapshotHarness[] {
-  return Array.from(providers.harnesses.values()).map((provider) => ({
-    id: provider.id,
-    label: provider.id,
-  }));
+  return Array.from(providers.harnesses.values()).map((provider) => {
+    const harness: SnapshotHarness = { id: provider.id, label: provider.id };
+    const version = providers.harnessVersions.get(provider.id);
+    if (version?.installedVersion !== undefined) {
+      harness.installedVersion = version.installedVersion;
+    }
+    if (version?.latestVersion !== undefined) {
+      harness.latestVersion = version.latestVersion;
+    }
+    if (harness.installedVersion !== undefined && harness.latestVersion !== undefined) {
+      harness.updateAvailable = harness.installedVersion !== harness.latestVersion;
+    }
+    return harness;
+  });
 }
 
 function normalizeTerminalTargetsForCurrentWorktrees(input: {

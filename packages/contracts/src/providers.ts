@@ -408,11 +408,24 @@ export interface TerminalReattachCapability {
   reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined>;
 }
 
+/** Best-effort version probe result; omit fields (or the method) when unknown. */
+export type HarnessVersionInfo = {
+  installedVersion?: string;
+  latestVersion?: string;
+};
+
 export interface HarnessProvider {
   id: ProviderId;
   capabilities(): HarnessCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
+  /**
+   * Best-effort, offline-safe version probe: installed from the local CLI,
+   * latest from a cached registry lookup. The observer calls this once in the
+   * background and caches the result — it must never gate reconciliation, and
+   * failures should resolve to an empty object rather than throw.
+   */
+  versionInfo?(): Promise<HarnessVersionInfo>;
   /**
    * Report whether this harness's status hooks are installed. Optional: a
    * harness that cannot determine hook installation omits it, and callers

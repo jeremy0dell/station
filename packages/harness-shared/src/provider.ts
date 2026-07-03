@@ -9,6 +9,7 @@ import type {
   HarnessProvider,
   HarnessRunObservation,
   HarnessStatusObservation,
+  HarnessVersionInfo,
   ProviderDoctorCheck,
   ProviderDoctorContext,
   ProviderHealth,
@@ -42,6 +43,13 @@ export type HarnessHealthSpec = {
   unavailableError: (error: unknown) => SafeError;
 };
 
+export type HarnessVersionSpec = {
+  /** CLI args that print the installed version; defaults to ["--version"]. */
+  args?: string[];
+  /** npm package consulted for the latest release; omit to skip the lookup. */
+  latestPackage?: string;
+};
+
 export type HarnessIngestSpec = {
   operation: string;
   errorCode: string;
@@ -70,6 +78,7 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
     options: TOpts,
     context?: ProviderDoctorContext,
   ) => Promise<ProviderDoctorCheck[]>;
+  version?: HarnessVersionSpec;
   hooksStatus?: (options: TOpts, context?: ProviderDoctorContext) => Promise<HarnessHooksStatus>;
 };
 
@@ -106,7 +115,65 @@ export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessPr
   if (hooksStatus) {
     provider.hooksStatus = (context) => hooksStatus(options, context);
   }
+  const version = spec.version;
+  if (version) {
+    provider.versionInfo = () => harnessVersionInfo(spec, version, options);
+  }
   return provider;
+}
+
+/**
+ * Best-effort per D17: each half runs under its own timeout and a failure
+ * simply omits the field — offline or missing npm yields no badge, never an
+ * error. The observer caches the result; this is not called per reconcile.
+ */
+async function harnessVersionInfo<TOpts extends CommonHarnessProviderOptions>(
+  spec: TerminalBoundHarnessProviderSpec<TOpts>,
+  version: HarnessVersionSpec,
+  options: TOpts,
+): Promise<HarnessVersionInfo> {
+  const info: HarnessVersionInfo = {};
+  try {
+    const result = await runExternalCommand(
+      {
+        command: harnessCommand(options, spec.commandEnvVar, spec.commandFallback),
+        args: version.args ?? ["--version"],
+        timeoutMs: options.timeoutMs ?? 5000,
+        maxOutputChars: 4096,
+      },
+      options.runner,
+    );
+    const installed = parseVersionToken(result.stdout);
+    if (installed !== undefined) {
+      info.installedVersion = installed;
+    }
+  } catch {
+    // Unknown stays unknown.
+  }
+  if (version.latestPackage !== undefined) {
+    try {
+      const result = await runExternalCommand(
+        {
+          command: "npm",
+          args: ["view", version.latestPackage, "version"],
+          timeoutMs: options.timeoutMs ?? 5000,
+          maxOutputChars: 4096,
+        },
+        options.runner,
+      );
+      const latest = parseVersionToken(result.stdout);
+      if (latest !== undefined) {
+        info.latestVersion = latest;
+      }
+    } catch {
+      // Unknown stays unknown.
+    }
+  }
+  return info;
+}
+
+function parseVersionToken(output: string): string | undefined {
+  return output.match(/\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?/)?.[0];
 }
 
 export function harnessCommand(
