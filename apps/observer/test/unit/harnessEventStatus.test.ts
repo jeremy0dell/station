@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { PersistedProviderObservation } from "../../src/persistence";
 import {
   applyHarnessEventStatusOverlays,
+  decayStaleBusyStatuses,
   type ObserverHarnessRun,
   observerHarnessRunFromRun,
 } from "../../src/reconcile/harnessEventStatus";
@@ -176,6 +177,85 @@ describe("harness event status overlays", () => {
       confidence: "high",
       reason: "Harness process exited.",
     });
+  });
+});
+
+describe("stale busy status decay", () => {
+  // runObservedAt + 15 minutes exactly, and one millisecond past it.
+  const atWindow = "2026-05-21T12:15:00.000Z";
+  const pastWindow = "2026-05-21T12:15:00.001Z";
+
+  it("decays a working run with no signals past the window to unknown", () => {
+    const result = decayStaleBusyStatuses({
+      runs: [run({ state: "working", confidence: "high", reason: "Codex is running Bash." })],
+      now: pastWindow,
+    });
+
+    expect(result[0]?.status).toMatchObject({
+      value: "unknown",
+      confidence: "low",
+      source: "reconcile",
+      updatedAt: runObservedAt,
+    });
+    expect(result[0]?.status.reason).toContain(runObservedAt);
+    expect(result[0]?.run).toMatchObject({ state: "unknown", confidence: "low" });
+  });
+
+  it("decays a starting run the same way", () => {
+    const result = decayStaleBusyStatuses({
+      runs: [run({ state: "starting", reason: "Codex is starting." })],
+      now: pastWindow,
+    });
+
+    expect(result[0]?.status.value).toBe("unknown");
+  });
+
+  it("keeps a busy status at or inside the window", () => {
+    const result = decayStaleBusyStatuses({
+      runs: [run({ state: "working", reason: "Codex is running Bash." })],
+      now: atWindow,
+    });
+
+    expect(result[0]?.status.value).toBe("working");
+  });
+
+  it("never decays attention, idle, exited, or unknown statuses", () => {
+    for (const state of ["needs_attention", "idle", "exited", "unknown"] as const) {
+      const result = decayStaleBusyStatuses({
+        runs: [run({ state, reason: "State under test." })],
+        now: "2026-05-28T12:00:00.000Z",
+      });
+
+      expect(result[0]?.status.value).toBe(state);
+    }
+  });
+
+  it("decays overlaid event statuses and is stable across repeated reconciles", () => {
+    const overlaid = overlay({
+      runs: [run()],
+      observations: [
+        observation({
+          harnessRunId: "run_1",
+          rawEventType: "UserPromptSubmit",
+          status: status("working", "medium", "Prompt submitted."),
+        }),
+      ],
+    });
+
+    const once = decayStaleBusyStatuses({ runs: overlaid, now: "2026-05-21T13:00:00.000Z" });
+    const twice = decayStaleBusyStatuses({ runs: once, now: "2026-05-21T14:00:00.000Z" });
+
+    expect(once[0]?.status).toMatchObject({ value: "unknown", updatedAt: eventObservedAt });
+    expect(twice).toEqual(once);
+  });
+
+  it("leaves unparseable status timestamps alone", () => {
+    const result = decayStaleBusyStatuses({
+      runs: [run({ state: "working", reason: "Bad clock.", observedAt: "not-a-timestamp" })],
+      now: pastWindow,
+    });
+
+    expect(result[0]?.status.value).toBe("working");
   });
 });
 

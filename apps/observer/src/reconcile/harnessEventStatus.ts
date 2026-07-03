@@ -34,6 +34,46 @@ export function observerHarnessRunFromRun(run: HarnessRunObservation): ObserverH
   };
 }
 
+// A busy status is a claim that signals are still flowing. A run whose newest
+// signal is older than this window has gone dark — harness killed mid-turn,
+// hooks undelivered, stale ingress — and must not read as active forever;
+// unknown is the honest projection and the next real event restores truth.
+// Attention states are exempt: a question legitimately waits on the user.
+const BUSY_STATUS_DECAY_MS = 15 * 60 * 1000;
+const BUSY_STATUS_VALUES = new Set<ObservedStatus["value"]>(["working", "starting"]);
+
+export function decayStaleBusyStatuses(input: {
+  runs: ObserverHarnessRun[];
+  now: string;
+}): ObserverHarnessRun[] {
+  const cutoff = Date.parse(input.now) - BUSY_STATUS_DECAY_MS;
+  if (!Number.isFinite(cutoff)) {
+    return input.runs;
+  }
+  return input.runs.map((run) => {
+    if (!BUSY_STATUS_VALUES.has(run.status.value)) {
+      return run;
+    }
+    const updatedAt = Date.parse(run.status.updatedAt);
+    if (!Number.isFinite(updatedAt) || updatedAt >= cutoff) {
+      return run;
+    }
+    const decayed: ObservedStatus = {
+      value: "unknown",
+      confidence: "low",
+      reason: `No ${run.run.provider} signals since ${run.status.updatedAt}; the run may have ended without reporting.`,
+      source: "reconcile",
+      // Keep the last-signal timestamp so repeated reconciles project this
+      // exact status instead of minting a fresh one per pass.
+      updatedAt: run.status.updatedAt,
+    };
+    return {
+      run: runObservationWithStatus(run.run, decayed),
+      status: decayed,
+    };
+  });
+}
+
 export function applyHarnessEventStatusOverlays(input: {
   runs: ObserverHarnessRun[];
   observations: PersistedProviderObservation[];
