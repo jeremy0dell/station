@@ -19,10 +19,10 @@ describe("weather widget rendering", () => {
 
   it("renders loading, error, and success lines", () => {
     const config = { type: "weather", city: "Austin", label: "ATX" } as const;
-    expect(renderWeatherLoading(config)).toBe("ATX --° ⏳");
-    expect(renderWeatherError(config)).toBe("ATX --° 🫥");
+    expect(renderWeatherLoading(config)).toBe("ATX · --° ⏳");
+    expect(renderWeatherError(config)).toBe("ATX · --° 🫥");
     expect(renderWeatherSuccess(config, { temperature: 72.4, weatherCode: 0, isDay: true })).toBe(
-      "ATX 72° ☀️",
+      "ATX · 72° ☀️",
     );
   });
 });

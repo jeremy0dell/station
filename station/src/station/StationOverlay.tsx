@@ -7,6 +7,7 @@ import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseTarget } from "./input/stationMouse.js";
 import type { TuiStore } from "@station/dashboard-core";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
+import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";
 import { STATION_COLORS } from "./view/theme.js";
 import { StationMouseProvider, type StationMouseDispatch } from "./view/stationMouseContext.js";
@@ -105,19 +106,20 @@ export function StationOverlay({ store, topRowWidgets = [], dispatchMouse }: Sta
         height={layout.height}
         zIndex={30}
         border
-        borderColor={STATION_COLORS.gray}
+        borderColor={STATION_COLORS.hairline}
         backgroundColor={STATION_COLORS.background}
         flexDirection="column"
         onMouseDown={stopPopupMouse}
         onMouseScroll={stopPopupMouse}
       >
-        <DashboardRoot
-          store={store}
-          columns={innerColumns}
-          rows={innerRows}
-          topRowWidgets={topRowWidgets}
-        />
+        <DashboardRoot store={store} columns={innerColumns} rows={innerRows} />
       </box>
+      <DashboardFrameTitle
+        store={store}
+        frame={{ left: layout.left, top: layout.top, width: layout.width }}
+        topRowWidgets={topRowWidgets}
+        zIndex={31}
+      />
     </StationMouseProvider>
   );
 }

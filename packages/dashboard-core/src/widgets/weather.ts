@@ -14,18 +14,18 @@ export function weatherLabel(config: TuiWeatherWidgetConfig): string {
 }
 
 export function renderWeatherLoading(config: TuiWeatherWidgetConfig): string {
-  return `${weatherLabel(config)} --° ${WEATHER_LOADING_EMOJI}`;
+  return `${weatherLabel(config)} · --° ${WEATHER_LOADING_EMOJI}`;
 }
 
 export function renderWeatherError(config: TuiWeatherWidgetConfig): string {
-  return `${weatherLabel(config)} --° ${WEATHER_ERROR_EMOJI}`;
+  return `${weatherLabel(config)} · --° ${WEATHER_ERROR_EMOJI}`;
 }
 
 export function renderWeatherSuccess(
   config: TuiWeatherWidgetConfig,
   conditions: WeatherCurrentConditions,
 ): string {
-  return `${weatherLabel(config)} ${Math.round(conditions.temperature)}° ${weatherEmoji(
+  return `${weatherLabel(config)} · ${Math.round(conditions.temperature)}° ${weatherEmoji(
     conditions.weatherCode,
     conditions.isDay,
   )}`;

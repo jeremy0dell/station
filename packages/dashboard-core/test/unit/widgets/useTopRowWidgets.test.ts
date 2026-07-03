@@ -28,7 +28,7 @@ describe("refreshWeatherWidget", () => {
       setText: (text) => texts.push(text),
     });
     expect(getCurrentWeather).not.toHaveBeenCalled();
-    expect(texts).toEqual(["ATX 72° ☀️"]);
+    expect(texts).toEqual(["ATX · 72° ☀️"]);
   });
 
   it("refetches and re-caches once the entry is older than the refresh interval", async () => {
@@ -45,7 +45,7 @@ describe("refreshWeatherWidget", () => {
     });
     expect(getCurrentWeather).toHaveBeenCalledTimes(1);
     expect(cache.get("austin:fahrenheit")?.conditions).toEqual(fresh);
-    expect(texts.at(-1)).toBe("ATX 50° ☁️");
+    expect(texts.at(-1)).toBe("ATX · 50° ☁️");
   });
 
   it("renders the error glyph when the client rejects", async () => {
@@ -57,7 +57,7 @@ describe("refreshWeatherWidget", () => {
       weatherClient: client(() => Promise.reject(new Error("boom"))),
       setText: (text) => texts.push(text),
     });
-    expect(texts).toEqual(["ATX --° 🫥"]);
+    expect(texts).toEqual(["ATX · --° 🫥"]);
   });
 
   it("suppresses output when cancelled after the fetch resolves", async () => {

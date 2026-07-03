@@ -4,17 +4,14 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProjectView, StationSnapshot, WorktreeId } from "@station/contracts";
 import { useState } from "react";
-import stringWidth from "string-width";
 import {
   dashboardFooterLabel,
-  dashboardHeaderLine,
+  fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
   projectHeaderLabelParts,
   rowGridInputForViewportItem,
   scrollIndicatorLabel,
-  type DashboardHeaderStatus,
-  type TopRowWidgetText,
 } from "@station/dashboard-core";
 import {
   layoutWorktreeRowGrid,
@@ -32,8 +29,6 @@ import {
   type FleetSummary,
 } from "@station/dashboard-core";
 import type { TuiViewState } from "@station/dashboard-core";
-import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
-import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
@@ -68,19 +63,14 @@ export type DashboardViewProps = {
   snapshot: StationSnapshot;
   viewState: TuiViewState;
   columns?: number;
-  topRowWidgets?: readonly TopRowWidgetView[];
-  observerStatus?: DashboardHeaderStatus;
 };
 
-const PRODUCT_LABEL = "station";
 const QUIT_HINT = QUIT_HINT_CLOSE;
 
 export function DashboardView({
   snapshot,
   viewState,
   columns = 80,
-  topRowWidgets = [],
-  observerStatus,
 }: DashboardViewProps) {
   const dispatch = useStationMouse();
   const viewport = selectDashboardViewport(snapshot, viewState);
@@ -99,13 +89,10 @@ export function DashboardView({
       paddingRight={1}
       onMouseScroll={stationMouseProps(dispatch, { kind: "body" }).onMouseScroll}
     >
-      <DashboardHeaderRow
-        columns={contentColumns}
-        widgets={resolveTopRowWidgets(topRowWidgets, snapshot)}
-        {...(observerStatus === undefined ? {} : { status: observerStatus })}
-      />
-      {firstRun ? null : <FleetBar summary={fleet} />}
-      <Divider columns={contentColumns} />
+      {firstRun ? null : (
+        <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
+      )}
+      <text> </text>
       {firstRun || headerLayout === undefined ? null : <ColumnHeaderRow layout={headerLayout} />}
       <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
       {firstRun ? (
@@ -132,56 +119,22 @@ export function DashboardView({
   );
 }
 
-// Width reserved for the trailing " [+]" widget-settings affordance.
-const WIDGET_SETTINGS_AFFORDANCE = " [+]";
-
-export function DashboardHeaderRow({
-  columns,
-  widgets,
-  status,
-}: {
-  columns: number;
-  widgets: readonly TopRowWidgetText[];
-  status?: DashboardHeaderStatus;
-}) {
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
-  const stripColumns = columns - WIDGET_SETTINGS_AFFORDANCE.length;
-  const headerLine = dashboardHeaderLine({
-    productLabel: PRODUCT_LABEL,
-    columns: stripColumns,
-    widgets,
-    ...(status === undefined ? {} : { status }),
-  });
-  // Right-anchor the affordance even when no widgets/status fill the line.
-  const pad = " ".repeat(Math.max(0, stripColumns - stringWidth(headerLine)));
-  const suffix = headerLine.startsWith(PRODUCT_LABEL) ? headerLine.slice(PRODUCT_LABEL.length) : "";
-  return (
-    <box flexDirection="row">
-      <text fg={STATION_COLORS.foreground}>
-        <span attributes={TextAttributes.BOLD}>{PRODUCT_LABEL}</span>
-        {/* Widgets/status are calm chrome: gray, so the body's status colours stay the loud ones. */}
-        <span fg={STATION_COLORS.gray}>{`${suffix}${pad}`}</span>
-      </text>
-      <text
-        fg={hover ? STATION_COLORS.cyan : STATION_COLORS.gray}
-        {...stationMouseProps(dispatch, { kind: "widgetSettingsOpen" })}
-        onMouseOver={() => setHover(true)}
-        onMouseOut={() => setHover(false)}
-      >
-        {WIDGET_SETTINGS_AFFORDANCE}
-      </text>
-    </box>
-  );
-}
-
 export function Divider({ columns }: { columns: number }) {
   return <text fg={STATION_COLORS.gray}>{"─".repeat(Math.max(1, columns))}</text>;
 }
 
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
-// working/needs-you/idle always show; unknown/exited appear only when non-zero.
-function FleetBar({ summary }: { summary: FleetSummary }) {
+// working/needs-you/idle always show; unknown/exited appear only when non-zero
+// (M2's lane order — before idle). The right side carries the fleet totals.
+function FleetBar({
+  summary,
+  counts,
+  columns,
+}: {
+  summary: FleetSummary;
+  counts: { projects: number; worktrees: number; agents: number };
+  columns: number;
+}) {
   const parts: { glyph: string; color: string; label: string; animate?: boolean }[] = [
     { glyph: "●", color: STATION_COLORS.green, label: `${summary.ready} ready` },
     {
@@ -191,7 +144,6 @@ function FleetBar({ summary }: { summary: FleetSummary }) {
       animate: summary.working > 0,
     },
     { glyph: "!", color: STATION_COLORS.red, label: `${summary.needsYou} needs you` },
-    { glyph: "○", color: STATION_COLORS.gray, label: `${summary.idle} idle` },
   ];
   if (summary.unknown > 0) {
     parts.push({ glyph: "?", color: STATION_COLORS.yellow, label: `${summary.unknown} unknown` });
@@ -199,9 +151,16 @@ function FleetBar({ summary }: { summary: FleetSummary }) {
   if (summary.exited > 0) {
     parts.push({ glyph: "x", color: STATION_COLORS.gray, label: `${summary.exited} exited` });
   }
+  parts.push({ glyph: "○", color: STATION_COLORS.gray, label: `${summary.idle} idle` });
+  const lanesWidth =
+    "FLEET".length + parts.reduce((total, part) => total + 3 + 1 + part.label.length, 0);
+  const totals = fleetCountsLabel(
+    { projects: counts.projects, sessions: counts.worktrees, agents: counts.agents },
+    Math.max(0, columns - lanesWidth - 2),
+  );
   return (
-    <box height={1} width="100%" backgroundColor={STATION_COLORS.frozenSurface} overflow="hidden">
-      <text fg={STATION_COLORS.gray}>
+    <box height={1} width="100%" flexDirection="row" overflow="hidden">
+      <text flexGrow={1} fg={STATION_COLORS.gray}>
         <span attributes={TextAttributes.BOLD}>FLEET</span>
         {parts.map((part) => (
           <span key={part.label}>
@@ -215,6 +174,7 @@ function FleetBar({ summary }: { summary: FleetSummary }) {
           </span>
         ))}
       </text>
+      {totals.length > 0 ? <text fg={STATION_COLORS.gray}>{totals}</text> : null}
     </box>
   );
 }
@@ -286,7 +246,7 @@ function dashboardRowLayouts(
 
 function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
   return (
-    <box height={1} width="100%" backgroundColor={STATION_COLORS.frozenSurface} overflow="hidden">
+    <box height={1} width="100%" overflow="hidden">
       <text fg={STATION_COLORS.gray}>
         <Segments segments={layout.segments} />
       </text>

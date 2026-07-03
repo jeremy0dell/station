@@ -9,15 +9,12 @@ import { useStore } from "zustand/react";
 import {
   commandPromptRows,
   isModalOverlayActive,
-  observerHeaderStatusForConnection,
   snapshotLoadingLines,
 } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
-import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
-import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { activeTuiToast, nextTuiToastExpiry, QUIT_HINT_CLOSE } from "@station/dashboard-core";
 import { CommandPromptView } from "./CommandPromptView.js";
-import { DashboardHeaderRow, DashboardView, Divider } from "./DashboardView.js";
+import { DashboardView, Divider } from "./DashboardView.js";
 import { OverlayHostView } from "./OverlayHostView.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { STATION_COLORS } from "./theme.js";
@@ -29,10 +26,9 @@ export type DashboardRootProps = {
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
-  topRowWidgets?: readonly TopRowWidgetView[];
 };
 
-export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: DashboardRootProps) {
+export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
   const snapshot = useStore(store, (state) => state.snapshot);
   const loading = useStore(store, (state) => state.loading);
   const screen = useStore(store, (state) => state.screen);
@@ -88,11 +84,6 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
   if (loading || snapshot === undefined) {
     return (
       <box width="100%" flexGrow={1} flexDirection="column" paddingRight={1}>
-        <DashboardHeaderRow
-          columns={contentColumns}
-          widgets={resolveTopRowWidgets(topRowWidgets, snapshot)}
-        />
-        <Divider columns={contentColumns} />
         <box flexDirection="column" flexGrow={1}>
           {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
             <text
@@ -110,7 +101,6 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
     );
   }
 
-  const observerStatus = observerHeaderStatusForConnection(observerConnectionStatus, true);
   return (
     <box width="100%" flexGrow={1} flexDirection="column">
       <DashboardView
@@ -124,8 +114,6 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
           ...(focusedRowId === undefined ? {} : { focusedRowId }),
         }}
         columns={columns}
-        topRowWidgets={topRowWidgets}
-        {...(observerStatus === undefined ? {} : { observerStatus })}
       />
       <CommandPromptView screen={screen} />
       {toastOverlay}
