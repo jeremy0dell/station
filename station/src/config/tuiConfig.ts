@@ -3,6 +3,7 @@ import { safeErrorFromUnknown } from "@station/runtime";
 
 export type StationTuiConfigLoadResult = {
   config?: TuiConfig;
+  configPath?: string;
   warning?: string;
 };
 
@@ -18,6 +19,7 @@ export async function loadStationTuiConfig(options?: {
     if (loaded.config.tui !== undefined) {
       result.config = loaded.config.tui;
     }
+    result.configPath = loaded.configPath;
     const sectionWarning = loaded.diagnostics.find(
       (diagnostic) => diagnostic.code === "CONFIG_TUI_SECTION_INVALID",
     );

@@ -1,3 +1,5 @@
+import { trimRepeatedBlankLines } from "../tomlEdit.js";
+
 type TomlBlock = {
   start: number;
   end: number;
@@ -99,18 +101,4 @@ function isNonObserverEventHookTable(line: string): boolean {
     !trimmed.startsWith("[[hooks.event]]") &&
     !trimmed.startsWith("[[hooks.event.")
   );
-}
-
-function trimRepeatedBlankLines(lines: readonly string[]): string[] {
-  const result: string[] = [];
-  let previousBlank = false;
-  for (const line of lines) {
-    const blank = line.trim().length === 0;
-    if (blank && previousBlank) {
-      continue;
-    }
-    result.push(line);
-    previousBlank = blank;
-  }
-  return result;
 }

@@ -213,6 +213,7 @@ const station = createStation({
   clipboardEffects,
   openExternalUrl,
   ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
+  ...(tuiConfig.configPath === undefined ? {} : { tuiConfigPath: tuiConfig.configPath }),
   shellAutoCloseOverlay: readShellAutoCloseOverlay(Bun.env.STATION_SHELL_AUTOCLOSE),
   ...(hostSocketPath === undefined ? {} : { hostSocketPath }),
   ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),

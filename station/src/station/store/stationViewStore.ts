@@ -16,6 +16,8 @@ export type CreateStationViewStoreOptions = {
   folderService?: TuiFolderService;
   /** `[tui].widgets` seed for the session's live widget set. */
   widgets?: readonly TuiWidgetConfig[];
+  /** False when widget edits cannot be written back to config.toml. */
+  widgetsPersisted?: boolean;
 };
 
 export function createStationViewStore(
@@ -37,8 +39,13 @@ export function createStationViewStore(
   if (options.folderService !== undefined) {
     storeOptions.folderService = options.folderService;
   }
+  const initialState: NonNullable<typeof storeOptions.initialState> = {};
   if (options.widgets !== undefined) {
-    storeOptions.initialState = { widgets: options.widgets };
+    initialState.widgets = options.widgets;
   }
+  if (options.widgetsPersisted !== undefined) {
+    initialState.widgetsPersisted = options.widgetsPersisted;
+  }
+  storeOptions.initialState = initialState;
   return createTuiStore(storeOptions);
 }

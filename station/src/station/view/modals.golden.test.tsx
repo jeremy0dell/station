@@ -151,6 +151,7 @@ const CASES: ModalCase[] = [
   {
     name: "widget settings panel",
     keys: [{ input: "W" }],
+    trimSnapshotTrailingWhitespace: true,
     prepare: (store) => {
       store.setState({
         widgets: [
@@ -162,7 +163,7 @@ const CASES: ModalCase[] = [
     },
     expect: [
       "widgets",
-      "session only · persist in config.toml",
+      "saved to config.toml",
       "[on ] time",
       "[off] weather NYC",
       "[on ] moon",
@@ -173,7 +174,8 @@ const CASES: ModalCase[] = [
   {
     name: "widget settings picker",
     keys: [{ input: "W" }, { input: "a" }],
-    expect: ["add widget", "weather and tz are added in config.toml", "time", "fleet", "open PRs", "moon", "↵ add   esc back"],
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["add widget", "weather and tz require config.toml", "time", "fleet", "open PRs", "moon", "↵ add   esc back"],
   },
 ];
 

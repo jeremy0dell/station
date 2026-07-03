@@ -533,57 +533,57 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 `;
 
 exports[`modal flow golden frames renders the widget settings panel 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓ 
- [4] + session-r│ widgets                                      │                
- [5] ⠋ station-o│ session only · persist in config.toml        │ +412 -96 #76 … 
-                │ ▸ [on ] time                               × │                
-▼ observer  3 se│   [off] weather NYC                        × │  [sh] [qs] [▾] 
- [6] x batch-exp│   [on ] moon                               × │           #8 ✓ 
- [7] ⠋ provider-│   [ + add widget ]                           │   +32 -8 #16 … 
- [8] ○ trace-bun│ ↵ toggle   [ ] reorder   x remove   a add   e│     +1 -1 #4 ✓ 
-                └──────────────────────────────────────────────┘                
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
- [b] - old-experiment                     -         no agent                    
-                                                                                
-                                                                                
-─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
+───────────────────────────────────────────────────────────────────────────────
+       SESSION                            AGENT     STATUS            DIFF · PR
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
+ [2] - docs-cleanup                       -         no agent
+ [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
+ [4] + session-r│ widgets                                      │
+ [5] ⠋ station-o│ saved to config.toml                         │ +412 -96 #76 …
+                │ ▸ [on ] time                               × │
+▼ observer  3 se│   [off] weather NYC                        × │  [sh] [qs] [▾]
+ [6] x batch-exp│   [on ] moon                               × │           #8 ✓
+ [7] ⠋ provider-│   [ + add widget ]                           │   +32 -8 #16 …
+ [8] ○ trace-bun│ ↵ toggle   [ ] reorder   x remove   a add   e│     +1 -1 #4 ✓
+                └──────────────────────────────────────────────┘
+▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾]
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
+ [b] - old-experiment                     -         no agent
+
+
+───────────────────────────────────────────────────────────────────────────────
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
 "
 `;
 
 exports[`modal flow golden frames renders the widget settings picker 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-─────────────────────────────────────────────────────────────────────────────── 
-       SESSION                            AGENT     STATUS            DIFF · PR 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
- [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓ 
- [4] + session-r│ add widget                                   │                
- [5] ⠋ station-o│ weather and tz are added in config.toml      │ +412 -96 #76 … 
-                │ ▸ time                                       │                
-▼ observer  3 se│   fleet                                      │  [sh] [qs] [▾] 
- [6] x batch-exp│   open PRs                                   │           #8 ✓ 
- [7] ⠋ provider-│   moon                                       │   +32 -8 #16 … 
- [8] ○ trace-bun│ ↵ add   esc back                             │     +1 -1 #4 ✓ 
-                └──────────────────────────────────────────────┘                
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
- [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
- [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
- [b] - old-experiment                     -         no agent                    
-                                                                                
-                                                                                
-─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
+───────────────────────────────────────────────────────────────────────────────
+       SESSION                            AGENT     STATUS            DIFF · PR
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
+ [2] - docs-cleanup                       -         no agent
+ [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
+ [4] + session-r│ add widget                                   │
+ [5] ⠋ station-o│ weather and tz require config.toml           │ +412 -96 #76 …
+                │ ▸ time                                       │
+▼ observer  3 se│   fleet                                      │  [sh] [qs] [▾]
+ [6] x batch-exp│   open PRs                                   │           #8 ✓
+ [7] ⠋ provider-│   moon                                       │   +32 -8 #16 …
+ [8] ○ trace-bun│ ↵ add   esc back                             │     +1 -1 #4 ✓
+                └──────────────────────────────────────────────┘
+▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾]
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
+ [b] - old-experiment                     -         no agent
+
+
+───────────────────────────────────────────────────────────────────────────────
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
 "
 `;

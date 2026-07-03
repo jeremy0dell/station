@@ -73,6 +73,7 @@ enabled = true
           },
         ],
       },
+      configPath,
     });
   });
 

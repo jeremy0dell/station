@@ -1,4 +1,6 @@
+import { setTuiWidgetsInConfig } from "@station/config";
 import type { TuiStore } from "@station/dashboard-core";
+import { safeErrorFromUnknown } from "@station/runtime";
 import type { StoreApi } from "zustand/vanilla";
 import type { Automation } from "../config/stationConfig.js";
 import {
@@ -37,10 +39,11 @@ export function createStation(options: CreateStationOptions): Station {
   const automations = options.automations ?? [];
 
   // The view store and live-PTY registry everything else wires around. The
-  // config widget set seeds the store's live session copy (the widget-settings
-  // panel edits state only; config.toml stays the durable source).
+  // config widget set seeds the store's live session copy; widget-settings
+  // edits are written back to config.toml when a config path exists.
   const stationViewStore = createStationViewStore(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
+    widgetsPersisted: options.tuiConfigPath !== undefined,
   });
   const registry = setupRegistry(options, store, stationClient);
 
@@ -56,6 +59,7 @@ export function createStation(options: CreateStationOptions): Station {
     registry,
     reconcilers,
     layoutWriter,
+    tuiConfigPath: options.tuiConfigPath,
   });
 
   // Input runtime; its shutdown tears down this composition, then exits the app.
@@ -194,12 +198,22 @@ function createLifecycle(deps: {
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
+  tuiConfigPath: string | undefined;
 }): Pick<Station, "start" | "disposeForShutdown" | "disposeForHotReload"> {
-  const { store, stationClient, stationViewStore, registry, reconcilers, layoutWriter } = deps;
+  const {
+    store,
+    stationClient,
+    stationViewStore,
+    registry,
+    reconcilers,
+    layoutWriter,
+    tuiConfigPath,
+  } = deps;
   let detachStationSource: (() => void) | undefined;
   let detachReconcile: (() => void) | undefined;
   let detachSessionReconcile: (() => void) | undefined;
   let detachLayoutWriter: (() => void) | undefined;
+  let detachWidgetConfigWrites: (() => void) | undefined;
   let disposed = false;
 
   const disposeInternal = (disposeTerminals: boolean): void => {
@@ -215,6 +229,8 @@ function createLifecycle(deps: {
     detachSessionReconcile = undefined;
     detachLayoutWriter?.();
     detachLayoutWriter = undefined;
+    detachWidgetConfigWrites?.();
+    detachWidgetConfigWrites = undefined;
     // Real shutdown flushes pending layout synchronously (process.exit follows);
     // an HMR teardown just drops the timer — the reused store/registry keep it.
     if (disposeTerminals) {
@@ -251,12 +267,63 @@ function createLifecycle(deps: {
         layoutWriter.schedule();
         detachLayoutWriter = store.subscribe(() => layoutWriter.schedule());
       }
+      if (tuiConfigPath !== undefined) {
+        detachWidgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
+      }
       detachStationSource = stationViewStore.getState().start();
       stationClient.start();
     },
     disposeForShutdown: (): void => disposeInternal(true),
     disposeForHotReload: (): void => disposeInternal(false),
   };
+}
+
+function startWidgetConfigWrites(
+  stationViewStore: StoreApi<TuiStore>,
+  configPath: string,
+): () => void {
+  let pending: TuiStore["widgets"] | undefined;
+  let saving = false;
+
+  // Single-flight writer: `saving` keeps at most one drain running while
+  // `pending` coalesces to the newest widget set, so rapid edits (e.g. held
+  // reorder keys) collapse into sequential whole-file writes, never interleaved.
+  const drain = async (): Promise<void> => {
+    if (saving) {
+      return;
+    }
+    saving = true;
+    try {
+      while (pending !== undefined) {
+        const widgets = pending;
+        pending = undefined;
+        try {
+          await setTuiWidgetsInConfig({ configPath, widgets });
+        } catch (error) {
+          const safeError = safeErrorFromUnknown(error, {
+            tag: "StationWidgetConfigError",
+            code: "STATION_WIDGET_CONFIG_SAVE_FAILED",
+            message: "Could not save widgets to config.toml.",
+          });
+          stationViewStore.getState().pushToast({
+            kind: "error",
+            message: "Could not save widgets to config.toml.",
+            hint: safeError.message,
+          });
+        }
+      }
+    } finally {
+      saving = false;
+    }
+  };
+
+  return stationViewStore.subscribe((state, previous) => {
+    if (state.widgets === previous.widgets) {
+      return;
+    }
+    pending = state.widgets;
+    void drain();
+  });
 }
 
 /** Build the input runtime; aux shell placement uses the host when a socket is set. */

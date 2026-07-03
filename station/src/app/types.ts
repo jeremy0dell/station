@@ -55,6 +55,7 @@ export type CreateStationOptions = {
   automations?: readonly Automation[];
   openExternalUrl?: (url: string) => void;
   tuiConfig?: TuiConfig;
+  tuiConfigPath?: string;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   /** Existing registry to reuse across Bun HMR without killing live PTYs. */
   registry?: PtyRegistry;
