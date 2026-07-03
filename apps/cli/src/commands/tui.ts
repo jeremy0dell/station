@@ -133,7 +133,7 @@ function runRenderer(
 }
 
 async function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiRunResult> {
-  const childEnv = { ...process.env, ...env };
+  const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
   const override = process.env.STATION_DASHBOARD_COMMAND;
   // Bare stn shells into `bun run` against the station/ lane; if it was never
   // bun-installed the child dies with a raw "@opentui not found", so pre-flight the
@@ -142,10 +142,13 @@ async function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiR
     process.stderr.write(`${stationUiInstallHint} Or run stn doctor.\n`);
     return { status: "exited", code: 1 };
   }
+  if (override === undefined) {
+    process.stderr.write(`Starting STATION ${entry === "dashboard" ? "dashboard" : "TUI"}…\n`);
+  }
   const child =
     override !== undefined
       ? spawn(override, { shell: true, stdio: "inherit", env: childEnv })
-      : spawn("bun", ["run", "--cwd", resolveStationWorkspaceDir(), entry], {
+      : spawn("bun", ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), entry], {
           stdio: "inherit",
           env: childEnv,
         });

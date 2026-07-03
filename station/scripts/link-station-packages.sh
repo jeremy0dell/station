@@ -45,5 +45,7 @@ for package in "${linked_packages[@]}"; do
   freshness="${freshness}${package}@${mtime}  "
 done
 
-echo "Linked @station packages (${linked_packages[*]}) into node_modules."
-echo "dist builds: ${freshness}"
+if [[ "${STATION_QUIET_PRELAUNCH:-}" != "1" ]]; then
+  echo "Linked @station packages (${linked_packages[*]}) into node_modules."
+  echo "dist builds: ${freshness}"
+fi
