@@ -78,8 +78,8 @@ export function DashboardView({
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
-  const { headerLayout, layoutByItem } = firstRun
-    ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
+  const { layoutByItem } = firstRun
+    ? { layoutByItem: new Map<string, RowGridLayout>() }
     : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.focusedRowId);
   return (
     <box
@@ -93,7 +93,6 @@ export function DashboardView({
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
       <text> </text>
-      {firstRun || headerLayout === undefined ? null : <ColumnHeaderRow layout={headerLayout} />}
       <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
@@ -244,15 +243,7 @@ function dashboardRowLayouts(
   return { headerLayout, layoutByItem };
 }
 
-function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
-  return (
-    <box height={1} width="100%" overflow="hidden">
-      <text fg={STATION_COLORS.gray}>
-        <Segments segments={layout.segments} />
-      </text>
-    </box>
-  );
-}
+
 
 function DashboardBody({
   columns,

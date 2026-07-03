@@ -243,7 +243,7 @@ export function metadataSegments(row: WorktreeRowModel): MetadataSegment[] {
     return segments;
   }
   segments.push({
-    text: pr.state === "merged" ? `#${pr.number} merged` : `#${pr.number}`,
+    text: `#${pr.number}`,
     stale: pr.stale === true,
     color: prMetadataColor(pr),
     underline: true,
