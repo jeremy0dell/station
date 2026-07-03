@@ -81,6 +81,8 @@ const DEFAULT_DIFF_AUTOMATION: Automation = {
 export const WorkspaceConfigSchema = z
   .object({
     scroll_on_output: z.enum(SCROLL_ON_OUTPUT_MODES).default("freeze"),
+    overlay_width_percent: z.number().int().min(10).max(100).default(60),
+    overlay_height_percent: z.number().int().min(10).max(100).default(60),
     // Show the welcome screen as an intro over the restored layout on every cold
     // boot; dismiss it to drop into your sessions. Off boots straight in.
     welcome_on_boot: z.boolean().default(true),

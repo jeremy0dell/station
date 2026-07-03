@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process";
 import type { StationConfig } from "@station/config";
+import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
+import { safeErrorFromUnknown, systemClock } from "@station/runtime";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
+  logObserverLifecycleFailure,
   type ObserverProcessDeps,
   type ObserverStatus,
   startObserver,
@@ -95,11 +98,10 @@ export async function runTuiCommand(
   if (parsed.timeoutMs !== undefined) {
     startupReconcile.timeoutMs = parsed.timeoutMs;
   }
-  if (parsed.popupMode) {
-    scheduleReconcileBeforeTui(startupReconcile);
-  } else {
-    await reconcileBeforeTui(startupReconcile);
-  }
+  // Deferred and unawaited: the renderer resyncs from the observer's in-memory
+  // snapshot immediately, and the observer.reconciled event from this reconcile
+  // refreshes the live view when the scan lands.
+  scheduleReconcileBeforeTui(startupReconcile);
   // Bare terminal launches the native Station workspace (its own panes); inside a
   // tmux popup we keep the read-only dashboard, since tmux owns the panes there.
   return runRenderer(
@@ -164,7 +166,22 @@ function scheduleReconcileBeforeTui(input: {
   timeoutMs?: number;
 }): void {
   const timer = setTimeout(() => {
-    void reconcileBeforeTui(input).catch(() => undefined);
+    // The renderer owns the terminal by the time a deferred reconcile can fail, so
+    // the failure goes to cli.jsonl instead of stderr (which would corrupt the alt screen).
+    void reconcileBeforeTui(input).catch((error) =>
+      logObserverLifecycleFailure({
+        paths: input.paths,
+        operation: "tui.startup-reconcile",
+        trace: {},
+        error: safeErrorFromUnknown(error, {
+          tag: "ReconcileCommandError",
+          code: "RECONCILE_RPC_FAILED",
+          message: "TUI startup reconcile could not contact the observer.",
+        }),
+        deps: input.deps ?? {},
+        clock: systemClock,
+      }),
+    );
   }, 250);
   if (typeof timer === "object" && "unref" in timer && typeof timer.unref === "function") {
     timer.unref();
@@ -182,7 +199,7 @@ async function reconcileBeforeTui(input: {
       socketPath: input.paths.socketPath,
       timeoutMs: input.timeoutMs ?? 30_000,
     });
-  await client.reconcile("tui-startup");
+  await client.reconcile(TUI_STARTUP_RECONCILE_REASON);
 }
 
 type ParsedTuiArgs = {

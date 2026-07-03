@@ -18,14 +18,16 @@ const now = "2026-06-11T12:00:00.000Z";
 
 describe("observer reconcile with Claude harness", () => {
   it("observes a tmux-bound Claude target as a provider-neutral harness run", async () => {
+    const providers = claudeProviders();
     const core = createObserverCore({
       config,
-      providers: claudeProviders(),
+      providers,
       clock: {
         now: () => new Date(now),
       },
     });
 
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("claude-terminal-binding");
 
     expect(snapshot.rows[0]?.agent).toMatchObject({

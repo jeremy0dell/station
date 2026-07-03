@@ -27,6 +27,8 @@ export type StationAppProps = {
   onCopySelection: (text: string) => void;
   /** Configured automations surfaced in the pane context menu. */
   automations: readonly Automation[];
+  overlayWidthPercent?: number;
+  overlayHeightPercent?: number;
   /** Opt-in island display modes from `[tui.island]`. */
   island?: TuiIslandConfig;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
@@ -46,6 +48,9 @@ export type CreateStationOptions = {
   shellAutoCloseOverlay?: boolean;
   /** Scroll-position-on-output policy for panes; default freeze. */
   scrollOnOutput?: ScrollOnOutputMode;
+  /** Native Station overlay size as terminal percentages; defaults come from `[workspace]`. */
+  overlayWidthPercent?: number;
+  overlayHeightPercent?: number;
   /** Configured automations surfaced in the pane context menu; default none. */
   automations?: readonly Automation[];
   openExternalUrl?: (url: string) => void;

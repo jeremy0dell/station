@@ -16,6 +16,7 @@ import type {
 import type { JsonlLogger } from "@station/observability";
 import {
   durationMs,
+  forEachConcurrent,
   pathIsSameOrInside,
   type RuntimeClock,
   runRuntimeBoundaryWithRetryAndTimeout,
@@ -36,6 +37,9 @@ export type ProviderReadOptions = {
   retries: number;
   logger?: JsonlLogger;
 };
+
+// Caps concurrent provider subprocesses (wt list / listTargets) per reconcile.
+const providerReadConcurrency = 4;
 
 export type ReconcileOnceInput = {
   reason: string;
@@ -98,19 +102,22 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   const errors: SafeError[] = [];
   const providerHealth: Record<string, ProviderHealth> = {};
 
-  const worktreeResult = await readWorktreeObservations({
-    providers: input.providers,
-    projects: input.projects,
-    read: input.read,
-    providerHealth,
-    errors,
-  });
-  const terminalResult = await readTerminalTargetObservations({
-    providers: input.providers,
-    read: input.read,
-    providerHealth,
-    errors,
-  });
+  // Worktree and terminal reads are independent of each other.
+  const [worktreeResult, terminalResult] = await Promise.all([
+    readWorktreeObservations({
+      providers: input.providers,
+      projects: input.projects,
+      read: input.read,
+      providerHealth,
+      errors,
+    }),
+    readTerminalTargetObservations({
+      providers: input.providers,
+      read: input.read,
+      providerHealth,
+      errors,
+    }),
+  ]);
   const terminalTargets = normalizeTerminalTargetsForCurrentWorktrees({
     terminalTargets: terminalResult.terminalTargets,
     worktrees: worktreeResult.worktrees,
@@ -124,11 +131,10 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     providerHealth,
     errors,
   });
-  await readRepositoryProviderHealth({
+  readRepositoryProviderHealth({
     providers: input.providers,
     read: input.read,
     providerHealth,
-    errors,
   });
 
   const finishedAt = toIsoTimestamp(input.read.clock.now());
@@ -380,59 +386,67 @@ async function readWorktreeObservations(input: {
 }> {
   const provider = input.providers.worktree;
   const capabilities = provider.capabilities();
-  const worktrees: WorktreeObservation[] = [];
-  let projectsScanned = 0;
 
-  input.providerHealth[provider.id] = await readProviderHealth({
+  input.providerHealth[provider.id] = cachedProviderHealth({
+    providers: input.providers,
     providerId: provider.id,
     providerType: "worktree",
     capabilities,
     clock: input.read.clock,
-    timeoutMs: input.read.timeoutMs,
-    retries: input.read.retries,
-    health: () => provider.health(),
-    errors: input.errors,
   });
 
-  for (const project of input.projects) {
-    const result = await runProviderReadBoundary(
-      {
-        operation: `provider.${provider.id}.listWorktrees`,
-        clock: input.read.clock,
-        timeoutMs: input.read.timeoutMs,
-        retries: input.read.retries,
-        error: {
-          tag: "WorktreeProviderError",
-          code: "WORKTREE_LIST_FAILED",
-          message: "The worktree provider failed to list worktrees.",
-          provider: provider.id,
+  // Indexed collection keeps worktree order deterministic (config project order)
+  // while listWorktrees calls run concurrently.
+  const worktreesByProject: WorktreeObservation[][] = input.projects.map(() => []);
+  let projectsScanned = 0;
+  // One provider-level failure stops the remaining project scans: a hung
+  // provider would otherwise burn its full timeout budget once per project.
+  let providerFailed = false;
+  await forEachConcurrent(
+    input.projects,
+    { concurrency: providerReadConcurrency },
+    async (project, index) => {
+      if (providerFailed) {
+        return;
+      }
+      const result = await runProviderReadBoundary(
+        {
+          operation: `provider.${provider.id}.listWorktrees`,
+          clock: input.read.clock,
+          timeoutMs: input.read.timeoutMs,
+          retries: input.read.retries,
+          error: {
+            tag: "WorktreeProviderError",
+            code: "WORKTREE_LIST_FAILED",
+            message: "The worktree provider failed to list worktrees.",
+            provider: provider.id,
+          },
         },
-      },
-      () => provider.listWorktrees(project),
-    );
-    if (!result.ok) {
-      input.errors.push(result.error);
-      await input.read.logger?.error("Worktree provider list failed.", {
-        provider: provider.id,
-        error: result.error,
-        durationMs: result.timing.durationMs,
-      });
-      input.providerHealth[provider.id] = failedProviderHealth({
-        providerId: provider.id,
-        providerType: "worktree",
-        lastCheckedAt: result.timing.finishedAt,
-        lastError: result.error,
-        latencyMs: result.timing.durationMs,
-        capabilities,
-      });
-      break;
-    }
+        () => provider.listWorktrees(project),
+      );
+      if (!result.ok) {
+        providerFailed = true;
+        await recordProviderReadFailure({
+          providers: input.providers,
+          providerId: provider.id,
+          providerType: "worktree",
+          message: "Worktree provider list failed.",
+          error: result.error,
+          timing: result.timing,
+          capabilities,
+          providerHealth: input.providerHealth,
+          errors: input.errors,
+          logger: input.read.logger,
+        });
+        return;
+      }
 
-    projectsScanned += 1;
-    worktrees.push(...result.value);
-  }
+      projectsScanned += 1;
+      worktreesByProject[index] = result.value;
+    },
+  );
 
-  return { worktrees, projectsScanned };
+  return { worktrees: worktreesByProject.flat(), projectsScanned };
 }
 
 async function readTerminalTargetObservations(input: {
@@ -443,58 +457,60 @@ async function readTerminalTargetObservations(input: {
 }): Promise<{
   terminalTargets: TerminalTargetObservation[];
 }> {
-  const terminalTargets: TerminalTargetObservation[] = [];
+  const providers = Array.from(input.providers.terminals.values());
+  // Indexed collection keeps target order deterministic (provider registration
+  // order) while listTargets calls run concurrently.
+  const targetsByProvider: TerminalTargetObservation[][] = providers.map(() => []);
 
-  for (const provider of input.providers.terminals.values()) {
-    const capabilities = provider.capabilities();
+  await forEachConcurrent(
+    providers,
+    { concurrency: providerReadConcurrency },
+    async (provider, index) => {
+      const capabilities = provider.capabilities();
 
-    input.providerHealth[provider.id] = await readProviderHealth({
-      providerId: provider.id,
-      providerType: "terminal",
-      capabilities,
-      clock: input.read.clock,
-      timeoutMs: input.read.timeoutMs,
-      retries: input.read.retries,
-      health: () => provider.health(),
-      errors: input.errors,
-    });
-
-    const result = await runProviderReadBoundary(
-      {
-        operation: `provider.${provider.id}.listTargets`,
-        clock: input.read.clock,
-        timeoutMs: input.read.timeoutMs,
-        retries: input.read.retries,
-        error: {
-          tag: "TerminalProviderError",
-          code: "TERMINAL_LIST_FAILED",
-          message: "The terminal provider failed to list targets.",
-          provider: provider.id,
-        },
-      },
-      () => provider.listTargets(),
-    );
-    if (result.ok) {
-      terminalTargets.push(...result.value);
-    } else {
-      input.errors.push(result.error);
-      await input.read.logger?.error("Terminal provider list failed.", {
-        provider: provider.id,
-        error: result.error,
-        durationMs: result.timing.durationMs,
-      });
-      input.providerHealth[provider.id] = failedProviderHealth({
+      input.providerHealth[provider.id] = cachedProviderHealth({
+        providers: input.providers,
         providerId: provider.id,
         providerType: "terminal",
-        lastCheckedAt: result.timing.finishedAt,
-        lastError: result.error,
-        latencyMs: result.timing.durationMs,
         capabilities,
+        clock: input.read.clock,
       });
-    }
-  }
 
-  return { terminalTargets };
+      const result = await runProviderReadBoundary(
+        {
+          operation: `provider.${provider.id}.listTargets`,
+          clock: input.read.clock,
+          timeoutMs: input.read.timeoutMs,
+          retries: input.read.retries,
+          error: {
+            tag: "TerminalProviderError",
+            code: "TERMINAL_LIST_FAILED",
+            message: "The terminal provider failed to list targets.",
+            provider: provider.id,
+          },
+        },
+        () => provider.listTargets(),
+      );
+      if (result.ok) {
+        targetsByProvider[index] = result.value;
+      } else {
+        await recordProviderReadFailure({
+          providers: input.providers,
+          providerId: provider.id,
+          providerType: "terminal",
+          message: "Terminal provider list failed.",
+          error: result.error,
+          timing: result.timing,
+          capabilities,
+          providerHealth: input.providerHealth,
+          errors: input.errors,
+          logger: input.read.logger,
+        });
+      }
+    },
+  );
+
+  return { terminalTargets: targetsByProvider.flat() };
 }
 
 async function readHarnessObservations(input: {
@@ -515,15 +531,12 @@ async function readHarnessObservations(input: {
   for (const provider of input.providers.harnesses.values()) {
     const capabilities = provider.capabilities();
     harnessCapabilities[provider.id] = capabilities;
-    input.providerHealth[provider.id] = await readProviderHealth({
+    input.providerHealth[provider.id] = cachedProviderHealth({
+      providers: input.providers,
       providerId: provider.id,
       providerType: "harness",
       capabilities,
       clock: input.read.clock,
-      timeoutMs: input.read.timeoutMs,
-      retries: input.read.retries,
-      health: () => provider.health(),
-      errors: input.errors,
     });
 
     const result = await runProviderReadBoundary(
@@ -549,6 +562,7 @@ async function readHarnessObservations(input: {
 
     if (result.ok) {
       const classifiedRuns = await classifyHarnessRuns({
+        providers: input.providers,
         provider,
         capabilities,
         runs: result.value,
@@ -563,47 +577,41 @@ async function readHarnessObservations(input: {
       continue;
     }
 
-    input.errors.push(result.error);
-    await input.read.logger?.error("Harness provider discovery failed.", {
-      provider: provider.id,
-      error: result.error,
-      durationMs: result.timing.durationMs,
-    });
-    input.providerHealth[provider.id] = failedProviderHealth({
+    await recordProviderReadFailure({
+      providers: input.providers,
       providerId: provider.id,
       providerType: "harness",
-      lastCheckedAt: result.timing.finishedAt,
-      lastError: result.error,
-      latencyMs: result.timing.durationMs,
+      message: "Harness provider discovery failed.",
+      error: result.error,
+      timing: result.timing,
       capabilities,
+      providerHealth: input.providerHealth,
+      errors: input.errors,
+      logger: input.read.logger,
     });
   }
 
   return { harnessRuns, harnessCapabilities };
 }
 
-async function readRepositoryProviderHealth(input: {
+function readRepositoryProviderHealth(input: {
   providers: ProviderRegistry;
   read: ProviderReadOptions;
   providerHealth: Record<string, ProviderHealth>;
-  errors: SafeError[];
-}): Promise<void> {
+}): void {
   for (const provider of input.providers.repositories.values()) {
-    const capabilities = provider.capabilities();
-    input.providerHealth[provider.id] = await readProviderHealth({
+    input.providerHealth[provider.id] = cachedProviderHealth({
+      providers: input.providers,
       providerId: provider.id,
       providerType: "repository",
-      capabilities,
+      capabilities: provider.capabilities(),
       clock: input.read.clock,
-      timeoutMs: input.read.timeoutMs,
-      retries: input.read.retries,
-      health: () => provider.health(),
-      errors: input.errors,
     });
   }
 }
 
 async function classifyHarnessRuns(input: {
+  providers: ProviderRegistry;
   provider: HarnessProvider;
   capabilities: HarnessCapabilities;
   runs: HarnessRunObservation[];
@@ -642,19 +650,17 @@ async function classifyHarnessRuns(input: {
       continue;
     }
 
-    input.errors.push(classification.error);
-    await input.read.logger?.error("Harness provider classification failed.", {
-      provider: input.provider.id,
-      error: classification.error,
-      durationMs: classification.timing.durationMs,
-    });
-    input.providerHealth[input.provider.id] = failedProviderHealth({
+    await recordProviderReadFailure({
+      providers: input.providers,
       providerId: input.provider.id,
       providerType: "harness",
-      lastCheckedAt: classification.timing.finishedAt,
-      lastError: classification.error,
-      latencyMs: classification.timing.durationMs,
+      message: "Harness provider classification failed.",
+      error: classification.error,
+      timing: classification.timing,
       capabilities: input.capabilities,
+      providerHealth: input.providerHealth,
+      errors: input.errors,
+      logger: input.read.logger,
     });
   }
 
@@ -776,49 +782,26 @@ async function worktreesWithCachedMetadata(input: {
   });
 }
 
-async function readProviderHealth(input: {
+// Reconcile never awaits a health probe: it reads the out-of-band cache and
+// reports "unknown" until the first probe lands.
+function cachedProviderHealth(input: {
+  providers: ProviderRegistry;
   providerId: ProviderId;
   providerType: ProviderHealth["providerType"];
   capabilities: Record<string, boolean>;
   clock: RuntimeClock;
-  timeoutMs: number;
-  retries: number;
-  health: () => Promise<ProviderHealth>;
-  errors: SafeError[];
-}): Promise<ProviderHealth> {
-  const result = await runProviderReadBoundary(
-    {
-      operation: `provider.${input.providerId}.health`,
-      clock: input.clock,
-      timeoutMs: input.timeoutMs,
-      retries: input.retries,
-      error: {
-        tag: "ProviderUnavailableError",
-        code: "PROVIDER_HEALTH_FAILED",
-        message: "The provider health check failed.",
-        provider: input.providerId,
-      },
-    },
-    input.health,
-  );
-
-  if (result.ok) {
-    return {
-      ...result.value,
-      latencyMs: result.value.latencyMs ?? result.timing.durationMs,
-      capabilities: result.value.capabilities ?? input.capabilities,
-    };
+}): ProviderHealth {
+  const cached = input.providers.healthCache.read(input.providerId);
+  if (cached !== undefined) {
+    return cached;
   }
-
-  input.errors.push(result.error);
-  return failedProviderHealth({
+  return {
     providerId: input.providerId,
     providerType: input.providerType,
-    lastCheckedAt: result.timing.finishedAt,
-    lastError: result.error,
-    latencyMs: result.timing.durationMs,
+    status: "unknown",
+    lastCheckedAt: toIsoTimestamp(input.clock.now()),
     capabilities: input.capabilities,
-  });
+  };
 }
 
 function runProviderReadBoundary<T>(
@@ -855,6 +838,39 @@ function runProviderReadBoundary<T>(
     },
     task,
   );
+}
+
+async function recordProviderReadFailure(input: {
+  providers: ProviderRegistry;
+  providerId: ProviderId;
+  providerType: ProviderHealth["providerType"];
+  message: string;
+  error: SafeError;
+  timing: { finishedAt: string; durationMs: number };
+  capabilities: Record<string, boolean>;
+  providerHealth: Record<string, ProviderHealth>;
+  errors: SafeError[];
+  logger: JsonlLogger | undefined;
+}): Promise<void> {
+  input.errors.push(input.error);
+  await input.logger?.error(input.message, {
+    provider: input.providerId,
+    error: input.error,
+    durationMs: input.timing.durationMs,
+  });
+  input.providerHealth[input.providerId] = failedProviderHealth({
+    providerId: input.providerId,
+    providerType: input.providerType,
+    lastCheckedAt: input.timing.finishedAt,
+    lastError: input.error,
+    latencyMs: input.timing.durationMs,
+    capabilities: input.capabilities,
+  });
+  // Re-probe only when the cache still says healthy; a fresh cached failure
+  // needs no confirmation, and read() already schedules stale refreshes.
+  if (input.providers.healthCache.read(input.providerId)?.status === "healthy") {
+    void input.providers.healthCache.refresh(input.providerId);
+  }
 }
 
 function failedProviderHealth(input: {

@@ -91,16 +91,19 @@ const stationClient = createStationClient(Bun.env, {
     playStationAttentionSound();
   },
 });
-// Loaded before the renderer takes the screen so a config warning is still
-// readable on the normal terminal. A broken/absent file degrades to defaults.
-const stationConfig = await loadStationConfig({ env: Bun.env });
-if (stationConfig.warning !== undefined) {
-  console.error(`[station] ${stationConfig.warning}`);
-}
-const tuiConfig = await loadStationTuiConfig({ env: Bun.env });
-if (tuiConfig.warning !== undefined) {
-  console.error(`[station] ${tuiConfig.warning}`);
-}
+// Started now so the observer subscribe + snapshot resync overlaps the boot
+// phases below and the first painted frame is already populated. createStation's
+// lifecycle calls start() again — a guarded no-op.
+stationClient.start();
+
+const configsLoading = Promise.all([
+  loadStationConfig({ env: Bun.env }),
+  loadStationTuiConfig({ env: Bun.env }),
+]);
+
+// Kicked after configsLoading so its synchronous ps calls don't delay the config
+// reads; awaited before raw mode below.
+const rivalsReaped = terminateRivalStationUIs();
 
 const stationGlobalSlots = stationHotSlots();
 
@@ -130,13 +133,15 @@ try {
 }
 
 // Warm-reattach live host PTYs when a host is up, else cold-respawn fresh shells.
-let restorePlan: LayoutRestorePlan | undefined;
+let restorePlanLoading: LayoutRestorePlan | Promise<LayoutRestorePlan> | undefined;
 if (restoredLayout !== undefined) {
   if (hostSocketPath === undefined) {
-    restorePlan = planLayoutRestoreColdShells(restoredLayout, { cwdExists: savedCwdExists });
+    restorePlanLoading = planLayoutRestoreColdShells(restoredLayout, {
+      cwdExists: savedCwdExists,
+    });
   } else {
     const socket = hostSocketPath;
-    restorePlan = await buildBootRestorePlan(restoredLayout, {
+    restorePlanLoading = buildBootRestorePlan(restoredLayout, {
       cwdExists: savedCwdExists,
       listHost: () => listLiveHostPtys(socket),
       makeHostTerminal: (entry) => (options) =>
@@ -151,6 +156,19 @@ if (restoredLayout !== undefined) {
       resolveAuxShellPlacement: resolveAuxShellPlacement(socket),
     });
   }
+}
+
+const [[stationConfig, tuiConfig], restorePlan] = await Promise.all([
+  configsLoading,
+  restorePlanLoading,
+]);
+// Warnings print before the renderer takes the screen so they stay readable on
+// the normal terminal. A broken/absent file degrades to defaults.
+if (stationConfig.warning !== undefined) {
+  console.error(`[station] ${stationConfig.warning}`);
+}
+if (tuiConfig.warning !== undefined) {
+  console.error(`[station] ${tuiConfig.warning}`);
 }
 
 // HMR recreates renderer, input handlers, and observer subscriptions, but keeps
@@ -189,6 +207,8 @@ const station = createStation({
   stationClient,
   registry: stationRuntime.registry,
   scrollOnOutput: stationConfig.config.scroll_on_output,
+  overlayWidthPercent: stationConfig.config.overlay_width_percent,
+  overlayHeightPercent: stationConfig.config.overlay_height_percent,
   automations: stationConfig.config.automations,
   clipboardEffects,
   openExternalUrl,
@@ -213,11 +233,10 @@ let rootForShutdown: { unmount(): void } | undefined;
 // since module locals reset.
 stationGlobalSlots.__stationHotRenderer?.destroy();
 
-// Reap any other Station UI still attached to this terminal before we put stdin
-// into raw mode. Two readers on one tty tear multi-byte key sequences apart
-// (Shift+Enter and friends), so this enforces one UI per terminal. See
-// singleInstance.ts.
-terminateRivalStationUIs();
+// No rival stdin reader may survive past this line: createCliRenderer claims
+// raw mode next, and two readers on one tty tear multi-byte key sequences
+// apart (Shift+Enter and friends). See singleInstance.ts.
+await rivalsReaped;
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,

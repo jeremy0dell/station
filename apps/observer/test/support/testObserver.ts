@@ -1,4 +1,6 @@
 import type { StationConfig } from "@station/config";
+import { STATION_SCHEMA_VERSION, type StationSnapshot } from "@station/contracts";
+import type { CommandQueue } from "../../src/commands/queue";
 import {
   createCommandQueue,
   createObserverApi,
@@ -8,8 +10,53 @@ import {
   openObserverSqlite,
   type ProviderRegistry,
 } from "../../src/internal";
+import type { ObserverPersistence } from "../../src/persistence";
 
 export type TestClock = { now: () => Date };
+
+export function fakeObserverPersistence(): ObserverPersistence {
+  return {
+    recordEventWithIngressDedupe: async () => ({ deduped: false }),
+  } as unknown as ObserverPersistence;
+}
+
+export function fakeObserverCommandQueue(): CommandQueue {
+  return {
+    dispatch: async () => {
+      throw new Error("dispatch is not used by this test.");
+    },
+    drain: async () => undefined,
+    shutdown: async () => undefined,
+    registerHandler: () => undefined,
+  };
+}
+
+export function emptyStationSnapshot(generatedAt: string): StationSnapshot {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    generatedAt,
+    observer: {
+      pid: 1,
+      startedAt: generatedAt,
+      version: "0.0.0",
+      healthy: true,
+    },
+    providerHealth: {},
+    projects: [],
+    rows: [],
+    sessions: [],
+    counts: {
+      projects: 0,
+      worktrees: 0,
+      agents: 0,
+      working: 0,
+      idle: 0,
+      attention: 0,
+      unknown: 0,
+    },
+    alerts: [],
+  };
+}
 
 /** Sequential id factory mirroring the per-file `ids()` helper the tests used to inline. */
 export function createTestIdFactory() {

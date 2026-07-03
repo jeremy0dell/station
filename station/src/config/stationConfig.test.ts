@@ -52,11 +52,15 @@ describe("loadStationConfig", () => {
   it("reads the [workspace] section out of the runtime config", async () => {
     const path = await writeConfig(`[workspace]
 scroll_on_output = "shift"
+overlay_width_percent = 60
+overlay_height_percent = 60
 welcome_on_boot = false`);
     const result = await loadStationConfig({ path });
     expect(result.source).toBe("file");
     expect(result.warning).toBeUndefined();
     expect(result.config.scroll_on_output).toBe("shift");
+    expect(result.config.overlay_width_percent).toBe(60);
+    expect(result.config.overlay_height_percent).toBe(60);
     expect(result.config.welcome_on_boot).toBe(false);
     // An unset automations key still ships the built-in see-diff default.
     expect(result.config.automations.map((automation) => automation.id)).toEqual(["see-diff"]);

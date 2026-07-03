@@ -12,8 +12,6 @@
 
 import { execFileSync } from "node:child_process";
 
-declare const Bun: { sleepSync(ms: number): void };
-
 export type ProcEntry = { pid: number; tty: string; command: string };
 
 function isBunExecutable(command: string): boolean {
@@ -55,50 +53,106 @@ export function parsePsListing(output: string): ProcEntry[] {
   return entries;
 }
 
-function listProcesses(): ProcEntry[] {
-  // `tty=` prints `ttys001` for an attached process and `??` for none, so the
-  // self lookup and the rival comparison share one identical tty format.
-  const output = execFileSync("ps", ["-axo", "pid=,tty=,command="], { encoding: "utf8" });
+function lookupSelfTty(): string {
+  // `tty=` prints `ttys001` for an attached process and `??` for none — the
+  // same format `ps -t` echoes back, so the rival comparison needs no
+  // translation.
+  return execFileSync("ps", ["-p", String(process.pid), "-o", "tty="], {
+    encoding: "utf8",
+  }).trim();
+}
+
+function listTtyProcesses(tty: string): ProcEntry[] {
+  // Scoping to one tty keeps the scan ~15ms where a full `ps -axo` costs
+  // 200-290ms on a busy box.
+  const output = execFileSync("ps", ["-t", tty, "-o", "pid=,tty=,command="], {
+    encoding: "utf8",
+  });
   return parsePsListing(output);
 }
 
-function terminate(pid: number): void {
+export type TerminateDeps = {
+  kill: (pid: number, signal: "SIGTERM" | "SIGKILL" | 0) => void;
+  sleep: (ms: number) => Promise<void>;
+};
+
+const defaultTerminateDeps: TerminateDeps = {
+  kill: (pid, signal) => process.kill(pid, signal),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
+const POLL_INTERVAL_MS = 10;
+const SIGTERM_GRACE_MS = 250;
+const SIGKILL_GRACE_MS = 50;
+
+async function pollUntilGone(pid: number, capMs: number, deps: TerminateDeps): Promise<boolean> {
+  for (let waited = 0; waited < capMs; waited += POLL_INTERVAL_MS) {
+    await deps.sleep(POLL_INTERVAL_MS);
+    try {
+      deps.kill(pid, 0);
+    } catch {
+      return true; // ESRCH: exited
+    }
+  }
+  return false;
+}
+
+export async function terminate(
+  pid: number,
+  deps: TerminateDeps = defaultTerminateDeps,
+): Promise<void> {
   try {
-    process.kill(pid, "SIGTERM");
+    deps.kill(pid, "SIGTERM");
   } catch {
     return; // already gone
   }
-  // The orphan traps no signals, so SIGTERM normally lands; escalate only if it
-  // is somehow still alive after a short grace, then stop — stdin frees as it dies.
-  Bun.sleepSync(250);
-  try {
-    process.kill(pid, 0);
-    process.kill(pid, "SIGKILL");
-  } catch {
-    // exited within the grace window
+  // The orphan traps no signals, so SIGTERM normally lands within a poll tick;
+  // escalate only if it is somehow still alive at the grace cap, then stop —
+  // stdin frees as it dies.
+  if (await pollUntilGone(pid, SIGTERM_GRACE_MS, deps)) {
+    return;
   }
+  try {
+    deps.kill(pid, "SIGKILL");
+  } catch {
+    return;
+  }
+  await pollUntilGone(pid, SIGKILL_GRACE_MS, deps);
 }
+
+export type ReapDeps = {
+  isTty: () => boolean;
+  lookupSelfTty: () => string;
+  listTtyProcesses: (tty: string) => ProcEntry[];
+  terminate: (pid: number) => Promise<void>;
+};
+
+const defaultReapDeps: ReapDeps = {
+  isTty: () => process.stdout.isTTY === true,
+  lookupSelfTty,
+  listTtyProcesses,
+  terminate: (pid) => terminate(pid),
+};
 
 /**
  * Best-effort: terminate any other Station UI holding this terminal's stdin.
  * No-op unless stdin is a real tty (a piped or test run skips it), and never
- * blocks startup if `ps` is unavailable.
+ * blocks startup if `ps` is unavailable. Callers must await the result before
+ * putting stdin into raw mode — a surviving rival reader tears key sequences.
  */
-export function terminateRivalStationUIs(): void {
-  if (process.stdout.isTTY !== true) {
+export async function terminateRivalStationUIs(deps: ReapDeps = defaultReapDeps): Promise<void> {
+  if (!deps.isTty()) {
     return;
   }
-  let processes: ProcEntry[];
+  let rivals: number[];
   try {
-    processes = listProcesses();
+    const myTty = deps.lookupSelfTty();
+    if (myTty === "" || myTty === "??") {
+      return;
+    }
+    rivals = selectRivalStationUiPids(deps.listTtyProcesses(myTty), process.pid, myTty);
   } catch {
     return;
   }
-  const self = processes.find((p) => p.pid === process.pid);
-  if (self === undefined || self.tty === "??" || self.tty === "") {
-    return;
-  }
-  for (const pid of selectRivalStationUiPids(processes, process.pid, self.tty)) {
-    terminate(pid);
-  }
+  await Promise.all(rivals.map((pid) => deps.terminate(pid)));
 }

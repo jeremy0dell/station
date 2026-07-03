@@ -26,6 +26,7 @@ describe("observer diagnostics collector", () => {
       sqlitePath: join(stateDir, "observer.sqlite"),
     });
 
+    await providers.healthCache.refreshAll();
     await core.reconcile("diagnostics-test");
     const deps = {
       config,

@@ -15,14 +15,16 @@ const now = "2026-05-20T12:00:00.000Z";
 
 describe("observer reconcile with OpenCode harness", () => {
   it("observes a tmux-bound OpenCode target as a provider-neutral harness run", async () => {
+    const providers = opencodeProviders();
     const core = createObserverCore({
       config,
-      providers: opencodeProviders(),
+      providers,
       clock: {
         now: () => new Date(now),
       },
     });
 
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("opencode-terminal-binding");
 
     expect(snapshot.rows[0]?.agent).toMatchObject({

@@ -457,42 +457,51 @@ export class TerminalScreenRenderable extends Renderable {
     // Order the selection once per frame, not once per row.
     const orderedSelection = this.#selection === null ? null : orderSelection(this.#selection);
     const rowLimit = Math.min(this.#rows.length, this.height);
-    for (let rowIndex = 0; rowIndex < rowLimit; rowIndex++) {
-      const row = this.#rows[rowIndex];
-      if (row === undefined) {
-        continue;
-      }
-      const selectedCols =
-        orderedSelection === null
-          ? null
-          : rowColumnsOrdered(orderedSelection, rowIndex, this.width);
-      let col = 0;
-      for (const span of row.spans) {
-        if (col >= this.width) {
-          break;
+    // Scissor to the pane bounds: span.width comes from the VT model's
+    // Unicode-11 tables while drawText advances by OpenTUI's modern grapheme
+    // widths, so emoji-bearing rows can paint wider than the columns accounted
+    // here and would otherwise escape into the border and neighboring panes.
+    buffer.pushScissorRect(this.x, this.y, this.width, this.height);
+    try {
+      for (let rowIndex = 0; rowIndex < rowLimit; rowIndex++) {
+        const row = this.#rows[rowIndex];
+        if (row === undefined) {
+          continue;
         }
-        // Spans can exceed the laid-out width only during a resize race
-        // (screen still at the old geometry); draw the part that fits rather
-        // than dropping the span or painting into neighboring UI.
-        const text =
-          col + span.width > this.width ? clipSpanText(span, this.width - col) : span.text;
-        if (text.length === 0) {
-          break;
+        const selectedCols =
+          orderedSelection === null
+            ? null
+            : rowColumnsOrdered(orderedSelection, rowIndex, this.width);
+        let col = 0;
+        for (const span of row.spans) {
+          if (col >= this.width) {
+            break;
+          }
+          // Spans can exceed the laid-out width only during a resize race
+          // (screen still at the old geometry); draw the part that fits rather
+          // than dropping the span or painting into neighboring UI.
+          const text =
+            col + span.width > this.width ? clipSpanText(span, this.width - col) : span.text;
+          if (text.length === 0) {
+            break;
+          }
+          // Highlight the selected sub-range of this span via drawText's selection
+          // arg (columns are char indices here; exact for single-width cells).
+          const selection = selectionForSpan(selectedCols, col, span.width, selectionBg);
+          buffer.drawText(
+            text,
+            this.x + col,
+            this.y + rowIndex,
+            span.fg === undefined ? defaultFg : rgbaForHex(span.fg),
+            span.bg === undefined ? undefined : rgbaForHex(span.bg),
+            span.attributes,
+            selection,
+          );
+          col += span.width;
         }
-        // Highlight the selected sub-range of this span via drawText's selection
-        // arg (columns are char indices here; exact for single-width cells).
-        const selection = selectionForSpan(selectedCols, col, span.width, selectionBg);
-        buffer.drawText(
-          text,
-          this.x + col,
-          this.y + rowIndex,
-          span.fg === undefined ? defaultFg : rgbaForHex(span.fg),
-          span.bg === undefined ? undefined : rgbaForHex(span.bg),
-          span.attributes,
-          selection,
-        );
-        col += span.width;
       }
+    } finally {
+      buffer.popScissorRect();
     }
   }
 

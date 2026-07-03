@@ -381,6 +381,12 @@ function buildViewProps(
     onCopySelection: deps.onCopySelection,
     automations: deps.automations,
   };
+  if (options.overlayWidthPercent !== undefined) {
+    viewProps.overlayWidthPercent = options.overlayWidthPercent;
+  }
+  if (options.overlayHeightPercent !== undefined) {
+    viewProps.overlayHeightPercent = options.overlayHeightPercent;
+  }
   const island = options.tuiConfig?.island;
   if (island !== undefined) {
     viewProps.island = island;

@@ -1,4 +1,5 @@
 import type { StationConfig } from "@station/config";
+import { POPUP_OPEN_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { openTmuxPopup, type TmuxPopupOptions, type TmuxPopupResult } from "@station/tmux";
 import {
@@ -125,6 +126,6 @@ async function prepareObserverForPopup(
       socketPath: observer.paths.socketPath,
       timeoutMs: options.timeoutMs ?? 30_000,
     });
-  void client.reconcile("popup-open").catch(() => undefined);
+  void client.reconcile(POPUP_OPEN_RECONCILE_REASON).catch(() => undefined);
   return undefined;
 }

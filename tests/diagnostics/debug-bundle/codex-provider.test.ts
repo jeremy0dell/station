@@ -30,29 +30,31 @@ describe("Codex provider debug bundle diagnostics", () => {
       clock,
       idFactory: ids(),
     });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [
+        createCodexHarnessProvider({
+          command: "codex-missing",
+          now: () => new Date(now),
+          runner: async () => {
+            throw Object.assign(new Error("OPENAI_API_KEY=sk-codexSecret000000 missing"), {
+              code: "ENOENT",
+              stderr: "OPENAI_API_KEY=sk-codexSecret000000 codex-missing: not found",
+            });
+          },
+        }),
+      ],
+    });
     const core = createObserverCore({
       config,
-      providers: new ProviderRegistry({
-        worktree: new FakeWorktreeProvider({ now }),
-        terminal: new FakeTerminalProvider({ now }),
-        harnesses: [
-          createCodexHarnessProvider({
-            command: "codex-missing",
-            now: () => new Date(now),
-            runner: async () => {
-              throw Object.assign(new Error("OPENAI_API_KEY=sk-codexSecret000000 missing"), {
-                code: "ENOENT",
-                stderr: "OPENAI_API_KEY=sk-codexSecret000000 codex-missing: not found",
-              });
-            },
-          }),
-        ],
-      }),
+      providers,
       persistence,
       sqlite,
       clock,
     });
 
+    await providers.healthCache.refreshAll();
     await core.reconcile("codex-health-failure");
     const snapshot = await collectDiagnosticSnapshot({
       config,

@@ -98,3 +98,12 @@ export const ReconcileReceiptSchema = z
   .strict();
 
 export type ReconcileReceipt = z.infer<typeof ReconcileReceiptSchema>;
+
+// Freshness-insensitive launch reconciles: the observer may satisfy these by
+// joining an in-flight observer.startup scan instead of running a new one.
+export const TUI_STARTUP_RECONCILE_REASON = "tui-startup";
+export const POPUP_OPEN_RECONCILE_REASON = "popup-open";
+export const STARTUP_RECONCILE_REASONS = [
+  TUI_STARTUP_RECONCILE_REASON,
+  POPUP_OPEN_RECONCILE_REASON,
+] as const;

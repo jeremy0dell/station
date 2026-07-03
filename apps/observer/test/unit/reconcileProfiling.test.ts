@@ -1,12 +1,14 @@
-import type { StationSnapshot } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CommandQueue } from "../../src/commands/queue";
-import type { ObserverPersistence } from "../../src/persistence";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import {
+  emptyStationSnapshot,
+  fakeObserverCommandQueue,
+  fakeObserverPersistence,
+} from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -101,8 +103,8 @@ function createProfilingApi(input: {
   const eventBus = createObserverEventBus();
   const options = {
     core: fakeCore(input.reconcileDelayMs),
-    persistence: fakePersistence(),
-    commandQueue: fakeCommandQueue(),
+    persistence: fakeObserverPersistence(),
+    commandQueue: fakeObserverCommandQueue(),
     eventBus,
     clock: { now: () => new Date(now) },
     logger: input.logger,
@@ -124,34 +126,17 @@ function fakeCore(reconcileDelayMs: number): ObserverCore {
       if (reconcileDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, reconcileDelayMs));
       }
-      return snapshot();
+      return emptyStationSnapshot(now);
     },
     projectHarnessEventStatus: async () => ({ projected: false, events: [] }),
     updateConfig: () => undefined,
     getProjects: () => [],
-    getSnapshot: snapshot,
+    getSnapshot: () => emptyStationSnapshot(now),
     getHealth: () => ({
       status: "healthy",
       startedAt: now,
       providerHealth: {},
     }),
-  };
-}
-
-function fakePersistence(): ObserverPersistence {
-  return {
-    recordEventWithIngressDedupe: async () => ({ deduped: false }),
-  } as unknown as ObserverPersistence;
-}
-
-function fakeCommandQueue(): CommandQueue {
-  return {
-    dispatch: async () => {
-      throw new Error("dispatch is not used by reconcile profiling tests.");
-    },
-    drain: async () => undefined,
-    shutdown: async () => undefined,
-    registerHandler: () => undefined,
   };
 }
 
@@ -210,32 +195,5 @@ function logReturn(
     level,
     message,
     ...(attributes === undefined ? {} : { attributes }),
-  };
-}
-
-function snapshot(): StationSnapshot {
-  return {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    generatedAt: now,
-    observer: {
-      pid: 1,
-      startedAt: now,
-      version: "0.0.0",
-      healthy: true,
-    },
-    providerHealth: {},
-    projects: [],
-    rows: [],
-    sessions: [],
-    counts: {
-      projects: 0,
-      worktrees: 0,
-      agents: 0,
-      working: 0,
-      idle: 0,
-      attention: 0,
-      unknown: 0,
-    },
-    alerts: [],
   };
 }

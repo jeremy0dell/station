@@ -168,10 +168,18 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   // the PTY at that same size so there is no corrective resize/SIGWINCH during
   // shell startup, and so panes that are never laid out never spawn a shell.
   const startSession = (entry: InternalEntry, size: StationTerminalSize): void => {
+    let replayingSnapshot = false;
     const screen = createStationVtScreen({
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
       onResponse: (data) => {
+        // A replayed snapshot re-parses queries the child issued long ago
+        // (startup probes recorded in the ring); answering those would inject
+        // stale replies into the child's stdin, so drop replies until the
+        // replay settles.
+        if (replayingSnapshot) {
+          return;
+        }
         // Query replies (DA1/DSR/OSC...) go straight to the PTY: routing them
         // through the keyboard path would tangle them with chord filtering,
         // and TUIs block on these at startup.
@@ -202,6 +210,31 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }
     entry.terminal = terminal;
     entry.status = `pid ${terminal.pid}`;
+    if (terminal.onReplay !== undefined) {
+      entry.subscriptions.push(
+        terminal.onReplay(async ({ size: recordedSize, chunks }) => {
+          const current = entry.screen;
+          if (current === null) {
+            return;
+          }
+          // Parse the snapshot at the size it was painted for — erase/cursor
+          // sequences recorded at another width land on the wrong rows
+          // otherwise — then return to the pane size so xterm reflows the
+          // replayed rows. The terminal holds live frames until this resolves.
+          replayingSnapshot = true;
+          try {
+            current.resize(recordedSize);
+            for (const chunk of chunks) {
+              current.feed(chunk);
+            }
+            await current.whenIdle();
+          } finally {
+            replayingSnapshot = false;
+          }
+          current.resize(entry.appliedSize ?? size);
+        }),
+      );
+    }
     entry.subscriptions.push(
       terminal.onData((data) => {
         entry.screen?.feed(data);

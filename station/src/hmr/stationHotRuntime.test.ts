@@ -14,16 +14,22 @@ import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js"
 
 const FREEZE_CONFIG: WorkspaceConfig = {
   scroll_on_output: "freeze",
+  overlay_width_percent: 60,
+  overlay_height_percent: 60,
   welcome_on_boot: false,
   automations: [],
 };
 const FOLLOW_CONFIG: WorkspaceConfig = {
   scroll_on_output: "follow",
+  overlay_width_percent: 60,
+  overlay_height_percent: 60,
   welcome_on_boot: false,
   automations: [],
 };
 const INTRO_CONFIG: WorkspaceConfig = {
   scroll_on_output: "freeze",
+  overlay_width_percent: 60,
+  overlay_height_percent: 60,
   welcome_on_boot: true,
   automations: [],
 };

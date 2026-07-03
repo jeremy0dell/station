@@ -18,14 +18,16 @@ const now = "2026-05-27T12:00:00.000Z";
 
 describe("observer reconcile with Pi harness", () => {
   it("observes a tmux-bound Pi target as a provider-neutral harness run", async () => {
+    const providers = piProviders();
     const core = createObserverCore({
       config,
-      providers: piProviders(),
+      providers,
       clock: {
         now: () => new Date(now),
       },
     });
 
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("pi-terminal-binding");
 
     expect(snapshot.rows[0]?.agent).toMatchObject({
