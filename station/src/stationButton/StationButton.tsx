@@ -72,15 +72,7 @@ export function StationButton({ store, stationViewStore, dispatchMouse, island }
 
   return (
     <DynamicStationButton
-      attention={status.attention}
-      needsYouCount={status.needsYouCount}
-      workingCount={status.workingCount}
-      readyCount={status.readyCount}
-      idleCount={status.idleCount}
-      sessionName={status.sessionName}
-      restCounts={island?.restCounts}
-      projectRollup={status.projectRollup}
-      celebration={celebration}
+      input={{ status, restCounts: island?.restCounts, celebration }}
       onHoverChange={store.actions.setStationButtonHover}
       onToggleStation={onHeader}
       onContextMenu={onHeader}

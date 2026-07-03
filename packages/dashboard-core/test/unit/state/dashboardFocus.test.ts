@@ -26,17 +26,17 @@ describe("dashboard focus cursor", () => {
 
   it("enters upward on the last visible session row", () => {
     const entered = handleTuiKey(state({ terminalRows: 12 }), UP).state;
-    // terminalRows 12 -> bodyRows 5: header + working/attention/exited/no-agent visible.
-    expect(entered.focusedRowId).toBe("wt_web_no_agent");
+    // terminalRows 12 -> bodyRows 6: header + five session rows visible.
+    expect(entered.focusedRowId).toBe("wt_web_idle");
   });
 
   it("scrolls the viewport to keep the cursor visible when walking past the bottom", () => {
     let current = state({ terminalRows: 12 });
-    for (let presses = 0; presses < 5; presses += 1) {
+    for (let presses = 0; presses < 6; presses += 1) {
       current = handleTuiKey(current, DOWN).state;
     }
-    expect(current.focusedRowId).toBe("wt_web_idle");
-    // Item index 5 must sit inside the 5-row window: offset = 5 - 5 + 1.
+    expect(current.focusedRowId).toBe("wt_web_unknown");
+    // Item index 6 must sit inside the 6-row window: offset = 6 - 6 + 1.
     expect(current.scrollOffset).toBe(1);
   });
 
@@ -62,8 +62,8 @@ describe("dashboard focus cursor", () => {
 
     const second = handleTuiKey(first, NEXT_NEEDS_ME).state;
     expect(second.focusedRowId).toBe("wt_web_stuck");
-    // The stuck row (item index 7) scrolled into the 5-row window.
-    expect(second.scrollOffset).toBe(3);
+    // The stuck row (item index 7) scrolled into the 6-row window.
+    expect(second.scrollOffset).toBe(2);
 
     const wrapped = handleTuiKey(second, NEXT_NEEDS_ME).state;
     expect(wrapped.focusedRowId).toBe("wt_web_attention");

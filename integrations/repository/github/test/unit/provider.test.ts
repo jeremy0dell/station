@@ -15,10 +15,11 @@ describe("GitHub repository provider", () => {
   it("discovers a unique pull request with gh pr list", async () => {
     const calls: string[] = [];
     const provider = providerWithResponses(calls, {
-      "pr list --repo github.com/example/web --head feature --state all --limit 5 --json number,url,state,baseRefName,headRefName,headRefOid,isDraft,updatedAt,headRepository,headRepositoryOwner":
+      "pr list --repo github.com/example/web --head feature --state all --limit 5 --json number,title,url,state,baseRefName,headRefName,headRefOid,isDraft,updatedAt,headRepository,headRepositoryOwner":
         JSON.stringify([
           {
             number: 42,
+            title: "feat(web): expand the search",
             url: "https://github.com/example/web/pull/42",
             state: "OPEN",
             baseRefName: "main",
@@ -44,6 +45,7 @@ describe("GitHub repository provider", () => {
       }),
     ).resolves.toEqual({
       number: 42,
+      title: "feat(web): expand the search",
       url: "https://github.com/example/web/pull/42",
       host: "github.com",
       state: "open",
@@ -57,7 +59,7 @@ describe("GitHub repository provider", () => {
 
   it("returns null when no pull request matches", async () => {
     const provider = providerWithResponses([], {
-      "pr list --repo github.com/example/web --head feature --state all --limit 5 --json number,url,state,baseRefName,headRefName,headRefOid,isDraft,updatedAt,headRepository,headRepositoryOwner":
+      "pr list --repo github.com/example/web --head feature --state all --limit 5 --json number,title,url,state,baseRefName,headRefName,headRefOid,isDraft,updatedAt,headRepository,headRepositoryOwner":
         "[]",
     });
 
@@ -72,7 +74,7 @@ describe("GitHub repository provider", () => {
 
   it("rejects ambiguous pull request matches as a safe provider error", async () => {
     const provider = providerWithResponses([], {
-      "pr list --repo github.com/example/web --head feature --state all --limit 5 --json number,url,state,baseRefName,headRefName,headRefOid,isDraft,updatedAt,headRepository,headRepositoryOwner":
+      "pr list --repo github.com/example/web --head feature --state all --limit 5 --json number,title,url,state,baseRefName,headRefName,headRefOid,isDraft,updatedAt,headRepository,headRepositoryOwner":
         JSON.stringify([
           {
             number: 1,

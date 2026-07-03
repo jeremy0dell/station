@@ -58,6 +58,7 @@ export type RepositoryRemote = z.infer<typeof RepositoryRemoteSchema>;
 export const WorktreePullRequestSchema = z
   .object({
     number: z.number().int().positive(),
+    title: nonEmptyStringSchema.optional(),
     url: z.string().url().optional(),
     host: nonEmptyStringSchema.optional(),
     state: z.enum(["open", "closed", "merged", "draft", "unknown"]).optional(),

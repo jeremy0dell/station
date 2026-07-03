@@ -50,7 +50,7 @@ describe("TUI screen transitions", () => {
       terminalRows: 10,
     });
 
-    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state.scrollOffset).toBe(8);
+    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state.scrollOffset).toBe(7);
     expect(
       handleTuiKey({ ...state, scrollOffset: 0 }, { input: "", mouseScroll: "up" }).state
         .scrollOffset,
@@ -676,6 +676,6 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(opened.state, { input: "1" });
 
     expect(transition.state.collapsedProjectIds.has("web")).toBe(true);
-    expect(transition.state.scrollOffset).toBe(1);
+    expect(transition.state.scrollOffset).toBe(0);
   });
 });

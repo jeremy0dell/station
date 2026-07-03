@@ -1,58 +1,128 @@
 import { describe, expect, it } from "bun:test";
-import { attentionLines, COLLAPSED_BASE_COLS, COLLAPSED_COUNTS_COLS, targetDims } from "./layout.js";
+import {
+  attentionLines,
+  celebrationText,
+  COLLAPSED_BASE_COLS,
+  COLLAPSED_COUNTS_COLS,
+  islandDisplay,
+  type IslandDisplayInput,
+  targetDims,
+} from "./layout.js";
+import type { StationButtonStatus } from "./status.js";
 
-const CALM = { attention: false, workingCount: 0, readyCount: 0, idleCount: 0 } as const;
+const CALM_STATUS: StationButtonStatus = {
+  attention: false,
+  needsYouCount: 0,
+  workingCount: 0,
+  readyCount: 0,
+  idleCount: 0,
+};
+
+function input(
+  status: Partial<StationButtonStatus> = {},
+  extra: Omit<IslandDisplayInput, "status"> = {},
+): IslandDisplayInput {
+  return { status: { ...CALM_STATUS, ...status }, ...extra };
+}
+
+function dims(value: IslandDisplayInput, expanded: boolean) {
+  return targetDims(islandDisplay(value, expanded));
+}
+
+describe("islandDisplay", () => {
+  it("ranks attention over celebration over counts over the bare mark", () => {
+    const celebration = { prNumber: 42 };
+    expect(
+      islandDisplay(input({ attention: true }, { celebration, restCounts: true }), false).kind,
+    ).toBe("alertMark");
+    expect(islandDisplay(input({}, { celebration, restCounts: true }), false).kind).toBe(
+      "celebration",
+    );
+    expect(islandDisplay(input({}, { restCounts: true }), false).kind).toBe("counts");
+    expect(islandDisplay(input(), false).kind).toBe("mark");
+  });
+
+  it("expands to the alert card, the roll-up, or the totals", () => {
+    expect(islandDisplay(input({ attention: true, needsYouCount: 2 }), true).kind).toBe(
+      "alertCard",
+    );
+    const rollup = [{ projectId: "p1", name: "station", status: "idle" as const }];
+    expect(islandDisplay(input({ projectRollup: rollup }), true).kind).toBe("rollup");
+    const summary = islandDisplay(input({ workingCount: 2, readyCount: 1, idleCount: 3 }), true);
+    // Ready folds into the idle total.
+    expect(summary).toEqual({ kind: "summary", working: 2, idle: 4 });
+  });
+});
 
 describe("targetDims", () => {
-  it("keeps the expanded card width stable as live counts change", () => {
+  it("keeps the summary card width stable as live counts change", () => {
     const width = (workingCount: number, idleCount: number): number =>
-      targetDims(true, { ...CALM, workingCount, idleCount }).width;
-    // The card is anchored top-right, so any width change slides it out from
-    // under a stationary cursor (reads as a hover leave). Counts crossing the
-    // singular/plural ("1 session" -> "2 sessions") or digit (9 -> 10) boundary
-    // must not resize it.
+      dims(input({ workingCount, idleCount }), true).width;
     expect(width(1, 1)).toBe(width(2, 14));
     expect(width(2, 14)).toBe(width(9, 99));
     expect(width(0, 0)).toBe(width(12, 7));
   });
 
-  it("keeps the attention card width stable as the session name changes", () => {
+  it("keeps the alert card width stable as the session name changes", () => {
     const width = (sessionName: string): number =>
-      targetDims(true, { ...CALM, attention: true, sessionName }).width;
-    // A live snapshot shortening (or lengthening) a branch name must not resize
-    // the top-right-anchored card out from under a hovering cursor.
+      dims(input({ attention: true, sessionName }), true).width;
     expect(width("feature/a-quite-long-branch-name")).toBe(width("x"));
     expect(width("x")).toBe(width("main"));
     expect(width("main")).toBe(width("another/long-feature-branch-name-here"));
   });
 
   it("keeps the collapsed counts box width stable as counts tick", () => {
-    const dims = (workingCount: number, readyCount: number, idleCount: number) =>
-      targetDims(false, { ...CALM, workingCount, readyCount, idleCount, restCounts: true });
-    expect(dims(0, 0, 0)).toEqual(dims(9, 10, 99));
-    expect(dims(1, 1, 1).width).toBe(COLLAPSED_COUNTS_COLS);
-    expect(dims(1, 1, 1).width).toBeGreaterThan(COLLAPSED_BASE_COLS);
-    // Counts past the 2-digit paint budget must not overflow either (painted as 99).
-    expect(dims(150, 0, 0)).toEqual(dims(0, 0, 0));
+    const at = (workingCount: number, readyCount: number, idleCount: number) =>
+      dims(input({ workingCount, readyCount, idleCount }, { restCounts: true }), false);
+    expect(at(0, 0, 0)).toEqual(at(9, 10, 99));
+    expect(at(1, 1, 1).width).toBe(COLLAPSED_COUNTS_COLS);
+    expect(at(1, 1, 1).width).toBeGreaterThan(COLLAPSED_BASE_COLS);
+    expect(at(150, 0, 0)).toEqual(at(0, 0, 0));
   });
 
-  it("keeps the expanded roll-up card width fixed while height tracks project count", () => {
-    const dims = (projects: number) =>
-      targetDims(true, { ...CALM, projectRollup: Array.from({ length: projects }) });
-    expect(dims(1).width).toBe(dims(8).width);
-    expect(dims(2).height).toBe(dims(1).height + 1);
-    // Past the fold the card shows ROLLUP_MAX_LINES entries plus one "+N more" line.
-    expect(dims(6).height).toBe(dims(9).height);
+  it("keeps the roll-up card width fixed while height tracks project count", () => {
+    const at = (projects: number) =>
+      dims(
+        input({
+          projectRollup: Array.from({ length: projects }, (_, i) => ({
+            projectId: `p${i}`,
+            name: `proj-${i}`,
+            status: "idle" as const,
+          })),
+        }),
+        true,
+      );
+    expect(at(1).width).toBe(at(8).width);
+    expect(at(2).height).toBe(at(1).height + 1);
+    expect(at(6).height).toBe(at(9).height);
     // An empty roll-up falls back to the totals card.
-    expect(dims(0)).toEqual(targetDims(true, CALM));
+    expect(at(0)).toEqual(dims(input(), true));
   });
 
-  it("sizes the celebration box to its PR number and stays put while it shows", () => {
-    const celebrate = (prNumber: number) =>
-      targetDims(false, { ...CALM, celebration: { prNumber } });
-    expect(celebrate(42)).toEqual(celebrate(42));
-    expect(celebrate(12345).width).toBe(celebrate(42).width + 3);
-    expect(celebrate(42).height).toBe(targetDims(false, CALM).height);
+  it("sizes the celebration box to its text and stays put while it shows", () => {
+    const at = (celebration: { prNumber: number; title?: string }) =>
+      dims(input({}, { celebration }), false);
+    expect(at({ prNumber: 42 })).toEqual(at({ prNumber: 42 }));
+    expect(at({ prNumber: 12345 }).width).toBe(at({ prNumber: 42 }).width + 3);
+    expect(at({ prNumber: 42 }).height).toBe(dims(input(), false).height);
+    expect(at({ prNumber: 42, title: "fix things" }).width).toBe(
+      at({ prNumber: 42 }).width + " · fix things".length,
+    );
+  });
+});
+
+describe("celebrationText", () => {
+  it("appends the PR title, clamped to the stable budget", () => {
+    expect(celebrationText({ prNumber: 42 })).toBe("✓ #42 merged");
+    expect(celebrationText({ prNumber: 42, title: "fix the hooks" })).toBe(
+      "✓ #42 merged · fix the hooks",
+    );
+    const long = celebrationText({
+      prNumber: 42,
+      title: "a very long pull request title that keeps going",
+    });
+    expect(long.endsWith("…")).toBe(true);
+    expect(long.length).toBe("✓ #42 merged · ".length + 28);
   });
 });
 
@@ -60,7 +130,6 @@ describe("attentionLines", () => {
   it("swaps to the queue line only when several sessions ask", () => {
     expect(attentionLines(1)).toEqual(["needs your attention", "↵ or click to focus"]);
     expect(attentionLines(3)).toEqual(["! 3 need you ›", "↵ or click to focus"]);
-    // The painted queue depth clamps to the 2-digit width budget.
     expect(attentionLines(120)[0]).toBe("! 99 need you ›");
   });
 });

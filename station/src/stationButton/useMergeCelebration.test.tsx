@@ -20,7 +20,13 @@ function CelebrationProbe({
   ttlMs: number;
 }) {
   const celebration = useMergeCelebration(store, ttlMs);
-  return <text>{celebration === undefined ? "quiet" : `pr:${celebration.prNumber}`}</text>;
+  return (
+    <text>
+      {celebration === undefined
+        ? "quiet"
+        : `pr:${celebration.prNumber}:${celebration.title ?? ""}`}
+    </text>
+  );
 }
 
 function withMergedPr(snapshot: StationSnapshot, worktreeId: string): StationSnapshot {
@@ -31,7 +37,7 @@ function withMergedPr(snapshot: StationSnapshot, worktreeId: string): StationSna
       if (row.id !== worktreeId || pr === undefined) {
         return row;
       }
-      return { ...row, worktree: { ...row.worktree, pr: { ...pr, state: "merged" as const } } };
+      return { ...row, worktree: { ...row.worktree, pr: { ...pr, state: "merged" as const, title: "ship it" } } };
     }),
   };
 }
@@ -63,7 +69,7 @@ describe("useMergeCelebration", () => {
       // The state update commits on the next macrotask beat.
       await new Promise((resolve) => setTimeout(resolve, 20));
       await setup.flush();
-      expect(setup.captureCharFrame()).toContain("pr:76");
+      expect(setup.captureCharFrame()).toContain("pr:76:ship it");
 
       await new Promise((resolve) => setTimeout(resolve, 120));
       await setup.flush();
