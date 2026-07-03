@@ -12,7 +12,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm link --global`. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` dies at launch with "@opentui not found". If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm link --global`. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
 
 ## Requirements
 
@@ -41,7 +41,7 @@ pnpm stn setup
 pnpm smoke:release
 ```
 
-`cd station && bun install` is required for the terminal UI: bare `stn` renders it by shelling into `bun run` against `station/`, so without the install the TUI fails with "@opentui not found" even though `stn doctor` finds the Bun binary. `stn doctor` now reports this lane explicitly (a `renderer-runtime` warning with code `STATION_UI_NOT_INSTALLED`).
+`cd station && bun install` is required for the terminal UI: bare `stn` renders it by shelling into `bun run` against `station/`, so without the install `stn` refuses to launch and prints the install hint (historically a raw "@opentui not found" error) even though the Bun binary is healthy. `stn doctor` reports this lane explicitly (a `renderer-runtime` warning with code `STATION_UI_NOT_INSTALLED`).
 
 After STATION is installed:
 

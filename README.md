@@ -63,7 +63,7 @@ station has two lanes and both must be installed: the **CLI + observer** on pnpm
 pnpm install
 pnpm build
 
-# Lane 2 — terminal UI (Bun). Without this, bare `stn` fails with "@opentui not found".
+# Lane 2 — terminal UI (Bun). Without this, bare `stn` refuses to launch ("@opentui not found").
 cd station && bun install && cd ..
 
 # Verify, configure, and launch

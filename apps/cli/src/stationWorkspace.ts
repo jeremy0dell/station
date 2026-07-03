@@ -14,9 +14,9 @@ export function resolveStationWorkspaceDir(): string {
   return join(repoRoot, "station");
 }
 
-/** Human-facing remediation when the station/ Bun lane has not been installed. */
-export const stationUiInstallHint =
-  "Install the STATION UI dependencies: cd station && bun install.";
+/** Human-facing remediation when the station/ Bun lane has not been installed.
+ * Absolute path: bare stn runs from arbitrary cwds where `cd station` means nothing. */
+export const stationUiInstallHint = `Install the STATION UI dependencies: cd ${resolveStationWorkspaceDir()} && bun install.`;
 
 /**
  * @opentui is the renderer's first import, so its presence under
@@ -35,7 +35,9 @@ export async function isStationUiInstalled(): Promise<boolean> {
   try {
     await access(marker);
     return true;
-  } catch {
-    return false;
+  } catch (cause) {
+    // Only a missing marker means "bun install never ran". Fail open on other
+    // errors (EACCES etc.) so a probe hiccup cannot veto an otherwise working lane.
+    return (cause as NodeJS.ErrnoException | null | undefined)?.code !== "ENOENT";
   }
 }
