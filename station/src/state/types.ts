@@ -121,6 +121,8 @@ export type InputSlice = {
   /** Focus to restore when the overlay closes; only pane focus is recorded. */
   overlayReturnFocus: FocusTarget | null;
   contextMenu: ContextMenuState | null;
+  /** Mouse is over the floating island; scopes its ↵ jump so Enter never leaves a pane otherwise. */
+  stationButtonHover: boolean;
 };
 
 /**

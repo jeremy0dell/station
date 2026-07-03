@@ -1,5 +1,7 @@
 export const DASHBOARD_FIXED_ROW_HEIGHTS = {
   header: 1,
+  fleetBar: 1,
+  columnHeader: 1,
   topDivider: 1,
   topScrollIndicator: 1,
   bottomScrollIndicator: 1,

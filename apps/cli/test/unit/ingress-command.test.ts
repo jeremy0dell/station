@@ -1,16 +1,8 @@
-import type {
-  HarnessEventReport,
-  HarnessEventReportReceipt,
-  ProviderHookEvent,
-  ProviderHookReceipt,
-} from "@station/contracts";
-import { runProviderIngressCommand } from "@station/provider-hooks";
+import type { ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  listHookSpoolFiles,
-  readHarnessEventReportSpoolRecord,
-} from "../../../../tests/support/spool";
+import { listHookSpoolFiles, readHookSpoolRecord } from "../../../../tests/support/spool";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { runProviderIngressCommand } from "../../src/ingress/command.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -124,10 +116,10 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("delivers compact Codex payloads through observer.harnessEvent.report", async () => {
+  it("delivers raw Codex hook payloads through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
-    let observedReport: HarnessEventReport | undefined;
+    let observedEvent: ProviderHookEvent | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -145,54 +137,52 @@ describe("provider hook ingress command", () => {
       },
       {
         clock: { now: () => new Date(now) },
-        hookId: () => "report_codex_1",
-        clientFactory: () =>
-          ({
-            reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
-              observedReport = report;
-              return {
-                schemaVersion: "0.6.0",
-                reportId: report.reportId,
-                provider: report.provider,
-                eventType: report.eventType,
-                accepted: true,
-                status: "accepted",
-                receivedAt: report.observedAt,
-                projected: false,
-                scheduledReconcile: true,
-              };
-            },
-          }) as never,
+        hookId: () => "hook_codex_1",
+        clientFactory: () => {
+          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
+            observedEvent = event;
+            return {
+              schemaVersion: "0.6.0",
+              hookId: event.hookId ?? "hook_1",
+              provider: event.provider,
+              event: event.event,
+              accepted: true,
+              status: "ingested",
+              receivedAt: event.receivedAt,
+              reconciled: false,
+            };
+          };
+          return {
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
       },
     );
 
     expect(receipt.status).toBe("ingested");
-    expect(observedReport).toMatchObject({
+    expect(observedEvent).toMatchObject({
       provider: "codex",
-      eventType: "PreToolUse",
-      correlation: {
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        terminalTargetId: "tmux:station:@1:%2",
-        cwd: "/tmp/station/web/task",
-      },
-      diagnostics: {
-        compacted: true,
-        omittedFieldNames: ["tool_input"],
-      },
-      providerData: {
-        hookEventName: "PreToolUse",
-        toolName: "Bash",
+      kind: "harness",
+      event: "PreToolUse",
+      hookId: "hook_codex_1",
+      payload: {
+        hook_event_name: "PreToolUse",
+        session_id: "codex_session_1",
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" },
+        station_project_id: "web",
+        station_worktree_id: "wt_web_task",
+        station_session_id: "ses_web_task",
       },
     });
-    expect(JSON.stringify(observedReport)).not.toContain("pnpm test");
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("delivers compact Claude payloads through observer.harnessEvent.report", async () => {
+  it("delivers raw Claude hook payloads through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
-    let observedReport: HarnessEventReport | undefined;
+    let observedEvent: ProviderHookEvent | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -210,54 +200,42 @@ describe("provider hook ingress command", () => {
       },
       {
         clock: { now: () => new Date(now) },
-        hookId: () => "report_claude_1",
-        clientFactory: () =>
-          ({
-            reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
-              observedReport = report;
-              return {
-                schemaVersion: "0.6.0",
-                reportId: report.reportId,
-                provider: report.provider,
-                eventType: report.eventType,
-                accepted: true,
-                status: "accepted",
-                receivedAt: report.observedAt,
-                projected: false,
-                scheduledReconcile: true,
-              };
-            },
-          }) as never,
+        hookId: () => "hook_claude_1",
+        clientFactory: () => {
+          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
+            observedEvent = event;
+            return {
+              schemaVersion: "0.6.0",
+              hookId: event.hookId ?? "hook_1",
+              provider: event.provider,
+              event: event.event,
+              accepted: true,
+              status: "ingested",
+              receivedAt: event.receivedAt,
+              reconciled: false,
+            };
+          };
+          return {
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
       },
     );
 
     expect(receipt.status).toBe("ingested");
-    expect(observedReport).toMatchObject({
+    expect(observedEvent).toMatchObject({
       provider: "claude",
-      eventType: "PreToolUse",
-      status: {
-        value: "working",
-        confidence: "medium",
-      },
-      correlation: {
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        terminalTargetId: "tmux:station:@1:%2",
-        harnessRunId: "claude:tmux:station:@1:%2",
-        nativeSessionId: "claude_session_1",
-        cwd: "/tmp/station/web/task",
-      },
-      diagnostics: {
-        compacted: true,
-        omittedFieldNames: ["tool_input"],
-      },
-      providerData: {
-        hookEventName: "PreToolUse",
-        toolName: "Bash",
+      kind: "harness",
+      event: "PreToolUse",
+      payload: {
+        hook_event_name: "PreToolUse",
+        session_id: "claude_session_1",
+        station_worktree_id: "wt_web_task",
+        station_session_id: "ses_web_task",
       },
     });
-    expect(JSON.stringify(observedReport)).not.toContain("pnpm test");
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
   it("ignores Claude events outside the rule-derived allow-list", async () => {
@@ -309,10 +287,10 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("delivers compact Cursor payloads through observer.harnessEvent.report", async () => {
+  it("delivers raw Cursor hook payloads through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
-    let observedReport: HarnessEventReport | undefined;
+    let observedEvent: ProviderHookEvent | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -330,98 +308,41 @@ describe("provider hook ingress command", () => {
       },
       {
         clock: { now: () => new Date(now) },
-        hookId: () => "report_cursor_1",
-        clientFactory: () =>
-          ({
-            reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
-              observedReport = report;
-              return {
-                schemaVersion: "0.6.0",
-                reportId: report.reportId,
-                provider: report.provider,
-                eventType: report.eventType,
-                accepted: true,
-                status: "accepted",
-                receivedAt: report.observedAt,
-                projected: false,
-                scheduledReconcile: true,
-              };
-            },
-          }) as never,
+        hookId: () => "hook_cursor_1",
+        clientFactory: () => {
+          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
+            observedEvent = event;
+            return {
+              schemaVersion: "0.6.0",
+              hookId: event.hookId ?? "hook_1",
+              provider: event.provider,
+              event: event.event,
+              accepted: true,
+              status: "ingested",
+              receivedAt: event.receivedAt,
+              reconciled: false,
+            };
+          };
+          return {
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
       },
     );
 
     expect(receipt.status).toBe("ingested");
-    expect(observedReport).toMatchObject({
+    expect(observedEvent).toMatchObject({
       provider: "cursor",
-      eventType: "beforeShellExecution",
-      correlation: {
-        harnessRunId: "cursor:tmux:station:@1:%2",
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        terminalTargetId: "tmux:station:@1:%2",
-        nativeSessionId: "cursor_session_1",
-        cwd: "/tmp/station/web/task",
-      },
-      diagnostics: {
-        compacted: true,
-        omittedFieldNames: ["command", "tool_input", "user_email"],
-      },
-      providerData: {
-        hookEventName: "beforeShellExecution",
-        toolName: "shell",
+      kind: "harness",
+      event: "beforeShellExecution",
+      payload: {
+        hook_event_name: "beforeShellExecution",
+        session_id: "cursor_session_1",
+        station_worktree_id: "wt_web_task",
       },
     });
-    expect(JSON.stringify(observedReport)).not.toContain("pnpm test");
-    expect(JSON.stringify(observedReport)).not.toContain("person@example.com");
-  });
-
-  it("uses stable Codex report ids when no explicit hook id is provided", async () => {
-    const fixture = await createTempState();
-    const configPath = await writeConfigToml(fixture.root, fixture.config);
-    let observedReport: HarnessEventReport | undefined;
-
-    const receipt = await runProviderIngressCommand(
-      [
-        "--socket",
-        fixture.socketPath,
-        "--state-dir",
-        fixture.stateDir,
-        "--config",
-        configPath,
-        "codex",
-      ],
-      {
-        stdin: JSON.stringify(codexPayload()),
-        env: stationEnv(),
-      },
-      {
-        clock: { now: () => new Date(now) },
-        clientFactory: () =>
-          ({
-            reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => {
-              observedReport = report;
-              return {
-                schemaVersion: "0.6.0",
-                reportId: report.reportId,
-                provider: report.provider,
-                eventType: report.eventType,
-                accepted: true,
-                status: "accepted",
-                receivedAt: report.observedAt,
-                projected: false,
-                scheduledReconcile: true,
-              };
-            },
-          }) as never,
-      },
-    );
-
-    expect(receipt.status).toBe("ingested");
-    expect(observedReport?.reportId).toBe(
-      "codex:codex_session_1:PreToolUse:turn_1:tool%3Acall_test",
-    );
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
   it("passes the delivery timeout to the observer protocol client", async () => {
@@ -450,18 +371,19 @@ describe("provider hook ingress command", () => {
         hookId: () => "report_codex_timeout",
         clientFactory: (_socketPath, options) => {
           observedTimeoutMs = options.timeoutMs;
+          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => ({
+            schemaVersion: "0.6.0",
+            hookId: event.hookId ?? "hook_timeout_1",
+            provider: event.provider,
+            event: event.event,
+            accepted: true,
+            status: "ingested",
+            receivedAt: event.receivedAt,
+            reconciled: false,
+          });
           return {
-            reportHarnessEvent: async (report): Promise<HarnessEventReportReceipt> => ({
-              schemaVersion: "0.6.0",
-              reportId: report.reportId,
-              provider: report.provider,
-              eventType: report.eventType,
-              accepted: true,
-              status: "accepted",
-              receivedAt: report.observedAt,
-              projected: false,
-              scheduledReconcile: true,
-            }),
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
           } as never;
         },
       },
@@ -471,7 +393,7 @@ describe("provider hook ingress command", () => {
     expect(observedTimeoutMs).toBe(4321);
   });
 
-  it("spools compact Codex reports when online delivery is unavailable", async () => {
+  it("spools raw Codex hook events when online delivery is unavailable", async () => {
     const fixture = await createTempState();
 
     const receipt = await runProviderIngressCommand(
@@ -482,13 +404,16 @@ describe("provider hook ingress command", () => {
       },
       {
         clock: { now: () => new Date(now) },
-        hookId: () => "report_codex_spooled",
-        clientFactory: () =>
-          ({
-            reportHarnessEvent: async () => {
-              throw new Error("offline");
-            },
-          }) as never,
+        hookId: () => "hook_codex_spooled",
+        clientFactory: () => {
+          const ingest = async (): Promise<ProviderHookReceipt> => {
+            throw new Error("offline");
+          };
+          return {
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
       },
     );
 
@@ -499,17 +424,13 @@ describe("provider hook ingress command", () => {
     });
     const files = await listHookSpoolFiles(fixture.hookSpoolDir);
     expect(files).toHaveLength(1);
-    const record = await readHarnessEventReportSpoolRecord(fixture.hookSpoolDir, files[0] ?? "");
-    expect(record.report).toMatchObject({
-      reportId: "report_codex_spooled",
+    const record = await readHookSpoolRecord(fixture.hookSpoolDir, files[0] ?? "");
+    expect(record.event).toMatchObject({
+      hookId: "hook_codex_spooled",
       provider: "codex",
-      eventType: "PreToolUse",
-      diagnostics: {
-        compacted: true,
-        omittedFieldNames: ["tool_input"],
-      },
+      kind: "harness",
+      event: "PreToolUse",
     });
-    expect(JSON.stringify(record)).not.toContain("pnpm test");
   });
 
   it("rejects malformed provider payloads before delivery or spool writes", async () => {
@@ -524,13 +445,16 @@ describe("provider hook ingress command", () => {
       },
       {
         clock: { now: () => new Date(now) },
-        clientFactory: () =>
-          ({
-            reportHarnessEvent: async () => {
-              delivered = true;
-              throw new Error("should not deliver invalid payloads");
-            },
-          }) as never,
+        clientFactory: () => {
+          const ingest = async (): Promise<ProviderHookReceipt> => {
+            delivered = true;
+            throw new Error("should not deliver invalid payloads");
+          };
+          return {
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
       },
     );
 

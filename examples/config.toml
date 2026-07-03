@@ -69,10 +69,10 @@ welcome_on_boot = true       # show the welcome intro over the restored layout o
 #   command = "git diff | diffnav"
 
 [[hooks.event]]
-id = "notify-agent-idle"
+id = "notify-agent-state"
 events = ["worktree.agentStateChanged"]
 command = "stn"
-args = ["notify", "turn-completion"]
+args = ["notify", "agent-state"]
 timeout_ms = 3000
 
 [[projects]]

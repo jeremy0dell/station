@@ -1,12 +1,10 @@
 // OpenTUI port of apps/tui's Throbber: one shared module-level animation
 // clock (120ms) drives every throbber via useSyncExternalStore, so all
 // markers tick in lockstep and the interval stops when the last throbber
-// unmounts. Frame families and the attention style cycle match upstream.
+// unmounts. Frame families match upstream.
 import { memo, useCallback, useSyncExternalStore } from "react";
-import { TextAttributes } from "@opentui/core";
-import { STATION_COLORS } from "./theme.js";
 
-export type ThrobberVariant = "circle" | "braille" | "attention" | "dots";
+export type ThrobberVariant = "circle" | "braille" | "dots";
 
 const DEFAULT_INTERVAL_MS = 120;
 
@@ -25,24 +23,17 @@ const BRAILLE_FRAMES = [
 ] as const satisfies NonEmptyList<string>;
 const DOT_FRAMES = [".  ", ".. ", "..."] as const satisfies NonEmptyList<string>;
 
-export const Throbber = memo(function Throbber({ variant }: { variant: ThrobberVariant }) {
-  const frameTick = useAnimationTick(variant === "attention" ? 2 : 1);
-
-  if (variant === "attention") {
-    // Style pulse on a stable "!": dim -> normal -> bold -> normal.
-    const phase = positiveModulo(frameTick, 4);
-    const attributes =
-      phase === 0 ? TextAttributes.DIM : phase === 2 ? TextAttributes.BOLD : TextAttributes.NONE;
-    return (
-      <span fg={STATION_COLORS.red} attributes={attributes}>
-        !
-      </span>
-    );
-  }
-
+export const Throbber = memo(function Throbber({
+  variant,
+  fg,
+}: {
+  variant: ThrobberVariant;
+  fg?: string;
+}) {
+  const frameTick = useAnimationTick(1);
   const frames =
     variant === "dots" ? DOT_FRAMES : variant === "circle" ? CIRCLE_FRAMES : BRAILLE_FRAMES;
-  return <span>{cycle(frames, frameTick)}</span>;
+  return <span {...(fg === undefined ? {} : { fg })}>{cycle(frames, frameTick)}</span>;
 });
 
 type NonEmptyList<T> = readonly [T, ...T[]];

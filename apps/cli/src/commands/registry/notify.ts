@@ -7,18 +7,18 @@ export const notifyCliCommand: CliCommandNode = {
   name: "notify",
   description: "Run notification helpers used by event hooks.",
   run: runNotifyCliCommand,
-  usage: ["stn notify turn-completion"],
-  examples: ["pnpm stn event-hooks plan notify-turn-completion"],
+  usage: ["stn notify agent-state"],
+  examples: ["pnpm stn event-hooks plan notify-agent-state"],
   notes: [
     "Notify commands read hook payloads from stdin when run normally.",
     "They are primarily installed through observer event hooks instead of invoked by hand.",
   ],
   children: [
     {
-      name: "turn-completion",
-      description: "Notify when an agent transitions to idle through a hook event.",
-      usage: ["stn notify turn-completion"],
-      examples: ["pnpm stn event-hooks plan notify-turn-completion"],
+      name: "agent-state",
+      description: "Notify when a hook event makes an agent idle or in need of attention.",
+      usage: ["stn notify agent-state"],
+      examples: ["pnpm stn event-hooks plan notify-agent-state"],
     },
   ],
 };

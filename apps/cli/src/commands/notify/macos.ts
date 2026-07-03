@@ -8,12 +8,11 @@ type MacNotificationInput = {
 };
 
 type MacNotificationSoundInput = {
-  kind: "finished" | "needs_attention";
+  kind: "finished";
   commandRunner?: ExternalCommandRunner;
 };
 
 const finishedSoundPath = "/System/Library/Sounds/Glass.aiff";
-const needsAttentionSoundPath = "/System/Library/Sounds/Ping.aiff";
 const soundTimeoutMs = 5000;
 
 export async function showMacNotification(
@@ -49,12 +48,11 @@ export async function showMacNotification(
 export async function playMacNotificationSound(
   input: MacNotificationSoundInput,
 ): Promise<"played" | "failed"> {
-  const soundPath = input.kind === "needs_attention" ? needsAttentionSoundPath : finishedSoundPath;
   try {
     await runExternalCommand(
       {
         command: "/usr/bin/afplay",
-        args: [soundPath],
+        args: [finishedSoundPath],
         timeoutMs: soundTimeoutMs,
       },
       input.commandRunner,

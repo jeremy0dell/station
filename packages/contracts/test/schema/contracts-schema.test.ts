@@ -1082,10 +1082,10 @@ describe("contract schemas", () => {
     );
 
     const eventHookConfig = {
-      id: "notify-agent-idle",
+      id: "notify-agent-state",
       events: ["worktree.agentStateChanged"],
       command: "stn",
-      args: ["notify", "turn-completion"],
+      args: ["notify", "agent-state"],
       timeoutMs: 3000,
       filter: {
         agentState: "idle",
@@ -1112,7 +1112,7 @@ describe("contract schemas", () => {
       ObserverEventHookInvocationSchema,
       {
         schemaVersion: STATION_SCHEMA_VERSION,
-        hookId: "notify-agent-idle",
+        hookId: "notify-agent-state",
         observedAt: "2026-05-20T12:02:00.000Z",
         event: {
           type: "worktree.agentStateChanged",

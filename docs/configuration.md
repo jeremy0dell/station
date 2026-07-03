@@ -254,11 +254,27 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 > clock/weather strip; `[workspace]` is interaction behavior (scroll, welcome,
 > automations). They never overlap.
 
-`[tui].widgets` is an array discriminated on `type`:
+`[tui].widgets` is an array discriminated on `type`. Every widget accepts an
+optional `enabled` (bool; default true — `false` keeps the entry in config but
+hides it). Array order is display order, left to right:
 
 - **`type = "time"`** — optional `time_format` (`12h` \| `24h`).
 - **`type = "weather"`** — required `city`; optional `label`, `temperature_unit`
   (`fahrenheit` \| `celsius`), `refresh_interval_minutes` (int > 0).
+- **`type = "fleet"`** — live-agent count, derived from the observer snapshot.
+- **`type = "prs"`** — open-PR count across sessions, derived from the snapshot.
+- **`type = "tz"`** — a timezone pair; required `zones` (1–2 of
+  `{ label, time_zone }`, IANA names — an unknown zone renders `--:--`);
+  optional `time_format` (`12h` \| `24h`).
+- **`type = "moon"`** — current moon phase.
+
+`[tui.island]` — opt-in display modes for the floating Station island (top-right
+button). Both default off:
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `rest_counts` | bool | Collapsed island shows live fleet counts (`⠿ working · ● ready · ○ idle`) instead of the bare mark. |
+| `project_rollup` | bool | Hovering the island lists each project's worst agent status instead of the working/idle totals. |
 
 ### `[repository.github]` — repository metadata provider (optional)
 

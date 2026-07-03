@@ -67,6 +67,8 @@ export type StationStoreActions = {
   openContextMenu(target: ContextMenuTarget, anchor: ContextMenuAnchor): void;
   closeContextMenu(): void;
   setContextMenuActiveIndex(activeIndex: number): void;
+  /** Track mouse-over on the floating island (gates its hover-scoped ↵ jump). */
+  setStationButtonHover(hovered: boolean): void;
   /** Show a bottom-right app toast (e.g. a copy confirmation). */
   showToast(message: string, kind?: "info" | "error"): void;
   /** Clear the toast if it still carries `token` (ignores a superseded timer). */
@@ -309,6 +311,12 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
             contextMenu: { ...contextMenu, activeIndex },
           },
         });
+      },
+      setStationButtonHover: (hovered) => {
+        if (state.input.stationButtonHover === hovered) {
+          return;
+        }
+        setState({ ...state, input: { ...state.input, stationButtonHover: hovered } });
       },
       showToast: (message, kind = "info") => {
         toastToken += 1;

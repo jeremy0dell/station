@@ -36,6 +36,7 @@ export function StationApp({
   onCopySelection,
   automations,
   widgets = EMPTY_WIDGETS,
+  island,
   topRowWidgetDeps,
 }: StationAppProps) {
   const overlayVisible = useStoreValue(store, selectStationOverlayVisible);
@@ -80,7 +81,12 @@ export function StationApp({
       <StationToast store={store} />
       {/* Floats at the top-right above everything; only its own hitbox captures
           mouse events, so clicks elsewhere reach the panes underneath. */}
-      <StationButton store={store} stationViewStore={stationViewStore} dispatchMouse={dispatchMouse} />
+      <StationButton
+        store={store}
+        stationViewStore={stationViewStore}
+        dispatchMouse={dispatchMouse}
+        island={island}
+      />
     </box>
   );
 }

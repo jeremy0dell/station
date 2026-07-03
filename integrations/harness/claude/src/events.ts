@@ -250,6 +250,7 @@ export function statusFromClaudeHookEvent(
       reason: `Claude Code requested permission for ${event.tool_name}.`,
       source: "harness_event",
       updatedAt: observedAt,
+      attention: "tool_approval",
     };
   }
   if (event.hook_event_name === "Notification") {
@@ -260,6 +261,7 @@ export function statusFromClaudeHookEvent(
         reason: "Claude Code is waiting for permission approval.",
         source: "harness_event",
         updatedAt: observedAt,
+        attention: "tool_approval",
       };
     }
     if (event.notification_type === "idle_prompt") {

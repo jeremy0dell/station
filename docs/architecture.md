@@ -28,7 +28,7 @@ The repo is organized around these boundaries:
 - `packages/protocol` owns the observer transport and validates request, response, and event messages.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, and typed error conversion.
 - `packages/client` owns the framework-neutral rich-client observer runtime: snapshot loading, the event subscription/reconnect loop, event-to-snapshot reduction, and command dispatch/completion-wait wrappers consumed by the Station UI.
-- `packages/provider-hooks` owns the tiny `stn-ingress` sender, provider hook compaction/reporting, and offline spool writes for generated command hooks.
+- `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Normalization/compaction run observer-side via provider hook adapters.
 - `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs outliving the Station UI, exposing attach/list/close over its own local socket so panes can warm-reattach with scrollback. It is consumed by Station, not by the observer.
 - `packages/config`, `packages/observability`, and `packages/testing` are shared support packages.
 - `integrations/...` adapt external tools: Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, OpenCode, scripted harnesses, and GitHub repository metadata.

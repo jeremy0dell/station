@@ -8,9 +8,9 @@ import type {
   SafeError,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { deliverProviderHookWithSpooling } from "@station/provider-hooks";
 import { describe, expect, it } from "vitest";
 import { createTempState } from "../../../../tests/support/temp-projects";
+import { deliverProviderHookWithSpooling } from "../../src/ingress/deliveryPolicy.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 

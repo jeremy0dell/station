@@ -121,7 +121,15 @@ function normalizeHooksConfig(value: unknown): unknown {
 }
 
 function normalizeTuiConfig(value: unknown): unknown {
-  return normalizeObject(value, {}, { widgets: normalizeTuiWidgetConfigs });
+  return normalizeObject(
+    value,
+    {},
+    { widgets: normalizeTuiWidgetConfigs, island: normalizeTuiIslandConfig },
+  );
+}
+
+function normalizeTuiIslandConfig(value: unknown): unknown {
+  return normalizeObject(value);
 }
 
 function normalizeTuiWidgetConfigs(value: unknown): unknown {
@@ -132,7 +140,14 @@ function normalizeTuiWidgetConfigs(value: unknown): unknown {
 }
 
 function normalizeTuiWidgetConfig(value: unknown): unknown {
-  return normalizeObject(value);
+  return normalizeObject(value, {}, { zones: normalizeTuiTimezoneZones });
+}
+
+function normalizeTuiTimezoneZones(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((zone) => normalizeObject(zone));
 }
 
 function normalizeEventHookConfigs(value: unknown): unknown {

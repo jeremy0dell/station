@@ -139,7 +139,7 @@ describeReal("real Codex hook ingestion", () => {
       await expect(
         waitForNotifyEvent(notify.logPath, (event) => notifyEventMatches(event, "codex"), 60_000),
       ).resolves.toMatchObject({
-        hookId: "notify-agent-idle",
+        hookId: "notify-agent-state",
         event: {
           type: "worktree.agentStateChanged",
           agent: {

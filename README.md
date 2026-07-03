@@ -104,7 +104,7 @@ The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the 
   <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
 </p>
 
-**`@station/provider-hooks`**: the `stn-ingress` sender used by generated hook commands. Delivers compact provider reports to the observer socket with bounded delivery and local spooling when the observer is unavailable.
+**`stn-ingress`** (`apps/cli/src/ingress`): the sender used by generated hook commands. Delivers raw provider hook events to the observer socket with bounded delivery and local spooling when the observer is unavailable; the observer normalizes them via provider hook adapters.
 
 ---
 
@@ -166,6 +166,7 @@ station is under active development. The current build supports local setup, dia
 |-----|---------------|
 | [Overview](docs/overview.md) | What station is, why it exists, and the mental model behind it |
 | [Install](docs/install.md) | Full checkout setup, smoke options, local CLI linking |
+| [Homebrew packaging](docs/homebrew.md) | Draft tap formula path and release checklist |
 | [Architecture](docs/architecture.md) | Authoritative boundary map for architecture decisions |
 | [Development](docs/development.md) | Environment, test gates, data-shape conventions |
 | [TUI](docs/tui.md) | OpenTUI/React Station UI coding, terminal layout, test expectations |

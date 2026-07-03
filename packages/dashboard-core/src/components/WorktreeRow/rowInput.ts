@@ -1,6 +1,5 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
 import {
-  ROW_COLOR_PURPLE,
   type RowColor,
   type RowGridCell,
   type RowGridCellImportance,
@@ -17,16 +16,20 @@ export function worktreeRowGridInput({
   row,
   slot,
   title,
+  focused,
 }: {
   id?: string;
   row: WorktreeRowModel;
   slot: string | undefined;
   title?: string | undefined;
+  focused?: boolean | undefined;
 }): RowGridRowInput {
   const marker = statusMarker(row);
   const displayTitle = title ?? row.branch;
   const activity = activityCellForRow(row);
   const ready = isReadyToRead(row);
+  const state = row.agent?.state ?? "none";
+  // Colour reinforces the glyph + status label; the session name stays foreground.
   const color = row.display.alert
     ? "red"
     : marker.kind === "text" && marker.text === "?"
@@ -48,13 +51,21 @@ export function worktreeRowGridInput({
   if (ready) {
     input.markerColor = "green";
     input.activityColor = "green";
+  } else if (state === "working") {
+    input.markerColor = "blue";
+    input.activityColor = "blue";
+  } else if (!row.display.alert && state !== "unknown") {
+    // Calm states (idle · starting · exited · no agent): status + agent recede to gray.
+    input.activityColor = "gray";
+    input.agentColor = "gray";
   }
-  return color === undefined
-    ? worktreeStyleRowGridInput(input)
-    : worktreeStyleRowGridInput({
-        ...input,
-        color,
-      });
+  if (color !== undefined) {
+    input.color = color;
+  }
+  if (focused === true) {
+    input.focused = true;
+  }
+  return worktreeStyleRowGridInput(input);
 }
 
 export function worktreeStyleRowGridInput(input: {
@@ -69,12 +80,20 @@ export function worktreeStyleRowGridInput(input: {
   color?: RowColor;
   markerColor?: RowColor;
   activityColor?: RowColor;
+  agentColor?: RowColor;
   metadataGroups?: WorktreeRowMetadataGroups;
+  focused?: true;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
   cells.identity = {
     key: "identity",
-    segments: identitySegments(input.slot, input.marker, input.color, input.markerColor),
+    segments: identitySegments(
+      input.slot,
+      input.marker,
+      input.color,
+      input.markerColor,
+      input.focused,
+    ),
     importance: "required",
   };
   cells.title = {
@@ -85,7 +104,7 @@ export function worktreeStyleRowGridInput(input: {
   if (input.agent !== undefined) {
     cells.agent = {
       key: "agent",
-      segments: [textSegment(input.agent, { color: input.color })],
+      segments: [textSegment(input.agent, { color: input.agentColor ?? input.color })],
       importance: "optional",
     };
   }
@@ -128,10 +147,21 @@ function identitySegments(
   marker: RowMarker,
   color: RowColor | undefined,
   markerColor: RowColor | undefined,
+  focused: true | undefined,
 ): RowSegment[] {
-  const segments: RowSegment[] = [textSegment(` [${slot ?? " "}] `, { color })];
+  // The cursor reuses the identity cell's leading pad cell, so a focused row
+  // never shifts the shared grid geometry.
+  const segments: RowSegment[] = [
+    focused === true ? textSegment("▏", { color: "cyan" }) : textSegment(" ", { color }),
+    textSegment(`[${slot ?? " "}] `, { color }),
+  ];
   if (marker.kind === "throbber") {
-    segments.push({ kind: "throbber", variant: marker.variant });
+    const throbberColor = markerColor ?? color;
+    segments.push(
+      throbberColor === undefined
+        ? { kind: "throbber", variant: marker.variant }
+        : { kind: "throbber", variant: marker.variant, color: throbberColor },
+    );
   } else {
     segments.push(textSegment(marker.text, { color: markerColor ?? color }));
   }
@@ -173,7 +203,7 @@ export function statusMarker(row: WorktreeRowModel): RowMarker {
   return { kind: "text", text: "-" };
 }
 
-function isReadyToRead(row: WorktreeRowModel): boolean {
+export function isReadyToRead(row: WorktreeRowModel): boolean {
   return row.agent?.state === "idle" && row.agent.turnReadiness?.state === "ready_to_read";
 }
 
@@ -275,7 +305,7 @@ function checksStateGlyph(checks: NonNullable<WorktreeRowModel["worktree"]["chec
 }
 
 function prMetadataColor(pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>): MetadataColor {
-  return pr.state === "merged" ? ROW_COLOR_PURPLE : "blue";
+  return pr.state === "merged" ? "purple" : "blue";
 }
 
 function failedChecksGlyph(count: number | undefined): string {
@@ -286,7 +316,7 @@ function checksStateColor(
   checks: NonNullable<WorktreeRowModel["worktree"]["checks"]>,
   pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>,
 ): MetadataColor {
-  if (pr.state === "merged" && checks.state === "pass") return ROW_COLOR_PURPLE;
+  if (pr.state === "merged" && checks.state === "pass") return "purple";
   if (checks.state === "pass") return "green";
   if (checks.state === "fail" || checks.state === "cancelled") return "red";
   if (checks.state === "running") return "yellow";

@@ -59,7 +59,7 @@ export function ProjectSettingsPanelView({
       height={height}
       zIndex={10}
       border
-      borderColor={STATION_COLORS.gray}
+      borderColor={STATION_COLORS.hairline}
       backgroundColor={STATION_COLORS.background}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}

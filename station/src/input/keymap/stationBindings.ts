@@ -1,7 +1,9 @@
 import type { StoreApi } from "zustand/vanilla";
-import { STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
+import { agentWorktreePaneId, STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
+import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
+import { rowNeedsUser } from "../../stationButton/status.js";
 import type { TuiStore } from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
@@ -128,6 +130,43 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
   catchAll: () => ({ kind: "swallowed" }),
 };
 
+/**
+ * The island's ↵ jump (C6): active only while the mouse is over the island, a
+ * session is asking for the user, and no overlay owns the screen — the narrow
+ * window where the expanded attention card is showing "↵ or click to focus".
+ * Everywhere else Enter falls through to terminal passthrough untouched.
+ */
+function createStationButtonLayer(
+  stationViewStore: StoreApi<TuiStore>,
+): KeymapLayer<RouteOutcome> {
+  const attentionRow = () => stationViewStore.getState().snapshot?.rows.find(rowNeedsUser);
+  return {
+    id: "station-button",
+    isActive: (state) =>
+      state.input.stationButtonHover &&
+      state.input.activeOverlay === null &&
+      attentionRow() !== undefined,
+    bindings: [
+      {
+        keys: [ENTER_LEGACY],
+        action: (state) => {
+          const row = attentionRow();
+          if (row === undefined) {
+            return { kind: "swallowed" };
+          }
+          // Mirror the island's click: focus the flagged session's live agent
+          // pane, else open the dashboard so the user can act on it.
+          const paneId = agentWorktreePaneId(row.id);
+          if (selectPaneRecord(state, paneId)?.role === "primary-agent") {
+            return { kind: "focus", target: { kind: "pane", paneId } };
+          }
+          return { kind: "overlay-open", overlayId: STATION_OVERLAY_ID };
+        },
+      },
+    ],
+  };
+}
+
 const workspaceLayer: KeymapLayer<RouteOutcome> = {
   id: "workspace",
   isActive: () => true,
@@ -174,7 +213,17 @@ export function createStationKeymap(
 ): KeymapStack<RouteOutcome> {
   const overlayLayer =
     stationViewStore === undefined ? placeholderOverlayLayer : createStationOverlayLayer(stationViewStore);
-  return createKeymapStack([contextMenuLayer, overlayLayer, terminalLayer, workspaceLayer, welcomeLayer]);
+  const layers: KeymapLayer<RouteOutcome>[] = [
+    contextMenuLayer,
+    overlayLayer,
+    terminalLayer,
+    workspaceLayer,
+    welcomeLayer,
+  ];
+  if (stationViewStore !== undefined) {
+    layers.push(createStationButtonLayer(stationViewStore));
+  }
+  return createKeymapStack(layers);
 }
 
 /**

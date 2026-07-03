@@ -20,6 +20,7 @@ import { STATION_OVERLAY_ID } from "../../state/types.js";
 import type { TuiStore } from "@station/dashboard-core";
 import {
   handleStationSequence,
+  resolveKeyFocusedRowAgentTarget,
   resolveKeyForkSessionSubmit,
   resolveKeyNewSessionSubmit,
   resolveKeyRowAgentTarget,
@@ -39,6 +40,12 @@ export function createStationOverlayLayer(
       const target = resolveKeyRowAgentTarget(stationViewStore, key);
       if (target.kind === "launch-managed") {
         return paneLaunchManagedOutcome(target);
+      }
+      // Enter on the focused row (dashboard cursor) takes the same managed
+      // launch; the machine's terminal.focus can't reach Station-hosted panes.
+      const focusedTarget = resolveKeyFocusedRowAgentTarget(stationViewStore, key);
+      if (focusedTarget.kind === "launch-managed") {
+        return paneLaunchManagedOutcome(focusedTarget);
       }
       // Enter on the New Session review screen hosts the agent in Station
       // (create worktree + managed launch) rather than the machine's tmux

@@ -12,7 +12,9 @@ import {
   observerHeaderStatusForConnection,
   snapshotLoadingLines,
 } from "@station/dashboard-core";
-import type { TopRowWidgetText, TuiStore } from "@station/dashboard-core";
+import type { TuiStore } from "@station/dashboard-core";
+import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { activeTuiToast, nextTuiToastExpiry, QUIT_HINT_CLOSE } from "@station/dashboard-core";
 import { CommandPromptView } from "./CommandPromptView.js";
 import { DashboardHeaderRow, DashboardView, Divider } from "./DashboardView.js";
@@ -27,7 +29,7 @@ export type DashboardRootProps = {
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
-  topRowWidgets?: readonly TopRowWidgetText[];
+  topRowWidgets?: readonly TopRowWidgetView[];
 };
 
 export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: DashboardRootProps) {
@@ -37,6 +39,7 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
   const searchQuery = useStore(store, (state) => state.searchQuery);
   const collapsedProjectIds = useStore(store, (state) => state.collapsedProjectIds);
   const scrollOffset = useStore(store, (state) => state.scrollOffset);
+  const focusedRowId = useStore(store, (state) => state.focusedRowId);
   const localRows = useStore(store, (state) => state.localRows);
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
   const activeToast = useStore(store, activeTuiToast);
@@ -84,7 +87,10 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
   if (loading || snapshot === undefined) {
     return (
       <box width="100%" flexGrow={1} flexDirection="column" paddingRight={1}>
-        <DashboardHeaderRow columns={contentColumns} widgets={topRowWidgets} />
+        <DashboardHeaderRow
+          columns={contentColumns}
+          widgets={resolveTopRowWidgets(topRowWidgets, snapshot)}
+        />
         <Divider columns={contentColumns} />
         <box flexDirection="column" flexGrow={1}>
           {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
@@ -108,7 +114,14 @@ export function DashboardRoot({ store, columns, rows, topRowWidgets = [] }: Dash
     <box width="100%" flexGrow={1} flexDirection="column">
       <DashboardView
         snapshot={snapshot}
-        viewState={{ searchQuery, collapsedProjectIds, scrollOffset, terminalRows: rows, localRows }}
+        viewState={{
+          searchQuery,
+          collapsedProjectIds,
+          scrollOffset,
+          terminalRows: rows,
+          localRows,
+          ...(focusedRowId === undefined ? {} : { focusedRowId }),
+        }}
         columns={columns}
         topRowWidgets={topRowWidgets}
         {...(observerStatus === undefined ? {} : { observerStatus })}

@@ -26,6 +26,7 @@ import { applyRestoreSeeds, planLayoutRestoreColdShells } from "./state/layout/r
 import { savedCwdExists } from "./state/layout/savedCwdExists.js";
 import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
 import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
+import { playStationAttentionSound } from "./sources/attentionSound.js";
 import { createStationClient } from "./sources/createStationClient.js";
 import { resolveOpenUrlCommand } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
@@ -85,7 +86,11 @@ function openExternalUrl(rawUrl: string): void {
   }
 }
 
-const stationClient = createStationClient();
+const stationClient = createStationClient(Bun.env, {
+  onAttentionNeeded: () => {
+    playStationAttentionSound();
+  },
+});
 // Loaded before the renderer takes the screen so a config warning is still
 // readable on the normal terminal. A broken/absent file degrades to defaults.
 const stationConfig = await loadStationConfig({ env: Bun.env });

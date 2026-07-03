@@ -1,5 +1,5 @@
 import type { StationConfig } from "@station/config";
-import type { HarnessEventReportReceipt } from "@station/contracts";
+import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -153,6 +153,86 @@ describe("observer provider hook ingress", () => {
     );
     await events.return?.();
     await reconciled.close();
+    sqlite.close();
+  });
+
+  it("normalizes harness hook events observer-side through the provider hook adapter", async () => {
+    const clock = { now: () => new Date(now) };
+    const adapter: ProviderHookAdapter = {
+      provider: "fake-harness",
+      kind: "harness",
+      decideScope: (event) =>
+        (event.payload as { owned?: boolean } | undefined)?.owned === true
+          ? { action: "accept", reason: "station-env" }
+          : { action: "ignore", reason: "missing-station-env" },
+      toHarnessEventReport: (input) => ({
+        ok: true,
+        report: {
+          schemaVersion: STATION_SCHEMA_VERSION,
+          reportId: `fake:${input.event.hookId}`,
+          provider: "fake-harness",
+          kind: "harness",
+          eventType: input.event.event,
+          observedAt: input.event.receivedAt,
+          status: {
+            value: "needs_attention",
+            confidence: "high",
+            reason: "Fake harness requested user input.",
+            source: "harness_event",
+            updatedAt: input.event.receivedAt,
+            attention: "question",
+          },
+          correlation: { worktreeId: "wt_web_task" },
+        },
+      }),
+    };
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+      hookAdapters: [adapter],
+    });
+    const { sqlite, persistence, api } = createTestObserver({ config, providers, clock });
+
+    const receipt = await api.ingestProviderHookEvent({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_adapter_1",
+      provider: "fake-harness",
+      kind: "harness",
+      event: "request_user_input",
+      receivedAt: now,
+      payload: { owned: true },
+    });
+    expect(receipt).toMatchObject({ accepted: true, status: "ingested" });
+
+    await expect(persistence.listProviderObservations()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "fake-harness",
+          entityKind: "harness_event",
+          payload: expect.objectContaining({
+            reportId: "fake:hook_adapter_1",
+            eventType: "request_user_input",
+            status: expect.objectContaining({
+              value: "needs_attention",
+              attention: "question",
+            }),
+          }),
+        }),
+      ]),
+    );
+
+    const ignored = await api.ingestProviderHookEvent({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_adapter_2",
+      provider: "fake-harness",
+      kind: "harness",
+      event: "request_user_input",
+      receivedAt: now,
+      payload: { owned: false },
+    });
+    expect(ignored).toMatchObject({ accepted: false, status: "ignored" });
+
     sqlite.close();
   });
 

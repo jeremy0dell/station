@@ -17,6 +17,7 @@ import {
   selectNewSessionProject,
   selectNewSessionProjectChoices,
 } from "../selectors/selectors.js";
+import { isSlotKey } from "../state/keymap.js";
 import {
   backWizardStep,
   createStepWizardState,
@@ -302,7 +303,11 @@ function pickerInputIntent(
   input: NewSessionInput,
   choose: (key: SelectionKey) => NewSessionFlowAction,
 ): NewSessionInputIntent {
-  return isSelectionKey(input.input) ? transitionIntent(choose(input.input)) : { type: "none" };
+  // isSlotKey, not raw isSelectionKey: the keymap's slot-pattern exceptions
+  // (Tab/Ctrl-I) must apply here too or the keymap contract drifts.
+  return isSlotKey({ ...input.key, input: input.input }) && isSelectionKey(input.input)
+    ? transitionIntent(choose(input.input))
+    : { type: "none" };
 }
 
 function transitionIntent(action: NewSessionFlowAction): NewSessionInputIntent {

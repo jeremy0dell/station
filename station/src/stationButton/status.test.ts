@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createInitialTuiState } from "@station/dashboard-core";
+import { createInitialTuiState, selectFleetSummary } from "@station/dashboard-core";
 import {
   attentionAndFailuresSnapshot,
   manyProjectsSnapshot,
@@ -10,32 +10,41 @@ describe("selectStationButtonStatus", () => {
   it("is empty before a snapshot arrives", () => {
     expect(selectStationButtonStatus(createInitialTuiState())).toEqual({
       attention: false,
+      needsYouCount: 0,
       workingCount: 0,
+      readyCount: 0,
       idleCount: 0,
     });
   });
 
-  it("reports working/idle totals and no attention for a healthy snapshot", () => {
+  it("reports the client-side fleet breakdown and no attention for a healthy snapshot", () => {
     const snapshot = manyProjectsSnapshot();
     const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
+    const fleet = selectFleetSummary(snapshot);
 
-    expect(status.workingCount).toBe(snapshot.counts.working);
-    expect(status.idleCount).toBe(snapshot.counts.idle);
+    expect(status.workingCount).toBe(fleet.working);
+    expect(status.readyCount).toBe(fleet.ready);
+    expect(status.idleCount).toBe(fleet.idle);
+    // The classic totals stay intact: ready + idle covers the contract's idle count.
+    expect(status.readyCount + status.idleCount).toBe(snapshot.counts.idle);
     expect(status.attention).toBe(false);
+    expect(status.needsYouCount).toBe(0);
     expect(status.sessionName).toBeUndefined();
     expect(status.attentionWorktreeId).toBeUndefined();
+    expect(status.projectRollup).toBeUndefined();
   });
 
-  it("flags the first session needing the user", () => {
+  it("flags the first session needing the user and counts the queue", () => {
     const snapshot = attentionAndFailuresSnapshot();
     const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
-    const firstFlagged = snapshot.rows.find(
+    const flagged = snapshot.rows.filter(
       (row) =>
         row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck",
     );
 
     expect(status.attention).toBe(true);
-    expect(status.attentionWorktreeId).toBe(firstFlagged?.id);
+    expect(status.needsYouCount).toBe(flagged.length);
+    expect(status.attentionWorktreeId).toBe(flagged[0]?.id);
     expect(typeof status.sessionName).toBe("string");
   });
 
@@ -51,15 +60,53 @@ describe("selectStationButtonStatus", () => {
     const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
 
     expect(status.attention).toBe(true);
+    expect(status.needsYouCount).toBe(1);
     expect(status.attentionWorktreeId).toBe(stuckRow.id);
+  });
+
+  it("builds the per-project roll-up only when asked, keeping the worst status", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const status = selectStationButtonStatus(state, { projectRollup: true });
+    const rollup = status.projectRollup;
+    if (rollup === undefined) {
+      throw new Error("expected a roll-up when the option is on");
+    }
+
+    // One entry per project holding sessions, in row display order.
+    const projectIds = [...new Set(snapshot.rows.map((row) => row.projectId))];
+    expect(rollup.map((entry) => entry.projectId)).toEqual(projectIds);
+
+    // A project with a flagged session rolls up to needsYou even when it also
+    // has calmer sessions.
+    const flagged = snapshot.rows.find(
+      (row) =>
+        row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck",
+    );
+    const flaggedEntry = rollup.find((entry) => entry.projectId === flagged?.projectId);
+    expect(flaggedEntry?.status).toBe("needsYou");
   });
 
   it("compares field-wise so the snapshot reference can stay stable", () => {
     const snapshot = manyProjectsSnapshot();
-    const a = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
-    const b = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const a = selectStationButtonStatus(state, { projectRollup: true });
+    const b = selectStationButtonStatus(state, { projectRollup: true });
 
     expect(stationButtonStatusEqual(a, b)).toBe(true);
     expect(stationButtonStatusEqual(a, { ...a, workingCount: a.workingCount + 1 })).toBe(false);
+    // Roll-up presence and content participate in the comparison.
+    expect(stationButtonStatusEqual(a, { ...a, projectRollup: undefined })).toBe(false);
+    if (a.projectRollup !== undefined && a.projectRollup.length > 0) {
+      const [first, ...rest] = a.projectRollup;
+      if (first !== undefined) {
+        expect(
+          stationButtonStatusEqual(a, {
+            ...a,
+            projectRollup: [{ ...first, status: "needsYou" }, ...rest],
+          }),
+        ).toBe(a.projectRollup[0]?.status === "needsYou");
+      }
+    }
   });
 });

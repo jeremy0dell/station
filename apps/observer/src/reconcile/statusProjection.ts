@@ -183,6 +183,7 @@ function projectAgent(agent: WorktreeAgent, status: ObservedStatus): WorktreeAge
     reason: status.reason,
     updatedAt: status.updatedAt,
   };
+  if (status.attention !== undefined) nextAgent.attention = status.attention;
   if (agent.pid !== undefined) nextAgent.pid = agent.pid;
   if (agent.runId !== undefined) nextAgent.runId = agent.runId;
   if (agent.sessionId !== undefined) nextAgent.sessionId = agent.sessionId;
@@ -256,6 +257,7 @@ function projectSession(
         reason: status.reason,
         source: status.source,
         updatedAt: status.updatedAt,
+        ...(status.attention === undefined ? {} : { attention: status.attention }),
       },
     };
     changed = !sessionStatusEqual(session, nextSession);
@@ -328,6 +330,7 @@ function agentsEqual(left: WorktreeAgent, right: WorktreeAgent): boolean {
     left.confidence === right.confidence &&
     left.reason === right.reason &&
     left.updatedAt === right.updatedAt &&
+    left.attention === right.attention &&
     readinessEqual(left.turnReadiness, right.turnReadiness)
   );
 }
@@ -357,6 +360,7 @@ function sessionStatusEqual(left: SessionView, right: SessionView): boolean {
   return (
     left.updatedAt === right.updatedAt &&
     left.status.value === right.status.value &&
+    left.status.attention === right.status.attention &&
     left.status.confidence === right.status.confidence &&
     left.status.reason === right.status.reason &&
     left.status.source === right.status.source &&

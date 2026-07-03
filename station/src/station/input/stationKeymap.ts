@@ -133,8 +133,11 @@ export function editableTextBindings(
 
 export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]> = {
   dashboard: [
-    { id: "station.dashboard.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.dashboard.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
+    { id: "station.dashboard.focusUp", pattern: { kind: "named", named: "up" }, action: "station.focus.up", outcome: "handled" },
+    { id: "station.dashboard.focusDown", pattern: { kind: "named", named: "down" }, action: "station.focus.down", outcome: "handled" },
+    { id: "station.dashboard.focusActivate", pattern: { kind: "named", named: "return" }, action: "station.focus.activate", outcome: "handled", help: { keys: "↵", label: "open focused session" } },
+    // Tab folds to Ctrl-I in legacy encoding (sequenceToTuiKey); this chord is Tab.
+    { id: "station.dashboard.nextNeedsMe", pattern: { kind: "char", char: "i", ctrl: true }, action: "station.focus.nextNeedsMe", outcome: "handled", help: { keys: "⇥", label: "next session needing you" } },
     { id: "station.dashboard.help", pattern: { kind: "char", char: "H" }, action: "station.help.open", outcome: "handled", help: { keys: "H", label: "help" } },
     { id: "station.dashboard.helpAlias", pattern: { kind: "char", char: "?" }, action: "station.help.open", outcome: "handled" },
     { id: "station.dashboard.dismiss", pattern: { kind: "char", char: "Q" }, action: "station.overlay.dismiss", outcome: "close-overlay", help: { keys: "Q/esc", label: "close" } },
@@ -285,7 +288,10 @@ export const STATION_HELP_CONTENT = [
   { key: "Esc/↑↓", description: "context menu close/move" },
   { key: "Enter/Sp", description: "context menu select" },
   { text: "station project view", align: "center" as const },
-  { key: "↑/↓ wheel", description: "scroll project list" },
+  { key: "↑/↓", description: "move cursor" },
+  { key: "↵", description: "open focused session" },
+  { key: "tab", description: "next session needing you" },
+  { key: "wheel", description: "scroll project list" },
   { key: "1-9/a-z", description: "start or focus row" },
   { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
   { key: "X", description: "delete session" },
@@ -311,7 +317,11 @@ export const STATION_GLOBAL_BINDINGS: readonly StationBinding[] = [
 export function isSlotKey(key: TuiKey): boolean {
   // ctrl is not excluded: choice lookup in the machine reads key.input only,
   // so Ctrl-A activates slot "a" exactly as apps/tui does under Ink (the
-  // global Ctrl-C binding resolves first).
+  // global Ctrl-C binding resolves first). Ctrl-I is the exception — Tab folds
+  // to it and the next-needs-me chord owns it (mirrors the machine's isSlotKey).
+  if (key.ctrl === true && key.input === "i") {
+    return false;
+  }
   return (
     key.return !== true && key.escape !== true && SELECTION_KEYS.includes(key.input as SelectionKey)
   );

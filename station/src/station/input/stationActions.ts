@@ -16,6 +16,7 @@ import {
   focusProjectSettingsItem as focusProjectSettingsItemState,
   generatedSessionBranch,
   openProjectDefaultAgentPicker,
+  selectDashboardItems,
   selectDashboardViewport,
   type ProjectSettingsItemId,
 } from "@station/dashboard-core";
@@ -188,6 +189,42 @@ export function resolveKeyRowAgentTarget(
   }
   const row = choiceValueByKey(selectDashboardViewport(state.snapshot, state).rowChoices, sequence);
   return row === undefined ? { kind: "none" } : resolveRowAgentTarget(store, row.id);
+}
+
+/**
+ * Enter opens the focused row exactly as its slot key / click does: same
+ * RowAgentTarget, same managed-launch path. The shared machine's ↵ activation
+ * dispatches terminal.focus, which Station-hosted panes can't honor, so the
+ * overlay intercepts here. `none` when nothing is focused, the row left the
+ * snapshot, or an operation is already pending on it.
+ */
+export function resolveKeyFocusedRowAgentTarget(
+  store: StoreApi<TuiStore>,
+  sequence: string,
+): RowAgentTarget {
+  if (sequenceToTuiKey(sequence)?.return !== true) {
+    return { kind: "none" };
+  }
+  const state = store.getState();
+  if (state.snapshot === undefined || deriveStationMode(state) !== "dashboard") {
+    return { kind: "none" };
+  }
+  const focusedRowId = state.focusedRowId;
+  if (focusedRowId === undefined) {
+    return { kind: "none" };
+  }
+  const item = selectDashboardItems(state.snapshot, state).find(
+    (candidate) => candidate.type === "worktree" && candidate.row.id === focusedRowId,
+  );
+  if (
+    item === undefined ||
+    item.type !== "worktree" ||
+    item.pendingRemove !== undefined ||
+    item.pendingStart !== undefined
+  ) {
+    return { kind: "none" };
+  }
+  return resolveRowAgentTarget(store, focusedRowId);
 }
 
 /**

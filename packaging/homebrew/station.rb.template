@@ -1,0 +1,91 @@
+# Draft formula for the upstream Station tap.
+#
+# station is a PRIVATE repo. There is no built-in Homebrew download strategy
+# for private-repo archive tarballs (verified against Homebrew 6.x source --
+# no such strategy exists). Instead this clones via git+https, which
+# transparently authenticates using whatever git credentials the installing
+# user already has for github.com (SSH key, or `gh auth login`'s git
+# credential helper) -- no extra token/env var needed. This formula is for
+# internal/team use, not public onboarding, until the repo goes public.
+#
+# Copy this file to Formula/station.rb in the tap and replace the tag/revision
+# placeholders with a new tagged release before publishing.
+class Station < Formula
+  desc "Terminal-native control plane for AI-agent worktree sessions"
+  homepage "https://github.com/jeremy0dell/station"
+  url "https://github.com/jeremy0dell/station.git",
+      tag:      "v0.1.0",
+      revision: "9842b141e6faf526c8f88225c3f92274d7eb18bf"
+  license "FSL-1.1-ALv2"
+  head "https://github.com/jeremy0dell/station.git", branch: "main"
+
+  depends_on "pnpm" => :build
+  depends_on "python" => :build
+  depends_on "bun"
+  depends_on "diffnav"
+  depends_on "node@24"
+  depends_on "tmux"
+  depends_on "worktrunk"
+
+  def install
+    node24_bin = formula_opt_bin("node@24")
+    ENV.prepend_path "PATH", node24_bin
+
+    system "pnpm", "install", "--frozen-lockfile"
+    system "pnpm", "build"
+
+    cd "station" do
+      system "bun", "install", "--frozen-lockfile"
+      system "bun", "run", "link:station"
+      system "bun", "run", "repair:node-pty"
+    end
+
+    # node-pty ships prebuilds for every platform/arch; keep only this Mac's,
+    # so foreign-arch Mach-O binaries don't end up in the installed prefix
+    # (brew audit --strict flags them).
+    other_macos_arch = Hardware::CPU.arm? ? "darwin-x64" : "darwin-arm64"
+    rm_r "station/node_modules/node-pty/prebuilds/#{other_macos_arch}"
+
+    libexec.install "apps", "bin", "integrations", "packages", "station"
+    libexec.install "node_modules", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"
+
+    write_launcher "stn", libexec/"bin/stn"
+    write_launcher "stn-ingress", libexec/"bin/stn-ingress"
+    write_launcher "stn-tmux-popup", libexec/"integrations/terminal/tmux/bin/stn-popup"
+  end
+
+  def write_launcher(name, target)
+    (bin/name).write <<~SH
+      #!/bin/sh
+      export PATH="#{formula_opt_bin("node@24")}:#{formula_opt_bin("bun")}:$PATH"
+      exec "#{target}" "$@"
+    SH
+  end
+
+  def caveats
+    <<~EOS
+      Homebrew installed the Station launchers. Configure the first project explicitly:
+        cd /path/to/first/git/project
+        stn setup
+        stn doctor
+        stn
+
+      Runtime config: ~/.config/station/config.toml
+      Runtime state:  ~/.local/state/station
+
+      station is a private repo. Installing or upgrading this formula requires
+      git access to jeremy0dell/station (SSH key, or `gh auth login`'s git
+      credential helper).
+    EOS
+  end
+
+  test do
+    ENV["HOME"] = testpath
+    ENV["XDG_RUNTIME_DIR"] = testpath/"run"
+    mkdir_p ENV["XDG_RUNTIME_DIR"]
+
+    output = shell_output("#{bin}/stn setup check --json", 1)
+    assert_match "\"requiredOk\": false", output
+    assert_match "\"configPath\"", output
+  end
+end
