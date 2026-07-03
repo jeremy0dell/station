@@ -20,6 +20,9 @@ export type CodexLaunchOptions = {
   defaultApprovalPolicy?: string;
   defaultSandboxMode?: string;
   noAltScreen?: boolean;
+  observerSocketPath?: string;
+  stateDir?: string;
+  hookSpoolDir?: string;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -69,6 +72,9 @@ export function buildCodexLaunchPlan(
   }
   if (!yolo && sandboxMode !== undefined) {
     providerDataInput.sandboxMode = sandboxMode;
+  }
+  if (options.observerSocketPath !== undefined) {
+    providerDataInput.observerSocketPathProvided = true;
   }
   const providerData = codexProviderData(providerDataInput, {
     configuredProfile,
@@ -182,6 +188,9 @@ function codexLaunchEnv(
 ): Record<string, string> {
   return harnessLaunchEnv("codex", request, {
     env: options.env,
+    observerSocketPath: options.observerSocketPath,
+    stateDir: options.stateDir,
+    hookSpoolDir: options.hookSpoolDir,
     carryEnv: [{ from: "CODEX_HOME" }],
   });
 }

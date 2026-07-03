@@ -6,6 +6,8 @@ For configuration — the runtime `config.toml` (all sections, including `[works
 
 For development, test, and documentation workflow, read `docs/development.md`.
 
+For harness status, attention, and event semantics, read `docs/harness-signals.md`. For adding or upgrading a harness integration, read `docs/harness-authoring.md`.
+
 For runtime trace IDs, command IDs, diagnostic IDs, or live debugging, read `docs/debugging.md`.
 For diagnosis, start with the debugging, diagnostics, and observability tools documented there before reading source code.
 
@@ -34,6 +36,8 @@ Provider-specific diagnostics and behavior must stay behind provider or integrat
 Use strict schemas for untrusted input and shared payload formats. Avoid maintaining parallel hand-written validators for the same shape.
 
 Treat `unknown` as a boundary-only type. At JSON/TOML/CLI/hook/provider boundaries, parse once with a strict Zod schema or contract parser, then pass typed values inward.
+
+Use idiomatic TypeScript and `SafeError` shapes. At error boundaries, convert unknown failures through the repo's SafeError helpers instead of probing Error-like objects by hand. If code is `===`-checking JavaScript primitive type strings (`"string"`, `"number"`, `"boolean"`, `"object"`), it is usually the wrong shape even in small helpers: use a schema, discriminated union, inferred type, or typed builder instead. Keep primitive `typeof` checks only for truly generic JavaScript interop, recursion, or error-normalization boundaries where no typed contract can exist, and keep them local.
 
 Do not add local JavaScript-style type helper clusters such as `isRecord`, `asRecord`, `stringField`, `numberField`, or repeated `"key" in value`/`typeof value.foo === ...` checks for shapes that already have, or should have, a schema or discriminated TypeScript type. If the shape is shared, put the schema in `packages/contracts`; if it is provider-private, keep a provider-local schema beside the adapter/parser.
 

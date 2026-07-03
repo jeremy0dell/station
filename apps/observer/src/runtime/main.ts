@@ -22,6 +22,7 @@ import { emptyConfig } from "./emptyConfig.js";
 import { createObserverEventBus } from "./eventBus.js";
 import { createObserverLogger } from "./logging.js";
 import { type ObserverServer, startObserverServer } from "./server.js";
+import { type SocketOwnershipWatch, watchSocketOwnership } from "./socketOwnership.js";
 
 export type ObserverProviderRegistryFactoryOptions = {
   configPath?: string | undefined;
@@ -110,6 +111,7 @@ export async function runObserverMain(
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
 
   let server: ObserverServer | undefined;
+  let ownership: SocketOwnershipWatch | undefined;
   let stopResolve: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
     stopResolve = resolve;
@@ -117,6 +119,7 @@ export async function runObserverMain(
   let stopping: Promise<void> | undefined;
   const stopObserver = async () => {
     stopping ??= (async () => {
+      ownership?.stop();
       await commandQueue.shutdown();
       await eventHooks?.shutdown();
       await server?.close();
@@ -147,7 +150,34 @@ export async function runObserverMain(
     },
   });
 
-  server = await startObserverServer({ socketPath, api, clock: systemClock });
+  try {
+    server = await startObserverServer({ socketPath, api, clock: systemClock });
+  } catch (error) {
+    await logger.error("Observer server could not start; shutting down runtime services.", {
+      socketPath,
+      error,
+    });
+    // Services started before the bind (command queue, event hooks) hold live
+    // timers; without teardown + forced exit a failed-bind observer lingers as
+    // a spool-stealing zombie that never owned the socket.
+    await stopObserver();
+    sqlite.close();
+    setTimeout(() => process.exit(1), 2000).unref();
+    return 1;
+  }
+  ownership = watchSocketOwnership({
+    socketPath,
+    onLost: () => {
+      void logger.warn("Observer socket was taken over by another process; shutting down.", {
+        socketPath,
+        pid: process.pid,
+      });
+      // A displaced observer must not linger: its loops would keep draining
+      // spool events and firing hooks for a state dir it no longer serves.
+      setTimeout(() => process.exit(0), 5000).unref();
+      void api.stop();
+    },
+  });
   const stopFromSignal = () => {
     void api.stop();
   };
@@ -156,6 +186,8 @@ export async function runObserverMain(
 
   await stopped;
   sqlite.close();
+  // Stray unref-less timers must not keep a stopped observer alive.
+  setTimeout(() => process.exit(0), 2000).unref();
   return 0;
 }
 

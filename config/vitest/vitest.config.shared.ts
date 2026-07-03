@@ -9,6 +9,9 @@ export const stationAliases = {
   "@station/cli/internal": fileURLToPath(
     new URL("../../apps/cli/src/internal.ts", import.meta.url),
   ),
+  "@station/cli/ingress": fileURLToPath(
+    new URL("../../apps/cli/src/ingress/index.ts", import.meta.url),
+  ),
   "@station/cli": fileURLToPath(new URL("../../apps/cli/src/index.ts", import.meta.url)),
   "@station/observer/internal": fileURLToPath(
     new URL("../../apps/observer/src/internal.ts", import.meta.url),
@@ -45,9 +48,6 @@ export const stationAliases = {
   ),
   "@station/pi": fileURLToPath(
     new URL("../../integrations/harness/pi/src/index.ts", import.meta.url),
-  ),
-  "@station/provider-hooks": fileURLToPath(
-    new URL("../../packages/provider-hooks/src/index.ts", import.meta.url),
   ),
   "@station/protocol": fileURLToPath(
     new URL("../../packages/protocol/src/index.ts", import.meta.url),

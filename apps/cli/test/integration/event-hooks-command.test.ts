@@ -58,7 +58,7 @@ describe("CLI event hook commands", () => {
     );
     expect(after).toContain("timeout_ms = 8000");
     expect(after).toContain("[hooks.event.filter]");
-    expect(after).not.toContain('agent_state = "idle"');
+    expect(after).toContain('agent_state = "idle"');
     expect(after).not.toContain('[hooks.event.filter]\nharness = "codex"');
     expect(after).toContain('change_source = "harness_event_report"');
     expect(after).not.toContain('harness_event_type = "Stop"');
@@ -172,7 +172,7 @@ describe("CLI event hook commands", () => {
     expect(after).not.toContain("display notification");
     expect(after).toContain("[hooks.event.filter]");
     expect(after).toContain('change_source = "harness_event_report"');
-    expect(after).not.toContain('agent_state = "idle"');
+    expect(after).toContain('agent_state = "idle"');
     expect(after).not.toContain('harness_event_type = "Stop"');
     expect(after).toContain('command = "stn"');
     expect(after).toContain(
@@ -218,7 +218,7 @@ describe("CLI event hook commands", () => {
     expect(after.match(/id = "notify-agent-state"/g)).toHaveLength(1);
     expect(after).not.toContain("display notification");
     expect(after).toContain('change_source = "harness_event_report"');
-    expect(after).not.toContain('agent_state = "idle"');
+    expect(after).toContain('agent_state = "idle"');
   });
 });
 

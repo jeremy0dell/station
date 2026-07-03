@@ -68,6 +68,10 @@ const setIntervalAllowlist = new Map([
     "packages/dashboard-core/src/widgets/useTopRowWidgets.ts",
     "Header widgets use local render refresh intervals for clock/weather text, isolated from observer runtime IO.",
   ],
+  [
+    "apps/observer/src/runtime/socketOwnership.ts",
+    "Socket takeover by another observer (unlink+rebind) emits no fs event to the displaced process; inode polling is the only loss signal.",
+  ],
 ]);
 
 describe("boundary inventory guard", () => {

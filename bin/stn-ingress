@@ -12,7 +12,7 @@ while [ -h "$script" ]; do
 done
 
 root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd)
-entry=$root/packages/provider-hooks/dist/main.js
+entry=$root/apps/cli/dist/ingressMain.js
 
 if [ ! -f "$entry" ]; then
   printf '%s\n' "stn-ingress has not been built. Run: pnpm build" >&2

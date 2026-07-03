@@ -371,39 +371,6 @@ importers:
         specifier: ^4.1.12
         version: 4.4.3
 
-  packages/provider-hooks:
-    dependencies:
-      '@station/claude':
-        specifier: workspace:*
-        version: link:../../integrations/harness/claude
-      '@station/codex':
-        specifier: workspace:*
-        version: link:../../integrations/harness/codex
-      '@station/config':
-        specifier: workspace:*
-        version: link:../config
-      '@station/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@station/cursor':
-        specifier: workspace:*
-        version: link:../../integrations/harness/cursor
-      '@station/observability':
-        specifier: workspace:*
-        version: link:../observability
-      '@station/pi':
-        specifier: workspace:*
-        version: link:../../integrations/harness/pi
-      '@station/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@station/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@station/worktrunk':
-        specifier: workspace:*
-        version: link:../../integrations/worktree/worktrunk
-
   packages/runtime:
     dependencies:
       effect:

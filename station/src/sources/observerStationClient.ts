@@ -4,12 +4,14 @@ import {
   type ObserverService,
 } from "@station/client";
 import { bridgeOperationService } from "@station/dashboard-core";
+import { isNeedsAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
 import type { StationClient } from "./types.js";
 
 export type CreateObserverStationClientOptions = {
   socketPath?: string;
   /** Test seam: inject a fake observer service instead of a socket. */
   service?: ObserverService;
+  onAttentionNeeded?: (event: StationAttentionEvent) => void;
 };
 
 /**
@@ -26,7 +28,22 @@ export function createObserverStationClient(
       socketPath: requireSocketPath(options.socketPath),
       clientLabel: "Station",
     });
-  const runtime = createStationClientRuntime({ service, clientLabel: "Station" });
+  const runtime = createStationClientRuntime({
+    service,
+    clientLabel: "Station",
+    hooks: {
+      onEvent: (event) => {
+        if (!isNeedsAttentionEvent(event)) {
+          return;
+        }
+        try {
+          options.onAttentionNeeded?.(event);
+        } catch {
+          // Notification failures must not tear down the observer subscription.
+        }
+      },
+    },
+  });
 
   return {
     state: {
