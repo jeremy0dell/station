@@ -140,7 +140,14 @@ function normalizeTuiWidgetConfigs(value: unknown): unknown {
 }
 
 function normalizeTuiWidgetConfig(value: unknown): unknown {
-  return normalizeObject(value);
+  return normalizeObject(value, {}, { zones: normalizeTuiTimezoneZones });
+}
+
+function normalizeTuiTimezoneZones(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((zone) => normalizeObject(zone));
 }
 
 function normalizeEventHookConfigs(value: unknown): unknown {

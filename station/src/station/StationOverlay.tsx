@@ -5,7 +5,8 @@ import type { StoreApi } from "zustand/vanilla";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseTarget } from "./input/stationMouse.js";
-import type { TopRowWidgetText, TuiStore } from "@station/dashboard-core";
+import type { TuiStore } from "@station/dashboard-core";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { DashboardRoot } from "./view/DashboardRoot.js";
 import { STATION_COLORS } from "./view/theme.js";
 import { StationMouseProvider, type StationMouseDispatch } from "./view/stationMouseContext.js";
@@ -13,7 +14,7 @@ import { StationMouseProvider, type StationMouseDispatch } from "./view/stationM
 export type StationOverlayProps = {
   /** Owned by main.tsx (HMR recreates store + renderer + handlers together). */
   store: StoreApi<TuiStore>;
-  topRowWidgets?: readonly TopRowWidgetText[];
+  topRowWidgets?: readonly TopRowWidgetView[];
   /** The Station input runtime's mouse entry point. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
