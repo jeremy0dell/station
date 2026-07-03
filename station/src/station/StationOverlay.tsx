@@ -106,7 +106,7 @@ export function StationOverlay({ store, topRowWidgets = [], dispatchMouse }: Sta
         height={layout.height}
         zIndex={30}
         border
-        borderColor={STATION_COLORS.hairline}
+        borderColor={STATION_COLORS.gray}
         backgroundColor={STATION_COLORS.background}
         flexDirection="column"
         onMouseDown={stopPopupMouse}
