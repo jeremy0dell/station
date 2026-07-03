@@ -56,10 +56,10 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Prompt order: install codex (y), decline cursor/opencode/pi/claude, decline
-        // link-launchers + Worktrunk-hooks + codex-hooks, accept Write config (y),
-        // decline shell-integration + popup. (Crush removal dropped one harness prompt.)
-        answers: ["y", "n", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
+        // Prompt order: install codex (y), decline cursor/opencode/pi/claude,
+        // decline Worktrunk-hooks + codex-hooks, accept Write config (y),
+        // decline shell-integration + popup.
+        answers: ["y", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -67,7 +67,6 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("No supported agent CLI is available.");
       expect(result.stdout).toContain("Running: sh -c");
       expect(result.stdout).toContain("fake codex installer ran");
-      expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex agent hooks?");
       expect(result.stdout).toContain("Applying: Write STATION config");
@@ -145,6 +144,9 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
     await writeCodexShim(bin);
   }
   if (input.harness === "installable-codex") {
+    await writeShim(bin, "stn", "exit 0\n");
+    await writeShim(bin, "stn-ingress", "exit 0\n");
+    await writeShim(bin, "stn-tmux-popup", "exit 0\n");
     await writeShim(
       bin,
       "sh",

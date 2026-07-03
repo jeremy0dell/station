@@ -7,6 +7,7 @@ import type {
   TerminalProvider,
   WorktreeProvider,
 } from "@station/contracts";
+import { withTimeout } from "@station/runtime";
 import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 
 export type ProviderRegistryInput = {
@@ -110,11 +111,26 @@ export class ProviderRegistry {
     const timeoutMs = options?.timeoutMs ?? 15_000;
     await Promise.all(
       Array.from(this.harnesses.values()).map(async (provider) => {
-        if (provider.versionInfo === undefined) {
+        const versionInfo = provider.versionInfo;
+        if (versionInfo === undefined) {
           return;
         }
         try {
-          const info = await withTimeout(provider.versionInfo(), timeoutMs);
+          const info = await withTimeout(() => versionInfo(), {
+            timeoutMs,
+            error: {
+              tag: "RuntimeError",
+              code: "HARNESS_VERSION_PROBE_FAILED",
+              message: "Harness version probe failed.",
+              provider: provider.id,
+            },
+            timeoutError: {
+              tag: "TimeoutError",
+              code: "HARNESS_VERSION_PROBE_TIMEOUT",
+              message: "Harness version probe timed out.",
+              provider: provider.id,
+            },
+          });
           if (info.installedVersion !== undefined || info.latestVersion !== undefined) {
             this.harnessVersions.set(provider.id, info);
           }
@@ -124,20 +140,4 @@ export class ProviderRegistry {
       }),
     );
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("version probe timed out")), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
