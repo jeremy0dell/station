@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets/types";
@@ -441,6 +444,62 @@ describe("Station app composition", () => {
     expect(latest.panes[1]?.split).toEqual({ anchorPaneId: MAIN_PANE_ID, direction: "right" });
     expect(latest.activePaneId).toBe("pane-split-9");
     expect(latest.cwdByPane["pane-split-9"]).toBe("/work/root/sub");
+  });
+
+  it("writes widget settings changes to config.toml", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "station-widget-config-"));
+    teardowns.push(() => rmSync(tempDir, { recursive: true, force: true }));
+    const projectRoot = join(tempDir, "project");
+    mkdirSync(projectRoot);
+    const configPath = join(tempDir, "config.toml");
+    writeFileSync(
+      configPath,
+      `
+schema_version = 1
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-build-shell"
+
+[[tui.widgets]]
+type = "time"
+
+[[projects]]
+id = "web"
+label = "web"
+root = "${projectRoot}"
+`,
+      "utf8",
+    );
+
+    const store = createStationStore();
+    const source = new FakeStationSource(manyProjectsSnapshot());
+    const scripted = createScriptedTerminal();
+    const composition = createStation({
+      store,
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service: new FakeTuiObserverService(manyProjectsSnapshot()),
+        start: () => source.start(),
+        stop: () => source.stop(),
+      },
+      shutdown: () => {},
+      createTerminal: () => scripted.terminal,
+      tuiConfig: { widgets: [{ type: "time" }] },
+      tuiConfigPath: configPath,
+    });
+    teardowns.push(() => composition.dispose());
+
+    composition.start();
+    composition.stationViewStore.setState({ widgets: [{ type: "moon" }] });
+
+    await waitFor(() => readFileSync(configPath, "utf8").includes('type = "moon"'));
+    const sourceText = readFileSync(configPath, "utf8");
+    expect(sourceText).toContain("[[tui.widgets]]\ntype = \"moon\"");
+    expect(sourceText).not.toContain('type = "time"');
   });
 });
 

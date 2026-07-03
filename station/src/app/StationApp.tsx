@@ -34,7 +34,6 @@ export function StationApp({
   onCopySelection,
   automations,
   island,
-  widgetsPersisted,
   topRowWidgetDeps,
 }: StationAppProps) {
   const overlayVisible = useStoreValue(store, selectStationOverlayVisible);
@@ -70,7 +69,6 @@ export function StationApp({
           store={stationViewStore}
           topRowWidgets={topRowWidgets}
           dispatchMouse={dispatchMouse}
-          widgetsPersisted={widgetsPersisted}
         />
       ) : null}
       <ContextMenuRoot

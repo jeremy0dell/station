@@ -9,7 +9,6 @@ import type { StoreApi } from "zustand/vanilla";
 import type { Automation, ScrollOnOutputMode } from "../config/stationConfig.js";
 import type { ClipboardEffects } from "../copy/clipboard.js";
 import type { StationInputRuntime } from "../input/stationInput.js";
-import type { WidgetConfigPersistenceOptions } from "../station/widgets/widgetPersistence.js";
 import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import type { StationStore } from "../state/store.js";
 import type { StationClient } from "../sources/types.js";
@@ -30,8 +29,6 @@ export type StationAppProps = {
   automations: readonly Automation[];
   /** Opt-in island display modes from `[tui.island]`. */
   island?: TuiIslandConfig;
-  /** Whether widget edits are written back to config.toml. */
-  widgetsPersisted?: boolean;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
 };
 
@@ -53,7 +50,7 @@ export type CreateStationOptions = {
   automations?: readonly Automation[];
   openExternalUrl?: (url: string) => void;
   tuiConfig?: TuiConfig;
-  widgetConfig?: WidgetConfigPersistenceOptions;
+  tuiConfigPath?: string;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   /** Existing registry to reuse across Bun HMR without killing live PTYs. */
   registry?: PtyRegistry;

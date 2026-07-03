@@ -13,7 +13,7 @@ export type WidgetSettingsLine =
 
 export type WidgetSettingsPanelModel = {
   title: string;
-  /** Session-scope reminder under the title. */
+  /** Config-scope reminder under the title. */
   note: string;
   lines: readonly WidgetSettingsLine[];
   footer: string;
@@ -23,7 +23,6 @@ export type WidgetSettingsPanelModel = {
 export function widgetSettingsPanelModel(
   screen: Extract<TuiState["screen"], { name: "widgetSettings" }>,
   widgets: readonly TuiWidgetConfig[],
-  options: { persisted?: boolean } = {},
 ): WidgetSettingsPanelModel {
   if (screen.focus === "picker") {
     return {
@@ -52,7 +51,7 @@ export function widgetSettingsPanelModel(
   lines.push({ kind: "add", label: "[ + add widget ]", active: false });
   return {
     title: "widgets",
-    note: options.persisted === true ? "saved to config.toml" : "session only · edit config.toml",
+    note: "saved to config.toml",
     lines,
     footer: "↵ toggle   [ ] reorder   x remove   a add   esc close",
     focus: "list",

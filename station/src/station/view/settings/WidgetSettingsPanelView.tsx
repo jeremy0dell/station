@@ -17,7 +17,6 @@ export type WidgetSettingsPanelViewProps = {
   widgets: readonly TuiWidgetConfig[];
   columns: number;
   rows: number;
-  persisted?: boolean;
 };
 
 export function WidgetSettingsPanelView({
@@ -25,10 +24,9 @@ export function WidgetSettingsPanelView({
   widgets,
   columns,
   rows,
-  persisted = false,
 }: WidgetSettingsPanelViewProps) {
   const dispatch = useStationMouse();
-  const model = widgetSettingsPanelModel(screen, widgets, { persisted });
+  const model = widgetSettingsPanelModel(screen, widgets);
   const { top, left, width, height, innerWidth } = widgetSettingsPanelLayout(
     columns,
     rows,
@@ -115,11 +113,13 @@ function PanelLine({
     );
   }
   if (line.kind === "pickerChoice") {
-    const background = hover
-      ? STATION_COLORS.hoverBackground
-      : line.active
-        ? STATION_COLORS.focusBackground
-        : STATION_COLORS.background;
+    let background: string = STATION_COLORS.background;
+    if (line.active) {
+      background = STATION_COLORS.focusBackground;
+    }
+    if (hover) {
+      background = STATION_COLORS.hoverBackground;
+    }
     return (
       <text
         fg={line.active ? STATION_COLORS.cyan : STATION_COLORS.foreground}
@@ -136,13 +136,12 @@ function PanelLine({
   const dimmed = focus === "picker";
   const chip = line.enabled ? "[on ]" : "[off]";
   const marker = line.active && !dimmed ? "▸" : " ";
-  const rowColor = dimmed
-    ? STATION_COLORS.gray
-    : line.active
-      ? STATION_COLORS.cyan
-      : line.enabled
-        ? STATION_COLORS.foreground
-        : STATION_COLORS.gray;
+  let rowColor: string = STATION_COLORS.gray;
+  if (!dimmed && line.active) {
+    rowColor = STATION_COLORS.cyan;
+  } else if (!dimmed && line.enabled) {
+    rowColor = STATION_COLORS.foreground;
+  }
   return (
     <box flexDirection="row">
       <text

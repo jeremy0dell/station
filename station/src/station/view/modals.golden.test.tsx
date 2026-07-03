@@ -163,7 +163,7 @@ const CASES: ModalCase[] = [
     },
     expect: [
       "widgets",
-      "session only · edit config.toml",
+      "saved to config.toml",
       "[on ] time",
       "[off] weather NYC",
       "[on ] moon",

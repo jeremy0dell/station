@@ -1,4 +1,6 @@
+import { setTuiWidgetsInConfig } from "@station/config";
 import type { TuiStore } from "@station/dashboard-core";
+import { safeErrorFromUnknown } from "@station/runtime";
 import type { StoreApi } from "zustand/vanilla";
 import type { Automation } from "../config/stationConfig.js";
 import {
@@ -23,10 +25,6 @@ import type { StationClient } from "../sources/types.js";
 import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { createStationViewStore } from "../station/store/stationViewStore.js";
-import {
-  createWidgetConfigPersistence,
-  type WidgetConfigPersistence,
-} from "../station/widgets/widgetPersistence.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
@@ -46,7 +44,6 @@ export function createStation(options: CreateStationOptions): Station {
   const stationViewStore = createStationViewStore(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
   });
-  const widgetPersistence = createWidgetConfigPersistence(stationViewStore, options.widgetConfig);
   const registry = setupRegistry(options, store, stationClient);
 
   // Source → store/registry bridges, plus debounced disk layout (production only).
@@ -61,7 +58,7 @@ export function createStation(options: CreateStationOptions): Station {
     registry,
     reconcilers,
     layoutWriter,
-    widgetPersistence,
+    tuiConfigPath: options.tuiConfigPath,
   });
 
   // Input runtime; its shutdown tears down this composition, then exits the app.
@@ -200,7 +197,7 @@ function createLifecycle(deps: {
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
-  widgetPersistence: WidgetConfigPersistence | undefined;
+  tuiConfigPath: string | undefined;
 }): Pick<Station, "start" | "disposeForShutdown" | "disposeForHotReload"> {
   const {
     store,
@@ -209,13 +206,13 @@ function createLifecycle(deps: {
     registry,
     reconcilers,
     layoutWriter,
-    widgetPersistence,
+    tuiConfigPath,
   } = deps;
   let detachStationSource: (() => void) | undefined;
   let detachReconcile: (() => void) | undefined;
   let detachSessionReconcile: (() => void) | undefined;
   let detachLayoutWriter: (() => void) | undefined;
-  let detachWidgetPersistence: (() => void) | undefined;
+  let detachWidgetConfigWrites: (() => void) | undefined;
   let disposed = false;
 
   const disposeInternal = (disposeTerminals: boolean): void => {
@@ -231,8 +228,8 @@ function createLifecycle(deps: {
     detachSessionReconcile = undefined;
     detachLayoutWriter?.();
     detachLayoutWriter = undefined;
-    detachWidgetPersistence?.();
-    detachWidgetPersistence = undefined;
+    detachWidgetConfigWrites?.();
+    detachWidgetConfigWrites = undefined;
     // Real shutdown flushes pending layout synchronously (process.exit follows);
     // an HMR teardown just drops the timer — the reused store/registry keep it.
     if (disposeTerminals) {
@@ -269,13 +266,63 @@ function createLifecycle(deps: {
         layoutWriter.schedule();
         detachLayoutWriter = store.subscribe(() => layoutWriter.schedule());
       }
-      detachWidgetPersistence = widgetPersistence?.start();
+      detachWidgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
       detachStationSource = stationViewStore.getState().start();
       stationClient.start();
     },
     disposeForShutdown: (): void => disposeInternal(true),
     disposeForHotReload: (): void => disposeInternal(false),
   };
+}
+
+function startWidgetConfigWrites(
+  stationViewStore: StoreApi<TuiStore>,
+  configPath: string | undefined,
+): () => void {
+  let previous = stationViewStore.getState().widgets;
+  let pending: TuiStore["widgets"] | undefined;
+  let saving = false;
+
+  const drain = async (): Promise<void> => {
+    if (saving) {
+      return;
+    }
+    saving = true;
+    try {
+      while (pending !== undefined) {
+        const widgets = pending;
+        pending = undefined;
+        try {
+          if (configPath === undefined) {
+            throw new Error("No config.toml path is available.");
+          }
+          await setTuiWidgetsInConfig({ configPath, widgets });
+        } catch (error) {
+          const safeError = safeErrorFromUnknown(error, {
+            tag: "StationWidgetConfigError",
+            code: "STATION_WIDGET_CONFIG_SAVE_FAILED",
+            message: "Could not save widgets to config.toml.",
+          });
+          stationViewStore.getState().pushToast({
+            kind: "error",
+            message: "Could not save widgets to config.toml.",
+            hint: safeError.message,
+          });
+        }
+      }
+    } finally {
+      saving = false;
+    }
+  };
+
+  return stationViewStore.subscribe((state) => {
+    if (state.widgets === previous) {
+      return;
+    }
+    previous = state.widgets;
+    pending = state.widgets;
+    void drain();
+  });
 }
 
 /** Build the input runtime; aux shell placement uses the host when a socket is set. */
@@ -340,9 +387,6 @@ function buildViewProps(
   }
   if (options.topRowWidgetDeps !== undefined) {
     viewProps.topRowWidgetDeps = options.topRowWidgetDeps;
-  }
-  if (options.widgetConfig !== undefined) {
-    viewProps.widgetsPersisted = true;
   }
   return viewProps;
 }
