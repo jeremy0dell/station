@@ -112,13 +112,21 @@ function* widgetStripCandidates(widgets: readonly TopRowWidgetText[]): Generator
 }
 
 export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {
+  const parts = projectHeaderLabelParts(project, collapsed);
+  return `${parts.title}${parts.counts}`;
+}
+
+export function projectHeaderLabelParts(
+  project: ProjectView,
+  collapsed: boolean,
+): { title: string; counts: string } {
   const caret = collapsed ? "▶" : "▼";
   const sessions = `${project.counts.worktrees} ${plural(project.counts.worktrees, "session")}`;
   const agents =
     project.counts.agents > 0
       ? ` · ${project.counts.agents} ${plural(project.counts.agents, "agent")}`
       : "";
-  return `${caret} ${project.label}  ${sessions}${agents}`;
+  return { title: `${caret} ${project.label}`, counts: `  ${sessions}${agents}` };
 }
 
 export function emptyProjectLabel(): string {

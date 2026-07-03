@@ -10,7 +10,7 @@ import {
   dashboardHeaderLine,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
-  projectHeaderLabel,
+  projectHeaderLabelParts,
   rowGridInputForViewportItem,
   scrollIndicatorLabel,
   type DashboardHeaderStatus,
@@ -256,7 +256,9 @@ function columnHeaderRowInput(): RowGridRowInput {
       agent: { key: "agent", segments: [textSegment("AGENT")], importance: "optional" },
       activity: { key: "activity", segments: [textSegment("STATUS")], importance: "optional" },
     },
-    metadataGroups: { diff: [textSegment("DIFF")], pr: [textSegment("PR")] },
+    // The trailing middot composes to "DIFF · PR" via the groups' joining space,
+    // and the ladder sheds diff first, so the dot can never be orphaned.
+    metadataGroups: { diff: [textSegment("DIFF ·")], pr: [textSegment("PR")] },
   };
 }
 
@@ -512,15 +514,15 @@ function ProjectHeaderLine({
       <text
         flexGrow={1}
         fg={STATION_COLORS.foreground}
-        attributes={TextAttributes.BOLD}
         {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
-        {truncateCells(
-          projectHeaderLabel(project, collapsed),
-          Math.max(1, columns - shellWidth - quickSessionWidth),
-        )}
+        <ProjectHeaderLabel
+          project={project}
+          collapsed={collapsed}
+          width={Math.max(1, columns - shellWidth - quickSessionWidth)}
+        />
       </text>
       <ShellAffordance
         target={{ kind: "openShellForProject", projectId: project.id }}
@@ -529,5 +531,26 @@ function ProjectHeaderLine({
       />
       <QuickSessionAffordance projectId={project.id} compact={compact} />
     </box>
+  );
+}
+
+function ProjectHeaderLabel({
+  project,
+  collapsed,
+  width,
+}: {
+  project: ProjectView;
+  collapsed: boolean;
+  width: number;
+}) {
+  const parts = projectHeaderLabelParts(project, collapsed);
+  const combined = truncateCells(`${parts.title}${parts.counts}`, width);
+  const title = combined.slice(0, parts.title.length);
+  const counts = combined.slice(parts.title.length);
+  return (
+    <>
+      <span attributes={TextAttributes.BOLD}>{title}</span>
+      <span fg={STATION_COLORS.gray}>{counts}</span>
+    </>
   );
 }
