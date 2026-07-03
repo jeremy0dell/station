@@ -3,6 +3,7 @@ import { createInitialTuiState } from "../../../src/state/screen.js";
 import {
   handleWidgetSettingsKey,
   openWidgetSettings,
+  widgetSettingsRemoveAt,
   widgetSettingsRowLabel,
 } from "../../../src/state/screens/widgetSettings.js";
 import type { TuiState } from "../../../src/state/types.js";
@@ -52,6 +53,15 @@ describe("widgetSettings screen", () => {
     state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
     state = handleWidgetSettingsKey(state, { input: "x" }).state;
     expect(state.widgets.map((widget) => widget.type)).toEqual(["time", "fleet"]);
+    expect(screenOf(state).cursor).toBe(1);
+  });
+
+  it("mouse-removing a row above the cursor keeps the cursor on its widget", () => {
+    let state = panelState();
+    state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
+    state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
+    state = widgetSettingsRemoveAt(state, 0);
+    expect(state.widgets.map((widget) => widget.type)).toEqual(["fleet", "moon"]);
     expect(screenOf(state).cursor).toBe(1);
   });
 

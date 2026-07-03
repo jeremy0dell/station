@@ -50,7 +50,8 @@ export function widgetSettingsToggleAt(state: TuiState, index: number): TuiState
   );
 }
 
-/** Mouse path: remove the clicked row, clamping the cursor to the shorter list. */
+/** Mouse path: remove the clicked row; the cursor follows the widget it was on
+ * (rows above it shift up by one), clamping only when the cursor row itself went away. */
 export function widgetSettingsRemoveAt(state: TuiState, index: number): TuiState {
   const screen = state.screen;
   if (screen.name !== "widgetSettings" || index < 0 || index >= state.widgets.length) {
@@ -62,7 +63,10 @@ export function widgetSettingsRemoveAt(state: TuiState, index: number): TuiState
     {
       ...screen,
       focus: "list",
-      cursor: clampCursor(Math.min(screen.cursor, index), widgets.length),
+      cursor: clampCursor(
+        index < screen.cursor ? screen.cursor - 1 : screen.cursor,
+        widgets.length,
+      ),
     },
   );
 }
