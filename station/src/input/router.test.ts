@@ -25,7 +25,7 @@ import {
   SPLIT_BELOW_LEGACY,
   SPLIT_RIGHT_LEGACY,
   STATION_EXIT_LEGACY,
-} from "./stationBindings.js";
+} from "./keymap/stationBindings.js";
 
 const keymap = createStationKeymap();
 const mouseBindings = createStationMouseBindings();
