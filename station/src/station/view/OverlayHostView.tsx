@@ -22,6 +22,7 @@ export type OverlayHostViewProps = {
   localRows: TuiLocalRows;
   /** Live session widget set for the widget-settings panel. */
   widgets?: readonly TuiWidgetConfig[];
+  widgetsPersisted?: boolean;
 };
 
 export function OverlayHostView({
@@ -31,13 +32,20 @@ export function OverlayHostView({
   rows,
   localRows,
   widgets = [],
+  widgetsPersisted = false,
 }: OverlayHostViewProps) {
   if (screen.name === "help") {
     return <HelpOverlayView columns={columns} rows={rows} />;
   }
   if (screen.name === "widgetSettings") {
     return (
-      <WidgetSettingsPanelView screen={screen} widgets={widgets} columns={columns} rows={rows} />
+      <WidgetSettingsPanelView
+        screen={screen}
+        widgets={widgets}
+        columns={columns}
+        rows={rows}
+        persisted={widgetsPersisted}
+      />
     );
   }
   if (screen.name === "addProject") {

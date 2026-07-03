@@ -13,15 +13,17 @@ import { ControlByte } from "../terminal/protocol/controlBytes.js";
 import { DecMode } from "../terminal/protocol/decset.js";
 
 // CSI ? <param(;param)*> (h|l) — DECSET (h) / DECRST (l), possibly batching
-// several modes. Built from a string so the ESC byte isn't a control char in a
-// regex literal (matches the style in input/terminalReplies.ts).
+// several modes. Built from strings so the ESC byte isn't a control char in
+// regex literals (matches the style in input/terminalReplies.ts).
 const DECSET_PATTERN = "\\x1b\\[\\?([0-9;]+)([hl])";
-// A still-incomplete DECSET prefix at a chunk's tail, carried into the next
-// chunk so a sequence split across PTY reads ("\x1b[?10" then "49h") is matched.
-const PARTIAL_DECSET = new RegExp("\\x1b(?:\\[(?:\\?[0-9;]*)?)?$");
+const KITTY_KEYBOARD_PATTERN = "\\x1b\\[([<>=])([0-9]*)u";
+const STICKY_SEQUENCE_PATTERN = new RegExp(`${DECSET_PATTERN}|${KITTY_KEYBOARD_PATTERN}`, "g");
+// A still-incomplete sticky-mode prefix at a chunk's tail, carried into the
+// next chunk so a sequence split across PTY reads ("\x1b[?10" then "49h") is matched.
+const PARTIAL_STICKY_SEQUENCE = new RegExp("\\x1b(?:\\[(?:\\?[0-9;]*|[<>=][0-9]*)?)?$");
 // Big enough to hold the longest realistic semicolon-batched DECSET split across
-// a read boundary (e.g. ?1049;1000;1002;1003;1006;2004h); PARTIAL_DECSET still
-// rejects non-DECSET tails of any length, so this only bounds a stray ESC run.
+// a read boundary (e.g. ?1049;1000;1002;1003;1006;2004h); the partial matcher
+// still rejects unrelated tails of any length, so this only bounds a stray ESC run.
 const MAX_CARRY = 64;
 // RIS (ESC c) — a full terminal reset clears every DEC private mode.
 const RIS = `${ControlByte.Esc}c`;
@@ -61,7 +63,9 @@ const STICKY_ON_MODES: readonly number[] = [
 
 export class TerminalModeTracker {
   readonly #on = new Set<number>();
+  readonly #kittyKeyboardFlagStack: number[] = [];
   #cursorHidden = false;
+  #kittyKeyboardFlags = 0;
   #carry = "";
 
   feed(chunk: string): void {
@@ -73,35 +77,43 @@ export class TerminalModeTracker {
     const scanFrom = risIndex >= 0 ? risIndex + RIS.length : 0;
     if (risIndex >= 0) {
       this.#on.clear();
+      this.#kittyKeyboardFlagStack.length = 0;
       this.#cursorHidden = false;
+      this.#kittyKeyboardFlags = 0;
     }
-    const re = new RegExp(DECSET_PATTERN, "g");
-    re.lastIndex = scanFrom;
+    STICKY_SEQUENCE_PATTERN.lastIndex = scanFrom;
     let lastEnd = scanFrom;
-    let match: RegExpExecArray | null = re.exec(data);
+    let match: RegExpExecArray | null = STICKY_SEQUENCE_PATTERN.exec(data);
     while (match !== null) {
-      const set = match[2] === "h";
-      for (const param of match[1].split(";")) {
-        const mode = Number(param);
-        if (mode === DecMode.CursorVisible) {
-          this.#cursorHidden = !set;
-        } else if (STICKY_ON_MODES.includes(mode)) {
-          if (set) {
-            this.#on.add(mode);
-          } else {
-            this.#on.delete(mode);
+      if (match[1] !== undefined && match[2] !== undefined) {
+        const set = match[2] === "h";
+        for (const param of match[1].split(";")) {
+          const mode = Number(param);
+          if (mode === DecMode.CursorVisible) {
+            this.#cursorHidden = !set;
+          } else if (STICKY_ON_MODES.includes(mode)) {
+            if (set) {
+              this.#on.add(mode);
+            } else {
+              this.#on.delete(mode);
+            }
           }
         }
+      } else {
+        this.#applyKittyKeyboardSequence(match[3] ?? "", match[4] ?? "");
       }
-      lastEnd = re.lastIndex;
-      match = re.exec(data);
+      lastEnd = STICKY_SEQUENCE_PATTERN.lastIndex;
+      match = STICKY_SEQUENCE_PATTERN.exec(data);
     }
-    // Hold back a trailing, still-incomplete DECSET prefix (only one that hasn't
+    // Hold back a trailing, still-incomplete sticky prefix (only one that hasn't
     // been consumed by a match) for the next chunk; bounded so a stray ESC can't
     // grow it without limit.
     const escIndex = data.lastIndexOf(ControlByte.Esc);
     const tail = escIndex >= lastEnd ? data.slice(escIndex) : "";
-    this.#carry = tail.length > 0 && tail.length <= MAX_CARRY && PARTIAL_DECSET.test(tail) ? tail : "";
+    this.#carry =
+      tail.length > 0 && tail.length <= MAX_CARRY && PARTIAL_STICKY_SEQUENCE.test(tail)
+        ? tail
+        : "";
   }
 
   /** Sequences re-asserting every currently-on mode, or "" when none are set. */
@@ -124,6 +136,44 @@ export class TerminalModeTracker {
     }
     if (this.#cursorHidden) {
       parts.push(`${ControlByte.Csi}?${DecMode.CursorVisible}l`);
+    }
+    const kittyKeyboard = this.#kittyKeyboardRestoreSequence();
+    if (kittyKeyboard.length > 0) {
+      parts.push(kittyKeyboard);
+    }
+    return parts.join("");
+  }
+
+  #applyKittyKeyboardSequence(operator: string, rawFlags: string): void {
+    if (operator === "<") {
+      this.#kittyKeyboardFlags = this.#kittyKeyboardFlagStack.pop() ?? 0;
+      return;
+    }
+    const flags = Number(rawFlags);
+    if (operator === ">") {
+      this.#kittyKeyboardFlagStack.push(this.#kittyKeyboardFlags);
+      if (rawFlags.length > 0 && Number.isFinite(flags)) {
+        this.#kittyKeyboardFlags = flags;
+      }
+      return;
+    }
+    if (operator === "=") {
+      this.#kittyKeyboardFlags = rawFlags.length > 0 && Number.isFinite(flags) ? flags : 0;
+    }
+  }
+
+  #kittyKeyboardRestoreSequence(): string {
+    if (this.#kittyKeyboardFlagStack.length === 0) {
+      return this.#kittyKeyboardFlags === 0 ? "" : `${ControlByte.Csi}=${this.#kittyKeyboardFlags}u`;
+    }
+
+    const parts: string[] = [];
+    const baseline = this.#kittyKeyboardFlagStack[0] ?? 0;
+    if (baseline !== 0) {
+      parts.push(`${ControlByte.Csi}=${baseline}u`);
+    }
+    for (const flags of [...this.#kittyKeyboardFlagStack.slice(1), this.#kittyKeyboardFlags]) {
+      parts.push(`${ControlByte.Csi}>${flags}u`);
     }
     return parts.join("");
   }

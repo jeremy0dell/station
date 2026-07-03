@@ -23,6 +23,10 @@ import type { StationClient } from "../sources/types.js";
 import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { createStationViewStore } from "../station/store/stationViewStore.js";
+import {
+  createWidgetConfigPersistence,
+  type WidgetConfigPersistence,
+} from "../station/widgets/widgetPersistence.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
@@ -42,6 +46,7 @@ export function createStation(options: CreateStationOptions): Station {
   const stationViewStore = createStationViewStore(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
   });
+  const widgetPersistence = createWidgetConfigPersistence(stationViewStore, options.widgetConfig);
   const registry = setupRegistry(options, store, stationClient);
 
   // Source → store/registry bridges, plus debounced disk layout (production only).
@@ -56,6 +61,7 @@ export function createStation(options: CreateStationOptions): Station {
     registry,
     reconcilers,
     layoutWriter,
+    widgetPersistence,
   });
 
   // Input runtime; its shutdown tears down this composition, then exits the app.
@@ -194,12 +200,22 @@ function createLifecycle(deps: {
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
+  widgetPersistence: WidgetConfigPersistence | undefined;
 }): Pick<Station, "start" | "disposeForShutdown" | "disposeForHotReload"> {
-  const { store, stationClient, stationViewStore, registry, reconcilers, layoutWriter } = deps;
+  const {
+    store,
+    stationClient,
+    stationViewStore,
+    registry,
+    reconcilers,
+    layoutWriter,
+    widgetPersistence,
+  } = deps;
   let detachStationSource: (() => void) | undefined;
   let detachReconcile: (() => void) | undefined;
   let detachSessionReconcile: (() => void) | undefined;
   let detachLayoutWriter: (() => void) | undefined;
+  let detachWidgetPersistence: (() => void) | undefined;
   let disposed = false;
 
   const disposeInternal = (disposeTerminals: boolean): void => {
@@ -215,6 +231,8 @@ function createLifecycle(deps: {
     detachSessionReconcile = undefined;
     detachLayoutWriter?.();
     detachLayoutWriter = undefined;
+    detachWidgetPersistence?.();
+    detachWidgetPersistence = undefined;
     // Real shutdown flushes pending layout synchronously (process.exit follows);
     // an HMR teardown just drops the timer — the reused store/registry keep it.
     if (disposeTerminals) {
@@ -251,6 +269,7 @@ function createLifecycle(deps: {
         layoutWriter.schedule();
         detachLayoutWriter = store.subscribe(() => layoutWriter.schedule());
       }
+      detachWidgetPersistence = widgetPersistence?.start();
       detachStationSource = stationViewStore.getState().start();
       stationClient.start();
     },
@@ -321,6 +340,9 @@ function buildViewProps(
   }
   if (options.topRowWidgetDeps !== undefined) {
     viewProps.topRowWidgetDeps = options.topRowWidgetDeps;
+  }
+  if (options.widgetConfig !== undefined) {
+    viewProps.widgetsPersisted = true;
   }
   return viewProps;
 }

@@ -7,6 +7,7 @@ import {
   loadConfig,
   removeProjectFromConfig,
   setProjectDefaultHarnessInConfig,
+  setTuiWidgetsInConfig,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
 
@@ -432,5 +433,68 @@ root = ${JSON.stringify(web)}
       code: "PROJECT_NOT_CONFIGURED",
       projectId: "ghost",
     });
+  });
+});
+
+describe("TUI widget config mutation", () => {
+  it("writes configured widgets and reloads them in order", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+
+    const result = await setTuiWidgetsInConfig({
+      configPath,
+      homeDir: tempDir,
+      widgets: [
+        { type: "time", timeFormat: "24h" },
+        { type: "fleet" },
+        { type: "prs", enabled: false },
+        { type: "moon" },
+      ],
+    });
+
+    expect(result.status).toBe("updated");
+    const source = await readFile(configPath, "utf8");
+    expect(source).toContain('[[tui.widgets]]\ntype = "time"\ntime_format = "24h"');
+    expect(source).toContain('[[tui.widgets]]\ntype = "prs"\nenabled = false');
+
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    expect(loaded.config.tui?.widgets).toEqual([
+      { type: "time", timeFormat: "24h" },
+      { type: "fleet" },
+      { type: "prs", enabled: false },
+      { type: "moon" },
+    ]);
+  });
+
+  it("replaces old widget blocks without dropping other [tui] settings", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+    const base = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${base}
+[[tui.widgets]]
+type = "weather"
+city = "New York, NY"
+
+[tui.island]
+rest_counts = true
+`,
+      "utf8",
+    );
+
+    await setTuiWidgetsInConfig({
+      configPath,
+      homeDir: tempDir,
+      widgets: [],
+    });
+
+    const source = await readFile(configPath, "utf8");
+    expect(source).not.toContain("[[tui.widgets]]");
+    expect(source).toContain("widgets = []");
+    expect(source).toContain("[tui.island]\nrest_counts = true");
+
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    expect(loaded.config.tui).toEqual({ widgets: [], island: { restCounts: true } });
   });
 });

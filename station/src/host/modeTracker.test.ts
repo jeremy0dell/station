@@ -66,6 +66,46 @@ describe("TerminalModeTracker", () => {
     );
   });
 
+  it("re-asserts kitty keyboard mode from dropped setup chunks", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[>1u");
+    expect(tracker.restoreSequence()).toBe("\x1b[>1u");
+  });
+
+  it("replays sticky terminal modes before kitty keyboard state", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[?1049h\x1b[>1u");
+    expect(tracker.restoreSequence()).toBe("\x1b[?1049h\x1b[>1u");
+  });
+
+  it("tracks kitty keyboard push, set, and pop in order", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("\x1b[=1u\x1b[>4u\x1b[<u");
+    expect(tracker.restoreSequence()).toBe("\x1b[=1u");
+
+    tracker.feed("\x1b[=0u");
+    expect(tracker.restoreSequence()).toBe("");
+  });
+
+  it("replays nested kitty keyboard stack so retained pops restore earlier flags", () => {
+    const dropped = new TerminalModeTracker();
+    dropped.feed("\x1b[>1u\x1b[>5u");
+
+    const restored = new TerminalModeTracker();
+    restored.feed(dropped.restoreSequence());
+    restored.feed("\x1b[<u");
+
+    expect(dropped.restoreSequence()).toBe("\x1b[>1u\x1b[>5u");
+    expect(restored.restoreSequence()).toBe("\x1b[>1u");
+  });
+
+  it("recognizes a kitty keyboard sequence split across fed chunks", () => {
+    const tracker = new TerminalModeTracker();
+    tracker.feed("output\x1b[>");
+    tracker.feed("1u more output");
+    expect(tracker.restoreSequence()).toBe("\x1b[>1u");
+  });
+
   it("clears all tracked modes on a RIS (full reset) in the dropped data", () => {
     const tracker = new TerminalModeTracker();
     tracker.feed("\x1b[?1049h\x1b[?1000hsome output\x1bc"); // alt+mouse, then reset

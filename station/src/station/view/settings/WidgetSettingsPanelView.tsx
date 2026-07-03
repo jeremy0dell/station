@@ -17,6 +17,7 @@ export type WidgetSettingsPanelViewProps = {
   widgets: readonly TuiWidgetConfig[];
   columns: number;
   rows: number;
+  persisted?: boolean;
 };
 
 export function WidgetSettingsPanelView({
@@ -24,9 +25,10 @@ export function WidgetSettingsPanelView({
   widgets,
   columns,
   rows,
+  persisted = false,
 }: WidgetSettingsPanelViewProps) {
   const dispatch = useStationMouse();
-  const model = widgetSettingsPanelModel(screen, widgets);
+  const model = widgetSettingsPanelModel(screen, widgets, { persisted });
   const { top, left, width, height, innerWidth } = widgetSettingsPanelLayout(
     columns,
     rows,
@@ -46,10 +48,12 @@ export function WidgetSettingsPanelView({
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>
+      <text fg={STATION_COLORS.foreground} bg={STATION_COLORS.background} attributes={TextAttributes.BOLD}>
         {fit(` ${model.title}`, innerWidth)}
       </text>
-      <text fg={STATION_COLORS.gray}>{fit(` ${model.note}`, innerWidth)}</text>
+      <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>
+        {fit(` ${model.note}`, innerWidth)}
+      </text>
       {model.lines.map((line) => (
         <PanelLine
           key={lineKey(line)}
@@ -58,7 +62,11 @@ export function WidgetSettingsPanelView({
           focus={model.focus}
         />
       ))}
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>
+      <text
+        fg={STATION_COLORS.foreground}
+        bg={STATION_COLORS.background}
+        attributes={TextAttributes.DIM}
+      >
         {fit(` ${model.footer}`, innerWidth)}
       </text>
     </box>
@@ -87,13 +95,17 @@ function PanelLine({
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
   if (line.kind === "empty") {
-    return <text fg={STATION_COLORS.gray}>{fit(`   ${line.label}`, width)}</text>;
+    return (
+      <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>
+        {fit(`   ${line.label}`, width)}
+      </text>
+    );
   }
   if (line.kind === "add") {
     return (
       <text
         fg={STATION_COLORS.cyan}
-        {...(hover ? { bg: STATION_COLORS.hoverBackground } : {})}
+        bg={hover ? STATION_COLORS.hoverBackground : STATION_COLORS.background}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsAdd" })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -103,10 +115,15 @@ function PanelLine({
     );
   }
   if (line.kind === "pickerChoice") {
+    const background = hover
+      ? STATION_COLORS.hoverBackground
+      : line.active
+        ? STATION_COLORS.focusBackground
+        : STATION_COLORS.background;
     return (
       <text
         fg={line.active ? STATION_COLORS.cyan : STATION_COLORS.foreground}
-        {...(hover ? { bg: STATION_COLORS.hoverBackground } : {})}
+        bg={background}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsPickerChoice", index: line.index })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -130,7 +147,7 @@ function PanelLine({
     <box flexDirection="row">
       <text
         fg={rowColor}
-        {...(hover && !dimmed ? { bg: STATION_COLORS.hoverBackground } : {})}
+        bg={hover && !dimmed ? STATION_COLORS.hoverBackground : STATION_COLORS.background}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", index: line.index })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -149,6 +166,7 @@ function RemoveMark({ index, rowHovered }: { index: number; rowHovered: boolean 
   return (
     <text
       fg={hover ? STATION_COLORS.red : rowHovered ? STATION_COLORS.gray : STATION_COLORS.hairline}
+      bg={STATION_COLORS.background}
       {...stationMouseProps(dispatch, { kind: "widgetSettingsRemove", index })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}

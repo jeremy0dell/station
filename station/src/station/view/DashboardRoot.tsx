@@ -26,9 +26,15 @@ export type DashboardRootProps = {
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
+  widgetsPersisted?: boolean;
 };
 
-export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
+export function DashboardRoot({
+  store,
+  columns,
+  rows,
+  widgetsPersisted = false,
+}: DashboardRootProps) {
   const snapshot = useStore(store, (state) => state.snapshot);
   const loading = useStore(store, (state) => state.loading);
   const screen = useStore(store, (state) => state.screen);
@@ -124,6 +130,7 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
         rows={rows}
         localRows={localRows}
         widgets={liveWidgets}
+        widgetsPersisted={widgetsPersisted}
       />
     </box>
   );

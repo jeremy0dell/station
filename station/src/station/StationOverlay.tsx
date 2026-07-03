@@ -16,6 +16,7 @@ export type StationOverlayProps = {
   /** Owned by main.tsx (HMR recreates store + renderer + handlers together). */
   store: StoreApi<TuiStore>;
   topRowWidgets?: readonly TopRowWidgetView[];
+  widgetsPersisted?: boolean;
   /** The Station input runtime's mouse entry point. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
@@ -64,7 +65,12 @@ export function stationPopupLayout(terminalWidth: number, terminalHeight: number
 /**
  * The backdrop owns outside mouse events (clicks/wheel never fall through to shell).
  */
-export function StationOverlay({ store, topRowWidgets = [], dispatchMouse }: StationOverlayProps) {
+export function StationOverlay({
+  store,
+  topRowWidgets = [],
+  widgetsPersisted = false,
+  dispatchMouse,
+}: StationOverlayProps) {
   const { width, height } = useTerminalDimensions();
   const dispatch = useCallback<StationMouseDispatch>(
     (target: StationMouseTarget, event) => {
@@ -112,7 +118,12 @@ export function StationOverlay({ store, topRowWidgets = [], dispatchMouse }: Sta
         onMouseDown={stopPopupMouse}
         onMouseScroll={stopPopupMouse}
       >
-        <DashboardRoot store={store} columns={innerColumns} rows={innerRows} />
+        <DashboardRoot
+          store={store}
+          columns={innerColumns}
+          rows={innerRows}
+          widgetsPersisted={widgetsPersisted}
+        />
       </box>
       <DashboardFrameTitle
         store={store}
