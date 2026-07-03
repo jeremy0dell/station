@@ -22,66 +22,31 @@ export type TopRowWidgetText = {
   compact?: string;
 };
 
-export function dashboardHeaderLine({
-  productLabel,
-  columns,
-  status,
+/**
+ * The frame's right-embedded strip: observer status (when present) then the
+ * widget ladder, widest candidate that fits. Empty string when nothing fits.
+ */
+export function headerStrip({
   widgets,
+  status,
+  maxWidth,
 }: {
-  productLabel: string;
-  columns: number;
+  widgets: readonly TopRowWidgetText[];
   status?: DashboardHeaderStatus;
-  widgets: readonly TopRowWidgetText[];
+  maxWidth: number;
 }): string {
-  const safeColumns = Math.max(1, columns);
-  const productWidth = stringWidth(productLabel);
-  if (productWidth >= safeColumns) {
-    return productLabel;
-  }
-
-  if (status !== undefined) {
-    return dashboardHeaderLineWithStatus({
-      productLabel,
-      productWidth,
-      safeColumns,
-      status,
-      widgets,
-    });
-  }
-
-  if (widgets.length === 0) {
-    return productLabel;
-  }
-
-  for (const strip of widgetStripCandidates(widgets)) {
-    const stripWidth = stringWidth(strip);
-    const gapWidth = safeColumns - productWidth - stripWidth;
-    if (gapWidth >= 1) {
-      return `${productLabel}${" ".repeat(gapWidth)}${strip}`;
-    }
-  }
-
-  return productLabel;
-}
-
-function dashboardHeaderLineWithStatus(input: {
-  productLabel: string;
-  productWidth: number;
-  safeColumns: number;
-  status: DashboardHeaderStatus;
-  widgets: readonly TopRowWidgetText[];
-}): string {
-  for (const statusText of statusTextCandidates(input.status)) {
-    for (const widgets of [...widgetStripCandidates(input.widgets), ""]) {
-      const strip = widgets.length === 0 ? statusText : `${statusText}  ${widgets}`;
-      const stripWidth = stringWidth(strip);
-      const gapWidth = input.safeColumns - input.productWidth - stripWidth;
-      if (gapWidth >= 1) {
-        return `${input.productLabel}${" ".repeat(gapWidth)}${strip}`;
+  for (const statusText of status === undefined ? [""] : statusTextCandidates(status)) {
+    for (const strip of [...widgetStripCandidates(widgets), ""]) {
+      const joined = [statusText, strip].filter((part) => part.length > 0).join(" · ");
+      if (joined.length === 0) {
+        continue;
+      }
+      if (stringWidth(joined) <= maxWidth) {
+        return joined;
       }
     }
   }
-  return input.productLabel;
+  return "";
 }
 
 function statusTextCandidates(status: DashboardHeaderStatus): string[] {
@@ -102,13 +67,29 @@ function* widgetStripCandidates(widgets: readonly TopRowWidgetText[]): Generator
   }
   const full = widgets.map((widget) => widget.text);
   const compact = widgets.map((widget) => widget.compact ?? widget.text);
-  yield full.join("  ");
+  yield full.join(" · ");
   if (compact.some((text, i) => text !== full[i])) {
-    yield compact.join("  ");
+    yield compact.join(" · ");
   }
   for (let visibleCount = widgets.length - 1; visibleCount > 0; visibleCount -= 1) {
-    yield compact.slice(0, visibleCount).join("  ");
+    yield compact.slice(0, visibleCount).join(" · ");
   }
+}
+
+/** Right side of the FLEET row; falls back to bare numbers, then to nothing. */
+export function fleetCountsLabel(
+  counts: { projects: number; sessions: number; agents: number },
+  maxWidth: number,
+): string {
+  const full = `${counts.projects} ${plural(counts.projects, "project")} · ${counts.sessions} ${plural(
+    counts.sessions,
+    "session",
+  )} · ${counts.agents} ${plural(counts.agents, "agent")}`;
+  if (full.length <= maxWidth) {
+    return full;
+  }
+  const compact = `${counts.projects} · ${counts.sessions} · ${counts.agents}`;
+  return compact.length <= maxWidth ? compact : "";
 }
 
 export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {

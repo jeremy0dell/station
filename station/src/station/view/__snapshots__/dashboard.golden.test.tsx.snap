@@ -1,9 +1,8 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`dashboard golden frames renders many-projects at 80x24 1`] = `
-"station                                                                     [+] 
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited 
-─────────────────────────────────────────────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+                                                                                
        SESSION                            AGENT     STATUS            DIFF · PR 
                                                                                 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
@@ -23,15 +22,15 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
  [b] - old-experiment                     -         no agent                    
                                                                                 
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
 exports[`dashboard golden frames renders many-projects at 120x40 1`] = `
-"station                                                                                                             [+] 
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 exited                                         
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle     4 projects · 11 sessions · 9 agents 
+                                                                                                                        
        SESSION                                   AGENT     STATUS                                             DIFF · PR 
                                                                                                                         
 ▼ station  5 sessions · 4 agents                                                            [shell] [quick session] [▾] 
@@ -67,15 +66,15 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ? 1 unknown  x 1 e
                                                                                                                         
                                                                                                                         
                                                                                                                         
+                                                                                                                        
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                          
 "
 `;
 
 exports[`dashboard golden frames renders many-projects at 60x16 1`] = `
-"station                                                 [+] 
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ?   
-─────────────────────────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
+                                                            
        SESSION          AGENT     STATUS                 PR 
                                                             
 ▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
@@ -86,32 +85,32 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ○ 4 idle  ?
  [5] ⠋ station-overlay  codex     working             #76 … 
                                                             
 ▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
-▼ 6 below · showing 5 of 11                                 
+ [6] x batch-export     opencode  exited               #8 ✓ 
+▼ 5 below · showing 6 of 11                                 
 ─────────────────────────────────────────────────────────── 
 ↵ open  N new  ⇥ next  / search  X delete  ? help  Q/esc:c… 
 "
 `;
 
 exports[`dashboard golden frames renders many-projects at 40x12 1`] = `
-"station                             [+] 
-FLEET  ● 0 ready  ⠋ 2 working  ! 0      
-─────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 2 working  ! 0      
+                                        
        SESSION             STATUS       
                                         
 ▼ station  5 sessions · … [sh] [qs] [▾] 
  [1] ○ cli-help-man        idle         
  [2] - docs-cleanup        no agent     
  [3] ○ pty-buffer          idle         
-▼ 8 below · showing 3 of 11             
+ [4] + session-resume      starting     
+▼ 7 below · showing 4 of 11             
 ─────────────────────────────────────── 
 ↵ open  N new  ⇥ next  / search  X del… 
 "
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 80x24 1`] = `
-"station                                                                     [+] 
-FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 exited 
-─────────────────────────────────────────────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0 idle 
+                                                                                
        SESSION                        AGENT     STATUS                DIFF · PR 
                                                                                 
 ▼ station  4 sessions · 4 agents                                  [sh] [qs] [▾] 
@@ -131,15 +130,15 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
                                                                                 
                                                                                 
                                                                                 
+                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
 "
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 120x40 1`] = `
-"station                                                                                                             [+] 
-FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 exited                                         
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0 idle      2 projects · 6 sessions · 6 agents 
+                                                                                                                        
        SESSION                                   AGENT     STATUS                                             DIFF · PR 
                                                                                                                         
 ▼ station  4 sessions · 4 agents                                                            [shell] [quick session] [▾] 
@@ -175,15 +174,15 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ? 1 unknown  x 1 e
                                                                                                                         
                                                                                                                         
                                                                                                                         
+                                                                                                                        
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                          
 "
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 60x16 1`] = `
-"station                                                 [+] 
-FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ?   
-─────────────────────────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown   
+                                                            
        SESSION            AGENT     STATUS               PR 
                                                             
 ▼ station  4 sessions · 4 agents              [sh] [qs] [▾] 
@@ -194,33 +193,34 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ○ 0 idle  ?
                                                             
 ▼ observer  2 sessions · 2 agents             [sh] [qs] [▾] 
  [5] x done-run           opencode  exited                  
-▼ 1 below · showing 5 of 6                                  
+ [6] ! sqlite-cleanup     opencode  Agent needs appr… #6 x1 
+                                                            
 ─────────────────────────────────────────────────────────── 
 ↵ open  N new  ⇥ next  / search  X delete  ? help  Q/esc:c… 
 "
 `;
 
 exports[`dashboard golden frames renders attention-and-failures at 40x12 1`] = `
-"station                             [+] 
-FLEET  ● 0 ready  ⠋ 1 working  ! 3      
-─────────────────────────────────────── 
+"FLEET  ● 0 ready  ⠋ 1 working  ! 3      
+                                        
        SESSION                          
                                         
 ▼ station  4 sessions · … [sh] [qs] [▾] 
  [1] ! hook-scope                       
  [2] ? metadata-refresh                 
  [3] ! popup-latency                    
-▼ 3 below · showing 3 of 6              
+ [4] ⠋ pr-info                          
+▼ 2 below · showing 4 of 6              
 ─────────────────────────────────────── 
 ↵ open  N new  ⇥ next  / search  X del… 
 "
 `;
 
 exports[`dashboard golden frames renders no-projects at 80x24 1`] = `
-"station                                                                     [+] 
-─────────────────────────────────────────────────────────────────────────────── 
+"                                                                                
                                                                                 
 No projects configured yet.                                                     
+                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -245,10 +245,10 @@ A add project  Q/esc:close
 `;
 
 exports[`dashboard golden frames renders no-projects at 120x40 1`] = `
-"station                                                                                                             [+] 
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+"                                                                                                                        
                                                                                                                         
 No projects configured yet.                                                                                             
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -289,10 +289,10 @@ A add project  Q/esc:close
 `;
 
 exports[`dashboard golden frames renders no-projects at 60x16 1`] = `
-"station                                                 [+] 
-─────────────────────────────────────────────────────────── 
+"                                                            
                                                             
 No projects configured yet.                                 
+                                                            
                                                             
                                                             
                                                             
@@ -309,10 +309,10 @@ A add project  Q/esc:close
 `;
 
 exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
-"station                             [+] 
-─────────────────────────────────────── 
+"                                        
                                         
 No projects configured yet.             
+                                        
                                         
                                         
                                         

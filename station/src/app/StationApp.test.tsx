@@ -116,10 +116,10 @@ describe("Station app composition", () => {
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    const frame = await waitForFrame(station, (candidate) => candidate.includes("NYC 72°"));
+    const frame = await waitForFrame(station, (candidate) => candidate.includes("NYC · 72°"));
 
     expect(frame).toContain("10:42");
-    expect(frame).toContain("NYC 72°");
+    expect(frame).toContain("NYC · 72°");
   });
 
   it("closes STATION on click-away without writing mouse bytes to the pane underneath", async () => {
