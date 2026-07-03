@@ -137,7 +137,11 @@ const CASES: ModalCase[] = [
       store.setState(openProjectDefaultAgentPicker(store.getState(), "station"));
     },
     trimSnapshotTrailingWhitespace: true,
-    expect: ["Select default agent for station", "1-9/a-z:select   Esc:cancel", "codex"],
+    expect: [
+      "Select default agent for station",
+      "1-9/a-z:select   Esc:cancel",
+      "codex ● update v0.3.0 → v0.4.0",
+    ],
   },
   {
     name: "add project sheet",

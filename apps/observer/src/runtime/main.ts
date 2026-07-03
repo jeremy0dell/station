@@ -82,6 +82,8 @@ export async function runObserverMain(
     providerOptions.configPath = loadedConfig.configPath;
   }
   const providers = deps.providerRegistryFactory(config, providerOptions);
+  // Fire-and-forget: version badges appear on a later snapshot when probes land.
+  void providers.refreshHarnessVersions();
   const featureFlags = createFeatureFlagEvaluator({
     ...(config.featureFlags === undefined ? {} : { overrides: config.featureFlags }),
     revisionSeed: loadedConfig.configPath,

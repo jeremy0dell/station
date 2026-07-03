@@ -1,3 +1,4 @@
+import type { ProviderId } from "@station/contracts";
 import type { TuiViewState } from "@station/dashboard-core";
 import {
   choiceValueByKey,
@@ -7,6 +8,7 @@ import {
   SELECTION_KEYS,
   selectDashboardRowChoices,
   selectNewSessionHarnessChoices,
+  selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
   selectProjectChoices,
   selectProjectGroups,
@@ -304,5 +306,34 @@ describe("TUI selectors", () => {
       ["2", "opencode"],
       ["3", "scripted"],
     ]);
+  });
+});
+
+describe("selectNewSessionHarnessOptions update badge", () => {
+  it("carries the update pair only when the snapshot knows both versions differ", () => {
+    const base = createDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      harnesses: [
+        {
+          id: "codex" as ProviderId,
+          label: "codex",
+          installedVersion: "0.3.0",
+          latestVersion: "0.4.0",
+          updateAvailable: true,
+        },
+        { id: "opencode" as ProviderId, label: "opencode", installedVersion: "1.0.0" },
+      ],
+    };
+    const project = snapshot.projects[0];
+    if (project === undefined) {
+      throw new Error("fixture is expected to contain a project");
+    }
+    const options = selectNewSessionHarnessOptions(snapshot, project);
+    expect(options.find((option) => option.id === "codex")?.update).toEqual({
+      installed: "0.3.0",
+      latest: "0.4.0",
+    });
+    expect(options.find((option) => option.id === "opencode")?.update).toBeUndefined();
   });
 });

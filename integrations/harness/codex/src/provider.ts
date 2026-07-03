@@ -82,6 +82,7 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   },
   doctorChecks,
   hooksStatus,
+  version: { latestPackage: "@openai/codex" },
 };
 
 function command(options: CodexHarnessProviderOptions): string {

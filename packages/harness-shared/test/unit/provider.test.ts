@@ -164,3 +164,44 @@ describe("createTerminalBoundHarnessProvider", () => {
     expect("hooksStatus" in provider).toBe(true);
   });
 });
+
+describe("versionInfo", () => {
+  it("stays absent when the spec declares no version block", () => {
+    const provider = createTerminalBoundHarnessProvider(baseSpec(), {});
+    expect(provider.versionInfo).toBeUndefined();
+  });
+
+  it("parses installed and latest version tokens from the probes", async () => {
+    const provider = createTerminalBoundHarnessProvider(
+      baseSpec({ version: { latestPackage: "@example/test-cli" } }),
+      {
+        now: () => now,
+        runner: async (input) => ({
+          stdout: input.command === "npm" ? "1.4.0\n" : "test-cli 1.2.3 (build abc)\n",
+          stderr: "",
+          exitCode: 0,
+        }),
+      },
+    );
+    await expect(provider.versionInfo?.()).resolves.toEqual({
+      installedVersion: "1.2.3",
+      latestVersion: "1.4.0",
+    });
+  });
+
+  it("omits whatever half fails and never rejects", async () => {
+    const provider = createTerminalBoundHarnessProvider(
+      baseSpec({ version: { latestPackage: "@example/test-cli" } }),
+      {
+        now: () => now,
+        runner: async (input) => {
+          if (input.command === "npm") {
+            throw new Error("offline");
+          }
+          return { stdout: "test-cli 1.2.3\n", stderr: "", exitCode: 0 };
+        },
+      },
+    );
+    await expect(provider.versionInfo?.()).resolves.toEqual({ installedVersion: "1.2.3" });
+  });
+});

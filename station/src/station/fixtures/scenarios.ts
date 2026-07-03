@@ -316,7 +316,13 @@ function snapshotFromRows(rows: WorktreeRow[], extras: SnapshotExtras): StationS
     },
     providerHealth: extras.providerHealth ?? {},
     harnesses: [
-      { id: "codex", label: "codex" },
+      {
+        id: "codex",
+        label: "codex",
+        installedVersion: "0.3.0",
+        latestVersion: "0.4.0",
+        updateAvailable: true,
+      },
       { id: "opencode", label: "opencode" },
     ],
     projects,

@@ -214,6 +214,12 @@ export const SnapshotHarnessSchema = z
   .object({
     id: ProviderIdSchema,
     label: nonEmptyStringSchema,
+    /** Best-effort local CLI version; absent when the probe failed or hasn't run. */
+    installedVersion: nonEmptyStringSchema.optional(),
+    /** Best-effort registry version from a cached, offline-safe lookup. */
+    latestVersion: nonEmptyStringSchema.optional(),
+    /** Set only when both versions are known; consumers omit the badge otherwise. */
+    updateAvailable: z.boolean().optional(),
   })
   .strict();
 

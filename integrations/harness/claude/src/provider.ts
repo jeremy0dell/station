@@ -84,6 +84,7 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
   },
   doctorChecks,
   hooksStatus,
+  version: { latestPackage: "@anthropic-ai/claude-code" },
 };
 
 function command(options: ClaudeHarnessProviderOptions): string {
