@@ -12,7 +12,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, and `pnpm link --global`. If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm link --global`. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
 
 ## Requirements
 
@@ -27,7 +27,7 @@ stn
 
 `bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk, Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
 
-Node.js 24.x and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node).
+Node.js 24.x and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node). The repo pins Node with `.node-version` and `.nvmrc` (`24`), so fnm/nvm auto-select the right version in the checkout instead of falling back to your global default (asdf reads these only with `legacy_version_file = yes` in `~/.asdfrc`).
 
 ## Fresh Checkout
 
@@ -36,9 +36,12 @@ From the repository root:
 ```bash
 pnpm install
 pnpm build
+cd station && bun install && cd ..   # Bun UI lane (separate workspace; pnpm does not install it)
 pnpm stn setup
 pnpm smoke:release
 ```
+
+`cd station && bun install` is required for the terminal UI: bare `stn` renders it by shelling into `bun run` against `station/`, so without the install `stn` refuses to launch and prints the install hint (historically a raw "@opentui not found" error) even though the Bun binary is healthy. `stn doctor` reports this lane explicitly (a `renderer-runtime` warning with code `STATION_UI_NOT_INSTALLED`).
 
 After STATION is installed:
 

@@ -1,3 +1,4 @@
+import { stationUiInstallHint } from "../../stationWorkspace.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
 import { selectSetupHarness } from "./harnessSelection.js";
 import type {
@@ -74,6 +75,7 @@ function setupChecks(
     configCheck(facts),
     ...configDiagnosticsChecks(facts),
     launcherCheck(facts),
+    stationUiCheck(facts),
     {
       id: "worktrunk-shell-integration",
       tier: "recommended",
@@ -153,6 +155,34 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
     label: "STATION launchers",
     message: "station, stn-ingress, and stn-tmux-popup are available on PATH.",
     details,
+  };
+}
+
+function stationUiCheck(facts: SetupFacts): SetupCheck {
+  if (facts.stationUi.status === "installed") {
+    return {
+      id: "station-ui",
+      tier: "recommended",
+      status: "ok",
+      label: "STATION UI dependencies",
+      message: "The station/ Bun UI lane is installed.",
+    };
+  }
+  if (facts.stationUi.status === "missing") {
+    return {
+      id: "station-ui",
+      tier: "recommended",
+      status: "warning",
+      label: "STATION UI dependencies",
+      message: `${stationUiInstallHint} Until then bare stn cannot render the terminal UI (stn doctor reports this as STATION_UI_NOT_INSTALLED).`,
+    };
+  }
+  return {
+    id: "station-ui",
+    tier: "recommended",
+    status: "skipped",
+    label: "STATION UI dependencies",
+    message: "Skipped until Bun is available (or a STATION_DASHBOARD_COMMAND override is set).",
   };
 }
 
