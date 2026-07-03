@@ -143,7 +143,7 @@ async function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiR
     return { status: "exited", code: 1 };
   }
   if (override === undefined) {
-    process.stderr.write(`Starting STATION ${entry === "dashboard" ? "dashboard" : "TUI"}…\n`);
+    process.stderr.write(`Launching STATION ${entry === "dashboard" ? "dashboard" : "TUI"}…\n`);
   }
   const child =
     override !== undefined
