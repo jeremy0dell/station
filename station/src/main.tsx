@@ -207,6 +207,8 @@ const station = createStation({
   stationClient,
   registry: stationRuntime.registry,
   scrollOnOutput: stationConfig.config.scroll_on_output,
+  overlayWidthPercent: stationConfig.config.overlay_width_percent,
+  overlayHeightPercent: stationConfig.config.overlay_height_percent,
   automations: stationConfig.config.automations,
   clipboardEffects,
   openExternalUrl,

@@ -1401,6 +1401,8 @@ layout = "agent-build-shell"
 
 [workspace]
 scroll_on_output = "shift"
+overlay_width_percent = 60
+overlay_height_percent = 60
 welcome_on_boot = false
 
 [[workspace.automations]]
@@ -1416,6 +1418,8 @@ ${projectToml("web", root)}
     );
 
     expect(loaded.config.workspace.scroll_on_output).toBe("shift");
+    expect(loaded.config.workspace.overlay_width_percent).toBe(60);
+    expect(loaded.config.workspace.overlay_height_percent).toBe(60);
     expect(loaded.config.workspace.welcome_on_boot).toBe(false);
     expect(loaded.config.workspace.automations).toEqual([
       {

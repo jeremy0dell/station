@@ -248,7 +248,7 @@ describe("config schemas", () => {
 });
 
 describe("workspace config", () => {
-  it("fills an empty [workspace] with defaults (freeze, welcome on, see-diff)", () => {
+  it("fills an empty [workspace] with defaults (60% overlay, freeze, welcome on, see-diff)", () => {
     const workspace = WorkspaceConfigSchema.parse({});
     const expectedWatchCommand =
       'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
@@ -259,6 +259,8 @@ describe("workspace config", () => {
     ].join(" ");
 
     expect(workspace.scroll_on_output).toBe("freeze");
+    expect(workspace.overlay_width_percent).toBe(60);
+    expect(workspace.overlay_height_percent).toBe(60);
     expect(workspace.welcome_on_boot).toBe(true);
     expect(workspace.automations).toEqual([
       {
@@ -281,9 +283,13 @@ describe("workspace config", () => {
   it("accepts the valid scroll-on-output modes and applies per-step automation defaults", () => {
     const workspace = WorkspaceConfigSchema.parse({
       scroll_on_output: "shift",
+      overlay_width_percent: 70,
+      overlay_height_percent: 65,
       automations: [{ id: "build", label: "Build", steps: [{ command: "pnpm build" }] }],
     });
     expect(workspace.scroll_on_output).toBe("shift");
+    expect(workspace.overlay_width_percent).toBe(70);
+    expect(workspace.overlay_height_percent).toBe(65);
     expect(workspace.automations[0]?.steps[0]).toMatchObject({
       command: "pnpm build",
       split: "right",
@@ -364,6 +370,8 @@ describe("workspace config", () => {
 
   it("rejects an unknown scroll mode, unknown keys, stepless and duplicate automations", () => {
     expect(WorkspaceConfigSchema.safeParse({ scroll_on_output: "bounce" }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ overlay_width_percent: 101 }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ overlay_height_percent: 9 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ welcome: true }).success).toBe(false);
     expect(
       WorkspaceConfigSchema.safeParse({ automations: [{ id: "x", label: "X", steps: [] }] })

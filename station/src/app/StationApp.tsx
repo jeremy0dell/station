@@ -35,6 +35,8 @@ export function StationApp({
   automations,
   island,
   topRowWidgetDeps,
+  overlayWidthPercent,
+  overlayHeightPercent,
 }: StationAppProps) {
   const overlayVisible = useStoreValue(store, selectStationOverlayVisible);
   const hasPanes = useStoreValue(store, selectPaneCount) > 0;
@@ -69,6 +71,8 @@ export function StationApp({
           store={stationViewStore}
           topRowWidgets={topRowWidgets}
           dispatchMouse={dispatchMouse}
+          widthPercent={overlayWidthPercent}
+          heightPercent={overlayHeightPercent}
         />
       ) : null}
       <ContextMenuRoot
