@@ -82,8 +82,9 @@ export async function runObserverMain(
     providerOptions.configPath = loadedConfig.configPath;
   }
   const providers = deps.providerRegistryFactory(config, providerOptions);
-  // Fire-and-forget: version badges appear on a later snapshot when probes land.
+  // Fire-and-forget boot probes: snapshots read cached results and fill in as they land.
   void providers.refreshHarnessVersions();
+  void providers.healthCache.refreshAll();
   const featureFlags = createFeatureFlagEvaluator({
     ...(config.featureFlags === undefined ? {} : { overrides: config.featureFlags }),
     revisionSeed: loadedConfig.configPath,

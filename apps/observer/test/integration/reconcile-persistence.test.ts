@@ -2,6 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
+import { ProviderHealthSchema, StationSnapshotSchema } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -102,13 +103,16 @@ function providersWithOneSession() {
 describe("observer reconcile persistence", () => {
   it("persists provider observations, session correlations, and reconcile events", async () => {
     const dbPath = await tempDbPath();
+    const providers = providersWithOneSession();
     const { sqlite, persistence, core } = createTestObserverCore({
       config,
-      providers: providersWithOneSession(),
+      providers,
       clock: { now: () => new Date(now) },
       sqlitePath: dbPath,
     });
 
+    // Warm the health cache so both reconciles persist identical health rows.
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("persistence-test");
 
     expect(snapshot.rows.map((row) => row.id)).toEqual(["wt_web_main"]);
@@ -160,6 +164,32 @@ describe("observer reconcile persistence", () => {
       }),
     ]);
     reopened.close();
+  });
+
+  it("persists 'unknown' provider health before the first background probe lands", async () => {
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
+      clock: { now: () => new Date(now) },
+    });
+
+    const snapshot = await core.reconcile("cold-health-cache");
+
+    expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot.observer.healthy).toBe(true);
+    expect(Object.values(snapshot.providerHealth).map((health) => health.status)).toEqual([
+      "unknown",
+      "unknown",
+      "unknown",
+    ]);
+    const observations = await persistence.listProviderObservations();
+    const healthRows = observations.filter((item) => item.entityKind === "provider_health");
+    expect(healthRows.map((row) => ProviderHealthSchema.parse(row.payload).status)).toEqual([
+      "unknown",
+      "unknown",
+      "unknown",
+    ]);
+    sqlite.close();
   });
 
   it("does not hydrate the live graph from stale SQLite records", async () => {

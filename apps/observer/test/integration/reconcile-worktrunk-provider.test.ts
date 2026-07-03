@@ -35,6 +35,7 @@ describe("observer reconcile with Worktrunk provider", () => {
       clock: { now: () => new Date(now) },
     });
 
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("worktrunk-provider");
 
     expect(snapshot.rows).toEqual([

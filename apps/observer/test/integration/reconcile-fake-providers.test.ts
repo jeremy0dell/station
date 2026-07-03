@@ -163,6 +163,7 @@ describe("observer reconcile with fake providers", () => {
       },
     });
 
+    await providers.healthCache.refreshAll();
     const snapshot = await core.reconcile("integration-test");
     const health = core.getHealth();
 
@@ -505,20 +506,22 @@ describe("observer reconcile with fake providers", () => {
         active -= 1;
       }
     };
+    const providers = new ProviderRegistry({
+      worktree,
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
     const core = createObserverCore({
       config,
       providerTimeoutMs: 100,
       providerReadRetries: 1,
-      providers: new ProviderRegistry({
-        worktree,
-        terminal: new FakeTerminalProvider({ now }),
-        harnesses: [new FakeHarnessProvider({ now })],
-      }),
+      providers,
       clock: {
         now: () => new Date(now),
       },
     });
 
+    await providers.healthCache.refreshAll();
     const [first, second] = await Promise.all([
       core.reconcile("concurrent-a"),
       core.reconcile("concurrent-b"),
@@ -527,6 +530,45 @@ describe("observer reconcile with fake providers", () => {
     expect(first.providerHealth["fake-worktree"]?.status).toBe("healthy");
     expect(second.providerHealth["fake-worktree"]?.status).toBe("healthy");
     expect(attempts).toBeGreaterThan(config.projects.length);
-    expect(maxActive).toBe(1);
+    // Serialized reconciles: concurrent listWorktrees stay within one
+    // reconcile's per-project fan-out instead of doubling across both.
+    expect(maxActive).toBeLessThanOrEqual(config.projects.length);
+  });
+
+  it("reads provider health from the cache without awaiting probes", async () => {
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: [createFakeWorktree({ id: "wt_web_idle", projectId: "web", now })],
+    });
+    worktree.health = () => new Promise<never>(() => undefined);
+    const providers = new ProviderRegistry({
+      worktree,
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+      healthCache: { timeoutMs: 20 },
+    });
+    const core = createObserverCore({
+      config,
+      providers,
+      clock: {
+        now: () => new Date(now),
+      },
+    });
+
+    const snapshot = await core.reconcile("hung-health-probe");
+
+    expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot.providerHealth["fake-worktree"]?.status).toBe("unknown");
+    expect(snapshot.rows.map((row) => row.id)).toEqual(["wt_web_idle"]);
+
+    // The hung probe times out in the background; live reads keep degrading it.
+    await providers.healthCache.refreshAll();
+    const after = await core.reconcile("after-probes");
+    expect(after.providerHealth["fake-terminal"]?.status).toBe("healthy");
+    expect(after.providerHealth["fake-harness"]?.status).toBe("healthy");
+    expect(after.providerHealth["fake-worktree"]).toMatchObject({
+      status: "unavailable",
+      lastError: { code: "PROVIDER_TIMEOUT" },
+    });
   });
 });

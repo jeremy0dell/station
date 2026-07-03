@@ -13,10 +13,11 @@ import type {
   ObserverStopReceipt,
   ProviderHookEvent,
   ProviderHookReceipt,
+  ReconcileReceipt,
   StationCommand,
   StationEvent,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type { ObserverApi } from "@station/protocol";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
@@ -168,6 +169,31 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
 
+  // Launch reconciles that arrive while the observer.startup scan is still
+  // running join that flight (reason rewrapped) instead of queueing a redundant
+  // full scan. All other reconciles — scheduler, hooks, external launches, bare
+  // `stn reconcile` — must keep the "scan starts at or after the request" property.
+  let startupFlight: Promise<ReconcileReceipt> | undefined;
+  const startupJoinableReasons = new Set<string>(STARTUP_RECONCILE_REASONS);
+  const reconcile = (reason?: string): Promise<ReconcileReceipt> => {
+    if (startupFlight !== undefined && reason !== undefined && startupJoinableReasons.has(reason)) {
+      return startupFlight.then((receipt) => ({ ...receipt, reason }));
+    }
+    const flight = runReconcile(reconcileDeps, reconciling, reason);
+    if (reason === "observer.startup") {
+      startupFlight = flight;
+      void flight
+        .catch(() => undefined)
+        .finally(() => {
+          // Identity guard: only the flight that set the stash may clear it.
+          if (startupFlight === flight) {
+            startupFlight = undefined;
+          }
+        });
+    }
+    return flight;
+  };
+
   const api: ObserverApi = {
     health: () => buildHealth(options, clock, harnessIngressQueue),
     stop: () => buildStop(options, harnessIngressQueue, metadataRefresh, clock),
@@ -182,7 +208,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       diagnosticOptions?: DiagnosticCollectionOptions,
     ): Promise<DiagnosticSnapshot> =>
       collectDiagnosticSnapshot(buildDiagnosticDeps(options, clock), diagnosticOptions),
-    reconcile: (reason) => runReconcile(reconcileDeps, reconciling, reason),
+    reconcile,
     ingestProviderHookEvent: (event: ProviderHookEvent): Promise<ProviderHookReceipt> =>
       providerHookIngress.ingest(event),
     reportHarnessEvent: async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> =>

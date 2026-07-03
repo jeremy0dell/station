@@ -46,6 +46,7 @@ describe("Worktrunk dependency debug bundle diagnostics", () => {
       clock,
     });
 
+    await providers.healthCache.refreshAll();
     await core.reconcile("worktrunk-dependency");
     const snapshot = await collectDiagnosticSnapshot({
       config,

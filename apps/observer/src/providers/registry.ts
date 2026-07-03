@@ -1,6 +1,7 @@
 import type {
   HarnessProvider,
   HarnessVersionInfo,
+  ProviderHealth,
   ProviderHookAdapter,
   ProviderId,
   RepositoryProvider,
@@ -8,6 +9,11 @@ import type {
   WorktreeProvider,
 } from "@station/contracts";
 import { withTimeout } from "@station/runtime";
+import {
+  ProviderHealthCache,
+  type ProviderHealthCacheTuning,
+  type ProviderHealthProbeTarget,
+} from "./healthCache.js";
 import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 
 export type ProviderRegistryInput = {
@@ -23,6 +29,7 @@ export type ProviderRegistryInput = {
   repositories?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
   hookAdapters?: Iterable<ProviderHookAdapter> | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
+  healthCache?: ProviderHealthCacheTuning | undefined;
 };
 
 export class ProviderRegistry {
@@ -35,6 +42,7 @@ export class ProviderRegistry {
   readonly repositories: Map<string, RepositoryProvider>;
   readonly hookAdapters: Map<string, ProviderHookAdapter>;
   readonly terminalIntentRunner: TerminalIntentRunner;
+  readonly healthCache: ProviderHealthCache;
 
   constructor(input: ProviderRegistryInput) {
     this.worktree = input.worktree;
@@ -88,6 +96,11 @@ export class ProviderRegistry {
           harnesses: this.harnesses,
         },
       });
+
+    this.healthCache = new ProviderHealthCache({
+      targets: healthProbeTargets(this),
+      ...(input.healthCache ?? {}),
+    });
   }
 
   /** The default terminal provider. Retained for single-provider back-compat. */
@@ -140,4 +153,36 @@ export class ProviderRegistry {
       }),
     );
   }
+}
+
+type HealthProbeCapableProvider = {
+  id: ProviderId;
+  capabilities(): Record<string, boolean>;
+  health(): Promise<ProviderHealth>;
+};
+
+function healthProbeTargets(registry: ProviderRegistry): ProviderHealthProbeTarget[] {
+  const targets: ProviderHealthProbeTarget[] = [probeTarget(registry.worktree, "worktree")];
+  for (const provider of registry.terminals.values()) {
+    targets.push(probeTarget(provider, "terminal"));
+  }
+  for (const provider of registry.harnesses.values()) {
+    targets.push(probeTarget(provider, "harness"));
+  }
+  for (const provider of registry.repositories.values()) {
+    targets.push(probeTarget(provider, "repository"));
+  }
+  return targets;
+}
+
+function probeTarget(
+  provider: HealthProbeCapableProvider,
+  providerType: ProviderHealth["providerType"],
+): ProviderHealthProbeTarget {
+  return {
+    providerId: provider.id,
+    providerType,
+    capabilities: () => provider.capabilities(),
+    health: () => provider.health(),
+  };
 }
