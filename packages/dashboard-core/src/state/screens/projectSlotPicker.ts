@@ -1,4 +1,4 @@
-import { type KeyedChoice, selectProjectChooserChoices } from "../../selectors/selectors.js";
+import { selectProjectChooserChoices } from "../../selectors/selectors.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
@@ -10,29 +10,16 @@ import type { TuiState } from "../types.js";
  */
 export type ProjectPickerScreen = "projectCollapse" | "projectSettingsPicker";
 
-export function formatProjectChoicePrompt(
-  choices: ReadonlyArray<KeyedChoice<{ label: string }>>,
-): string {
-  return choices.map((choice) => `${choice.key}:${choice.value.label}`).join(" ");
-}
-
 export function openProjectSlotPicker(state: TuiState, name: ProjectPickerScreen): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
-  const choices = selectProjectChooserChoices(state.snapshot);
   // Seed the cursor to the first project so ↑↓ starts from the highlighted row;
   // the shared selectionMiddleware then owns arrows/↵/slot for this list.
+  const first = selectProjectChooserChoices(state.snapshot)[0];
   const selection = new Map(state.selection);
-  const first = choices[0];
   if (first !== undefined) {
     selection.set(name, first.value.id);
   }
-  return {
-    state: {
-      ...state,
-      selection,
-      screen: { name, value: formatProjectChoicePrompt(choices) },
-    },
-  };
+  return { state: { ...state, selection, screen: { name } } };
 }

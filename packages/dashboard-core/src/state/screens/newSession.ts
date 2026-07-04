@@ -41,7 +41,7 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
     return submitNewSession(state);
   }
 
-  const flow = transitionNewSessionFlow(state.screen.flow, state.snapshot, intent.action);
+  const flow = transitionNewSessionFlow(state.screen.flow, intent.action);
   if (flow === undefined) {
     return {
       state: {

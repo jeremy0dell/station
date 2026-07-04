@@ -701,12 +701,16 @@ describe("routeStationMouse widget settings", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "A" });
     const opened = store.getState().screen;
-    if (opened.name !== "addProject") throw new Error("expected addProject");
+    if (opened.name !== "addProject" || opened.flow.mode !== "start") {
+      throw new Error("expected addProject start");
+    }
     expect(opened.flow.selectedIndex).toBe(0);
 
     routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
     const moved = store.getState().screen;
-    if (moved.name !== "addProject") throw new Error("expected addProject");
+    if (moved.name !== "addProject" || moved.flow.mode !== "start") {
+      throw new Error("expected addProject start");
+    }
     expect(moved.flow.selectedIndex).toBe(1);
   });
 

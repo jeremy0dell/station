@@ -6,7 +6,6 @@ import {
   isSelectionKey,
   keyChoices,
   SELECTION_KEYS,
-  selectDashboardRowChoices,
   selectNewSessionHarnessChoices,
   selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
@@ -253,24 +252,6 @@ describe("TUI selectors", () => {
       (group) => group.project.id === "web",
     );
     expect(web?.rows.map((candidate) => candidate.id)[0]).toBe("wt_web_stuck");
-  });
-
-  it("assigns stable numeric slots without resolving any selected row", () => {
-    const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState();
-    const choices = selectDashboardRowChoices(snapshot, state);
-
-    expect(choiceValueByKey(choices, "5")?.id).toBe("wt_web_idle");
-  });
-
-  it("skips collapsed project rows when assigning worktree slots", () => {
-    const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState({ collapsedProjectIds: ["web"] });
-    const choices = selectDashboardRowChoices(snapshot, state);
-
-    expect(choices.map((choice) => [choice.key, choice.value.id])).toEqual([
-      ["1", "wt_api_working"],
-    ]);
   });
 
   it("assigns project choices from rendered project headers", () => {

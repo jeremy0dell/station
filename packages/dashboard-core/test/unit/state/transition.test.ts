@@ -577,6 +577,17 @@ describe("TUI screen transitions", () => {
     expect(committed.screen.flow.selectedProjectId).toBe("api");
   });
 
+  it("commits a new-session project via a slot key through the engine", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const pick = handleTuiKey(review, { input: "P" }).state;
+    // Slot "2" resolves to the second project (api) via the shared middleware.
+    const committed = handleTuiKey(pick, { input: "2" }).state;
+    if (committed.screen.name !== "newSession") throw new Error("unreachable");
+    expect(committed.screen.flow.mode).toBe("review");
+    expect(committed.screen.flow.selectedProjectId).toBe("api");
+  });
+
   it("commits a new-session agent via the cursor on enter", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const review = handleTuiKey(base, { input: "N" }).state;

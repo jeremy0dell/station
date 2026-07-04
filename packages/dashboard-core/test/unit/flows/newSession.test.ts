@@ -1,4 +1,6 @@
 import {
+  chooseNewSessionAgentById,
+  chooseNewSessionProjectById,
   createNewSessionFlow,
   createNewSessionNameToken,
   harnessOptions,
@@ -35,12 +37,12 @@ describe("new session flow", () => {
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
 
-    const editing = transitionNewSessionFlow(opened, snapshot, { type: "editName" });
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
 
-    const state = typeName(editing, snapshot, " feature/foo ");
+    const state = typeName(editing, " feature/foo ");
 
-    expect(transitionNewSessionFlow(state, snapshot, { type: "commitName" })).toMatchObject({
+    expect(transitionNewSessionFlow(state, { type: "commitName" })).toMatchObject({
       mode: "review",
       branch: "feature/foo",
       nameSource: "custom",
@@ -67,11 +69,14 @@ describe("new session flow", () => {
       type: "submit",
     });
 
-    const picker = transitionNewSessionFlow(opened, snapshot, { type: "pickAgent" });
+    // In a pick step the shared selection engine owns ↑↓/↵/slot before this
+    // handler, so a slot key yields no intent here.
+    const picker = transitionNewSessionFlow(opened, { type: "pickAgent" });
     if (picker?.mode !== "pickAgent") throw new Error("expected agent picker");
-    expect(newSessionIntentForInput(picker, input("2"))).toEqual({
-      type: "transition",
-      action: { type: "chooseAgent", key: "2" },
+    expect(newSessionIntentForInput(picker, input("2"))).toEqual({ type: "none" });
+    expect(chooseNewSessionAgentById(picker, snapshot, "opencode")).toMatchObject({
+      mode: "review",
+      selectedHarness: "opencode",
     });
   });
 
@@ -80,14 +85,14 @@ describe("new session flow", () => {
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
 
-    const editing = transitionNewSessionFlow(opened, snapshot, { type: "editName" });
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
     expect(editing).toMatchObject({
       mode: "editName",
       stepHistory: ["review"],
       draftName: { value: "", cursor: 0 },
     });
 
-    const reviewed = transitionNewSessionFlow(editing ?? opened, snapshot, { type: "cancel" });
+    const reviewed = transitionNewSessionFlow(editing ?? opened, { type: "cancel" });
     expect(reviewed).toMatchObject({
       mode: "review",
       stepHistory: [],
@@ -101,13 +106,9 @@ describe("new session flow", () => {
 
     // Pick a non-default harness so the assertion can tell "preserved" from "reset to default".
     const chosen = { ...opened, selectedHarness: "opencode" as const };
-    const picker = transitionNewSessionFlow(chosen, snapshot, { type: "pickProject" });
+    const picker = transitionNewSessionFlow(chosen, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
-    const selected = transitionNewSessionFlow(picker, snapshot, {
-      type: "chooseProject",
-      key: "2",
-      token: "bbbbbb",
-    });
+    const selected = chooseNewSessionProjectById(picker, snapshot, "api", "bbbbbb");
 
     expect(selected).toMatchObject({
       mode: "review",
@@ -128,13 +129,9 @@ describe("new session flow", () => {
       branch: "feature/custom",
       nameSource: "custom" as const,
     };
-    const picker = transitionNewSessionFlow(custom, snapshot, { type: "pickProject" });
+    const picker = transitionNewSessionFlow(custom, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
-    const selected = transitionNewSessionFlow(picker, snapshot, {
-      type: "chooseProject",
-      key: "2",
-      token: "bbbbbb",
-    });
+    const selected = chooseNewSessionProjectById(picker, snapshot, "api", "bbbbbb");
 
     expect(selected).toMatchObject({
       selectedProjectId: "api",
@@ -144,30 +141,24 @@ describe("new session flow", () => {
     });
   });
 
-  it("ignores out-of-range direct project picks", () => {
+  it("ignores a project pick for an unknown id", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const picker = transitionNewSessionFlow(opened, snapshot, { type: "pickProject" });
+    const picker = transitionNewSessionFlow(opened, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
 
-    const intent = newSessionIntentForInput(picker, input("9"));
-    if (intent.type !== "transition") throw new Error("expected transition intent");
-    const selected = transitionNewSessionFlow(picker, snapshot, intent.action);
-
-    expect(selected).toBe(picker);
+    expect(chooseNewSessionProjectById(picker, snapshot, "ghost", "bbbbbb")).toBe(picker);
   });
 
-  it("selects a project by a letter key", () => {
+  it("commits a project by id from a larger list", () => {
     const snapshot = createProjectSnapshot(10);
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const picker = transitionNewSessionFlow(opened, snapshot, { type: "pickProject" });
+    const picker = transitionNewSessionFlow(opened, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
 
-    const intent = newSessionIntentForInput(picker, input("a"));
-    if (intent.type !== "transition") throw new Error("expected transition intent");
-    const selected = transitionNewSessionFlow(picker, snapshot, intent.action);
+    const selected = chooseNewSessionProjectById(picker, snapshot, "project-10", "bbbbbb");
 
     expect(selected).toMatchObject({
       mode: "review",
@@ -177,61 +168,50 @@ describe("new session flow", () => {
     });
   });
 
-  it("does not select picker items from 0, arrows, out-of-range j/k, or Enter", () => {
+  it("yields no pick-step intent for any key (the selection engine owns them)", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const picker = transitionNewSessionFlow(opened, snapshot, { type: "pickProject" });
+    const picker = transitionNewSessionFlow(opened, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
 
-    expect(newSessionIntentForInput(picker, input("0"))).toEqual({ type: "none" });
-    expect(newSessionIntentForInput(picker, input("", { downArrow: true }))).toEqual({
-      type: "none",
-    });
-    expect(newSessionIntentForInput(picker, input("", { upArrow: true }))).toEqual({
-      type: "none",
-    });
-    const jIntent = newSessionIntentForInput(picker, input("j"));
-    const kIntent = newSessionIntentForInput(picker, input("k"));
-    if (jIntent.type !== "transition" || kIntent.type !== "transition") {
-      throw new Error("expected letter selection intents");
+    for (const key of [
+      input("0"),
+      input("2"),
+      input("j"),
+      input("", { downArrow: true }),
+      input("", { upArrow: true }),
+      input("\r", { return: true }),
+    ]) {
+      expect(newSessionIntentForInput(picker, key)).toEqual({ type: "none" });
     }
-    expect(transitionNewSessionFlow(picker, snapshot, jIntent.action)).toBe(picker);
-    expect(transitionNewSessionFlow(picker, snapshot, kIntent.action)).toBe(picker);
-    expect(newSessionIntentForInput(picker, input("\r", { return: true }))).toEqual({
-      type: "none",
-    });
   });
 
-  it("ignores out-of-range direct agent picks", () => {
+  it("ignores an agent pick for an unknown id", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const picker = transitionNewSessionFlow(opened, snapshot, { type: "pickAgent" });
+    const picker = transitionNewSessionFlow(opened, { type: "pickAgent" });
     if (picker?.mode !== "pickAgent") throw new Error("expected agent picker");
 
-    const intent = newSessionIntentForInput(picker, input("9"));
-    if (intent.type !== "transition") throw new Error("expected transition intent");
-    const selected = transitionNewSessionFlow(picker, snapshot, intent.action);
-
-    expect(selected).toBe(picker);
+    expect(chooseNewSessionAgentById(picker, snapshot, "ghost")).toBe(picker);
   });
 
   it("moves the edit-name cursor and edits at the insertion point", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const editing = transitionNewSessionFlow(opened, snapshot, { type: "editName" });
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
 
-    const typed = typeName(editing, snapshot, "feature/foo");
-    const movedOnce = applyInput(typed, snapshot, "", { leftArrow: true });
-    const movedTwice = applyInput(movedOnce, snapshot, "", { leftArrow: true });
-    const movedLeft = applyInput(movedTwice, snapshot, "", { leftArrow: true });
+    const typed = typeName(editing, "feature/foo");
+    const movedOnce = applyInput(typed, "", { leftArrow: true });
+    const movedTwice = applyInput(movedOnce, "", { leftArrow: true });
+    const movedLeft = applyInput(movedTwice, "", { leftArrow: true });
     if (movedLeft?.mode !== "editName") throw new Error("expected edit mode");
     expect(movedLeft.draftName.cursor).toBe(8);
 
-    const inserted = applyInput(movedLeft, snapshot, "-bar");
+    const inserted = applyInput(movedLeft, "-bar");
     expect(inserted).toMatchObject({
       mode: "editName",
       draftName: {
@@ -240,7 +220,7 @@ describe("new session flow", () => {
       },
     });
 
-    const backspaced = applyInput(inserted, snapshot, "", { backspace: true });
+    const backspaced = applyInput(inserted, "", { backspace: true });
     expect(backspaced).toMatchObject({
       mode: "editName",
       draftName: {
@@ -249,7 +229,7 @@ describe("new session flow", () => {
       },
     });
 
-    const deleted = applyInput(backspaced, snapshot, "", { delete: true });
+    const deleted = applyInput(backspaced, "", { delete: true });
     expect(deleted).toMatchObject({
       mode: "editName",
       draftName: {
@@ -263,19 +243,19 @@ describe("new session flow", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const editing = transitionNewSessionFlow(opened, snapshot, { type: "editName" });
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
 
-    const typed = typeName(editing, snapshot, "featurefoo");
-    const movedOnce = applyInput(typed, snapshot, "", { leftArrow: true });
-    const movedTwice = applyInput(movedOnce, snapshot, "", { leftArrow: true });
-    const movedLeft = applyInput(movedTwice, snapshot, "", { leftArrow: true });
+    const typed = typeName(editing, "featurefoo");
+    const movedOnce = applyInput(typed, "", { leftArrow: true });
+    const movedTwice = applyInput(movedOnce, "", { leftArrow: true });
+    const movedLeft = applyInput(movedTwice, "", { leftArrow: true });
 
     expect(newSessionIntentForInput(movedLeft, input("u", { ctrl: true }))).toEqual({
       type: "transition",
       action: { type: "editNameInput", action: { type: "deleteBeforeCursor" } },
     });
-    expect(applyInput(movedLeft, snapshot, "u", { ctrl: true })).toMatchObject({
+    expect(applyInput(movedLeft, "u", { ctrl: true })).toMatchObject({
       mode: "editName",
       draftName: {
         value: "foo",
@@ -288,7 +268,7 @@ describe("new session flow", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    const editing = transitionNewSessionFlow(opened, snapshot, { type: "editName" });
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
 
     expect(newSessionIntentForInput(editing, input("", { leftArrow: true }))).toEqual({
@@ -389,11 +369,10 @@ function createProjectSnapshot(count: number) {
 
 function typeName(
   initialState: NonNullable<ReturnType<typeof transitionNewSessionFlow>> & { mode: "editName" },
-  snapshot: ReturnType<typeof createHarnessSnapshot>,
   value: string,
 ) {
   return value.split("").reduce((state, input) => {
-    const next = applyInput(state, snapshot, input);
+    const next = applyInput(state, input);
     if (next?.mode !== "editName") throw new Error("expected edit mode");
     return next;
   }, initialState);
@@ -401,13 +380,12 @@ function typeName(
 
 function applyInput(
   state: NonNullable<ReturnType<typeof transitionNewSessionFlow>>,
-  snapshot: ReturnType<typeof createHarnessSnapshot>,
   value: string,
   key: Parameters<typeof newSessionIntentForInput>[1]["key"] = {},
 ) {
   const intent = newSessionIntentForInput(state, input(value, key));
   if (intent.type !== "transition") throw new Error("expected transition intent");
-  const next = transitionNewSessionFlow(state, snapshot, intent.action);
+  const next = transitionNewSessionFlow(state, intent.action);
   if (next === undefined) throw new Error("expected state");
   return next;
 }
