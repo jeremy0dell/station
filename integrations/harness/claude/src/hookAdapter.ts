@@ -14,6 +14,7 @@ import {
   ProviderHookEventSchema,
   parseStationHookIdentityPayload,
 } from "@station/contracts";
+import { z } from "zod";
 import { compactClaudeHookPayload } from "./compaction.js";
 import { claudeHookPayloadReportId, claudeHookPayloadToHarnessEventReport } from "./events.js";
 import { isClaudeForwardedEventType } from "./ingressRules.js";
@@ -27,24 +28,29 @@ export const claudeHookAdapter: ProviderHookAdapter = {
   toHarnessEventReport: claudeHookEventReport,
 };
 
+// Pre-parse probe for the scope decision only; the full event schema validates
+// later in toHarnessEventReport.
+const hookCwdProbeSchema = z.object({ cwd: z.string().min(1) }).loose();
+
 function decideClaudeHookScope(event: ProviderHookEvent): ProviderHookScopeDecision {
   if (event.kind !== "harness") {
     return { action: "accept", reason: "not-required" };
-  }
-
-  const payload = parseStationHookIdentityPayload(event.payload);
-  if (payload === undefined) {
-    return { action: "ignore", reason: "missing-station-env" };
-  }
-  if (payload.station_session_id === undefined || payload.station_worktree_id === undefined) {
-    return { action: "ignore", reason: "missing-station-env" };
   }
   // A fallback global install can surface user-added hook events; unlisted
   // event types are dropped, never errors.
   if (!isClaudeForwardedEventType(event.event)) {
     return { action: "ignore", reason: "event-not-forwarded" };
   }
-  return { action: "accept", reason: "station-env" };
+  const payload = parseStationHookIdentityPayload(event.payload);
+  if (payload?.station_session_id !== undefined && payload.station_worktree_id !== undefined) {
+    return { action: "accept", reason: "station-env" };
+  }
+  // Sessions Station did not launch carry no station env; the observer
+  // correlates their events by cwd (dropped there when ambiguous).
+  if (hookCwdProbeSchema.safeParse(event.payload).success) {
+    return { action: "accept", reason: "cwd" };
+  }
+  return { action: "ignore", reason: "missing-station-env" };
 }
 
 function compactClaudeHookEventPayload(

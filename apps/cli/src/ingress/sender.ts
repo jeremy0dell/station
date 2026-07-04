@@ -25,6 +25,7 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { normalizeWorktrunkLifecycleEvent } from "@station/worktrunk";
+import { z } from "zod";
 import { deliverProviderHookWithSpooling, type ProviderDeliveryAttempt } from "./deliveryPolicy.js";
 import type { ProviderHookObserverStartupDeps } from "./observerStartup.js";
 import { writeProviderHookSpoolRecord } from "./spool.js";
@@ -154,7 +155,7 @@ export async function sendClaudeHookPayload(
     env: input.env ?? process.env,
   });
   const eventName = parseProviderHookEventName(enrichedPayload) ?? "unknown";
-  if (!hasStationOwnership(enrichedPayload)) {
+  if (!hasStationOwnership(enrichedPayload) && !hasCorrelatableCwd(enrichedPayload)) {
     return ignoredProviderHookReceipt({
       provider: "claude",
       event: eventName,
@@ -197,7 +198,7 @@ export async function sendCodexHookPayload(
     env: input.env ?? process.env,
   });
   const eventName = parseProviderHookEventName(enrichedPayload) ?? "unknown";
-  if (!hasStationOwnership(enrichedPayload)) {
+  if (!hasStationOwnership(enrichedPayload) && !hasCorrelatableCwd(enrichedPayload)) {
     return ignoredProviderHookReceipt({
       provider: "codex",
       event: eventName,
@@ -432,6 +433,16 @@ function payloadSummaryFor(payload: unknown): ProviderHookPayloadSummary {
     compacted: false,
     omittedFieldNames: [],
   };
+}
+
+// External sessions (no station env) are deliverable when the payload carries
+// a cwd the observer can correlate to a worktree; providers whose payloads
+// have no cwd keep the ownership gate. Pre-parse probe only — full event
+// schemas validate at the adapter boundary.
+const hookCwdProbeSchema = z.object({ cwd: z.string().min(1) }).loose();
+
+function hasCorrelatableCwd(payload: unknown): boolean {
+  return hookCwdProbeSchema.safeParse(payload).success;
 }
 
 function hasStationOwnership(payload: unknown): boolean {

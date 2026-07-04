@@ -70,7 +70,7 @@ describe("Claude hook setup", () => {
     expect(settings.hooks.Stop?.[0]).not.toHaveProperty("matcher");
   });
 
-  it("installs the artifact and script idempotently with the env guard", async () => {
+  it("installs the artifact and script idempotently without a station-env gate", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-claude-hooks-"));
     const claudeConfigDir = join(root, "claude-home");
     const settingsPath = join(root, "state", "hooks", "station-claude-settings.json");
@@ -98,9 +98,9 @@ describe("Claude hook setup", () => {
     expect(first.changed).toBe(true);
     expect(second.changed).toBe(false);
     expect(Object.keys(settings.hooks)).toEqual(expectedEvents);
-    expect(script).toContain(
-      `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    );
+    // External sessions carry no station env; the script must deliver anyway
+    // and leave scope decisions to the provider adapter.
+    expect(script).not.toContain("STATION_SESSION_ID");
     expect(script).toContain("--config /tmp/station/config.toml");
     expect(script).toContain("claude > /dev/null");
     expect(script).not.toContain("payload_file=");
@@ -112,31 +112,40 @@ describe("Claude hook setup", () => {
     });
   });
 
-  it("generated script exits before payload parsing or hook invocation without ownership env", async () => {
+  it("generated script delivers to stn-ingress even without ownership env", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-claude-hooks-"));
     const settingsPath = join(root, "state", "hooks", "station-claude-settings.json");
     const hookScriptPath = join(root, "state", "hooks", "station-claude-hook.sh");
+    const hookBin = join(root, "stn-ingress");
+    const argsLog = join(root, "hook.args");
+    await writeFile(
+      hookBin,
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        `printf '%s\\n' "$*" >> ${shellQuote(argsLog)}`,
+        "cat > /dev/null",
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
 
     await installClaudeHooks({
       claudeSettingsPath: settingsPath,
       claudeConfigDir: join(root, "claude-home"),
       hookScriptPath,
-      hookBin: join(root, "missing-stn-ingress"),
+      stationConfigPath: "/tmp/station/config.toml",
+      hookBin,
       env: {},
     });
 
-    for (const env of [
-      {},
-      { STATION_SESSION_ID: "ses_web_task" },
-      { STATION_WORKTREE_ID: "wt_web_task" },
-    ]) {
-      const result = await runHookScript(hookScriptPath, "{ invalid json", {
-        TMPDIR: root,
-        ...env,
-      });
+    const payload = JSON.stringify({ hook_event_name: "PreToolUse" });
+    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root });
 
-      expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
-    }
+    expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+    await expect(readFile(argsLog, "utf8")).resolves.toBe(
+      "--config /tmp/station/config.toml claude\n",
+    );
   });
 
   it("generated script invokes stn-ingress with Claude stdin when ownership env is present", async () => {

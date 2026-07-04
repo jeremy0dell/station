@@ -101,9 +101,9 @@ describe("Codex hook setup", () => {
     expect(script).toContain("CONFIG_ARG=(--config /tmp/station/config.toml)");
     expect(script).toContain("STATE_DIR_ARG=(--state-dir /tmp/station/state)");
     expect(script).toContain("SPOOL_DIR_ARG=(--spool-dir /tmp/station/state/spool/hooks)");
-    expect(script).toContain(
-      `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    );
+    // External sessions carry no station env; the script must deliver anyway
+    // and leave scope decisions to the provider adapter.
+    expect(script).not.toContain("STATION_SESSION_ID");
     expect(script).not.toContain("payload_file=");
     expect(script).toContain("codex > /dev/null");
     expect(scriptMode).toBe(0o700);
@@ -125,31 +125,40 @@ describe("Codex hook setup", () => {
     });
   });
 
-  it("generated script exits before payload parsing or hook invocation without ownership env", async () => {
+  it("generated script delivers to stn-ingress even without ownership env", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
     const env = codexEnv(root);
     const configPath = join(root, "codex", "config.toml");
     const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const hookBin = join(root, "stn-ingress");
+    const argsLog = join(root, "hook.args");
+    await writeFile(
+      hookBin,
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        `printf '%s\\n' "$*" >> ${shellQuote(argsLog)}`,
+        "cat > /dev/null",
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
 
     await installCodexHooks({
       codexConfigPath: configPath,
       hookScriptPath,
-      hookBin: join(root, "missing-stn-ingress"),
+      stationConfigPath: "/tmp/station/config.toml",
+      hookBin,
       env,
     });
 
-    for (const env of [
-      {},
-      { STATION_SESSION_ID: "ses_web_task" },
-      { STATION_WORKTREE_ID: "wt_web_task" },
-    ]) {
-      const result = await runHookScript(hookScriptPath, "{ invalid json", {
-        TMPDIR: root,
-        ...env,
-      });
+    const payload = JSON.stringify({ hook_event_name: "PreToolUse" });
+    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root });
 
-      expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
-    }
+    expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+    await expect(readFile(argsLog, "utf8")).resolves.toBe(
+      "--config /tmp/station/config.toml codex\n",
+    );
   });
 
   it("generated script invokes stn-ingress with Codex stdin when ownership env is present", async () => {

@@ -111,10 +111,11 @@ describe("runtime hookSetup", () => {
       });
       expect(ignoreAndRedirect).toContain("claude > /dev/null 2>&1 || true\n");
 
-      // The session/worktree ownership guard must survive: no env -> exit 0 before invoking.
-      expect(plain).toContain("STATION_SESSION_ID");
-      expect(plain).toContain("STATION_WORKTREE_ID");
-      expect(plain).toContain("  exit 0");
+      // No ownership gate: external sessions (no station env) must deliver so
+      // the observer can correlate them by cwd; scope lives in the adapters.
+      expect(plain).not.toContain("STATION_SESSION_ID");
+      expect(plain).not.toContain("STATION_WORKTREE_ID");
+      expect(plain).not.toContain("  exit 0");
     });
 
     it("builds provider-neutral ingress commands and generated scripts", () => {

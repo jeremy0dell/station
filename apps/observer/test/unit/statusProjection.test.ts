@@ -13,7 +13,10 @@ import {
 import { describe, expect, it } from "vitest";
 import { buildStationSnapshot } from "../../src/reconcile/graph";
 import { observerHarnessRunFromRun } from "../../src/reconcile/harnessEventStatus";
-import { projectHarnessEventReportOntoSnapshot } from "../../src/reconcile/statusProjection";
+import {
+  projectHarnessEventReportOntoSnapshot,
+  withWorktreeCorrelationFromCwd,
+} from "../../src/reconcile/statusProjection";
 
 const now = "2026-05-21T12:00:00.000Z";
 const eventAt = "2026-05-21T12:00:01.000Z";
@@ -230,6 +233,96 @@ describe("live harness status projection", () => {
     });
   });
 });
+
+describe("cwd correlation resolution", () => {
+  it("resolves a cwd-only report to the containing worktree and projects it", () => {
+    const snapshot = snapshotFor();
+    const enriched = withWorktreeCorrelationFromCwd(
+      report({
+        status: status("working", "medium", "Codex is about to use Bash."),
+        correlation: { cwd: "/tmp/station/web/task/src/deep" },
+      }),
+      snapshot,
+    );
+
+    expect(enriched.correlation).toMatchObject({
+      worktreeId: "wt_web_task",
+      cwd: "/tmp/station/web/task/src/deep",
+    });
+
+    const result = projectHarnessEventReportOntoSnapshot({
+      snapshot,
+      report: enriched,
+      projectedAt: eventAt,
+    });
+    expect(result.projected).toBe(true);
+    expect(result.correlatedBy).toBe("worktreeId");
+    expect(result.snapshot.rows[0]?.agent).toMatchObject({ state: "working" });
+  });
+
+  it("leaves reports with stronger correlation or an unknown cwd untouched", () => {
+    const snapshot = snapshotFor();
+    const strong = report({
+      status: status("working", "medium", "Codex is about to use Bash."),
+      correlation: { sessionId: "ses_other", cwd: "/tmp/station/web/task" },
+    });
+    expect(withWorktreeCorrelationFromCwd(strong, snapshot)).toBe(strong);
+
+    const elsewhere = report({
+      status: status("working", "medium", "Codex is about to use Bash."),
+      correlation: { cwd: "/somewhere/unrelated" },
+    });
+    expect(withWorktreeCorrelationFromCwd(elsewhere, snapshot)).toBe(elsewhere);
+  });
+
+  it("picks the deepest containing worktree and drops ties as ambiguous", () => {
+    const snapshot = snapshotForRows([
+      { id: "wt_web_root", path: "/tmp/station/web" },
+      { id: "wt_web_task", path: "/tmp/station/web/task" },
+    ]);
+    const nested = withWorktreeCorrelationFromCwd(
+      report({
+        status: status("working", "medium", "Codex is about to use Bash."),
+        correlation: { cwd: "/tmp/station/web/task/src" },
+      }),
+      snapshot,
+    );
+    expect(nested.correlation?.worktreeId).toBe("wt_web_task");
+
+    const duplicated = snapshotForRows([
+      { id: "wt_a", path: "/tmp/station/web/task" },
+      { id: "wt_b", path: "/tmp/station/web/task" },
+    ]);
+    const ambiguous = report({
+      status: status("working", "medium", "Codex is about to use Bash."),
+      correlation: { cwd: "/tmp/station/web/task" },
+    });
+    expect(withWorktreeCorrelationFromCwd(ambiguous, duplicated)).toBe(ambiguous);
+  });
+});
+
+function snapshotForRows(rows: Array<{ id: string; path: string }>) {
+  return buildStationSnapshot({
+    generatedAt: now,
+    observer: { pid: 4242, startedAt: now, version: "0.0.0", healthy: true },
+    projects: [
+      {
+        id: "web",
+        label: "web",
+        root: "/tmp/station/web",
+        defaults: { harness: "codex", terminal: "tmux", layout: "agent-shell" },
+        worktrunk: { enabled: true },
+      },
+    ],
+    worktreeProviderId: "fake-worktree",
+    providerHealth: {},
+    worktrees: rows.map((row) =>
+      createFakeWorktree({ id: row.id, projectId: "web", branch: row.id, path: row.path, now }),
+    ),
+    terminalTargets: [],
+    harnessRuns: [],
+  });
+}
 
 function snapshotFor(input: { state?: AgentState; confidence?: Confidence; now?: string } = {}) {
   const worktrees = [

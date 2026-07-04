@@ -117,9 +117,9 @@ describe("Cursor hook setup", () => {
     expect(script).toContain("CONFIG_ARG=(--config /tmp/station/config.toml)");
     expect(providerHookScriptRoutesByStationEnv(script, "cursor")).toBe(true);
     expect(script).toContain("--no-auto-start cursor");
-    expect(script).toContain(
-      `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    );
+    // External sessions carry no station env; the script must deliver anyway
+    // and leave scope decisions to the provider adapter.
+    expect(script).not.toContain("STATION_SESSION_ID");
     expect(script).toContain("cursor > /dev/null");
     expect(scriptMode).toBe(0o700);
     await expect(
@@ -177,29 +177,38 @@ describe("Cursor hook setup", () => {
     });
   });
 
-  it("generated script exits before hook invocation without ownership env", async () => {
+  it("generated script delivers to stn-ingress even without ownership env", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-"));
     const hooksPath = join(root, "cursor", "hooks.json");
     const hookScriptPath = join(root, "state", "hooks", "station-cursor-hook.sh");
+    const hookBin = join(root, "stn-ingress");
+    const argsLog = join(root, "hook.args");
+    await writeFile(
+      hookBin,
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        `printf '%s\\n' "$*" >> ${shellQuote(argsLog)}`,
+        "cat > /dev/null",
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
 
     await installCursorHooks({
       cursorHooksPath: hooksPath,
       hookScriptPath,
-      hookBin: join(root, "missing-stn-ingress"),
+      stationConfigPath: "/tmp/station/config.toml",
+      hookBin,
     });
 
-    for (const env of [
-      {},
-      { STATION_SESSION_ID: "ses_web_task" },
-      { STATION_WORKTREE_ID: "wt_web_task" },
-    ]) {
-      const result = await runHookScript(hookScriptPath, "{ invalid json", {
-        TMPDIR: root,
-        ...env,
-      });
+    const payload = JSON.stringify({ hook_event_name: "beforeShellExecution" });
+    const result = await runHookScript(hookScriptPath, payload, { TMPDIR: root });
 
-      expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
-    }
+    expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+    await expect(readFile(argsLog, "utf8")).resolves.toBe(
+      "--config /tmp/station/config.toml cursor\n",
+    );
   });
 
   it("generated script invokes stn-ingress with Cursor stdin when ownership env is present", async () => {
