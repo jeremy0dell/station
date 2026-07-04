@@ -12,6 +12,8 @@ import { fit } from "../sheets/parts.js";
 import { STATION_COLORS } from "../theme.js";
 import { stationMouseProps, useStationMouse } from "../stationMouseContext.js";
 
+const UNSELECTABLE_TEXT = { selectable: false } as const;
+
 export type WidgetSettingsPanelViewProps = {
   screen: Extract<TuiScreen, { name: "widgetSettings" }>;
   widgets: readonly TuiWidgetConfig[];
@@ -48,10 +50,15 @@ export function WidgetSettingsPanelView({
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={STATION_COLORS.foreground} bg={STATION_COLORS.background} attributes={TextAttributes.BOLD}>
+      <text
+        fg={STATION_COLORS.foreground}
+        bg={STATION_COLORS.background}
+        attributes={TextAttributes.BOLD}
+        {...UNSELECTABLE_TEXT}
+      >
         {fit(` ${model.title}`, innerWidth)}
       </text>
-      <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>
+      <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background} {...UNSELECTABLE_TEXT}>
         {fit(` ${model.note}`, innerWidth)}
       </text>
       {model.lines.map((line) => (
@@ -66,6 +73,7 @@ export function WidgetSettingsPanelView({
         fg={STATION_COLORS.foreground}
         bg={STATION_COLORS.background}
         attributes={TextAttributes.DIM}
+        {...UNSELECTABLE_TEXT}
       >
         {fit(` ${model.footer}`, innerWidth)}
       </text>
@@ -96,7 +104,7 @@ function PanelLine({
   const [hover, setHover] = useState(false);
   if (line.kind === "empty") {
     return (
-      <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>
+      <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background} {...UNSELECTABLE_TEXT}>
         {fit(`   ${line.label}`, width)}
       </text>
     );
@@ -106,6 +114,7 @@ function PanelLine({
       <text
         fg={STATION_COLORS.cyan}
         bg={hover ? STATION_COLORS.hoverBackground : STATION_COLORS.background}
+        {...UNSELECTABLE_TEXT}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsAdd" })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -126,6 +135,7 @@ function PanelLine({
       <text
         fg={line.active ? STATION_COLORS.cyan : STATION_COLORS.foreground}
         bg={background}
+        {...UNSELECTABLE_TEXT}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsPickerChoice", index: line.index })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -149,6 +159,7 @@ function PanelLine({
       <text
         fg={rowColor}
         bg={hover && !dimmed ? STATION_COLORS.hoverBackground : STATION_COLORS.background}
+        {...UNSELECTABLE_TEXT}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", index: line.index })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -168,6 +179,7 @@ function RemoveMark({ index, rowHovered }: { index: number; rowHovered: boolean 
     <text
       fg={hover ? STATION_COLORS.red : rowHovered ? STATION_COLORS.gray : STATION_COLORS.hairline}
       bg={STATION_COLORS.background}
+      {...UNSELECTABLE_TEXT}
       {...stationMouseProps(dispatch, { kind: "widgetSettingsRemove", index })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}

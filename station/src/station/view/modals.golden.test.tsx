@@ -2,6 +2,7 @@
 // the parity checklist, reached by driving the real machine with real keys,
 // rendered over the dashboard at 80x24. Snapshots live in __snapshots__.
 import { afterEach, describe, expect, it } from "bun:test";
+import { TextRenderable, type BaseRenderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import type { StoreApi } from "zustand/vanilla";
 import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
@@ -14,6 +15,8 @@ import {
 } from "@station/dashboard-core";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import { DashboardRoot } from "./DashboardRoot.js";
+import { StationMouseProvider } from "./stationMouseContext.js";
+import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 
 const SIZE = { width: 80, height: 24 };
 
@@ -229,4 +232,35 @@ describe("modal flow golden frames", () => {
       expect(frame).toMatchSnapshot();
     });
   }
+
+  it("keeps widget settings text out of OpenTUI selection", async () => {
+    const setup = await testRender(
+      <StationMouseProvider value={() => {}}>
+        <WidgetSettingsPanelView
+          screen={{ name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 }}
+          widgets={[{ type: "time" }, { type: "moon", enabled: false }]}
+          widgetsPersisted
+          columns={SIZE.width}
+          rows={SIZE.height}
+        />
+      </StationMouseProvider>,
+      SIZE,
+    );
+    teardowns.push(() => {
+      setup.renderer.destroy();
+    });
+    await setup.renderOnce();
+
+    const textRenderables = collectTextRenderables(setup.renderer.root);
+    expect(textRenderables.length).toBeGreaterThan(0);
+    expect(textRenderables.every((renderable) => renderable.selectable === false)).toBe(true);
+  });
 });
+
+function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
+  const collected = renderable instanceof TextRenderable ? [renderable] : [];
+  for (const child of renderable.getChildren()) {
+    collected.push(...collectTextRenderables(child));
+  }
+  return collected;
+}
