@@ -6,7 +6,9 @@ import {
 
 const HOME = "/home/u";
 
-function resolve(argv: string[], files: Record<string, string> = {}, xdg?: string) {
+function resolve(argv: string[], files: Record<string, string> = {}, xdg = "") {
+  // Pin XDG explicitly so a real XDG_RUNTIME_DIR in CI cannot leak into the
+  // non-XDG cases (empty string = no XDG override).
   return resolveObserverSocketForProcessArgs(argv, {
     homeDir: HOME,
     xdgRuntimeDir: xdg,
