@@ -123,12 +123,12 @@ const CASES: ModalCase[] = [
   {
     name: "new session pick project",
     keys: [{ input: "N" }, { input: "P" }],
-    expect: ["Choose Project", "1-9/a-z:select   Esc:back", "station", "observer"],
+    expect: ["Choose Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc back", "station", "observer"],
   },
   {
     name: "new session pick agent",
     keys: [{ input: "N" }, { input: "A" }],
-    expect: ["Choose Agent", "1-9/a-z:select   Esc:back", "codex"],
+    expect: ["Choose Agent", "↑↓ move   ↵ select   1-9/a-z jump   Esc back", "codex"],
   },
   {
     name: "project default agent picker",

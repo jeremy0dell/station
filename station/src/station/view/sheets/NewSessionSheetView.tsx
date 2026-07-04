@@ -1,8 +1,12 @@
 // OpenTUI port of apps/tui's NewSessionBottomSheet (review / editName /
 // pickProject / pickAgent). Picker lines are click targets dispatching their
 // slot key through the station mouse router.
-import type { ProjectView, StationSnapshot } from "@station/contracts";
-import { type NewSessionFlowState, selectedProject } from "@station/dashboard-core";
+import type { ProjectView, ProviderId, StationSnapshot } from "@station/contracts";
+import {
+  type NewSessionFlowState,
+  selectedProject,
+  type TuiSelectionState,
+} from "@station/dashboard-core";
 import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
@@ -27,11 +31,18 @@ import {
 export type NewSessionSheetViewProps = {
   snapshot: StationSnapshot;
   state: NewSessionFlowState;
+  selection: TuiSelectionState;
   columns: number;
   rows: number;
 };
 
-export function NewSessionSheetView({ snapshot, state, columns, rows }: NewSessionSheetViewProps) {
+export function NewSessionSheetView({
+  snapshot,
+  state,
+  selection,
+  columns,
+  rows,
+}: NewSessionSheetViewProps) {
   const project = selectedProject(snapshot, state);
   const optionCount = optionCountForState(snapshot, state, project);
   const contentWidth = bottomSheetContentWidth(columns);
@@ -43,7 +54,7 @@ export function NewSessionSheetView({ snapshot, state, columns, rows }: NewSessi
       title={titleForState(state)}
       contentRows={newSessionContentRowCount(state, optionCount)}
     >
-      {renderMode(snapshot, state, project, contentWidth)}
+      {renderMode(snapshot, state, project, selection, contentWidth)}
     </BottomSheetFrameView>
   );
 }
@@ -52,13 +63,27 @@ function renderMode(
   snapshot: StationSnapshot,
   state: NewSessionFlowState,
   project: ProjectView | undefined,
+  selection: TuiSelectionState,
   contentWidth: number,
 ) {
   if (state.mode === "pickProject") {
-    return <ProjectPicker snapshot={snapshot} width={contentWidth} />;
+    return (
+      <ProjectPicker
+        snapshot={snapshot}
+        width={contentWidth}
+        selectedId={selection.get("newSessionPickProject") as ProjectView["id"] | undefined}
+      />
+    );
   }
   if (state.mode === "pickAgent" && project !== undefined) {
-    return <AgentPicker snapshot={snapshot} project={project} width={contentWidth} />;
+    return (
+      <AgentPicker
+        snapshot={snapshot}
+        project={project}
+        width={contentWidth}
+        selectedId={selection.get("newSessionPickAgent") as ProviderId | undefined}
+      />
+    );
   }
   if (state.mode === "editName") {
     return <EditName state={state} project={project} width={contentWidth} />;
@@ -150,7 +175,15 @@ function EditName({
   );
 }
 
-function ProjectPicker({ snapshot, width }: { snapshot: StationSnapshot; width: number }) {
+function ProjectPicker({
+  snapshot,
+  width,
+  selectedId,
+}: {
+  snapshot: StationSnapshot;
+  width: number;
+  selectedId?: ProjectView["id"];
+}) {
   const projects = selectNewSessionProjectChoices(snapshot);
   return (
     <>
@@ -163,10 +196,11 @@ function ProjectPicker({ snapshot, width }: { snapshot: StationSnapshot; width: 
           detail={choice.value.health.status}
           color={providerHealthStatusColor(choice.value.health.status)}
           width={width}
+          selected={choice.value.id === selectedId}
         />
       ))}
       <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"1-9/a-z:select   Esc:back"}</SheetFooter>
+      <SheetFooter width={width}>{"↑↓ move   ↵ select   1-9/a-z jump   Esc back"}</SheetFooter>
     </>
   );
 }
@@ -175,18 +209,20 @@ function AgentPicker({
   snapshot,
   project,
   width,
+  selectedId,
 }: {
   snapshot: StationSnapshot;
   project: ProjectView;
   width: number;
+  selectedId?: ProviderId;
 }) {
   const options = selectNewSessionHarnessChoices(snapshot, project);
   return (
     <>
       <SheetLine width={width}> </SheetLine>
-      <AgentChoiceListView choices={options} width={width} />
+      <AgentChoiceListView choices={options} width={width} selectedId={selectedId} />
       <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"1-9/a-z:select   Esc:back"}</SheetFooter>
+      <SheetFooter width={width}>{"↑↓ move   ↵ select   1-9/a-z jump   Esc back"}</SheetFooter>
     </>
   );
 }

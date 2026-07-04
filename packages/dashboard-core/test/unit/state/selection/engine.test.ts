@@ -219,7 +219,11 @@ describe("list registry — migrated modes", () => {
   it("registers exactly the migrated lists (complete over all modes)", () => {
     // Any accidental registration in an unmigrated mode flips this red, so the
     // set is asserted whole rather than sampled.
-    expect(Object.keys(LIST_REGISTRY).sort()).toEqual(["projectDefaultAgent"]);
+    expect(Object.keys(LIST_REGISTRY).sort()).toEqual([
+      "newSessionPickAgent",
+      "newSessionPickProject",
+      "projectDefaultAgent",
+    ]);
   });
 });
 

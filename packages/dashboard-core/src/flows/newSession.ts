@@ -342,9 +342,29 @@ function selectProjectByKey(
   token: string,
 ): NewSessionPickProjectState | NewSessionReviewState {
   const project = choiceValueByKey(selectNewSessionProjectChoices(snapshot), key);
-  if (project === undefined) {
-    return state;
-  }
+  return project === undefined ? state : applyChosenProject(state, snapshot, project, token);
+}
+
+/**
+ * Commit a project chosen by id (the shared selection engine's cursor/slot
+ * value) — the by-key path resolves to the same apply step.
+ */
+export function chooseNewSessionProjectById(
+  state: NewSessionPickProjectState,
+  snapshot: StationSnapshot,
+  projectId: ProjectId,
+  token: string,
+): NewSessionPickProjectState | NewSessionReviewState {
+  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
+  return project === undefined ? state : applyChosenProject(state, snapshot, project, token);
+}
+
+function applyChosenProject(
+  state: NewSessionPickProjectState,
+  snapshot: StationSnapshot,
+  project: NonNullable<ReturnType<typeof selectNewSessionProject>>,
+  token: string,
+): NewSessionPickProjectState | NewSessionReviewState {
   // Harness options are global, so a chosen harness stays valid across projects;
   // keep the user's selection and only fall back to the default if it disappears.
   const options = selectNewSessionHarnessOptions(snapshot, project);
@@ -379,6 +399,20 @@ function selectAgentByKey(
     project === undefined
       ? undefined
       : choiceValueByKey(selectNewSessionHarnessChoices(snapshot, project), key);
+  return option === undefined ? state : chooseNewSessionAgentById(state, snapshot, option.id);
+}
+
+/** Commit an agent chosen by id (the shared selection engine's cursor/slot value). */
+export function chooseNewSessionAgentById(
+  state: NewSessionPickAgentState,
+  snapshot: StationSnapshot,
+  agentId: ProviderId,
+): NewSessionPickAgentState | NewSessionReviewState {
+  const project = selectedProject(snapshot, state);
+  const option =
+    project === undefined
+      ? undefined
+      : selectNewSessionHarnessOptions(snapshot, project).find((entry) => entry.id === agentId);
   if (option === undefined) {
     return state;
   }

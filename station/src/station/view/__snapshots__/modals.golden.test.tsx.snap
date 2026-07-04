@@ -443,7 +443,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ 3 scripts healthy                                                            │
 │ 4 empty-project healthy                                                      │
 │                                                                              │
-│ 1-9/a-z:select   Esc:back                                                    │
+│ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -471,7 +471,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ 1 codex ● update v0.3.0 → v0.4.0                                             │
 │ 2 opencode unknown                                                           │
 │                                                                              │
-│ 1-9/a-z:select   Esc:back                                                    │
+│ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

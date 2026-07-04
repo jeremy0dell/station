@@ -265,11 +265,11 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   newSessionPickProject: [
     { id: "station.newSessionProject.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.newSessionProject.choose", pattern: { kind: "slot" }, action: "station.newSession.chooseProject", outcome: "handled", help: { keys: "1-9 a-z", label: "choose project" } },
+    ...selectableListBindings("station.newSessionProject"),
   ],
   newSessionPickAgent: [
     { id: "station.newSessionAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.newSessionAgent.choose", pattern: { kind: "slot" }, action: "station.newSession.chooseAgent", outcome: "handled", help: { keys: "1-9 a-z", label: "choose agent" } },
+    ...selectableListBindings("station.newSessionAgent"),
   ],
   projectDefaultAgent: [
     { id: "station.projectDefaultAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectDefaultAgent.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },

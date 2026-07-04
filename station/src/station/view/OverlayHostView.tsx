@@ -56,7 +56,13 @@ export function OverlayHostView({
   }
   if (screen.name === "newSession") {
     return (
-      <NewSessionSheetView columns={columns} rows={rows} snapshot={snapshot} state={screen.flow} />
+      <NewSessionSheetView
+        columns={columns}
+        rows={rows}
+        snapshot={snapshot}
+        state={screen.flow}
+        selection={selection}
+      />
     );
   }
   if (screen.name === "projectDefaultAgent") {

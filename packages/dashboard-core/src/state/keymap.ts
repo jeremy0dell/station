@@ -610,13 +610,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.newSessionProject.choose",
-      pattern: { kind: "slot" },
-      action: "tui.newSession.chooseProject",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose project" },
-    },
+    ...selectableListBindings("tui.newSessionProject"),
   ],
   newSessionPickAgent: [
     {
@@ -626,13 +620,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.newSessionAgent.choose",
-      pattern: { kind: "slot" },
-      action: "tui.newSession.chooseAgent",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose agent" },
-    },
+    ...selectableListBindings("tui.newSessionAgent"),
   ],
   projectDefaultAgent: [
     {

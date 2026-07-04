@@ -24,12 +24,14 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   "tui.remove.chooseSlot",
   "tui.rename.chooseSlot",
   "tui.fork.chooseSlot",
-  "tui.newSessionProject.choose",
-  "tui.newSessionAgent.choose",
+  "tui.newSessionProject.slot",
+  "tui.newSessionAgent.slot",
   "tui.projectDefaultAgent.slot",
-  // Seeded at the current default (the top row in the fixture), so ↑ clamps —
-  // a real no-op in the representative state.
+  // Selection lists seed at the current choice, which is the top row in the
+  // fixtures, so ↑ clamps to a real no-op in the representative state.
   "tui.projectDefaultAgent.cursorUp",
+  "tui.newSessionProject.cursorUp",
+  "tui.newSessionAgent.cursorUp",
   // Add-project metadata is a union over its internal submodes.
   "tui.addProject.cancel",
   "tui.addProject.confirm",

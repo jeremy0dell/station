@@ -1,5 +1,6 @@
 import {
   createInitialTuiState,
+  deriveTuiInputMode,
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
@@ -557,6 +558,38 @@ describe("TUI screen transitions", () => {
         },
       },
     });
+  });
+
+  it("seeds and moves the new-session project cursor, committing the choice on enter", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const pick = handleTuiKey(review, { input: "P" }).state;
+    expect(deriveTuiInputMode(pick)).toBe("newSessionPickProject");
+    // Seeded to the current selection (web); arrow down moves to api.
+    expect(pick.selection.get("newSessionPickProject")).toBe("web");
+    const moved = handleTuiKey(pick, { input: "", downArrow: true }).state;
+    expect(moved.selection.get("newSessionPickProject")).toBe("api");
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
+    expect(committed.screen.name).toBe("newSession");
+    if (committed.screen.name !== "newSession") throw new Error("unreachable");
+    expect(committed.screen.flow.mode).toBe("review");
+    expect(committed.screen.flow.selectedProjectId).toBe("api");
+  });
+
+  it("commits a new-session agent via the cursor on enter", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const pick = handleTuiKey(review, { input: "A" }).state;
+    expect(deriveTuiInputMode(pick)).toBe("newSessionPickAgent");
+    expect(pick.selection.get("newSessionPickAgent")).toBe("codex");
+    const moved = handleTuiKey(pick, { input: "", downArrow: true }).state;
+    expect(moved.selection.get("newSessionPickAgent")).toBe("opencode");
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
+    if (committed.screen.name !== "newSession") throw new Error("unreachable");
+    expect(committed.screen.flow.mode).toBe("review");
+    expect(committed.screen.flow.selectedHarness).toBe("opencode");
   });
 
   it("opens and cancels the project default agent picker", () => {
