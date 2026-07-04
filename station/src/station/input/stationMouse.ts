@@ -30,6 +30,7 @@ import {
   resolveRowAgentTarget,
   resolveRowPaneTarget,
   scrollStationView,
+  selectAddProjectRow,
   toggleProjectCollapsed,
   type OpenPaneTarget,
   type RowAgentTarget,
@@ -71,6 +72,8 @@ export type StationMouseTarget =
   | { kind: "widgetSettingsAdd" }
   /** A choice row in the add-widget picker. */
   | { kind: "widgetSettingsPickerChoice"; index: number }
+  /** A folder/start row in the add-project browser; clicking moves the cursor there. */
+  | { kind: "addProjectRow"; index: number }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
@@ -276,6 +279,12 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       addWidgetSettingsPickerChoice(store, target.index);
+      return { kind: "handled" };
+    case "addProjectRow":
+      if (mode !== "addProject") {
+        return { kind: "handled" };
+      }
+      selectAddProjectRow(store, target.index);
       return { kind: "handled" };
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {

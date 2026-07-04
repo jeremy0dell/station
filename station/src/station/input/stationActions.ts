@@ -17,6 +17,7 @@ import {
   generatedSessionBranch,
   openProjectDefaultAgentPicker,
   openWidgetSettings as openWidgetSettingsState,
+  selectAddProjectRow as selectAddProjectRowState,
   selectDashboardItems,
   selectDashboardViewport,
   widgetSettingsAddFromPicker,
@@ -392,6 +393,10 @@ export function openWidgetSettingsPanel(store: StoreApi<TuiStore>): void {
 
 export function toggleWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
   store.setState(widgetSettingsToggleAt(store.getState(), index));
+}
+
+export function selectAddProjectRow(store: StoreApi<TuiStore>, index: number): void {
+  store.setState(selectAddProjectRowState(store.getState(), index));
 }
 
 export function removeWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {

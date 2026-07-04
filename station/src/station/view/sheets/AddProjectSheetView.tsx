@@ -74,6 +74,7 @@ function StartChoices({
           selected={index === state.selectedIndex}
           label={choice.label}
           detail={choice.detail}
+          mouseTarget={{ kind: "addProjectRow", index }}
         />
       ))}
       <SheetFill count={Math.max(0, contentRows - visible.length - 3)} width={width} />
@@ -149,6 +150,7 @@ function FolderPicker({
           selected={start + index === state.selectedIndex}
           label={rowLabel(row)}
           detail={rowDetail(row.kind)}
+          mouseTarget={{ kind: "addProjectRow", index: start + index }}
         />
       ))}
       <SheetFill count={Math.max(0, contentRows - visible.length - 4)} width={width} />

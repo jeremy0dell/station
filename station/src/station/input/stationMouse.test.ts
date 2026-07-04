@@ -696,4 +696,24 @@ describe("routeStationMouse widget settings", () => {
     routeStationMouse({ kind: "widgetSettingsRow", index: 0 }, LEFT_DOWN, store);
     expect(store.getState().widgets[0]).toEqual({ type: "time" });
   });
+
+  it("moves the add-project cursor to a clicked row", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "A" });
+    const opened = store.getState().screen;
+    if (opened.name !== "addProject") throw new Error("expected addProject");
+    expect(opened.flow.selectedIndex).toBe(0);
+
+    routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
+    const moved = store.getState().screen;
+    if (moved.name !== "addProject") throw new Error("expected addProject");
+    expect(moved.flow.selectedIndex).toBe(1);
+  });
+
+  it("ignores an add-project row click outside addProject mode", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "H" });
+    routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
+    expect(store.getState().screen.name).toBe("help");
+  });
 });
