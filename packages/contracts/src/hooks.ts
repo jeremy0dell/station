@@ -170,7 +170,7 @@ export function parseProviderHookEventName(payload: unknown): string | undefined
 export type ProviderHookScopeDecision =
   | {
       action: "accept";
-      reason: "not-required" | "station-env";
+      reason: "not-required" | "station-env" | "cwd";
     }
   | {
       action: "ignore";

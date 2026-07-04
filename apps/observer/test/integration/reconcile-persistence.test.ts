@@ -358,6 +358,56 @@ describe("observer reconcile persistence", () => {
     sqlite.close();
   });
 
+  it("mints a run for an external session and lights its worktree row", async () => {
+    const dbPath = await tempDbPath();
+    const eventAt = "2026-05-20T12:00:01.000Z";
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({
+        now,
+        worktrees: [createFakeWorktree({ id: "wt_web_main", projectId: "web", now })],
+      }),
+      terminal: new FakeTerminalProvider({ now, targets: [] }),
+      harnesses: [new FakeHarnessProvider({ now, runs: [] })],
+    });
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers,
+      clock: { now: () => new Date(now) },
+      sqlitePath: dbPath,
+    });
+    await persistence.recordProviderObservation({
+      provider: "fake-harness",
+      providerType: "harness",
+      entityKind: "harness_event",
+      entityKey: "native_ext_1",
+      observedAt: eventAt,
+      payload: {
+        provider: "fake-harness",
+        worktreeId: "wt_web_main",
+        nativeSessionId: "native_ext_1",
+        rawEventType: "UserPromptSubmit",
+        status: {
+          value: "working",
+          confidence: "medium",
+          reason: "Prompt submitted.",
+          source: "harness_event",
+          updatedAt: eventAt,
+        },
+        observedAt: eventAt,
+      },
+    });
+
+    const snapshot = await core.reconcile("external-session");
+
+    expect(snapshot.rows[0]?.agent).toMatchObject({
+      harness: "fake-harness",
+      state: "working",
+      runId: "fake-harness:external:native_ext_1",
+    });
+    expect(snapshot.counts).toMatchObject({ working: 1 });
+    sqlite.close();
+  });
+
   it("attaches cached current change summaries to hot snapshots", async () => {
     const { sqlite, persistence, core } = createTestObserverCore({
       config,

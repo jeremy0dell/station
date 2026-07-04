@@ -7,6 +7,7 @@ import type {
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
+import { pathIsSameOrInside } from "@station/runtime";
 import { countsForRows, statusPolicy } from "./statusPolicy.js";
 
 type WorktreeAgent = NonNullable<WorktreeRow["agent"]>;
@@ -25,6 +26,55 @@ type ProjectionTarget = {
   rowIndex: number;
   correlatedBy: CorrelatedBy;
 };
+
+/**
+ * Resolve a cwd-only correlation into a worktreeId at the ingress boundary.
+ * cwd is the weakest identity (dropped when ambiguous); resolving it here once
+ * means live projection AND the persisted observation both correlate by the
+ * contract field, so the status survives reconcile overlays. Stronger
+ * correlation fields, when present, are left untouched.
+ */
+export function withWorktreeCorrelationFromCwd(
+  report: HarnessEventReport,
+  snapshot: StationSnapshot,
+): HarnessEventReport {
+  const correlation = report.correlation;
+  if (
+    correlation?.cwd === undefined ||
+    correlation.harnessRunId !== undefined ||
+    correlation.sessionId !== undefined ||
+    correlation.worktreeId !== undefined
+  ) {
+    return report;
+  }
+  const worktreeId = rowIdForCwd(snapshot.rows, correlation.cwd);
+  if (worktreeId === undefined) {
+    return report;
+  }
+  return { ...report, correlation: { ...correlation, worktreeId } };
+}
+
+// Deepest containing worktree wins; a tie at the same depth is ambiguous and
+// resolves to nothing (mirrors resolveWorktreeByProjectPath in run.ts).
+function rowIdForCwd(rows: readonly WorktreeRow[], cwd: string): string | undefined {
+  const matches = rows
+    .filter((row) => pathIsSameOrInside(cwd, row.path))
+    .sort(
+      (left, right) =>
+        right.path.length - left.path.length ||
+        left.id.localeCompare(right.id) ||
+        left.path.localeCompare(right.path),
+    );
+  const match = matches[0];
+  if (match === undefined) {
+    return undefined;
+  }
+  const next = matches[1];
+  if (next !== undefined && next.path.length === match.path.length) {
+    return undefined;
+  }
+  return match.id;
+}
 
 export function projectHarnessEventReportOntoSnapshot(input: {
   snapshot: StationSnapshot;

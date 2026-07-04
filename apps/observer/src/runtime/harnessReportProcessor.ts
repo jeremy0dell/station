@@ -4,6 +4,7 @@ import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, runRuntimeBoundary } from "@station/runtime";
 import type { HarnessEventReportIngestion } from "../hooks/ingestion.js";
 import type { ObserverCore } from "../reconcile/core.js";
+import { withWorktreeCorrelationFromCwd } from "../reconcile/statusProjection.js";
 import type { ObserverEventBus } from "./eventBus.js";
 
 export type HarnessReportProcessorDeps = {
@@ -37,8 +38,11 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
 
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,
-  report: HarnessEventReport,
+  rawReport: HarnessEventReport,
 ): Promise<HarnessReportProcessResult> {
+  // Resolve cwd-only correlation before ingest so the persisted observation
+  // carries the worktreeId too, not just this projection pass.
+  const report = withWorktreeCorrelationFromCwd(rawReport, deps.core.getSnapshot());
   const receipt = await deps.harnessEventReportIngestion.ingest(report, {
     triggerReconcile: false,
   });

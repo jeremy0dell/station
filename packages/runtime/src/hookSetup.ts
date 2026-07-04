@@ -234,12 +234,12 @@ export function expectedProviderHookScript(input: {
   const suffix = input.ignoreFailure === true ? " || true" : "";
   const redirect = input.redirectStderr === true ? " > /dev/null 2>&1" : " > /dev/null";
   const options = input.options ?? {};
+  // No station-env gate: sessions Station did not launch (plain `claude` or
+  // `codex` in any terminal) still deliver, and the provider adapter decides
+  // scope — the observer correlates env-less events by their payload cwd.
   return [
     "#!/usr/bin/env bash",
     "set -euo pipefail",
-    `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    "  exit 0",
-    "fi",
     ...dynamicHookArg(
       "SOCKET_ARG",
       "STATION_OBSERVER_SOCKET_PATH",
@@ -264,9 +264,6 @@ export function expectedProviderHookScript(input: {
 
 export function providerHookScriptRoutesByStationEnv(script: string, provider: string): boolean {
   return (
-    script.includes(
-      `if [ -z "\${STATION_SESSION_ID:-}" ] || [ -z "\${STATION_WORKTREE_ID:-}" ]; then`,
-    ) &&
     script.includes("STATION_OBSERVER_SOCKET_PATH") &&
     script.includes("STATION_CONFIG_PATH") &&
     script.includes("STATION_STATE_DIR") &&

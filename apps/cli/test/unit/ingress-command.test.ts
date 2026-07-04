@@ -264,7 +264,7 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("ignores Claude events without station ownership env", async () => {
+  it("delivers Claude events without station ownership env when the payload has a cwd", async () => {
     const fixture = await createTempState();
 
     const receipt = await runProviderIngressCommand(
@@ -276,6 +276,32 @@ describe("provider hook ingress command", () => {
       {
         clock: { now: () => new Date(now) },
         hookId: () => "report_claude_unowned_1",
+      },
+    );
+
+    // External sessions must reach the observer (spooled here — none is
+    // running) so cwd correlation can light their worktree row.
+    expect(receipt).toMatchObject({
+      status: "spooled",
+      provider: "claude",
+      event: "PreToolUse",
+    });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toHaveLength(1);
+  });
+
+  it("ignores Claude events with neither station ownership env nor a payload cwd", async () => {
+    const fixture = await createTempState();
+    const { cwd: _cwd, ...payloadWithoutCwd } = claudePayload();
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "claude"],
+      {
+        stdin: JSON.stringify(payloadWithoutCwd),
+        env: {},
+      },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "report_claude_unowned_2",
       },
     );
 
