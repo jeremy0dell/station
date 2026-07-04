@@ -306,6 +306,58 @@ describe("observer reconcile persistence", () => {
     sqlite.close();
   });
 
+  it("decays a busy status whose newest signal is older than the decay window", async () => {
+    const dbPath = await tempDbPath();
+    const lastSignalAt = "2026-05-20T11:00:00.000Z"; // an hour before `now`
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
+      clock: { now: () => new Date(now) },
+      sqlitePath: dbPath,
+    });
+    await persistence.recordProviderObservation({
+      provider: "fake-harness",
+      providerType: "harness",
+      entityKind: "harness_event",
+      entityKey: "run_web_main",
+      observedAt: lastSignalAt,
+      payload: {
+        provider: "fake-harness",
+        harnessRunId: "run_web_main",
+        worktreeId: "wt_web_main",
+        sessionId: "ses_web_main",
+        rawEventType: "UserPromptSubmit",
+        status: {
+          value: "working",
+          confidence: "high",
+          reason: "Prompt submitted.",
+          source: "harness_event",
+          updatedAt: lastSignalAt,
+        },
+        observedAt: lastSignalAt,
+      },
+    });
+
+    const snapshot = await core.reconcile("stale-busy-decay");
+
+    expect(snapshot.rows[0]?.agent).toMatchObject({
+      state: "unknown",
+      confidence: "low",
+      updatedAt: lastSignalAt,
+    });
+    expect(snapshot.sessions[0]?.status).toMatchObject({
+      value: "unknown",
+      source: "reconcile",
+      updatedAt: lastSignalAt,
+    });
+    expect(snapshot.counts).toMatchObject({
+      working: 0,
+      attention: 0,
+      unknown: 1,
+    });
+    sqlite.close();
+  });
+
   it("attaches cached current change summaries to hot snapshots", async () => {
     const { sqlite, persistence, core } = createTestObserverCore({
       config,

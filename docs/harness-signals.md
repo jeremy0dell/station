@@ -71,6 +71,11 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
 6. **Evolution is additive.** New fields optional, enums keep catch-all
    members (`input`), schema stamps (`schemaVersion`) travel with payloads.
    New signal kinds require census evidence, not speculation.
+7. **Busy statuses decay.** `working`/`starting` are claims that signals are
+   still flowing; reconcile projects a run whose newest signal is older than
+   15 minutes to `unknown` (low confidence, source `reconcile`) instead of
+   trusting it forever. Attention and idle states never decay, and the next
+   real event restores live status.
 
 ## Target Taxonomy (HarnessSignal)
 

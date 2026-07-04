@@ -39,7 +39,10 @@ export async function closeSessionResources(
   if (input.mode === "harness" || input.mode === "all") {
     await stopHarnessForSession({
       ...input,
-      allowUnsupportedStop: input.mode === "all" && canUseTerminalCloseFallbackForSession(input),
+      // Force means "retire the session even if the provider cannot stop the
+      // process" — without this, force dead-ends on stop-less providers.
+      allowUnsupportedStop:
+        input.force || (input.mode === "all" && canUseTerminalCloseFallbackForSession(input)),
     });
   }
   throwIfAborted(input.context.signal);

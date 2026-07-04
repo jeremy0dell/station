@@ -29,7 +29,11 @@ import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ReconcileTiming } from "./core.js";
 import { buildStationSnapshot, safeErrorToProviderHealth } from "./graph.js";
-import { applyHarnessEventStatusOverlays, type ObserverHarnessRun } from "./harnessEventStatus.js";
+import {
+  applyHarnessEventStatusOverlays,
+  decayStaleBusyStatuses,
+  type ObserverHarnessRun,
+} from "./harnessEventStatus.js";
 
 export type ProviderReadOptions = {
   clock: RuntimeClock;
@@ -149,7 +153,10 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   if (input.persistence !== undefined) {
     harnessStatusInput.persistence = input.persistence;
   }
-  const harnessRunsWithStatus = await harnessRunsWithPersistedEventStatus(harnessStatusInput);
+  const harnessRunsWithStatus = decayStaleBusyStatuses({
+    runs: await harnessRunsWithPersistedEventStatus(harnessStatusInput),
+    now: finishedAt,
+  });
   const harnessRuns = normalizeHarnessRunsForCurrentWorktrees({
     harnessRuns: harnessRunsWithStatus,
     worktrees: worktreeResult.worktrees,
