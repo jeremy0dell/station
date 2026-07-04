@@ -1,8 +1,44 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { listHookSpoolFiles, readHookSpoolRecord } from "../../../../tests/support/spool";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { runProviderIngressCommand } from "../../src/ingress/command.js";
+
+// A config with one project rooted at `projectRoot`, so the delivery gate for
+// env-less sessions can be exercised (writeConfigToml hardcodes empty projects).
+async function writeConfigWithProject(root: string, projectRoot: string): Promise<string> {
+  const path = join(root, "config-project.toml");
+  await writeFile(
+    path,
+    [
+      "schema_version = 1",
+      "",
+      "[defaults]",
+      'worktree_provider = "fake-worktree"',
+      'terminal = "fake-terminal"',
+      'harness = "fake-harness"',
+      'layout = "agent-shell"',
+      "",
+      "[[projects]]",
+      'id = "web"',
+      'label = "web"',
+      `root = ${JSON.stringify(projectRoot)}`,
+      "",
+      "[projects.defaults]",
+      'harness = "fake-harness"',
+      'terminal = "fake-terminal"',
+      'layout = "agent-shell"',
+      "",
+      "[projects.worktrunk]",
+      "enabled = true",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  return path;
+}
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -310,6 +346,41 @@ describe("provider hook ingress command", () => {
       provider: "claude",
       event: "PreToolUse",
     });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it("delivers an env-less Claude event whose cwd falls under a configured project root", async () => {
+    const fixture = await createTempState();
+    // The project root must exist on disk; the payload cwd is compared as a
+    // string, so a subdir of the root need not exist.
+    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
+
+    const receipt = await runProviderIngressCommand(
+      ["--config", configPath, "--no-auto-start", "claude"],
+      {
+        stdin: JSON.stringify({ ...claudePayload(), cwd: join(fixture.root, "web", "task") }),
+        env: {},
+      },
+      { clock: { now: () => new Date(now) }, hookId: () => "report_claude_in_root" },
+    );
+
+    expect(receipt.status).toBe("spooled");
+  });
+
+  it("ignores an env-less Claude event whose cwd is under no configured project root", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
+
+    const receipt = await runProviderIngressCommand(
+      ["--config", configPath, "--no-auto-start", "claude"],
+      {
+        stdin: JSON.stringify({ ...claudePayload(), cwd: "/tmp/unrelated/elsewhere" }),
+        env: {},
+      },
+      { clock: { now: () => new Date(now) }, hookId: () => "report_claude_out_of_root" },
+    );
+
+    expect(receipt).toMatchObject({ status: "ignored", provider: "claude" });
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 

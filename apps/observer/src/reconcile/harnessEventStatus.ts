@@ -35,7 +35,10 @@ export function observerHarnessRunFromRun(run: HarnessRunObservation): ObserverH
 }
 
 export function externalHarnessRunId(provider: string, nativeSessionId: string): string {
-  return `${provider}:external:${nativeSessionId}`;
+  // nativeSessionId is untrusted (straight from the hook payload); encode both
+  // parts so a value containing ':' or 'external:' cannot collide with another
+  // session's id or shadow it.
+  return `${encodeURIComponent(provider)}:external:${encodeURIComponent(nativeSessionId)}`;
 }
 
 /**
@@ -52,6 +55,10 @@ export function synthesizeExternalHarnessRuns(input: {
 }): ObserverHarnessRun[] {
   const existingIds = new Set(input.runs.map((run) => run.run.id));
   const latestById = new Map<string, HarnessEventObservation>();
+  // Any exited observation retires the session for good; tracked separately so
+  // event reordering (updatedAt vs ingest observedAt divergence, out-of-order
+  // delivery) can't let a surviving `working` event resurrect an ended run.
+  const endedIds = new Set<string>();
 
   for (const observation of input.observations) {
     if (observation.expired || observation.entityKind !== "harness_event") {
@@ -74,18 +81,24 @@ export function synthesizeExternalHarnessRuns(input: {
     if (event.nativeSessionId === undefined || event.worktreeId === undefined) {
       continue;
     }
-    if (event.status === undefined || event.status.value === "unknown") {
+    if (event.status === undefined) {
       continue;
     }
     const id = externalHarnessRunId(event.provider, event.nativeSessionId);
+    if (event.status.value === "exited") {
+      endedIds.add(id);
+      continue;
+    }
+    if (event.status.value === "unknown") {
+      continue;
+    }
     if (existingIds.has(id)) {
       continue;
     }
     const previous = latestById.get(id);
-    if (
-      previous?.status !== undefined &&
-      Date.parse(previous.status.updatedAt) >= Date.parse(event.status.updatedAt)
-    ) {
+    // Rank by the strongest available timestamp so a freshly-ingested but
+    // clock-lagged event is not passed over.
+    if (previous?.status !== undefined && eventOrdinal(previous) >= eventOrdinal(event)) {
       continue;
     }
     latestById.set(id, event);
@@ -99,7 +112,7 @@ export function synthesizeExternalHarnessRuns(input: {
     if (status === undefined || worktreeId === undefined || nativeSessionId === undefined) {
       continue;
     }
-    if (status.value === "exited") {
+    if (endedIds.has(id)) {
       continue;
     }
     synthesized.push({
@@ -215,6 +228,15 @@ function parseHarnessEventObservation(
     return undefined;
   }
   return result.data;
+}
+
+// The strongest available ordering timestamp: the harness-assigned status time,
+// or the ingest time when that is later, so a clock-lagged event is not ranked
+// behind an older one.
+function eventOrdinal(event: HarnessEventObservation): number {
+  const updated = event.status === undefined ? 0 : Date.parse(event.status.updatedAt);
+  const observed = Date.parse(event.observedAt);
+  return Math.max(Number.isFinite(updated) ? updated : 0, Number.isFinite(observed) ? observed : 0);
 }
 
 function correlateHarnessEvent(

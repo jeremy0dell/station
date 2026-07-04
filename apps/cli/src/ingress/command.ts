@@ -1,9 +1,15 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, type ObserverPaths, resolveObserverPaths, resolvePath } from "@station/config";
+import {
+  loadConfig,
+  type ObserverPaths,
+  resolveObserverPaths,
+  resolvePath,
+  type StationConfig,
+} from "@station/config";
 import type { ProviderHookReceipt } from "@station/contracts";
 import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { systemClock, toIsoTimestamp } from "@station/runtime";
+import { resolveLocalPath, systemClock, toIsoTimestamp } from "@station/runtime";
 import {
   type ProviderHookSenderDeps,
   type ProviderHookSenderOptions,
@@ -31,6 +37,8 @@ type ParsedOptions = {
   providerArgs: string[];
   paths: ObserverPaths;
   configPath?: string;
+  /** Roots a session cwd must fall under to be worth delivering; undefined = permissive. */
+  projectRoots?: string[];
   observerEntryPath?: string;
   autoStart?: boolean;
   deliveryTimeoutMs?: number;
@@ -230,10 +238,19 @@ async function parseArgs(argv: string[]): Promise<ParsedOptions> {
     }
   }
 
-  const defaults =
-    configPath === undefined
-      ? resolveObserverPaths()
-      : resolveObserverPaths((await loadConfig(configPath)).config);
+  // Load config once: it resolves the observer paths AND the roots under which
+  // an env-less (external) session's cwd is worth delivering. `undefined` roots
+  // (no --config) keep the permissive fallback; an empty array (config with no
+  // projects) drops env-less events rather than spooling them everywhere.
+  let projectRoots: string[] | undefined;
+  let defaults: ObserverPaths;
+  if (configPath === undefined) {
+    defaults = resolveObserverPaths();
+  } else {
+    const loaded = await loadConfig(configPath);
+    defaults = resolveObserverPaths(loaded.config);
+    projectRoots = deliveryRootsFromConfig(loaded.config);
+  }
   const paths = {
     ...defaults,
     ...(stateDir === undefined ? {} : { stateDir }),
@@ -246,12 +263,29 @@ async function parseArgs(argv: string[]): Promise<ParsedOptions> {
 
   const parsed: ParsedOptions = { providerArgs, paths };
   if (configPath !== undefined) parsed.configPath = configPath;
+  if (projectRoots !== undefined) parsed.projectRoots = projectRoots;
   if (observerEntryPath !== undefined) parsed.observerEntryPath = observerEntryPath;
   if (autoStart !== undefined) parsed.autoStart = autoStart;
   if (deliveryTimeoutMs !== undefined) parsed.deliveryTimeoutMs = deliveryTimeoutMs;
   if (startupTimeoutMs !== undefined) parsed.startupTimeoutMs = startupTimeoutMs;
   if (rateLimitMs !== undefined) parsed.rateLimitMs = rateLimitMs;
   return parsed;
+}
+
+// Roots under which a session's cwd can correlate to a worktree: the project
+// repo plus its managed-worktree and base directories (worktrees often live
+// outside the repo root). A cwd under none of these is an unrelated session
+// whose events would never project, so it is not worth delivering or spooling.
+function deliveryRootsFromConfig(config: StationConfig): string[] {
+  const roots = new Set<string>();
+  for (const project of config.projects) {
+    for (const root of [project.root, project.worktrunk.managedRoot, project.worktrunk.base]) {
+      if (root !== undefined && root.length > 0) {
+        roots.add(resolveLocalPath(root));
+      }
+    }
+  }
+  return [...roots];
 }
 
 function senderOptionsFromParsed(
@@ -262,6 +296,7 @@ function senderOptionsFromParsed(
     paths: parsed.paths,
   };
   if (parsed.configPath !== undefined) senderOptions.configPath = parsed.configPath;
+  if (parsed.projectRoots !== undefined) senderOptions.projectRoots = parsed.projectRoots;
   const observerEntryPath = options.observerEntryPath ?? parsed.observerEntryPath;
   if (observerEntryPath !== undefined) senderOptions.observerEntryPath = observerEntryPath;
   if (parsed.autoStart !== undefined) senderOptions.autoStart = parsed.autoStart;

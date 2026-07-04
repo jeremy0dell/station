@@ -47,7 +47,7 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("force-closes a harness session even when the provider cannot stop runs", async () => {
+  it("errors honestly on force close-harness when the provider cannot stop runs", async () => {
     const fixture = createFixture({ state: "working", harnessStopSupported: false });
     await fixture.core.reconcile("pre-cleanup");
 
@@ -61,13 +61,14 @@ describe("cleanup command handlers", () => {
     });
     await fixture.queue.drain();
 
-    // Nothing to stop and nothing closed — but the command completes instead of
-    // dead-ending on HARNESS_STOP_UNSUPPORTED, which left unstoppable sessions
-    // impossible to retire.
+    // A hollow "success" would leave the still-running agent in place and the
+    // row reappearing each reconcile; mode:harness has no terminal-close
+    // fallback, so the command must fail rather than pretend to have stopped it.
     expect(fixture.harness.snapshot().stopped).toEqual([]);
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
-      status: "succeeded",
+      status: "failed",
+      error: { code: "HARNESS_STOP_UNSUPPORTED" },
     });
     fixture.sqlite.close();
   });

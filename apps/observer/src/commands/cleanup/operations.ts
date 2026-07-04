@@ -37,12 +37,14 @@ export async function closeSessionResources(
   } & CleanupRuntime,
 ): Promise<void> {
   if (input.mode === "harness" || input.mode === "all") {
+    // Only tolerate an unsupported stop when there is a terminal-close fallback
+    // that will actually retire the session. Otherwise force must NOT report a
+    // hollow success on a stop-less provider — the process keeps running and the
+    // row reappears each reconcile; error honestly instead (a stale/ghost row is
+    // cleared by busy-status decay, not by a fake stop).
     await stopHarnessForSession({
       ...input,
-      // Force means "retire the session even if the provider cannot stop the
-      // process" — without this, force dead-ends on stop-less providers.
-      allowUnsupportedStop:
-        input.force || (input.mode === "all" && canUseTerminalCloseFallbackForSession(input)),
+      allowUnsupportedStop: input.mode === "all" && canUseTerminalCloseFallbackForSession(input),
     });
   }
   throwIfAborted(input.context.signal);
