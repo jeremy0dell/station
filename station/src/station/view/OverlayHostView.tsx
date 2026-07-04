@@ -2,7 +2,7 @@
 // its overlay (help panel, bottom sheets) in an absolute layer above the
 // dashboard. The dashboard never reflows for overlays.
 import type { StationSnapshot } from "@station/contracts";
-import type { TuiLocalRows, TuiScreen } from "@station/dashboard-core";
+import type { TuiLocalRows, TuiScreen, TuiSelectionState } from "@station/dashboard-core";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
@@ -17,6 +17,7 @@ import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 export type OverlayHostViewProps = {
   snapshot: StationSnapshot;
   screen: TuiScreen;
+  selection: TuiSelectionState;
   columns: number;
   rows: number;
   localRows: TuiLocalRows;
@@ -29,6 +30,7 @@ export type OverlayHostViewProps = {
 export function OverlayHostView({
   snapshot,
   screen,
+  selection,
   columns,
   rows,
   localRows,
@@ -64,6 +66,7 @@ export function OverlayHostView({
         rows={rows}
         snapshot={snapshot}
         screen={screen}
+        selection={selection}
       />
     );
   }

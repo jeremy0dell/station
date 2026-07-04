@@ -83,6 +83,7 @@ export function SheetChoiceLine({
   color,
   width,
   current = false,
+  selected = false,
   note,
 }: {
   choiceKey: string;
@@ -92,11 +93,14 @@ export function SheetChoiceLine({
   width: number;
   /** Marks the row as the currently-selected option (e.g. a project's default). */
   current?: boolean;
+  /** Marks the row under the keyboard cursor; painted like hover so ↑↓ and mouse agree. */
+  selected?: boolean;
   /** Right-aligned dim status (e.g. "updating…") shown in the row's free space. */
   note?: string | undefined;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
+  const focused = hover || selected;
   // The marker reuses the prefix's leading margin column so the key/label
   // columns stay aligned and the row width is unchanged whether or not it is set.
   const marker = current ? "✓" : " ";
@@ -111,8 +115,8 @@ export function SheetChoiceLine({
   const gap = spaces(free - visibleNote.length);
   return (
     <text
-      fg={hover ? STATION_COLORS.green : STATION_COLORS.foreground}
-      {...(hover ? { bg: STATION_COLORS.hoverBackground } : {})}
+      fg={focused ? STATION_COLORS.green : STATION_COLORS.foreground}
+      {...(focused ? { bg: STATION_COLORS.hoverBackground } : {})}
       {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}

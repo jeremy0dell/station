@@ -53,6 +53,11 @@ function allowedNoOpBinding(mode: StationInputMode, binding: StationBinding): bo
   ) {
     return true;
   }
+  // The default-agent cursor seeds at the current default, which is the top row
+  // in the fixture, so ↑ clamps to a no-op in the representative state.
+  if (binding.id === "station.projectDefaultAgent.cursorUp") {
+    return true;
+  }
   if (mode === "addProject" && binding.action === ADD_PROJECT_KEY_ACTION) {
     return true;
   }

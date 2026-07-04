@@ -26,7 +26,10 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   "tui.fork.chooseSlot",
   "tui.newSessionProject.choose",
   "tui.newSessionAgent.choose",
-  "tui.projectDefaultAgent.choose",
+  "tui.projectDefaultAgent.slot",
+  // Seeded at the current default (the top row in the fixture), so ↑ clamps —
+  // a real no-op in the representative state.
+  "tui.projectDefaultAgent.cursorUp",
   // Add-project metadata is a union over its internal submodes.
   "tui.addProject.cancel",
   "tui.addProject.confirm",

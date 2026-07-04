@@ -1,5 +1,6 @@
 import { SELECTION_KEYS, type SelectionKey } from "../selectors/selectors.js";
 import type { TuiKey } from "./keys.js";
+import { selectableListBindings } from "./selection/bindings.js";
 import type { TuiState } from "./types.js";
 
 export type TuiInputMode =
@@ -641,13 +642,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.projectDefaultAgent.choose",
-      pattern: { kind: "slot" },
-      action: "tui.projectDefaultAgent.choose",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose agent" },
-    },
+    ...selectableListBindings("tui.projectDefaultAgent"),
   ],
   // One action; the widgetSettings screen handler decodes list-vs-picker focus.
   widgetSettings: [

@@ -623,6 +623,55 @@ describe("TUI screen transitions", () => {
     expect(transition.operations).toBeUndefined();
   });
 
+  it("seeds the default-agent cursor to the project's current default on open", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    // web's default harness is codex (slot 1); the cursor starts there.
+    expect(opened.selection.get("projectDefaultAgent")).toBe("codex");
+  });
+
+  it("moves the default-agent cursor with arrows and commits it on enter", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    const moved = handleTuiKey(opened, { input: "", downArrow: true }).state;
+    expect(moved.selection.get("projectDefaultAgent")).toBe("opencode");
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true });
+    expect(committed.state.screen).toEqual({ name: "dashboard" });
+    expect(committed.operations).toEqual([
+      {
+        type: "setProjectDefaultHarness",
+        command: {
+          type: "project.setDefaultHarness",
+          payload: { projectId: "web", harness: "opencode" },
+        },
+      },
+    ]);
+  });
+
+  it("enter on the unchanged default-agent cursor closes without dispatching", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    const committed = handleTuiKey(opened, { input: "\r", return: true });
+    expect(committed.state.screen).toEqual({ name: "dashboard" });
+    expect(committed.operations).toBeUndefined();
+  });
+
+  it("clamps the default-agent cursor at the top edge", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    const up = handleTuiKey(opened, { input: "", upArrow: true }).state;
+    expect(up.selection.get("projectDefaultAgent")).toBe("codex");
+  });
+
   it("adds a safe error toast when no project exists for a new session", () => {
     const snapshot = {
       ...createZeroWorktreeSnapshot(),

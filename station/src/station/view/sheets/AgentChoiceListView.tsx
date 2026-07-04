@@ -7,6 +7,8 @@ export type AgentChoiceListViewProps = {
   width: number;
   /** The option to mark as current (a project's default harness), if any. */
   currentId?: NewSessionHarnessOption["id"];
+  /** The option under the keyboard cursor (the shared selection engine's cursor). */
+  selectedId?: NewSessionHarnessOption["id"];
   /** When true, the current option shows an "updating…" cue (change in flight). */
   pending?: boolean;
 };
@@ -15,6 +17,7 @@ export function AgentChoiceListView({
   choices,
   width,
   currentId,
+  selectedId,
   pending = false,
 }: AgentChoiceListViewProps) {
   return (
@@ -44,6 +47,7 @@ export function AgentChoiceListView({
             }
             width={width}
             current={current}
+            selected={choice.value.id === selectedId}
             {...(current && pending ? { note: "updating…" } : {})}
           />
         );

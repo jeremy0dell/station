@@ -499,7 +499,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │✓1 codex ● update v0.3.0 → v0.4.0                                             │
 │ 2 opencode unknown                                                           │
 │                                                                              │
-│ ✓ current   1-9/a-z:select   Esc:cancel                                      │
+│ ✓ current   ↑↓ move   ↵ select   1-9/a-z jump   Esc cancel                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

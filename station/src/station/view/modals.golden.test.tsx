@@ -139,7 +139,7 @@ const CASES: ModalCase[] = [
     trimSnapshotTrailingWhitespace: true,
     expect: [
       "Select default agent for station",
-      "1-9/a-z:select   Esc:cancel",
+      "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel",
       "codex ● update v0.3.0 → v0.4.0",
     ],
   },

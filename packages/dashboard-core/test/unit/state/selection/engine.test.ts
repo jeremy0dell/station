@@ -215,11 +215,11 @@ describe("selection slice default", () => {
   });
 });
 
-describe("P1 inertness — the registry is empty", () => {
-  it("registers no list in any mode, so the middleware is a no-op everywhere", () => {
-    // A single assertion that is complete over all modes: any accidental
-    // registration (this phase must add none) flips this red.
-    expect(Object.keys(LIST_REGISTRY)).toEqual([]);
+describe("list registry — migrated modes", () => {
+  it("registers exactly the migrated lists (complete over all modes)", () => {
+    // Any accidental registration in an unmigrated mode flips this red, so the
+    // set is asserted whole rather than sampled.
+    expect(Object.keys(LIST_REGISTRY).sort()).toEqual(["projectDefaultAgent"]);
   });
 });
 

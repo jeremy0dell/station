@@ -134,6 +134,21 @@ export function editableTextBindings(
   ];
 }
 
+/**
+ * The ↑↓/↵/slot binding block for a list migrated onto the shared selection
+ * engine — the station-side mirror of dashboard-core's selectableListBindings.
+ * The engine (not this table) owns dispatch; these document the keys for the
+ * coverage test, help overlay, and mouse chrome.
+ */
+export function selectableListBindings(prefix: string): readonly StationBinding[] {
+  return [
+    { id: `${prefix}.cursorUp`, pattern: { kind: "named", named: "up" }, action: `${prefix}.cursorUp`, outcome: "handled" },
+    { id: `${prefix}.cursorDown`, pattern: { kind: "named", named: "down" }, action: `${prefix}.cursorDown`, outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: `${prefix}.activate`, pattern: { kind: "named", named: "return" }, action: `${prefix}.activate`, outcome: "handled", help: { keys: "↵", label: "choose" } },
+    { id: `${prefix}.slot`, pattern: { kind: "slot" }, action: `${prefix}.slot`, outcome: "handled", help: { keys: "1-9 a-z", label: "jump to item" } },
+  ];
+}
+
 export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]> = {
   dashboard: [
     { id: "station.dashboard.focusUp", pattern: { kind: "named", named: "up" }, action: "station.focus.up", outcome: "handled" },
@@ -258,7 +273,7 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   projectDefaultAgent: [
     { id: "station.projectDefaultAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectDefaultAgent.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.projectDefaultAgent.choose", pattern: { kind: "slot" }, action: "station.projectDefaultAgent.choose", outcome: "handled", help: { keys: "1-9 a-z", label: "choose agent" } },
+    ...selectableListBindings("station.projectDefaultAgent"),
   ],
   // The add-project flow has internal modes (start/choose/review/success/
   // failed, with a slash filter and a name editor); this single table covers
