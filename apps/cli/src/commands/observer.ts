@@ -9,11 +9,13 @@ import {
   startObserver,
   stopObserver,
 } from "../observerProcess.js";
+import { type ObserverReapDeps, type ReapOutcome, runObserverReap } from "../observerReap.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
 
 export type ObserverCommandResult =
   | ObserverStatus
   | ObserverStopReceipt
+  | ReapOutcome
   | {
       status: "foreground-exited";
       code: number;
@@ -24,6 +26,7 @@ export type ObserverCommandOptions = {
   config?: StationConfig;
   configPath?: string;
   timeoutMs?: number;
+  reapDeps?: ObserverReapDeps;
 };
 
 export async function runObserverCommand(
@@ -41,6 +44,8 @@ export async function runObserverCommand(
   };
 
   switch (action) {
+    case "reap":
+      return runObserverReap(paths.socketPath, { force: parsed.force }, options.reapDeps ?? {});
     case "status":
       return getObserverStatus(runtimeOptions, deps);
     case "start":
@@ -72,18 +77,22 @@ export async function runObserverCommand(
 function parseObserverArgs(
   args: string[],
   timeoutMs: number | undefined,
-): { action: string; timeoutMs?: number } {
+): { action: string; timeoutMs?: number; force: boolean } {
   const parsed = takeTimeoutOption(args, timeoutMs);
-  const flag = parsed.args.find((arg) => arg.startsWith("--"));
+  const force = parsed.args.includes("--force") || parsed.args.includes("--yes");
+  const rest = parsed.args.filter((arg) => arg !== "--force" && arg !== "--yes");
+
+  const flag = rest.find((arg) => arg.startsWith("--"));
   if (flag !== undefined) {
     throw new Error(`Unknown observer option: ${flag}`);
   }
-  if (parsed.args.length > 1) {
-    throw new Error(`Unknown observer option: ${parsed.args[1] ?? ""}`);
+  if (rest.length > 1) {
+    throw new Error(`Unknown observer option: ${rest[1] ?? ""}`);
   }
 
-  const result: { action: string; timeoutMs?: number } = {
-    action: parsed.args[0] ?? "status",
+  const result: { action: string; timeoutMs?: number; force: boolean } = {
+    action: rest[0] ?? "status",
+    force,
   };
   if (parsed.timeoutMs !== undefined) result.timeoutMs = parsed.timeoutMs;
   return result;
@@ -108,6 +117,20 @@ function takeTimeoutOption(
 }
 
 export function observerCommandSummary(result: ObserverCommandResult): unknown {
+  if ("plan" in result) {
+    const { plan, applied } = result;
+    return {
+      action: "reap",
+      socketPath: plan.socketPath,
+      keeper: plan.keeper ?? null,
+      duplicates: plan.duplicates,
+      targets: plan.targets.map((t) => t.pid),
+      refusals: plan.refusals,
+      applied,
+      ...(applied ? { killed: result.killed, survived: result.survived } : {}),
+      ...(result.aborted === undefined ? {} : { aborted: result.aborted }),
+    };
+  }
   if ("health" in result) {
     return {
       status: result.status,
