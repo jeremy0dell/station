@@ -274,7 +274,7 @@ button). Both default off:
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `rest_counts` | bool | Collapsed island shows live fleet counts (`⠿ working · ● ready · ○ idle`) instead of the bare mark. |
+| `rest_counts` | bool | Collapsed island shows active working/ready counts instead of the bare mark; idle and zero lanes are hidden. |
 | `project_rollup` | bool | Hovering the island lists each project's worst agent status instead of the working/idle totals. |
 
 ### `[repository.github]` — repository metadata provider (optional)
