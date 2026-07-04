@@ -46,6 +46,8 @@ export type StationVtScreenOptions = {
   scrollOnOutput?: ScrollOnOutputMode;
   /** Injectable for deterministic coalescing tests. */
   flushIntervalMs?: number;
+  /** Max hold for an open synchronized frame before the escape hatch flushes; injectable for tests. */
+  syncHoldMaxMs?: number;
   theme?: StationVtTheme;
   /**
    * Terminal query replies (DA1/DA2/DSR/CPR/DECRQM from xterm, OSC 10/11 from
@@ -205,6 +207,7 @@ export type StationVtScreen = {
 export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
   const theme = options.theme ?? stationVtTheme;
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
+  const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
   const terminal = new Terminal({
     cols: Math.max(options.size.cols, MIN_COLS),
     rows: Math.max(options.size.rows, MIN_ROWS),
@@ -509,17 +512,20 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     // DECSET 2026 (synchronized output): between BSU and ESU the app is
     // mid-frame, so hold listener notification rather than snapshot a torn
-    // buffer. Bounded so a client that never sends ESU cannot freeze the pane;
-    // once expired, flush at normal cadence until the mode clears.
+    // buffer. Bounded so a client that never sends ESU cannot freeze the pane.
     if (terminal.modes.synchronizedOutputMode) {
-      syncHoldUntil ??= Date.now() + SYNC_OUTPUT_HOLD_MAX_MS;
+      syncHoldUntil ??= Date.now() + syncHoldMaxMs;
       if (Date.now() < syncHoldUntil) {
         flushTimer = setTimeout(flush, flushIntervalMs);
         return;
       }
-    } else {
-      syncHoldUntil = undefined;
     }
+    // Falling through means the mode is off or the escape-hatch deadline
+    // passed; clear it either way so the NEXT synchronized frame re-arms a
+    // fresh hold. Without this, a coalesced ESU+BSU that never let the mode be
+    // observed off would reuse a stale (already-expired) deadline and tear; a
+    // genuinely stuck frame just re-holds ~1s at a time.
+    syncHoldUntil = undefined;
     lastFlushAt = Date.now();
     applyScrollOnOutput();
     clampScrollOffset();

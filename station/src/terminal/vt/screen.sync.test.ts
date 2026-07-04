@@ -130,4 +130,40 @@ describe("synchronized output (DECSET 2026)", () => {
     expect(notifiedAt[0]).toBeGreaterThan(500);
     expect(gridText(screen)).toEqual(["FRAME-B-ROW0", "FRAME-B-ROW1", "", "", ""]);
   }, 10_000);
+
+  it("re-holds a synchronized frame after a prior escape-hatch expiry", async () => {
+    // Short hold window so the escape hatch fires quickly.
+    const screen = track(
+      createStationVtScreen({ size: SIZE, flushIntervalMs: 1, syncHoldMaxMs: 30 }),
+    );
+    await feedAndFlush(screen, frameA);
+
+    // Frame 1: a stuck BSU (no ESU) — held, then flushed by the escape hatch.
+    screen.feed(bsuPlusHalfB);
+    await screen.whenIdle();
+    await sleep(60); // past the 30ms deadline; escape hatch flushed and reset
+
+    // Frame 2 arrives as a single coalesced write that closes frame 1 (ESU) and
+    // immediately opens a new synchronized frame (BSU) then half-paints it. The
+    // stale-deadline bug reused frame 1's expired deadline and did NOT hold.
+    const snapshots: Array<{ syncActive: boolean; rows: string[] }> = [];
+    screen.subscribe(() => {
+      snapshots.push({
+        syncActive: screen.unsafeEngine.modes.synchronizedOutputMode,
+        rows: gridText(screen),
+      });
+    });
+    const closeThenReopen =
+      "\x1b[?2026l\x1b[?2026h\x1b[2J\x1b[H" + ["NEXT-ROW0", "NEXT-ROW1"].join("\r\n");
+    screen.feed(closeThenReopen);
+    await screen.whenIdle();
+    await sleep(10);
+
+    // The new frame is still open (deadline re-armed), so no torn snapshot with
+    // the half-painted NEXT frame was published within its hold window.
+    expect(screen.unsafeEngine.modes.synchronizedOutputMode).toBe(true);
+    expect(
+      snapshots.some((s) => s.rows[0] === "NEXT-ROW0" && s.rows.every((r) => !r.startsWith("FRAME"))),
+    ).toBe(false);
+  }, 10_000);
 });
