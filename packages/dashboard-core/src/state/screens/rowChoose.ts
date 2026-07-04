@@ -1,7 +1,7 @@
 import type { WorktreeId } from "@station/contracts";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
-import { moveDashboardFocus } from "../dashboardFocus.js";
+import { focusedSelectableRow, moveDashboardFocus } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
@@ -35,7 +35,8 @@ export function handleDashboardRowChoiceKey(
     return { state };
   }
   if (isReturnKey(key)) {
-    return state.focusedRowId === undefined ? { state } : commit(state, state.focusedRowId);
+    const row = focusedSelectableRow(state);
+    return row === undefined ? { state } : commit(state, row.id);
   }
   if (isSlotKey(key)) {
     const row = choiceValueByKey(

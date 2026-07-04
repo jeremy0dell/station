@@ -210,8 +210,8 @@ function moveSelection(state: AddProjectFlowState, delta: number): AddProjectFlo
   return state;
 }
 
-// Absolute-index cursor move for a mouse click; clamps to the active list so an
-// off-list index (stale click) is a no-op rather than an out-of-range cursor.
+// Absolute-index cursor move for a mouse click; clamps into the active list so a
+// stale click past the end lands on the last row rather than out of range.
 function selectIndex(state: AddProjectFlowState, index: number): AddProjectFlowState {
   if (state.mode === "start") {
     return { ...state, selectedIndex: clampIndex(index, 0, state.choices.length - 1) };

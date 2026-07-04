@@ -42,6 +42,42 @@ describe("TUI screen transitions", () => {
     expect(committed.screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
   });
 
+  it("does not commit a pending-remove focused row on enter in the choose-row trio", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const withPending: typeof base = {
+      ...base,
+      focusedRowId: "wt_api_working",
+      localRows: {
+        ...base.localRows,
+        pendingRemove: [
+          {
+            localId: "rm:wt_api_working",
+            projectId: "api",
+            worktreeId: "wt_api_working",
+            branch: "queue-worker",
+            createdAt: "2026-07-04T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const opened = handleTuiKey(withPending, { input: "X" }).state;
+    const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
+    // ↵ is inert on a mid-removal row, exactly as the slot path and dashboard activation refuse it.
+    expect(committed.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+  });
+
+  it("does not commit a collapsed (hidden) focused row on enter in the choose-row trio", () => {
+    const base = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      collapsedProjectIds: ["api"],
+    });
+    const state: typeof base = { ...base, focusedRowId: "wt_api_working" };
+    const opened = handleTuiKey(state, { input: "X" }).state;
+    const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
+    // The row is filtered out of view; ↵ must not act on a row the user cannot see.
+    expect(committed.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+  });
+
   it("scrolls dashboard rows with mouse wheel events", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
