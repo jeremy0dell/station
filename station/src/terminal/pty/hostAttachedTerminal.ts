@@ -91,6 +91,12 @@ export function createHostAttachedTerminal(
   const pendingWrites: string[] = [];
   let attachment: HostAttachment | undefined;
   let size = options.size;
+  // The size the host PTY last CONFIRMED applying (not the size we asked for);
+  // a persistent gap between this and `size` is geometry divergence.
+  let ackedSize: StationTerminalSize | undefined;
+  // Monotonic so only the newest resize's ack stamps `ackedSize` — out-of-order
+  // resolutions from concurrent resizes cannot pin it to a stale geometry.
+  let resizeSeq = 0;
   let pid = 0;
   let exited = false;
   let disposed = false;
@@ -158,6 +164,28 @@ export function createHostAttachedTerminal(
     await Promise.all([...replayListeners].map((listener) => listener({ size: recordedSize, chunks })));
   };
 
+  // Send a resize to the attached host PTY and stamp `ackedSize` to the size
+  // that was actually sent — but only if this remains the newest resize, so a
+  // slow ack cannot revert `ackedSize` to a superseded geometry. No-ops while
+  // detached; the size is (re)sent by the attach loop once `attachment` is set.
+  const applyHostResize = (target: StationTerminalSize): void => {
+    const opened = attachment;
+    if (opened === undefined) {
+      return;
+    }
+    const seq = (resizeSeq += 1);
+    opened
+      .resize(target.cols, target.rows)
+      .then(() => {
+        if (seq === resizeSeq) {
+          ackedSize = target;
+        }
+      })
+      .catch((error) => {
+        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
+      });
+  };
+
   // Attach, replay scrollback once, then stream frames. A transient transport
   // failure — or the stream ending with no exit frame — reconnects with backoff;
   // only a genuinely-gone PTY (or exhausted retries) ends the pane.
@@ -210,6 +238,9 @@ export function createHostAttachedTerminal(
           await opened.resize(size.cols, size.rows > 1 ? size.rows - 1 : size.rows + 1);
           await opened.resize(size.cols, size.rows);
         }
+        // The size the host was just driven to; a resize arriving during the
+        // write drain below only updates `size` (resize() no-ops while detached).
+        const attachSentSize: StationTerminalSize = { cols: size.cols, rows: size.rows };
         // Drain front-to-back so a mid-flush failure leaves only the un-sent
         // writes to retry (no double-send on reconnect). New writes keep arriving
         // at the back while attachment is still undefined, preserving order.
@@ -222,6 +253,13 @@ export function createHostAttachedTerminal(
           pendingWrites.shift();
         }
         attachment = opened;
+        if (size.cols !== attachSentSize.cols || size.rows !== attachSentSize.rows) {
+          // A resize arrived during attach; resize() no-op'd then, so send it now.
+          applyHostResize(size);
+        } else {
+          // Host is at the size we just drove it to; record it as confirmed.
+          ackedSize = attachSentSize;
+        }
         connectedAt = now();
         for await (const frame of opened.frames) {
           if (frame.type === "data") {
@@ -252,8 +290,10 @@ export function createHostAttachedTerminal(
         emitDiagnostic(safe.message);
       }
       // Transient: clear attachment so write() re-buffers, then drop the dead
-      // client and dial a fresh one before the next attempt.
+      // client and dial a fresh one before the next attempt. Clear ackedSize so
+      // a geometry check during the reconnect window does not read a stale ack.
       attachment = undefined;
+      ackedSize = undefined;
       if (disposed || closeRequested) {
         return;
       }
@@ -358,13 +398,12 @@ export function createHostAttachedTerminal(
     },
     resize(next) {
       size = next;
-      if (attachment === undefined) {
-        // Applied to the host PTY on attach via `size`.
-        return;
-      }
-      attachment.resize(next.cols, next.rows).catch((error) => {
-        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
-      });
+      // Applied (and acked) via applyHostResize; a no-op while detached, then
+      // (re)sent by the attach loop once attachment is set.
+      applyHostResize(next);
+    },
+    get ackedSize() {
+      return ackedSize;
     },
     kill() {
       if (!ownsPty) {
