@@ -14,6 +14,7 @@ import { handleRemoveWorktreeKey } from "./screens/removeWorktree.js";
 import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleSearchKey } from "./screens/search.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
+import { selectionMiddleware } from "./selection/middleware.js";
 import type { TuiState } from "./types.js";
 
 export type TuiTransition = {
@@ -40,6 +41,13 @@ export function handleTuiKey(
       state,
       exitCode: 0,
     };
+  }
+
+  // Registered lists resolve ↑↓/↵/slot here; an unregistered screen yields
+  // undefined and keeps its bespoke reducer below.
+  const selected = selectionMiddleware(state, key);
+  if (selected !== undefined) {
+    return selected;
   }
 
   switch (state.screen.name) {

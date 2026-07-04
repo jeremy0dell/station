@@ -205,6 +205,7 @@ describe("TUI selectors", () => {
       scrollOffset: 0,
       terminalRows: 24,
       localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
+      selection: new Map(),
     };
     expect(selectVisibleRows(snapshot, searched).map((candidate) => candidate.id)).toEqual([
       "wt_web_idle",
@@ -216,6 +217,7 @@ describe("TUI selectors", () => {
       scrollOffset: 0,
       terminalRows: 24,
       localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
+      selection: new Map(),
     };
     const groups = selectProjectGroups(snapshot, collapsed);
     expect(groups.find((group) => group.project.id === "web")?.collapsed).toBe(true);
@@ -240,6 +242,7 @@ describe("TUI selectors", () => {
       scrollOffset: 0,
       terminalRows: 24,
       localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
+      selection: new Map(),
     };
 
     expect(selectVisibleRows(titled, searched).map((candidate) => candidate.id)).toEqual([

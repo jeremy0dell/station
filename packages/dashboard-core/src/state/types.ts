@@ -12,6 +12,7 @@ import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
 import type { TuiToast } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
+import type { TuiSelectionState } from "./selection/types.js";
 
 export type TuiRuntimeState = {
   persistentPopup: boolean;
@@ -30,6 +31,8 @@ export type TuiViewState = {
   localRows: TuiLocalRows;
   /** Persistent list cursor; a stale id (row gone) is harmless and simply unfocused. */
   focusedRowId?: WorktreeId;
+  /** Per-list cursor for screens migrated onto the shared selection engine. */
+  selection: TuiSelectionState;
 };
 
 export type TuiState = TuiViewState & {
