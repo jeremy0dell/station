@@ -1,6 +1,7 @@
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { type IMarker, Terminal } from "@xterm/headless";
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
+import { reportTerminalCorruption, type TerminalCorruptionKind } from "../diagnostics.js";
 import type { StationTerminalSize } from "../types.js";
 import { buildVisibleRows, type VtRow } from "./rows.js";
 import { type StationVtTheme, stationVtTheme } from "./theme.js";
@@ -14,6 +15,16 @@ import {
 
 const DEFAULT_FLUSH_INTERVAL_MS = 33;
 const SYNC_OUTPUT_HOLD_MAX_MS = 1000;
+// Raw feed tail kept for corruption dumps: enough history to replay how the
+// visible grid got into its state, small enough for dozens of live panes.
+const RAW_RING_LIMIT_CHARS = 128 * 1024;
+const FRAGMENT_SCAN_MIN_INTERVAL_MS = 1_000;
+// ANSI guts rendered as visible text — multi-param CSI bodies, truecolor SGR
+// tails, OSC color replies, private-mode toggles. Heuristic by nature: a pane
+// that PRINTS escape codes as text (log viewers) trips it, so it only ever
+// counts and logs, never alerts.
+const ESCAPE_FRAGMENT_PATTERN =
+  /\[\??\d{1,4}(?:;\d{1,4}){1,7}[A-Za-z]|\d{1,3};\d{1,3};\d{1,3}m|;rgb:[0-9a-fA-F]{2}|\[\?\d{2,4}[hl]/;
 // Scrollback is now viewable (wheel + copy-mode), but a modest buffer still
 // keeps resize reflow cheap; the depth is intentionally not yet configurable.
 const DEFAULT_SCROLLBACK_LINES = 1000;
@@ -37,6 +48,10 @@ export type StationVtScreenOptions = {
    * on them at startup.
    */
   onResponse?: (data: string) => void;
+  /** Pane label attached to corruption telemetry from this screen. */
+  diagnosticsLabel?: string;
+  /** Fired when a detector trips, so the owner can capture pane evidence. */
+  onCorruptionDetected?: (kind: TerminalCorruptionKind) => void;
 };
 
 export type VtCursor = {
@@ -172,6 +187,11 @@ export type StationVtScreen = {
   /** Resolves after everything fed so far has been parsed. */
   whenIdle(): Promise<void>;
   /**
+   * Forensic snapshot for corruption dumps: the visible grid plus the raw byte
+   * tail that produced it (replayable offline through a fresh screen).
+   */
+  corruptionEvidence(): { rows: string[]; rawTail: string };
+  /**
    * Test/diagnostic-only escape hatch to the underlying engine. Production
    * code must consume the view methods above instead.
    */
@@ -203,6 +223,59 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let lastFlushAt = 0;
   let syncHoldUntil: number | undefined;
+  const rawRing: string[] = [];
+  let rawRingChars = 0;
+  let lastFragmentScanAt = 0;
+
+  const pushRawRing = (data: string): void => {
+    rawRing.push(data);
+    rawRingChars += data.length;
+    while (rawRingChars > RAW_RING_LIMIT_CHARS && rawRing.length > 1) {
+      const evicted = rawRing.shift();
+      if (evicted === undefined) {
+        break;
+      }
+      rawRingChars -= evicted.length;
+    }
+  };
+
+  const reportCorruption = (
+    kind: TerminalCorruptionKind,
+    key?: string,
+    attributes?: Record<string, unknown>,
+  ): void => {
+    reportTerminalCorruption({
+      kind,
+      ...(options.diagnosticsLabel === undefined ? {} : { pane: options.diagnosticsLabel }),
+      ...(key === undefined ? {} : { key }),
+      ...(attributes === undefined ? {} : { attributes }),
+    });
+  };
+
+  const visibleRowText = (index: number): string => {
+    const buffer = terminal.buffer.active;
+    return buffer.getLine(buffer.baseY + index)?.translateToString(true) ?? "";
+  };
+
+  const scanForEscapeFragments = (): void => {
+    const now = Date.now();
+    if (now - lastFragmentScanAt < FRAGMENT_SCAN_MIN_INTERVAL_MS) {
+      return;
+    }
+    lastFragmentScanAt = now;
+    for (let index = 0; index < terminal.rows; index += 1) {
+      const text = visibleRowText(index);
+      const match = ESCAPE_FRAGMENT_PATTERN.exec(text);
+      if (match !== null) {
+        reportCorruption("escape_fragment", undefined, {
+          row: index,
+          excerpt: text.slice(Math.max(0, match.index - 8), match.index + 24),
+        });
+        options.onCorruptionDetected?.("escape_fragment");
+        return;
+      }
+    }
+  };
   // Lines scrolled up from the live bottom (0 = at the bottom).
   let scrollOffset = 0;
   let kittyKeyboardFlags = 0;
@@ -372,6 +445,57 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     return true;
   });
 
+  // Sequences the engine swallows without handling are exactly where silent
+  // corruption starts; count and log them. The public parser API has no
+  // fallback hook, so this reaches into engine internals — an engine bump that
+  // moves them turns detection off instead of breaking the screen.
+  try {
+    const parser = (
+      terminal as unknown as {
+        _core?: {
+          _inputHandler?: {
+            _parser?: {
+              setCsiHandlerFallback(
+                callback: (ident: number, params: { toArray(): unknown[] }) => void,
+              ): void;
+              setEscHandlerFallback(callback: (ident: number) => void): void;
+              setOscHandlerFallback(
+                callback: (identifier: number, action: string, data: string) => void,
+              ): void;
+              setDcsHandlerFallback(callback: (ident: number, action: string) => void): void;
+            };
+          };
+        };
+      }
+    )._core?._inputHandler?._parser;
+    parser?.setCsiHandlerFallback((ident, params) => {
+      reportCorruption("unhandled_sequence", `csi:${ident}`, {
+        family: "csi",
+        ident,
+        params: params.toArray(),
+      });
+    });
+    parser?.setEscHandlerFallback((ident) => {
+      reportCorruption("unhandled_sequence", `esc:${ident}`, { family: "esc", ident });
+    });
+    parser?.setOscHandlerFallback((identifier, action, data) => {
+      if (action === "START") {
+        reportCorruption("unhandled_sequence", `osc:${identifier}`, {
+          family: "osc",
+          ident: identifier,
+          data: String(data).slice(0, 40),
+        });
+      }
+    });
+    parser?.setDcsHandlerFallback((ident, action) => {
+      if (action === "HOOK") {
+        reportCorruption("unhandled_sequence", `dcs:${ident}`, { family: "dcs", ident });
+      }
+    });
+  } catch {
+    reportCorruption("parse_error", "fallback-wiring-unavailable");
+  }
+
   const flush = (): void => {
     flushTimer = undefined;
     if (disposed) {
@@ -394,6 +518,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     applyScrollOnOutput();
     clampScrollOffset();
     notifyListeners();
+    scanForEscapeFragments();
   };
 
   const scheduleFlush = (): void => {
@@ -410,6 +535,18 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     feed: (data) => {
       if (disposed) {
         return;
+      }
+      pushRawRing(data);
+      // U+FFFD in the feed means bytes were already destroyed upstream (the
+      // bridge's UTF-8 decode of split or invalid sequences).
+      if (data.includes("�")) {
+        let count = 0;
+        for (const char of data) {
+          if (char === "�") {
+            count += 1;
+          }
+        }
+        reportCorruption("replacement_char", undefined, { count });
       }
       terminal.write(data);
     },
@@ -535,10 +672,11 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     },
     isApplicationCursorKeys: () => terminal.modes.applicationCursorKeysMode,
     isKittyKeyboardEnabled: () => kittyKeyboardFlags !== 0,
-    rowText: (index) => {
-      const buffer = terminal.buffer.active;
-      return buffer.getLine(buffer.baseY + index)?.translateToString(true) ?? "";
-    },
+    rowText: (index) => visibleRowText(index),
+    corruptionEvidence: () => ({
+      rows: Array.from({ length: terminal.rows }, (_, index) => visibleRowText(index)),
+      rawTail: rawRing.join(""),
+    }),
     cursor: () => {
       const buffer = terminal.buffer.active;
       return { x: buffer.cursorX, y: buffer.cursorY };

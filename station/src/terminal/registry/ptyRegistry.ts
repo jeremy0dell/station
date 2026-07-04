@@ -1,5 +1,6 @@
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
+import { reportTerminalCorruption, writePaneEvidenceDump } from "../diagnostics.js";
 import { createLocalPtyTerminal } from "../pty/localPtyTerminal.js";
 import type {
   StationTerminalExit,
@@ -10,6 +11,9 @@ import type {
 import { createStationVtScreen, type StationVtScreen } from "../vt/screen.js";
 
 const DEFAULT_RESIZE_DEBOUNCE_MS = 75;
+// Grace for the async resize path (debounce, bridge hop, host ack) before a
+// screen/PTY/pane size disagreement counts as divergence rather than transit.
+const GEOMETRY_SETTLE_MS = 2_000;
 
 /**
  * The read-only view a pane id resolves to. `screen` and `terminal` are null
@@ -90,6 +94,8 @@ export type PtyRegistryOptions = {
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
   /** Injectable for deterministic resize-debounce tests. */
   resizeDebounceMs?: number;
+  /** Injectable for deterministic geometry-divergence tests. */
+  geometrySettleMs?: number;
   /**
    * Notified when a pane's PTY process exits. Used to report a managed primary
    * agent's exit back to the observer. The registry knows only the pane id; the
@@ -110,6 +116,7 @@ type InternalEntry = {
   cwd: string | undefined;
   appliedSize: StationTerminalSize | null;
   resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  geometryCheckTimer: ReturnType<typeof setTimeout> | undefined;
   lastResizeAt: number;
   pendingSize: StationTerminalSize | null;
   spawnOptions: StationTerminalSpawnOptions | undefined;
@@ -125,6 +132,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   let createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   let scrollOnOutput = options.scrollOnOutput;
   const resizeDebounceMs = options.resizeDebounceMs ?? DEFAULT_RESIZE_DEBOUNCE_MS;
+  const geometrySettleMs = options.geometrySettleMs ?? GEOMETRY_SETTLE_MS;
   const entries = new Map<PaneId, InternalEntry>();
   const listeners = new Set<() => void>();
   let onPaneExit = options.onPaneExit;
@@ -153,6 +161,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       status: "starting shell",
       appliedSize: null,
       resizeTimer: undefined,
+      geometryCheckTimer: undefined,
       lastResizeAt: 0,
       pendingSize: null,
       spawnOptions,
@@ -172,6 +181,13 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     const screen = createStationVtScreen({
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
+      diagnosticsLabel: entry.paneId,
+      onCorruptionDetected: (kind) => {
+        const evidence = entries.get(entry.paneId)?.screen?.corruptionEvidence();
+        if (evidence !== undefined) {
+          writePaneEvidenceDump({ pane: entry.paneId, trigger: kind, evidence });
+        }
+      },
       onResponse: (data) => {
         // A replayed snapshot re-parses queries the child issued long ago
         // (startup probes recorded in the ring); answering those would inject
@@ -210,6 +226,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }
     entry.terminal = terminal;
     entry.status = `pid ${terminal.pid}`;
+    // Covers PTYs diverged from birth (e.g. a host PTY spawned at a default
+    // size); later resizes re-schedule their own checks.
+    scheduleGeometryCheck(entry);
     if (terminal.onReplay !== undefined) {
       entry.subscriptions.push(
         terminal.onReplay(async ({ size: recordedSize, chunks }) => {
@@ -236,6 +255,15 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       );
     }
     entry.subscriptions.push(
+      // Transport faults (failed host resizes, reconnects) were previously
+      // emitted to zero listeners; they are load-bearing divergence evidence.
+      terminal.onDiagnostic((message) => {
+        reportTerminalCorruption({
+          kind: "terminal_diagnostic",
+          pane: entry.paneId,
+          attributes: { message },
+        });
+      }),
       terminal.onData((data) => {
         entry.screen?.feed(data);
       }),
@@ -258,12 +286,64 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     if (!entry.exited) {
       entry.terminal?.resize(size);
     }
+    scheduleGeometryCheck(entry);
+  };
+
+  // Divergence detector: after a resize settles, the pane's asserted size, the
+  // screen model, and the PTY's acked size must agree. A persistent mismatch
+  // is the stuck-width corruption observed directly, so it logs and captures
+  // pane evidence.
+  const scheduleGeometryCheck = (entry: InternalEntry): void => {
+    if (entry.geometryCheckTimer !== undefined) {
+      clearTimeout(entry.geometryCheckTimer);
+    }
+    entry.geometryCheckTimer = setTimeout(() => {
+      entry.geometryCheckTimer = undefined;
+      if (entries.get(entry.paneId) !== entry || entry.exited) {
+        return;
+      }
+      const applied = entry.appliedSize;
+      const stats = entry.screen?.bufferStats();
+      const acked = entry.terminal?.ackedSize;
+      if (applied === null || stats === undefined) {
+        return;
+      }
+      const screenMismatch = stats.cols !== applied.cols || stats.rows !== applied.rows;
+      const ackMismatch =
+        acked !== undefined && (acked.cols !== applied.cols || acked.rows !== applied.rows);
+      if (!screenMismatch && !ackMismatch) {
+        return;
+      }
+      const sizes = {
+        paneSize: `${applied.cols}x${applied.rows}`,
+        screenSize: `${stats.cols}x${stats.rows}`,
+        ...(acked === undefined ? {} : { ptySize: `${acked.cols}x${acked.rows}` }),
+      };
+      reportTerminalCorruption({
+        kind: "geometry_divergence",
+        pane: entry.paneId,
+        attributes: sizes,
+      });
+      const evidence = entry.screen?.corruptionEvidence();
+      if (evidence !== undefined) {
+        writePaneEvidenceDump({
+          pane: entry.paneId,
+          trigger: "geometry_divergence",
+          evidence,
+          attributes: sizes,
+        });
+      }
+    }, geometrySettleMs);
   };
 
   const disposeEntry = (entry: InternalEntry): void => {
     if (entry.resizeTimer !== undefined) {
       clearTimeout(entry.resizeTimer);
       entry.resizeTimer = undefined;
+    }
+    if (entry.geometryCheckTimer !== undefined) {
+      clearTimeout(entry.geometryCheckTimer);
+      entry.geometryCheckTimer = undefined;
     }
     for (const subscription of entry.subscriptions) {
       subscription.dispose();

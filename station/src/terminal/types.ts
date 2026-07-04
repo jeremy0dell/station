@@ -35,6 +35,12 @@ export type StationTerminalProcess = {
   readonly command: string;
   readonly pid: number;
   readonly size: StationTerminalSize;
+  /**
+   * The last size the backing PTY acknowledged applying, when the transport
+   * confirms resizes (host-attached terminals). `size` is the pane's asserted
+   * size; a persistent gap between the two is geometry divergence.
+   */
+  readonly ackedSize?: StationTerminalSize | undefined;
   onData(listener: (data: string) => void): StationTerminalDisposable;
   onExit(listener: (event: StationTerminalExit) => void): StationTerminalDisposable;
   /** Transport/bridge diagnostics; never terminal output. */

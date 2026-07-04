@@ -91,6 +91,7 @@ export function createHostAttachedTerminal(
   const pendingWrites: string[] = [];
   let attachment: HostAttachment | undefined;
   let size = options.size;
+  let ackedSize: StationTerminalSize | undefined;
   let pid = 0;
   let exited = false;
   let disposed = false;
@@ -210,6 +211,7 @@ export function createHostAttachedTerminal(
           await opened.resize(size.cols, size.rows > 1 ? size.rows - 1 : size.rows + 1);
           await opened.resize(size.cols, size.rows);
         }
+        ackedSize = { cols: size.cols, rows: size.rows };
         // Drain front-to-back so a mid-flush failure leaves only the un-sent
         // writes to retry (no double-send on reconnect). New writes keep arriving
         // at the back while attachment is still undefined, preserving order.
@@ -362,9 +364,17 @@ export function createHostAttachedTerminal(
         // Applied to the host PTY on attach via `size`.
         return;
       }
-      attachment.resize(next.cols, next.rows).catch((error) => {
-        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
-      });
+      attachment
+        .resize(next.cols, next.rows)
+        .then(() => {
+          ackedSize = next;
+        })
+        .catch((error) => {
+          emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
+        });
+    },
+    get ackedSize() {
+      return ackedSize;
     },
     kill() {
       if (!ownsPty) {

@@ -143,6 +143,7 @@ diagnostics/*/diagnostic-index.json
 diagnostics/*/commands.jsonl
 diagnostics/*/errors.jsonl
 diagnostics/*/logs/observer.jsonl
+diagnostics/panes/
 spool/hooks/
 ```
 
@@ -152,6 +153,8 @@ spool/hooks/
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.
 - `logs/observer.jsonl` and `logs/hooks.jsonl` explain runtime events around reconcile, command execution, hook delivery, projection, spool fallback, and provider health.
+- `logs/tui.jsonl` carries pane corruption telemetry from the native workspace: `Terminal corruption signal.` lines with `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `diagnostics/panes/` holds pane evidence dumps written when a detector trips: the visible grid plus the raw byte tail that produced it. Feed `rawTail` back through `createStationVtScreen` to replay the corruption offline.
 - SQLite is observer-owned runtime history; inspect through existing debug/diagnostic surfaces unless a task explicitly needs database-level investigation.
 - Logs and bundles are diagnostic evidence only. Reconcile from config/providers/current observer state before treating old evidence as current truth.
 - Provider hook logs are delivery/setup evidence, not runtime truth. Use observer health, reconcile output, and snapshots to verify the current graph.
