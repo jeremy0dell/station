@@ -2,7 +2,7 @@ import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { watchSocketOwnership } from "../../src/runtime/socketOwnership.js";
+import { readSocketIdentity, watchSocketOwnership } from "../../src/runtime/socketOwnership.js";
 
 describe("watchSocketOwnership", () => {
   let dir: string;
@@ -60,6 +60,51 @@ describe("watchSocketOwnership", () => {
 
     await unlink(socketPath);
     await waitFor(() => lost);
+    watch.stop();
+  });
+
+  it("seeded with its own identity does not fire on its own socket", async () => {
+    dir = await mkdtemp(join(tmpdir(), "stn-ownership-"));
+    const socketPath = join(dir, "observer.sock");
+    await writeFile(socketPath, "");
+    const identity = await readSocketIdentity(socketPath);
+    expect(identity).toBeDefined();
+
+    let lost = false;
+    const watch = watchSocketOwnership({
+      socketPath,
+      intervalMs: 20,
+      ...(identity === undefined ? {} : { expectedIdentity: identity }),
+      onLost: () => {
+        lost = true;
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(lost).toBe(false);
+    watch.stop();
+  });
+
+  it("seeded watcher detects a takeover that happened before it was armed", async () => {
+    dir = await mkdtemp(join(tmpdir(), "stn-ownership-"));
+    const socketPath = join(dir, "observer.sock");
+    await writeFile(socketPath, "");
+    const identity = await readSocketIdentity(socketPath);
+    if (identity === undefined) throw new Error("expected a socket identity");
+    // The live socket already differs from what this process thinks it bound (a
+    // rival rebound it before the watch was armed). Deterministic — no reliance
+    // on filesystem inode reuse.
+    const staleSeed = { ino: identity.ino + 1n, birthtimeNs: identity.birthtimeNs };
+
+    let lost = false;
+    const watch = watchSocketOwnership({
+      socketPath,
+      intervalMs: 20,
+      expectedIdentity: staleSeed,
+      onLost: () => {
+        lost = true;
+      },
+    });
+    await waitFor(() => lost); // fires on the first probe
     watch.stop();
   });
 

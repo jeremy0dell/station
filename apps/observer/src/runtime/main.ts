@@ -22,7 +22,11 @@ import { emptyConfig } from "./emptyConfig.js";
 import { createObserverEventBus } from "./eventBus.js";
 import { createObserverLogger } from "./logging.js";
 import { type ObserverServer, startObserverServer } from "./server.js";
-import { type SocketOwnershipWatch, watchSocketOwnership } from "./socketOwnership.js";
+import {
+  readSocketIdentity,
+  type SocketOwnershipWatch,
+  watchSocketOwnership,
+} from "./socketOwnership.js";
 
 export type ObserverProviderRegistryFactoryOptions = {
   configPath?: string | undefined;
@@ -154,7 +158,14 @@ export async function runObserverMain(
   });
 
   try {
-    server = await startObserverServer({ socketPath, api, clock: systemClock });
+    // Bind only; the startup reconcile runs below, after the ownership watch is
+    // armed, so a takeover during that ~1s scan is detected rather than missed.
+    server = await startObserverServer({
+      socketPath,
+      api,
+      clock: systemClock,
+      drainOnStart: false,
+    });
   } catch (error) {
     await logger.error("Observer server could not start; shutting down runtime services.", {
       socketPath,
@@ -168,8 +179,12 @@ export async function runObserverMain(
     setTimeout(() => process.exit(1), 2000).unref();
     return 1;
   }
+  // Seed the watcher with the just-bound socket identity so it never adopts a
+  // rival's socket as its baseline (the failure that let displaced observers linger).
+  const boundIdentity = await readSocketIdentity(socketPath);
   ownership = watchSocketOwnership({
     socketPath,
+    ...(boundIdentity === undefined ? {} : { expectedIdentity: boundIdentity }),
     onLost: () => {
       void logger.warn("Observer socket was taken over by another process; shutting down.", {
         socketPath,
@@ -177,7 +192,7 @@ export async function runObserverMain(
       });
       // A displaced observer must not linger: its loops would keep draining
       // spool events and firing hooks for a state dir it no longer serves.
-      setTimeout(() => process.exit(0), 5000).unref();
+      setTimeout(() => process.exit(0), 2000).unref();
       void api.stop();
     },
   });
@@ -186,6 +201,9 @@ export async function runObserverMain(
   };
   process.once("SIGINT", stopFromSignal);
   process.once("SIGTERM", stopFromSignal);
+
+  // Startup reconcile now that the ownership watch is live.
+  await api.reconcile("observer.startup");
 
   await stopped;
   sqlite.close();
