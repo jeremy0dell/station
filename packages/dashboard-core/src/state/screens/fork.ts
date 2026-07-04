@@ -5,15 +5,12 @@ import {
   editableTextInputIntentForInput,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
-import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
-import { choiceValueByKey } from "../../selectors/selectors.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
-import { scrollDashboard } from "../dashboardScroll.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
-import { scrollDeltaForKey } from "./dashboard.js";
+import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
 
@@ -64,34 +61,14 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
     return { state };
   }
   if (state.screen.step === "chooseSlot") {
-    return handleChooseSlotKey(state, key);
+    if (key.escape === true) {
+      return { state: { ...state, screen: { name: "dashboard" } } };
+    }
+    return handleDashboardRowChoiceKey(state, key, (current, rowId) => ({
+      state: openForkDetailsForRow(current, rowId),
+    }));
   }
   return handleDetailsKey(state, key, state.screen);
-}
-
-function handleChooseSlotKey(state: TuiState, key: TuiKey): TuiTransition {
-  if (key.escape === true) {
-    return { state: { ...state, screen: { name: "dashboard" } } };
-  }
-
-  const scrollDelta = scrollDeltaForKey(key);
-  if (scrollDelta !== 0) {
-    return { state: scrollDashboard(state, scrollDelta) };
-  }
-
-  if (state.snapshot === undefined) {
-    return { state };
-  }
-
-  const row = choiceValueByKey(
-    selectDashboardViewport(state.snapshot, state).rowChoices,
-    key.input,
-  );
-  if (row === undefined) {
-    return { state };
-  }
-
-  return { state: openForkDetailsForRow(state, row.id) };
 }
 
 // Builds the fork details step from a dashboard row. Exported so the context menu can

@@ -84,7 +84,7 @@ const CASES: ModalCase[] = [
   {
     name: "remove slot sheet",
     keys: [{ input: "X" }],
-    expect: ["Select session to delete", "Click a row or press slot key", "Esc:cancel"],
+    expect: ["Select session to delete", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
   },
   {
     name: "remove confirm sheet",
@@ -94,7 +94,7 @@ const CASES: ModalCase[] = [
   {
     name: "rename slot prompt",
     keys: [{ input: "R" }],
-    expect: ["Choose the slot to rename: 1-9/a-z"],
+    expect: ["Rename: ↑↓ move · ↵ choose · 1-9/a-z or click"],
   },
   {
     name: "rename sheet",
@@ -105,7 +105,7 @@ const CASES: ModalCase[] = [
   {
     name: "fork slot sheet",
     keys: [{ input: "F" }],
-    expect: ["Select session to fork", "Click a row or press slot key", "Esc:cancel"],
+    expect: ["Select session to fork", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
   },
   {
     name: "fork details sheet",

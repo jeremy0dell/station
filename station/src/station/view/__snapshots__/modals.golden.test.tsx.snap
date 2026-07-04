@@ -217,7 +217,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to delete                   │code  unknown           +3 -1 #10 
 │                                            │      no agent                    
-│ Click a row or press slot key              │                                  
+│ ↑↓ move · ↵ choose · slot or click         │                                  
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
@@ -273,7 +273,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
  [b] - old-experiment                     -         no agent                    
-Choose the slot to rename: 1-9/a-z                                              
+Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                                   
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -329,7 +329,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to fork                     │code  unknown           +3 -1 #10 
 │                                            │      no agent                    
-│ Click a row or press slot key              │                                  
+│ ↑↓ move · ↵ choose · slot or click         │                                  
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  

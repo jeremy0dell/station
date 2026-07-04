@@ -26,6 +26,11 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   "tui.remove.chooseSlot",
   "tui.rename.chooseSlot",
   "tui.fork.chooseSlot",
+  // Return commits the focused row; with no cursor yet in the representative
+  // state it is a no-op, exactly like tui.dashboard.focusActivate.
+  "tui.remove.activate",
+  "tui.rename.activate",
+  "tui.fork.activate",
   "tui.newSessionProject.slot",
   "tui.newSessionAgent.slot",
   "tui.projectDefaultAgent.slot",

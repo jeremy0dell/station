@@ -29,6 +29,19 @@ describe("TUI screen transitions", () => {
     expect(refresh.reconcileReason).toBe("tui-refresh");
   });
 
+  it("moves a cursor with arrows and commits the focused row on enter in remove-choose", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const opened = handleTuiKey(base, { input: "X" }).state;
+    expect(opened.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+
+    // Arrows now move the dashboard cursor (was: scroll the viewport).
+    const moved = handleTuiKey(opened, { input: "", downArrow: true }).state;
+    expect(moved.focusedRowId).toBeDefined();
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
+    expect(committed.screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
+  });
+
   it("scrolls dashboard rows with mouse wheel events", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),

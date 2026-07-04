@@ -1,13 +1,11 @@
-import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
-import { choiceValueByKey, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
+import { worktreeRowDisplayTitle } from "../../selectors/selectors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
-import { scrollDashboard } from "../dashboardScroll.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import { addPendingRemoveWorktreeRow } from "../localRows.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
-import { scrollDeltaForKey } from "./dashboard.js";
+import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "removeWorktree") {
@@ -24,33 +22,12 @@ export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransi
   }
 
   if (state.screen.step === "chooseSlot") {
-    return handleChooseSlotKey(state, key);
+    return handleDashboardRowChoiceKey(state, key, (current, rowId) => ({
+      state: openRemoveWorktreeConfirmForRow(current, rowId),
+    }));
   }
 
   return handleConfirmKey(state, key);
-}
-
-function handleChooseSlotKey(state: TuiState, key: TuiKey): TuiTransition {
-  const scrollDelta = scrollDeltaForKey(key);
-  if (scrollDelta !== 0) {
-    return {
-      state: scrollDashboard(state, scrollDelta),
-    };
-  }
-
-  if (state.snapshot === undefined) {
-    return { state };
-  }
-
-  const row = choiceValueByKey(
-    selectDashboardViewport(state.snapshot, state).rowChoices,
-    key.input,
-  );
-  if (row === undefined) {
-    return { state };
-  }
-
-  return { state: openRemoveWorktreeConfirmForRow(state, row.id) };
 }
 
 export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string): TuiState {

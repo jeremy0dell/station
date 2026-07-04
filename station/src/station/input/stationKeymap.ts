@@ -195,9 +195,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   removeChooseSlot: [
     { id: "station.remove.cancel", pattern: { kind: "named", named: "escape" }, action: "station.remove.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.remove.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.remove.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
-    { id: "station.remove.chooseSlot", pattern: { kind: "slot" }, action: "station.remove.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose row" } },
+    { id: "station.remove.focusUp", pattern: { kind: "named", named: "up" }, action: "station.remove.focus", outcome: "handled" },
+    { id: "station.remove.focusDown", pattern: { kind: "named", named: "down" }, action: "station.remove.focus", outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: "station.remove.activate", pattern: { kind: "named", named: "return" }, action: "station.remove.activate", outcome: "handled", help: { keys: "↵", label: "choose row" } },
+    { id: "station.remove.chooseSlot", pattern: { kind: "slot" }, action: "station.remove.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "jump to row" } },
   ],
   removeConfirm: [
     { id: "station.removeConfirm.cancelEsc", pattern: { kind: "named", named: "escape" }, action: "station.remove.cancel", outcome: "handled", help: { keys: "N/esc/enter", label: "cancel" } },
@@ -229,9 +230,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   renameChooseSlot: [
     { id: "station.rename.cancel", pattern: { kind: "named", named: "escape" }, action: "station.rename.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.rename.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.rename.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
-    { id: "station.rename.chooseSlot", pattern: { kind: "slot" }, action: "station.rename.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose row" } },
+    { id: "station.rename.focusUp", pattern: { kind: "named", named: "up" }, action: "station.rename.focus", outcome: "handled" },
+    { id: "station.rename.focusDown", pattern: { kind: "named", named: "down" }, action: "station.rename.focus", outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: "station.rename.activate", pattern: { kind: "named", named: "return" }, action: "station.rename.activate", outcome: "handled", help: { keys: "↵", label: "choose row" } },
+    { id: "station.rename.chooseSlot", pattern: { kind: "slot" }, action: "station.rename.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "jump to row" } },
   ],
   renameEdit: [
     { id: "station.renameEdit.back", pattern: { kind: "named", named: "escape" }, action: "station.rename.back", outcome: "handled", help: { keys: "esc", label: "back" } },
@@ -240,9 +242,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   forkChooseSlot: [
     { id: "station.fork.cancel", pattern: { kind: "named", named: "escape" }, action: "station.fork.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.fork.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.fork.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
-    { id: "station.fork.chooseSlot", pattern: { kind: "slot" }, action: "station.fork.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose source" } },
+    { id: "station.fork.focusUp", pattern: { kind: "named", named: "up" }, action: "station.fork.focus", outcome: "handled" },
+    { id: "station.fork.focusDown", pattern: { kind: "named", named: "down" }, action: "station.fork.focus", outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: "station.fork.activate", pattern: { kind: "named", named: "return" }, action: "station.fork.activate", outcome: "handled", help: { keys: "↵", label: "choose source" } },
+    { id: "station.fork.chooseSlot", pattern: { kind: "slot" }, action: "station.fork.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "jump to source" } },
   ],
   forkDetails: [
     { id: "station.forkDetails.back", pattern: { kind: "named", named: "escape" }, action: "station.fork.back", outcome: "handled", help: { keys: "esc", label: "back" } },
