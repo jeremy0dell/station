@@ -33,6 +33,7 @@ import {
   applyHarnessEventStatusOverlays,
   decayStaleBusyStatuses,
   type ObserverHarnessRun,
+  synthesizeExternalHarnessRuns,
 } from "./harnessEventStatus.js";
 
 export type ProviderReadOptions = {
@@ -688,7 +689,7 @@ async function harnessRunsWithPersistedEventStatus(input: {
     now: input.now,
   });
   return applyHarnessEventStatusOverlays({
-    runs: input.harnessRuns,
+    runs: synthesizeExternalHarnessRuns({ runs: input.harnessRuns, observations }),
     observations,
   });
 }

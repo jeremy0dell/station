@@ -34,6 +34,90 @@ export function observerHarnessRunFromRun(run: HarnessRunObservation): ObserverH
   };
 }
 
+export function externalHarnessRunId(provider: string, nativeSessionId: string): string {
+  return `${provider}:external:${nativeSessionId}`;
+}
+
+/**
+ * Mint runs for sessions Station did not launch. Their hook events carry only
+ * native identity plus a cwd-resolved worktree — no station sessionId and no
+ * harnessRunId — so provider discovery never surfaces them and their status
+ * had nowhere to land. One run per (provider, native session), carrying the
+ * newest observed status; ended sessions (exited) synthesize nothing, so an
+ * external run disappears from rows once its session ends.
+ */
+export function synthesizeExternalHarnessRuns(input: {
+  runs: ObserverHarnessRun[];
+  observations: PersistedProviderObservation[];
+}): ObserverHarnessRun[] {
+  const existingIds = new Set(input.runs.map((run) => run.run.id));
+  const latestById = new Map<string, HarnessEventObservation>();
+
+  for (const observation of input.observations) {
+    if (observation.expired || observation.entityKind !== "harness_event") {
+      continue;
+    }
+    const event = parseHarnessEventObservation(observation);
+    if (event === undefined || event.provider !== observation.provider) {
+      continue;
+    }
+    // Station-launched sessions carry station identity (session, run, or
+    // terminal target); their runs come from provider discovery and must not
+    // be duplicated here.
+    if (
+      event.sessionId !== undefined ||
+      event.harnessRunId !== undefined ||
+      event.terminalTargetId !== undefined
+    ) {
+      continue;
+    }
+    if (event.nativeSessionId === undefined || event.worktreeId === undefined) {
+      continue;
+    }
+    if (event.status === undefined || event.status.value === "unknown") {
+      continue;
+    }
+    const id = externalHarnessRunId(event.provider, event.nativeSessionId);
+    if (existingIds.has(id)) {
+      continue;
+    }
+    const previous = latestById.get(id);
+    if (
+      previous?.status !== undefined &&
+      Date.parse(previous.status.updatedAt) >= Date.parse(event.status.updatedAt)
+    ) {
+      continue;
+    }
+    latestById.set(id, event);
+  }
+
+  const synthesized: ObserverHarnessRun[] = [];
+  for (const [id, event] of latestById) {
+    const status = event.status;
+    const worktreeId = event.worktreeId;
+    const nativeSessionId = event.nativeSessionId;
+    if (status === undefined || worktreeId === undefined || nativeSessionId === undefined) {
+      continue;
+    }
+    if (status.value === "exited") {
+      continue;
+    }
+    synthesized.push({
+      run: {
+        id,
+        provider: event.provider,
+        worktreeId,
+        state: status.value,
+        confidence: status.confidence,
+        reason: status.reason,
+        observedAt: event.observedAt,
+      },
+      status,
+    });
+  }
+  return [...input.runs, ...synthesized];
+}
+
 // A busy status is a claim that signals are still flowing. A run whose newest
 // signal is older than this window has gone dark — harness killed mid-turn,
 // hooks undelivered, stale ingress — and must not read as active forever;

@@ -10,8 +10,10 @@ import type { PersistedProviderObservation } from "../../src/persistence";
 import {
   applyHarnessEventStatusOverlays,
   decayStaleBusyStatuses,
+  externalHarnessRunId,
   type ObserverHarnessRun,
   observerHarnessRunFromRun,
+  synthesizeExternalHarnessRuns,
 } from "../../src/reconcile/harnessEventStatus";
 
 const runObservedAt = "2026-05-21T12:00:00.000Z";
@@ -180,6 +182,82 @@ describe("harness event status overlays", () => {
   });
 });
 
+describe("external run synthesis", () => {
+  const externalObservation = (input: {
+    nativeSessionId?: string;
+    sessionId?: string;
+    harnessRunId?: string;
+    worktreeId?: string;
+    value?: "working" | "idle" | "exited";
+    updatedAt?: string;
+  }) =>
+    observation({
+      nativeSessionId: input.nativeSessionId ?? "native_1",
+      ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
+      ...(input.harnessRunId === undefined ? {} : { harnessRunId: input.harnessRunId }),
+      worktreeId: input.worktreeId ?? "wt_1",
+      rawEventType: "UserPromptSubmit",
+      status: status(
+        input.value ?? "working",
+        "medium",
+        "Prompt submitted.",
+        input.updatedAt ?? eventObservedAt,
+      ),
+    });
+
+  it("mints a run for an external session from its worktree-resolved events", () => {
+    const result = synthesizeExternalHarnessRuns({
+      runs: [],
+      observations: [externalObservation({})],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.run).toMatchObject({
+      id: externalHarnessRunId("codex", "native_1"),
+      provider: "codex",
+      worktreeId: "wt_1",
+      state: "working",
+    });
+    expect(result[0]?.status).toMatchObject({ value: "working", updatedAt: eventObservedAt });
+  });
+
+  it("never duplicates station-identified sessions or existing runs", () => {
+    const stationOwned = synthesizeExternalHarnessRuns({
+      runs: [],
+      observations: [
+        externalObservation({ sessionId: "ses_1" }),
+        externalObservation({ harnessRunId: "run_1", nativeSessionId: "native_2" }),
+      ],
+    });
+    expect(stationOwned).toHaveLength(0);
+
+    const existing = run({ id: externalHarnessRunId("codex", "native_1"), state: "working" });
+    const alreadyPresent = synthesizeExternalHarnessRuns({
+      runs: [existing],
+      observations: [externalObservation({})],
+    });
+    expect(alreadyPresent).toEqual([existing]);
+  });
+
+  it("keeps the newest status per native session and drops ended sessions", () => {
+    const superseded = synthesizeExternalHarnessRuns({
+      runs: [],
+      observations: [
+        externalObservation({ value: "working", updatedAt: "2026-05-21T12:00:01.000Z" }),
+        externalObservation({ value: "idle", updatedAt: "2026-05-21T12:00:05.000Z" }),
+      ],
+    });
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0]?.status).toMatchObject({ value: "idle" });
+
+    const ended = synthesizeExternalHarnessRuns({
+      runs: [],
+      observations: [externalObservation({ value: "exited" })],
+    });
+    expect(ended).toHaveLength(0);
+  });
+});
+
 describe("stale busy status decay", () => {
   // runObservedAt + 15 minutes exactly, and one millisecond past it.
   const atWindow = "2026-05-21T12:15:00.000Z";
@@ -307,6 +385,7 @@ function observation(
     harnessRunId?: string | undefined;
     sessionId?: string | undefined;
     worktreeId?: string | undefined;
+    nativeSessionId?: string | undefined;
     rawEventType?: string;
     observedAt?: string;
   },
@@ -321,6 +400,7 @@ function observation(
   if (input.harnessRunId !== undefined) payload.harnessRunId = input.harnessRunId;
   if (input.sessionId !== undefined) payload.sessionId = input.sessionId;
   if (input.worktreeId !== undefined) payload.worktreeId = input.worktreeId;
+  if (input.nativeSessionId !== undefined) payload.nativeSessionId = input.nativeSessionId;
   if (input.rawEventType !== undefined) payload.rawEventType = input.rawEventType;
 
   return persistedObservation(payload, {
