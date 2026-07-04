@@ -1,6 +1,7 @@
 import { deriveTuiInputMode, type TuiInputMode } from "../keymap.js";
 import type { TuiState } from "../types.js";
 import { newSessionPickAgentListSpec, newSessionPickProjectListSpec } from "./specs/newSession.js";
+import { projectCollapseListSpec, projectSettingsPickerListSpec } from "./specs/projectChoosers.js";
 import { projectDefaultAgentListSpec } from "./specs/projectDefaultAgent.js";
 import type { RegisteredListSpec } from "./types.js";
 
@@ -12,6 +13,8 @@ export const LIST_REGISTRY: Partial<Record<TuiInputMode, RegisteredListSpec>> = 
   projectDefaultAgent: projectDefaultAgentListSpec,
   newSessionPickProject: newSessionPickProjectListSpec,
   newSessionPickAgent: newSessionPickAgentListSpec,
+  projectCollapse: projectCollapseListSpec,
+  projectSettingsPicker: projectSettingsPickerListSpec,
 };
 
 export function listSpecForState(state: TuiState): RegisteredListSpec | undefined {

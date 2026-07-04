@@ -222,7 +222,9 @@ describe("list registry — migrated modes", () => {
     expect(Object.keys(LIST_REGISTRY).sort()).toEqual([
       "newSessionPickAgent",
       "newSessionPickProject",
+      "projectCollapse",
       "projectDefaultAgent",
+      "projectSettingsPicker",
     ]);
   });
 });

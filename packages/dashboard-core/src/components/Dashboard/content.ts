@@ -273,21 +273,11 @@ function textPromptForScreen(screen: TuiScreen): { label: string; value: string 
   if (screen.name === "search") {
     return { label: "search", value: screen.value };
   }
-  if (screen.name === "projectCollapse") {
-    return { label: "collapse project", value: screen.value };
-  }
-  if (screen.name === "projectSettingsPicker") {
-    return { label: "settings for project", value: screen.value };
-  }
   return undefined;
 }
 
 export function commandPromptRows(screen: TuiScreen): number {
-  if (
-    screen.name === "search" ||
-    screen.name === "projectCollapse" ||
-    screen.name === "projectSettingsPicker"
-  ) {
+  if (screen.name === "search") {
     return 2;
   }
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
@@ -301,6 +291,8 @@ export function isModalOverlayActive(screen: TuiScreen): boolean {
     screen.name === "help" ||
     screen.name === "newSession" ||
     screen.name === "projectDefaultAgent" ||
+    screen.name === "projectCollapse" ||
+    screen.name === "projectSettingsPicker" ||
     screen.name === "removeWorktree" ||
     (screen.name === "renameSession" && screen.step === "editName")
   );

@@ -7,6 +7,7 @@ import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
+import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
@@ -72,6 +73,17 @@ export function OverlayHostView({
         rows={rows}
         snapshot={snapshot}
         screen={screen}
+        selection={selection}
+      />
+    );
+  }
+  if (screen.name === "projectCollapse" || screen.name === "projectSettingsPicker") {
+    return (
+      <ProjectChoiceSheetView
+        columns={columns}
+        rows={rows}
+        snapshot={snapshot}
+        mode={screen.name}
         selection={selection}
       />
     );

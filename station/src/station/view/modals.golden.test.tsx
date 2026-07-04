@@ -38,14 +38,16 @@ const CASES: ModalCase[] = [
     expect: ["search: api"],
   },
   {
-    name: "collapse prompt",
+    name: "collapse project sheet",
     keys: [{ input: "C" }],
-    expect: ["collapse project:"],
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Collapse Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
-    name: "project settings picker prompt",
+    name: "project settings picker sheet",
     keys: [{ input: "P" }],
-    expect: ["settings for project:"],
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
     name: "project settings panel",

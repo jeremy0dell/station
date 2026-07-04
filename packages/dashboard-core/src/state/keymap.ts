@@ -338,13 +338,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.collapse.toggleSlot",
-      pattern: { kind: "slot" },
-      action: "tui.collapse.toggleSlot",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "toggle project" },
-    },
+    ...selectableListBindings("tui.collapse"),
   ],
   projectSettingsPicker: [
     {
@@ -354,13 +348,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.projectSettingsPicker.choose",
-      pattern: { kind: "slot" },
-      action: "tui.projectSettings.pick",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "open settings" },
-    },
+    ...selectableListBindings("tui.projectSettingsPicker"),
   ],
   removeChooseSlot: [
     {

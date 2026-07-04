@@ -336,6 +336,8 @@ const SHEET_CHOICE_MODES: ReadonlySet<StationInputMode> = new Set([
   "newSessionPickProject",
   "newSessionPickAgent",
   "projectDefaultAgent",
+  "projectCollapse",
+  "projectSettingsPicker",
   "projectSettings",
 ]);
 

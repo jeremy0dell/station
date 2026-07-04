@@ -141,6 +141,17 @@ export function selectProjectChoices(
   return keyChoices(selectProjectGroups(snapshot, state).map((group) => group.project));
 }
 
+/**
+ * The project choosers (collapse / settings) list every project in snapshot
+ * order, unaffected by search or collapse — so the engine spec and the sheet
+ * view can key off the snapshot alone and stay in exact agreement.
+ */
+export function selectProjectChooserChoices(
+  snapshot: StationSnapshot,
+): Array<KeyedChoice<ProjectView>> {
+  return keyChoices(snapshot.projects);
+}
+
 export function selectNewSessionProject(
   snapshot: StationSnapshot,
   selectedProjectId: ProjectId,

@@ -19,8 +19,10 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   // Slot bindings cover the full accelerator range; assigned slots depend on
   // the current viewport, selected picker, and row data.
   "tui.dashboard.slotActivate",
-  "tui.collapse.toggleSlot",
-  "tui.projectSettingsPicker.choose",
+  "tui.collapse.slot",
+  "tui.collapse.cursorUp",
+  "tui.projectSettingsPicker.slot",
+  "tui.projectSettingsPicker.cursorUp",
   "tui.remove.chooseSlot",
   "tui.rename.chooseSlot",
   "tui.fork.chooseSlot",
