@@ -64,7 +64,7 @@ export type IslandDisplayInput = {
 export type IslandDisplay =
   | { kind: "mark" }
   | { kind: "alertMark" }
-  | { kind: "counts"; working: number; ready: number; idle: number }
+  | { kind: "counts"; working: number; ready: number }
   | { kind: "celebration"; celebration: IslandCelebration }
   | { kind: "alertCard"; sessionName: string; needsYouCount: number }
   | { kind: "rollup"; entries: readonly ProjectRollupEntry[] }
@@ -98,12 +98,13 @@ export function islandDisplay(input: IslandDisplayInput, expanded: boolean): Isl
     return { kind: "celebration", celebration: input.celebration };
   }
   if (input.restCounts === true) {
-    return {
-      kind: "counts",
-      working: status.workingCount,
-      ready: status.readyCount,
-      idle: status.idleCount,
-    };
+    if (status.workingCount > 0 || status.readyCount > 0) {
+      return {
+        kind: "counts",
+        working: status.workingCount,
+        ready: status.readyCount,
+      };
+    }
   }
   return { kind: "mark" };
 }
@@ -154,7 +155,7 @@ export function targetDims(display: IslandDisplay): Dims {
     case "alertMark":
       return { width: COLLAPSED_ATTENTION_COLS, height: COLLAPSED_ATTENTION_ROWS };
     case "counts":
-      return { width: COLLAPSED_COUNTS_COLS, height: COLLAPSED_BASE_ROWS };
+      return { width: collapsedCountCols(countLaneCount(display)), height: COLLAPSED_BASE_ROWS };
     case "celebration": {
       const interior = ICON_COLS + 1 + celebrationText(display.celebration).length;
       return { width: interior + 2 * ICON_PAD + 2, height: COLLAPSED_BASE_ROWS };
@@ -191,11 +192,24 @@ export function targetDims(display: IslandDisplay): Dims {
   }
 }
 
-// The collapsed counts row measures with 2-digit lanes (`⠿88 ●88 ○88`) so live
+// The collapsed counts row measures visible lanes with 2-digit counts so live
 // count ticks can't slide the box out from under an approaching cursor.
-const STABLE_COUNT_LANES_COLS = 3 * (1 + 2) + 2;
-export const COLLAPSED_COUNTS_COLS =
-  ICON_COLS + 1 + STABLE_COUNT_LANES_COLS + 2 * ICON_PAD + 2;
+const STABLE_COUNT_LANE_COLS = 1 + 2;
+const STABLE_COUNT_LANE_GAP_COLS = 1;
+export const COLLAPSED_COUNTS_COLS = collapsedCountCols(2);
+
+function countLaneCount(display: Extract<IslandDisplay, { kind: "counts" }>): number {
+  return Number(display.working > 0) + Number(display.ready > 0);
+}
+
+function collapsedCountCols(laneCount: number): number {
+  if (laneCount === 0) {
+    return COLLAPSED_BASE_COLS;
+  }
+  const laneCols =
+    laneCount * STABLE_COUNT_LANE_COLS + (laneCount - 1) * STABLE_COUNT_LANE_GAP_COLS;
+  return ICON_COLS + 1 + laneCols + 2 * ICON_PAD + 2;
+}
 
 function summaryColumns(verb: string): number {
   return sessionSummary(STABLE_SUMMARY_COUNT, verb).length;

@@ -171,7 +171,6 @@ function StationButtonContent(props: {
           iconColor={color.icon}
           working={display.working}
           ready={display.ready}
-          idle={display.idle}
         />
       );
     case "celebration":
@@ -293,13 +292,11 @@ function CollapsedAttention({ color }: { color: StationButtonStateColors }): Rea
   );
 }
 
-// Fleet-lane vocabulary shared with the dashboard's FLEET bar: ⠿ working (blue,
-// animated while any), ● ready (green), ○ idle (gray).
+// Collapsed fleet counts show only active lanes: braille working and ● ready.
 function CollapsedCounts(props: {
   iconColor: string;
   working: number;
   ready: number;
-  idle: number;
 }): ReactNode {
   return (
     <box flexDirection="row" paddingLeft={ICON_PAD}>
@@ -307,13 +304,15 @@ function CollapsedCounts(props: {
       <text>
         <span> </span>
         {props.working > 0 ? (
-          <Throbber variant="braille" fg={STATION_COLORS.blue} />
-        ) : (
-          <span fg={STATION_COLORS.blue}>⠿</span>
-        )}
-        <span fg={STATION_COLORS.blue}>{`${paintedCount(props.working)} `}</span>
-        <span fg={STATION_COLORS.green}>{`●${paintedCount(props.ready)} `}</span>
-        <span fg={STATION_COLORS.gray}>{`○${paintedCount(props.idle)}`}</span>
+          <>
+            <Throbber variant="braille" fg={STATION_COLORS.blue} />
+            <span fg={STATION_COLORS.blue}>{paintedCount(props.working)}</span>
+          </>
+        ) : null}
+        {props.working > 0 && props.ready > 0 ? <span> </span> : null}
+        {props.ready > 0 ? (
+          <span fg={STATION_COLORS.green}>{`●${paintedCount(props.ready)}`}</span>
+        ) : null}
       </text>
     </box>
   );

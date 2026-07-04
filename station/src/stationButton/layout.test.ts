@@ -38,8 +38,17 @@ describe("islandDisplay", () => {
     expect(islandDisplay(input({}, { celebration, restCounts: true }), false).kind).toBe(
       "celebration",
     );
-    expect(islandDisplay(input({}, { restCounts: true }), false).kind).toBe("counts");
+    expect(islandDisplay(input({ readyCount: 1 }, { restCounts: true }), false).kind).toBe(
+      "counts",
+    );
     expect(islandDisplay(input(), false).kind).toBe("mark");
+  });
+
+  it("falls back to the bare mark for empty or idle-only rest counts", () => {
+    expect(islandDisplay(input({}, { restCounts: true }), false).kind).toBe("mark");
+    expect(islandDisplay(input({ idleCount: 3 }, { restCounts: true }), false).kind).toBe(
+      "mark",
+    );
   });
 
   it("expands to the alert card, the roll-up, or the totals", () => {
@@ -71,13 +80,21 @@ describe("targetDims", () => {
     expect(width("main")).toBe(width("another/long-feature-branch-name-here"));
   });
 
-  it("keeps the collapsed counts box width stable as counts tick", () => {
+  it("sizes collapsed counts by visible working and ready lanes", () => {
     const at = (workingCount: number, readyCount: number, idleCount: number) =>
       dims(input({ workingCount, readyCount, idleCount }, { restCounts: true }), false);
-    expect(at(0, 0, 0)).toEqual(at(9, 10, 99));
+    const workingOnly = at(1, 0, 0);
+    const readyOnly = at(0, 1, 0);
+
+    expect(at(0, 0, 0).width).toBe(COLLAPSED_BASE_COLS);
+    expect(at(0, 0, 9).width).toBe(COLLAPSED_BASE_COLS);
+    expect(workingOnly).toEqual(at(99, 0, 12));
+    expect(workingOnly).toEqual(at(150, 0, 0));
+    expect(readyOnly).toEqual(at(0, 99, 12));
+    expect(workingOnly.width).toBe(readyOnly.width);
+    expect(workingOnly.width).toBeGreaterThan(COLLAPSED_BASE_COLS);
+    expect(workingOnly.width).toBeLessThan(COLLAPSED_COUNTS_COLS);
     expect(at(1, 1, 1).width).toBe(COLLAPSED_COUNTS_COLS);
-    expect(at(1, 1, 1).width).toBeGreaterThan(COLLAPSED_BASE_COLS);
-    expect(at(150, 0, 0)).toEqual(at(0, 0, 0));
   });
 
   it("keeps the roll-up card width fixed while height tracks project count", () => {
