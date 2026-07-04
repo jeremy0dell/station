@@ -1,7 +1,12 @@
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { type IMarker, Terminal } from "@xterm/headless";
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
-import { reportTerminalCorruption, type TerminalCorruptionKind } from "../diagnostics.js";
+import { ChunkRing } from "../chunkRing.js";
+import {
+  reportTerminalCorruption,
+  type TerminalCorruptionKind,
+  writePaneEvidenceDump,
+} from "../diagnostics.js";
 import type { StationTerminalSize } from "../types.js";
 import { buildVisibleRows, type VtRow } from "./rows.js";
 import { type StationVtTheme, stationVtTheme } from "./theme.js";
@@ -24,7 +29,7 @@ const FRAGMENT_SCAN_MIN_INTERVAL_MS = 1_000;
 // that PRINTS escape codes as text (log viewers) trips it, so it only ever
 // counts and logs, never alerts.
 const ESCAPE_FRAGMENT_PATTERN =
-  /\[\??\d{1,4}(?:;\d{1,4}){1,7}[A-Za-z]|\d{1,3};\d{1,3};\d{1,3}m|;rgb:[0-9a-fA-F]{2}|\[\?\d{2,4}[hl]/;
+  /\[\??\d{1,4}(?:;\d{1,4}){1,7}[A-Za-z]|\b(?:38|48);[25];\d{1,3};\d{1,3};\d{1,3}m|;rgb:[0-9a-fA-F]{2}|\[\?\d{2,4}[hl]/;
 // Scrollback is now viewable (wheel + copy-mode), but a modest buffer still
 // keeps resize reflow cheap; the depth is intentionally not yet configurable.
 const DEFAULT_SCROLLBACK_LINES = 1000;
@@ -48,10 +53,8 @@ export type StationVtScreenOptions = {
    * on them at startup.
    */
   onResponse?: (data: string) => void;
-  /** Pane label attached to corruption telemetry from this screen. */
+  /** Pane label attached to corruption telemetry and evidence dumps. */
   diagnosticsLabel?: string;
-  /** Fired when a detector trips, so the owner can capture pane evidence. */
-  onCorruptionDetected?: (kind: TerminalCorruptionKind) => void;
 };
 
 export type VtCursor = {
@@ -223,32 +226,24 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let lastFlushAt = 0;
   let syncHoldUntil: number | undefined;
-  const rawRing: string[] = [];
-  let rawRingChars = 0;
+  const rawRing = new ChunkRing(RAW_RING_LIMIT_CHARS);
   let lastFragmentScanAt = 0;
 
-  const pushRawRing = (data: string): void => {
-    rawRing.push(data);
-    rawRingChars += data.length;
-    while (rawRingChars > RAW_RING_LIMIT_CHARS && rawRing.length > 1) {
-      const evicted = rawRing.shift();
-      if (evicted === undefined) {
-        break;
-      }
-      rawRingChars -= evicted.length;
-    }
-  };
+  const corruptionEvidence = (): { rows: string[]; rawTail: string } => ({
+    rows: Array.from({ length: terminal.rows }, (_, index) => visibleRowText(index)),
+    rawTail: rawRing.join(),
+  });
 
   const reportCorruption = (
     kind: TerminalCorruptionKind,
     key?: string,
-    attributes?: Record<string, unknown>,
+    detail?: Record<string, unknown>,
   ): void => {
     reportTerminalCorruption({
       kind,
       ...(options.diagnosticsLabel === undefined ? {} : { pane: options.diagnosticsLabel }),
       ...(key === undefined ? {} : { key }),
-      ...(attributes === undefined ? {} : { attributes }),
+      ...(detail === undefined ? {} : { detail }),
     });
   };
 
@@ -271,7 +266,13 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
           row: index,
           excerpt: text.slice(Math.max(0, match.index - 8), match.index + 24),
         });
-        options.onCorruptionDetected?.("escape_fragment");
+        if (options.diagnosticsLabel !== undefined) {
+          writePaneEvidenceDump({
+            pane: options.diagnosticsLabel,
+            trigger: "escape_fragment",
+            evidence: corruptionEvidence(),
+          });
+        }
         return;
       }
     }
@@ -468,6 +469,11 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
         };
       }
     )._core?._inputHandler?._parser;
+    if (parser === undefined) {
+      // An engine bump moved the private path; make the silent loss of
+      // unhandled-sequence detection observable instead of trusting empty counters.
+      reportCorruption("parse_error", "fallback-wiring-unavailable");
+    }
     parser?.setCsiHandlerFallback((ident, params) => {
       reportCorruption("unhandled_sequence", `csi:${ident}`, {
         family: "csi",
@@ -493,7 +499,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       }
     });
   } catch {
-    reportCorruption("parse_error", "fallback-wiring-unavailable");
+    reportCorruption("parse_error", "fallback-wiring-threw");
   }
 
   const flush = (): void => {
@@ -536,7 +542,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       if (disposed) {
         return;
       }
-      pushRawRing(data);
+      rawRing.push(data);
       // U+FFFD in the feed means bytes were already destroyed upstream (the
       // bridge's UTF-8 decode of split or invalid sequences).
       if (data.includes("�")) {
@@ -673,10 +679,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     isApplicationCursorKeys: () => terminal.modes.applicationCursorKeysMode,
     isKittyKeyboardEnabled: () => kittyKeyboardFlags !== 0,
     rowText: (index) => visibleRowText(index),
-    corruptionEvidence: () => ({
-      rows: Array.from({ length: terminal.rows }, (_, index) => visibleRowText(index)),
-      rawTail: rawRing.join(""),
-    }),
+    corruptionEvidence,
     cursor: () => {
       const buffer = terminal.buffer.active;
       return { x: buffer.cursorX, y: buffer.cursorY };

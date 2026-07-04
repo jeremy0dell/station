@@ -117,6 +117,9 @@ type InternalEntry = {
   appliedSize: StationTerminalSize | null;
   resizeTimer: ReturnType<typeof setTimeout> | undefined;
   geometryCheckTimer: ReturnType<typeof setTimeout> | undefined;
+  // True while a recorded snapshot is being parsed at its own size; the screen
+  // is intentionally off pane size then, so the geometry check must not fire.
+  replayingSnapshot: boolean;
   lastResizeAt: number;
   pendingSize: StationTerminalSize | null;
   spawnOptions: StationTerminalSpawnOptions | undefined;
@@ -162,6 +165,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       appliedSize: null,
       resizeTimer: undefined,
       geometryCheckTimer: undefined,
+      replayingSnapshot: false,
       lastResizeAt: 0,
       pendingSize: null,
       spawnOptions,
@@ -177,23 +181,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   // the PTY at that same size so there is no corrective resize/SIGWINCH during
   // shell startup, and so panes that are never laid out never spawn a shell.
   const startSession = (entry: InternalEntry, size: StationTerminalSize): void => {
-    let replayingSnapshot = false;
     const screen = createStationVtScreen({
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
       diagnosticsLabel: entry.paneId,
-      onCorruptionDetected: (kind) => {
-        const evidence = entries.get(entry.paneId)?.screen?.corruptionEvidence();
-        if (evidence !== undefined) {
-          writePaneEvidenceDump({ pane: entry.paneId, trigger: kind, evidence });
-        }
-      },
       onResponse: (data) => {
         // A replayed snapshot re-parses queries the child issued long ago
         // (startup probes recorded in the ring); answering those would inject
         // stale replies into the child's stdin, so drop replies until the
         // replay settles.
-        if (replayingSnapshot) {
+        if (entry.replayingSnapshot) {
           return;
         }
         // Query replies (DA1/DSR/OSC...) go straight to the PTY: routing them
@@ -240,7 +237,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           // sequences recorded at another width land on the wrong rows
           // otherwise — then return to the pane size so xterm reflows the
           // replayed rows. The terminal holds live frames until this resolves.
-          replayingSnapshot = true;
+          entry.replayingSnapshot = true;
           try {
             current.resize(recordedSize);
             for (const chunk of chunks) {
@@ -248,20 +245,23 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
             }
             await current.whenIdle();
           } finally {
-            replayingSnapshot = false;
+            entry.replayingSnapshot = false;
           }
           current.resize(entry.appliedSize ?? size);
+          // Re-check now that the screen is back at pane size; a check that fired
+          // during the replay was suppressed.
+          scheduleGeometryCheck(entry);
         }),
       );
     }
     entry.subscriptions.push(
-      // Transport faults (failed host resizes, reconnects) were previously
-      // emitted to zero listeners; they are load-bearing divergence evidence.
+      // Transport faults (failed host resizes, reconnects) feed the divergence
+      // detector; without a subscriber they would be dropped silently.
       terminal.onDiagnostic((message) => {
         reportTerminalCorruption({
           kind: "terminal_diagnostic",
           pane: entry.paneId,
-          attributes: { message },
+          detail: { message },
         });
       }),
       terminal.onData((data) => {
@@ -302,6 +302,13 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       if (entries.get(entry.paneId) !== entry || entry.exited) {
         return;
       }
+      // A pending resize or an in-flight replay intentionally holds the screen
+      // off pane size; either would report a transient as divergence. The
+      // resize path and the replay handler each re-schedule a check when they
+      // settle, so skipping here loses no real signal.
+      if (entry.replayingSnapshot || entry.resizeTimer !== undefined) {
+        return;
+      }
       const applied = entry.appliedSize;
       const stats = entry.screen?.bufferStats();
       const acked = entry.terminal?.ackedSize;
@@ -322,7 +329,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       reportTerminalCorruption({
         kind: "geometry_divergence",
         pane: entry.paneId,
-        attributes: sizes,
+        detail: sizes,
       });
       const evidence = entry.screen?.corruptionEvidence();
       if (evidence !== undefined) {
@@ -330,7 +337,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           pane: entry.paneId,
           trigger: "geometry_divergence",
           evidence,
-          attributes: sizes,
+          detail: sizes,
         });
       }
     }, geometrySettleMs);

@@ -6,7 +6,9 @@ import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyReg
 // Bump only when a code change makes a preserved store/registry unsafe to reuse
 // across a hot reload (e.g. an incompatible store-state shape). A mismatch
 // triggers a clean reboot rather than reusing stale in-memory state.
-export const STATION_HOT_RUNTIME_VERSION = 2;
+// v3: registry/screens gained corruption detectors and geometry checks; a
+// preserved v2 registry would leave hot-reloaded panes without them.
+export const STATION_HOT_RUNTIME_VERSION = 3;
 
 export type StationHotRenderer = { destroy(): void };
 

@@ -81,20 +81,19 @@ describe("replacement character detection", () => {
 
     expect(terminalCorruptionCounters().replacement_char).toBe(1);
     const record = logged.find((entry) => entry.attributes.kind === "replacement_char");
-    expect(record?.attributes.count).toBe(2);
+    // Bucket count (cumulative) is top-level; the per-chunk char count is nested
+    // under detail so it can never clobber the record's own fields.
+    expect(record?.attributes.count).toBe(1);
+    expect((record?.attributes.detail as { count: number }).count).toBe(2);
   });
 });
 
 describe("escape fragment detection", () => {
   it("fires when ANSI guts land in the grid as visible text", async () => {
-    const detected: string[] = [];
     const screen = track(
       createStationVtScreen({
         size: { cols: 60, rows: 6 },
         flushIntervalMs: 1,
-        onCorruptionDetected: (kind) => {
-          detected.push(kind);
-        },
       }),
     );
     // The literal tail an over-erased truecolor SGR leaves behind — no ESC byte.
@@ -103,14 +102,17 @@ describe("escape fragment detection", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(terminalCorruptionCounters().escape_fragment).toBeGreaterThanOrEqual(1);
-    expect(detected).toContain("escape_fragment");
+    const record = logged.find((entry) => entry.attributes.kind === "escape_fragment");
+    expect(record).toBeDefined();
   });
 
-  it("stays quiet for properly escaped styling", async () => {
+  it("stays quiet for properly escaped styling and benign numeric text", async () => {
     const screen = track(
       createStationVtScreen({ size: { cols: 60, rows: 6 }, flushIntervalMs: 1 }),
     );
-    screen.feed("\x1b[38;2;255;107;97mstyled\x1b[0m plain ?2004h [1] (3;4)");
+    // Properly escaped SGR, plus CSV-like numbers that the loose form used to
+    // false-positive on ("10;20;30mm" measurements).
+    screen.feed("\x1b[38;2;255;107;97mstyled\x1b[0m 10;20;30mm 1;2;3m rows");
     await screen.whenIdle();
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -127,5 +129,21 @@ describe("corruption evidence", () => {
     const evidence = screen.corruptionEvidence();
     expect(evidence.rows[0]).toContain("hello evidence");
     expect(evidence.rawTail).toContain("\x1b[31mhello");
+  });
+});
+
+describe("bucket bounding for untrusted idents", () => {
+  it("caps distinct unhandled-sequence buckets so terminal output cannot grow the maps unbounded", async () => {
+    const screen = track(createStationVtScreen({ size: { cols: 40, rows: 6 } }));
+    // OSC identifiers are arbitrary integers from the byte stream; a hostile or
+    // random stream would otherwise mint one bucket (and one log line) each.
+    for (let osc = 0; osc < 400; osc += 1) {
+      screen.feed(`\x1b]${9000 + osc};x\x07`);
+    }
+    await screen.whenIdle();
+
+    const buckets = Object.keys(terminalCorruptionCounters());
+    expect(buckets.length).toBeLessThanOrEqual(300);
+    expect(buckets).toContain("unhandled_sequence:_overflow");
   });
 });

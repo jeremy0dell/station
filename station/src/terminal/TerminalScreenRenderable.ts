@@ -7,7 +7,6 @@ import {
   RGBA,
 } from "@opentui/core";
 import { extend } from "@opentui/react";
-import { reportTerminalCorruption } from "./diagnostics.js";
 import type { StationTerminalSize } from "./types.js";
 import { buildMouseReportSequence } from "./input/mouseReport.js";
 import { type MouseButtonName, MouseTracking } from "./protocol/mouse.js";
@@ -481,14 +480,8 @@ export class TerminalScreenRenderable extends Renderable {
           // Spans can exceed the laid-out width only during a resize race
           // (screen still at the old geometry); draw the part that fits rather
           // than dropping the span or painting into neighboring UI.
-          const overflows = col + span.width > this.width;
-          if (overflows) {
-            reportTerminalCorruption({
-              kind: "overflow_clip",
-              attributes: { width: this.width, col, spanWidth: span.width },
-            });
-          }
-          const text = overflows ? clipSpanText(span, this.width - col) : span.text;
+          const text =
+            col + span.width > this.width ? clipSpanText(span, this.width - col) : span.text;
           if (text.length === 0) {
             break;
           }

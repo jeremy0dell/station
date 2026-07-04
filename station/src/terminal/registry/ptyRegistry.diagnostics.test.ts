@@ -109,8 +109,8 @@ describe("geometry divergence detection", () => {
 
     await waitFor(() => (terminalCorruptionCounters().geometry_divergence ?? 0) >= 1);
     const record = logged.find((entry) => entry.attributes.kind === "geometry_divergence");
-    expect(record?.attributes).toMatchObject({
-      pane: PANE,
+    expect(record?.attributes.pane).toBe(PANE);
+    expect(record?.attributes.detail).toMatchObject({
       paneSize: "48x12",
       screenSize: "48x12",
       ptySize: "80x24",
@@ -143,7 +143,9 @@ describe("transport diagnostics", () => {
 
     await waitFor(() => (terminalCorruptionCounters().terminal_diagnostic ?? 0) >= 1);
     const record = logged.find((entry) => entry.attributes.kind === "terminal_diagnostic");
-    expect(record?.attributes.message).toBe("The station host request failed.");
+    expect((record?.attributes.detail as { message: string }).message).toBe(
+      "The station host request failed.",
+    );
     expect(record?.attributes.pane).toBe(PANE);
   });
 });
