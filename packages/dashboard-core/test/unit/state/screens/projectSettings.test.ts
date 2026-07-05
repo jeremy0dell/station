@@ -60,6 +60,47 @@ describe("project settings panel", () => {
     expect(drive(panelState(), [ESC]).screen.name).toBe("dashboard");
   });
 
+  it("arrow-navigates the agent picker and commits the focused agent on enter", () => {
+    const snapshot = createDashboardSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "web");
+    if (project === undefined) throw new Error("missing web project");
+    const other = selectNewSessionHarnessChoices(snapshot, project).find(
+      (choice) => choice.value.id !== project.defaults.harness,
+    );
+    if (other === undefined) throw new Error("no alternative harness in fixture");
+
+    // Descend into the agent detail; the cursor seeds at the current default.
+    const detail = drive(panelState(), [RIGHT]);
+    expect(detail.selection.get("projectSettingsAgent")).toBe(project.defaults.harness);
+
+    // Arrow to a different agent; the cursor moves.
+    const moved = drive(detail, [DOWN]);
+    expect(moved.selection.get("projectSettingsAgent")).toBe(other.value.id);
+
+    // Enter commits the focused agent and returns to the list.
+    const committed = handleTuiKey(moved, ENTER);
+    expect(committed.operations).toEqual([
+      expect.objectContaining({
+        type: "setProjectDefaultHarness",
+        command: expect.objectContaining({
+          payload: { projectId: "web", harness: other.value.id },
+        }),
+      }),
+    ]);
+    expect(committed.state.screen.name === "projectSettings" && committed.state.screen.focus).toBe(
+      "list",
+    );
+  });
+
+  it("enter on the unchanged focused agent closes to the list without dispatching", () => {
+    // Cursor seeds at the current default; committing it is a no-op-and-ascend.
+    const committed = handleTuiKey(drive(panelState(), [RIGHT]), ENTER);
+    expect(committed.operations ?? []).toEqual([]);
+    expect(committed.state.screen.name === "projectSettings" && committed.state.screen.focus).toBe(
+      "list",
+    );
+  });
+
   it("selecting a non-current agent emits setProjectDefaultHarness", () => {
     const snapshot = createDashboardSnapshot();
     const project = snapshot.projects.find((candidate) => candidate.id === "web");

@@ -36,31 +36,36 @@ const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/
 const ADD_PROJECT_KEY_ACTION = "station.addProject.key";
 const PROJECT_SETTINGS_KEY_ACTION = "station.projectSettings.key";
 
+const ALLOWED_NOOP_BINDINGS = new Set([
+  // Return only acts once a row is focused; Tab only when a row needs attention.
+  "station.dashboard.focusActivate",
+  "station.dashboard.nextNeedsMe",
+  // Selection lists seed at the current choice, which is the top row in the
+  // fixtures, so ↑ clamps to a no-op in the representative state.
+  "station.collapse.cursorUp",
+  "station.projectSettingsPicker.cursorUp",
+  "station.newSessionProject.cursorUp",
+  "station.newSessionAgent.cursorUp",
+  "station.projectDefaultAgent.cursorUp",
+  // The choose-row trio's ↵ commits the focused row; with no cursor yet in the
+  // representative state it is a no-op, like station.dashboard.focusActivate.
+  "station.remove.activate",
+  "station.rename.activate",
+  "station.fork.activate",
+]);
+
 /**
  * Slot bindings are runtime-assigned, and the union-table modes (addProject,
  * projectSettings) route every key to one action and decode it in the machine,
  * so their bindings are checked by that shared action only — future distinct
- * stale actions still fail the audit.
+ * stale actions still fail the audit. Everything else must be allowlisted by
+ * exact id so a new dead cursor/activate binding cannot slip past the audit.
  */
 function allowedNoOpBinding(mode: StationInputMode, binding: StationBinding): boolean {
   if (binding.pattern.kind === "slot") {
     return true;
   }
-  // Return only acts once a row is focused; Tab only when a row needs attention.
-  if (
-    binding.id === "station.dashboard.focusActivate" ||
-    binding.id === "station.dashboard.nextNeedsMe"
-  ) {
-    return true;
-  }
-  // Selection lists seed at the current choice, which is the top row in the
-  // fixtures, so ↑ clamps to a no-op in the representative state.
-  if (binding.id.endsWith(".cursorUp")) {
-    return true;
-  }
-  // The choose-row trio's ↵ commits the focused row; with no cursor yet in the
-  // representative state it is a no-op, like station.dashboard.focusActivate.
-  if (binding.id.endsWith(".activate")) {
+  if (ALLOWED_NOOP_BINDINGS.has(binding.id)) {
     return true;
   }
   if (mode === "addProject" && binding.action === ADD_PROJECT_KEY_ACTION) {
@@ -221,6 +226,15 @@ describe("station keymap coverage", () => {
       }
     }
     expect(failures).toEqual([]);
+  });
+
+  it("keeps the no-op allowlist limited to bindings that exist", () => {
+    const knownIds = new Set(
+      Object.values(STATION_KEYMAP).flatMap((table) => table.map((binding) => binding.id)),
+    );
+    for (const id of ALLOWED_NOOP_BINDINGS) {
+      expect(knownIds.has(id)).toBe(true);
+    }
   });
 
   it("matches at most one specific binding per key (text catch-alls last)", () => {

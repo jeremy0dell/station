@@ -33,10 +33,19 @@ export function ProjectChoiceSheetView({
   const choices = selectProjectChooserChoices(snapshot);
   const width = bottomSheetContentWidth(columns);
   const selectedId = selection.get(mode) as ProjectId | undefined;
+  // Window the list to the frame so the cursor can never move onto a clipped
+  // row; the slice follows the cursor like AddProjectSheetView's folder picker.
+  const listHeight = Math.max(1, Math.min(choices.length, rows - 6));
+  const selectedIndex = Math.max(
+    0,
+    choices.findIndex((choice) => choice.value.id === selectedId),
+  );
+  const start = Math.max(0, Math.min(selectedIndex, choices.length - listHeight));
+  const visible = choices.slice(start, start + listHeight);
   return (
-    <BottomSheetFrameView columns={columns} rows={rows} title={TITLE[mode]} contentRows={choices.length + 4}>
+    <BottomSheetFrameView columns={columns} rows={rows} title={TITLE[mode]} contentRows={visible.length + 4}>
       <SheetLine width={width}> </SheetLine>
-      {choices.map((choice) => (
+      {visible.map((choice) => (
         <SheetChoiceLine
           key={choice.value.id}
           choiceKey={choice.key}
@@ -48,7 +57,11 @@ export function ProjectChoiceSheetView({
         />
       ))}
       <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"↑↓ move   ↵ select   1-9/a-z jump   Esc cancel"}</SheetFooter>
+      <SheetFooter width={width}>
+        {visible.length < choices.length
+          ? `↑↓ move   ↵ select   ${start + 1}-${start + visible.length} of ${choices.length}   Esc cancel`
+          : "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel"}
+      </SheetFooter>
     </BottomSheetFrameView>
   );
 }

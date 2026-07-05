@@ -20,6 +20,7 @@ export type TuiInputMode =
   | "newSessionPickProject"
   | "newSessionPickAgent"
   | "projectDefaultAgent"
+  | "projectSettings"
   | "addProject"
   | "widgetSettings";
 
@@ -58,6 +59,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return "addProject";
     case "projectDefaultAgent":
       return "projectDefaultAgent";
+    case "projectSettings":
+      return "projectSettings";
     case "widgetSettings":
       return "widgetSettings";
   }
@@ -569,11 +572,24 @@ export const TUI_KEYMAP = {
       help: { keys: "esc", label: "cancel" },
     },
     {
+      id: "tui.newSession.reviewFocusUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.newSession.reviewFocus",
+      outcome: "handled",
+    },
+    {
+      id: "tui.newSession.reviewFocusDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.newSession.reviewFocus",
+      outcome: "handled",
+      help: { keys: "↑↓", label: "field" },
+    },
+    {
       id: "tui.newSession.create",
       pattern: { kind: "named", named: "return" },
       action: "tui.newSession.submit",
       outcome: "handled",
-      help: { keys: "enter", label: "create" },
+      help: { keys: "↵", label: "choose field" },
     },
     {
       id: "tui.newSession.editName",
@@ -643,6 +659,74 @@ export const TUI_KEYMAP = {
       help: { keys: "esc", label: "cancel" },
     },
     ...selectableListBindings("tui.projectDefaultAgent"),
+  ],
+  // Union table (like addProject): every key routes to one action and the
+  // machine decodes it against the panel's focus/activeId. The agent detail's
+  // ↑↓/↵/slot are additionally resolved by the shared selectionMiddleware.
+  projectSettings: [
+    {
+      id: "tui.projectSettings.cancel",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+      help: { keys: "esc", label: "back/close" },
+    },
+    {
+      id: "tui.projectSettings.confirm",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+      help: { keys: "→/enter", label: "edit/choose" },
+    },
+    {
+      id: "tui.projectSettings.up",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.projectSettings.down",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+      help: { keys: "↑↓", label: "move" },
+    },
+    {
+      id: "tui.projectSettings.left",
+      pattern: { kind: "named", named: "left" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.projectSettings.right",
+      pattern: { kind: "named", named: "right" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.projectSettings.backspace",
+      pattern: { kind: "named", named: "backspace" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.projectSettings.delete",
+      pattern: { kind: "named", named: "delete" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.projectSettings.clearLine",
+      pattern: { kind: "char", char: "u", ctrl: true },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
+    {
+      id: "tui.projectSettings.type",
+      pattern: { kind: "text" },
+      action: "tui.projectSettings.key",
+      outcome: "handled",
+    },
   ],
   // One action; the widgetSettings screen handler decodes list-vs-picker focus.
   widgetSettings: [

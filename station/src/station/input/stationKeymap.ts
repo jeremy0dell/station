@@ -8,7 +8,11 @@
 // Runtime keyboard dispatch does NOT branch on these tables; it always goes
 // through the machine, so a table omission can never change behavior — it
 // fails the coverage test instead.
-import { SELECTION_KEYS, type SelectionKey } from "@station/dashboard-core";
+import {
+  SELECTION_KEYS,
+  selectableListBindings as coreSelectableListBindings,
+  type SelectionKey,
+} from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import type { TuiState } from "@station/dashboard-core";
 
@@ -136,17 +140,12 @@ export function editableTextBindings(
 
 /**
  * The ↑↓/↵/slot binding block for a list migrated onto the shared selection
- * engine — the station-side mirror of dashboard-core's selectableListBindings.
+ * engine, reused verbatim from dashboard-core so the two keymaps cannot drift.
  * The engine (not this table) owns dispatch; these document the keys for the
  * coverage test, help overlay, and mouse chrome.
  */
 export function selectableListBindings(prefix: string): readonly StationBinding[] {
-  return [
-    { id: `${prefix}.cursorUp`, pattern: { kind: "named", named: "up" }, action: `${prefix}.cursorUp`, outcome: "handled" },
-    { id: `${prefix}.cursorDown`, pattern: { kind: "named", named: "down" }, action: `${prefix}.cursorDown`, outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
-    { id: `${prefix}.activate`, pattern: { kind: "named", named: "return" }, action: `${prefix}.activate`, outcome: "handled", help: { keys: "↵", label: "choose" } },
-    { id: `${prefix}.slot`, pattern: { kind: "slot" }, action: `${prefix}.slot`, outcome: "handled", help: { keys: "1-9 a-z", label: "jump to item" } },
-  ];
+  return coreSelectableListBindings(prefix);
 }
 
 export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]> = {
@@ -256,7 +255,9 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   newSessionReview: [
     { id: "station.newSession.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.newSession.create", pattern: { kind: "named", named: "return" }, action: "station.newSession.submit", outcome: "handled", help: { keys: "enter", label: "create" } },
+    { id: "station.newSession.reviewFocusUp", pattern: { kind: "named", named: "up" }, action: "station.newSession.reviewFocus", outcome: "handled" },
+    { id: "station.newSession.reviewFocusDown", pattern: { kind: "named", named: "down" }, action: "station.newSession.reviewFocus", outcome: "handled", help: { keys: "↑↓", label: "field" } },
+    { id: "station.newSession.create", pattern: { kind: "named", named: "return" }, action: "station.newSession.submit", outcome: "handled", help: { keys: "↵", label: "choose field" } },
     { id: "station.newSession.editName", pattern: { kind: "char", char: "N" }, action: "station.newSession.editName", outcome: "handled", help: { keys: "N", label: "name" } },
     { id: "station.newSession.pickProject", pattern: { kind: "char", char: "P" }, action: "station.newSession.pickProject", outcome: "handled", help: { keys: "P", label: "project" } },
     { id: "station.newSession.pickAgent", pattern: { kind: "char", char: "A" }, action: "station.newSession.pickAgent", outcome: "handled", help: { keys: "A", label: "agent" } },

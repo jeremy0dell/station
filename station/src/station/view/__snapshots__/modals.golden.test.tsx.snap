@@ -121,7 +121,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [1│▸ Default agent           │✓1 codex ● update v0.3.0 → v0.4.0            │ ✓ 
  [2│  Remove project          │ 2 opencode unknown                          │   
  [3│                          │                                             │ ✓ 
- [4│                          │ ✓ current · 1-9/a-z select                  │   
+ [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
  [5│                          │                                             │ … 
    │                          │                                             │   
 ▼ o│                          │                                             │▾] 
@@ -177,7 +177,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [1│▸ Default agent           │ 1 codex ● update v0.3.0 → v0.4.0            │ ✓ 
  [2│  Remove project          │✓2 opencode unknown                 updating…│   
  [3│                          │                                             │ ✓ 
- [4│                          │ ✓ current · 1-9/a-z select                  │   
+ [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
  [5│                          │                                             │ … 
    │                          │                                             │   
 ▼ o│                          │                                             │▾] 
@@ -379,7 +379,6 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │                                                                              │
@@ -387,7 +386,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Name       station-XXXXXX                                                    │
 │ Agent      codex unknown                                                     │
 │                                                                              │
-│ Enter:create N:name P:project A:agent Esc:cancel                             │
+│▸ Create session                                                              │
+│ ↑↓ field  ↵ choose  N/P/A  Esc:cancel                                        │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -585,5 +585,33 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 
 ───────────────────────────────────────────────────────────────────────────────
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
+"
+`;
+
+exports[`modal flow golden frames renders the collapse project sheet windows a long list 1`] = `
+"┌──────────────────────────────────────────────────────────────────────────────┐
+│ Collapse Project                                                             │
+│                                                                              │
+│ 1 station healthy                                                            │
+│ 2 observer healthy                                                           │
+│ 3 scripts healthy                                                            │
+│ 4 empty-project healthy                                                      │
+│ 5 filler-0 healthy                                                           │
+│ 6 filler-1 healthy                                                           │
+│ 7 filler-2 healthy                                                           │
+│ 8 filler-3 healthy                                                           │
+│ 9 filler-4 healthy                                                           │
+│ a filler-5 healthy                                                           │
+│ b filler-6 healthy                                                           │
+│ c filler-7 healthy                                                           │
+│ d filler-8 healthy                                                           │
+│ e filler-9 healthy                                                           │
+│ f filler-10 healthy                                                          │
+│ g filler-11 healthy                                                          │
+│ h filler-12 healthy                                                          │
+│ i filler-13 healthy                                                          │
+│                                                                              │
+│ ↑↓ move   ↵ select   1-18 of 25   Esc cancel                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

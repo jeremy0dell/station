@@ -6,6 +6,7 @@ import {
   handleTuiKey,
   matchingTuiBindings,
   openProjectDefaultAgentPicker,
+  openProjectSettings,
   TUI_KEYMAP,
   type TuiInputMode,
   type TuiTransition,
@@ -50,6 +51,19 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   "tui.addProject.delete",
   "tui.addProject.clearLine",
   "tui.addProject.type",
+  // Project-settings metadata is a union table (like addProject); in the list-focus
+  // representative state several keys are inert (↑ clamps, left/backspace/delete/
+  // ctrl-u/non-harness printables do nothing).
+  "tui.projectSettings.cancel",
+  "tui.projectSettings.confirm",
+  "tui.projectSettings.up",
+  "tui.projectSettings.down",
+  "tui.projectSettings.left",
+  "tui.projectSettings.right",
+  "tui.projectSettings.backspace",
+  "tui.projectSettings.delete",
+  "tui.projectSettings.clearLine",
+  "tui.projectSettings.type",
   // Esc only dismisses when the runtime is showing a dismissible persistent popup.
   "tui.dashboard.dismissEsc",
   // Return only activates once a row is focused.
@@ -106,6 +120,7 @@ function representativeStates(): Record<TuiInputMode, TuiState> {
     newSessionPickProject: drive(base, [{ input: "N" }, { input: "P" }]),
     newSessionPickAgent: drive(base, [{ input: "N" }, { input: "A" }]),
     projectDefaultAgent: openProjectDefaultAgentPicker(base, "web"),
+    projectSettings: openProjectSettings(base, "web"),
     addProject: drive(base, [{ input: "A" }]),
     // Mid-list cursor over three widgets so every list binding (toggle,
     // both reorder directions, remove) visibly acts.

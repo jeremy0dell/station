@@ -17,6 +17,7 @@ describe("new session flow", () => {
 
     expect(state).toEqual({
       mode: "review",
+      reviewFocus: "create",
       selectedProjectId: "web",
       selectedHarness: "codex",
       branch: "web-k7p3x9",
@@ -30,6 +31,47 @@ describe("new session flow", () => {
     expect(createNewSessionNameToken("source-a")).toMatch(/^[a-f0-9]{6}$/);
     expect(createNewSessionNameToken("source-a")).toBe(createNewSessionNameToken("source-a"));
     expect(createNewSessionNameToken("source-a")).not.toBe(createNewSessionNameToken("source-b"));
+  });
+
+  it("review menu: arrows cycle focus and enter activates the focused field", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    expect(opened.reviewFocus).toBe("create");
+
+    // Enter on the default "create" focus submits.
+    expect(newSessionIntentForInput(opened, input("\r", { return: true }))).toEqual({
+      type: "submit",
+    });
+
+    // Down cycles create → project (the top field); enter there opens the
+    // project picker, not submit.
+    expect(newSessionIntentForInput(opened, input("", { downArrow: true }))).toEqual({
+      type: "transition",
+      action: { type: "reviewFocus", dir: 1 },
+    });
+    const onProject = transitionNewSessionFlow(opened, { type: "reviewFocus", dir: 1 });
+    if (onProject?.mode !== "review") throw new Error("expected review");
+    expect(onProject.reviewFocus).toBe("project");
+    expect(newSessionIntentForInput(onProject, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "pickProject" },
+    });
+
+    // Down again focuses Name; enter opens the name editor.
+    const onName = transitionNewSessionFlow(onProject, { type: "reviewFocus", dir: 1 });
+    if (onName?.mode !== "review") throw new Error("expected review");
+    expect(onName.reviewFocus).toBe("name");
+    expect(newSessionIntentForInput(onName, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "editName" },
+    });
+
+    // Letter accelerators still work regardless of focus.
+    expect(newSessionIntentForInput(onName, input("A"))).toEqual({
+      type: "transition",
+      action: { type: "pickAgent" },
+    });
   });
 
   it("trims typed names and otherwise preserves branch text", () => {

@@ -12,7 +12,7 @@ export type ListId = string;
 export type ListRow<TId extends string> = { selectable: true; id: TId } | { selectable: false };
 
 /** How a commit was reached — screens use this to keep slot vs cursor policy apart. */
-export type CommitVia = "cursor" | "slot" | "pointer";
+export type CommitVia = "cursor" | "slot";
 
 /**
  * The whole per-list contribution. A screen supplies data (rows, optional
@@ -23,8 +23,6 @@ export type ListSpec<TId extends string> = {
   listId: ListId;
   /** ↑↓ move a cursor and ↵ commits it. */
   cursor?: boolean;
-  /** Reserved for follow-scroll lists (the choose-row trio); unused by flat pickers. */
-  followScroll?: boolean;
   /** Gate for hybrid screens: when it returns false the middleware yields all keys. */
   active?: (state: TuiState) => boolean;
   /** Full ordered cursor space. */

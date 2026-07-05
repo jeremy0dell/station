@@ -5,8 +5,10 @@
 // machine; this layer is render + mouse targets only.
 import { TextAttributes } from "@opentui/core";
 import type { StationSnapshot } from "@station/contracts";
+import type { ProviderId } from "@station/contracts";
 import {
   isRemoveProjectArmed,
+  PROJECT_SETTINGS_AGENT_LIST_ID,
   PROJECT_SETTINGS_ITEMS,
   projectSettingsPanelLayout,
   removeProjectConfirmPhrase,
@@ -14,6 +16,7 @@ import {
   selectProjectDefaultHarness,
   type TuiLocalRows,
   type TuiScreen,
+  type TuiSelectionState,
 } from "@station/dashboard-core";
 import { useState } from "react";
 import { EditableTextInputView } from "../EditableTextInputView.js";
@@ -27,6 +30,7 @@ type ProjectSettingsScreen = Extract<TuiScreen, { name: "projectSettings" }>;
 export type ProjectSettingsPanelViewProps = {
   snapshot: StationSnapshot;
   screen: ProjectSettingsScreen;
+  selection: TuiSelectionState;
   columns: number;
   rows: number;
   localRows: TuiLocalRows;
@@ -35,6 +39,7 @@ export type ProjectSettingsPanelViewProps = {
 export function ProjectSettingsPanelView({
   snapshot,
   screen,
+  selection,
   columns,
   rows,
   localRows,
@@ -48,7 +53,11 @@ export function ProjectSettingsPanelView({
   const projectLabel = project?.label ?? "Project";
   const title = "Project settings";
   const footer =
-    screen.focus === "list" ? "↑↓ move   →/enter edit   esc close" : "←/esc back";
+    screen.focus === "list"
+      ? "↑↓ move   →/enter edit   esc close"
+      : screen.activeId === "agent"
+        ? "↑↓ move   ↵ choose   ←/esc back"
+        : "←/esc back";
 
   return (
     <box
@@ -82,6 +91,7 @@ export function ProjectSettingsPanelView({
             width={rightWidth}
             focused={screen.focus === "detail"}
             localRows={localRows}
+            selectedAgentId={selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined}
           />
         </box>
       </box>
@@ -146,12 +156,14 @@ function DetailPane({
   width,
   focused,
   localRows,
+  selectedAgentId,
 }: {
   snapshot: StationSnapshot;
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
   localRows: TuiLocalRows;
+  selectedAgentId?: ProviderId;
 }) {
   if (screen.activeId === "remove") {
     return <RemoveDetail screen={screen} width={width} focused={focused} />;
@@ -163,6 +175,7 @@ function DetailPane({
       width={width}
       focused={focused}
       localRows={localRows}
+      selectedAgentId={selectedAgentId}
     />
   );
 }
@@ -173,12 +186,14 @@ function AgentDetail({
   width,
   focused,
   localRows,
+  selectedAgentId,
 }: {
   snapshot: StationSnapshot;
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
   localRows: TuiLocalRows;
+  selectedAgentId?: ProviderId;
 }) {
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   const choices = project === undefined ? [] : selectNewSessionHarnessChoices(snapshot, project);
@@ -195,10 +210,11 @@ function AgentDetail({
             choices={choices}
             width={width}
             currentId={currentDefault?.harness}
+            selectedId={focused ? selectedAgentId : undefined}
             pending={currentDefault?.pending ?? false}
           />
           <SheetLine width={width}> </SheetLine>
-          <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" ✓ current · 1-9/a-z select", width)}</text>
+          <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}</text>
         </>
       )}
     </>
