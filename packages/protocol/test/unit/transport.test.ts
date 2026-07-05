@@ -55,6 +55,31 @@ describe("Unix socket NDJSON transport", () => {
     await server.close();
   });
 
+  it("reclaims a stale socket file on its own during listen", async () => {
+    const { socketPath } = await createTempSocketPath();
+    await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
+    await createStaleSocketFile(socketPath);
+    await expect(isSocketStale(socketPath)).resolves.toBe(true);
+
+    // No prior removeStaleSocket: listen must reclaim the dead socket itself.
+    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    await expect(isSocketStale(socketPath)).resolves.toBe(false);
+    await server.close();
+  });
+
+  it("refuses to bind (and never unlinks) while another server is live on the path", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const live = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+
+    await expect(
+      listenUnixSocket({ socketPath, onConnection: () => undefined }),
+    ).rejects.toMatchObject({ code: "EADDRINUSE" });
+    // The live server is untouched and still accepting.
+    await expect(isSocketStale(socketPath)).resolves.toBe(false);
+
+    await live.close();
+  });
+
   it("relays frames both ways over an in-memory connection pair", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     const serverIterator = server.messages()[Symbol.asyncIterator]();

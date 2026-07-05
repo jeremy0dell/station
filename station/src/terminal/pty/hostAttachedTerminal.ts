@@ -161,7 +161,19 @@ export function createHostAttachedTerminal(
       }
       return;
     }
-    await Promise.all([...replayListeners].map((listener) => listener({ size: recordedSize, chunks })));
+    // A listener that throws (a render/VT error while parsing the replay) must
+    // NOT reject here: the attach loop would treat it as a transport fault and
+    // reconnect, re-feeding the whole snapshot and eventually killing a healthy
+    // PTY. The async wrapper catches a synchronous throw as well as a rejection.
+    await Promise.all(
+      [...replayListeners].map(async (listener) => {
+        try {
+          await listener({ size: recordedSize, chunks });
+        } catch (error) {
+          emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
+        }
+      }),
+    );
   };
 
   // Send a resize to the attached host PTY and stamp `ackedSize` to the size
@@ -215,23 +227,28 @@ export function createHostAttachedTerminal(
         // On a RECONNECT the ack snapshot is the current ring — it captured output
         // produced while we were detached — so repaint from it (clearing first so
         // the already-shown history isn't duplicated) rather than dropping the gap.
+        const isReconnect = replayed;
         const recordedSize = { cols: opened.ack.cols, rows: opened.ack.rows };
         if (!replayed) {
           await emitReplay(opened.ack.scrollback, recordedSize);
           replayed = true;
-        } else {
+        } else if (opened.ack.scrollback.length > 0) {
           await emitReplay([RECONNECT_REPAINT, ...opened.ack.scrollback], recordedSize);
         }
+        // else: reconnect with an empty ring — clearing would just blank the pane
+        // with nothing to replay, so leave the shown frame and rely on the nudge.
         // Sync the host PTY to THIS client's pane size on (re)attach — the host may
         // have spawned it at a different size — then flush input typed before attach
         // resolved. Expose `attachment` only AFTER the flush so later writes order
         // after the buffered ones.
         await opened.resize(size.cols, size.rows);
         // A same-size resize is a no-op TIOCSWINSZ — no SIGWINCH — so a child
-        // whose replayed frame may be stale would never repaint; flap the rows
-        // to force one. A real size change above already delivers the signal.
+        // whose frame may be stale would never repaint; flap the rows to force
+        // one. Needed whenever there was history to reflow OR this is a reconnect
+        // (the child may have produced state while we were detached). A real size
+        // change above already delivers the signal.
         if (
-          opened.ack.scrollback.length > 0 &&
+          (isReconnect || opened.ack.scrollback.length > 0) &&
           opened.ack.cols === size.cols &&
           opened.ack.rows === size.rows
         ) {

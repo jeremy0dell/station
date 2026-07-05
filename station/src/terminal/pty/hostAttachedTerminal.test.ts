@@ -346,6 +346,92 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     expect(received).toEqual(["history-", RECONNECT_REPAINT, "history-", "gap-"]);
   });
 
+  it("nudges the child on an empty-ring reconnect so the pane is not left blank", async () => {
+    // Same-size reconnect with nothing in the ring: without a nudge the child
+    // never gets a SIGWINCH and the pane stays whatever it last showed.
+    const first = controllableAttachment(ack({ scrollback: [] }));
+    const second = controllableAttachment(ack({ scrollback: [] }));
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            return attachCalls === 1 ? first.attachment : second.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const exits: number[] = [];
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    await flush();
+    // First attach, empty ring: no flap (a fresh spawn need not be nudged).
+    expect(first.state.resizes).toEqual([{ cols: 80, rows: 24 }]);
+
+    first.endStream();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(exits).toEqual([]);
+    // Reconnect flapped the rows (24 -> 23 -> 24) to force a repaint.
+    expect(second.state.resizes).toEqual([
+      { cols: 80, rows: 24 },
+      { cols: 80, rows: 23 },
+      { cols: 80, rows: 24 },
+    ]);
+  });
+
+  it("does not reconnect (or kill the pane) when a replay listener throws", async () => {
+    const ctrl = controllableAttachment(ack({ scrollback: ["hist-"] }));
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        ({
+          attach: async () => {
+            attachCalls += 1;
+            return ctrl.attachment;
+          },
+          dispose: () => {},
+          health: async () => ({ ok: true, protocolVersion: 1 }),
+          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          write: async () => undefined,
+          resize: async () => undefined,
+          list: async () => [],
+          focus: async () => undefined,
+          close: async () => ({ closed: true }),
+        }) satisfies StationHostClient,
+    });
+    const diagnostics: string[] = [];
+    const exits: number[] = [];
+    terminal.onDiagnostic((message) => diagnostics.push(message));
+    terminal.onExit((event) => exits.push(event.exitCode));
+    // A render/VT error while parsing the replay must be isolated: previously it
+    // rejected the attach, was treated as a transport fault, and reconnected —
+    // re-feeding the snapshot and eventually killing a healthy PTY.
+    terminal.onReplay?.(() => {
+      throw new Error("vt parse blew up");
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(attachCalls).toBe(1); // no reconnect from the listener throw
+    expect(exits).toEqual([]); // pane stayed alive
+    expect(diagnostics.length).toBeGreaterThan(0); // the failure was surfaced, not swallowed
+  });
+
   it("keeps reconnecting a long-lived pane across many drops (budget is consecutive, not lifetime)", async () => {
     // A pane that has streamed for a while then drops should earn a fresh retry
     // budget each time — otherwise the lifetime cap eventually kills a healthy
