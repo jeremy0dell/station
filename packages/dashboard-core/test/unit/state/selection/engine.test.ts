@@ -224,6 +224,7 @@ describe("list registry — migrated modes", () => {
       "newSessionPickProject",
       "projectCollapse",
       "projectDefaultAgent",
+      "projectSettings",
       "projectSettingsPicker",
     ]);
   });

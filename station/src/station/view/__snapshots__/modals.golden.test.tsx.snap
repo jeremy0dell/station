@@ -121,7 +121,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [1│▸ Default agent           │✓1 codex ● update v0.3.0 → v0.4.0            │ ✓ 
  [2│  Remove project          │ 2 opencode unknown                          │   
  [3│                          │                                             │ ✓ 
- [4│                          │ ✓ current · 1-9/a-z select                  │   
+ [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
  [5│                          │                                             │ … 
    │                          │                                             │   
 ▼ o│                          │                                             │▾] 
@@ -177,7 +177,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [1│▸ Default agent           │ 1 codex ● update v0.3.0 → v0.4.0            │ ✓ 
  [2│  Remove project          │✓2 opencode unknown                 updating…│   
  [3│                          │                                             │ ✓ 
- [4│                          │ ✓ current · 1-9/a-z select                  │   
+ [4│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
  [5│                          │                                             │ … 
    │                          │                                             │   
 ▼ o│                          │                                             │▾] 

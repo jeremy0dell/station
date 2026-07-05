@@ -3,6 +3,7 @@ import type { TuiState } from "../types.js";
 import { newSessionPickAgentListSpec, newSessionPickProjectListSpec } from "./specs/newSession.js";
 import { projectCollapseListSpec, projectSettingsPickerListSpec } from "./specs/projectChoosers.js";
 import { projectDefaultAgentListSpec } from "./specs/projectDefaultAgent.js";
+import { projectSettingsAgentListSpec } from "./specs/projectSettingsAgent.js";
 import type { RegisteredListSpec } from "./types.js";
 
 /**
@@ -15,6 +16,7 @@ export const LIST_REGISTRY: Partial<Record<TuiInputMode, RegisteredListSpec>> = 
   newSessionPickAgent: newSessionPickAgentListSpec,
   projectCollapse: projectCollapseListSpec,
   projectSettingsPicker: projectSettingsPickerListSpec,
+  projectSettings: projectSettingsAgentListSpec,
 };
 
 export function listSpecForState(state: TuiState): RegisteredListSpec | undefined {

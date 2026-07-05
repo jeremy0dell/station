@@ -101,6 +101,7 @@ export function OverlayHostView({
         rows={rows}
         snapshot={snapshot}
         screen={screen}
+        selection={selection}
         localRows={localRows}
       />
     );

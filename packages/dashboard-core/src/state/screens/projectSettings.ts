@@ -1,3 +1,4 @@
+import type { ProviderId } from "@station/contracts";
 import {
   createEditableTextInputState,
   type EditableTextInputInput,
@@ -21,11 +22,14 @@ import type { ProjectSettingsItemId, TuiState } from "../types.js";
 
 export type ProjectSettingsItem = { id: ProjectSettingsItemId; label: string };
 
+/** List id for the agent detail cursor on the shared selection engine. */
+export const PROJECT_SETTINGS_AGENT_LIST_ID = "projectSettingsAgent";
+
 /**
  * Ordered left-list registry for the two-pane Project Settings panel. The panel
  * engine is item-agnostic — extending it is adding an entry here (plus the
- * detail rendering and, for new fields, a persist vertical). Station/global
- * settings reuse the same engine with a different registry.
+ * detail rendering and, for new fields, a persist vertical). The agent detail is
+ * the only sub-list wired to the shared selection engine (via the list id above).
  */
 export const PROJECT_SETTINGS_ITEMS: readonly ProjectSettingsItem[] = [
   { id: "agent", label: "Default agent" },
@@ -71,7 +75,25 @@ export function focusProjectSettingsItem(state: TuiState, itemId: ProjectSetting
   if (itemId !== "remove") {
     screen.removeDraft = createEditableTextInputState("");
   }
-  return { ...state, screen };
+  return descend({ ...state, screen }, screen);
+}
+
+// Enter the detail pane, seeding the agent cursor to the current effective
+// default so ↑↓ start from what is selected and ↵ is immediately meaningful.
+function descend(state: TuiState, screen: ProjectSettingsScreen): TuiState {
+  if (screen.activeId !== "agent") {
+    return state;
+  }
+  const project = state.snapshot?.projects.find((candidate) => candidate.id === screen.projectId);
+  if (project === undefined) {
+    return state;
+  }
+  const selection = new Map(state.selection);
+  selection.set(
+    PROJECT_SETTINGS_AGENT_LIST_ID,
+    selectProjectDefaultHarness(state.localRows, project).harness,
+  );
+  return { ...state, selection };
 }
 
 export function handleProjectSettingsKey(state: TuiState, key: TuiKey): TuiTransition {
@@ -116,11 +138,15 @@ function handleListKey(state: TuiState, screen: ProjectSettingsScreen, key: TuiK
     return { state: moveActive(state, screen, 1) };
   }
   if (key.rightArrow === true || isReturnKey(key)) {
-    return { state: { ...state, screen: { ...screen, focus: "detail" } } };
+    const detail: ProjectSettingsScreen = { ...screen, focus: "detail" };
+    return { state: descend({ ...state, screen: detail }, detail) };
   }
   return { state };
 }
 
+// The cross-pane slot handler: resolve the harness from the slot key, then
+// commit through the shared path so keyboard slot, right-pane click, and the
+// engine cursor all produce the same optimistic change.
 function selectAgent(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey): TuiTransition {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === screen.projectId);
   if (state.snapshot === undefined || project === undefined) {
@@ -130,31 +156,44 @@ function selectAgent(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey
     selectNewSessionHarnessChoices(state.snapshot, project),
     key.input,
   );
-  if (option === undefined) {
+  return option === undefined ? { state } : commitProjectSettingsAgentById(state, option.id);
+}
+
+/**
+ * Commit a default-agent choice by id — the single path shared by the engine
+ * cursor (↵), the keyboard slot, and the right-pane click. Compares against the
+ * effective (optimistic) default, not the snapshot: while a change is in flight
+ * the picked agent is what the user sees as current, so re-selecting it is a
+ * no-op-and-ascend and picking anything else overrides the pending change.
+ */
+export function commitProjectSettingsAgentById(
+  state: TuiState,
+  harness: ProviderId,
+): TuiTransition {
+  if (state.screen.name !== "projectSettings" || state.snapshot === undefined) {
     return { state };
   }
-  // Compare against the effective (optimistic) default, not the snapshot value:
-  // while a change is in flight the picked agent is what the user sees as current,
-  // so re-selecting it is a no-op and selecting anything else — even the snapshot
-  // default — is a real change that must override the pending one.
-  const effectiveDefault = selectProjectDefaultHarness(state.localRows, project).harness;
-  if (option.id === effectiveDefault) {
-    return { state: { ...state, screen: { ...screen, focus: "list" } } };
+  const screen = state.screen;
+  const project = state.snapshot.projects.find((candidate) => candidate.id === screen.projectId);
+  if (project === undefined) {
+    return { state: toDashboard(state) };
+  }
+  const ascended: TuiState = { ...state, screen: { ...screen, focus: "list" } };
+  if (harness === selectProjectDefaultHarness(state.localRows, project).harness) {
+    return { state: ascended };
   }
   // Move the marker to the picked agent immediately; the runner reverts this if
   // the command fails, and the next snapshot prunes it once the change lands.
   return {
-    state: addPendingProjectDefaultHarness(
-      { ...state, screen: { ...screen, focus: "list" } },
-      { projectId: project.id, harness: option.id, createdAt: new Date().toISOString() },
-    ),
+    state: addPendingProjectDefaultHarness(ascended, {
+      projectId: project.id,
+      harness,
+      createdAt: new Date().toISOString(),
+    }),
     operations: [
       {
         type: "setProjectDefaultHarness",
-        command: buildSetProjectDefaultHarnessCommand({
-          projectId: project.id,
-          harness: option.id,
-        }),
+        command: buildSetProjectDefaultHarnessCommand({ projectId: project.id, harness }),
       },
     ],
   };
