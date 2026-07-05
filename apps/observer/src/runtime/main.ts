@@ -20,6 +20,7 @@ import { openObserverSqlite } from "../sqlite.js";
 import { createObserverApi } from "./api.js";
 import { emptyConfig } from "./emptyConfig.js";
 import { createObserverEventBus } from "./eventBus.js";
+import { runShutdownWithBackstop } from "./gracefulExit.js";
 import { createObserverLogger } from "./logging.js";
 import { type ObserverServer, startObserverServer } from "./server.js";
 import {
@@ -27,6 +28,10 @@ import {
   type SocketOwnershipWatch,
   watchSocketOwnership,
 } from "./socketOwnership.js";
+
+// Ceiling on a graceful stop; a wedged drain (a handler ignoring its abort)
+// force-exits at this point instead of keeping the observer alive forever.
+const STOP_BACKSTOP_MS = 5000;
 
 export type ObserverProviderRegistryFactoryOptions = {
   configPath?: string | undefined;
@@ -125,13 +130,21 @@ export async function runObserverMain(
   });
   let stopping: Promise<void> | undefined;
   const stopObserver = async () => {
-    stopping ??= (async () => {
-      ownership?.stop();
-      await commandQueue.shutdown();
-      await eventHooks?.shutdown();
-      await server?.close();
-      stopResolve();
-    })();
+    stopping ??= runShutdownWithBackstop(
+      async () => {
+        ownership?.stop();
+        await commandQueue.shutdown();
+        await eventHooks?.shutdown();
+        await server?.close();
+        stopResolve();
+      },
+      STOP_BACKSTOP_MS,
+      {
+        exit: (code) => process.exit(code),
+        setTimer: (fn, ms) => setTimeout(fn, ms),
+        clearTimer: (timer) => clearTimeout(timer as NodeJS.Timeout),
+      },
+    );
     await stopping;
   };
   const api = createObserverApi({
@@ -192,7 +205,7 @@ export async function runObserverMain(
       });
       // A displaced observer must not linger: its loops would keep draining
       // spool events and firing hooks for a state dir it no longer serves.
-      setTimeout(() => process.exit(0), 2000).unref();
+      // stopObserver's backstop guarantees the exit even if the drain hangs.
       void api.stop();
     },
   });
