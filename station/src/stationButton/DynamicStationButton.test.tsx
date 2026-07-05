@@ -56,13 +56,45 @@ describe("DynamicStationButton", () => {
     expect(frame).not.toContain("needs user");
   });
 
-  it("collapsed rest counts paint the fleet lanes", async () => {
+  it("collapsed rest counts paint working without zero or idle lanes", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton
+        input={input({ workingCount: 2, idleCount: 6 }, { restCounts: true })}
+      />,
+    );
+    expect(frame).toContain(STATION_ICON);
+    expect(frame).toContain("2");
+    expect(frame).not.toContain("●");
+    expect(frame).not.toContain("○");
+    expect(frame).not.toContain("0");
+    expect(frame).not.toContain("session");
+  });
+
+  it("collapsed rest counts paint ready without working or idle lanes", async () => {
     const frame = await captureFrame(
       <DynamicStationButton input={input({ readyCount: 1, idleCount: 6 }, { restCounts: true })} />,
     );
     expect(frame).toContain(STATION_ICON);
-    expect(frame).toContain("⠿0 ●1 ○6");
+    expect(frame).toContain("●1");
+    expect(frame).not.toContain("⠿0");
+    expect(frame).not.toContain("○");
     expect(frame).not.toContain("session");
+  });
+
+  it("collapsed rest counts fall back to the glyph for zero or idle-only counts", async () => {
+    const zeroFrame = await captureFrame(
+      <DynamicStationButton input={input({}, { restCounts: true })} />,
+    );
+    const idleFrame = await captureFrame(
+      <DynamicStationButton input={input({ idleCount: 6 }, { restCounts: true })} />,
+    );
+
+    expect(zeroFrame).toContain(STATION_ICON);
+    expect(zeroFrame).not.toContain("0");
+    expect(zeroFrame).not.toContain("○");
+    expect(idleFrame).toContain(STATION_ICON);
+    expect(idleFrame).not.toContain("○6");
+    expect(idleFrame).not.toContain("●");
   });
 
   it("collapsed celebration announces the merged PR", async () => {

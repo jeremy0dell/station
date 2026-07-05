@@ -44,6 +44,12 @@ export function openObserverSqlite(options: OpenObserverSqliteOptions = {}): Obs
   const path = options.path ?? ":memory:";
   const clock = options.clock ?? systemClock;
   const database = new DatabaseSync(path);
+  // WAL + synchronous=NORMAL keeps an unclean exit (SIGKILL of a wedged observer)
+  // from corrupting the DB or losing committed rows; :memory: ignores WAL.
+  if (path !== ":memory:") {
+    database.exec("PRAGMA journal_mode = WAL");
+  }
+  database.exec("PRAGMA synchronous = NORMAL");
   let open = true;
   let lastError: SafeError | undefined;
   let appliedMigrations: AppliedObserverSqliteMigration[] = [];

@@ -1,3 +1,4 @@
+import { ChunkRing } from "../terminal/chunkRing.js";
 import { TerminalModeTracker } from "./modeTracker.js";
 
 /**
@@ -9,39 +10,31 @@ import { TerminalModeTracker } from "./modeTracker.js";
  * TUI whose setup scrolled past the budget would replay into a normal-screen VT.
  */
 export class ScrollbackRing {
-  readonly #chunks: string[] = [];
-  #bytes = 0;
-  #truncated = false;
   readonly #modes = new TerminalModeTracker();
+  readonly #ring: ChunkRing;
 
-  constructor(private readonly maxBytes: number) {}
+  constructor(maxBytes: number) {
+    this.#ring = new ChunkRing(
+      maxBytes,
+      (chunk) => Buffer.byteLength(chunk, "utf8"),
+      (dropped) => this.#modes.feed(dropped),
+    );
+  }
 
   push(chunk: string): void {
-    if (chunk.length === 0) {
-      return;
-    }
-    this.#chunks.push(chunk);
-    this.#bytes += Buffer.byteLength(chunk, "utf8");
-    while (this.#bytes > this.maxBytes && this.#chunks.length > 1) {
-      const dropped = this.#chunks.shift();
-      if (dropped === undefined) {
-        break;
-      }
-      this.#modes.feed(dropped);
-      this.#bytes -= Buffer.byteLength(dropped, "utf8");
-      this.#truncated = true;
-    }
+    this.#ring.push(chunk);
   }
 
   snapshot(): { scrollback: string[]; truncated: boolean } {
     // Prepend a mode-restore preamble so the modes set by dropped chunks are
     // re-established before the surviving chunks replay over them.
     const preamble = this.#modes.restoreSequence();
-    const scrollback = preamble.length > 0 ? [preamble, ...this.#chunks] : [...this.#chunks];
-    return { scrollback, truncated: this.#truncated };
+    const chunks = [...this.#ring.chunks()];
+    const scrollback = preamble.length > 0 ? [preamble, ...chunks] : chunks;
+    return { scrollback, truncated: this.#ring.evicted };
   }
 
   get byteLength(): number {
-    return this.#bytes;
+    return this.#ring.total;
   }
 }

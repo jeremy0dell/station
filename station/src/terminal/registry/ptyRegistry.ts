@@ -1,5 +1,6 @@
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
+import { reportTerminalCorruption, writePaneEvidenceDump } from "../diagnostics.js";
 import { createLocalPtyTerminal } from "../pty/localPtyTerminal.js";
 import type {
   StationTerminalExit,
@@ -10,6 +11,9 @@ import type {
 import { createStationVtScreen, type StationVtScreen } from "../vt/screen.js";
 
 const DEFAULT_RESIZE_DEBOUNCE_MS = 75;
+// Grace for the async resize path (debounce, bridge hop, host ack) before a
+// screen/PTY/pane size disagreement counts as divergence rather than transit.
+const GEOMETRY_SETTLE_MS = 2_000;
 
 /**
  * The read-only view a pane id resolves to. `screen` and `terminal` are null
@@ -90,6 +94,8 @@ export type PtyRegistryOptions = {
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
   /** Injectable for deterministic resize-debounce tests. */
   resizeDebounceMs?: number;
+  /** Injectable for deterministic geometry-divergence tests. */
+  geometrySettleMs?: number;
   /**
    * Notified when a pane's PTY process exits. Used to report a managed primary
    * agent's exit back to the observer. The registry knows only the pane id; the
@@ -110,6 +116,10 @@ type InternalEntry = {
   cwd: string | undefined;
   appliedSize: StationTerminalSize | null;
   resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  geometryCheckTimer: ReturnType<typeof setTimeout> | undefined;
+  // True while a recorded snapshot is being parsed at its own size; the screen
+  // is intentionally off pane size then, so the geometry check must not fire.
+  replayingSnapshot: boolean;
   lastResizeAt: number;
   pendingSize: StationTerminalSize | null;
   spawnOptions: StationTerminalSpawnOptions | undefined;
@@ -125,6 +135,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   let createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   let scrollOnOutput = options.scrollOnOutput;
   const resizeDebounceMs = options.resizeDebounceMs ?? DEFAULT_RESIZE_DEBOUNCE_MS;
+  const geometrySettleMs = options.geometrySettleMs ?? GEOMETRY_SETTLE_MS;
   const entries = new Map<PaneId, InternalEntry>();
   const listeners = new Set<() => void>();
   let onPaneExit = options.onPaneExit;
@@ -153,6 +164,8 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       status: "starting shell",
       appliedSize: null,
       resizeTimer: undefined,
+      geometryCheckTimer: undefined,
+      replayingSnapshot: false,
       lastResizeAt: 0,
       pendingSize: null,
       spawnOptions,
@@ -168,16 +181,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   // the PTY at that same size so there is no corrective resize/SIGWINCH during
   // shell startup, and so panes that are never laid out never spawn a shell.
   const startSession = (entry: InternalEntry, size: StationTerminalSize): void => {
-    let replayingSnapshot = false;
     const screen = createStationVtScreen({
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
+      diagnosticsLabel: entry.paneId,
       onResponse: (data) => {
         // A replayed snapshot re-parses queries the child issued long ago
         // (startup probes recorded in the ring); answering those would inject
         // stale replies into the child's stdin, so drop replies until the
         // replay settles.
-        if (replayingSnapshot) {
+        if (entry.replayingSnapshot) {
           return;
         }
         // Query replies (DA1/DSR/OSC...) go straight to the PTY: routing them
@@ -210,6 +223,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }
     entry.terminal = terminal;
     entry.status = `pid ${terminal.pid}`;
+    // Covers PTYs diverged from birth (e.g. a host PTY spawned at a default
+    // size); later resizes re-schedule their own checks.
+    scheduleGeometryCheck(entry);
     if (terminal.onReplay !== undefined) {
       entry.subscriptions.push(
         terminal.onReplay(async ({ size: recordedSize, chunks }) => {
@@ -221,7 +237,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           // sequences recorded at another width land on the wrong rows
           // otherwise — then return to the pane size so xterm reflows the
           // replayed rows. The terminal holds live frames until this resolves.
-          replayingSnapshot = true;
+          entry.replayingSnapshot = true;
           try {
             current.resize(recordedSize);
             for (const chunk of chunks) {
@@ -229,13 +245,25 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
             }
             await current.whenIdle();
           } finally {
-            replayingSnapshot = false;
+            entry.replayingSnapshot = false;
           }
           current.resize(entry.appliedSize ?? size);
+          // Re-check now that the screen is back at pane size; a check that fired
+          // during the replay was suppressed.
+          scheduleGeometryCheck(entry);
         }),
       );
     }
     entry.subscriptions.push(
+      // Transport faults (failed host resizes, reconnects) feed the divergence
+      // detector; without a subscriber they would be dropped silently.
+      terminal.onDiagnostic((message) => {
+        reportTerminalCorruption({
+          kind: "terminal_diagnostic",
+          pane: entry.paneId,
+          detail: { message },
+        });
+      }),
       terminal.onData((data) => {
         entry.screen?.feed(data);
       }),
@@ -258,12 +286,71 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     if (!entry.exited) {
       entry.terminal?.resize(size);
     }
+    scheduleGeometryCheck(entry);
+  };
+
+  // Divergence detector: after a resize settles, the pane's asserted size, the
+  // screen model, and the PTY's acked size must agree. A persistent mismatch
+  // is the stuck-width corruption observed directly, so it logs and captures
+  // pane evidence.
+  const scheduleGeometryCheck = (entry: InternalEntry): void => {
+    if (entry.geometryCheckTimer !== undefined) {
+      clearTimeout(entry.geometryCheckTimer);
+    }
+    entry.geometryCheckTimer = setTimeout(() => {
+      entry.geometryCheckTimer = undefined;
+      if (entries.get(entry.paneId) !== entry || entry.exited) {
+        return;
+      }
+      // A pending resize or an in-flight replay intentionally holds the screen
+      // off pane size; either would report a transient as divergence. The
+      // resize path and the replay handler each re-schedule a check when they
+      // settle, so skipping here loses no real signal.
+      if (entry.replayingSnapshot || entry.resizeTimer !== undefined) {
+        return;
+      }
+      const applied = entry.appliedSize;
+      const stats = entry.screen?.bufferStats();
+      const acked = entry.terminal?.ackedSize;
+      if (applied === null || stats === undefined) {
+        return;
+      }
+      const screenMismatch = stats.cols !== applied.cols || stats.rows !== applied.rows;
+      const ackMismatch =
+        acked !== undefined && (acked.cols !== applied.cols || acked.rows !== applied.rows);
+      if (!screenMismatch && !ackMismatch) {
+        return;
+      }
+      const sizes = {
+        paneSize: `${applied.cols}x${applied.rows}`,
+        screenSize: `${stats.cols}x${stats.rows}`,
+        ...(acked === undefined ? {} : { ptySize: `${acked.cols}x${acked.rows}` }),
+      };
+      reportTerminalCorruption({
+        kind: "geometry_divergence",
+        pane: entry.paneId,
+        detail: sizes,
+      });
+      const evidence = entry.screen?.corruptionEvidence();
+      if (evidence !== undefined) {
+        writePaneEvidenceDump({
+          pane: entry.paneId,
+          trigger: "geometry_divergence",
+          evidence,
+          detail: sizes,
+        });
+      }
+    }, geometrySettleMs);
   };
 
   const disposeEntry = (entry: InternalEntry): void => {
     if (entry.resizeTimer !== undefined) {
       clearTimeout(entry.resizeTimer);
       entry.resizeTimer = undefined;
+    }
+    if (entry.geometryCheckTimer !== undefined) {
+      clearTimeout(entry.geometryCheckTimer);
+      entry.geometryCheckTimer = undefined;
     }
     for (const subscription of entry.subscriptions) {
       subscription.dispose();

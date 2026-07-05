@@ -256,6 +256,26 @@ describe("external run synthesis", () => {
     });
     expect(ended).toHaveLength(0);
   });
+
+  it("does not resurrect a run when a surviving working event outranks the exited one", () => {
+    // An exited observation retires the session even if another event has a
+    // later timestamp (out-of-order delivery / observedAt vs updatedAt skew).
+    const result = synthesizeExternalHarnessRuns({
+      runs: [],
+      observations: [
+        externalObservation({ value: "exited", updatedAt: "2026-05-21T12:00:01.000Z" }),
+        externalObservation({ value: "working", updatedAt: "2026-05-21T12:00:09.000Z" }),
+      ],
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it("encodes untrusted native session ids so they cannot collide", () => {
+    expect(externalHarnessRunId("codex", "external:victim")).toBe(
+      "codex:external:external%3Avictim",
+    );
+    expect(externalHarnessRunId("codex", "plain_1")).toBe("codex:external:plain_1");
+  });
 });
 
 describe("stale busy status decay", () => {

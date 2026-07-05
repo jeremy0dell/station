@@ -1,4 +1,10 @@
-import { ConfigError, DEFAULT_WORKSPACE_CONFIG, loadConfig, type WorkspaceConfig } from "@station/config";
+import {
+  ConfigError,
+  DEFAULT_WORKSPACE_CONFIG,
+  loadConfig,
+  resolveObserverPaths,
+  type WorkspaceConfig,
+} from "@station/config";
 import { safeErrorFromUnknown } from "@station/runtime";
 
 // Native Station workspace settings are the `[workspace]` section of the single
@@ -19,6 +25,8 @@ export type StationConfigSource = "file" | "defaults";
 export type StationConfigLoadResult = {
   config: WorkspaceConfig;
   source: StationConfigSource;
+  /** Runtime state dir (config-relocatable); TUI logs and pane dumps live under it. */
+  stateDir: string;
   /** Set when a present-but-broken config forced a fallback to defaults. */
   warning?: string;
 };
@@ -38,7 +46,11 @@ export async function loadStationConfig(options?: {
   const configPath = options?.path ?? configPathFromEnv(options?.env);
   try {
     const loaded = configPath === undefined ? await loadConfig() : await loadConfig({ configPath });
-    const result: StationConfigLoadResult = { config: loaded.config.workspace, source: "file" };
+    const result: StationConfigLoadResult = {
+      config: loaded.config.workspace,
+      source: "file",
+      stateDir: resolveObserverPaths(loaded.config).stateDir,
+    };
     // The config loaded, but a typo'd [workspace] was best-effort dropped to
     // defaults — surface that as a warning rather than swallowing it silently.
     const sectionWarning = loaded.diagnostics.find(
@@ -51,7 +63,11 @@ export async function loadStationConfig(options?: {
   } catch (cause) {
     // A missing config is the common first-run case: silent defaults.
     if (cause instanceof ConfigError && cause.code === "CONFIG_FILE_NOT_FOUND") {
-      return { config: DEFAULT_WORKSPACE_CONFIG, source: "defaults" };
+      return {
+        config: DEFAULT_WORKSPACE_CONFIG,
+        source: "defaults",
+        stateDir: resolveObserverPaths().stateDir,
+      };
     }
     const error =
       cause instanceof ConfigError
@@ -64,6 +80,7 @@ export async function loadStationConfig(options?: {
     return {
       config: DEFAULT_WORKSPACE_CONFIG,
       source: "defaults",
+      stateDir: resolveObserverPaths().stateDir,
       warning: `${error.message}; using defaults.`,
     };
   }

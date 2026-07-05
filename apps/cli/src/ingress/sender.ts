@@ -18,6 +18,7 @@ import {
 import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
 import { createObserverClient } from "@station/protocol";
 import {
+  pathIsSameOrInside,
   type RuntimeClock,
   runRuntimeBoundaryWithTimeout,
   safeErrorFromUnknown,
@@ -38,6 +39,12 @@ export type ProviderHookSenderOptions = {
   deliveryTimeoutMs?: number;
   startupTimeoutMs?: number;
   rateLimitMs?: number;
+  /**
+   * Roots (project repos + managed-worktree dirs) an env-less session's cwd
+   * must fall under to be worth delivering. Undefined keeps the permissive
+   * fallback (any cwd); provided (even empty) gates on membership.
+   */
+  projectRoots?: readonly string[];
 };
 
 type ProviderHookClientFactoryOptions = {
@@ -155,7 +162,10 @@ export async function sendClaudeHookPayload(
     env: input.env ?? process.env,
   });
   const eventName = parseProviderHookEventName(enrichedPayload) ?? "unknown";
-  if (!hasStationOwnership(enrichedPayload) && !hasCorrelatableCwd(enrichedPayload)) {
+  if (
+    !hasStationOwnership(enrichedPayload) &&
+    !hasCorrelatableCwd(enrichedPayload, input.projectRoots)
+  ) {
     return ignoredProviderHookReceipt({
       provider: "claude",
       event: eventName,
@@ -198,7 +208,10 @@ export async function sendCodexHookPayload(
     env: input.env ?? process.env,
   });
   const eventName = parseProviderHookEventName(enrichedPayload) ?? "unknown";
-  if (!hasStationOwnership(enrichedPayload) && !hasCorrelatableCwd(enrichedPayload)) {
+  if (
+    !hasStationOwnership(enrichedPayload) &&
+    !hasCorrelatableCwd(enrichedPayload, input.projectRoots)
+  ) {
     return ignoredProviderHookReceipt({
       provider: "codex",
       event: eventName,
@@ -435,14 +448,26 @@ function payloadSummaryFor(payload: unknown): ProviderHookPayloadSummary {
   };
 }
 
-// External sessions (no station env) are deliverable when the payload carries
-// a cwd the observer can correlate to a worktree; providers whose payloads
-// have no cwd keep the ownership gate. Pre-parse probe only — full event
-// schemas validate at the adapter boundary.
+// External sessions (no station env) are deliverable when the payload cwd falls
+// under a configured project/worktree root — an unrelated dir would never
+// correlate at the observer, so delivering (and spooling) its events is waste.
+// Pre-parse probe only; full event schemas validate at the adapter boundary.
 const hookCwdProbeSchema = z.object({ cwd: z.string().min(1) }).loose();
 
-function hasCorrelatableCwd(payload: unknown): boolean {
-  return hookCwdProbeSchema.safeParse(payload).success;
+function hasCorrelatableCwd(
+  payload: unknown,
+  projectRoots: readonly string[] | undefined,
+): boolean {
+  const parsed = hookCwdProbeSchema.safeParse(payload);
+  if (!parsed.success) {
+    return false;
+  }
+  // No configured roots (config absent): keep the permissive fallback rather
+  // than dropping everything.
+  if (projectRoots === undefined) {
+    return true;
+  }
+  return projectRoots.some((root) => pathIsSameOrInside(parsed.data.cwd, root));
 }
 
 function hasStationOwnership(payload: unknown): boolean {

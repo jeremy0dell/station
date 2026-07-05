@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import { componentLogPath, createJsonlLogger } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
@@ -24,6 +26,7 @@ import type { LayoutRestorePlan } from "./state/layout/restoreLayout.js";
 import { readLayoutSnapshotSync } from "./state/layout/layoutPersistence.js";
 import { applyRestoreSeeds, planLayoutRestoreColdShells } from "./state/layout/restoreLayout.js";
 import { savedCwdExists } from "./state/layout/savedCwdExists.js";
+import { wireTerminalDiagnostics } from "./terminal/diagnostics.js";
 import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
 import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
 import { playStationAttentionSound } from "./sources/attentionSound.js";
@@ -170,6 +173,17 @@ if (stationConfig.warning !== undefined) {
 if (tuiConfig.warning !== undefined) {
   console.error(`[station] ${tuiConfig.warning}`);
 }
+
+// Corruption telemetry sink: detectors count regardless; with this wired they
+// also log to logs/tui.jsonl and write pane evidence dumps under
+// diagnostics/panes/.
+wireTerminalDiagnostics({
+  logger: createJsonlLogger({
+    component: "tui",
+    path: componentLogPath(stationConfig.stateDir, "tui"),
+  }),
+  dumpDir: join(stationConfig.stateDir, "diagnostics", "panes"),
+});
 
 // HMR recreates renderer, input handlers, and observer subscriptions, but keeps
 // coordination state plus live PTYs so a code edit returns to the active session

@@ -46,7 +46,9 @@ root = ${JSON.stringify(root)}
 describe("loadStationConfig", () => {
   it("returns silent defaults when the config file is absent", async () => {
     const result = await loadStationConfig({ path: "/definitely/not/here/config.toml" });
-    expect(result).toEqual({ config: DEFAULT_WORKSPACE_CONFIG, source: "defaults" });
+    expect(result.config).toEqual(DEFAULT_WORKSPACE_CONFIG);
+    expect(result.source).toBe("defaults");
+    expect(result.stateDir).toContain("/state/station");
   });
 
   it("reads the [workspace] section out of the runtime config", async () => {

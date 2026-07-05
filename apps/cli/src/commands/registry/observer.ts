@@ -7,7 +7,12 @@ export const observerCliCommand: CliCommandNode = {
   description: "Start, stop, or inspect the local observer process.",
   requiresConfig: true,
   run: runObserverCliCommand,
-  usage: ["stn observer start", "stn observer status", "stn observer stop"],
+  usage: [
+    "stn observer start",
+    "stn observer status",
+    "stn observer stop",
+    "stn observer reap [--force]",
+  ],
   options: [
     {
       name: "--timeout-ms <ms>",
@@ -34,6 +39,14 @@ export const observerCliCommand: CliCommandNode = {
       description: "Stop the observer for the configured socket.",
       usage: ["stn observer stop"],
       examples: ["pnpm stn observer stop"],
+    },
+    {
+      name: "reap",
+      description:
+        "List duplicate observers for the configured socket; --force terminates all but the live owner.",
+      usage: ["stn observer reap [--force]"],
+      options: [{ name: "--force", description: "Terminate the duplicates (default lists only)." }],
+      examples: ["pnpm stn observer reap", "pnpm stn observer reap --force"],
     },
   ],
 };
