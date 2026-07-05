@@ -6,7 +6,7 @@
 // never touch the store.
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
-import { isRemoveProjectArmed } from "@station/dashboard-core";
+import { isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core";
 import type { ProjectSettingsItemId, TuiStore } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
@@ -340,15 +340,11 @@ export function stationMouseEventKind(event: StationMouseEvent): StationMouseEve
   return undefined;
 }
 
-/** Modes whose sheets list slot-keyed choices a click can select. */
-const SHEET_CHOICE_MODES: ReadonlySet<StationInputMode> = new Set([
-  "newSessionPickProject",
-  "newSessionPickAgent",
-  "projectDefaultAgent",
-  "projectCollapse",
-  "projectSettingsPicker",
-  "projectSettings",
-]);
+// Modes whose sheets list slot-keyed choices a click can select — exactly the
+// registered selection lists, derived so this set cannot drift from the engine.
+const SHEET_CHOICE_MODES: ReadonlySet<StationInputMode> = new Set(
+  Object.keys(LIST_REGISTRY) as StationInputMode[],
+);
 
 function routeStationWheel(
   target: StationMouseTarget,

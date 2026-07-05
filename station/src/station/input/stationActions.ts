@@ -13,6 +13,7 @@ import type { ProviderId } from "@station/contracts";
 import {
   choiceValueByKey,
   createNewSessionNameToken,
+  newSessionIntentForInput,
   focusProjectSettingsItem as focusProjectSettingsItemState,
   generatedSessionBranch,
   openProjectDefaultAgentPicker,
@@ -250,13 +251,17 @@ export type NewSessionSubmitTarget =
  */
 export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSubmitTarget {
   const state = store.getState();
-  if (
-    state.screen.name !== "newSession" ||
-    state.screen.flow.mode !== "review" ||
-    // ↵ only submits when the review focus ring is on "create"; on any other
-    // field it must reach the machine so ↵ opens that field's step instead.
-    state.screen.flow.reviewFocus !== "create"
-  ) {
+  if (state.screen.name !== "newSession") {
+    return { kind: "none" };
+  }
+  // The machine owns what ↵ means (reviewFocusIntents): submit only when it
+  // would submit, so a focused field's ↵ reaches the machine and opens its step.
+  const intent = newSessionIntentForInput(state.screen.flow, {
+    input: "\r",
+    key: { return: true },
+    token: "",
+  });
+  if (intent.type !== "submit") {
     return { kind: "none" };
   }
   if (state.snapshot === undefined) {

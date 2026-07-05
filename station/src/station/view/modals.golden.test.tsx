@@ -47,6 +47,25 @@ const CASES: ModalCase[] = [
     expect: ["Collapse Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
+    name: "collapse project sheet windows a long list",
+    keys: [{ input: "C" }],
+    snapshot: () => {
+      const base = manyProjectsSnapshot();
+      const station = base.projects[0];
+      if (station === undefined) throw new Error("fixture has no projects");
+      const extras = Array.from({ length: 21 }, (_, index) => ({
+        ...station,
+        id: `filler-${index}` as typeof station.id,
+        label: `filler-${index}`,
+      }));
+      return { ...base, projects: [...base.projects, ...extras] };
+    },
+    trimSnapshotTrailingWhitespace: true,
+    // 25 projects at 24 rows: the list windows to 18 with a range footer instead
+    // of clipping rows the cursor could still reach.
+    expect: ["Collapse Project", "↑↓ move   ↵ select   1-18 of 25   Esc cancel", "station"],
+  },
+  {
     name: "project settings picker sheet",
     keys: [{ input: "P" }],
     trimSnapshotTrailingWhitespace: true,

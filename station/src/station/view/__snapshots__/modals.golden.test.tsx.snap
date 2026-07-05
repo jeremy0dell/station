@@ -587,3 +587,31 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
 "
 `;
+
+exports[`modal flow golden frames renders the collapse project sheet windows a long list 1`] = `
+"┌──────────────────────────────────────────────────────────────────────────────┐
+│ Collapse Project                                                             │
+│                                                                              │
+│ 1 station healthy                                                            │
+│ 2 observer healthy                                                           │
+│ 3 scripts healthy                                                            │
+│ 4 empty-project healthy                                                      │
+│ 5 filler-0 healthy                                                           │
+│ 6 filler-1 healthy                                                           │
+│ 7 filler-2 healthy                                                           │
+│ 8 filler-3 healthy                                                           │
+│ 9 filler-4 healthy                                                           │
+│ a filler-5 healthy                                                           │
+│ b filler-6 healthy                                                           │
+│ c filler-7 healthy                                                           │
+│ d filler-8 healthy                                                           │
+│ e filler-9 healthy                                                           │
+│ f filler-10 healthy                                                          │
+│ g filler-11 healthy                                                          │
+│ h filler-12 healthy                                                          │
+│ i filler-13 healthy                                                          │
+│                                                                              │
+│ ↑↓ move   ↵ select   1-18 of 25   Esc cancel                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;

@@ -44,3 +44,5 @@ export * from "./state/screens/projectSettings.js";
 export * from "./state/screens/removeWorktree.js";
 export * from "./state/screens/sessionRows.js";
 export * from "./state/screens/widgetSettings.js";
+export * from "./state/selection/bindings.js";
+export * from "./state/selection/registry.js";

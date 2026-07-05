@@ -58,8 +58,8 @@ export function activateFocusedDashboardRow(state: TuiState): TuiTransition {
  * The focused row only when it is currently committable: present in the filtered
  * view (not collapsed or searched away) and not mid-operation. The choose-row
  * trio's ↵ resolves through this so it cannot act on a row the slot path and
- * dashboard activation both refuse — a pending row, or one scrolled/filtered
- * out of sight.
+ * dashboard activation both refuse — a pending row, or one filtered out of the
+ * view (viewport scroll does not unfocus; the cursor rule keeps it committable).
  */
 export function focusedSelectableRow(state: TuiState): WorktreeRow | undefined {
   if (state.snapshot === undefined) {

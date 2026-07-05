@@ -333,10 +333,7 @@ function commitEditedName(state: NewSessionEditNameState): NewSessionReviewState
     return toReviewState(state);
   }
   return {
-    ...resetWizardStep(baseState(state), "review"),
-    reviewFocus: "create",
-    selectedProjectId: state.selectedProjectId,
-    selectedHarness: state.selectedHarness,
+    ...toReviewState(state),
     branch,
     nameSource: "custom",
   };
@@ -367,13 +364,11 @@ function applyChosenProject(
     return state;
   }
   return {
-    ...resetWizardStep(baseState(state), "review"),
-    reviewFocus: "create",
+    ...toReviewState(state),
     selectedProjectId: project.id,
     selectedHarness: harness.id,
     branch:
       state.nameSource === "generated" ? generatedSessionBranch(project.id, token) : state.branch,
-    nameSource: state.nameSource,
   };
 }
 
@@ -399,12 +394,8 @@ export function chooseNewSessionAgentById(
     return state;
   }
   return {
-    ...resetWizardStep(baseState(state), "review"),
-    reviewFocus: "create",
-    selectedProjectId: state.selectedProjectId,
+    ...toReviewState(state),
     selectedHarness: option.id,
-    branch: state.branch,
-    nameSource: state.nameSource,
   };
 }
 
@@ -416,6 +407,7 @@ function cancelNewSessionStep(state: NewSessionFlowState): NewSessionReviewState
   return toReviewState(previous);
 }
 
+// Every return-to-review path funnels here so the focus-reset policy has one owner.
 function toReviewState(state: NewSessionBaseState): NewSessionReviewState {
   return {
     ...resetWizardStep(baseState(state), "review"),
