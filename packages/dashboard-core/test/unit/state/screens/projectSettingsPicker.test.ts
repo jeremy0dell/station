@@ -19,12 +19,11 @@ const P: TuiKey = { input: "P" };
 const ESC: TuiKey = { input: "", escape: true };
 
 describe("project settings picker", () => {
-  it("P opens a project picker prompt listing the projects", () => {
-    const picker = drive(dashboardState(), [P]).screen;
-    expect(picker.name).toBe("projectSettingsPicker");
-    if (picker.name !== "projectSettingsPicker") return;
-    // The inline command row renders this slot:label list.
-    expect(picker.value.length).toBeGreaterThan(0);
+  it("P opens the project settings picker and seeds the cursor", () => {
+    const opened = drive(dashboardState(), [P]);
+    expect(opened.screen.name).toBe("projectSettingsPicker");
+    // The picker renders as a list sheet; the cursor seeds to the first project.
+    expect(opened.selection.get("projectSettingsPicker")).toBeDefined();
   });
 
   it("choosing a slot opens that project's settings panel", () => {

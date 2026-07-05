@@ -127,18 +127,22 @@ export function selectVisibleRows(snapshot: StationSnapshot, state: TuiViewState
   return selectProjectGroups(snapshot, state).flatMap((group) => group.rows);
 }
 
-export function selectDashboardRowChoices(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
-): Array<KeyedChoice<WorktreeRow>> {
-  return keyChoices(selectVisibleRows(snapshot, state));
-}
-
 export function selectProjectChoices(
   snapshot: StationSnapshot,
   state: TuiViewState,
 ): Array<KeyedChoice<ProjectView>> {
   return keyChoices(selectProjectGroups(snapshot, state).map((group) => group.project));
+}
+
+/**
+ * The project choosers (collapse / settings) list every project in snapshot
+ * order, unaffected by search or collapse — so the engine spec and the sheet
+ * view can key off the snapshot alone and stay in exact agreement.
+ */
+export function selectProjectChooserChoices(
+  snapshot: StationSnapshot,
+): Array<KeyedChoice<ProjectView>> {
+  return keyChoices(snapshot.projects);
 }
 
 export function selectNewSessionProject(

@@ -113,6 +113,11 @@ export function handleAddProjectKey(state: TuiState, key: TuiKey): TuiTransition
   return { state };
 }
 
+/** Mouse: click a folder/start row to move the cursor there (open/pick stay on the keyboard). */
+export function selectAddProjectRow(state: TuiState, index: number): TuiState {
+  return applyFlowTransitionState(state, { type: "select", index });
+}
+
 export function applyAddProjectFolderLoaded(
   state: TuiState,
   result: TuiFolderReadResult,

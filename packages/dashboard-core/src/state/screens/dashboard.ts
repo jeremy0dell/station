@@ -158,16 +158,6 @@ function activateDashboardSlot(state: TuiState, key: TuiKey): TuiTransition {
   return activateDashboardRow(state, row);
 }
 
-export function scrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
-  if (key.upArrow === true || key.mouseScroll === "up") {
-    return -1;
-  }
-  if (key.downArrow === true || key.mouseScroll === "down") {
-    return 1;
-  }
-  return 0;
-}
-
 function mouseScrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
   if (key.mouseScroll === "up") {
     return -1;

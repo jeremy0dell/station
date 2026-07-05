@@ -31,7 +31,7 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         minHeight={7}
       >
         <SheetLine width={contentWidth}> </SheetLine>
-        <SheetMessageLine width={contentWidth}>Click a row or press slot key</SheetMessageLine>
+        <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
         <SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>
       </BottomSheetFrameView>
     );

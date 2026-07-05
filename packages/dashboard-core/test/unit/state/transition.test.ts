@@ -1,5 +1,6 @@
 import {
   createInitialTuiState,
+  deriveTuiInputMode,
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
@@ -26,6 +27,55 @@ describe("TUI screen transitions", () => {
 
     expect(rename.state.screen).toEqual({ name: "renameSession", step: "chooseSlot" });
     expect(refresh.reconcileReason).toBe("tui-refresh");
+  });
+
+  it("moves a cursor with arrows and commits the focused row on enter in remove-choose", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const opened = handleTuiKey(base, { input: "X" }).state;
+    expect(opened.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+
+    // Arrows now move the dashboard cursor (was: scroll the viewport).
+    const moved = handleTuiKey(opened, { input: "", downArrow: true }).state;
+    expect(moved.focusedRowId).toBeDefined();
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
+    expect(committed.screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
+  });
+
+  it("does not commit a pending-remove focused row on enter in the choose-row trio", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const withPending: typeof base = {
+      ...base,
+      focusedRowId: "wt_api_working",
+      localRows: {
+        ...base.localRows,
+        pendingRemove: [
+          {
+            localId: "rm:wt_api_working",
+            projectId: "api",
+            worktreeId: "wt_api_working",
+            branch: "queue-worker",
+            createdAt: "2026-07-04T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const opened = handleTuiKey(withPending, { input: "X" }).state;
+    const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
+    // ↵ is inert on a mid-removal row, exactly as the slot path and dashboard activation refuse it.
+    expect(committed.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+  });
+
+  it("does not commit a collapsed (hidden) focused row on enter in the choose-row trio", () => {
+    const base = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      collapsedProjectIds: ["api"],
+    });
+    const state: typeof base = { ...base, focusedRowId: "wt_api_working" };
+    const opened = handleTuiKey(state, { input: "X" }).state;
+    const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
+    // The row is filtered out of view; ↵ must not act on a row the user cannot see.
+    expect(committed.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
   });
 
   it("scrolls dashboard rows with mouse wheel events", () => {
@@ -559,6 +609,49 @@ describe("TUI screen transitions", () => {
     });
   });
 
+  it("seeds and moves the new-session project cursor, committing the choice on enter", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const pick = handleTuiKey(review, { input: "P" }).state;
+    expect(deriveTuiInputMode(pick)).toBe("newSessionPickProject");
+    // Seeded to the current selection (web); arrow down moves to api.
+    expect(pick.selection.get("newSessionPickProject")).toBe("web");
+    const moved = handleTuiKey(pick, { input: "", downArrow: true }).state;
+    expect(moved.selection.get("newSessionPickProject")).toBe("api");
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
+    expect(committed.screen.name).toBe("newSession");
+    if (committed.screen.name !== "newSession") throw new Error("unreachable");
+    expect(committed.screen.flow.mode).toBe("review");
+    expect(committed.screen.flow.selectedProjectId).toBe("api");
+  });
+
+  it("commits a new-session project via a slot key through the engine", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const pick = handleTuiKey(review, { input: "P" }).state;
+    // Slot "2" resolves to the second project (api) via the shared middleware.
+    const committed = handleTuiKey(pick, { input: "2" }).state;
+    if (committed.screen.name !== "newSession") throw new Error("unreachable");
+    expect(committed.screen.flow.mode).toBe("review");
+    expect(committed.screen.flow.selectedProjectId).toBe("api");
+  });
+
+  it("commits a new-session agent via the cursor on enter", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const pick = handleTuiKey(review, { input: "A" }).state;
+    expect(deriveTuiInputMode(pick)).toBe("newSessionPickAgent");
+    expect(pick.selection.get("newSessionPickAgent")).toBe("codex");
+    const moved = handleTuiKey(pick, { input: "", downArrow: true }).state;
+    expect(moved.selection.get("newSessionPickAgent")).toBe("opencode");
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
+    if (committed.screen.name !== "newSession") throw new Error("unreachable");
+    expect(committed.screen.flow.mode).toBe("review");
+    expect(committed.screen.flow.selectedHarness).toBe("opencode");
+  });
+
   it("opens and cancels the project default agent picker", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const opened = openProjectDefaultAgentPicker(state, "web");
@@ -621,6 +714,55 @@ describe("TUI screen transitions", () => {
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
     expect(transition.operations).toBeUndefined();
+  });
+
+  it("seeds the default-agent cursor to the project's current default on open", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    // web's default harness is codex (slot 1); the cursor starts there.
+    expect(opened.selection.get("projectDefaultAgent")).toBe("codex");
+  });
+
+  it("moves the default-agent cursor with arrows and commits it on enter", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    const moved = handleTuiKey(opened, { input: "", downArrow: true }).state;
+    expect(moved.selection.get("projectDefaultAgent")).toBe("opencode");
+
+    const committed = handleTuiKey(moved, { input: "\r", return: true });
+    expect(committed.state.screen).toEqual({ name: "dashboard" });
+    expect(committed.operations).toEqual([
+      {
+        type: "setProjectDefaultHarness",
+        command: {
+          type: "project.setDefaultHarness",
+          payload: { projectId: "web", harness: "opencode" },
+        },
+      },
+    ]);
+  });
+
+  it("enter on the unchanged default-agent cursor closes without dispatching", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    const committed = handleTuiKey(opened, { input: "\r", return: true });
+    expect(committed.state.screen).toEqual({ name: "dashboard" });
+    expect(committed.operations).toBeUndefined();
+  });
+
+  it("clamps the default-agent cursor at the top edge", () => {
+    const opened = openProjectDefaultAgentPicker(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "web",
+    );
+    const up = handleTuiKey(opened, { input: "", upArrow: true }).state;
+    expect(up.selection.get("projectDefaultAgent")).toBe("codex");
   });
 
   it("adds a safe error toast when no project exists for a new session", () => {

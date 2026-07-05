@@ -8,16 +8,7 @@ import {
   editableTextInputIntentForInput,
   transitionEditableTextInput,
 } from "../components/EditableTextInput/editing.js";
-import {
-  choiceValueByKey,
-  isSelectionKey,
-  type SelectionKey,
-  selectNewSessionHarnessChoices,
-  selectNewSessionHarnessOptions,
-  selectNewSessionProject,
-  selectNewSessionProjectChoices,
-} from "../selectors/selectors.js";
-import { isSlotKey } from "../state/keymap.js";
+import { selectNewSessionHarnessOptions, selectNewSessionProject } from "../selectors/selectors.js";
 import {
   backWizardStep,
   createStepWizardState,
@@ -65,8 +56,6 @@ export type NewSessionFlowAction =
   | { type: "commitName" }
   | { type: "pickProject" }
   | { type: "pickAgent" }
-  | { type: "chooseProject"; key: SelectionKey; token: string }
-  | { type: "chooseAgent"; key: SelectionKey }
   | { type: "cancel" };
 
 export type NewSessionInputKey = {
@@ -138,7 +127,6 @@ export function createNewSessionFlow(
 
 export function transitionNewSessionFlow(
   state: NewSessionFlowState,
-  snapshot: StationSnapshot,
   action: NewSessionFlowAction,
 ): NewSessionFlowState | undefined {
   switch (action.type) {
@@ -162,16 +150,10 @@ export function transitionNewSessionFlow(
       return {
         ...enterWizardStep(baseState(state), "pickProject"),
       } satisfies NewSessionPickProjectState;
-    case "chooseProject":
-      return state.mode === "pickProject"
-        ? selectProjectByKey(state, snapshot, action.key, action.token)
-        : state;
     case "pickAgent":
       return {
         ...enterWizardStep(baseState(state), "pickAgent"),
       } satisfies NewSessionPickAgentState;
-    case "chooseAgent":
-      return state.mode === "pickAgent" ? selectAgentByKey(state, snapshot, action.key) : state;
   }
 }
 
@@ -187,14 +169,11 @@ export function newSessionIntentForInput(
       return reviewInputIntent(input);
     case "editName":
       return editNameInputIntent(input);
+    // Pick steps are registered lists: the shared selectionMiddleware resolves
+    // ↑↓/↵/slot before this handler runs, so nothing is left for it to intent.
     case "pickProject":
-      return pickerInputIntent(input, (key) => ({
-        type: "chooseProject",
-        key,
-        token: input.token,
-      }));
     case "pickAgent":
-      return pickerInputIntent(input, (key) => ({ type: "chooseAgent", key }));
+      return { type: "none" };
   }
 }
 
@@ -299,17 +278,6 @@ function editNameInputIntent(input: NewSessionInput): NewSessionInputIntent {
     : { type: "none" };
 }
 
-function pickerInputIntent(
-  input: NewSessionInput,
-  choose: (key: SelectionKey) => NewSessionFlowAction,
-): NewSessionInputIntent {
-  // isSlotKey, not raw isSelectionKey: the keymap's slot-pattern exceptions
-  // (Tab/Ctrl-I) must apply here too or the keymap contract drifts.
-  return isSlotKey({ ...input.key, input: input.input }) && isSelectionKey(input.input)
-    ? transitionIntent(choose(input.input))
-    : { type: "none" };
-}
-
 function transitionIntent(action: NewSessionFlowAction): NewSessionInputIntent {
   return {
     type: "transition",
@@ -335,16 +303,23 @@ function commitEditedName(state: NewSessionEditNameState): NewSessionReviewState
   };
 }
 
-function selectProjectByKey(
+/** Commit a project chosen by id (the shared selection engine's cursor/slot value). */
+export function chooseNewSessionProjectById(
   state: NewSessionPickProjectState,
   snapshot: StationSnapshot,
-  key: SelectionKey,
+  projectId: ProjectId,
   token: string,
 ): NewSessionPickProjectState | NewSessionReviewState {
-  const project = choiceValueByKey(selectNewSessionProjectChoices(snapshot), key);
-  if (project === undefined) {
-    return state;
-  }
+  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
+  return project === undefined ? state : applyChosenProject(state, snapshot, project, token);
+}
+
+function applyChosenProject(
+  state: NewSessionPickProjectState,
+  snapshot: StationSnapshot,
+  project: NonNullable<ReturnType<typeof selectNewSessionProject>>,
+  token: string,
+): NewSessionPickProjectState | NewSessionReviewState {
   // Harness options are global, so a chosen harness stays valid across projects;
   // keep the user's selection and only fall back to the default if it disappears.
   const options = selectNewSessionHarnessOptions(snapshot, project);
@@ -369,16 +344,17 @@ function firstHarnessOption(
   return selectNewSessionHarnessOptions(snapshot, project)[0];
 }
 
-function selectAgentByKey(
+/** Commit an agent chosen by id (the shared selection engine's cursor/slot value). */
+export function chooseNewSessionAgentById(
   state: NewSessionPickAgentState,
   snapshot: StationSnapshot,
-  key: SelectionKey,
+  agentId: ProviderId,
 ): NewSessionPickAgentState | NewSessionReviewState {
   const project = selectedProject(snapshot, state);
   const option =
     project === undefined
       ? undefined
-      : choiceValueByKey(selectNewSessionHarnessChoices(snapshot, project), key);
+      : selectNewSessionHarnessOptions(snapshot, project).find((entry) => entry.id === agentId);
   if (option === undefined) {
     return state;
   }

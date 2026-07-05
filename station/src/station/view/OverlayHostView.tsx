@@ -2,11 +2,12 @@
 // its overlay (help panel, bottom sheets) in an absolute layer above the
 // dashboard. The dashboard never reflows for overlays.
 import type { StationSnapshot } from "@station/contracts";
-import type { TuiLocalRows, TuiScreen } from "@station/dashboard-core";
+import type { TuiLocalRows, TuiScreen, TuiSelectionState } from "@station/dashboard-core";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
+import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
@@ -17,6 +18,7 @@ import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 export type OverlayHostViewProps = {
   snapshot: StationSnapshot;
   screen: TuiScreen;
+  selection: TuiSelectionState;
   columns: number;
   rows: number;
   localRows: TuiLocalRows;
@@ -29,6 +31,7 @@ export type OverlayHostViewProps = {
 export function OverlayHostView({
   snapshot,
   screen,
+  selection,
   columns,
   rows,
   localRows,
@@ -54,7 +57,13 @@ export function OverlayHostView({
   }
   if (screen.name === "newSession") {
     return (
-      <NewSessionSheetView columns={columns} rows={rows} snapshot={snapshot} state={screen.flow} />
+      <NewSessionSheetView
+        columns={columns}
+        rows={rows}
+        snapshot={snapshot}
+        state={screen.flow}
+        selection={selection}
+      />
     );
   }
   if (screen.name === "projectDefaultAgent") {
@@ -64,6 +73,18 @@ export function OverlayHostView({
         rows={rows}
         snapshot={snapshot}
         screen={screen}
+        selection={selection}
+      />
+    );
+  }
+  if (screen.name === "projectCollapse" || screen.name === "projectSettingsPicker") {
+    return (
+      <ProjectChoiceSheetView
+        columns={columns}
+        rows={rows}
+        snapshot={snapshot}
+        mode={screen.name}
+        selection={selection}
       />
     );
   }

@@ -53,6 +53,16 @@ function allowedNoOpBinding(mode: StationInputMode, binding: StationBinding): bo
   ) {
     return true;
   }
+  // Selection lists seed at the current choice, which is the top row in the
+  // fixtures, so ↑ clamps to a no-op in the representative state.
+  if (binding.id.endsWith(".cursorUp")) {
+    return true;
+  }
+  // The choose-row trio's ↵ commits the focused row; with no cursor yet in the
+  // representative state it is a no-op, like station.dashboard.focusActivate.
+  if (binding.id.endsWith(".activate")) {
+    return true;
+  }
   if (mode === "addProject" && binding.action === ADD_PROJECT_KEY_ACTION) {
     return true;
   }

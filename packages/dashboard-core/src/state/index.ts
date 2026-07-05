@@ -3,6 +3,7 @@ export * from "./dashboardFocus.js";
 export * from "./dashboardScroll.js";
 export * from "./keys.js";
 export * from "./screen.js";
+export * from "./selection/index.js";
 export * from "./sourceBridge.js";
 export * from "./store.js";
 export * from "./timing.js";

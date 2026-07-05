@@ -35,6 +35,8 @@ export function transitionAddProjectFlow(
   switch (action.type) {
     case "move":
       return { state: moveSelection(state, action.delta) };
+    case "select":
+      return { state: selectIndex(state, action.index) };
     case "startOpen": {
       if (state.mode !== "start") return { state };
       const choice = state.choices[state.selectedIndex];
@@ -204,6 +206,18 @@ function moveSelection(state: AddProjectFlowState, delta: number): AddProjectFlo
   if (state.mode === "choose") {
     const count = addProjectRows(state).length;
     return { ...state, selectedIndex: clampIndex(state.selectedIndex + delta, 0, count - 1) };
+  }
+  return state;
+}
+
+// Absolute-index cursor move for a mouse click; clamps into the active list so a
+// stale click past the end lands on the last row rather than out of range.
+function selectIndex(state: AddProjectFlowState, index: number): AddProjectFlowState {
+  if (state.mode === "start") {
+    return { ...state, selectedIndex: clampIndex(index, 0, state.choices.length - 1) };
+  }
+  if (state.mode === "choose") {
+    return { ...state, selectedIndex: clampIndex(index, 0, addProjectRows(state).length - 1) };
   }
   return state;
 }

@@ -41,14 +41,16 @@ const CASES: ModalCase[] = [
     expect: ["search: api"],
   },
   {
-    name: "collapse prompt",
+    name: "collapse project sheet",
     keys: [{ input: "C" }],
-    expect: ["collapse project:"],
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Collapse Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
-    name: "project settings picker prompt",
+    name: "project settings picker sheet",
     keys: [{ input: "P" }],
-    expect: ["settings for project:"],
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
     name: "project settings panel",
@@ -85,7 +87,7 @@ const CASES: ModalCase[] = [
   {
     name: "remove slot sheet",
     keys: [{ input: "X" }],
-    expect: ["Select session to delete", "Click a row or press slot key", "Esc:cancel"],
+    expect: ["Select session to delete", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
   },
   {
     name: "remove confirm sheet",
@@ -95,7 +97,7 @@ const CASES: ModalCase[] = [
   {
     name: "rename slot prompt",
     keys: [{ input: "R" }],
-    expect: ["Choose the slot to rename: 1-9/a-z"],
+    expect: ["Rename: ↑↓ move · ↵ choose · 1-9/a-z or click"],
   },
   {
     name: "rename sheet",
@@ -106,7 +108,7 @@ const CASES: ModalCase[] = [
   {
     name: "fork slot sheet",
     keys: [{ input: "F" }],
-    expect: ["Select session to fork", "Click a row or press slot key", "Esc:cancel"],
+    expect: ["Select session to fork", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
   },
   {
     name: "fork details sheet",
@@ -126,12 +128,12 @@ const CASES: ModalCase[] = [
   {
     name: "new session pick project",
     keys: [{ input: "N" }, { input: "P" }],
-    expect: ["Choose Project", "1-9/a-z:select   Esc:back", "station", "observer"],
+    expect: ["Choose Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc back", "station", "observer"],
   },
   {
     name: "new session pick agent",
     keys: [{ input: "N" }, { input: "A" }],
-    expect: ["Choose Agent", "1-9/a-z:select   Esc:back", "codex"],
+    expect: ["Choose Agent", "↑↓ move   ↵ select   1-9/a-z jump   Esc back", "codex"],
   },
   {
     name: "project default agent picker",
@@ -142,7 +144,7 @@ const CASES: ModalCase[] = [
     trimSnapshotTrailingWhitespace: true,
     expect: [
       "Select default agent for station",
-      "1-9/a-z:select   Esc:cancel",
+      "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel",
       "codex ● update v0.3.0 → v0.4.0",
     ],
   },

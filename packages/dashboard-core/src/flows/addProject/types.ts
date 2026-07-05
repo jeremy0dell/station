@@ -78,6 +78,7 @@ export type CreateAddProjectFlowInput = {
 
 export type AddProjectFlowAction =
   | { type: "move"; delta: number }
+  | { type: "select"; index: number }
   | { type: "startOpen" }
   | { type: "chooseOpen" }
   | { type: "chooseParent" }

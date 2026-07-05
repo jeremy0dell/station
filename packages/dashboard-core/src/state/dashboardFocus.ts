@@ -50,18 +50,28 @@ export function focusNextNeedsMe(state: TuiState): TuiState {
 }
 
 export function activateFocusedDashboardRow(state: TuiState): TuiTransition {
+  const row = focusedSelectableRow(state);
+  return row === undefined ? { state } : activateDashboardRow(state, row);
+}
+
+/**
+ * The focused row only when it is currently committable: present in the filtered
+ * view (not collapsed or searched away) and not mid-operation. The choose-row
+ * trio's ↵ resolves through this so it cannot act on a row the slot path and
+ * dashboard activation both refuse — a pending row, or one scrolled/filtered
+ * out of sight.
+ */
+export function focusedSelectableRow(state: TuiState): WorktreeRow | undefined {
   if (state.snapshot === undefined) {
-    return { state };
+    return undefined;
   }
   const items = selectDashboardItems(state.snapshot, state);
   const index = focusedItemIndex(items, state);
   const item = index === undefined ? undefined : (items[index] as WorktreeItem);
-  // Pending rows mirror the slot-key rule: no activation while an operation is
-  // already in flight for the row.
   if (item === undefined || item.pendingRemove !== undefined || item.pendingStart !== undefined) {
-    return { state };
+    return undefined;
   }
-  return activateDashboardRow(state, item.row);
+  return item.row;
 }
 
 export function rowNeedsYou(row: WorktreeRow): boolean {

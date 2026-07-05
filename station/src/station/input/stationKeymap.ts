@@ -134,6 +134,21 @@ export function editableTextBindings(
   ];
 }
 
+/**
+ * The ↑↓/↵/slot binding block for a list migrated onto the shared selection
+ * engine — the station-side mirror of dashboard-core's selectableListBindings.
+ * The engine (not this table) owns dispatch; these document the keys for the
+ * coverage test, help overlay, and mouse chrome.
+ */
+export function selectableListBindings(prefix: string): readonly StationBinding[] {
+  return [
+    { id: `${prefix}.cursorUp`, pattern: { kind: "named", named: "up" }, action: `${prefix}.cursorUp`, outcome: "handled" },
+    { id: `${prefix}.cursorDown`, pattern: { kind: "named", named: "down" }, action: `${prefix}.cursorDown`, outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: `${prefix}.activate`, pattern: { kind: "named", named: "return" }, action: `${prefix}.activate`, outcome: "handled", help: { keys: "↵", label: "choose" } },
+    { id: `${prefix}.slot`, pattern: { kind: "slot" }, action: `${prefix}.slot`, outcome: "handled", help: { keys: "1-9 a-z", label: "jump to item" } },
+  ];
+}
+
 export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]> = {
   dashboard: [
     { id: "station.dashboard.focusUp", pattern: { kind: "named", named: "up" }, action: "station.focus.up", outcome: "handled" },
@@ -172,17 +187,18 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   projectCollapse: [
     { id: "station.collapse.cancel", pattern: { kind: "named", named: "escape" }, action: "station.collapse.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.collapse.toggleSlot", pattern: { kind: "slot" }, action: "station.collapse.toggleSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "toggle project" } },
+    ...selectableListBindings("station.collapse"),
   ],
   projectSettingsPicker: [
     { id: "station.projectSettingsPicker.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectSettings.pickerCancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.projectSettingsPicker.choose", pattern: { kind: "slot" }, action: "station.projectSettings.pick", outcome: "handled", help: { keys: "1-9 a-z", label: "open settings" } },
+    ...selectableListBindings("station.projectSettingsPicker"),
   ],
   removeChooseSlot: [
     { id: "station.remove.cancel", pattern: { kind: "named", named: "escape" }, action: "station.remove.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.remove.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.remove.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
-    { id: "station.remove.chooseSlot", pattern: { kind: "slot" }, action: "station.remove.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose row" } },
+    { id: "station.remove.focusUp", pattern: { kind: "named", named: "up" }, action: "station.remove.focus", outcome: "handled" },
+    { id: "station.remove.focusDown", pattern: { kind: "named", named: "down" }, action: "station.remove.focus", outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: "station.remove.activate", pattern: { kind: "named", named: "return" }, action: "station.remove.activate", outcome: "handled", help: { keys: "↵", label: "choose row" } },
+    { id: "station.remove.chooseSlot", pattern: { kind: "slot" }, action: "station.remove.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "jump to row" } },
   ],
   removeConfirm: [
     { id: "station.removeConfirm.cancelEsc", pattern: { kind: "named", named: "escape" }, action: "station.remove.cancel", outcome: "handled", help: { keys: "N/esc/enter", label: "cancel" } },
@@ -214,9 +230,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   renameChooseSlot: [
     { id: "station.rename.cancel", pattern: { kind: "named", named: "escape" }, action: "station.rename.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.rename.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.rename.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
-    { id: "station.rename.chooseSlot", pattern: { kind: "slot" }, action: "station.rename.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose row" } },
+    { id: "station.rename.focusUp", pattern: { kind: "named", named: "up" }, action: "station.rename.focus", outcome: "handled" },
+    { id: "station.rename.focusDown", pattern: { kind: "named", named: "down" }, action: "station.rename.focus", outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: "station.rename.activate", pattern: { kind: "named", named: "return" }, action: "station.rename.activate", outcome: "handled", help: { keys: "↵", label: "choose row" } },
+    { id: "station.rename.chooseSlot", pattern: { kind: "slot" }, action: "station.rename.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "jump to row" } },
   ],
   renameEdit: [
     { id: "station.renameEdit.back", pattern: { kind: "named", named: "escape" }, action: "station.rename.back", outcome: "handled", help: { keys: "esc", label: "back" } },
@@ -225,9 +242,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   forkChooseSlot: [
     { id: "station.fork.cancel", pattern: { kind: "named", named: "escape" }, action: "station.fork.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.fork.scrollUp", pattern: { kind: "named", named: "up" }, action: "station.view.scrollUp", outcome: "handled" },
-    { id: "station.fork.scrollDown", pattern: { kind: "named", named: "down" }, action: "station.view.scrollDown", outcome: "handled" },
-    { id: "station.fork.chooseSlot", pattern: { kind: "slot" }, action: "station.fork.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "choose source" } },
+    { id: "station.fork.focusUp", pattern: { kind: "named", named: "up" }, action: "station.fork.focus", outcome: "handled" },
+    { id: "station.fork.focusDown", pattern: { kind: "named", named: "down" }, action: "station.fork.focus", outcome: "handled", help: { keys: "↑↓", label: "move cursor" } },
+    { id: "station.fork.activate", pattern: { kind: "named", named: "return" }, action: "station.fork.activate", outcome: "handled", help: { keys: "↵", label: "choose source" } },
+    { id: "station.fork.chooseSlot", pattern: { kind: "slot" }, action: "station.fork.chooseSlot", outcome: "handled", help: { keys: "1-9 a-z", label: "jump to source" } },
   ],
   forkDetails: [
     { id: "station.forkDetails.back", pattern: { kind: "named", named: "escape" }, action: "station.fork.back", outcome: "handled", help: { keys: "esc", label: "back" } },
@@ -250,15 +268,15 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   newSessionPickProject: [
     { id: "station.newSessionProject.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.newSessionProject.choose", pattern: { kind: "slot" }, action: "station.newSession.chooseProject", outcome: "handled", help: { keys: "1-9 a-z", label: "choose project" } },
+    ...selectableListBindings("station.newSessionProject"),
   ],
   newSessionPickAgent: [
     { id: "station.newSessionAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.newSessionAgent.choose", pattern: { kind: "slot" }, action: "station.newSession.chooseAgent", outcome: "handled", help: { keys: "1-9 a-z", label: "choose agent" } },
+    ...selectableListBindings("station.newSessionAgent"),
   ],
   projectDefaultAgent: [
     { id: "station.projectDefaultAgent.cancel", pattern: { kind: "named", named: "escape" }, action: "station.projectDefaultAgent.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.projectDefaultAgent.choose", pattern: { kind: "slot" }, action: "station.projectDefaultAgent.choose", outcome: "handled", help: { keys: "1-9 a-z", label: "choose agent" } },
+    ...selectableListBindings("station.projectDefaultAgent"),
   ],
   // The add-project flow has internal modes (start/choose/review/success/
   // failed, with a slash filter and a name editor); this single table covers

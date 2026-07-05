@@ -8,6 +8,7 @@ import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildCreateSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { addPendingCreateSessionRow } from "../localRows.js";
+import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
@@ -40,7 +41,7 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
     return submitNewSession(state);
   }
 
-  const flow = transitionNewSessionFlow(state.screen.flow, state.snapshot, intent.action);
+  const flow = transitionNewSessionFlow(state.screen.flow, intent.action);
   if (flow === undefined) {
     return {
       state: {
@@ -51,10 +52,10 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
   }
 
   return {
-    state: {
+    state: seedNewSessionPickerCursor({
       ...state,
       screen: { name: "newSession", flow },
-    },
+    }),
   };
 }
 

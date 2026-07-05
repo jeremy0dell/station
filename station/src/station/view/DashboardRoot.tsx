@@ -36,6 +36,7 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
   const collapsedProjectIds = useStore(store, (state) => state.collapsedProjectIds);
   const scrollOffset = useStore(store, (state) => state.scrollOffset);
   const focusedRowId = useStore(store, (state) => state.focusedRowId);
+  const selection = useStore(store, (state) => state.selection);
   const localRows = useStore(store, (state) => state.localRows);
   const liveWidgets = useStore(store, (state) => state.widgets);
   const widgetsPersisted = useStore(store, (state) => state.widgetsPersisted);
@@ -112,6 +113,7 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
           scrollOffset,
           terminalRows: rows,
           localRows,
+          selection,
           ...(focusedRowId === undefined ? {} : { focusedRowId }),
         }}
         columns={columns}
@@ -121,6 +123,7 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
       <OverlayHostView
         snapshot={snapshot}
         screen={screen}
+        selection={selection}
         columns={columns}
         rows={rows}
         localRows={localRows}

@@ -1,5 +1,6 @@
 import { SELECTION_KEYS, type SelectionKey } from "../selectors/selectors.js";
 import type { TuiKey } from "./keys.js";
+import { selectableListBindings } from "./selection/bindings.js";
 import type { TuiState } from "./types.js";
 
 export type TuiInputMode =
@@ -337,13 +338,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.collapse.toggleSlot",
-      pattern: { kind: "slot" },
-      action: "tui.collapse.toggleSlot",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "toggle project" },
-    },
+    ...selectableListBindings("tui.collapse"),
   ],
   projectSettingsPicker: [
     {
@@ -353,13 +348,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.projectSettingsPicker.choose",
-      pattern: { kind: "slot" },
-      action: "tui.projectSettings.pick",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "open settings" },
-    },
+    ...selectableListBindings("tui.projectSettingsPicker"),
   ],
   removeChooseSlot: [
     {
@@ -370,23 +359,31 @@ export const TUI_KEYMAP = {
       help: { keys: "esc", label: "cancel" },
     },
     {
-      id: "tui.remove.scrollUp",
+      id: "tui.remove.focusUp",
       pattern: { kind: "named", named: "up" },
-      action: "tui.view.scrollUp",
+      action: "tui.remove.focus",
       outcome: "handled",
     },
     {
-      id: "tui.remove.scrollDown",
+      id: "tui.remove.focusDown",
       pattern: { kind: "named", named: "down" },
-      action: "tui.view.scrollDown",
+      action: "tui.remove.focus",
       outcome: "handled",
+      help: { keys: "↑↓", label: "move cursor" },
+    },
+    {
+      id: "tui.remove.activate",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.remove.activate",
+      outcome: "handled",
+      help: { keys: "↵", label: "choose row" },
     },
     {
       id: "tui.remove.chooseSlot",
       pattern: { kind: "slot" },
       action: "tui.remove.chooseSlot",
       outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose row" },
+      help: { keys: "1-9 a-z", label: "jump to row" },
     },
   ],
   removeConfirm: [
@@ -450,23 +447,31 @@ export const TUI_KEYMAP = {
       help: { keys: "esc", label: "cancel" },
     },
     {
-      id: "tui.rename.scrollUp",
+      id: "tui.rename.focusUp",
       pattern: { kind: "named", named: "up" },
-      action: "tui.view.scrollUp",
+      action: "tui.rename.focus",
       outcome: "handled",
     },
     {
-      id: "tui.rename.scrollDown",
+      id: "tui.rename.focusDown",
       pattern: { kind: "named", named: "down" },
-      action: "tui.view.scrollDown",
+      action: "tui.rename.focus",
       outcome: "handled",
+      help: { keys: "↑↓", label: "move cursor" },
+    },
+    {
+      id: "tui.rename.activate",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.rename.activate",
+      outcome: "handled",
+      help: { keys: "↵", label: "choose row" },
     },
     {
       id: "tui.rename.chooseSlot",
       pattern: { kind: "slot" },
       action: "tui.rename.chooseSlot",
       outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose row" },
+      help: { keys: "1-9 a-z", label: "jump to row" },
     },
   ],
   renameEdit: [
@@ -495,23 +500,31 @@ export const TUI_KEYMAP = {
       help: { keys: "esc", label: "cancel" },
     },
     {
-      id: "tui.fork.scrollUp",
+      id: "tui.fork.focusUp",
       pattern: { kind: "named", named: "up" },
-      action: "tui.view.scrollUp",
+      action: "tui.fork.focus",
       outcome: "handled",
     },
     {
-      id: "tui.fork.scrollDown",
+      id: "tui.fork.focusDown",
       pattern: { kind: "named", named: "down" },
-      action: "tui.view.scrollDown",
+      action: "tui.fork.focus",
       outcome: "handled",
+      help: { keys: "↑↓", label: "move cursor" },
+    },
+    {
+      id: "tui.fork.activate",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.fork.activate",
+      outcome: "handled",
+      help: { keys: "↵", label: "choose source" },
     },
     {
       id: "tui.fork.chooseSlot",
       pattern: { kind: "slot" },
       action: "tui.fork.chooseSlot",
       outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose source" },
+      help: { keys: "1-9 a-z", label: "jump to source" },
     },
   ],
   forkDetails: [
@@ -609,13 +622,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.newSessionProject.choose",
-      pattern: { kind: "slot" },
-      action: "tui.newSession.chooseProject",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose project" },
-    },
+    ...selectableListBindings("tui.newSessionProject"),
   ],
   newSessionPickAgent: [
     {
@@ -625,13 +632,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.newSessionAgent.choose",
-      pattern: { kind: "slot" },
-      action: "tui.newSession.chooseAgent",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose agent" },
-    },
+    ...selectableListBindings("tui.newSessionAgent"),
   ],
   projectDefaultAgent: [
     {
@@ -641,13 +642,7 @@ export const TUI_KEYMAP = {
       outcome: "handled",
       help: { keys: "esc", label: "cancel" },
     },
-    {
-      id: "tui.projectDefaultAgent.choose",
-      pattern: { kind: "slot" },
-      action: "tui.projectDefaultAgent.choose",
-      outcome: "handled",
-      help: { keys: "1-9 a-z", label: "choose agent" },
-    },
+    ...selectableListBindings("tui.projectDefaultAgent"),
   ],
   // One action; the widgetSettings screen handler decodes list-vs-picker focus.
   widgetSettings: [

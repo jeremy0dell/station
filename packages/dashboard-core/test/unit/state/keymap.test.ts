@@ -19,14 +19,26 @@ const ALLOWED_NOOP_BINDINGS = new Set([
   // Slot bindings cover the full accelerator range; assigned slots depend on
   // the current viewport, selected picker, and row data.
   "tui.dashboard.slotActivate",
-  "tui.collapse.toggleSlot",
-  "tui.projectSettingsPicker.choose",
+  "tui.collapse.slot",
+  "tui.collapse.cursorUp",
+  "tui.projectSettingsPicker.slot",
+  "tui.projectSettingsPicker.cursorUp",
   "tui.remove.chooseSlot",
   "tui.rename.chooseSlot",
   "tui.fork.chooseSlot",
-  "tui.newSessionProject.choose",
-  "tui.newSessionAgent.choose",
-  "tui.projectDefaultAgent.choose",
+  // Return commits the focused row; with no cursor yet in the representative
+  // state it is a no-op, exactly like tui.dashboard.focusActivate.
+  "tui.remove.activate",
+  "tui.rename.activate",
+  "tui.fork.activate",
+  "tui.newSessionProject.slot",
+  "tui.newSessionAgent.slot",
+  "tui.projectDefaultAgent.slot",
+  // Selection lists seed at the current choice, which is the top row in the
+  // fixtures, so ↑ clamps to a real no-op in the representative state.
+  "tui.projectDefaultAgent.cursorUp",
+  "tui.newSessionProject.cursorUp",
+  "tui.newSessionAgent.cursorUp",
   // Add-project metadata is a union over its internal submodes.
   "tui.addProject.cancel",
   "tui.addProject.confirm",
