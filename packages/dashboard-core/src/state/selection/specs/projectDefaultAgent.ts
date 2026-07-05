@@ -1,9 +1,8 @@
 import type { ProviderId } from "@station/contracts";
-import { selectNewSessionHarnessChoices } from "../../../selectors/selectors.js";
 import { buildSetProjectDefaultHarnessCommand } from "../../commandBuilders.js";
 import type { TuiTransition } from "../../transition.js";
 import type { TuiState } from "../../types.js";
-import { flatPickerSpec } from "../flatPicker.js";
+import { harnessPickerSpec } from "./harnessPicker.js";
 
 function toDashboard(state: TuiState): TuiState {
   return { ...state, screen: { name: "dashboard" } };
@@ -29,21 +28,14 @@ function commitProjectDefaultAgent(state: TuiState, harness: ProviderId): TuiTra
   };
 }
 
-export const projectDefaultAgentListSpec = flatPickerSpec<ProviderId>({
+export const projectDefaultAgentListSpec = harnessPickerSpec({
   listId: "projectDefaultAgent",
-  choices: (state) => {
-    if (state.screen.name !== "projectDefaultAgent" || state.snapshot === undefined) {
-      return [];
+  resolveProject: (snapshot, state) => {
+    if (state.screen.name !== "projectDefaultAgent") {
+      return undefined;
     }
     const { projectId } = state.screen;
-    const project = state.snapshot.projects.find((candidate) => candidate.id === projectId);
-    if (project === undefined) {
-      return [];
-    }
-    return selectNewSessionHarnessChoices(state.snapshot, project).map((choice) => ({
-      key: choice.key,
-      value: choice.value.id,
-    }));
+    return snapshot.projects.find((candidate) => candidate.id === projectId);
   },
   commit: commitProjectDefaultAgent,
 });

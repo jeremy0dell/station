@@ -1,16 +1,16 @@
-import type { ProjectId, ProviderId } from "@station/contracts";
+import type { ProjectId } from "@station/contracts";
 import {
   chooseNewSessionAgentById,
   chooseNewSessionProjectById,
   createNewSessionNameToken,
 } from "../../../flows/newSession.js";
 import {
-  selectNewSessionHarnessChoices,
   selectNewSessionProject,
   selectNewSessionProjectChoices,
 } from "../../../selectors/selectors.js";
 import type { TuiState } from "../../types.js";
 import { flatPickerSpec } from "../flatPicker.js";
+import { harnessPickerSpec } from "./harnessPicker.js";
 
 export const newSessionPickProjectListSpec = flatPickerSpec<ProjectId>({
   listId: "newSessionPickProject",
@@ -45,24 +45,13 @@ export const newSessionPickProjectListSpec = flatPickerSpec<ProjectId>({
   },
 });
 
-export const newSessionPickAgentListSpec = flatPickerSpec<ProviderId>({
+export const newSessionPickAgentListSpec = harnessPickerSpec({
   listId: "newSessionPickAgent",
-  choices: (state) => {
-    if (
-      state.screen.name !== "newSession" ||
-      state.screen.flow.mode !== "pickAgent" ||
-      state.snapshot === undefined
-    ) {
-      return [];
+  resolveProject: (snapshot, state) => {
+    if (state.screen.name !== "newSession" || state.screen.flow.mode !== "pickAgent") {
+      return undefined;
     }
-    const project = selectNewSessionProject(state.snapshot, state.screen.flow.selectedProjectId);
-    if (project === undefined) {
-      return [];
-    }
-    return selectNewSessionHarnessChoices(state.snapshot, project).map((choice) => ({
-      key: choice.key,
-      value: choice.value.id,
-    }));
+    return selectNewSessionProject(snapshot, state.screen.flow.selectedProjectId);
   },
   commit: (state, agentId) => {
     if (
