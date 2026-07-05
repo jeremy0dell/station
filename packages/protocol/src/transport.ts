@@ -65,7 +65,6 @@ export async function listenUnixSocket(
   options: ListenUnixSocketOptions,
 ): Promise<UnixSocketServer> {
   await ensureSocketDirectory(options.socketPath);
-  await removeStaleSocket(options.socketPath);
 
   const sockets = new Set<Socket>();
 
@@ -78,19 +77,7 @@ export async function listenUnixSocket(
     void options.onConnection(connection);
   });
 
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve();
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen(options.socketPath);
-  });
+  await bindWithStaleReclaim(server, options.socketPath);
 
   try {
     await chmod(options.socketPath, 0o600);
@@ -102,6 +89,42 @@ export async function listenUnixSocket(
     socketPath: options.socketPath,
     close: () => closeServer(server, options.socketPath, sockets),
   };
+}
+
+// Claims the socket path by binding, never by pre-emptively unlinking. A stale
+// file is removed only after a bind fails AND a reconnect confirms nobody is
+// listening — so a socket that another observer is actively serving is never
+// unlinked out from under it (the check-then-unlink race this replaces).
+async function bindWithStaleReclaim(server: Server, socketPath: string): Promise<void> {
+  try {
+    await listenOnce(server, socketPath);
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+      throw error;
+    }
+    if (!(await isSocketStale(socketPath))) {
+      throw error; // a live server owns it — we lost the race
+    }
+    await unlink(socketPath);
+    await listenOnce(server, socketPath); // retry once; a fresh EADDRINUSE now surfaces
+  }
+}
+
+function listenOnce(server: Server, socketPath: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(socketPath);
+  });
 }
 
 export function connectUnixSocket(
