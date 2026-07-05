@@ -379,7 +379,6 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
- [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │                                                                              │
@@ -387,7 +386,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Name       station-XXXXXX                                                    │
 │ Agent      codex unknown                                                     │
 │                                                                              │
-│ Enter:create N:name P:project A:agent Esc:cancel                             │
+│▸ Create session                                                              │
+│ ↑↓ field  ↵ choose  N/P/A  Esc:cancel                                        │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

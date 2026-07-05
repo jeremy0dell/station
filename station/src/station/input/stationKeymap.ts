@@ -256,7 +256,9 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
   ],
   newSessionReview: [
     { id: "station.newSession.cancel", pattern: { kind: "named", named: "escape" }, action: "station.newSession.cancel", outcome: "handled", help: { keys: "esc", label: "cancel" } },
-    { id: "station.newSession.create", pattern: { kind: "named", named: "return" }, action: "station.newSession.submit", outcome: "handled", help: { keys: "enter", label: "create" } },
+    { id: "station.newSession.reviewFocusUp", pattern: { kind: "named", named: "up" }, action: "station.newSession.reviewFocus", outcome: "handled" },
+    { id: "station.newSession.reviewFocusDown", pattern: { kind: "named", named: "down" }, action: "station.newSession.reviewFocus", outcome: "handled", help: { keys: "↑↓", label: "field" } },
+    { id: "station.newSession.create", pattern: { kind: "named", named: "return" }, action: "station.newSession.submit", outcome: "handled", help: { keys: "↵", label: "choose field" } },
     { id: "station.newSession.editName", pattern: { kind: "char", char: "N" }, action: "station.newSession.editName", outcome: "handled", help: { keys: "N", label: "name" } },
     { id: "station.newSession.pickProject", pattern: { kind: "char", char: "P" }, action: "station.newSession.pickProject", outcome: "handled", help: { keys: "P", label: "project" } },
     { id: "station.newSession.pickAgent", pattern: { kind: "char", char: "A" }, action: "station.newSession.pickAgent", outcome: "handled", help: { keys: "A", label: "agent" } },

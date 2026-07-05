@@ -250,7 +250,13 @@ export type NewSessionSubmitTarget =
  */
 export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSubmitTarget {
   const state = store.getState();
-  if (state.screen.name !== "newSession" || state.screen.flow.mode !== "review") {
+  if (
+    state.screen.name !== "newSession" ||
+    state.screen.flow.mode !== "review" ||
+    // ↵ only submits when the review focus ring is on "create"; on any other
+    // field it must reach the machine so ↵ opens that field's step instead.
+    state.screen.flow.reviewFocus !== "create"
+  ) {
     return { kind: "none" };
   }
   if (state.snapshot === undefined) {

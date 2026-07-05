@@ -572,11 +572,24 @@ export const TUI_KEYMAP = {
       help: { keys: "esc", label: "cancel" },
     },
     {
+      id: "tui.newSession.reviewFocusUp",
+      pattern: { kind: "named", named: "up" },
+      action: "tui.newSession.reviewFocus",
+      outcome: "handled",
+    },
+    {
+      id: "tui.newSession.reviewFocusDown",
+      pattern: { kind: "named", named: "down" },
+      action: "tui.newSession.reviewFocus",
+      outcome: "handled",
+      help: { keys: "↑↓", label: "field" },
+    },
+    {
       id: "tui.newSession.create",
       pattern: { kind: "named", named: "return" },
       action: "tui.newSession.submit",
       outcome: "handled",
-      help: { keys: "enter", label: "create" },
+      help: { keys: "↵", label: "choose field" },
     },
     {
       id: "tui.newSession.editName",

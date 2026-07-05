@@ -27,8 +27,23 @@ type NewSessionBaseState = StepWizardState<NewSessionStep> & {
   nameSource: NewSessionNameSource;
 };
 
+/** The review menu's focus ring — which field ↵ acts on. */
+export type NewSessionReviewFocus = "name" | "project" | "agent" | "create";
+
+// Traversal order matches the review's top-to-bottom render (Project, Name,
+// Agent, then the Create action).
+const REVIEW_FIELDS: readonly NewSessionReviewFocus[] = ["project", "name", "agent", "create"];
+
+function cycleReviewFocus(current: NewSessionReviewFocus, dir: -1 | 1): NewSessionReviewFocus {
+  const index = REVIEW_FIELDS.indexOf(current);
+  const next = (index + dir + REVIEW_FIELDS.length) % REVIEW_FIELDS.length;
+  return REVIEW_FIELDS[next] ?? current;
+}
+
 export type NewSessionReviewState = NewSessionBaseState & {
   mode: "review";
+  /** Default "create" so ↵ still creates, preserving today's muscle memory. */
+  reviewFocus: NewSessionReviewFocus;
 };
 
 export type NewSessionEditNameState = NewSessionBaseState & {
@@ -56,6 +71,7 @@ export type NewSessionFlowAction =
   | { type: "commitName" }
   | { type: "pickProject" }
   | { type: "pickAgent" }
+  | { type: "reviewFocus"; dir: -1 | 1 }
   | { type: "cancel" };
 
 export type NewSessionInputKey = {
@@ -118,6 +134,7 @@ export function createNewSessionFlow(
   }
   return {
     ...createStepWizardState("review"),
+    reviewFocus: "create",
     selectedProjectId: project.id,
     selectedHarness: harness.id,
     branch: generatedSessionBranch(project.id, token),
@@ -154,6 +171,10 @@ export function transitionNewSessionFlow(
       return {
         ...enterWizardStep(baseState(state), "pickAgent"),
       } satisfies NewSessionPickAgentState;
+    case "reviewFocus":
+      return state.mode === "review"
+        ? { ...state, reviewFocus: cycleReviewFocus(state.reviewFocus, action.dir) }
+        : state;
   }
 }
 
@@ -166,7 +187,7 @@ export function newSessionIntentForInput(
   }
   switch (state.mode) {
     case "review":
-      return reviewInputIntent(input);
+      return reviewInputIntent(state, input);
     case "editName":
       return editNameInputIntent(input);
     // Pick steps are registered lists: the shared selectionMiddleware resolves
@@ -255,12 +276,29 @@ export function createNewSessionNameToken(unique = randomUUID()): string {
   return stableNameHash(["new-session", unique], 6);
 }
 
-function reviewInputIntent(input: NewSessionInput): NewSessionInputIntent {
+function reviewInputIntent(
+  state: NewSessionReviewState,
+  input: NewSessionInput,
+): NewSessionInputIntent {
+  if (input.key.upArrow === true) {
+    return transitionIntent({ type: "reviewFocus", dir: -1 });
+  }
+  if (input.key.downArrow === true) {
+    return transitionIntent({ type: "reviewFocus", dir: 1 });
+  }
   if (isReturn(input)) {
-    return { type: "submit" };
+    return reviewFocusIntents[state.reviewFocus];
   }
   return reviewKeyIntents[input.input] ?? { type: "none" };
 }
+
+// ↵ activates the focused field; "create" submits, the rest open their step.
+const reviewFocusIntents: Record<NewSessionReviewFocus, NewSessionInputIntent> = {
+  create: { type: "submit" },
+  name: transitionIntent({ type: "editName" }),
+  project: transitionIntent({ type: "pickProject" }),
+  agent: transitionIntent({ type: "pickAgent" }),
+};
 
 const reviewKeyIntents: Record<string, NewSessionInputIntent> = {
   N: transitionIntent({ type: "editName" }),
@@ -296,6 +334,7 @@ function commitEditedName(state: NewSessionEditNameState): NewSessionReviewState
   }
   return {
     ...resetWizardStep(baseState(state), "review"),
+    reviewFocus: "create",
     selectedProjectId: state.selectedProjectId,
     selectedHarness: state.selectedHarness,
     branch,
@@ -329,6 +368,7 @@ function applyChosenProject(
   }
   return {
     ...resetWizardStep(baseState(state), "review"),
+    reviewFocus: "create",
     selectedProjectId: project.id,
     selectedHarness: harness.id,
     branch:
@@ -360,6 +400,7 @@ export function chooseNewSessionAgentById(
   }
   return {
     ...resetWizardStep(baseState(state), "review"),
+    reviewFocus: "create",
     selectedProjectId: state.selectedProjectId,
     selectedHarness: option.id,
     branch: state.branch,
@@ -378,6 +419,7 @@ function cancelNewSessionStep(state: NewSessionFlowState): NewSessionReviewState
 function toReviewState(state: NewSessionBaseState): NewSessionReviewState {
   return {
     ...resetWizardStep(baseState(state), "review"),
+    reviewFocus: "create",
   };
 }
 

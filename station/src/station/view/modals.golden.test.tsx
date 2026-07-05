@@ -118,7 +118,7 @@ const CASES: ModalCase[] = [
   {
     name: "new session review",
     keys: [{ input: "N" }],
-    expect: ["Create Session", "Project", "Agent", "Enter:create N:name P:project A:agent Esc:cancel"],
+    expect: ["Create Session", "Project", "Agent", "Create session", "↑↓ field  ↵ choose  N/P/A  Esc:cancel"],
   },
   {
     name: "new session edit name",

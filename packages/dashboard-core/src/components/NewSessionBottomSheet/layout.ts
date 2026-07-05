@@ -30,5 +30,6 @@ export function newSessionContentRowCount(state: NewSessionFlowState, optionCoun
   if (state.mode === "editName") {
     return 6;
   }
-  return 7;
+  // review: leading blank + Project/Name/Agent + blank + Create row + footer.
+  return 8;
 }

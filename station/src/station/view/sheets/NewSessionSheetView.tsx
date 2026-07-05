@@ -21,6 +21,7 @@ import { providerHealthStatusColor, STATION_COLORS } from "../theme.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import {
+  fit,
   SheetChoiceLine,
   SheetFooter,
   SheetLabelValue,
@@ -117,15 +118,23 @@ function Review({
 }) {
   const harness =
     project === undefined ? undefined : selectedHarnessOption(snapshot, project, state);
+  const focus = state.mode === "review" ? state.reviewFocus : "create";
   return (
     <>
       <SheetLine width={width}> </SheetLine>
-      <SheetLabelValue width={width} label="Project" labelWidth={10} value={project?.label ?? "-"} />
+      <SheetLabelValue
+        width={width}
+        label="Project"
+        labelWidth={10}
+        value={project?.label ?? "-"}
+        focused={focus === "project"}
+      />
       <SheetLabelValue
         width={width}
         label="Name"
         labelWidth={10}
         value={state.branch}
+        focused={focus === "name"}
         {...(state.nameSource === "generated" ? { valueColor: STATION_COLORS.gray } : {})}
       />
       <SheetLabelValue
@@ -133,10 +142,14 @@ function Review({
         label="Agent"
         labelWidth={10}
         value={harness === undefined ? state.selectedHarness : `${harness.label} ${harness.status}`}
+        focused={focus === "agent"}
         {...colorProp(providerHealthStatusColor(harness?.status))}
       />
       <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"Enter:create N:name P:project A:agent Esc:cancel"}</SheetFooter>
+      <text fg={focus === "create" ? STATION_COLORS.cyan : STATION_COLORS.foreground}>
+        {fit(`${focus === "create" ? "▸" : " "} Create session`, width)}
+      </text>
+      <SheetFooter width={width}>{"↑↓ field  ↵ choose  N/P/A  Esc:cancel"}</SheetFooter>
     </>
   );
 }

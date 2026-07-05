@@ -23,25 +23,33 @@ export function SheetLabelValue({
   labelWidth = 15,
   value,
   valueColor,
+  focused = false,
 }: {
   width: number;
   label: string;
   labelWidth?: number;
   value: string | ReactNode;
   valueColor?: string;
+  /** Marks the row under a focus ring — a ▸ marker + cyan label instead of dim. */
+  focused?: boolean;
 }) {
-  const labelText = ` ${label.padEnd(labelWidth)} `;
+  const labelText = `${focused ? "▸" : " "}${label.padEnd(labelWidth)} `;
+  const labelSpan = focused ? (
+    <span fg={STATION_COLORS.cyan}>{labelText}</span>
+  ) : (
+    <span attributes={TextAttributes.DIM}>{labelText}</span>
+  );
   if (isValidElement(value)) {
     return (
       <text fg={STATION_COLORS.foreground}>
-        <span attributes={TextAttributes.DIM}>{labelText}</span>
+        {labelSpan}
         {value}
       </text>
     );
   }
   return (
     <text fg={STATION_COLORS.foreground}>
-      <span attributes={TextAttributes.DIM}>{labelText}</span>
+      {labelSpan}
       <span {...(valueColor === undefined ? {} : { fg: valueColor })}>
         {fit(String(value), Math.max(1, width - labelText.length))}
       </span>
