@@ -7,6 +7,13 @@ reads it, where it lives, and how to relocate it.
 
 If you only ever edit one thing, it is `~/.config/station/config.toml`.
 
+If that default file does not exist yet, `stn` and its `tui`/`popup` launch
+routes use in-memory first-run defaults, ensure the observer, and show the
+existing empty-state UI. They do not create a config file; `stn setup` remains
+the writer. This exception applies only to the implicit default path: a missing
+explicit `--config`, an unreadable file, malformed TOML, or invalid config still
+stops launch with an error.
+
 > The annotated `examples/config.toml` is the copy-paste starting point;
 > `examples/project-local-config.toml` shows the project-local file. This page is
 > the field-by-field reference.

@@ -1,4 +1,4 @@
-import type { ConfigDiagnostic, StationConfig } from "@station/config";
+import { type ConfigDiagnostic, emptyConfig, type StationConfig } from "@station/config";
 import type {
   CommandId,
   CommandRecord,
@@ -47,7 +47,6 @@ import {
 import type { ObserverPersistence } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
-import { emptyConfig } from "./emptyConfig.js";
 import type { ObserverEventBus } from "./eventBus.js";
 import {
   type ExternalLaunchDeps,

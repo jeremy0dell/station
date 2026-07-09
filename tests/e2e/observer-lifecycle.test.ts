@@ -1,10 +1,53 @@
+import { access } from "node:fs/promises";
+import { join } from "node:path";
 import { startObserver } from "@station/cli";
+import { emptyConfig } from "@station/config";
 import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 import { waitForSocketClosed } from "../support/sockets";
 import { createTempState, writeConfigToml } from "../support/temp-projects";
 
 describe("observer lifecycle e2e", () => {
+  it("boots a real observer with in-memory defaults and no config file", async () => {
+    const fixture = await createTempState();
+    const config = {
+      ...emptyConfig(),
+      observer: {
+        stateDir: fixture.stateDir,
+        socketPath: fixture.socketPath,
+      },
+    };
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    let started = false;
+
+    try {
+      const status = await startObserver({ config, timeoutMs: 30_000 });
+      expect(status).toMatchObject({
+        status: "running",
+        paths: { socketPath: fixture.socketPath },
+      });
+      started = true;
+
+      await expect(client.health()).resolves.toMatchObject({
+        status: "healthy",
+        socketPath: fixture.socketPath,
+        stateDir: fixture.stateDir,
+      });
+      await expect(client.getSnapshot()).resolves.toMatchObject({
+        schemaVersion: "0.6.0",
+        counts: { projects: 0 },
+      });
+      await expect(access(join(fixture.root, "config.toml"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      if (started) {
+        await client.stop();
+        await waitForSocketClosed(fixture.socketPath);
+      }
+    }
+  });
+
   it("starts a real observer process, serves protocol requests, and stops cleanly", async () => {
     const fixture = await createTempState();
     const config = {

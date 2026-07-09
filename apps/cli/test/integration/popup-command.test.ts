@@ -1,3 +1,5 @@
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCli } from "@station/cli";
 import {
@@ -13,6 +15,133 @@ const now = "2026-05-20T12:00:00.000Z";
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url)).replace(/\/$/, "");
 
 describe("CLI popup command", () => {
+  it("ensures the observer before opening a config-less first-run popup", async () => {
+    const fixture = await createTempState();
+    const calls: TmuxPopupOptions[] = [];
+    const lifecycle: string[] = [];
+    let running = false;
+    const observerDeps: ObserverProcessDeps = {
+      spawnObserver: async () => {
+        lifecycle.push("observer-spawn");
+        running = true;
+        return { pid: 1234, unref: () => undefined };
+      },
+      clientFactory: () =>
+        ({
+          health: async () => {
+            if (!running) throw new Error("stopped");
+            return {
+              schemaVersion: "0.6.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: "0.0.0",
+            };
+          },
+          reconcile: async () => emptySnapshot("popup-open"),
+        }) as never,
+      sleep: async () => undefined,
+    };
+
+    const result = await withIsolatedHome(fixture.root, () =>
+      runCli([], {
+        observerDeps,
+        popupDeps: {
+          env: { TMUX: "/tmp/tmux-501/default,123,0" },
+          openTmuxPopup: async (options) => {
+            lifecycle.push("popup-open");
+            calls.push(options);
+            return { opened: true };
+          },
+        },
+      }),
+    );
+
+    expect(result).toEqual({ code: 0, output: { opened: true } });
+    expect(lifecycle).toEqual(["observer-spawn", "popup-open"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.tuiCommand).toContain("tui --popup --persistent");
+    expect(calls[0]?.tuiCommand).not.toContain("--config");
+    await expect(access(join(fixture.root, ".config/station/config.toml"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("keeps an explicitly missing popup config as a hard error", async () => {
+    const fixture = await createTempState();
+    const configPath = join(fixture.root, "missing.toml");
+
+    await expect(
+      runCli(["--config", configPath, "popup"], {
+        observerDeps: {
+          spawnObserver: async () => {
+            throw new Error("observer should not start for an explicit missing config");
+          },
+        },
+        popupDeps: {
+          env: { TMUX: "/tmp/tmux-501/default,123,0" },
+          openTmuxPopup: async () => {
+            throw new Error("popup should not open for an explicit missing config");
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "CONFIG_FILE_NOT_FOUND", configPath });
+  });
+
+  it("does not open a first-run popup when the observer fails to start", async () => {
+    const fixture = await createTempState();
+    let popupOpened = false;
+
+    const result = await withIsolatedHome(fixture.root, () =>
+      runCli([], {
+        observerDeps: {
+          spawnObserver: async () => {
+            throw new Error("observer failed to start");
+          },
+          clientFactory: () =>
+            ({
+              health: async () => {
+                throw new Error("stopped");
+              },
+            }) as never,
+        },
+        popupDeps: {
+          env: { TMUX: "/tmp/tmux-501/default,123,0" },
+          openTmuxPopup: async () => {
+            popupOpened = true;
+            return { opened: true };
+          },
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: { status: "unavailable", observer: { status: "unhealthy" } },
+    });
+    expect(popupOpened).toBe(false);
+  });
+
+  it("keeps a malformed implicit popup config as a hard error", async () => {
+    const fixture = await createTempState();
+    const configPath = join(fixture.root, ".config/station/config.toml");
+    await mkdir(join(fixture.root, ".config/station"), { recursive: true });
+    await writeFile(configPath, "not = [valid toml", "utf8");
+
+    await expect(
+      withIsolatedHome(fixture.root, () =>
+        runCli([], {
+          popupDeps: {
+            env: { TMUX: "/tmp/tmux-501/default,123,0" },
+            openTmuxPopup: async () => {
+              throw new Error("popup should not open for malformed config");
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "CONFIG_TOML_PARSE_FAILED", configPath });
+  });
+
   it("delegates popup opening to the tmux integration", async () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
@@ -309,34 +438,53 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
         }),
         reconcile: async (reason: string) => {
           reconciles.push(reason);
-          return {
-            schemaVersion: "0.6.0",
-            reason,
-            reconciledAt: now,
-            snapshot: {
-              schemaVersion: "0.6.0",
-              generatedAt: now,
-              observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
-              providerHealth: {},
-              projects: [],
-              rows: [],
-              sessions: [],
-              counts: {
-                projects: 0,
-                worktrees: 0,
-                agents: 0,
-                working: 0,
-                idle: 0,
-                attention: 0,
-                unknown: 0,
-              },
-              alerts: [],
-            },
-          };
+          return emptySnapshot(reason);
         },
       }) as never,
     sleep: async () => undefined,
   };
+}
+
+function emptySnapshot(reason: string) {
+  return {
+    schemaVersion: "0.6.0",
+    reason,
+    reconciledAt: now,
+    snapshot: {
+      schemaVersion: "0.6.0",
+      generatedAt: now,
+      observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
+      providerHealth: {},
+      projects: [],
+      rows: [],
+      sessions: [],
+      counts: {
+        projects: 0,
+        worktrees: 0,
+        agents: 0,
+        working: 0,
+        idle: 0,
+        attention: 0,
+        unknown: 0,
+      },
+      alerts: [],
+    },
+  };
+}
+
+async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise<T> {
+  const previousHome = process.env.HOME;
+  const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+  process.env.HOME = home;
+  delete process.env.XDG_RUNTIME_DIR;
+  try {
+    return await run();
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+    else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+  }
 }
 
 function nonCompletingReconcileObserverDeps(reconciles: string[]): ObserverProcessDeps {

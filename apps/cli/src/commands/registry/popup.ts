@@ -1,7 +1,13 @@
 import { dirname, join } from "node:path";
+import { emptyConfig } from "@station/config";
 import type { CliEnv } from "../../env.js";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
-import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import type {
+  CliCommandConfigErrorContext,
+  CliCommandNode,
+  CliCommandRunContext,
+} from "../cliCommand/types.js";
+import { isConfigError } from "../configDiagnostics.js";
 import { type PopupCommandDeps, type PopupCommandOptions, runPopupCommand } from "../popup.js";
 
 export const popupCliCommand: CliCommandNode = {
@@ -9,6 +15,7 @@ export const popupCliCommand: CliCommandNode = {
   description: "Open the terminal popup dashboard.",
   requiresConfig: true,
   run: runPopupCliCommand,
+  handleConfigError: handlePopupConfigError,
   usage: ["stn popup [--persistent]"],
   options: [
     {
@@ -19,7 +26,19 @@ export const popupCliCommand: CliCommandNode = {
   examples: ["pnpm stn popup", "pnpm stn popup --persistent"],
 };
 
-async function runPopupCliCommand(context: CliCommandRunContext) {
+async function handlePopupConfigError(error: unknown, context: CliCommandConfigErrorContext) {
+  if (
+    !isConfigError(error) ||
+    error.code !== "CONFIG_FILE_NOT_FOUND" ||
+    context.configPath !== undefined
+  ) {
+    return undefined;
+  }
+  // Keep the resolved path absent so the nested TUI does not receive --config for a missing file.
+  return runPopupCliCommand({ ...context, config: emptyConfig() }, true);
+}
+
+async function runPopupCliCommand(context: CliCommandRunContext, firstRun = false) {
   const popupEnv = context.options.popupDeps?.env ?? context.options.env;
   const defaultPopupEnv = popupEnv ?? process.env;
   const hasExplicitPopupUi =
@@ -43,6 +62,9 @@ async function runPopupCliCommand(context: CliCommandRunContext) {
     popupDeps.observer = context.options.observerDeps;
   }
   const popupOptions: PopupCommandOptions = loadedCommandOptions(context);
+  if (firstRun) {
+    popupOptions.firstRun = true;
+  }
   popupOptions.tuiCommand = tuiCommand;
   if (popupEnv !== undefined) {
     popupOptions.env = popupEnv;

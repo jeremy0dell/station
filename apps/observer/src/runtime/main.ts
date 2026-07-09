@@ -2,7 +2,12 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { type LoadedStationConfig, loadConfig, type StationConfig } from "@station/config";
+import {
+  emptyConfig,
+  type LoadedStationConfig,
+  loadConfig,
+  type StationConfig,
+} from "@station/config";
 import { componentLogPath } from "@station/observability";
 import { type RuntimeClock, stationBuildInfo, systemClock, toIsoTimestamp } from "@station/runtime";
 import { createCommandQueue } from "../commands/queue.js";
@@ -18,7 +23,6 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import { createObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { openObserverSqlite } from "../sqlite.js";
 import { createObserverApi } from "./api.js";
-import { emptyConfig } from "./emptyConfig.js";
 import { createObserverEventBus } from "./eventBus.js";
 import { runShutdownWithBackstop } from "./gracefulExit.js";
 import { createObserverLogger } from "./logging.js";
