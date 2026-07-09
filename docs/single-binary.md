@@ -327,6 +327,9 @@ cycle. Keep `STATION_DASHBOARD_COMMAND` / `STATION_HOST_ENTRY` /
 
 ### B1 — config-tolerant launch
 
+**Status: implemented.** Native and tmux launch routes both ensure the singleton
+observer before presenting their first-run UI.
+
 In-memory defaults, write-on-configure (no auto-written stub — it poisons
 `stn setup`'s clean create path). Lift `emptyConfig` to
 `packages/config/src/firstRun.ts`; add `handleConfigError` hooks on

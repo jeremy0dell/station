@@ -29,6 +29,7 @@ export type PopupCommandDeps = Partial<
 export type PopupCommandOptions = {
   config?: StationConfig;
   configPath?: string;
+  firstRun?: boolean;
   checkoutRoot?: TmuxPopupOptions["checkoutRoot"];
   timeoutMs?: number;
   runner?: TmuxPopupOptions["runner"];
@@ -57,7 +58,10 @@ export async function runPopupCommand(
     throw new Error(`Unknown popup option: ${args[0] ?? ""}`);
   }
 
+  const hasFirstRunConfig = options.firstRun === true && options.config?.projects.length === 0;
+  // A config-less launch has no project terminal to validate; the popup route itself selects tmux.
   if (
+    !hasFirstRunConfig &&
     options.config?.defaults.terminal !== undefined &&
     options.config.defaults.terminal !== "tmux"
   ) {

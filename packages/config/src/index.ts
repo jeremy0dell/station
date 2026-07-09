@@ -1,3 +1,4 @@
+export * from "./firstRun.js";
 export * from "./hooks/index.js";
 export * from "./loadConfig.js";
 export * from "./observerPaths.js";

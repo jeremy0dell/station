@@ -1,6 +1,7 @@
-import { writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { runCli } from "@station/cli";
-import { runTuiCommand } from "@station/cli/internal";
+import { type ObserverProcessDeps, runTuiCommand } from "@station/cli/internal";
 import type { TuiConfig } from "@station/config";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
@@ -51,10 +52,15 @@ function emptySnapshot(reason: string) {
 
 // A running observer whose health check passes once spawned. `reconcile`
 // records its reason (or hangs, to model the non-blocking startup reconcile).
-function runningObserverDeps(options: { reconciles?: string[]; hangReconcile?: boolean } = {}) {
+type SpawnObserverInput = Parameters<NonNullable<ObserverProcessDeps["spawnObserver"]>>[0];
+
+function runningObserverDeps(
+  options: { reconciles?: string[]; hangReconcile?: boolean; spawns?: SpawnObserverInput[] } = {},
+) {
   let running = false;
   return {
-    spawnObserver: async () => {
+    spawnObserver: async (input: SpawnObserverInput) => {
+      options.spawns?.push(input);
       running = true;
       return { pid: 1234, unref: () => undefined };
     },
@@ -83,6 +89,69 @@ function runningObserverDeps(options: { reconciles?: string[]; hangReconcile?: b
 }
 
 describe("CLI tui command", () => {
+  it("launches the native first-run TUI without writing an implicit config", async () => {
+    const fixture = await createTempState();
+    const envs: Array<Record<string, string>> = [];
+    const spawns: SpawnObserverInput[] = [];
+
+    const result = await withIsolatedHome(fixture.root, () =>
+      runCli([], {
+        env: {},
+        observerDeps: runningObserverDeps({ spawns }),
+        tuiDeps: {
+          spawnRenderer: async ({ env }) => {
+            envs.push(env);
+            return { status: "exited", code: 0 };
+          },
+        },
+      }),
+    );
+
+    expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
+    expect(spawns).toEqual([
+      {
+        paths: expect.objectContaining({
+          stateDir: join(fixture.root, ".local/state/station"),
+          socketPath: join(fixture.root, ".local/state/station/run/observer.sock"),
+        }),
+      },
+    ]);
+    expect(envs).toEqual([
+      {
+        STATION_OBSERVER_SOCKET_PATH: join(fixture.root, ".local/state/station/run/observer.sock"),
+      },
+    ]);
+    await expect(access(join(fixture.root, ".config/station/config.toml"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("keeps explicit missing and malformed implicit configs as hard errors", async () => {
+    const fixture = await createTempState();
+    const explicitPath = join(fixture.root, "missing.toml");
+    const observerDeps: ObserverProcessDeps = {
+      spawnObserver: async () => {
+        throw new Error("observer should not start for config errors");
+      },
+    };
+    const tuiDeps = {
+      spawnRenderer: async () => {
+        throw new Error("renderer should not start for config errors");
+      },
+    };
+
+    await expect(
+      runCli(["--config", explicitPath, "tui"], { observerDeps, tuiDeps }),
+    ).rejects.toMatchObject({ code: "CONFIG_FILE_NOT_FOUND", configPath: explicitPath });
+
+    const implicitPath = join(fixture.root, ".config/station/config.toml");
+    await mkdir(join(fixture.root, ".config/station"), { recursive: true });
+    await writeFile(implicitPath, "not = [valid toml", "utf8");
+    await expect(
+      withIsolatedHome(fixture.root, () => runCli([], { env: {}, observerDeps, tuiDeps })),
+    ).rejects.toMatchObject({ code: "CONFIG_TOML_PARSE_FAILED", configPath: implicitPath });
+  });
+
   it("starts or connects the observer and hands its socket to the renderer", async () => {
     const fixture = await createTempState();
     fixture.config.tui = tuiConfig;
@@ -436,5 +505,20 @@ async function expectWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<
     if (timeout !== undefined) {
       clearTimeout(timeout);
     }
+  }
+}
+
+async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise<T> {
+  const previousHome = process.env.HOME;
+  const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+  process.env.HOME = home;
+  delete process.env.XDG_RUNTIME_DIR;
+  try {
+    return await run();
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+    else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
   }
 }

@@ -1,5 +1,11 @@
+import { emptyConfig } from "@station/config";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
-import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import type {
+  CliCommandConfigErrorContext,
+  CliCommandNode,
+  CliCommandRunContext,
+} from "../cliCommand/types.js";
+import { isConfigError } from "../configDiagnostics.js";
 import { runTuiCommand, type TuiCommandDeps } from "../tui.js";
 
 export const tuiCliCommand: CliCommandNode = {
@@ -7,6 +13,7 @@ export const tuiCliCommand: CliCommandNode = {
   description: "Open the fullscreen or popup TUI.",
   requiresConfig: true,
   run: runTuiCliCommand,
+  handleConfigError: handleTuiConfigError,
   usage: ["stn tui [--popup] [--persistent]"],
   options: [
     { name: "--popup", description: "Run in popup mode." },
@@ -17,6 +24,17 @@ export const tuiCliCommand: CliCommandNode = {
   ],
   examples: ["pnpm stn tui", "pnpm stn tui --popup --persistent"],
 };
+
+async function handleTuiConfigError(error: unknown, context: CliCommandConfigErrorContext) {
+  if (
+    !isConfigError(error) ||
+    error.code !== "CONFIG_FILE_NOT_FOUND" ||
+    context.configPath !== undefined
+  ) {
+    return undefined;
+  }
+  return runTuiCliCommand({ ...context, config: emptyConfig() });
+}
 
 async function runTuiCliCommand(context: CliCommandRunContext) {
   const tuiDeps: TuiCommandDeps = {};
