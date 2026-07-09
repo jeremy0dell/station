@@ -1,4 +1,3 @@
-import type { DatabaseSync } from "node:sqlite";
 import type {
   CommandId,
   DiagnosticDetail,
@@ -7,6 +6,7 @@ import type {
   StationCommand,
 } from "@station/contracts";
 import { ErrorEnvelopeSchema, SafeErrorSchema, StationCommandSchema } from "@station/contracts";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import { stringifyJson } from "./json.js";
 import {
   commandErrorFromRow,
@@ -17,7 +17,7 @@ import {
 import type { PersistedCommand, PersistedCommandError } from "./types.js";
 
 export function recordCommandAccepted(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     commandId: CommandId;
     command: StationCommand;
@@ -46,7 +46,7 @@ export function recordCommandAccepted(
 }
 
 export function markCommandStarted(
-  database: DatabaseSync,
+  database: SqlDatabase,
   commandId: CommandId,
   startedAt: string,
 ): PersistedCommand {
@@ -57,7 +57,7 @@ export function markCommandStarted(
 }
 
 export function markCommandSucceeded(
-  database: DatabaseSync,
+  database: SqlDatabase,
   commandId: CommandId,
   finishedAt: string,
 ): PersistedCommand {
@@ -70,7 +70,7 @@ export function markCommandSucceeded(
 }
 
 export function markCommandFailed(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     commandId: CommandId;
     safeError: SafeError;
@@ -95,7 +95,7 @@ export function markCommandFailed(
 }
 
 export function getCommand(
-  database: DatabaseSync,
+  database: SqlDatabase,
   commandId: CommandId,
 ): PersistedCommand | undefined {
   const row = getCommandRow(database, commandId);
@@ -104,7 +104,7 @@ export function getCommand(
     : commandWithDiagnostics(commandFromRow(row), commandErrorRows(database, commandId));
 }
 
-export function listCommands(database: DatabaseSync): PersistedCommand[] {
+export function listCommands(database: SqlDatabase): PersistedCommand[] {
   const rows = database
     .prepare("SELECT * FROM commands ORDER BY created_at, id")
     .all() as SqliteCommandRow[];
@@ -133,7 +133,7 @@ export function listCommands(database: DatabaseSync): PersistedCommand[] {
 }
 
 export function listCommandErrors(
-  database: DatabaseSync,
+  database: SqlDatabase,
   commandId?: CommandId,
 ): PersistedCommandError[] {
   const rows =
@@ -147,7 +147,7 @@ export function listCommandErrors(
   return rows.map(commandErrorFromRow);
 }
 
-function readCommand(database: DatabaseSync, commandId: string): PersistedCommand {
+function readCommand(database: SqlDatabase, commandId: string): PersistedCommand {
   const row = getCommandRow(database, commandId);
   if (row === undefined) {
     throw new Error(`Command ${commandId} was not found.`);
@@ -155,13 +155,13 @@ function readCommand(database: DatabaseSync, commandId: string): PersistedComman
   return commandWithDiagnostics(commandFromRow(row), commandErrorRows(database, commandId));
 }
 
-function getCommandRow(database: DatabaseSync, commandId: string): SqliteCommandRow | undefined {
+function getCommandRow(database: SqlDatabase, commandId: string): SqliteCommandRow | undefined {
   return database.prepare("SELECT * FROM commands WHERE id = ?").get(commandId) as
     | SqliteCommandRow
     | undefined;
 }
 
-function commandErrorRows(database: DatabaseSync, commandId?: CommandId): SqliteCommandErrorRow[] {
+function commandErrorRows(database: SqlDatabase, commandId?: CommandId): SqliteCommandErrorRow[] {
   return commandId === undefined
     ? (database
         .prepare("SELECT * FROM command_errors ORDER BY created_at, id")

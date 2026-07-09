@@ -50,10 +50,16 @@ pnpm lint
 pnpm test:unit
 pnpm test:contracts
 pnpm test:integration
+pnpm test:sqlite:bun
 pnpm test:diagnostics
 pnpm test:agent:scripted
 pnpm smoke:release
 ```
+
+Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
+creates observer databases under Node and Bun, then reopens each database under
+the other runtime to verify the shared SQLite contract and migrations. The
+mandatory `station-bun` CI job runs this gate.
 
 For CI install parity, use:
 

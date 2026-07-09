@@ -1,16 +1,16 @@
-import type { DatabaseSync } from "node:sqlite";
 import type { CommandId, StationEvent } from "@station/contracts";
 import {
   StationEventSchema,
   stationEventCommandId,
   stationEventTimestamp,
 } from "@station/contracts";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import { stringifyJson } from "./json.js";
 import { eventFromRow, type SqliteEventRow } from "./rows.js";
 import type { PersistedEvent } from "./types.js";
 
 export function recordEvent(
-  database: DatabaseSync,
+  database: SqlDatabase,
   event: StationEvent,
   options: {
     eventId: string;
@@ -43,7 +43,7 @@ export function recordEvent(
 }
 
 export function listEvents(
-  database: DatabaseSync,
+  database: SqlDatabase,
   filter: {
     commandId?: CommandId;
     type?: StationEvent["type"];
@@ -74,7 +74,7 @@ export function eventTimestamp(event: StationEvent): string | undefined {
   return stationEventTimestamp(event);
 }
 
-function readEvent(database: DatabaseSync, eventId: string): PersistedEvent {
+function readEvent(database: SqlDatabase, eventId: string): PersistedEvent {
   const row = database.prepare("SELECT * FROM events WHERE id = ?").get(eventId) as SqliteEventRow;
   return eventFromRow(row);
 }

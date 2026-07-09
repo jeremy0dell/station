@@ -29,9 +29,10 @@ export type {
 export const cliCommandRegistry: CliCommandNode = {
   name: "stn",
   description: "STATION is a terminal-native control plane for AI-agent worktree sessions.",
-  usage: ["stn [--config <path>] [command]", "stn --help", "stn --man"],
+  usage: ["stn [--config <path>] [command]", "stn --version", "stn --help", "stn --man"],
   options: [
     { name: "--config <path>", description: "Use a specific STATION config file." },
+    { name: "--version", description: "Print the STATION build version." },
     { name: "-h, --help", description: "Print concise help for a command path." },
     { name: "--man", description: "Print the fuller manual for a command path." },
   ],

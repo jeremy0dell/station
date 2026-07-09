@@ -1,4 +1,3 @@
-import type { DatabaseSync } from "node:sqlite";
 import type {
   HarnessRunObservation,
   ProviderProjectConfig,
@@ -10,6 +9,7 @@ import {
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
 } from "@station/contracts";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import { maxIso, optionalJson } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
 import { providerObservationExpiresAt } from "./retention.js";
@@ -44,7 +44,7 @@ type ProjectPersistenceInput = {
 };
 
 export function persistReconcileResult(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: PersistReconcileResultInput,
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
@@ -120,19 +120,19 @@ function expiresAtFor(input: PersistReconcileResultInput, observedAt: string): s
   return input.expiresAt;
 }
 
-export function listProjects(database: DatabaseSync): PersistedProject[] {
+export function listProjects(database: SqlDatabase): PersistedProject[] {
   return (database.prepare("SELECT * FROM projects ORDER BY id").all() as SqliteProjectRow[]).map(
     projectFromRow,
   );
 }
 
-export function listWorktrees(database: DatabaseSync): PersistedWorktree[] {
+export function listWorktrees(database: SqlDatabase): PersistedWorktree[] {
   return (database.prepare("SELECT * FROM worktrees ORDER BY id").all() as SqliteWorktreeRow[]).map(
     worktreeFromRow,
   );
 }
 
-export function listTerminalTargets(database: DatabaseSync): PersistedTerminalTarget[] {
+export function listTerminalTargets(database: SqlDatabase): PersistedTerminalTarget[] {
   return (
     database
       .prepare("SELECT * FROM terminal_targets ORDER BY id")
@@ -140,20 +140,20 @@ export function listTerminalTargets(database: DatabaseSync): PersistedTerminalTa
   ).map(terminalTargetFromRow);
 }
 
-export function listHarnessRuns(database: DatabaseSync): PersistedHarnessRun[] {
+export function listHarnessRuns(database: SqlDatabase): PersistedHarnessRun[] {
   return (
     database.prepare("SELECT * FROM harness_runs ORDER BY id").all() as SqliteHarnessRunRow[]
   ).map(harnessRunFromRow);
 }
 
-export function listSessions(database: DatabaseSync): PersistedSession[] {
+export function listSessions(database: SqlDatabase): PersistedSession[] {
   return (database.prepare("SELECT * FROM sessions ORDER BY id").all() as SqliteSessionRow[]).map(
     sessionFromRow,
   );
 }
 
 export function renameSession(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: { sessionId: string; title: string },
 ): PersistedSession | undefined {
   database.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(input.title, input.sessionId);
@@ -164,7 +164,7 @@ export function renameSession(
 }
 
 export function seedSessionTitle(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     sessionId: string;
     projectId: string;
@@ -205,13 +205,13 @@ export function seedSessionTitle(
   return sessionFromRow(row);
 }
 
-export function deleteSessionTitleSeed(database: DatabaseSync, sessionId: string): number {
+export function deleteSessionTitleSeed(database: SqlDatabase, sessionId: string): number {
   const result = database.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
   return Number(result.changes);
 }
 
 function upsertProject(
-  database: DatabaseSync,
+  database: SqlDatabase,
   project: ProjectPersistenceInput,
   lastSeenAt: string,
 ): void {
@@ -238,7 +238,7 @@ function projectPersistenceInput(project: ProviderProjectConfig): ProjectPersist
   };
 }
 
-function upsertWorktree(database: DatabaseSync, worktree: WorktreeObservation): void {
+function upsertWorktree(database: SqlDatabase, worktree: WorktreeObservation): void {
   database
     .prepare(
       `
@@ -271,7 +271,7 @@ function upsertWorktree(database: DatabaseSync, worktree: WorktreeObservation): 
     );
 }
 
-function upsertTerminalTarget(database: DatabaseSync, target: TerminalTargetObservation): void {
+function upsertTerminalTarget(database: SqlDatabase, target: TerminalTargetObservation): void {
   database
     .prepare(
       `
@@ -302,7 +302,7 @@ function upsertTerminalTarget(database: DatabaseSync, target: TerminalTargetObse
     );
 }
 
-function upsertHarnessRun(database: DatabaseSync, run: HarnessRunObservation): void {
+function upsertHarnessRun(database: SqlDatabase, run: HarnessRunObservation): void {
   database
     .prepare(
       `
@@ -342,7 +342,7 @@ function upsertHarnessRun(database: DatabaseSync, run: HarnessRunObservation): v
 }
 
 function upsertSessions(
-  database: DatabaseSync,
+  database: SqlDatabase,
   terminalTargets: TerminalTargetObservation[],
   harnessRuns: HarnessRunObservation[],
   worktrees: WorktreeObservation[],

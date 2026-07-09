@@ -1,4 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
 import type { SafeError } from "@station/contracts";
 import {
   Effect,
@@ -9,6 +8,7 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { latestSchemaVersion, migrations } from "./migrations/index.js";
+import { openSqlDatabase, type SqlDatabase } from "./sqlite/driver.js";
 
 export type ObserverSqliteHealthStatus = "healthy" | "unavailable" | "closed";
 
@@ -29,7 +29,7 @@ export type ObserverSqliteHealth = {
 };
 
 export type ObserverSqliteHandle = {
-  database: DatabaseSync;
+  database: SqlDatabase;
   health(): ObserverSqliteHealth;
   recordFailure(error: SafeError): void;
   close(): void;
@@ -43,7 +43,7 @@ export type OpenObserverSqliteOptions = {
 export function openObserverSqlite(options: OpenObserverSqliteOptions = {}): ObserverSqliteHandle {
   const path = options.path ?? ":memory:";
   const clock = options.clock ?? systemClock;
-  const database = new DatabaseSync(path);
+  const database = openSqlDatabase(path);
   // WAL + synchronous=NORMAL keeps an unclean exit (SIGKILL of a wedged observer)
   // from corrupting the DB or losing committed rows; :memory: ignores WAL.
   if (path !== ":memory:") {
@@ -92,7 +92,7 @@ export function openObserverSqlite(options: OpenObserverSqliteOptions = {}): Obs
 
 export function runSqliteTransactionEffect<T>(
   sqlite: ObserverSqliteHandle,
-  task: (database: DatabaseSync) => T,
+  task: (database: SqlDatabase) => T,
 ): Effect.Effect<T, RuntimeSafeError> {
   return Effect.try({
     try: () => {
@@ -128,7 +128,7 @@ type SchemaVersionRow = {
   value: string;
 };
 
-function applyMigrations(database: DatabaseSync, clock: RuntimeClock): void {
+function applyMigrations(database: SqlDatabase, clock: RuntimeClock): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS observer_meta (
       key TEXT PRIMARY KEY,
@@ -175,7 +175,7 @@ function applyMigrations(database: DatabaseSync, clock: RuntimeClock): void {
     .run(String(latestSchemaVersion));
 }
 
-function readSchemaVersion(database: DatabaseSync, open: boolean): number {
+function readSchemaVersion(database: SqlDatabase, open: boolean): number {
   if (!open) {
     return latestSchemaVersion;
   }
@@ -187,7 +187,7 @@ function readSchemaVersion(database: DatabaseSync, open: boolean): number {
   return Number.isFinite(version) ? version : 0;
 }
 
-function readAppliedMigrations(database: DatabaseSync): AppliedObserverSqliteMigration[] {
+function readAppliedMigrations(database: SqlDatabase): AppliedObserverSqliteMigration[] {
   return (
     database
       .prepare("SELECT version, name, applied_at FROM observer_migrations ORDER BY version")

@@ -38,6 +38,7 @@
     "test:unit": "vitest run --config config/vitest/vitest.unit.config.ts",
     "test:contracts": "vitest run --config config/vitest/vitest.contracts.config.ts",
     "test:integration": "pnpm build && vitest run --config config/vitest/vitest.integration.config.ts",
+    "test:sqlite:bun": "node scripts/test-runners/run-sqlite-cross-runtime.mjs",
     "test:diagnostics": "vitest run --config config/vitest/vitest.diagnostics.config.ts",
     "test:e2e:setup": "vitest run --config config/vitest/vitest.setup-e2e.config.ts",
     "test:e2e": "vitest run --config config/vitest/vitest.e2e.config.ts",

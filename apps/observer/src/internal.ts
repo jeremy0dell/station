@@ -32,4 +32,5 @@ export * from "./runtime/logging.js";
 export * from "./runtime/main.js";
 export * from "./runtime/reconcileScheduler.js";
 export * from "./runtime/server.js";
+export type { SqlDatabase, SqlParam, SqlRunResult, SqlStatement } from "./sqlite/driver.js";
 export * from "./sqlite.js";

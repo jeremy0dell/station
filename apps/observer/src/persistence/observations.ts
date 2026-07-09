@@ -1,4 +1,3 @@
-import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import type { ProviderId } from "@station/contracts";
 import {
   HarnessEventObservationSchema,
@@ -6,6 +5,7 @@ import {
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
 } from "@station/contracts";
+import type { SqlDatabase, SqlParam } from "../sqlite/driver.js";
 import { isRecord } from "../utils/guards.js";
 import { parseJson, stringifyJson } from "./json.js";
 import { providerObservationFromRow, type SqliteProviderObservationRow } from "./rows.js";
@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 
 export function insertProviderObservation(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     id: string;
     provider: ProviderId;
@@ -79,7 +79,7 @@ export function insertProviderObservation(
 }
 
 export function listProviderObservations(
-  database: DatabaseSync,
+  database: SqlDatabase,
   options: {
     entityKind?: ProviderObservationKind | readonly ProviderObservationKind[];
     includeExpired?: boolean;
@@ -94,7 +94,7 @@ export function listProviderObservations(
 }
 
 export function listCurrentProviderEntityObservations(
-  database: DatabaseSync,
+  database: SqlDatabase,
   options: {
     entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
     includeExpired?: boolean;
@@ -108,7 +108,7 @@ export function listCurrentProviderEntityObservations(
 }
 
 export function pruneExpiredProviderObservations(
-  database: DatabaseSync,
+  database: SqlDatabase,
   expiresBefore: string,
 ): number {
   const expiredResult = database
@@ -121,7 +121,7 @@ function buildCurrentProviderEntityObservationQuery(options: {
   entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
   includeExpired?: boolean;
   referenceTime: string;
-}): { sql: string; params: SQLInputValue[] } {
+}): { sql: string; params: SqlParam[] } {
   const kinds =
     options.entityKind === undefined
       ? (["worktree", "terminal_target"] satisfies CurrentProviderObservationKind[])
@@ -148,7 +148,7 @@ function buildCurrentProviderEntityObservationQuery(options: {
   }
   const latestExpiryClause =
     options.includeExpired === true ? "" : " AND (i.expires_at IS NULL OR i.expires_at > ?)";
-  const params: SQLInputValue[] = options.includeExpired === true ? [] : [options.referenceTime];
+  const params: SqlParam[] = options.includeExpired === true ? [] : [options.referenceTime];
   return {
     sql: `
       WITH keys AS (
@@ -196,9 +196,9 @@ function buildProviderObservationQuery(options: {
   includeExpired?: boolean;
   latestOnly?: boolean;
   referenceTime: string;
-}): { sql: string; params: SQLInputValue[] } {
+}): { sql: string; params: SqlParam[] } {
   const clauses: string[] = [];
-  const params: SQLInputValue[] = [];
+  const params: SqlParam[] = [];
 
   if (options.entityKind !== undefined) {
     const kinds =
@@ -256,7 +256,7 @@ function buildProviderObservationQuery(options: {
 }
 
 function latestProviderObservationRow(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     provider: ProviderId;
     providerType: ProviderObservationType;
@@ -281,7 +281,7 @@ function latestProviderObservationRow(
     | undefined;
 }
 
-function readProviderObservation(database: DatabaseSync, id: string): SqliteProviderObservationRow {
+function readProviderObservation(database: SqlDatabase, id: string): SqliteProviderObservationRow {
   return database
     .prepare("SELECT * FROM provider_observations WHERE id = ?")
     .get(id) as SqliteProviderObservationRow;
