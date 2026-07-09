@@ -47,16 +47,18 @@ export type SpawnObserverInput = {
   configPath?: string;
 };
 
-type ChildExitResult =
-  | {
-      type: "exit";
-      code: number | null;
-      signal: NodeJS.Signals | null;
-    }
-  | {
-      type: "spawn_error";
-      error: Error;
-    };
+type ChildProcessExit = {
+  type: "exit";
+  code: number | null;
+  signal: NodeJS.Signals | null;
+};
+
+type ChildProcessSpawnError = {
+  type: "spawn_error";
+  error: Error;
+};
+
+type ChildExitResult = ChildProcessExit | ChildProcessSpawnError;
 
 export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
   kill?: ChildProcess["kill"];
