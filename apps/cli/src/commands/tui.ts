@@ -72,6 +72,7 @@ export async function runTuiCommand(
     {
       ...options,
       paths,
+      onStartupProgress: (message) => process.stderr.write(`${message}\n`),
       ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
     },
     deps.observer,

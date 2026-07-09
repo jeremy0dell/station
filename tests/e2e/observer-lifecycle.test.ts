@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { startObserver } from "@station/cli";
 import { emptyConfig } from "@station/config";
@@ -10,6 +10,10 @@ import { createTempState, writeConfigToml } from "../support/temp-projects";
 describe("observer lifecycle e2e", () => {
   it("boots a real observer with in-memory defaults and no config file", async () => {
     const fixture = await createTempState();
+    const bootLogPath = join(fixture.stateDir, "logs", "observer-boot.log");
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    await writeFile(bootLogPath, "stale observer boot output\n", "utf8");
+    await chmod(bootLogPath, 0o666);
     const config = {
       ...emptyConfig(),
       observer: {
@@ -40,12 +44,56 @@ describe("observer lifecycle e2e", () => {
       await expect(access(join(fixture.root, "config.toml"))).rejects.toMatchObject({
         code: "ENOENT",
       });
+
+      const bootLog = await readFile(bootLogPath, "utf8");
+      expect(bootLog).not.toContain("stale observer boot output");
+      const header = bootLog.split(/\r?\n/, 1)[0];
+      expect(JSON.parse(header ?? "")).toEqual({
+        command: [
+          process.execPath,
+          expect.stringMatching(/observerMain\.js$/),
+          "--socket",
+          fixture.socketPath,
+          "--state-dir",
+          fixture.stateDir,
+        ],
+      });
+      expect((await stat(bootLogPath)).mode & 0o777).toBe(0o600);
     } finally {
       if (started) {
         await client.stop();
         await waitForSocketClosed(fixture.socketPath);
       }
     }
+  });
+
+  it("reports a malformed-config child exit without waiting for the startup timeout", async () => {
+    const fixture = await createTempState();
+    const configPath = join(fixture.root, "malformed.toml");
+    const bootLogPath = join(fixture.stateDir, "logs", "observer-boot.log");
+    await writeFile(configPath, "not = [valid toml", "utf8");
+
+    const startedAt = Date.now();
+    const status = await startObserver({
+      config: fixture.config,
+      configPath,
+      timeoutMs: 30_000,
+    });
+    const durationMs = Date.now() - startedAt;
+
+    expect(durationMs).toBeLessThan(10_000);
+    expect(status).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_EXITED_ON_START",
+        message: expect.stringContaining("exit code 1"),
+        hint: expect.stringContaining(`Observer boot log: ${bootLogPath}`),
+      },
+    });
+    expect(status.error?.hint).toContain("Station config file is not valid TOML.");
+    await expect(readFile(bootLogPath, "utf8")).resolves.toContain(
+      "Station config file is not valid TOML.",
+    );
   });
 
   it("starts a real observer process, serves protocol requests, and stops cleanly", async () => {

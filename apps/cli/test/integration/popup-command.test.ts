@@ -8,7 +8,7 @@ import {
   shouldSuppressCliProcessOutput,
 } from "@station/cli/internal";
 import type { TmuxPopupOptions } from "@station/tmux";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -67,6 +67,131 @@ describe("CLI popup command", () => {
     });
   });
 
+  it("reports slow observer startup before opening the popup", async () => {
+    const fixture = await createTempState();
+    fixture.config.defaults.terminal = "tmux";
+    let spawned = false;
+    let markSpawned = () => undefined;
+    let releaseHealth = () => undefined;
+    const observerSpawned = new Promise<void>((resolve) => {
+      markSpawned = resolve;
+    });
+    const healthReady = new Promise<void>((resolve) => {
+      releaseHealth = resolve;
+    });
+    const openTmuxPopup = vi.fn(async () => ({ opened: true }));
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    vi.useFakeTimers();
+
+    try {
+      const resultPromise = runPopupCommand(
+        [],
+        {
+          config: fixture.config,
+          env: { TMUX: "/tmp/tmux-501/default,123,0" },
+        },
+        {
+          observer: {
+            spawnObserver: async () => {
+              spawned = true;
+              markSpawned();
+              return { pid: 1234, unref: () => undefined };
+            },
+            clientFactory: () =>
+              ({
+                health: async () => {
+                  if (!spawned) throw new Error("stopped");
+                  await healthReady;
+                  return {
+                    schemaVersion: "0.6.0",
+                    status: "healthy",
+                    pid: 1234,
+                    startedAt: now,
+                    version: "0.0.0",
+                  };
+                },
+                reconcile: async () => emptySnapshot("popup-open"),
+              }) as never,
+          },
+          openTmuxPopup,
+        },
+      );
+
+      await observerSpawned;
+      await vi.advanceTimersByTimeAsync(1_499);
+      expect(stderrWrite).not.toHaveBeenCalled();
+      expect(openTmuxPopup).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(stderrWrite).toHaveBeenNthCalledWith(1, "Starting STATION observer…\n");
+
+      await vi.advanceTimersByTimeAsync(3_499);
+      expect(stderrWrite).toHaveBeenCalledTimes(1);
+      expect(openTmuxPopup).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(stderrWrite).toHaveBeenNthCalledWith(
+        2,
+        `Still waiting for STATION observer; boot log: ${join(
+          fixture.stateDir,
+          "logs/observer-boot.log",
+        )}\n`,
+      );
+      expect(openTmuxPopup).not.toHaveBeenCalled();
+
+      releaseHealth();
+      await expect(resultPromise).resolves.toEqual({ opened: true });
+      expect(openTmuxPopup).toHaveBeenCalledOnce();
+    } finally {
+      releaseHealth();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+      stderrWrite.mockRestore();
+    }
+  });
+
+  it("keeps warm observer attachment silent", async () => {
+    const fixture = await createTempState();
+    fixture.config.defaults.terminal = "tmux";
+    const openTmuxPopup = vi.fn(async () => ({ opened: true }));
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    try {
+      await expect(
+        runPopupCommand(
+          [],
+          {
+            config: fixture.config,
+            env: { TMUX: "/tmp/tmux-501/default,123,0" },
+          },
+          {
+            observer: {
+              spawnObserver: async () => {
+                throw new Error("observer should not spawn for a warm attachment");
+              },
+              clientFactory: () =>
+                ({
+                  health: async () => ({
+                    schemaVersion: "0.6.0",
+                    status: "healthy",
+                    pid: 1234,
+                    startedAt: now,
+                    version: "0.0.0",
+                  }),
+                  reconcile: async () => emptySnapshot("popup-open"),
+                }) as never,
+            },
+            openTmuxPopup,
+          },
+        ),
+      ).resolves.toEqual({ opened: true });
+      expect(stderrWrite).not.toHaveBeenCalled();
+      expect(openTmuxPopup).toHaveBeenCalledOnce();
+    } finally {
+      stderrWrite.mockRestore();
+    }
+  });
+
   it("keeps an explicitly missing popup config as a hard error", async () => {
     const fixture = await createTempState();
     const configPath = join(fixture.root, "missing.toml");
@@ -88,16 +213,18 @@ describe("CLI popup command", () => {
     ).rejects.toMatchObject({ code: "CONFIG_FILE_NOT_FOUND", configPath });
   });
 
-  it("does not open a first-run popup when the observer fails to start", async () => {
+  it("does not open a first-run popup when the observer exits during startup", async () => {
     const fixture = await createTempState();
-    let popupOpened = false;
+    const openTmuxPopup = vi.fn(async () => ({ opened: true }));
 
     const result = await withIsolatedHome(fixture.root, () =>
       runCli([], {
         observerDeps: {
-          spawnObserver: async () => {
-            throw new Error("observer failed to start");
-          },
+          spawnObserver: async () => ({
+            pid: 1234,
+            unref: () => undefined,
+            exited: Promise.resolve({ type: "exit" as const, code: 1, signal: null }),
+          }),
           clientFactory: () =>
             ({
               health: async () => {
@@ -107,19 +234,22 @@ describe("CLI popup command", () => {
         },
         popupDeps: {
           env: { TMUX: "/tmp/tmux-501/default,123,0" },
-          openTmuxPopup: async () => {
-            popupOpened = true;
-            return { opened: true };
-          },
+          openTmuxPopup,
         },
       }),
     );
 
     expect(result).toMatchObject({
       code: 1,
-      output: { status: "unavailable", observer: { status: "unhealthy" } },
+      output: {
+        status: "unavailable",
+        observer: {
+          status: "unhealthy",
+          error: { code: "OBSERVER_EXITED_ON_START" },
+        },
+      },
     });
-    expect(popupOpened).toBe(false);
+    expect(openTmuxPopup).not.toHaveBeenCalled();
   });
 
   it("keeps a malformed implicit popup config as a hard error", async () => {

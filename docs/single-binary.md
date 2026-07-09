@@ -340,10 +340,12 @@ first-run screen.
 
 ### B2 — observer boot guarantee (no eviction — F3)
 
-Boot log `<stateDir>/logs/observer-boot.log` replacing `stdio:"ignore"`;
-child-exit race → immediate `OBSERVER_EXITED_ON_START` with a boot-log
-tail (kills the silent 30s hang); default health wait 30s → 10s with
-progressive stderr from the tui/popup call sites only.
+**Status: implemented.** Observer launch rewrites the private boot log at
+`<stateDir>/logs/observer-boot.log`, captures a JSON-encoded command header plus
+child stdout/stderr, and races health readiness against child exit. It reports
+`OBSERVER_EXITED_ON_START` immediately with a redacted log tail unless a
+concurrent observer became healthy. The default health wait is 10 seconds;
+only TUI and popup launches show delayed progress.
 
 **Removed from v1:** the client-side unhealthy-incumbent SIGTERM eviction.
 It conflicts with [observer-singleton](observer-singleton.md), which is
