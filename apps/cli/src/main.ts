@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "@station/config";
-import { isSafeError, type RuntimeSafeError } from "@station/runtime";
+import { isSafeError, type RuntimeSafeError, stationBuildInfo } from "@station/runtime";
 import { parseRequiredOptionValue } from "./args.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import {
@@ -24,6 +24,9 @@ export async function runCli(
   const help = renderCliHelpFromArgs(args);
   if (help !== undefined) {
     return { code: 0, output: help.text, outputFormat: "text" };
+  }
+  if (args.length === 1 && args[0] === "--version") {
+    return { code: 0, output: stationBuildInfo().version, outputFormat: "text" };
   }
   const command = args[0] ?? defaultCommand(defaultCommandEnv(options));
   const commandArgs = args[0] === undefined ? [] : args.slice(1);

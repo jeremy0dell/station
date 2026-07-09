@@ -1,10 +1,10 @@
-import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import {
   SafeErrorSchema,
   WorktreeChangeSummarySchema,
   WorktreeChecksSummarySchema,
   WorktreePullRequestSchema,
 } from "@station/contracts";
+import type { SqlDatabase, SqlParam } from "../sqlite/driver.js";
 import { parseJson, stringifyJson } from "./json.js";
 import type {
   PersistedWorktreeMetadataCurrent,
@@ -24,7 +24,7 @@ type SqliteWorktreeMetadataCurrentRow = {
 };
 
 export function upsertWorktreeMetadataCurrent<TKind extends WorktreeMetadataCurrentKind>(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     worktreeId: string;
     kind: TKind;
@@ -73,7 +73,7 @@ export function upsertWorktreeMetadataCurrent<TKind extends WorktreeMetadataCurr
 }
 
 export function listWorktreeMetadataCurrent<TKind extends WorktreeMetadataCurrentKind>(
-  database: DatabaseSync,
+  database: SqlDatabase,
   options: {
     kind?: TKind | readonly TKind[];
     includeExpired?: boolean;
@@ -90,7 +90,7 @@ export function listWorktreeMetadataCurrent<TKind extends WorktreeMetadataCurren
 }
 
 export function deleteWorktreeMetadataCurrent(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: {
     worktreeId: string;
     kind?: WorktreeMetadataCurrentKind;
@@ -108,7 +108,7 @@ export function deleteWorktreeMetadataCurrent(
 }
 
 export function pruneExpiredWorktreeMetadataCurrent(
-  database: DatabaseSync,
+  database: SqlDatabase,
   expiresBefore: string,
 ): number {
   const result = database
@@ -123,9 +123,9 @@ function buildListWorktreeMetadataCurrentQuery<TKind extends WorktreeMetadataCur
   kind?: TKind | readonly TKind[];
   includeExpired?: boolean;
   referenceTime: string;
-}): { sql: string; params: SQLInputValue[] } {
+}): { sql: string; params: SqlParam[] } {
   const clauses: string[] = [];
-  const params: SQLInputValue[] = [];
+  const params: SqlParam[] = [];
 
   if (options.kind !== undefined) {
     const kinds = typeof options.kind === "string" ? [options.kind] : [...options.kind];
@@ -152,7 +152,7 @@ function buildListWorktreeMetadataCurrentQuery<TKind extends WorktreeMetadataCur
 }
 
 function readWorktreeMetadataCurrent(
-  database: DatabaseSync,
+  database: SqlDatabase,
   worktreeId: string,
   kind: WorktreeMetadataCurrentKind,
 ): SqliteWorktreeMetadataCurrentRow {

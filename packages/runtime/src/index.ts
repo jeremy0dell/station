@@ -1,4 +1,5 @@
 export * from "./boundary.js";
+export * from "./buildInfo.js";
 export * from "./concurrency.js";
 export * from "./effect.js";
 export * from "./errors.js";

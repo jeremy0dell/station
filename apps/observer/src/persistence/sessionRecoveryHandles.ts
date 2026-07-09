@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
 import type { SessionRecoveryHandle } from "@station/contracts";
 import { SessionRecoveryHandleSchema } from "@station/contracts";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import type { ListSessionRecoveryHandlesOptions } from "./types.js";
 
 type SqliteSessionRecoveryHandleRow = {
@@ -20,7 +20,7 @@ type SqliteSessionRecoveryHandleRow = {
 };
 
 export function upsertSessionRecoveryHandle(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: SessionRecoveryHandle,
 ): SessionRecoveryHandle {
   // Ingress report ids are per event. Recovery handles need a stable identity
@@ -82,7 +82,7 @@ export function upsertSessionRecoveryHandle(
 }
 
 export function getSessionRecoveryHandle(
-  database: DatabaseSync,
+  database: SqlDatabase,
   handleId: string,
 ): SessionRecoveryHandle | undefined {
   const row = database
@@ -92,7 +92,7 @@ export function getSessionRecoveryHandle(
 }
 
 export function listSessionRecoveryHandles(
-  database: DatabaseSync,
+  database: SqlDatabase,
   options: ListSessionRecoveryHandlesOptions = {},
 ): SessionRecoveryHandle[] {
   const rows = database

@@ -180,6 +180,9 @@ checks are skipped when `isCompiledBinary()`.
 
 ### A1 — foundation: buildInfo + SQLite driver + real observer version
 
+**Status: implemented.** The mandatory `pnpm test:sqlite:bun` gate covers the
+SQLite driver contract and Node-to-Bun and Bun-to-Node database compatibility.
+
 `packages/runtime/src/buildInfo.ts` (dev-safe `typeof`-guarded defines;
 exported from the package index).
 

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import type { PersistedSessionTurnReadiness } from "./types.js";
 
 type SqliteSessionTurnReadinessRow = {
@@ -12,7 +12,7 @@ type SqliteSessionTurnReadinessRow = {
 };
 
 export function upsertSessionTurnReadiness(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: PersistedSessionTurnReadiness,
 ): PersistedSessionTurnReadiness {
   database
@@ -48,7 +48,7 @@ export function upsertSessionTurnReadiness(
 }
 
 export function getSessionTurnReadiness(
-  database: DatabaseSync,
+  database: SqlDatabase,
   sessionId: string,
 ): PersistedSessionTurnReadiness | undefined {
   const row = database
@@ -57,7 +57,7 @@ export function getSessionTurnReadiness(
   return row === undefined ? undefined : readinessFromRow(row);
 }
 
-export function listSessionTurnReadiness(database: DatabaseSync): PersistedSessionTurnReadiness[] {
+export function listSessionTurnReadiness(database: SqlDatabase): PersistedSessionTurnReadiness[] {
   const rows = database
     .prepare("SELECT * FROM session_turn_readiness ORDER BY completed_at DESC, session_id")
     .all() as SqliteSessionTurnReadinessRow[];
@@ -65,7 +65,7 @@ export function listSessionTurnReadiness(database: DatabaseSync): PersistedSessi
 }
 
 export function deleteSessionTurnReadiness(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: { sessionId: string; token?: string },
 ): number {
   const result =

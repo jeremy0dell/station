@@ -16,7 +16,7 @@ export function renderCliHelpFromArgs(args: readonly string[]): CliHelpResult | 
     return undefined;
   }
   const mode: CliHelpMode = args.includes("--man") ? "man" : "help";
-  const topicPath = helpTopicPath(args.filter((arg) => !isCliHelpFlag(arg)));
+  const topicPath = helpTopicPath(args.filter((arg) => !isCliHelpFlag(arg) && arg !== "--version"));
   return {
     mode,
     text: renderCliCommandHelpTopic(topicPath, mode),

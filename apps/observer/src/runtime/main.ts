@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { type LoadedStationConfig, loadConfig, type StationConfig } from "@station/config";
 import { componentLogPath } from "@station/observability";
-import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import { type RuntimeClock, stationBuildInfo, systemClock, toIsoTimestamp } from "@station/runtime";
 import { createCommandQueue } from "../commands/queue.js";
 import { registerObserverCommandHandlers } from "../commands/router.js";
 import { createFeatureFlagEvaluator } from "../features/evaluator.js";
@@ -106,6 +106,7 @@ export async function runObserverMain(
     clock: systemClock,
     logger,
     featureFlags,
+    version: stationBuildInfo().version,
   });
   registerObserverCommandHandlers({
     queue: commandQueue,

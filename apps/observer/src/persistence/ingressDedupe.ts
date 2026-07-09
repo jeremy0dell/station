@@ -1,8 +1,8 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import type { IngressDedupeKey } from "./types.js";
 
 export function claimIngressDedupeKey(
-  database: DatabaseSync,
+  database: SqlDatabase,
   input: IngressDedupeKey & {
     eventId: string;
     createdAt: string;

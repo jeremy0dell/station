@@ -108,6 +108,26 @@ describe("CLI manual-smoke commands", () => {
     expect(text).toContain("setup");
   });
 
+  it("returns the exact source build version without loading config", async () => {
+    const direct = await runCli(["--version"]);
+    const withMissingConfig = await runCli([
+      "--config",
+      "/tmp/station-missing-config.toml",
+      "--version",
+    ]);
+
+    expect(direct).toEqual({ code: 0, output: "0.0.0-dev", outputFormat: "text" });
+    expect(withMissingConfig).toEqual(direct);
+  });
+
+  it("keeps help ahead of version and treats version as top-level only", async () => {
+    const help = await runCli(["--version", "--help"]);
+
+    expect(help).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(help)).toContain("Usage:\n  stn [--config <path>] [command]");
+    await expect(runCli(["--version", "doctor"])).rejects.toThrow("Unknown command: --version");
+  });
+
   it("returns root manual with behavior notes and verification examples", async () => {
     const result = await runCli(["--man"]);
 

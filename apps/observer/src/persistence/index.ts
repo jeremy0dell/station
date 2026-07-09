@@ -1,6 +1,6 @@
-import type { DatabaseSync } from "node:sqlite";
 import { StationEventSchema } from "@station/contracts";
 import { Effect, systemClock, toIsoTimestamp } from "@station/runtime";
+import type { SqlDatabase } from "../sqlite/driver.js";
 import { runSqliteTransactionEffect } from "../sqlite.js";
 import * as commandStore from "./commands.js";
 import * as correlationStore from "./correlations.js";
@@ -29,7 +29,7 @@ export function createObserverPersistence(
   const clock = options.clock ?? systemClock;
   const idFactory = { ...defaultIdFactory, ...options.idFactory };
   const now = () => toIsoTimestamp(clock.now());
-  const transaction = <T>(task: (database: DatabaseSync) => T): Promise<T> =>
+  const transaction = <T>(task: (database: SqlDatabase) => T): Promise<T> =>
     Effect.runPromise(runSqliteTransactionEffect(options.sqlite, task));
 
   return {
