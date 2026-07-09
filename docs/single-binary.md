@@ -183,6 +183,85 @@ Bundle an entry importing a module that guards top-level execution with
 compiled binary on ubuntu; observer survives parent exit. Expected fine;
 cheap to confirm in CI rather than locally.
 
+## Spike results (2026-07-09, bun 1.3.14, darwin-arm64)
+
+S1–S4 ran against a scratch clone of merged main (`pnpm build` + station
+`bun install` + hand-linked `@station/cli`/`@station/observer`); S5 stays
+deferred to A4's CI smoke.
+
+### S1 — PASS (bundle graph works; the `.d.ts` hazard did not materialize)
+
+807 modules bundled in ~70ms, 73MB binary. Bun's bundler resolved every
+`@station/*` import through node_modules `exports` and ignored
+`apps/cli/tsconfig.json`'s `.d.ts` `paths` — no empty modules, no resolver
+plugin needed. `jsxImportSource` applied to bundled `.tsx`, the opentui
+dylib embedded automatically, and the compiled binary rendered the
+dashboard entry under a PTY (live alt-screen + terminal-capability output).
+Real CLI machinery ran end to end: `setup check --json` in a temp HOME
+executed genuine probes. Two defects surfaced, both already mapped to
+phases:
+
+- Top-level `node:sqlite` kills compiled startup (`No such built-in
+  module`). Confirmed the swap surface is **exactly one value-import** in
+  the whole dist (`apps/observer/dist/sqlite.js`); a hand-patched
+  `bun:sqlite` shim there made everything work — A1's driver as specced.
+- `apps/cli/src/main.ts`'s self-exec guard
+  (`import.meta.url === file://${process.argv[1]}`) fires for **every
+  bundled module** in compiled mode (argv[1] is the bunfs root, which is
+  every module's URL) → `runCli` executes twice per invocation. Fix
+  verified by S4; A3 swaps the guard to `import.meta.main`.
+
+### S2 — PASS with a required A2 amendment (ctty trampoline)
+
+- **Completeness**: a short-lived child's full output, including the final
+  bytes, is delivered *before* `p.exited` resolves — no drain race, the
+  bridge's drain-before-exit concern doesn't apply in-process.
+- **Backpressure**: kernel PTY flow control just works. A deliberately slow
+  `data` callback throttled a 200MB `cat` to 44MB/90s with **peak RSS
+  31MB** — the consumer's pace blocks the child; no pause/resume machinery
+  needed. (`TerminalOptions` also exposes a `drain` callback for write-side
+  backpressure.)
+- **Resize**: cols/rows of 0 throw; 1 works. Keep the bridge's 2/1 clamps.
+- **`terminal.close()` does NOT kill the attached child** — dispose must
+  `child.kill()` explicitly.
+- **No controlling terminal**: children get the pty on stdio but not as
+  ctty (`ps` shows `TTY ??`, TPGID 0). Consequences measured: Ctrl-Z
+  arrives as literal `^Z` (job control broken — unacceptable for shell
+  panes), and pty children **orphan** when the parent exits or is
+  SIGKILLed.
+- **A setsid+TIOCSCTTY trampoline between spawn and payload fixes both**:
+  with the ctty acquired, Ctrl-Z suspends correctly and children die with
+  the parent (SIGHUP on master close) even under SIGKILL — pure kernel
+  semantics replace the bridge's stdin-close backstop.
+
+**A2 design amendment**: the adapter is in-process `Bun.Terminal` **plus a
+ctty trampoline** wrapping the payload command. Recommended shape: a tiny
+per-platform C helper (`setsid(); ioctl(0, TIOCSCTTY); execvp(payload)`),
+modeled on node-pty's `spawn-helper`, embedded in the binary and extracted
+with the runtime assets — true exec-replace, no extra process per pane.
+Fallback without native code: a self-exec `stn __pty-exec` internal command
+doing the same via `bun:ffi` then spawn-and-forward (leaves one shim
+process per pane). Worth tracking upstream: Bun may grow a
+controlling-terminal option on `Terminal`/`spawn`.
+
+### S3 — PASS for the planned install path (quarantine is the boundary)
+
+`bun build --compile` output is already ad-hoc linker-signed
+(`flags=adhoc,linker-signed`, identifier `a.out`) and runs unmodified. With
+`com.apple.quarantine` set (simulating a browser download), macOS SIGKILLs
+it (exit 137). curl/`gh` downloads set no quarantine, so the A5 install
+script path is unaffected; the script should still defensively
+`xattr -d com.apple.quarantine`, and the release job should
+`codesign --force --sign -` with a real identifier (cosmetic). Developer ID
+signing + notarization only become necessary for browser-download
+distribution — deferred with public distro.
+
+### S4 — PASS (`import.meta.main` is the correct guard everywhere)
+
+Dev-imported `false` / dev-standalone `true` / compiled-entry `true` /
+compiled-imported `false`. The legacy `file://argv[1]` comparison is `true`
+for imported modules under compile and must not survive A3.
+
 ## Stage 1 — Foundation (Track A, phase A1)
 
 Lands green on today's CI with zero behavior change. No compile anywhere yet.
@@ -267,9 +346,13 @@ driver, running a migration-shaped exec/prepare round trip, and asserting
 `StationTerminalProcess` (same MIN_COLS=2/MIN_ROWS=1 clamps as the bridge);
 extract the listener/pending-data/diagnostic machinery from
 `LocalPtyTerminalProcess` into a shared emitter module;
-`createLocalPtyTerminal` becomes a selector. **A2a** lands the adapter
-opt-in only (`STATION_PTY_IMPL=bun` selects it; default stays the bridge)
-so it can be daily-driven without commitment. **A2b** is a one-line default
+`createLocalPtyTerminal` becomes a selector. Per the S2 results, the
+adapter spawns the payload through a **ctty trampoline**
+(setsid + TIOCSCTTY + exec; embedded per-platform helper, see the S2
+amendment) — without it job control breaks and pty children orphan on a
+Station crash. **A2a** lands the adapter opt-in only
+(`STATION_PTY_IMPL=bun` selects it; default stays the bridge) so it can be
+daily-driven without commitment. **A2b** is a one-line default
 flip (`Bun.Terminal` present and `STATION_PTY_IMPL !== "bridge"` → adapter)
 after at least a week of real use with no bridge fallbacks — flipping back
 is a one-line revert, and `STATION_PTY_IMPL=bridge` stays the in-field undo
@@ -288,7 +371,10 @@ Bridge and its hardening test stay until A6.
 `[process.execPath, entry]` when compiled, `undefined` in dev). Register
 hidden registry routes `__observer` (→ `runCliObserverMain`) and `__ingress`;
 argv0 compat in `apps/cli/src/main.ts`
-(`basename(process.argv0) === "stn-ingress"` → `__ingress`). Rewrite each
+(`basename(process.argv0) === "stn-ingress"` → `__ingress`). Replace every
+`import.meta.url === file://argv[1]` self-exec guard with
+`import.meta.main` — S1 proved the legacy form double-executes `runCli` in
+compiled mode, and S4 proved `import.meta.main` is correct in all contexts. Rewrite each
 spawn site as `selfExecArgv(...) ?? <current dev command>`:
 
 - `apps/cli/src/observerProcess.ts` `defaultSpawnObserver` (also introduce a
@@ -494,13 +580,17 @@ fixes stand alone) with no dead machinery beyond dormant seams.
 
 ## Risk register (ranked)
 
-1. **Bundler vs `apps/cli` `.d.ts` `paths`** — silent empty modules in the
-   compile graph. Spike S1; likely fix is deleting the legacy paths block.
-2. **`Bun.Terminal` flow control / drain ordering** — unbounded memory on
-   firehose panes; truncated output of short-lived commands. Spike S2; the
-   bridge stays selectable for one release.
-3. **macOS Gatekeeper** for downloaded binaries. Spike S3; ad-hoc sign in
-   CI, notarization deferred.
+1. ~~**Bundler vs `apps/cli` `.d.ts` `paths`**~~ — **retired by S1**: the
+   bundler resolves through node_modules `exports` and ignores the paths
+   block; no fix needed.
+2. ~~**`Bun.Terminal` flow control / drain ordering**~~ — **retired by
+   S2**: kernel backpressure bounds memory and output is complete at exit.
+   Replaced by a smaller risk: the **ctty trampoline** (per-platform helper
+   build in release CI; job control and orphan-cleanup regressions if the
+   trampoline is wrong). The bridge stays selectable for one release.
+3. **macOS Gatekeeper** for downloaded binaries — **scoped by S3**: only
+   quarantined (browser-download) copies are killed; curl/`gh` installs are
+   clean. Installer strips the xattr defensively; notarization deferred.
 4. **Private-repo distribution ergonomics** — gh-auth requirement for
    installs; tap needs a token-backed download strategy. Accepted by
    decision; artifacts are public-ready.
