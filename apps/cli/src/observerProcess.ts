@@ -1,78 +1,32 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { lstat, mkdir, open } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import type { StationConfig } from "@station/config";
-import type { ObserverHealth, ObserverStopReceipt, SafeError } from "@station/contracts";
-import {
-  componentLogPath,
-  createJsonlLogger,
-  createTraceContext,
-  type JsonlLogger,
-  redactString,
-} from "@station/observability";
+import { lstat } from "node:fs/promises";
+import type { ObserverStopReceipt, SafeError } from "@station/contracts";
+import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
 import { createObserverClient, isSocketStale, removeStaleSocket } from "@station/protocol";
 import {
-  Effect,
   type RuntimeClock,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithRetryAndTimeout,
-  runRuntimeBoundaryWithTimeout,
   safeErrorFromUnknown,
   systemClock,
 } from "@station/runtime";
+import { defaultClientFactory } from "./observerProcess/health.js";
+import { startObserverProcess } from "./observerProcess/startup.js";
+import type {
+  ObserverProcessDeps,
+  ObserverProcessOptions,
+  ObserverStatus,
+} from "./observerProcess/types.js";
 import { type ObserverPaths, resolveObserverPaths } from "./paths.js";
 
-export type ObserverStatus =
-  | {
-      status: "running";
-      paths: ObserverPaths;
-      health: ObserverHealth;
-    }
-  | {
-      status: "stopped" | "stale" | "unhealthy";
-      paths: ObserverPaths;
-      error?: SafeError;
-    };
-
-export type ObserverProcessDeps = {
-  clientFactory?: (socketPath: string) => ReturnType<typeof createObserverClient>;
-  spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;
-  clock?: RuntimeClock;
-  sleep?: (ms: number) => Promise<void>;
-  logger?: JsonlLogger;
-};
-
-export type SpawnObserverInput = {
-  paths: ObserverPaths;
-  configPath?: string;
-};
-
-type ChildProcessExit = {
-  type: "exit";
-  code: number | null;
-  signal: NodeJS.Signals | null;
-};
-
-type ChildProcessSpawnError = {
-  type: "spawn_error";
-  error: Error;
-};
-
-type ChildExitResult = ChildProcessExit | ChildProcessSpawnError;
-
-export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
-  kill?: ChildProcess["kill"];
-  exited?: Promise<ChildExitResult>;
-  disposeExitWait?: () => void;
-};
-
-export type ObserverProcessOptions = {
-  config?: StationConfig;
-  configPath?: string;
-  paths?: ObserverPaths;
-  timeoutMs?: number;
-  onStartupProgress?: (message: string) => void;
-};
+export { waitForObserverHealth } from "./observerProcess/health.js";
+// Commands intentionally keep one stable lifecycle import while implementation lives in observerProcess/.
+export type {
+  ChildProcessLike,
+  ObserverProcessDeps,
+  ObserverProcessOptions,
+  ObserverStatus,
+  SpawnObserverInput,
+} from "./observerProcess/types.js";
 
 export async function getObserverStatus(
   options: ObserverProcessOptions = {},
@@ -125,46 +79,19 @@ export async function startObserver(
     return existing;
   }
 
-  const progressTimers = scheduleObserverStartupProgress(options.onStartupProgress, paths);
-  // Spawning only starts the daemon; report running only after the socket health check succeeds.
-  let child: ChildProcessLike | undefined;
-  const result = await runRuntimeBoundaryWithTimeout(
+  const result = await startObserverProcess(
     {
-      operation: "cli.observer.start",
-      clock,
+      paths,
       timeoutMs,
-      error: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_START_FAILED",
-        message: "Observer startup failed.",
-        hint: `Run station debug trace ${trace.traceId}.`,
-        traceId: trace.traceId,
-      },
-      timeoutError: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_START_FAILED",
-        message: "Observer did not become healthy before the startup timeout.",
-        hint: `Run station debug trace ${trace.traceId}.`,
-        traceId: trace.traceId,
-      },
       trace,
+      clock,
+      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      ...(options.onStartupProgress === undefined
+        ? {}
+        : { onStartupProgress: options.onStartupProgress }),
     },
-    async ({ signal }) => {
-      await mkdir(paths.stateDir, { recursive: true, mode: 0o700 });
-      await mkdir(dirname(paths.socketPath), { recursive: true, mode: 0o700 });
-      child = await (deps.spawnObserver ?? defaultSpawnObserver)({
-        paths,
-        ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      });
-      if (signal.aborted) {
-        child.kill?.();
-        throw observerHealthWaitCancelledError();
-      }
-      child.unref?.();
-      return waitForStartedObserver({ child, paths, timeoutMs, trace, signal }, deps);
-    },
-  ).finally(() => clearObserverStartupProgress(progressTimers));
-
+    deps,
+  );
   if (result.ok) {
     return {
       status: "running",
@@ -173,9 +100,6 @@ export async function startObserver(
     };
   }
 
-  if (result.error.code !== "OBSERVER_EXITED_ON_START") {
-    child?.kill?.();
-  }
   await logObserverLifecycleFailure({
     paths,
     operation: "cli.observer.start",
@@ -242,67 +166,6 @@ export async function restartObserver(
   return startObserver({ ...options, paths: status.paths }, deps);
 }
 
-export async function waitForObserverHealth(
-  options: {
-    paths: ObserverPaths;
-    timeoutMs?: number;
-    trace?: RuntimeTraceContext;
-    signal?: AbortSignal;
-  },
-  deps: ObserverProcessDeps = {},
-): Promise<ObserverHealth> {
-  const timeoutMs = options.timeoutMs ?? 2000;
-  const retries = Math.max(1, Math.ceil(timeoutMs / 25));
-  const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath);
-  const result = await runRuntimeBoundaryWithRetryAndTimeout(
-    {
-      operation: "cli.observer.waitForHealth",
-      timeoutMs,
-      error: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_FAILED",
-        message: "Observer health check failed.",
-        ...(options.trace?.traceId === undefined
-          ? {}
-          : {
-              hint: `Run station debug trace ${options.trace.traceId}.`,
-              traceId: options.trace.traceId,
-            }),
-      },
-      timeoutError: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_TIMEOUT",
-        message: "Observer did not report healthy before the timeout.",
-        ...(options.trace?.traceId === undefined
-          ? {}
-          : {
-              hint: `Run station debug trace ${options.trace.traceId}.`,
-              traceId: options.trace.traceId,
-            }),
-      },
-      retry: {
-        retries,
-        delayMs: 25,
-        shouldRetry: (error, attempt) =>
-          error.code !== "OBSERVER_HEALTH_WAIT_CANCELLED" && attempt < retries,
-      },
-      trace: options.trace,
-    },
-    async ({ signal }) => {
-      const signals = [signal, options.signal].filter(isAbortSignal);
-      if (signals.some((candidate) => candidate.aborted)) {
-        throw observerHealthWaitCancelledError();
-      }
-      return abortableObserverHealth(client.health(), signals);
-    },
-  );
-
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.value;
-}
-
 export function observerStatusErrorMessage(
   status: Exclude<ObserverStatus, { status: "running" }>,
 ): string {
@@ -319,320 +182,6 @@ export function observerStatusErrorMessage(
     lines.push(`Code: ${error.code}`);
   }
   return lines.join("\n");
-}
-
-function defaultClientFactory(socketPath: string) {
-  return createObserverClient({ socketPath, timeoutMs: 500 });
-}
-
-async function defaultSpawnObserver(input: SpawnObserverInput): Promise<ChildProcessLike> {
-  const argv = observerSpawnArgv(input);
-  const bootLogPath = observerBootLogPath(input.paths);
-  await mkdir(dirname(bootLogPath), { recursive: true, mode: 0o700 });
-  const bootLog = await open(bootLogPath, "w", 0o600);
-  let child: ChildProcess | undefined;
-  let startedChild: ChildProcessLike;
-  try {
-    await bootLog.chmod(0o600);
-    await bootLog.writeFile(`${JSON.stringify({ command: argv })}\n`, "utf8");
-    const [command, ...args] = argv;
-    child = spawn(command, args, {
-      detached: true,
-      stdio: ["ignore", bootLog.fd, bootLog.fd],
-    });
-    startedChild = childWithExit(child);
-  } catch (error) {
-    await bootLog.close().catch(() => undefined);
-    throw error;
-  }
-  try {
-    await bootLog.close();
-  } catch (error) {
-    child.kill();
-    throw error;
-  }
-  return startedChild;
-}
-
-function observerSpawnArgv(input: SpawnObserverInput): [string, ...string[]] {
-  const observerEntry = new URL("../dist/observerMain.js", import.meta.url);
-  return [
-    process.execPath,
-    observerEntry.pathname,
-    "--socket",
-    input.paths.socketPath,
-    "--state-dir",
-    input.paths.stateDir,
-    ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
-  ];
-}
-
-function childWithExit(child: ChildProcess): ChildProcessLike {
-  let disposeExitWait!: () => void;
-  const exited = new Promise<ChildExitResult>((resolve) => {
-    let settled = false;
-    const finish = (result: ChildExitResult) => {
-      if (settled) return;
-      settled = true;
-      disposeExitWait();
-      resolve(result);
-    };
-    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      finish({ type: "exit", code, signal });
-    };
-    const onError = (error: Error) => {
-      finish({ type: "spawn_error", error });
-    };
-    disposeExitWait = () => {
-      child.off("exit", onExit);
-      child.off("error", onError);
-    };
-    child.once("exit", onExit);
-    child.once("error", onError);
-  });
-  return Object.assign(child, { exited, disposeExitWait });
-}
-
-async function waitForStartedObserver(
-  input: {
-    child: ChildProcessLike;
-    paths: ObserverPaths;
-    timeoutMs: number;
-    trace: RuntimeTraceContext;
-    signal: AbortSignal;
-  },
-  deps: ObserverProcessDeps,
-): Promise<ObserverHealth> {
-  const healthController = new AbortController();
-  const cancelHealth = () => healthController.abort();
-  input.signal.addEventListener("abort", cancelHealth, { once: true });
-  const healthPromise = waitForObserverHealth(
-    {
-      paths: input.paths,
-      timeoutMs: input.timeoutMs,
-      trace: input.trace,
-      signal: healthController.signal,
-    },
-    deps,
-  );
-
-  try {
-    const childExit = input.child.exited;
-    if (childExit === undefined) {
-      return await healthPromise;
-    }
-
-    const outcome = await Effect.runPromise(
-      Effect.raceFirst(
-        Effect.tryPromise({
-          try: () => healthPromise,
-          catch: (error) => error,
-        }).pipe(
-          Effect.match({
-            onFailure: (error) => ({ type: "error" as const, error }),
-            onSuccess: (health) => ({ type: "healthy" as const, health }),
-          }),
-        ),
-        Effect.tryPromise({
-          try: () => childExit,
-          catch: (error) => error,
-        }).pipe(
-          Effect.match({
-            onFailure: (error) => ({ type: "error" as const, error }),
-            onSuccess: (exit) => ({ type: "exited" as const, exit }),
-          }),
-        ),
-      ),
-    );
-    if (outcome.type === "error") {
-      throw outcome.error;
-    }
-    if (outcome.type === "healthy") {
-      return outcome.health;
-    }
-
-    healthController.abort();
-    try {
-      // A competing observer may have won the socket immediately before this child exited.
-      return await probeObserverHealth(input.paths, deps, input.signal);
-    } catch {
-      if (input.signal.aborted) {
-        throw observerHealthWaitCancelledError();
-      }
-    }
-    throw await observerExitedOnStartError(input.paths, outcome.exit, input.trace);
-  } finally {
-    input.signal.removeEventListener("abort", cancelHealth);
-    healthController.abort();
-    input.child.disposeExitWait?.();
-    void healthPromise.catch(() => undefined);
-  }
-}
-
-function probeObserverHealth(
-  paths: ObserverPaths,
-  deps: ObserverProcessDeps,
-  signal: AbortSignal,
-): Promise<ObserverHealth> {
-  const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath);
-  return abortableObserverHealth(client.health(), [signal]);
-}
-
-async function observerExitedOnStartError(
-  paths: ObserverPaths,
-  exit: ChildExitResult,
-  trace: RuntimeTraceContext,
-): Promise<SafeError> {
-  const bootLogHint = await observerBootLogHint(paths);
-  const traceHint =
-    trace.traceId === undefined ? "" : `\nRun station debug trace ${trace.traceId}.`;
-  const error: SafeError = {
-    tag: "ObserverStartupError",
-    code: "OBSERVER_EXITED_ON_START",
-    message: `Observer exited before becoming healthy (${childExitDescription(exit)}).`,
-    hint: `${bootLogHint}${traceHint}`,
-  };
-  if (trace.traceId !== undefined) {
-    error.traceId = trace.traceId;
-  }
-  return error;
-}
-
-function childExitDescription(exit: ChildExitResult): string {
-  if (exit.type === "spawn_error") {
-    return `spawn error: ${redactString(exit.error.message)}`;
-  }
-  if (exit.signal !== null) {
-    return `signal ${exit.signal}`;
-  }
-  if (exit.code !== null) {
-    return `exit code ${exit.code}`;
-  }
-  return "unknown exit status";
-}
-
-async function observerBootLogHint(paths: ObserverPaths): Promise<string> {
-  const path = observerBootLogPath(paths);
-  const pathHint = `Observer boot log: ${path}`;
-  try {
-    const tail = await readObserverBootLogTail(path);
-    if (tail === undefined) {
-      return pathHint;
-    }
-    return `${pathHint}\nLast 15 lines (redacted):\n${redactString(tail)}`;
-  } catch {
-    return pathHint;
-  }
-}
-
-async function readObserverBootLogTail(path: string): Promise<string | undefined> {
-  const maxBytes = 64 * 1024;
-  const bootLog = await open(path, "r");
-  try {
-    const { size } = await bootLog.stat();
-    if (size === 0) return undefined;
-    const length = Math.min(size, maxBytes);
-    const buffer = Buffer.alloc(length);
-    const { bytesRead } = await bootLog.read(buffer, 0, length, size - length);
-    let content = buffer.subarray(0, bytesRead).toString("utf8");
-    if (size > length) {
-      const firstNewline = content.indexOf("\n");
-      if (firstNewline !== -1) content = content.slice(firstNewline + 1);
-    }
-    content = content.trimEnd();
-    if (content.trim().length === 0) return undefined;
-    return content.split(/\r?\n/).slice(-15).join("\n");
-  } finally {
-    await bootLog.close();
-  }
-}
-
-function observerBootLogPath(paths: ObserverPaths): string {
-  return join(paths.stateDir, "logs", "observer-boot.log");
-}
-
-function scheduleObserverStartupProgress(
-  onProgress: ObserverProcessOptions["onStartupProgress"],
-  paths: ObserverPaths,
-): Array<ReturnType<typeof setTimeout>> {
-  if (onProgress === undefined) {
-    return [];
-  }
-  return [
-    setTimeout(() => emitObserverStartupProgress(onProgress, "Starting STATION observer…"), 1_500),
-    setTimeout(
-      () =>
-        emitObserverStartupProgress(
-          onProgress,
-          `Still waiting for STATION observer; boot log: ${observerBootLogPath(paths)}`,
-        ),
-      5_000,
-    ),
-  ];
-}
-
-function emitObserverStartupProgress(
-  onProgress: NonNullable<ObserverProcessOptions["onStartupProgress"]>,
-  message: string,
-): void {
-  try {
-    onProgress(message);
-  } catch {
-    // Progress output must not turn a successful observer launch into a startup failure.
-  }
-}
-
-function clearObserverStartupProgress(timers: readonly ReturnType<typeof setTimeout>[]): void {
-  for (const timer of timers) {
-    clearTimeout(timer);
-  }
-}
-
-function abortableObserverHealth(
-  health: Promise<ObserverHealth>,
-  signals: readonly AbortSignal[],
-): Promise<ObserverHealth> {
-  if (signals.some((signal) => signal.aborted)) {
-    void health.catch(() => undefined);
-    return Promise.reject(observerHealthWaitCancelledError());
-  }
-
-  return new Promise<ObserverHealth>((resolve, reject) => {
-    const cleanup = () => {
-      for (const signal of signals) {
-        signal.removeEventListener("abort", onAbort);
-      }
-    };
-    const onAbort = () => {
-      cleanup();
-      reject(observerHealthWaitCancelledError());
-    };
-    for (const signal of signals) {
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-    void health.then(
-      (value) => {
-        cleanup();
-        resolve(value);
-      },
-      (error: unknown) => {
-        cleanup();
-        reject(error);
-      },
-    );
-  });
-}
-
-function observerHealthWaitCancelledError(): SafeError {
-  return {
-    tag: "CancellationError",
-    code: "OBSERVER_HEALTH_WAIT_CANCELLED",
-    message: "Observer health wait was cancelled.",
-  };
-}
-
-function isAbortSignal(value: AbortSignal | undefined): value is AbortSignal {
-  return value !== undefined;
 }
 
 export async function logObserverLifecycleFailure(input: {

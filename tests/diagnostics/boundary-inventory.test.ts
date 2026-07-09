@@ -66,7 +66,7 @@ const setTimeoutAllowlist = new Map([
     "SIGTERM-to-SIGKILL grace delay for reaping duplicate observer processes is OS signal timing, not observer command timeout or retry plumbing.",
   ],
   [
-    "apps/cli/src/observerProcess.ts",
+    "apps/cli/src/observerProcess/startup.ts",
     "UI-only progress timers report a runtime-bounded observer launch; they do not implement startup timeout or retry control.",
   ],
 ]);
