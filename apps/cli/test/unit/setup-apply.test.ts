@@ -217,6 +217,8 @@ function plan(actions: SetupPlan["actions"]): SetupPlan {
     checks: [],
     actions,
     summary: {
+      launchReady: true,
+      workflowReady: true,
       requiredOk: true,
       requiredMissing: 0,
       warnings: 0,

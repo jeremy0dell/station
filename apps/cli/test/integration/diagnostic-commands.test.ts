@@ -5,7 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { runCli } from "@station/cli";
 import { observerRuntimeFreshnessCheck, rendererRuntimeCheck } from "@station/cli/internal";
 import type { DiagnosticEvidenceIndex, DiagnosticSnapshot, DoctorReport } from "@station/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -120,6 +120,17 @@ describe("CLI diagnostic commands", () => {
     await expect(
       rendererRuntimeCheck(async () => undefined, "my-renderer --foo"),
     ).resolves.toBeUndefined();
+  });
+
+  it("skips source renderer probes in compiled mode", async () => {
+    const resolve = vi.fn(async () => "/usr/local/bin/bun");
+    const uiInstalled = vi.fn(async () => true);
+
+    await expect(
+      rendererRuntimeCheck(resolve, undefined, uiInstalled, true),
+    ).resolves.toBeUndefined();
+    expect(resolve).not.toHaveBeenCalled();
+    expect(uiInstalled).not.toHaveBeenCalled();
   });
 
   it("collects diagnostics and writes a debug bundle", async () => {

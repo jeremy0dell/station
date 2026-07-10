@@ -11,6 +11,7 @@
 // terminal.
 
 import { execFileSync } from "node:child_process";
+import { basename } from "node:path";
 
 export type ProcEntry = { pid: number; tty: string; command: string };
 
@@ -19,11 +20,16 @@ function isBunExecutable(command: string): boolean {
   return exe === "bun" || exe.endsWith("/bun");
 }
 
+function isCompiledStationTui(command: string): boolean {
+  const argv = command.trim().split(/\s+/);
+  return argv.length === 2 && basename(argv[0] ?? "") === "stn" && argv[1] === "__tui";
+}
+
 /**
  * Rival Station UIs: another process (never self) on the same controlling tty
- * whose command runs the `bun` executable on `src/main.tsx`. The `bash -c`
- * launcher whose argv merely mentions `src/main.tsx` is excluded by the bun
- * check — and it exits on its own once the bun child it waits on is gone.
+ * whose command is either Bun running `src/main.tsx` or the exact compiled
+ * `stn __tui` shape. Shell launchers that merely mention either shape are
+ * excluded by the executable and argv checks.
  */
 export function selectRivalStationUiPids(
   processes: readonly ProcEntry[],
@@ -35,8 +41,8 @@ export function selectRivalStationUiPids(
       (p) =>
         p.pid !== self &&
         p.tty === myTty &&
-        isBunExecutable(p.command) &&
-        p.command.includes("src/main.tsx"),
+        ((isBunExecutable(p.command) && p.command.includes("src/main.tsx")) ||
+          isCompiledStationTui(p.command)),
     )
     .map((p) => p.pid);
 }

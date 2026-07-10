@@ -58,6 +58,12 @@ describe("resolvePtyImplementation", () => {
     expect(resolvePtyImplementation("bridge")).toBe("bridge");
   });
 
+  it("allows compiled startup to supply Bun as the default", () => {
+    expect(resolvePtyImplementation(undefined, "bun")).toBe("bun");
+    expect(resolvePtyImplementation("", "bun")).toBe("bun");
+    expect(resolvePtyImplementation("bridge", "bun")).toBe("bridge");
+  });
+
   it("accepts the two explicit Bun modes", () => {
     expect(resolvePtyImplementation("bun")).toBe("bun");
     expect(resolvePtyImplementation("bun-nocctty")).toBe("bun-nocctty");

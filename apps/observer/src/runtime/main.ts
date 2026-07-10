@@ -38,13 +38,14 @@ import {
 const STOP_BACKSTOP_MS = 5000;
 
 export type ObserverProviderRegistryFactoryOptions = {
+  stateDir: string;
   configPath?: string | undefined;
 };
 
 export type ObserverProviderRegistryFactory = (
   config: StationConfig,
   options: ObserverProviderRegistryFactoryOptions,
-) => ProviderRegistry;
+) => ProviderRegistry | Promise<ProviderRegistry>;
 
 export type RunObserverMainDeps = {
   providerRegistryFactory: ObserverProviderRegistryFactory;
@@ -54,7 +55,7 @@ export type RunObserverMainDeps = {
  * COMPOSITION ROOT
  *
  * Builds the process-lifetime Observer runtime around provider adapters
- * supplied by CLI composition.
+ * supplied by awaited CLI composition.
  *
  * Shutdown owns the command queue, event hook, server, and SQLite lifecycles
  * created here.
@@ -82,6 +83,11 @@ export async function runObserverMain(
   const socketPath = resolveObserverSocketPath(options.socketPath, config, stateDir, homeDir);
   const spoolDir = providerIngressSpoolDir(stateDir);
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
+  const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir };
+  if (options.configPath !== undefined) {
+    providerOptions.configPath = loadedConfig.configPath;
+  }
+  const providers = await deps.providerRegistryFactory(config, providerOptions);
 
   const sqlite = openObserverSqlite({
     path: join(stateDir, "observer.sqlite"),
@@ -93,11 +99,6 @@ export async function runObserverMain(
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
-  const providerOptions: ObserverProviderRegistryFactoryOptions = {};
-  if (options.configPath !== undefined) {
-    providerOptions.configPath = loadedConfig.configPath;
-  }
-  const providers = deps.providerRegistryFactory(config, providerOptions);
   // Fire-and-forget boot probes: snapshots read cached results and fill in as they land.
   void providers.refreshHarnessVersions();
   void providers.healthCache.refreshAll();

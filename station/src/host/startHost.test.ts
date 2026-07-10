@@ -52,32 +52,23 @@ describe("startStationHost", () => {
   });
 
   it("records the selected PTY implementation at startup", async () => {
-    const previous = process.env.STATION_PTY_IMPL;
-    process.env.STATION_PTY_IMPL = "bun-nocctty";
     const records: Array<{ message: string; attributes: Record<string, unknown> }> = [];
     const dir = await mkdtemp(join(tmpdir(), "station-host-log-"));
-    try {
-      host = await startStationHost({
-        socketPath: join(dir, "station-host.sock"),
-        stateDir: dir,
-        logger: {
-          log: async (record: (typeof records)[number]) => {
-            records.push(record);
-          },
-        } as never,
-      });
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      ptyImplementation: "bun-nocctty",
+      logger: {
+        log: async (record: (typeof records)[number]) => {
+          records.push(record);
+        },
+      } as never,
+    });
 
-      expect(records[0]).toMatchObject({
-        message: "host.start",
-        attributes: { ptyImplementation: "bun-nocctty" },
-      });
-    } finally {
-      if (previous === undefined) {
-        delete process.env.STATION_PTY_IMPL;
-      } else {
-        process.env.STATION_PTY_IMPL = previous;
-      }
-    }
+    expect(records[0]).toMatchObject({
+      message: "host.start",
+      attributes: { ptyImplementation: "bun-nocctty" },
+    });
   });
 
   it("handles host.focus (best-effort) over a real unix socket", async () => {

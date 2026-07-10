@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "build:binary": "bun scripts/build-binary.mjs",
     "setup:system": "scripts/setup/setup-system-dependencies.sh",
     "setup:system:check": "scripts/setup/setup-system-dependencies.sh --check",
     "agent:cleanup": "node scripts/maintenance/agent-cleanup.mjs",
@@ -32,6 +33,7 @@
     "dev": "node scripts/tui-dev.mjs",
     "station:devbox": "node scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
+    "smoke:binary": "node scripts/test-runners/run-binary-smoke.mjs",
     "typecheck": "turbo run typecheck",
     "lint": "biome check . && node tools/lint/check-source-order.mjs && node tools/lint/check-no-raw-hex.mjs",
     "format": "biome format --write .",

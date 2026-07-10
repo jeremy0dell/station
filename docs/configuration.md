@@ -432,7 +432,7 @@ Advanced development/demo overrides:
 | --- | --- | --- |
 | `STATION_SOURCE` | Native Station TUI data source | unset/empty/`observer` for live observer, `mock` for fixture data. |
 | `STATION_SCENARIO` | Native Station mock data | Fixture scenario name when `STATION_SOURCE=mock`; defaults to `baseline`. |
-| `STATION_PTY_IMPL` | Station local and persistent-host PTYs | unset, empty, or `bridge` uses the Node/node-pty bridge (default); `bun` uses `Bun.Terminal` through the controlling-terminal helper; `bun-nocctty` starts the payload directly without job-control or orphan-cleanup guarantees. |
+| `STATION_PTY_IMPL` | Station local and persistent-host PTYs | Source mode defaults to `bridge`; a compiled binary defaults to `bun`. Explicit `bun` uses `Bun.Terminal` through the controlling-terminal helper; `bun-nocctty` starts the payload directly without job-control or orphan-cleanup guarantees. `bridge` is source-only. |
 | `STATION_NODE` | Station local PTY bridge | Node executable path/name; fallback is `node`. |
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
@@ -447,6 +447,16 @@ Source installs using `STATION_PTY_IMPL=bun` must first run
 automatically to `bun-nocctty`. Any other selector value is also an error.
 An existing station host keeps the implementation setting it inherited at
 startup, so stop and start the host when changing this variable.
+
+Compiled binaries embed the helper and materialize it under
+`<state_dir>/run/assets/ctty/` with private permissions, integrity checks, and a
+process lease so a newer TUI does not prune a helper still needed by an older
+host. The bundled Pi extension is materialized under
+`<state_dir>/run/assets/pi/` and retained because a live Pi process may reload
+its extension path. If `state_dir` is mounted `noexec`, compiled Bun PTYs fail
+with a diagnostic naming the path; move `[observer].state_dir` to an executable
+filesystem or explicitly select the degraded `bun-nocctty` mode. There is no
+automatic no-ctty fallback.
 
 Default state paths (all under `state_dir`, default `~/.local/state/station`):
 

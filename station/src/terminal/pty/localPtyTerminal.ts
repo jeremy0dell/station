@@ -83,6 +83,7 @@ function ensureSpawnHelperExecutable(): void {
 
 export function createLocalPtyTerminal(
   options: StationTerminalSpawnOptions = {},
+  runtime: LocalPtyTerminalRuntime = {},
 ): StationTerminalProcess {
   const size = normalizeSize(options.size);
   const env = createPtyEnv(options.env);
@@ -90,7 +91,8 @@ export function createLocalPtyTerminal(
   const args = options.args === undefined ? defaultShellArgs() : [...options.args];
   let implementation: PtyImplementation;
   try {
-    implementation = resolvePtyImplementation(process.env.STATION_PTY_IMPL);
+    implementation =
+      runtime.implementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
   } catch (error) {
     const detail =
       error instanceof Error ? error.message : "STATION_PTY_IMPL selects an unsupported value.";
@@ -111,7 +113,7 @@ export function createLocalPtyTerminal(
       size,
     };
     if (implementation === "bun") {
-      bunOptions.cttyHelperPath = CTTY_HELPER_PATH;
+      bunOptions.cttyHelperPath = runtime.cttyHelperPath ?? CTTY_HELPER_PATH;
     }
     return createBunTerminalProcess(bunOptions);
   }
@@ -346,10 +348,20 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
 
 export type PtyImplementation = "bridge" | "bun" | "bun-nocctty";
 
-export function resolvePtyImplementation(value: string | undefined): PtyImplementation {
+export type LocalPtyTerminalRuntime = {
+  /** A prepared runtime fixes the selector once at process startup. */
+  implementation?: PtyImplementation;
+  cttyHelperPath?: string;
+};
+
+export function resolvePtyImplementation(
+  value: string | undefined,
+  defaultImplementation: PtyImplementation = "bridge",
+): PtyImplementation {
   switch (value) {
     case undefined:
     case "":
+      return defaultImplementation;
     case "bridge":
       return "bridge";
     case "bun":

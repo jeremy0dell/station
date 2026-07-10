@@ -11,12 +11,18 @@ import {
   serveHostConnection,
 } from "@station/host";
 import { createPtyTable, type PtyTable, type PtyTableOptions } from "./ptyTable.js";
+import {
+  type PtyImplementation,
+  resolvePtyImplementation,
+} from "../terminal/pty/localPtyTerminal.js";
 
 export type StartStationHostOptions = {
   socketPath: string;
   stateDir: string;
   logger?: JsonlLogger;
   ptyTableOptions?: PtyTableOptions;
+  /** Prepared compiled runtimes supply the fixed selector reported at startup. */
+  ptyImplementation?: PtyImplementation;
 };
 
 export type StationHostInstance = {
@@ -32,7 +38,8 @@ export type StationHostInstance = {
 export async function startStationHost(
   options: StartStationHostOptions,
 ): Promise<StationHostInstance> {
-  const ptyImplementation = process.env.STATION_PTY_IMPL || "bridge";
+  const ptyImplementation =
+    options.ptyImplementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
   const logger =
     options.logger ??
     createJsonlLogger({

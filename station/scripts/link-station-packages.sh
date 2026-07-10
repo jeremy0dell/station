@@ -10,6 +10,7 @@ repo_root="$(cd "${station_root}/.." && pwd)"
 target_dir="${station_root}/node_modules/@station"
 
 linked_packages=(client config contracts dashboard-core runtime protocol observability station-host)
+linked_apps=(cli observer)
 
 for package in "${linked_packages[@]}"; do
   dist_entry="${repo_root}/packages/${package}/dist/index.js"
@@ -28,12 +29,32 @@ EOF
   fi
 done
 
+for app in "${linked_apps[@]}"; do
+  dist_entry="${repo_root}/apps/${app}/dist/index.js"
+  if [[ ! -f "${dist_entry}" ]]; then
+    cat >&2 <<EOF
+${dist_entry} is missing.
+
+Station consumes the built @station/${app} application package. Build the
+workspace at the repo root first:
+
+  cd ${repo_root}
+  pnpm install
+  pnpm build
+EOF
+    exit 1
+  fi
+done
+
 mkdir -p "${target_dir}"
 for package in "${linked_packages[@]}"; do
   # station-host publishes as @station/host (the redundant qualifier is dropped),
   # so the symlink name strips the leading station- while the source dir keeps it.
   link_name="${package#station-}"
   ln -sfn "../../../packages/${package}" "${target_dir}/${link_name}"
+done
+for app in "${linked_apps[@]}"; do
+  ln -sfn "../../../apps/${app}" "${target_dir}/${app}"
 done
 
 # Echo each linked dist's mtime so a stale build is visible at link time —
@@ -44,8 +65,13 @@ for package in "${linked_packages[@]}"; do
   mtime="$(date -r "${dist_entry}" "+%Y-%m-%d %H:%M" 2>/dev/null || stat -c "%y" "${dist_entry}" 2>/dev/null | cut -c1-16)"
   freshness="${freshness}${package}@${mtime}  "
 done
+for app in "${linked_apps[@]}"; do
+  dist_entry="${repo_root}/apps/${app}/dist/index.js"
+  mtime="$(date -r "${dist_entry}" "+%Y-%m-%d %H:%M" 2>/dev/null || stat -c "%y" "${dist_entry}" 2>/dev/null | cut -c1-16)"
+  freshness="${freshness}${app}@${mtime}  "
+done
 
 if [[ "${STATION_QUIET_PRELAUNCH:-}" != "1" ]]; then
-  echo "Linked @station packages (${linked_packages[*]}) into node_modules."
+  echo "Linked @station packages (${linked_packages[*]} ${linked_apps[*]}) into node_modules."
   echo "dist builds: ${freshness}"
 fi

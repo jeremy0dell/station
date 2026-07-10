@@ -20,10 +20,11 @@ describe("selectRivalStationUiPids", () => {
     }, // launcher: argv mentions the script but it is not the bun process
     { pid: 4242, tty: "ttys002", command: "bun --hot src/main.tsx" }, // a UI on another terminal
     { pid: 9000, tty: "ttys001", command: "bun src/host/hostMain.ts" }, // host daemon, not a UI
+    { pid: 9001, tty: "ttys001", command: "/usr/local/bin/stn __tui" }, // compiled UI
   ];
 
   it("targets only a rival UI on the same tty", () => {
-    expect(selectRivalStationUiPids(ROWS, SELF, "ttys001")).toEqual([5018]);
+    expect(selectRivalStationUiPids(ROWS, SELF, "ttys001")).toEqual([5018, 9001]);
   });
 
   it("never returns self even on a shared tty", () => {
@@ -40,6 +41,17 @@ describe("selectRivalStationUiPids", () => {
 
   it("matches a bun invoked by absolute path", () => {
     const rows = [{ pid: 1, tty: "ttys001", command: "/opt/homebrew/bin/bun --hot src/main.tsx" }];
+    expect(selectRivalStationUiPids(rows, 99, "ttys001")).toEqual([1]);
+  });
+
+  it("matches only the exact compiled stn TUI command shape", () => {
+    const rows = [
+      { pid: 1, tty: "ttys001", command: "/opt/station/stn __tui" },
+      { pid: 2, tty: "ttys001", command: "/opt/station/stn __station-host" },
+      { pid: 3, tty: "ttys001", command: "/opt/station/stn __tui extra" },
+      { pid: 4, tty: "ttys001", command: "/opt/station/stn-copy __tui" },
+      { pid: 5, tty: "ttys001", command: "/bin/sh -c /opt/station/stn __tui" },
+    ];
     expect(selectRivalStationUiPids(rows, 99, "ttys001")).toEqual([1]);
   });
 });

@@ -53,7 +53,7 @@ Pinned so the release job, install script, and acceptance suite agree.
 | Build runners | Native per target (no cross-compile — only the host-matching `@opentui/core-*` optional dep installs). Use *currently available* GitHub-hosted labels resolved at implementation time; do **not** hard-code `macos-13` (F9 — Intel macOS labels are being retired). Pin exact labels in the workflow with a comment naming the check date. |
 | macOS floor | Match the oldest OS the chosen Intel/arm runners image supports; state it in release notes. |
 | Linux floor | glibc only for v1.1 (bun's default). Declare the built-against glibc version (the runner's) as the floor; musl is a later target, not silently implied. |
-| CPU | x64 baseline = bun's default (no AVX-512 assumption); arm64 = Apple/ARMv8. |
+| CPU | x64 uses Bun's explicit `-baseline` targets for older SSE4.2-era CPUs; arm64 = Apple/ARMv8. |
 | Artifact | `stn-v{ver}-{darwin|linux}-{arm64|x64}.tar.gz`. **Manifest below is exhaustive.** |
 
 **Artifact manifest** (every file the binary needs on disk that
@@ -61,11 +61,9 @@ Pinned so the release job, install script, and acceptance suite agree.
 
 - `stn` — the compiled binary.
 - `stn-ingress` — symlink → `stn` (argv0 dispatch).
-- `stn-tmux-popup` — the tmux popup toggle. Today a separate bin
-  (`package.json` → `integrations/terminal/tmux/bin/stn-popup`); the popup
-  keybinding and setup depend on it. Either ship it as a third symlink →
-  `stn` routed to an internal `__tmux-popup` mode, or vendor the script.
-  Decide in A4; it is **not** optional.
+- `stn-tmux-popup` — symlink → `stn`. A4 routes its argv0 identity (and the
+  reserved `__tmux-popup` token) through the existing `popup` CLI command. The
+  source POSIX fast launcher remains unchanged for development installs.
 - `LICENSE` — required. FSL-1.1 (LICENSE:67) obliges every redistributed
   copy to include the Terms or a link and keep copyright notices. The
   archive must carry it.
@@ -166,16 +164,21 @@ Rather than move required checks to `recommended` (v1's B4, which erodes
 what "required" means), split the setup summary into two truths:
 
 - `launchReady` — the binary can start the TUI + observer. Needs: the
-  binary itself, a writable state dir. Nothing else. Bare `stn` gates on
-  this.
+  binary itself and a writable state dir; compiled mode also proves that
+  extracted executable assets can run there. Nothing else. Bare `stn` gates
+  on this.
 - `workflowReady` — full worktree workflow: worktrunk, tmux, diffnav,
   git-delta, an agent CLI, git repo cwd, a project in config. `stn setup`
   reports these as unmet *capabilities*, not as "broken."
 
 Each check keeps its real status; `stn setup check --json` gains both
-booleans. `stn` launches whenever `launchReady`; the TUI surfaces unmet
-`workflowReady` capabilities inline. Bun/station-UI/`rendererRuntimeCheck`
-checks are skipped when `isCompiledBinary()`.
+booleans and retains `requiredOk` as an alias of `workflowReady`. The compiled
+launch path enforces the same writable/executable-state prerequisite without
+running the full setup suite before first paint. Bun, station-UI, Xcode
+build-tool, and `rendererRuntimeCheck` checks are skipped when
+`isCompiledBinary()`. Surfacing dynamic `workflowReady` details inside the TUI
+is deferred until those facts have a proper runtime data boundary; setup JSON
+remains their authority.
 
 ## Phases
 
@@ -245,6 +248,9 @@ target's native `cc` to write the ignored development/CI executable at
 supply `TIOCSCTTY`, so TypeScript contains no platform ioctl constants. The
 four-target `station-pty` CI matrix compiles that same source natively on
 linux-x64, linux-arm64, darwin-x64, and darwin-arm64.
+The helper stays C because it is a small direct wrapper over POSIX `setsid`,
+`ioctl`, and `execvp`; Zig or Rust would add a build toolchain without improving
+that boundary.
 
 `createLocalPtyTerminal` is now a selector: unset, empty, or `bridge` preserves
 the Node/node-pty default; `bun` uses `Bun.Terminal` through the helper; and
@@ -258,11 +264,12 @@ resumes, a `SIGKILL` of the Station owner leaves no orphaned pane child, and
 `terminal.close()` is paired with an explicit `child.kill()` (S2: close alone
 does not kill). These checks remain release-blocking after the default flip.
 
-**A2b status: pending.** The default must not flip until A4 owns the packaged
-helper lifecycle, the four-target gate is green, and A2a has been daily-driven
-for at least one week. In-field undo for binary users is
-`STATION_PTY_IMPL=bun-nocctty` plus reverting the flip — **not** the bridge
-(dev-only).
+**A2b status: implemented for compiled binaries by A4.** An unset selector in a
+compiled TUI or station-host resolves to the packaged `bun` implementation;
+source development deliberately continues to default to `bridge`. In-field
+undo for binary users is the explicit degraded `STATION_PTY_IMPL=bun-nocctty`
+mode plus reverting the compiled activation — **not** the source-only bridge.
+Bridge removal remains A6 work after a full release cycle.
 
 ### A3 — self-exec seam + raw-argv dispatch
 
@@ -288,37 +295,45 @@ commands. The host and ingress boundaries receive finalized executable tuples
 and append only their operation-specific flags. The scripted harness remains
 an on-disk development/test runner: there is no `__scripted` mode.
 
-`__tmux-popup` is reserved and dispatches only to A3's injected placeholder
-runner. A4 chooses and packages the executable popup implementation; A3 leaves
-the POSIX launcher unchanged.
+`__tmux-popup` was reserved with an injected runner. A4 now binds it, and the
+`stn-tmux-popup` argv0 alias, to the existing CLI popup command while leaving the
+source POSIX launcher unchanged.
 
 ### A4 — compile entry + build script + asset extraction + CI smoke
 
-`station/src/bin/stnMain.ts` composes `dispatchSelfExec` with lazy route imports;
-`scripts/build-binary.mjs` + `build:binary`. Compile command carries **both**
-ambient-config disable flags (F1) and the version/compiled defines.
-`link-station-packages.sh` is extended for the app links.
+**Status: implemented.** `station/src/bin/stnMain.ts` composes
+`dispatchSelfExec` with lazy route imports; `scripts/build-binary.mjs` and
+`build:binary` build one native artifact with Bun 1.3.14. The compile command
+carries **both** ambient-config disable flags (F1), version/compiled defines,
+and the native target mapping; x64 selects Bun's `-baseline` targets.
+`link-station-packages.sh` links the CLI and Observer applications.
 
 A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
 
 - compile the one portable helper source natively for each target and embed the
   resulting executable alongside the Pi extension asset;
-- extract assets into a per-version, per-user cache such as
-  `<stateDir>/run/helpers/<ver>/`, set executable permissions, and verify their
-  size/hash before reuse;
+- extract the helper under `<stateDir>/run/assets/ctty/` and Pi extension under
+  `<stateDir>/run/assets/pi/`, set private permissions, and verify size plus full
+  SHA-256 before reuse;
 - make extraction atomic and lock-guarded so racing panes cannot observe a
   partial helper;
-- use an executable temporary location when the state cache is mounted `noexec`,
-  or surface a clear diagnostic without dropping to the no-ctty path; and
-- prune stale versions from the host/TUI asset-owning runtime. The observer does
-  not own helper extraction or cleanup.
+- probe the extracted helper and surface a clear configured-state-directory
+  diagnostic on `noexec`, without a temporary or no-ctty fallback;
+- lease helper versions to live TUI/host processes and prune only unleased stale
+  helper directories; and
+- retain immutable content-addressed Pi bundles because an external Pi process
+  may reload its extension path. Pi pruning waits for provider-process lifetime
+  ownership rather than risking a live session.
 
-CI `binary-smoke` (ubuntu): `--version`, `--help`, `setup check --json`
+CI `binary-smoke` (ubuntu): `--version`, `--help`, popup argv0 routing,
+`setup check --json`
 (asserting the `launchReady`/`workflowReady` split), an **observer round
 trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
-**detached self-spawn** check (folds in S5). Note: `observerReap.ts`'s
-ps-matcher must learn the compiled argv shape.
+**detached self-spawn** check (folds in S5). The four-target PTY matrix also
+builds the native binary and proves the unset compiled selector launches a
+payload through the extracted helper. `observerReap.ts` and the same-TTY UI
+reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
 
@@ -433,7 +448,7 @@ driving **live PTYs**. Define:
 One graph replaces v1's two prose landing-orders.
 
 ```
-A1 ─────────────┬─► A2a ─► A3 ─► A4 ─► A2b ─► A5 ─► A6
+A1 ─────────────┬─► A2a ─► A3 ─► A4 + compiled A2b ─► A5 ─► A6
  (buildInfo,     │
   sqlite,        │
   real version)  │
@@ -443,14 +458,14 @@ B1 ─► B2 ─► B-config ─► B3
 B-host  (independent; needed before upgrade is advertised safe)
 
 A2a: opt-in PTY + native helper gate    A3: raw dispatch
-A4: packaged asset lifecycle            A2b: default flip
+A4: packaged assets + compiled default   A2b: folded into A4
 A5: release                              A6: cleanup
 
 External dependency: observer-singleton 3c/3d/3e + version order
   → required before any older-version observer handoff is claimed safe.
 ```
 
-Suggested merge order: A1 → B1 → B2 → B-config → A2a → A3 → A4 → A2b →
+Suggested merge order: A1 → B1 → B2 → B-config → A2a → A3 → A4/A2b →
 B-host → A5 → A6, with B3's version half gated on the singleton roadmap.
 
 ## Verification (F11 — prove the headline UX, not a proxy)
@@ -460,7 +475,7 @@ tests; the cross-runtime SQLite test (A1).
 
 A2a PTY CI (every PR): Bun 1.3.14 plus a native helper build and focused
 real-PTY tests on `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15-intel`, and
-`macos-15`.
+`macos-15`. A4 extends those jobs with a native compiled-default/helper smoke.
 
 CI smoke (A4): the binary end-to-end minus TTY, **including** the
 hostile-directory RCE gate and detached self-spawn.

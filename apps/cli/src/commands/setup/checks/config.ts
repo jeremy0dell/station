@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG_PATH, loadConfigFromToml } from "@station/config";
+import { DEFAULT_CONFIG_PATH, loadConfigFromToml, resolveObserverPaths } from "@station/config";
 import { pathIsSame, resolveLocalPath } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
 import type { SetupConfigDiagnosticFact, SetupConfigFact } from "../model.js";
@@ -54,6 +54,7 @@ export async function checkSetupConfig(
       status: "valid",
       path,
       source,
+      observerStateDir: resolveObserverPaths(loaded.config, setupHomeDir(options)).stateDir,
       hasProjectForRoot: matchedProject !== undefined,
       configuredHarnesses: Object.keys(loaded.config.harness ?? {}),
       configuredHookHarnesses: Object.entries(loaded.config.harness ?? {}).flatMap(

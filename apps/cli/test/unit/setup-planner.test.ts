@@ -12,12 +12,15 @@ describe("setup planner", () => {
     const plan = buildSetupPlan(facts());
 
     expect(plan.summary).toMatchObject({
+      launchReady: true,
+      workflowReady: true,
       requiredOk: true,
       requiredMissing: 0,
       selectedActions: 0,
       selectedHarness: "codex",
     });
     expect(plan.checks.map((check) => [check.id, check.status])).toEqual([
+      ["state-dir", "ok"],
       ["worktrunk", "ok"],
       ["tmux", "ok"],
       ["bun", "ok"],
@@ -80,6 +83,57 @@ describe("setup planner", () => {
       tier: "required",
       selected: true,
       command: ["brew", "install", "bun"],
+    });
+  });
+
+  it("keeps compiled launch ready without source Bun or Station UI rows", () => {
+    const plan = buildSetupPlan(
+      facts({
+        compiled: true,
+        bun: { status: "missing", command: "bun", message: "Bun missing." },
+        stationUi: { status: "missing" },
+        xcode: {
+          status: "missing",
+          applicable: true,
+          message: "Command Line Tools missing.",
+        },
+      }),
+    );
+
+    expect(plan.summary).toMatchObject({
+      launchReady: true,
+      workflowReady: true,
+      requiredOk: true,
+    });
+    expect(plan.checks.some((check) => check.id === "bun")).toBe(false);
+    expect(plan.checks.some((check) => check.id === "station-ui")).toBe(false);
+    expect(plan.checks.some((check) => check.id === "command-line-tools")).toBe(false);
+    expect(plan.actions.some((action) => action.id === "install-bun")).toBe(false);
+  });
+
+  it("separates launch readiness from workflow readiness", () => {
+    const workflowIncomplete = buildSetupPlan(
+      facts({ worktrunk: { status: "missing", command: "wt", message: "Missing." } }),
+    );
+    expect(workflowIncomplete.summary).toMatchObject({
+      launchReady: true,
+      workflowReady: false,
+      requiredOk: false,
+    });
+
+    const launchBlocked = buildSetupPlan(
+      facts({
+        stateDir: {
+          status: "missing",
+          path: "/readonly/state",
+          message: "State directory is not writable.",
+        },
+      }),
+    );
+    expect(launchBlocked.summary).toMatchObject({
+      launchReady: false,
+      workflowReady: false,
+      requiredOk: false,
     });
   });
 
@@ -323,6 +377,8 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
     mode: "plan",
     configPath: "/tmp/config.toml",
     homeDir: "/tmp/home",
+    compiled: false,
+    stateDir: { status: "ok", path: "/tmp/home/.local/state/station" },
     worktrunk: {
       status: "ok",
       command: "wt",
@@ -422,6 +478,7 @@ function validConfigFact(
     status: "valid",
     path: "/tmp/config.toml",
     source: "schema_version = 1\n",
+    observerStateDir: "/tmp/home/.local/state/station",
     hasProjectForRoot: true,
     configuredHarnesses: ["codex"],
     configuredHookHarnesses: [],

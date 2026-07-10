@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import * as contracts from "@station/contracts";
 import { installCursorHooks } from "@station/cursor";
+import { createPiHarnessProvider } from "@station/pi";
 import { createStationHostController } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
 import { createProviderRegistry } from "../../src/observerProviders";
@@ -13,6 +14,14 @@ vi.mock("@station/terminal", async (importOriginal) => {
   return {
     ...actual,
     createStationHostController: vi.fn(actual.createStationHostController),
+  };
+});
+
+vi.mock("@station/pi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@station/pi")>();
+  return {
+    ...actual,
+    createPiHarnessProvider: vi.fn(actual.createPiHarnessProvider),
   };
 });
 
@@ -221,6 +230,25 @@ describe("observer providers", () => {
     });
 
     expect([...allBuiltIns.harnesses.keys()]).toEqual(["codex", "cursor", "pi", "opencode"]);
+  });
+
+  it("forwards a prepared extension path only to the Pi provider", () => {
+    vi.mocked(createPiHarnessProvider).mockClear();
+
+    createProviderRegistry(
+      {
+        ...config,
+        harness: { codex: {}, pi: {} },
+      },
+      { piExtensionPath: "/state/assets/pi/station-pi-extension.mjs" },
+    );
+
+    expect(createPiHarnessProvider).toHaveBeenCalledTimes(1);
+    expect(createPiHarnessProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extensionPath: "/state/assets/pi/station-pi-extension.mjs",
+      }),
+    );
   });
 
   it("passes tmux command config into the tmux terminal provider", async () => {

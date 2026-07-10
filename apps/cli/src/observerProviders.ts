@@ -53,12 +53,14 @@ import { selfExecArgv } from "./selfExec.js";
 
 export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
+  piExtensionPath?: string | undefined;
 };
 
 /**
  * COMPOSITION ROOT
  *
- * Constructs concrete provider adapters and assigns their Observer roles.
+ * Constructs concrete provider adapters, including the packaged Pi extension
+ * path supplied by compiled CLI composition, and assigns their Observer roles.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -275,6 +277,9 @@ function createHarnessProvider(
     }
     if (registryOptions.configPath !== undefined) {
       options.configPath = registryOptions.configPath;
+    }
+    if (registryOptions.piExtensionPath !== undefined) {
+      options.extensionPath = registryOptions.piExtensionPath;
     }
     applyObserverPaths(options, config, false);
     return createPiHarnessProvider(options);

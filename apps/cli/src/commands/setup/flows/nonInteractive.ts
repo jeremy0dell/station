@@ -73,7 +73,7 @@ export async function runNonInteractiveApply(
 
   const outputPlan = {
     ...writeResult.plan,
-    summary: { ...writeResult.plan.summary, requiredOk: true },
+    summary: { ...writeResult.plan.summary, workflowReady: true, requiredOk: true },
   };
   await write(deps, renderSetupApplyResult(outputPlan, renderOptions(deps)));
   return { code: 0 };

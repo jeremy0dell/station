@@ -61,7 +61,7 @@ export type SelfExecRunners = {
 };
 
 /**
- * Routes argv0 ingress before consuming one exact internal first token.
+ * Routes argv0 aliases before consuming one exact internal first token.
  * Dispatch occurs before CLI parsing or stdin reads; all other argv reaches the CLI unchanged.
  */
 export async function dispatchSelfExec(
@@ -70,6 +70,10 @@ export async function dispatchSelfExec(
 ): Promise<void> {
   if (basename(input.argv0) === "stn-ingress") {
     await runners.ingress(input.argv);
+    return;
+  }
+  if (basename(input.argv0) === "stn-tmux-popup") {
+    await runners.tmuxPopup(input.argv);
     return;
   }
 

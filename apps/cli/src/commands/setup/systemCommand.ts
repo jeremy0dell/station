@@ -1,3 +1,4 @@
+import { isCompiledBinary } from "@station/runtime";
 import { applySetupPlan } from "./apply.js";
 import { checkBrewDependency } from "./checks/brew.js";
 import { checkSetupBun } from "./checks/bun.js";
@@ -24,7 +25,9 @@ export async function runSetupSystemCommand(
     if (initial.worktrunk.status === "missing")
       actions.push(systemInstallAction("worktrunk", "worktrunk"));
     if (initial.tmux.status === "missing") actions.push(systemInstallAction("tmux", "tmux"));
-    if (initial.bun.status === "missing") actions.push(systemInstallAction("bun", "bun"));
+    if (!initial.compiled && initial.bun.status === "missing") {
+      actions.push(systemInstallAction("bun", "bun"));
+    }
     if (initial.diffnav.status === "missing")
       actions.push(systemInstallAction("diffnav", "dlvhdr/formulae/diffnav"));
     if (initial.gitDelta.status === "missing")
@@ -49,6 +52,7 @@ export async function runSetupSystemCommand(
 }
 
 type SystemFacts = {
+  compiled: boolean;
   worktrunk: Awaited<ReturnType<typeof checkSetupWorktrunk>>;
   tmux: Awaited<ReturnType<typeof checkSetupTmux>>;
   bun: Awaited<ReturnType<typeof checkSetupBun>>;
@@ -64,11 +68,14 @@ async function collectSystemFacts(
   deps: SetupCommandDeps,
 ): Promise<SystemFacts> {
   const env = deps.env ?? options.env;
+  const compiled = deps.compiled ?? isCompiledBinary();
   const dependencyOptions = dependencyOptionsForCommand(deps, env);
   const [worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain] = await Promise.all([
     checkSetupWorktrunk(dependencyOptions),
     checkSetupTmux(dependencyOptions),
-    checkSetupBun(dependencyOptions),
+    compiled
+      ? Promise.resolve({ status: "ok" as const, command: "bun" })
+      : checkSetupBun(dependencyOptions),
     checkSetupDiffnav(dependencyOptions),
     checkSetupGitDelta(dependencyOptions),
     checkBrewDependency({
@@ -83,7 +90,7 @@ async function collectSystemFacts(
       ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
     }),
   ]);
-  return { worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain };
+  return { compiled, worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain };
 }
 
 function renderSystemStatus(title: string, facts: SystemFacts): string {
@@ -92,7 +99,7 @@ function renderSystemStatus(title: string, facts: SystemFacts): string {
     "",
     `  ${facts.worktrunk.status === "ok" ? "ok" : "missing"} Worktrunk / wt`,
     `  ${facts.tmux.status === "ok" ? "ok" : "missing"} tmux`,
-    `  ${facts.bun.status === "ok" ? "ok" : "missing"} Bun`,
+    ...(facts.compiled ? [] : [`  ${facts.bun.status === "ok" ? "ok" : "missing"} Bun`]),
     `  ${facts.diffnav.status === "ok" ? "ok" : "missing"} diffnav`,
     `  ${facts.gitDelta.status === "ok" ? "ok" : "missing"} git-delta`,
     `  ${facts.brew.status === "ok" ? "ok" : facts.brew.status} Homebrew`,
@@ -111,7 +118,7 @@ function systemReady(facts: SystemFacts): boolean {
   return (
     facts.worktrunk.status === "ok" &&
     facts.tmux.status === "ok" &&
-    facts.bun.status === "ok" &&
+    (facts.compiled || facts.bun.status === "ok") &&
     facts.diffnav.status === "ok" &&
     facts.gitDelta.status === "ok" &&
     facts.toolchain.node.status === "ok" &&
@@ -139,6 +146,8 @@ function systemPlan(actions: SetupAction[]): SetupPlan {
     checks: [],
     actions,
     summary: {
+      launchReady: true,
+      workflowReady: true,
       requiredOk: true,
       requiredMissing: 0,
       warnings: 0,

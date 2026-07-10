@@ -52,12 +52,44 @@ describe("CLI setup command", () => {
       generatedAt: "2026-06-08T12:00:00.000Z",
       mode: "check",
       summary: {
+        workflowReady: false,
         requiredOk: false,
         selectedHarness: "codex",
         configPath: join(root, "missing.toml"),
       },
     });
     expect(calls.map((call) => call.command)).not.toContain("gh");
+  });
+
+  it("reports compiled launch readiness independently from workflow readiness", async () => {
+    const root = await tempRoot(tempRoots);
+    const result = await runCli(["setup", "check", "--json"], {
+      setupDeps: {
+        compiled: true,
+        cwd: root,
+        homeDir: join(root, "home"),
+        env: { PATH: "/empty" },
+        runner: fakeRunner([], {}),
+        access: fakeAccess([]),
+        fs: readOnlyFs({}),
+      },
+    });
+
+    expect(result.code).toBe(1);
+    const plan = result.output as {
+      summary: { launchReady: boolean; workflowReady: boolean; requiredOk: boolean };
+      checks: Array<{ id: string }>;
+      actions: Array<{ id: string }>;
+    };
+    expect(plan.summary).toMatchObject({
+      launchReady: true,
+      workflowReady: false,
+      requiredOk: false,
+    });
+    expect(plan.checks.some((check) => check.id === "bun")).toBe(false);
+    expect(plan.checks.some((check) => check.id === "station-ui")).toBe(false);
+    expect(plan.checks.some((check) => check.id === "command-line-tools")).toBe(false);
+    expect(plan.actions.some((action) => action.id === "install-bun")).toBe(false);
   });
 
   it("setup plan is read-only and includes a config write action", async () => {
@@ -292,7 +324,7 @@ describe("CLI setup command", () => {
 
     expect(result.code).toBe(1);
     expect(result.output).toMatchObject({
-      summary: { requiredOk: false },
+      summary: { workflowReady: false, requiredOk: false },
     });
   });
 

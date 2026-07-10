@@ -165,13 +165,14 @@ export function parseObserverPsOutput(output: string): ObserverProcessEntry[] {
     const pid = Number(pidStr);
     const startToken = tokenStr.trim();
     const argv = command.split(/\s+/).filter((token) => token.length > 0);
-    // Real observer only: argv[0] is a node binary running a …/observerMain.js
-    // script. Shell wrappers (/bin/zsh -c '…observerMain…') are excluded because
-    // their argv[0] is a shell, so grep/ps tooling never matches itself.
+    // Accept only the source Node entry or the exact compiled self-exec token;
+    // shell wrappers remain excluded so ps/grep tooling never matches itself.
     const exe = argv[0] ?? "";
     const isNode = exe === "node" || exe.endsWith("/node");
-    const runsObserver = argv.some((token) => token.endsWith("observerMain.js"));
-    if (!Number.isInteger(pid) || !isNode || !runsObserver) continue;
+    const runsSourceObserver = isNode && argv[1]?.endsWith("observerMain.js") === true;
+    const isStationBinary = exe === "stn" || exe.endsWith("/stn");
+    const runsCompiledObserver = isStationBinary && argv[1] === "__observer";
+    if (!Number.isInteger(pid) || (!runsSourceObserver && !runsCompiledObserver)) continue;
     const socketPath = resolveObserverSocketForProcessArgs(argv);
     entries.push(
       socketPath === undefined ? { pid, argv, startToken } : { pid, argv, startToken, socketPath },
