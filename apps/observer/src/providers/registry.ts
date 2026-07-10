@@ -15,7 +15,6 @@ import {
   type ProviderHealthCacheTuning,
   type ProviderHealthProbeTarget,
 } from "./healthCache.js";
-import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 
 function registerTerminal(
   terminals: Map<string, TerminalProvider>,
@@ -42,7 +41,6 @@ export type ProviderRegistryInput = {
   harnesses: Iterable<HarnessProvider> | Map<string, HarnessProvider>;
   repositories?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
   hookAdapters?: Iterable<ProviderHookAdapter> | undefined;
-  terminalIntentRunner?: TerminalIntentRunner | undefined;
   healthCache?: ProviderHealthCacheTuning | undefined;
 };
 
@@ -56,7 +54,6 @@ export class ProviderRegistry {
   readonly harnesses: Map<string, HarnessProvider>;
   readonly repositories: Map<string, RepositoryProvider>;
   readonly hookAdapters: Map<string, ProviderHookAdapter>;
-  readonly terminalIntentRunner: TerminalIntentRunner;
   readonly healthCache: ProviderHealthCache;
 
   constructor(input: ProviderRegistryInput) {
@@ -104,15 +101,6 @@ export class ProviderRegistry {
       }
       this.hookAdapters.set(adapter.provider, adapter);
     }
-
-    this.terminalIntentRunner =
-      input.terminalIntentRunner ??
-      createTerminalIntentRunner({
-        providers: {
-          terminals: this.terminals,
-          harnesses: this.harnesses,
-        },
-      });
 
     this.healthCache = new ProviderHealthCache({
       targets: healthProbeTargets(this),

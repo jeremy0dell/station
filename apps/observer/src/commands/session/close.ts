@@ -13,10 +13,12 @@ import {
 } from "../cleanup/index.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
+import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import { throwIfAborted } from "./shared.js";
 
 export type CreateSessionCloseHandlerOptions = {
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: ObserverPersistence;
   eventBus?: ObserverEventBus | undefined;
@@ -38,6 +40,7 @@ export function createSessionCloseHandler(
     assertSessionCloseAllowed(session, row, payload.force === true);
     await closeSessionResources({
       providers: options.providers,
+      terminalIntentRunner: options.terminalIntentRunner,
       session,
       row,
       mode: payload.mode,

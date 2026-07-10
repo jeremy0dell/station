@@ -24,6 +24,7 @@ describe("observer providers", () => {
     ).toEqual([managedTerminal]);
     expect(registry.defaultTerminalId).toBe(config.defaults.terminal);
     expect(registry.terminal).not.toBe(managedTerminal);
+    expect("terminalIntentRunner" in registry).toBe(false);
   });
 
   it("keeps explicit noop providers healthy for empty/test startup", async () => {
@@ -55,7 +56,6 @@ describe("observer providers", () => {
       providerId: "noop-harness",
       status: "healthy",
     });
-    expect(registry.terminalIntentRunner).toBeDefined();
     expect(await registry.worktree.listWorktrees(project)).toEqual([]);
     expect(await registry.terminal.listTargets()).toEqual([]);
     expect(
@@ -124,7 +124,6 @@ describe("observer providers", () => {
         canDiscoverRuns: false,
       },
     });
-    expect(registry.terminalIntentRunner).toBeDefined();
     await expect(registry.worktree.listWorktrees(firstProject())).resolves.toEqual([]);
     await expect(registry.terminal.listTargets()).resolves.toEqual([]);
     await expect(
@@ -166,7 +165,6 @@ describe("observer providers", () => {
     });
 
     expect([...registry.harnesses.keys()]).toEqual(["codex", "opencode", "pi", "scripted"]);
-    expect(registry.terminalIntentRunner).toBeDefined();
   });
 
   it("keeps the observer terminal intent runner out of contracts exports", () => {

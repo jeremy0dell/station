@@ -21,9 +21,9 @@ import {
 } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
-import { throwIfAborted } from "../commands/cancellation.js";
-import { launchHarnessInTerminal, runProviderMutation } from "../commands/session/shared.js";
 import { toSafeError } from "../diagnostics/errors.js";
+import { throwIfAborted } from "./cancellation.js";
+import { launchHarnessInTerminal, runProviderMutation } from "./session/shared.js";
 
 export type TerminalIntentSubmitContext = {
   trace?: TraceContext | undefined;
@@ -31,6 +31,15 @@ export type TerminalIntentSubmitContext = {
   commandTimeoutMs?: number | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Executes terminal workspace, focus, and close intents by coordinating
+ * terminal and harness ports.
+ *
+ * A process-lifetime instance deduplicates submissions by command ID and
+ * intent type.
+ */
 export type TerminalIntentRunner = {
   submitIntent(
     intent: TerminalIntent,
@@ -50,7 +59,7 @@ export type DefaultTerminalIntentRunnerOptions = {
   commandTimeoutMs?: number | undefined;
 };
 
-export class DefaultTerminalIntentRunner implements TerminalIntentRunner {
+class DefaultTerminalIntentRunner implements TerminalIntentRunner {
   readonly #providers: TerminalIntentProviderAccess;
   readonly #clock: RuntimeClock;
   readonly #logger: JsonlLogger | undefined;

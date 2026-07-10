@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const roots = ["apps", "packages", "integrations"];
@@ -146,6 +146,33 @@ describe("boundary inventory guard", () => {
       for (const providerImport of observerConcreteProviderImports) {
         if (source.includes(providerImport)) {
           violations.push(`${path}: concrete provider import ${providerImport}`);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps command orchestration out of observer provider modules", async () => {
+    const commandsRoot = join(process.cwd(), "apps/observer/src/commands");
+    const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src/providers"))).filter(
+      isProductionSourceFile,
+    );
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      const path = relative(process.cwd(), file);
+
+      for (const match of source.matchAll(/\b(?:from|import)\s*(?:\(\s*)?["']([^"']+)["']/g)) {
+        const specifier = match[1];
+        if (specifier === undefined || !specifier.startsWith(".")) {
+          continue;
+        }
+
+        const target = resolve(dirname(file), specifier);
+        if (target === commandsRoot || target.startsWith(`${commandsRoot}${sep}`)) {
+          violations.push(`${path}: command import ${specifier}`);
         }
       }
     }

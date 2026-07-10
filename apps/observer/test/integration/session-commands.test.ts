@@ -215,6 +215,52 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("submits session.fork launch work through the command composition runner", async () => {
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const worktree = new FakeWorktreeProvider({ now });
+    const fixture = createFixture({
+      worktree,
+      terminalIntentRunner,
+      sessionIds: ["ses_runner_fork"],
+    });
+    await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "fork-source" },
+    });
+    await fixture.queue.drain();
+    const source = fixture.core
+      .getSnapshot()
+      .rows.find((candidate) => candidate.branch === "fork-source");
+    if (source === undefined) {
+      throw new Error("fork source was not created");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "runner-fork",
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(terminalIntentRunner.intents).toEqual([
+      expect.objectContaining({
+        type: "session.ensureAgentWorkspace",
+        commandId: receipt.commandId,
+        terminalProvider: "fake-terminal",
+        sessionId: "ses_runner_fork",
+        worktree: expect.objectContaining({ branch: "runner-fork" }),
+      }),
+    ]);
+    fixture.sqlite.close();
+  });
+
   it("routes Pi session.create through observer command launch wiring", async () => {
     const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
@@ -1519,7 +1565,6 @@ function createFixture(
     worktree: options.worktree ?? new FakeWorktreeProvider({ now }),
     terminal: options.terminal ?? new FakeTerminalProvider({ now }),
     harnesses: options.harnesses ?? [options.harness ?? new FakeHarnessProvider({ now })],
-    terminalIntentRunner: options.terminalIntentRunner,
   });
   const featureFlags = createFeatureFlagEvaluator({
     overrides: {
@@ -1546,6 +1591,9 @@ function createFixture(
     featureFlags,
     eventBus,
     clock,
+    ...(options.terminalIntentRunner === undefined
+      ? {}
+      : { terminalIntentRunner: options.terminalIntentRunner }),
     idFactory: {
       sessionId: () => sessionIds.shift() ?? "ses_fallback",
     },

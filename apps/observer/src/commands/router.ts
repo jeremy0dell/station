@@ -22,6 +22,7 @@ import { createSessionResumeAgentHandler } from "./session/resumeAgent.js";
 import type { SessionCommandIdFactory } from "./session/shared.js";
 import { createSessionStartAgentHandler } from "./session/startAgent.js";
 import { createTerminalCloseHandler, createTerminalFocusHandler } from "./terminal.js";
+import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
 import { createWorktreeForkHandler } from "./worktree/fork.js";
 import { createWorktreeRemoveHandler } from "./worktree/remove.js";
@@ -39,15 +40,36 @@ export type RegisterObserverCommandHandlersOptions = {
   logger?: JsonlLogger | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   commandTimeoutMs?: number | undefined;
+  terminalIntentRunner?: TerminalIntentRunner | undefined;
   configPath?: string | undefined;
   homeDir?: string | undefined;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Constructs process-lifetime Observer command use cases and registers their
+ * handlers with the command queue.
+ *
+ * Terminal intent orchestration is created once here and injected directly
+ * into every handler that uses it.
+ */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
 ): void {
   const getProjects = options.getProjects ?? (() => options.projects);
   const featureFlags = options.featureFlags ?? createFeatureFlagEvaluator();
+  const terminalIntentRunner =
+    options.terminalIntentRunner ??
+    createTerminalIntentRunner({
+      providers: {
+        terminals: options.providers.terminals,
+        harnesses: options.providers.harnesses,
+      },
+      clock: options.clock,
+      logger: options.logger,
+      commandTimeoutMs: options.commandTimeoutMs,
+    });
   options.queue.registerHandler(
     "observer.reconcile",
     createObserverReconcileHandler({
@@ -61,6 +83,7 @@ export function registerObserverCommandHandlers(
     createTerminalFocusHandler({
       core: options.core,
       providers: options.providers,
+      terminalIntentRunner,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
   );
@@ -69,6 +92,7 @@ export function registerObserverCommandHandlers(
     createTerminalCloseHandler({
       core: options.core,
       providers: options.providers,
+      terminalIntentRunner,
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
@@ -80,6 +104,7 @@ export function registerObserverCommandHandlers(
     createSessionCreateHandler({
       getProjects,
       providers: options.providers,
+      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -94,6 +119,7 @@ export function registerObserverCommandHandlers(
     createSessionStartAgentHandler({
       getProjects,
       providers: options.providers,
+      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -108,6 +134,7 @@ export function registerObserverCommandHandlers(
     createSessionResumeAgentHandler({
       getProjects,
       providers: options.providers,
+      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       featureFlags,
@@ -122,6 +149,7 @@ export function registerObserverCommandHandlers(
     createSessionForkHandler({
       getProjects,
       providers: options.providers,
+      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -135,6 +163,7 @@ export function registerObserverCommandHandlers(
     "session.close",
     createSessionCloseHandler({
       providers: options.providers,
+      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -187,6 +216,7 @@ export function registerObserverCommandHandlers(
     "worktree.remove",
     createWorktreeRemoveHandler({
       providers: options.providers,
+      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,

@@ -39,14 +39,13 @@ import {
   cursorHookAdapter,
 } from "@station/cursor";
 import { GithubRepositoryProvider } from "@station/github-repository";
-import type { JsonlLogger } from "@station/observability";
-import { createTerminalIntentRunner, ProviderRegistry } from "@station/observer/internal";
+import { ProviderRegistry } from "@station/observer/internal";
 import {
   createOpenCodeHarnessProvider,
   type OpenCodeHarnessProviderOptions,
 } from "@station/opencode";
 import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
-import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import { systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
@@ -54,15 +53,15 @@ import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
 
 export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
-  clock?: RuntimeClock | undefined;
-  logger?: JsonlLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
  * COMPOSITION ROOT
  *
- * Constructs concrete integrations and assigns application roles for the observer.
+ * Constructs concrete provider adapters and assigns their Observer roles.
+ *
+ * Observer application use cases are composed by the Observer runtime, not
+ * stored in the provider registry.
  */
 export function createProviderRegistry(
   config: StationConfig,
@@ -72,7 +71,6 @@ export function createProviderRegistry(
   const terminal = createTerminalProvider(config);
   const harnesses = createHarnessProviders(config, options);
   const repositories = createRepositoryProviders(config);
-  const harnessMap = new Map(harnesses.map((provider) => [provider.id, provider]));
   // The externally-hosted native provider registers Station-owned terminal
   // targets; the default terminal provider stays the project default (e.g. tmux).
   // Behind stationPersistentAgents it is host-backed (spawns into / drives the
@@ -86,24 +84,11 @@ export function createProviderRegistry(
         }),
       })
     : new StationTerminalProvider();
-  const terminalMap = new Map<string, TerminalProvider>([
-    [terminal.id, terminal],
-    [station.id, station],
-  ]);
-  const terminalIntentRunner = createTerminalIntentRunner({
-    providers: {
-      terminals: terminalMap,
-      harnesses: harnessMap,
-    },
-    clock: options.clock,
-    logger: options.logger,
-    commandTimeoutMs: options.commandTimeoutMs,
-  });
   return new ProviderRegistry({
     worktree,
     terminal,
     managedTerminal: station,
-    harnesses: harnessMap,
+    harnesses,
     repositories,
     hookAdapters: [
       claudeHookAdapter,
@@ -112,7 +97,6 @@ export function createProviderRegistry(
       piHookAdapter,
       worktrunkHookAdapter,
     ],
-    terminalIntentRunner,
   });
 }
 

@@ -11,6 +11,7 @@ import {
   createObserverCore,
   createTerminalCloseHandler,
   createTerminalFocusHandler,
+  createTerminalIntentRunner,
   ProviderRegistry,
 } from "../../src/internal";
 
@@ -77,7 +78,11 @@ describe("observer terminal commands", () => {
       terminal,
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const handler = createTerminalFocusHandler({ core, providers });
+    const handler = createTerminalFocusHandler({
+      core,
+      providers,
+      terminalIntentRunner: terminalIntentRunnerFor(providers),
+    });
 
     await handler({
       commandId: "cmd_1",
@@ -122,7 +127,11 @@ describe("observer terminal commands", () => {
       terminal,
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const handler = createTerminalFocusHandler({ core, providers });
+    const handler = createTerminalFocusHandler({
+      core,
+      providers,
+      terminalIntentRunner: terminalIntentRunnerFor(providers),
+    });
 
     await expect(
       handler({
@@ -199,7 +208,11 @@ describe("observer terminal commands", () => {
       terminal,
       harnesses: [new FakeHarnessProvider({ now })],
     });
-    const handler = createTerminalCloseHandler({ core, providers });
+    const handler = createTerminalCloseHandler({
+      core,
+      providers,
+      terminalIntentRunner: terminalIntentRunnerFor(providers),
+    });
 
     await handler({
       commandId: "cmd_1",
@@ -262,7 +275,11 @@ describe("observer terminal commands", () => {
       clock: { now: () => new Date(now) },
     });
     await core.reconcile("terminal-close-failure-test");
-    const handler = createTerminalCloseHandler({ core, providers });
+    const handler = createTerminalCloseHandler({
+      core,
+      providers,
+      terminalIntentRunner: terminalIntentRunnerFor(providers),
+    });
 
     await expect(
       handler({
@@ -283,6 +300,15 @@ describe("observer terminal commands", () => {
     });
   });
 });
+
+function terminalIntentRunnerFor(providers: ProviderRegistry) {
+  return createTerminalIntentRunner({
+    providers: {
+      terminals: providers.terminals,
+      harnesses: providers.harnesses,
+    },
+  });
+}
 
 class RecordingTerminalProvider extends FakeTerminalProvider implements TerminalProvider {
   readonly #focused: string[];
