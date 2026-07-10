@@ -9,6 +9,7 @@ import type {
   EventFilter,
   HarnessEventReport,
   HarnessEventReportReceipt,
+  ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
   ProviderHookEvent,
@@ -19,7 +20,6 @@ import type {
 } from "@station/contracts";
 import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
-import type { ObserverApi } from "@station/protocol";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";

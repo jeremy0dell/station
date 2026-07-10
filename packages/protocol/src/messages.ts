@@ -1,4 +1,8 @@
 import {
+  AgentPrepareExternalLaunchParamsSchema,
+  AgentPrepareExternalLaunchResultSchema,
+  AgentReportExternalExitParamsSchema,
+  AgentReportExternalExitResultSchema,
   CommandIdSchema,
   CommandReceiptSchema,
   CommandRecordSchema,
@@ -9,23 +13,17 @@ import {
   EventFilterSchema,
   HarnessEventReportReceiptSchema,
   HarnessEventReportSchema,
-  HarnessLaunchPlanSchema,
   ObserverHealthSchema,
   ObserverStopReceiptSchema,
-  ProjectIdSchema,
   ProviderHookEventSchema,
   ProviderHookReceiptSchema,
-  ProviderIdSchema,
   ReconcileReceiptSchema,
   SafeErrorSchema,
   SchemaVersionSchema,
-  SessionIdSchema,
   STATION_SCHEMA_VERSION,
   StationCommandSchema,
   StationEventSchema,
   StationSnapshotSchema,
-  TerminalTargetIdSchema,
-  WorktreeIdSchema,
 } from "@station/contracts";
 import { z } from "zod";
 
@@ -113,75 +111,6 @@ export const SnapshotGetParamsSchema = z
   })
   .strict()
   .optional();
-
-export const AgentPrepareExternalLaunchParamsSchema = z
-  .object({
-    projectId: ProjectIdSchema,
-    worktreeId: WorktreeIdSchema,
-    harness: ProviderIdSchema.optional(),
-  })
-  .strict();
-
-export type AgentPrepareExternalLaunchParams = z.infer<
-  typeof AgentPrepareExternalLaunchParamsSchema
->;
-
-/**
- * Where a reattaching Station client picks up a persistent host-owned agent: the
- * live host PTY id, its STATION target id, and the host socket to attach to. Present
- * only behind `stationPersistentAgents` when a live host PTY exists — absent ⇒
- * the UI spawns the PTY locally from `launchPlan`.
- */
-export const AgentReattachHandleSchema = z
-  .object({
-    ptyId: z.string().min(1),
-    terminalTargetId: TerminalTargetIdSchema,
-    hostSocketPath: z.string().min(1),
-  })
-  .strict();
-
-export type AgentReattachHandle = z.infer<typeof AgentReattachHandleSchema>;
-
-export const AgentPrepareExternalLaunchResultSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("prepared"),
-      sessionId: SessionIdSchema,
-      terminalTargetId: TerminalTargetIdSchema,
-      launchPlan: HarnessLaunchPlanSchema,
-      reattachHandle: AgentReattachHandleSchema.optional(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("existing-session"),
-      sessionId: SessionIdSchema,
-      harnessProvider: ProviderIdSchema,
-      reattachHandle: AgentReattachHandleSchema.optional(),
-    })
-    .strict(),
-]);
-
-export type AgentPrepareExternalLaunchResult = z.infer<
-  typeof AgentPrepareExternalLaunchResultSchema
->;
-
-export const AgentReportExternalExitParamsSchema = z
-  .object({
-    terminalTargetId: TerminalTargetIdSchema,
-  })
-  .strict();
-
-export type AgentReportExternalExitParams = z.infer<typeof AgentReportExternalExitParamsSchema>;
-
-export const AgentReportExternalExitResultSchema = z
-  .object({
-    acknowledged: z.boolean(),
-    terminalTargetId: TerminalTargetIdSchema,
-  })
-  .strict();
-
-export type AgentReportExternalExitResult = z.infer<typeof AgentReportExternalExitResultSchema>;
 
 export const CommandDispatchParamsSchema = z
   .object({

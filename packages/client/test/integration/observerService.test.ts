@@ -6,6 +6,7 @@ import type {
   DoctorReport,
   HarnessEventReport,
   HarnessEventReportReceipt,
+  ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
   ProviderHookEvent,
@@ -18,7 +19,6 @@ import type {
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   listenUnixSocket,
-  type ObserverApi,
   type ObserverClient,
   startProtocolServer,
   type TerminalCommandRecord,

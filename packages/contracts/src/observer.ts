@@ -1,9 +1,32 @@
 import { z } from "zod";
+import type { CommandReceipt, CommandRecord, StationCommand } from "./commands.js";
+import type {
+  DiagnosticCollectionOptions,
+  DiagnosticSnapshot,
+  DoctorOptions,
+  DoctorReport,
+} from "./diagnostics.js";
 import { SafeErrorSchema } from "./errors.js";
-import { ProviderIdSchema, SchemaVersionSchema, TimestampSchema } from "./ids.js";
-import { ProviderHealthSchema } from "./providers.js";
+import type { EventFilter, StationEvent } from "./events.js";
+import type {
+  HarnessEventReport,
+  HarnessEventReportReceipt,
+  ProviderHookEvent,
+  ProviderHookReceipt,
+} from "./hooks.js";
+import {
+  type CommandId,
+  ProjectIdSchema,
+  ProviderIdSchema,
+  SchemaVersionSchema,
+  SessionIdSchema,
+  TerminalTargetIdSchema,
+  TimestampSchema,
+  WorktreeIdSchema,
+} from "./ids.js";
+import { HarnessLaunchPlanSchema, ProviderHealthSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
-import { StationSnapshotSchema } from "./snapshot.js";
+import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
 export const ObserverHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
 
@@ -98,6 +121,99 @@ export const ReconcileReceiptSchema = z
   .strict();
 
 export type ReconcileReceipt = z.infer<typeof ReconcileReceiptSchema>;
+
+export const AgentPrepareExternalLaunchParamsSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    worktreeId: WorktreeIdSchema,
+    harness: ProviderIdSchema.optional(),
+  })
+  .strict();
+
+export type AgentPrepareExternalLaunchParams = z.infer<
+  typeof AgentPrepareExternalLaunchParamsSchema
+>;
+
+/**
+ * Where a reattaching Station client picks up a persistent host-owned agent: the
+ * live host PTY id, its STATION target id, and the host socket to attach to. Present
+ * only behind `stationPersistentAgents` when a live host PTY exists — absent ⇒
+ * the UI spawns the PTY locally from `launchPlan`.
+ */
+export const AgentReattachHandleSchema = z
+  .object({
+    ptyId: z.string().min(1),
+    terminalTargetId: TerminalTargetIdSchema,
+    hostSocketPath: z.string().min(1),
+  })
+  .strict();
+
+export type AgentReattachHandle = z.infer<typeof AgentReattachHandleSchema>;
+
+export const AgentPrepareExternalLaunchResultSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("prepared"),
+      sessionId: SessionIdSchema,
+      terminalTargetId: TerminalTargetIdSchema,
+      launchPlan: HarnessLaunchPlanSchema,
+      reattachHandle: AgentReattachHandleSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("existing-session"),
+      sessionId: SessionIdSchema,
+      harnessProvider: ProviderIdSchema,
+      reattachHandle: AgentReattachHandleSchema.optional(),
+    })
+    .strict(),
+]);
+
+export type AgentPrepareExternalLaunchResult = z.infer<
+  typeof AgentPrepareExternalLaunchResultSchema
+>;
+
+export const AgentReportExternalExitParamsSchema = z
+  .object({
+    terminalTargetId: TerminalTargetIdSchema,
+  })
+  .strict();
+
+export type AgentReportExternalExitParams = z.infer<typeof AgentReportExternalExitParamsSchema>;
+
+export const AgentReportExternalExitResultSchema = z
+  .object({
+    acknowledged: z.boolean(),
+    terminalTargetId: TerminalTargetIdSchema,
+  })
+  .strict();
+
+export type AgentReportExternalExitResult = z.infer<typeof AgentReportExternalExitResultSchema>;
+
+/**
+ * DRIVING PORT
+ *
+ * Exposes Observer queries, handshakes, ingress reports, maintenance, and lifecycle
+ * operations to external actors.
+ */
+export type ObserverApi = {
+  health(): Promise<ObserverHealth>;
+  stop(): Promise<ObserverStopReceipt>;
+  getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
+  subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
+  dispatch(command: StationCommand): Promise<CommandReceipt>;
+  getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;
+  reconcile(reason?: string): Promise<ReconcileReceipt>;
+  ingestProviderHookEvent(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
+  reportHarnessEvent(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
+  prepareExternalLaunch(
+    params: AgentPrepareExternalLaunchParams,
+  ): Promise<AgentPrepareExternalLaunchResult>;
+  reportExternalExit(params: AgentReportExternalExitParams): Promise<AgentReportExternalExitResult>;
+  runDoctor(options?: DoctorOptions): Promise<DoctorReport>;
+  collectDiagnostics(options?: DiagnosticCollectionOptions): Promise<DiagnosticSnapshot>;
+};
 
 // Freshness-insensitive launch reconciles: the observer may satisfy these by
 // joining an in-flight observer.startup scan instead of running a new one.

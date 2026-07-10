@@ -169,7 +169,7 @@ ownership even where current ownership is still a deviation.
 
 | Conversation | Direction | Application seam | Actor or adapter | Rule and current status |
 | --- | --- | --- | --- | --- |
-| Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | This is the current driving-port-shaped surface; it becomes a conforming application-owned driving port when OBS-HEX-003 exits. |
+| Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. |
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; registration is not yet exhaustive (OBS-HEX-006). |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
@@ -518,12 +518,11 @@ and exit condition here.
 
 | ID | Current evidence and risk | Containment and exit evidence | Tracking |
 | --- | --- | --- | --- |
-| `OBS-HEX-003` | `ObserverApi` and external-launch application DTOs are owned by `packages/protocol`. The semantic boundary and one transport share an owner. | Do not add more application semantics to transport. Exit when application contracts live in `packages/contracts` and protocol owns only transport mapping and validation. | Observer application contract move. |
 | `OBS-HEX-004` | `ObserverCore` accepts `ObserverSqliteHandle`, exposes SQLite health, and imports persisted representations. Storage technology crosses inward. | Keep new SQLite details out of core. Exit when core depends only on application-purpose persistence and health capabilities. | SQLite/core isolation. |
 | `OBS-HEX-005` | `ObserverPersistence` combines unrelated use cases, complete Observer tests require SQLite, and the existing fake is not a safe substitute. | Add no new generic persistence bucket. Exit when consumers use the seven purpose-owned ports, SQLite and in-memory adapters pass shared contracts, and the full application runs without SQLite. | Persistence port and substitution remediation. |
 | `OBS-HEX-006` | `StationCommand` includes `session.sendPrompt` and `hooks.install`, but the Observer router registers neither; accepted commands can fail only after queueing. | Do not add another non-executable contract member. Exit when unsupported members are removed and construction proves exhaustive registration or an explicit reviewed unsupported allowlist. | Command surface cleanup and exhaustive registration. |
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
-| `OBS-HEX-009` | External-launch application results still expose `TerminalReattachInfo` with host endpoint and socket data. A host-specific representation crosses the application API. | The managed lifecycle remains explicitly injected and application code must not construct the payload. Exit when the API returns an opaque managed-terminal attachment resolved by Station-side attachment behavior. | Managed attachment protocol cutover. |
+| `OBS-HEX-009` | External-launch application results still expose `AgentReattachHandle` with host PTY and socket data. A host-specific representation crosses the application API. | The managed lifecycle remains explicitly injected and application code must not construct the payload. Exit when the API returns an opaque managed-terminal attachment resolved by Station-side attachment behavior. | Managed attachment protocol cutover. |
 | `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Keep behavior behind existing narrow call sites. Exit with purpose-owned `StationLogger` and `ProjectConfigWriter` ports and adapters. | Logging and project-config edge inversion. |
 | `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Use case and local adapter mechanics are mixed. | Keep new provider-specific parsing out of metadata orchestration. Exit when `WorktreeMetadataSource` owns local Git/ref evidence. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only and paths stay composition-supplied. Exit when a `DiagnosticEvidenceSource` adapter owns local traversal and the use case runs against a fake. | Diagnostic evidence isolation. |
@@ -533,6 +532,10 @@ resolved: application code receives `ManagedTerminalLifecycle` from composition,
 does not select the Station adapter by ID, and does not construct its target
 format. `OBS-HEX-002` is resolved: a non-GitHub repository adapter can be
 selected without application changes, and overlapping support fails explicitly.
+`OBS-HEX-003` is resolved: `ObserverApi` and external-launch application
+contracts are owned by `packages/contracts`, protocol retains transport mapping
+and validation, and a boundary diagnostic confines Observer protocol imports to
+the runtime server adapter.
 This document resolves `OBS-HEX-008`, the missing canonical Observer architecture
 contract. Resolved history belongs in its issue and pull request, not in the
 active register.

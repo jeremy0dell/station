@@ -1,5 +1,5 @@
-import type { CommandId, CommandRecord, StationSnapshot } from "@station/contracts";
-import { createObserverClient, type ObserverApi, type ObserverClient } from "@station/protocol";
+import type { CommandId, CommandRecord, ObserverApi, StationSnapshot } from "@station/contracts";
+import { createObserverClient, type ObserverClient } from "@station/protocol";
 import type { RealStationConfigFixture } from "./config";
 
 export function createRealObserverClient(
