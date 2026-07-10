@@ -32,6 +32,7 @@ export type StationHostInstance = {
 export async function startStationHost(
   options: StartStationHostOptions,
 ): Promise<StationHostInstance> {
+  const ptyImplementation = process.env.STATION_PTY_IMPL || "bridge";
   const logger =
     options.logger ??
     createJsonlLogger({
@@ -42,7 +43,7 @@ export async function startStationHost(
   await logger.log({
     level: "info",
     message: "host.start",
-    attributes: { socketPath: options.socketPath, pid: process.pid },
+    attributes: { socketPath: options.socketPath, pid: process.pid, ptyImplementation },
   });
 
   // Every lifecycle event -> station-host.jsonl as a tailable timeline. Redaction-safe: only ids/counts/codes, never PTY data/env.

@@ -232,37 +232,36 @@ versa), proving migration/schema compatibility across the two engines.
 
 ### A2 — `Bun.Terminal` PTY adapter + controlling-terminal helper (two PRs)
 
-`station/src/terminal/pty/bunTerminalProcess.ts` implementing
-`StationTerminalProcess`; shared emitter extracted from
-`LocalPtyTerminalProcess`. The payload command is spawned through a **ctty
-helper** (S2, F6): `setsid()`, `ioctl(0, TIOCSCTTY)`, `execvp(payload)`.
+**A2a status: implemented.** `station/src/terminal/pty/bunTerminalProcess.ts`
+implements `StationTerminalProcess`, and the bridge and Bun adapters share one
+emitter that retains early output and exit state. The payload command is spawned
+through a **ctty helper** (S2, F6): `setsid()`,
+`ioctl(STDIN_FILENO, TIOCSCTTY)`, `execvp(payload)`.
 
-Helper lifecycle (all required before the A2b default flip):
+A2a checks in one portable POSIX C source. `bun run build:ctty-helper` uses the
+target's native `cc` to write the ignored development/CI executable at
+`station/dist/ctty-helper`; no built helper is committed. Platform headers
+supply `TIOCSCTTY`, so TypeScript contains no platform ioctl constants. The
+four-target `station-pty` CI matrix compiles that same source natively on
+linux-x64, linux-arm64, darwin-x64, and darwin-arm64.
 
-- **Source + build**: a tiny C source per platform (arm64/x64 × darwin/
-  linux), compiled in release CI, checked in as source. `TIOCSCTTY` differs
-  per platform (macOS `0x20007461`); no magic constants in TS.
-- **Embedding + extraction**: embedded via file import; extracted to a
-  per-version, per-user cache dir (e.g. `<stateDir>/run/helpers/<ver>/`)
-  with `0700`, `chmod +x`, and an integrity check (size/hash) before use.
-- **Concurrency**: extraction is idempotent and lock-guarded (two panes
-  racing must not observe a half-written helper). Reuse if present + valid.
-- **`noexec` policy**: if the cache dir is on a `noexec` mount, fall back
-  to a temp exec-capable dir or surface a clear diagnostic; never silently
-  drop to the no-ctty path.
-- **Cleanup**: stale-version helpers pruned on observer start.
+`createLocalPtyTerminal` is now a selector: unset, empty, or `bridge` preserves
+the Node/node-pty default; `bun` uses `Bun.Terminal` through the helper; and
+`bun-nocctty` explicitly launches without it. A missing, non-executable, or
+`noexec`-blocked helper is an actionable error, never an automatic fallback to
+`bun-nocctty`. The degraded mode does not carry shell job-control or
+orphan-cleanup guarantees.
 
-`createLocalPtyTerminal` becomes a selector. **A2a**: adapter opt-in
-(`STATION_PTY_IMPL=bun`), default stays the bridge. **A2b**: default flip,
-gated on ≥1 week daily-driving A2a and the acceptance below. In-field undo
-for binary users is `STATION_PTY_IMPL=bun-nocctty` + reverting the flip —
-**not** the bridge (dev-only).
+The per-platform gate uses a real PTY to verify Ctrl-Z suspends and `fg`
+resumes, a `SIGKILL` of the Station owner leaves no orphaned pane child, and
+`terminal.close()` is paired with an explicit `child.kill()` (S2: close alone
+does not kill). These checks remain release-blocking after the default flip.
 
-**Per-platform job-control + orphan tests (release-blocking):** on every
-target, in a real PTY, verify Ctrl-Z suspends and resumes (`fg`), that a
-`SIGKILL` of the Station process leaves **no** orphaned pane children, and
-that `terminal.close()` is paired with an explicit `child.kill()` (S2:
-close alone does not kill).
+**A2b status: pending.** The default must not flip until A4 owns the packaged
+helper lifecycle, the four-target gate is green, and A2a has been daily-driven
+for at least one week. In-field undo for binary users is
+`STATION_PTY_IMPL=bun-nocctty` plus reverting the flip — **not** the bridge
+(dev-only).
 
 ### A3 — self-exec seam + raw-argv dispatch
 
@@ -280,9 +279,22 @@ Rewrite spawn sites (`observerProcess.ts`, `ingress/observerStartup.ts`,
 
 `station/src/bin/stnMain.ts`; `scripts/build-binary.mjs` + `build:binary`.
 Compile command carries **both** ambient-config disable flags (F1) and the
-version/compiled defines. Asset-extraction module resolves the Pi extension
-and ctty helper from embedded files to the per-version cache on first use.
-`link-station-packages.sh` extended for the app links.
+version/compiled defines. `link-station-packages.sh` is extended for the app
+links.
+
+A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
+
+- compile the one portable helper source natively for each target and embed the
+  resulting executable alongside the Pi extension asset;
+- extract assets into a per-version, per-user cache such as
+  `<stateDir>/run/helpers/<ver>/`, set executable permissions, and verify their
+  size/hash before reuse;
+- make extraction atomic and lock-guarded so racing panes cannot observe a
+  partial helper;
+- use an executable temporary location when the state cache is mounted `noexec`,
+  or surface a clear diagnostic without dropping to the no-ctty path; and
+- prune stale versions from the host/TUI asset-owning runtime. The observer does
+  not own helper extraction or cleanup.
 
 CI `binary-smoke` (ubuntu): `--version`, `--help`, `setup check --json`
 (asserting the `launchReady`/`workflowReady` split), an **observer round
@@ -404,19 +416,18 @@ driving **live PTYs**. Define:
 One graph replaces v1's two prose landing-orders.
 
 ```
-A1 ─────────────┬─► A2a ─► A2b ──────────────┐
- (buildInfo,     │   (ctty helper + per-       │
-  sqlite,        │    platform job-control     │
-  real version)  │    acceptance)              │
-                 ├─► A3 ─► A4 ─► A5 ─► A6       │
-                 │   (raw dispatch; compile +   (delete bridge after
-                 │    RCE gate; release;         one green release)
-                 │    checksum/license/brew)
-                 │
+A1 ─────────────┬─► A2a ─► A3 ─► A4 ─► A2b ─► A5 ─► A6
+ (buildInfo,     │
+  sqlite,        │
+  real version)  │
                  └─► B3 (schema/version UX) ◄── observer-singleton version-order phase
 B1 ─► B2 ─► B-config ─► B3
               (config activation — headline UX)
 B-host  (independent; needed before upgrade is advertised safe)
+
+A2a: opt-in PTY + native helper gate    A3: raw dispatch
+A4: packaged asset lifecycle            A2b: default flip
+A5: release                              A6: cleanup
 
 External dependency: observer-singleton 3c/3d/3e + version order
   → required before any older-version observer handoff is claimed safe.
@@ -429,6 +440,10 @@ B-host → A5 → A6, with B3's version half gated on the singleton roadmap.
 
 Unit/integration (every PR): vitest fake-seam tests; bun-lane driver + PTY
 tests; the cross-runtime SQLite test (A1).
+
+A2a PTY CI (every PR): Bun 1.3.14 plus a native helper build and focused
+real-PTY tests on `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15-intel`, and
+`macos-15`.
 
 CI smoke (A4): the binary end-to-end minus TTY, **including** the
 hostile-directory RCE gate and detached self-spawn.

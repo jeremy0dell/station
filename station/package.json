@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:ctty-helper": "mkdir -p dist && cc -std=c11 -Wall -Wextra -Werror -O2 -o dist/ctty-helper src/terminal/pty/station-ctty-helper.c && chmod 0755 dist/ctty-helper",
     "dev": "bun run link:station && bun run repair:node-pty && bun --hot src/main.tsx",
     "link:station": "./scripts/link-station-packages.sh",
     "repair:node-pty": "./scripts/repair-node-pty.sh",
@@ -20,6 +21,7 @@
     "host:list": "bun run link:station && bun src/host/listHostAgents.ts",
     "test:agents": "bun run repair:node-pty && STATION_PTY_SMOKE=1 STATION_PTY_SMOKE_TUI=1 bun test src/input/stationInput.e2e.test.tsx src/terminal/ptyPipeline.smoke.test.ts",
     "test:pty": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/terminal/pty/localPtyTerminal.test.ts src/terminal/ptyPipeline.smoke.test.ts src/terminal/pty/localPtyBridgeHardening.test.ts src/input/stationInput.e2e.test.tsx",
+    "test:pty:bun": "bun run build:ctty-helper && STATION_PTY_SMOKE=1 STATION_PTY_IMPL=bun bun test src/terminal/pty/terminalProcessEmitter.test.ts src/terminal/pty/localPtyTerminal.test.ts src/terminal/pty/bunTerminalProcess.test.ts",
     "test:stress": "STATION_VT_STRESS=1 bun test src/terminal/vt/screen.stress.test.ts",
     "test:vt": "bun test src/terminal",
     "typecheck": "bun run link:station && tsc -p tsconfig.json --noEmit"
