@@ -8,6 +8,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
+import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
   buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
@@ -26,6 +27,7 @@ import {
 export type CreateSessionCreateHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: ObserverPersistence;
   eventBus?: ObserverEventBus | undefined;
@@ -94,7 +96,7 @@ export function createSessionCreateHandler(
       seededSessionTitle = true;
       throwIfAborted(context.signal);
 
-      const receipt = await options.providers.terminalIntentRunner.submitIntent(
+      const receipt = await options.terminalIntentRunner.submitIntent(
         buildEnsureAgentWorkspaceIntent({
           commandId: context.commandId,
           project,

@@ -21,14 +21,15 @@ import {
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
-  DefaultTerminalIntentRunner,
+  createTerminalIntentRunner,
   type TerminalIntentProviderAccess,
-} from "../../src/providers/terminalIntentRunner";
+  type TerminalIntentRunner,
+} from "../../src/commands/terminalIntentRunner";
 
 const now = "2026-06-04T12:00:00.000Z";
 const clock = { now: () => new Date(now) };
 
-describe("DefaultTerminalIntentRunner", () => {
+describe("createTerminalIntentRunner", () => {
   it("opens the workspace, builds launch from the normalized terminal observation, and launches", async () => {
     const order: string[] = [];
     const terminal = new RecordingTerminalProvider({ order });
@@ -415,7 +416,7 @@ describe("DefaultTerminalIntentRunner", () => {
 
   it("logs terminal intent submission and receipt with product identifiers", async () => {
     const logger = new CapturingLogger();
-    const runner = new DefaultTerminalIntentRunner({
+    const runner = createTerminalIntentRunner({
       providers: {
         terminals: new Map([["fake-terminal", new RecordingTerminalProvider()]]),
         harnesses: new Map([["fake-harness", new CapturingHarnessProvider()]]),
@@ -471,12 +472,12 @@ describe("DefaultTerminalIntentRunner", () => {
 function runnerFor(
   terminal: RecordingTerminalProvider,
   harnesses: CapturingHarnessProvider[],
-): DefaultTerminalIntentRunner {
+): TerminalIntentRunner {
   const providers: TerminalIntentProviderAccess = {
     terminals: new Map([[terminal.id, terminal]]),
     harnesses: new Map(harnesses.map((provider) => [provider.id, provider])),
   };
-  return new DefaultTerminalIntentRunner({
+  return createTerminalIntentRunner({
     providers,
     clock,
   });

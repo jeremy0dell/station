@@ -9,6 +9,7 @@ import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
+import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
   assertNoCurrentAgent,
   buildEnsureAgentWorkspaceIntent,
@@ -30,6 +31,7 @@ import {
 export type CreateSessionStartAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: ObserverPersistence;
   eventBus?: ObserverEventBus | undefined;
@@ -101,7 +103,7 @@ export function createSessionStartAgentHandler(
       seededSessionTitle = true;
       throwIfAborted(context.signal);
 
-      const receipt = await options.providers.terminalIntentRunner.submitIntent(
+      const receipt = await options.terminalIntentRunner.submitIntent(
         buildEnsureAgentWorkspaceIntent({
           commandId: context.commandId,
           project,

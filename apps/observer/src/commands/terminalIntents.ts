@@ -1,4 +1,5 @@
 import type {
+  ProviderId,
   SafeError,
   SessionView,
   StationSnapshot,
@@ -11,12 +12,12 @@ import type {
   TerminalIntentSubject,
   WorktreeRow,
 } from "@station/contracts";
-import type { ProviderRegistry } from "../providers/registry.js";
 import { resolveRowForSession } from "./cleanup/resolve.js";
 import type { CommandHandlerContext } from "./queue.js";
+import type { TerminalIntentRunner } from "./terminalIntentRunner.js";
 
 export function terminalFocusIntentFromPayload(input: {
-  providers: ProviderRegistry;
+  defaultTerminalId: ProviderId;
   commandId: string;
   payload: TerminalFocusPayload;
   snapshot?: StationSnapshot | undefined;
@@ -27,7 +28,7 @@ export function terminalFocusIntentFromPayload(input: {
     terminalProvider: resolveTerminalProviderFromPayload(
       input.payload,
       input.snapshot,
-      input.providers.terminal.id,
+      input.defaultTerminalId,
     ),
     subject: terminalIntentSubjectFromPayload(input.payload, input.snapshot),
   };
@@ -38,7 +39,7 @@ export function terminalFocusIntentFromPayload(input: {
 }
 
 export function terminalCloseIntentFromPayload(input: {
-  providers: ProviderRegistry;
+  defaultTerminalId: ProviderId;
   commandId: string;
   payload: TerminalClosePayload;
   snapshot?: StationSnapshot | undefined;
@@ -49,7 +50,7 @@ export function terminalCloseIntentFromPayload(input: {
     terminalProvider: resolveTerminalProviderFromPayload(
       input.payload,
       input.snapshot,
-      input.providers.terminal.id,
+      input.defaultTerminalId,
     ),
     subject: terminalIntentSubjectFromPayload(input.payload, input.snapshot),
   };
@@ -60,7 +61,7 @@ export function terminalCloseIntentFromPayload(input: {
 }
 
 export function terminalCloseIntentForSession(input: {
-  providers: ProviderRegistry;
+  defaultTerminalId: ProviderId;
   commandId: string;
   session: SessionView;
   row?: WorktreeRow | undefined;
@@ -70,9 +71,7 @@ export function terminalCloseIntentForSession(input: {
     type: "terminal.close",
     commandId: input.commandId,
     terminalProvider:
-      input.session.terminal?.provider ??
-      input.row?.terminal?.provider ??
-      input.providers.terminal.id,
+      input.session.terminal?.provider ?? input.row?.terminal?.provider ?? input.defaultTerminalId,
     subject: terminalIntentSubjectForSession(input.session, input.row),
   };
   if (input.force) {
@@ -82,7 +81,7 @@ export function terminalCloseIntentForSession(input: {
 }
 
 export function terminalCloseIntentForWorktree(input: {
-  providers: ProviderRegistry;
+  defaultTerminalId: ProviderId;
   commandId: string;
   row: WorktreeRow;
   force: boolean;
@@ -90,7 +89,7 @@ export function terminalCloseIntentForWorktree(input: {
   const intent: TerminalCloseIntent = {
     type: "terminal.close",
     commandId: input.commandId,
-    terminalProvider: input.row.terminal?.provider ?? input.providers.terminal.id,
+    terminalProvider: input.row.terminal?.provider ?? input.defaultTerminalId,
     subject: terminalIntentSubjectForWorktree(input.row),
   };
   if (input.force) {
@@ -100,12 +99,12 @@ export function terminalCloseIntentForWorktree(input: {
 }
 
 export async function submitTerminalIntentOrThrow(input: {
-  providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   intent: TerminalIntent;
   context: CommandHandlerContext;
   commandTimeoutMs?: number | undefined;
 }): Promise<TerminalIntentReceipt> {
-  const receipt = await input.providers.terminalIntentRunner.submitIntent(input.intent, {
+  const receipt = await input.terminalIntentRunner.submitIntent(input.intent, {
     signal: input.context.signal,
     trace: input.context.trace,
     commandTimeoutMs: input.commandTimeoutMs,

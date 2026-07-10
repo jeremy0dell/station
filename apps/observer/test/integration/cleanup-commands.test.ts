@@ -1,5 +1,5 @@
 import type { StationConfig } from "@station/config";
-import type { HarnessProvider } from "@station/contracts";
+import type { HarnessProvider, TerminalIntent, TerminalIntentReceipt } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -17,6 +17,7 @@ import {
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
+  type TerminalIntentRunner,
 } from "../../src/internal";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -124,6 +125,63 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("routes terminal focus and close through the command composition runner", async () => {
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const fixture = createFixture({ state: "working", terminalIntentRunner });
+    await fixture.core.reconcile("pre-cleanup");
+
+    const focusReceipt = await fixture.queue.dispatch({
+      type: "terminal.focus",
+      payload: { worktreeId: "wt_web_cleanup" },
+    });
+    await fixture.queue.drain();
+    const closeReceipt = await fixture.queue.dispatch({
+      type: "terminal.close",
+      payload: { worktreeId: "wt_web_cleanup", force: true },
+    });
+    await fixture.queue.drain();
+
+    expect(terminalIntentRunner.intents).toEqual([
+      expect.objectContaining({
+        type: "terminal.focus",
+        commandId: focusReceipt.commandId,
+        terminalProvider: "fake-terminal",
+        subject: expect.objectContaining({ worktreeId: "wt_web_cleanup" }),
+      }),
+      expect.objectContaining({
+        type: "terminal.close",
+        commandId: closeReceipt.commandId,
+        terminalProvider: "fake-terminal",
+        subject: expect.objectContaining({ worktreeId: "wt_web_cleanup" }),
+      }),
+    ]);
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("routes session terminal cleanup through the command composition runner", async () => {
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const fixture = createFixture({ state: "working", terminalIntentRunner });
+    await fixture.core.reconcile("pre-cleanup");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.close",
+      payload: { sessionId: "ses_web_cleanup", mode: "terminal", force: true },
+    });
+    await fixture.queue.drain();
+
+    expect(terminalIntentRunner.intents).toEqual([
+      expect.objectContaining({
+        type: "terminal.close",
+        commandId: receipt.commandId,
+        terminalProvider: "fake-terminal",
+        subject: expect.objectContaining({ sessionId: "ses_web_cleanup" }),
+      }),
+    ]);
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("rejects dirty worktree removal without force", async () => {
     const fixture = createFixture({ dirty: true, state: "none" });
     await fixture.core.reconcile("pre-cleanup");
@@ -212,6 +270,32 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("routes worktree terminal cleanup through the command composition runner", async () => {
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const fixture = createFixture({ dirty: true, state: "working", terminalIntentRunner });
+    await fixture.core.reconcile("pre-cleanup");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: { worktreeId: "wt_web_cleanup", projectId: "web", force: true },
+    });
+    await fixture.queue.drain();
+
+    expect(terminalIntentRunner.intents).toEqual([
+      expect.objectContaining({
+        type: "terminal.close",
+        commandId: receipt.commandId,
+        terminalProvider: "fake-terminal",
+        subject: expect.objectContaining({ worktreeId: "wt_web_cleanup" }),
+      }),
+    ]);
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    expect(fixture.worktree.snapshot().removed).toEqual([
+      { projectId: "web", worktreeId: "wt_web_cleanup", force: true },
+    ]);
+    fixture.sqlite.close();
+  });
+
   it("force-removes a worktree when terminal cleanup finds an already-missing target", async () => {
     const fixture = createFixture({
       dirty: true,
@@ -276,6 +360,7 @@ function createFixture(input: {
   harnessStopSupported?: boolean;
   terminalCloseTargetMissing?: boolean;
   projectRootPath?: boolean;
+  terminalIntentRunner?: TerminalIntentRunner;
 }) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
@@ -356,8 +441,27 @@ function createFixture(input: {
     persistence,
     eventBus,
     clock,
+    ...(input.terminalIntentRunner === undefined
+      ? {}
+      : { terminalIntentRunner: input.terminalIntentRunner }),
   });
   return { sqlite, persistence, eventBus, queue, providers, core, worktree, terminal, harness };
+}
+
+class CapturingTerminalIntentRunner implements TerminalIntentRunner {
+  readonly intents: TerminalIntent[] = [];
+
+  async submitIntent(intent: TerminalIntent): Promise<TerminalIntentReceipt> {
+    this.intents.push(intent);
+    return {
+      status: "accepted",
+      accepted: true,
+      commandId: intent.commandId,
+      type: intent.type,
+      terminalProvider: intent.terminalProvider,
+      timestamp: now,
+    };
+  }
 }
 
 function withoutNativeStop(provider: FakeHarnessProvider): HarnessProvider {

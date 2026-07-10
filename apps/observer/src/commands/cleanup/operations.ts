@@ -13,6 +13,7 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import { resolveHarnessProviderOrThrow } from "../providers.js";
 import type { CommandHandlerContext } from "../queue.js";
 import { runProviderMutation, throwIfAborted } from "../session/shared.js";
+import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
   hasCloseableTerminalAttachment,
   submitTerminalIntentOrThrow,
@@ -28,6 +29,7 @@ export type CleanupRuntime = {
 export async function closeSessionResources(
   input: {
     providers: ProviderRegistry;
+    terminalIntentRunner: TerminalIntentRunner;
     session: SessionView;
     row?: WorktreeRow | undefined;
     mode: "harness" | "terminal" | "all";
@@ -62,16 +64,16 @@ export async function closeSessionResources(
         provider:
           input.session.terminal?.provider ??
           input.row?.terminal?.provider ??
-          input.providers.terminal.id,
+          input.providers.defaultTerminalId,
         sessionId: input.session.id,
         worktreeId: input.session.worktreeId,
       };
       throw error;
     }
     await submitTerminalIntentOrThrow({
-      providers: input.providers,
+      terminalIntentRunner: input.terminalIntentRunner,
       intent: terminalCloseIntentForSession({
-        providers: input.providers,
+        defaultTerminalId: input.providers.defaultTerminalId,
         commandId: input.context.commandId,
         session: input.session,
         row: input.row,
@@ -112,6 +114,7 @@ export async function stopHarnessForWorktree(
 export async function closeTerminalForWorktree(
   input: {
     providers: ProviderRegistry;
+    terminalIntentRunner: TerminalIntentRunner;
     row: WorktreeRow;
     force: boolean;
     context: CommandHandlerContext;
@@ -122,9 +125,9 @@ export async function closeTerminalForWorktree(
   }
   try {
     await submitTerminalIntentOrThrow({
-      providers: input.providers,
+      terminalIntentRunner: input.terminalIntentRunner,
       intent: terminalCloseIntentForWorktree({
-        providers: input.providers,
+        defaultTerminalId: input.providers.defaultTerminalId,
         commandId: input.context.commandId,
         row: input.row,
         force: input.force,

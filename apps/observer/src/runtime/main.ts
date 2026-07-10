@@ -9,7 +9,7 @@ import {
   type StationConfig,
 } from "@station/config";
 import { componentLogPath } from "@station/observability";
-import { type RuntimeClock, stationBuildInfo, systemClock, toIsoTimestamp } from "@station/runtime";
+import { stationBuildInfo, systemClock, toIsoTimestamp } from "@station/runtime";
 import { createCommandQueue } from "../commands/queue.js";
 import { registerObserverCommandHandlers } from "../commands/router.js";
 import { createFeatureFlagEvaluator } from "../features/evaluator.js";
@@ -39,9 +39,6 @@ const STOP_BACKSTOP_MS = 5000;
 
 export type ObserverProviderRegistryFactoryOptions = {
   configPath?: string | undefined;
-  clock: RuntimeClock;
-  logger: ReturnType<typeof createObserverLogger>;
-  commandTimeoutMs?: number | undefined;
 };
 
 export type ObserverProviderRegistryFactory = (
@@ -53,6 +50,15 @@ export type RunObserverMainDeps = {
   providerRegistryFactory: ObserverProviderRegistryFactory;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Builds the process-lifetime Observer runtime around provider adapters
+ * supplied by CLI composition.
+ *
+ * Shutdown owns the command queue, event hook, server, and SQLite lifecycles
+ * created here.
+ */
 export async function runObserverMain(
   argv = process.argv.slice(2),
   deps: RunObserverMainDeps,
@@ -87,10 +93,7 @@ export async function runObserverMain(
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
-  const providerOptions: ObserverProviderRegistryFactoryOptions = {
-    clock: systemClock,
-    logger,
-  };
+  const providerOptions: ObserverProviderRegistryFactoryOptions = {};
   if (options.configPath !== undefined) {
     providerOptions.configPath = loadedConfig.configPath;
   }
