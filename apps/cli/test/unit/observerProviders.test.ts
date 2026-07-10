@@ -10,6 +10,22 @@ import { createProviderRegistry } from "../../src/observerProviders";
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("observer providers", () => {
+  it("assigns one Station adapter to the managed lifecycle and terminal registry", () => {
+    const registry = createProviderRegistry(config);
+    const managedTerminal = registry.managedTerminal;
+
+    expect(managedTerminal).toBeDefined();
+    if (managedTerminal === undefined) {
+      throw new Error("managed terminal lifecycle was not registered");
+    }
+    expect(registry.terminals.get(managedTerminal.id)).toBe(managedTerminal);
+    expect(
+      [...registry.terminals.values()].filter((provider) => provider === managedTerminal),
+    ).toEqual([managedTerminal]);
+    expect(registry.defaultTerminalId).toBe(config.defaults.terminal);
+    expect(registry.terminal).not.toBe(managedTerminal);
+  });
+
   it("keeps explicit noop providers healthy for empty/test startup", async () => {
     const registry = createProviderRegistry({
       ...config,

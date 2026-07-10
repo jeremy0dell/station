@@ -51,6 +51,7 @@ When these disagree, reconcile from config, providers, and current observer stat
 ## Boundary Rules
 
 - Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces.
+- Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward target IDs returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or discover lifecycle operations through runtime method probing.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; it must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.
 - The CLI is the command/debug entrypoint, but long-lived runtime correlation belongs in the observer.
 - `packages/contracts` defines shared language with strict schemas for untrusted input and shared payloads.

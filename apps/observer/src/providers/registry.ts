@@ -1,6 +1,7 @@
 import type {
   HarnessProvider,
   HarnessVersionInfo,
+  ManagedTerminalLifecycle,
   ProviderHealth,
   ProviderHookAdapter,
   ProviderId,
@@ -16,13 +17,26 @@ import {
 } from "./healthCache.js";
 import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 
+function registerTerminal(
+  terminals: Map<string, TerminalProvider>,
+  provider: TerminalProvider,
+): void {
+  const registered = terminals.get(provider.id);
+  if (registered !== undefined && registered !== provider) {
+    throw new Error(`Duplicate terminal provider id: ${provider.id}`);
+  }
+  terminals.set(provider.id, provider);
+}
+
 export type ProviderRegistryInput = {
   worktree: WorktreeProvider;
   /** The default terminal provider (used for project-config back-compat). */
   terminal: TerminalProvider;
+  /** Terminal lifecycle used by Station's external-launch handshake. */
+  managedTerminal?: ManagedTerminalLifecycle | undefined;
   /**
-   * Additional terminal providers beyond the default (e.g. the externally-hosted
-   * "station" provider). The default is always registered; extras are merged in.
+   * Additional general terminal providers beyond the default. The default and
+   * managed lifecycle are always registered; extras are merged in.
    */
   terminals?: Iterable<TerminalProvider> | undefined;
   harnesses: Iterable<HarnessProvider> | Map<string, HarnessProvider>;
@@ -38,6 +52,7 @@ export class ProviderRegistry {
   readonly terminals: Map<string, TerminalProvider>;
   /** The default terminal provider id (project-config back-compat). */
   readonly defaultTerminalId: ProviderId;
+  readonly managedTerminal: ManagedTerminalLifecycle | undefined;
   readonly harnesses: Map<string, HarnessProvider>;
   readonly repositories: Map<string, RepositoryProvider>;
   readonly hookAdapters: Map<string, ProviderHookAdapter>;
@@ -48,12 +63,14 @@ export class ProviderRegistry {
     this.worktree = input.worktree;
 
     this.defaultTerminalId = input.terminal.id;
-    this.terminals = new Map([[input.terminal.id, input.terminal]]);
+    this.terminals = new Map();
+    registerTerminal(this.terminals, input.terminal);
     for (const provider of input.terminals ?? []) {
-      if (this.terminals.has(provider.id)) {
-        throw new Error(`Duplicate terminal provider id: ${provider.id}`);
-      }
-      this.terminals.set(provider.id, provider);
+      registerTerminal(this.terminals, provider);
+    }
+    this.managedTerminal = input.managedTerminal;
+    if (this.managedTerminal !== undefined) {
+      registerTerminal(this.terminals, this.managedTerminal);
     }
 
     if (input.harnesses instanceof Map) {

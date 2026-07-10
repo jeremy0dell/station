@@ -1,9 +1,4 @@
-import type {
-  SafeError,
-  TerminalProvider,
-  TerminalReattachCapability,
-  TerminalTargetId,
-} from "@station/contracts";
+import type { ManagedTerminalLifecycle, SafeError, TerminalTargetId } from "@station/contracts";
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
 import type {
   AgentPrepareExternalLaunchParams,
@@ -29,48 +24,15 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { nowIso } from "../utils/time.js";
 
-/**
- * The terminal provider id used for externally-hosted (Station-owned) targets.
- * Kept in sync with `@station/terminal`'s provider id by value, NOT by
- * import, so the observer stays free of `integrations/terminal/*` imports.
- */
-const EXTERNAL_TERMINAL_PROVIDER_ID = "native";
-
-type MarkExitableTerminalProvider = TerminalProvider & {
-  markExited(targetId: string): boolean;
-};
-
-function canMarkExited(provider: TerminalProvider): provider is MarkExitableTerminalProvider {
-  return typeof (provider as Partial<MarkExitableTerminalProvider>).markExited === "function";
-}
-
-/** Runtime feature-detect — the registry holds bare `TerminalProvider`; only the
- *  host-backed `native` provider implements `reattachInfo`. */
-function isReattachable(
-  provider: TerminalProvider,
-): provider is TerminalProvider & TerminalReattachCapability {
-  return "reattachInfo" in provider;
-}
-
-/**
- * Build a reattach handle if a live host PTY backs this worktree's Station target.
- * Stays decoupled from `@station/terminal`: the target id is derived by value
- * and `reattachInfo` is the optional persistence capability (absent ⇒ no handle,
- * the UI spawns the PTY locally).
- */
 async function resolveReattachHandle(
-  station: TerminalProvider,
-  worktreeId: string,
+  managedTerminal: ManagedTerminalLifecycle,
+  targetId: TerminalTargetId,
 ): Promise<AgentReattachHandle | undefined> {
-  if (!isReattachable(station)) {
-    return undefined;
-  }
-  const terminalTargetId = `${EXTERNAL_TERMINAL_PROVIDER_ID}:${worktreeId}` as TerminalTargetId;
-  const info = await station.reattachInfo(terminalTargetId);
+  const info = await managedTerminal.reattachInfo(targetId);
   if (info === undefined) {
     return undefined;
   }
-  return { ptyId: info.endpointId, terminalTargetId, hostSocketPath: info.socketPath };
+  return { ptyId: info.endpointId, terminalTargetId: targetId, hostSocketPath: info.socketPath };
 }
 
 export type ExternalLaunchDeps = {
@@ -88,8 +50,10 @@ export type ExternalLaunchOutcome<T> = {
 };
 
 /**
- * Prepare Station-hosted agent identity and launch plan without spawning; the
- * in-memory station target lets reconcile surface the session immediately.
+ * USE CASE
+ *
+ * Prepare Station-hosted agent identity, launch plan, and managed process handoff;
+ * the managed target lets reconcile surface the session immediately.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -112,11 +76,18 @@ export async function prepareExternalLaunch(
     if (agent?.sessionId === undefined) {
       throw sessionAlreadyHasAgentError(row.id);
     }
-    const reattachStation = deps.providers.terminals.get(EXTERNAL_TERMINAL_PROVIDER_ID);
-    const reattachHandle =
-      reattachStation === undefined
+    const managedTerminal = deps.providers.managedTerminal;
+    const managedTarget =
+      managedTerminal === undefined
         ? undefined
-        : await resolveReattachHandle(reattachStation, params.worktreeId);
+        : (await managedTerminal.listTargets()).find(
+            (target) =>
+              target.worktreeId === params.worktreeId && target.sessionId === agent.sessionId,
+          );
+    const reattachHandle =
+      managedTerminal === undefined || managedTarget === undefined
+        ? undefined
+        : await resolveReattachHandle(managedTerminal, managedTarget.id);
     return {
       outcome: {
         kind: "existing-session",
@@ -154,9 +125,9 @@ export async function prepareExternalLaunch(
     deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath },
   );
 
-  const station = deps.providers.terminals.get(EXTERNAL_TERMINAL_PROVIDER_ID);
-  if (station === undefined) {
-    throw externalProviderUnavailableError();
+  const managedTerminal = deps.providers.managedTerminal;
+  if (managedTerminal === undefined) {
+    throw managedTerminalUnavailableError();
   }
 
   // The snapshot's `row.agent` lags a concurrent prepare's registration (it is
@@ -166,20 +137,20 @@ export async function prepareExternalLaunch(
   // agent's stale target is intentionally NOT reused: `row.agent` is defined, so
   // this short-circuits to undefined and openWorkspace upserts the stale target
   // below, relaunching the agent.)
-  const concurrentStationTarget =
+  const concurrentManagedTarget =
     row.agent === undefined
-      ? (await station.listTargets()).find(
+      ? (await managedTerminal.listTargets()).find(
           (target) => target.worktreeId === params.worktreeId && target.sessionId !== undefined,
         )
       : undefined;
-  if (concurrentStationTarget?.sessionId !== undefined) {
-    const reattachHandle = await resolveReattachHandle(station, params.worktreeId);
+  if (concurrentManagedTarget?.sessionId !== undefined) {
+    const reattachHandle = await resolveReattachHandle(managedTerminal, concurrentManagedTarget.id);
     return {
       outcome: {
         kind: "existing-session",
-        sessionId: concurrentStationTarget.sessionId,
+        sessionId: concurrentManagedTarget.sessionId,
         harnessProvider:
-          concurrentStationTarget.harnessBinding?.harnessProvider ?? harnessProviderId,
+          concurrentManagedTarget.harnessBinding?.harnessProvider ?? harnessProviderId,
         ...(reattachHandle === undefined ? {} : { reattachHandle }),
       },
       reconcile: false,
@@ -188,16 +159,15 @@ export async function prepareExternalLaunch(
 
   // Accepted race: two *distinct* UIs racing prepare on the same worktree
   // can both pass the listTargets check above before either openWorkspace below
-  // runs. openWorkspace upserts by the deterministic `station:<worktreeId>` id, so
-  // the window resolves to exactly one target (the second session wins; the first
-  // is orphaned and reaped at the next reconcile) — never two targets/runs. A
-  // single UI is already covered by Station's `launchesInFlight` guard; a
-  // server-side lock is intentionally out of scope.
+  // runs. The managed lifecycle owns the one-target-per-worktree invariant, so
+  // the window resolves to one target (the second session may replace the first,
+  // which reconcile later reaps) rather than two targets. A single UI is already
+  // covered by Station's `launchesInFlight` guard; a server-side lock is out of scope.
   const sessionId = defaultSessionCommandIdFactory.sessionId();
 
-  let openedTargetId: string | undefined;
+  let openedTargetId: TerminalTargetId | undefined;
   try {
-    const opened = await station.openWorkspace({
+    const opened = await managedTerminal.openWorkspace({
       project,
       worktree,
       harness: harnessProviderId,
@@ -223,21 +193,19 @@ export async function prepareExternalLaunch(
     // UI PTY). `started: false` (no host / host unavailable) ⇒ no handle and the UI
     // spawns the PTY locally from launchPlan.
     let reattachHandle: AgentReattachHandle | undefined;
-    if (station.launchProcess !== undefined) {
-      const launched = await station.launchProcess({
-        project,
-        worktree,
-        terminalTarget: opened.target,
-        agentEndpointId: opened.agentEndpointId,
-        launchPlan,
-      });
-      if (launched.started && launched.reattach !== undefined) {
-        reattachHandle = {
-          ptyId: launched.reattach.endpointId,
-          terminalTargetId: opened.target.targetId,
-          hostSocketPath: launched.reattach.socketPath,
-        };
-      }
+    const launched = await managedTerminal.launchProcess({
+      project,
+      worktree,
+      terminalTarget: opened.target,
+      agentEndpointId: opened.agentEndpointId,
+      launchPlan,
+    });
+    if (launched.started) {
+      reattachHandle = {
+        ptyId: launched.reattach.endpointId,
+        terminalTargetId: opened.target.targetId,
+        hostSocketPath: launched.reattach.socketPath,
+      };
     }
 
     return {
@@ -253,14 +221,20 @@ export async function prepareExternalLaunch(
   } catch (error) {
     // Unregister the half-prepared target so a retry is not blocked by a dangling
     // session and reconcile does not surface a launch that never spawned.
-    if (openedTargetId !== undefined && canMarkExited(station)) {
-      station.markExited(openedTargetId);
+    if (openedTargetId !== undefined) {
+      try {
+        await managedTerminal.releaseTarget(openedTargetId);
+      } catch {
+        // Cleanup must not replace the launch failure that explains why the target was abandoned.
+      }
     }
     throw error;
   }
 }
 
 /**
+ * USE CASE
+ *
  * Drop an externally-hosted target when the Station UI reports its PTY exited, so
  * the next reconcile removes the session from both dashboards. Idempotent: an
  * unknown target id is acknowledged without a reconcile.
@@ -269,12 +243,8 @@ export async function reportExternalExit(
   deps: ExternalLaunchDeps,
   params: AgentReportExternalExitParams,
 ): Promise<ExternalLaunchOutcome<AgentReportExternalExitResult>> {
-  let acknowledged = false;
-  for (const provider of deps.providers.terminals.values()) {
-    if (canMarkExited(provider) && provider.markExited(params.terminalTargetId)) {
-      acknowledged = true;
-    }
-  }
+  const acknowledged =
+    (await deps.providers.managedTerminal?.releaseTarget(params.terminalTargetId)) ?? false;
   return {
     outcome: { acknowledged, terminalTargetId: params.terminalTargetId },
     reconcile: acknowledged,
@@ -301,12 +271,10 @@ function sessionAlreadyHasAgentError(worktreeId: string): SafeError {
   };
 }
 
-function externalProviderUnavailableError(): SafeError {
+function managedTerminalUnavailableError(): SafeError {
   return {
     tag: "TerminalProviderError",
     code: "TERMINAL_PROVIDER_UNAVAILABLE",
-    message:
-      "The Station terminal provider is not registered, so an external launch cannot be prepared.",
-    provider: EXTERNAL_TERMINAL_PROVIDER_ID,
+    message: "No managed terminal lifecycle is registered for external launch.",
   };
 }

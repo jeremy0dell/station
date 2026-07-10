@@ -84,7 +84,7 @@ describe("observer reconcile with a station-hosted target", () => {
     expect(stationRow?.terminal?.closeable).toBeUndefined();
 
     // Reporting exit drops only the station target; the tmux session survives.
-    expect(station.markExited(stationTargetId("wt_web_station"))).toBe(true);
+    await expect(station.releaseTarget(stationTargetId("wt_web_station"))).resolves.toBe(true);
     const afterExit = await core.reconcile("station-exit");
     expect(afterExit.sessions.map((session) => session.id)).toEqual(["ses_tmux"]);
     expect(afterExit.rows.find((row) => row.id === "wt_web_station")?.agent).toBeUndefined();
@@ -374,7 +374,7 @@ function providers(
         }),
       ],
     }),
-    terminals: [station],
+    managedTerminal: station,
     harnesses: [
       createClaudeHarnessProvider({
         now: () => new Date(now),

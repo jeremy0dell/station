@@ -59,6 +59,11 @@ export type CreateProviderRegistryOptions = {
   commandTimeoutMs?: number | undefined;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Constructs concrete integrations and assigns application roles for the observer.
+ */
 export function createProviderRegistry(
   config: StationConfig,
   options: CreateProviderRegistryOptions = {},
@@ -97,7 +102,7 @@ export function createProviderRegistry(
   return new ProviderRegistry({
     worktree,
     terminal,
-    terminals: [station],
+    managedTerminal: station,
     harnesses: harnessMap,
     repositories,
     hookAdapters: [

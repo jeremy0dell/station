@@ -1,4 +1,6 @@
 import type {
+  ManagedTerminalLaunchProcessResult,
+  ManagedTerminalLifecycle,
   OpenWorkspaceRequest,
   OpenWorkspaceResult,
   ProjectId,
@@ -9,9 +11,6 @@ import type {
   TerminalCapabilities,
   TerminalIdentityBinding,
   TerminalLaunchProcessRequest,
-  TerminalLaunchProcessResult,
-  TerminalProvider,
-  TerminalReattachCapability,
   TerminalReattachInfo,
   TerminalTargetId,
   TerminalTargetObservation,
@@ -38,11 +37,13 @@ export type StationTerminalProviderOptions = {
 };
 
 /**
+ * ADAPTER
+ *
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
  * mode uses `host.list` as liveness truth so reattach/restart re-derives the
  * same session instead of minting another.
  */
-export class StationTerminalProvider implements TerminalProvider, TerminalReattachCapability {
+export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
 
   readonly #clock: RuntimeClock;
@@ -50,7 +51,7 @@ export class StationTerminalProvider implements TerminalProvider, TerminalReatta
   readonly #targets = new Map<TerminalTargetId, TerminalTargetObservation>();
   // Targets backed by a host PTY (spawned via launchProcess or rebuilt from
   // host.list). listTargets drops ONLY these when their PTY is gone; a UI-hosted
-  // fallback target (host was unavailable at launch) is kept until markExited.
+  // fallback target (host was unavailable at launch) is kept until releaseTarget.
   readonly #hostBackedTargets = new Set<string>();
 
   constructor(options: StationTerminalProviderOptions = {}) {
@@ -196,7 +197,9 @@ export class StationTerminalProvider implements TerminalProvider, TerminalReatta
    * UI. Returns `started: false` when not host-backed or the host is unavailable,
    * so the observer falls back to the UI spawning from the launch plan.
    */
-  async launchProcess(request: TerminalLaunchProcessRequest): Promise<TerminalLaunchProcessResult> {
+  async launchProcess(
+    request: TerminalLaunchProcessRequest,
+  ): Promise<ManagedTerminalLaunchProcessResult> {
     const base = {
       terminalTargetId: request.terminalTarget.targetId,
       agentEndpointId: request.agentEndpointId,
@@ -245,11 +248,10 @@ export class StationTerminalProvider implements TerminalProvider, TerminalReatta
   }
 
   /**
-   * Provider-local: drop a registered target when the PTY exited, so the next
-   * reconcile removes the session from both dashboards. (Host-backed liveness in
-   * `listTargets` is the other drop path.) Returns whether a target was removed.
+   * Drop an abandoned or exited target so the next reconcile removes the session.
+   * Host-backed liveness in `listTargets` is the other removal path.
    */
-  markExited(targetId: TerminalTargetId): boolean {
+  async releaseTarget(targetId: TerminalTargetId): Promise<boolean> {
     this.#hostBackedTargets.delete(targetId);
     return this.#targets.delete(targetId);
   }
