@@ -17,9 +17,11 @@ import {
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { throwIfAborted } from "../session/shared.js";
+import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 
 export type CreateWorktreeRemoveHandlerOptions = {
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: ObserverPersistence;
   eventBus?: ObserverEventBus | undefined;
@@ -54,6 +56,7 @@ export function createWorktreeRemoveHandler(
     throwIfAborted(context.signal);
     await closeTerminalForWorktree({
       providers: options.providers,
+      terminalIntentRunner: options.terminalIntentRunner,
       row,
       force,
       context,

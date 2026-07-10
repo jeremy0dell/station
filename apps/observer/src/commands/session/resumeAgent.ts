@@ -19,6 +19,7 @@ import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
+import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
   buildEnsureAgentWorkspaceIntent,
   commandValidationError,
@@ -38,6 +39,7 @@ import {
 export type CreateSessionResumeAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: ObserverPersistence;
   featureFlags: FeatureFlagEvaluator;
@@ -133,7 +135,7 @@ export function createSessionResumeAgentHandler(
     if (handle.sessionId !== undefined) {
       resume.previousSessionId = handle.sessionId;
     }
-    const receipt = await options.providers.terminalIntentRunner.submitIntent(
+    const receipt = await options.terminalIntentRunner.submitIntent(
       buildEnsureAgentWorkspaceIntent({
         commandId: context.commandId,
         project,

@@ -15,6 +15,7 @@ import {
 } from "./cleanup/index.js";
 import type { CommandHandler } from "./queue.js";
 import { reconcileAndPublish } from "./reconcile.js";
+import type { TerminalIntentRunner } from "./terminalIntentRunner.js";
 import {
   submitTerminalIntentOrThrow,
   terminalCloseIntentFromPayload,
@@ -24,12 +25,14 @@ import {
 export type CreateTerminalFocusHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   commandTimeoutMs?: number | undefined;
 };
 
 export type CreateTerminalCloseHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
+  terminalIntentRunner: TerminalIntentRunner;
   persistence?: ObserverPersistence | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -43,9 +46,9 @@ export function createTerminalFocusHandler(
     assertCommandType(context, "terminal.focus");
     throwIfAborted(context.signal);
     await submitTerminalIntentOrThrow({
-      providers: options.providers,
+      terminalIntentRunner: options.terminalIntentRunner,
       intent: terminalFocusIntentFromPayload({
-        providers: options.providers,
+        defaultTerminalId: options.providers.defaultTerminalId,
         commandId: context.commandId,
         payload: context.command.payload,
         snapshot: options.core.getSnapshot(),
@@ -72,9 +75,9 @@ export function createTerminalCloseHandler(
     );
     throwIfAborted(context.signal);
     await submitTerminalIntentOrThrow({
-      providers: options.providers,
+      terminalIntentRunner: options.terminalIntentRunner,
       intent: terminalCloseIntentFromPayload({
-        providers: options.providers,
+        defaultTerminalId: options.providers.defaultTerminalId,
         commandId: context.commandId,
         payload: context.command.payload,
         snapshot,
