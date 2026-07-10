@@ -74,7 +74,6 @@ export function renderNewSetupConfig(
     "schema_version = 1",
     "",
     "[observer]",
-    'socket_path = "~/.local/state/station/observer.sock"',
     'state_dir = "~/.local/state/station"',
     "",
     "[defaults]",

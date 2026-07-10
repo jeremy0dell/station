@@ -1,6 +1,7 @@
 import { applySetupPlan } from "../apply.js";
 import { planSetupConfigWrite } from "../configWriter.js";
 import {
+  activateCompletedConfigWrite,
   applyOptions,
   collectForCommand,
   coreReadyForConfigWrite,
@@ -56,10 +57,24 @@ export async function runNonInteractiveApply(
     refreshedPlan,
     applyOptions(deps, { actionFilter: isConfigAction, announceActions: true }),
   );
-  const outputPlan =
-    writeResult.failedAction === undefined
-      ? { ...writeResult.plan, summary: { ...writeResult.plan.summary, requiredOk: true } }
-      : writeResult.plan;
+  if (writeResult.failedAction !== undefined) {
+    await write(deps, renderSetupApplyResult(writeResult.plan, renderOptions(deps)));
+    return { code: 1 };
+  }
+
+  const activationError = await activateCompletedConfigWrite(
+    writeResult.plan,
+    refreshedFacts.homeDir,
+    deps,
+  );
+  if (activationError !== undefined) {
+    return { code: 1 };
+  }
+
+  const outputPlan = {
+    ...writeResult.plan,
+    summary: { ...writeResult.plan.summary, requiredOk: true },
+  };
   await write(deps, renderSetupApplyResult(outputPlan, renderOptions(deps)));
-  return { code: writeResult.failedAction === undefined ? 0 : 1 };
+  return { code: 0 };
 }

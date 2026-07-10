@@ -3,11 +3,16 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadConfig } from "@station/config";
+import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
+import { waitForSocketClosed } from "../support/sockets";
 
 describe("setup core flow e2e", () => {
   it("creates core config from a temp git repo without real external tools", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-setup-e2e-"));
+    const runtimeDir = await mkdtemp(join(tmpdir(), "stn-r-"));
+    const observerSocket = join(runtimeDir, "station", "observer.sock");
+    const legacyObserverSocket = join(root, "home", ".local", "state", "station", "observer.sock");
     let passed = false;
     try {
       const home = join(root, "home");
@@ -37,6 +42,7 @@ describe("setup core flow e2e", () => {
         "brew",
         'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 0\n',
       );
+      await writeShim(bin, "npm", "echo 0.1.0\n");
       // diffnav + delta are required; the checks only need the binaries on PATH.
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
@@ -46,9 +52,20 @@ describe("setup core flow e2e", () => {
       const env = {
         ...process.env,
         HOME: home,
+        XDG_RUNTIME_DIR: runtimeDir,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
+        TMUX: "",
+        STATION_DASHBOARD_COMMAND: "true",
         STATION_FAST_POPUP_NO_FALLBACK: "1",
       };
+      const launch = runStation([], { cwd: repo, env });
+      expect(launch.status).toBe(0);
+      const observer = createObserverClient({ socketPath: observerSocket, timeoutMs: 1000 });
+      const beforeHealth = await observer.health();
+      const beforeSnapshot = await observer.getSnapshot();
+      expect(beforeHealth.pid).toBeTypeOf("number");
+      expect(beforeSnapshot).toMatchObject({ counts: { projects: 0 }, projects: [] });
+
       const firstCheck = runStation(["--config", configPath, "setup", "check", "--json"], {
         cwd: repo,
         env,
@@ -82,6 +99,15 @@ describe("setup core flow e2e", () => {
       expect(apply.stdout).toContain("Core setup complete.");
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
 
+      const afterHealth = await observer.health();
+      const afterSnapshot = await observer.getSnapshot();
+      expect(afterHealth.pid).toBeTypeOf("number");
+      expect(afterHealth.pid).not.toBe(beforeHealth.pid);
+      expect(afterSnapshot.projects).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "repo" })]),
+      );
+      expect(afterSnapshot.counts.projects).toBe(1);
+
       const finalCheck = runStation(["--config", configPath, "setup", "check", "--json"], {
         cwd: repo,
         env,
@@ -99,14 +125,21 @@ describe("setup core flow e2e", () => {
       });
       passed = true;
     } finally {
+      await stopObserverCandidates([observerSocket, legacyObserverSocket]);
       if (passed || process.env.STATION_KEEP_SETUP_E2E_TEMP !== "1") {
-        await rm(root, { recursive: true, force: true });
+        await Promise.all([
+          rm(root, { recursive: true, force: true }),
+          rm(runtimeDir, { recursive: true, force: true }),
+        ]);
       }
     }
   });
 
   it("preserves custom Worktrunk and tmux commands in generated config", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-setup-e2e-"));
+    const runtimeDir = await mkdtemp(join(tmpdir(), "stn-r-"));
+    const observerSocket = join(runtimeDir, "station", "observer.sock");
+    const legacyObserverSocket = join(root, "home", ".local", "state", "station", "observer.sock");
     let passed = false;
     try {
       const home = join(root, "home");
@@ -133,6 +166,7 @@ describe("setup core flow e2e", () => {
         "codex",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
+      await writeShim(bin, "npm", "echo 0.1.0\n");
       // diffnav + delta are required; without them config write is blocked.
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
@@ -142,6 +176,7 @@ describe("setup core flow e2e", () => {
       const env = {
         ...process.env,
         HOME: home,
+        XDG_RUNTIME_DIR: runtimeDir,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
         STATION_FAST_POPUP_NO_FALLBACK: "1",
         STATION_WORKTRUNK_BIN: customWt,
@@ -158,8 +193,12 @@ describe("setup core flow e2e", () => {
       expect(config).toContain(`[terminal.tmux]\ncommand = ${JSON.stringify(customTmux)}`);
       passed = true;
     } finally {
+      await stopObserverCandidates([observerSocket, legacyObserverSocket]);
       if (passed || process.env.STATION_KEEP_SETUP_E2E_TEMP !== "1") {
-        await rm(root, { recursive: true, force: true });
+        await Promise.all([
+          rm(root, { recursive: true, force: true }),
+          rm(runtimeDir, { recursive: true, force: true }),
+        ]);
       }
     }
   });
@@ -295,6 +334,14 @@ async function writeShim(bin: string, name: string, body: string): Promise<void>
   const path = join(bin, name);
   await writeFile(path, `#!/bin/sh\n${body}`, "utf8");
   await chmod(path, 0o700);
+}
+
+async function stopObserverCandidates(socketPaths: readonly string[]): Promise<void> {
+  for (const socketPath of new Set(socketPaths)) {
+    const client = createObserverClient({ socketPath, timeoutMs: 1000 });
+    await client.stop().catch(() => undefined);
+    await waitForSocketClosed(socketPath, { timeoutMs: 5000 });
+  }
 }
 
 function runStation(

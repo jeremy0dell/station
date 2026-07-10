@@ -1,4 +1,7 @@
+import { loadConfig, resolveObserverPaths } from "@station/config";
+import { type RuntimeSafeError, safeErrorFromUnknown } from "@station/runtime";
 import type { CliEnv } from "../../env.js";
+import { restartObserver } from "../../observerProcess.js";
 import type { applySetupPlan } from "./apply.js";
 import { commandEnv } from "./checks/env.js";
 import {
@@ -8,7 +11,12 @@ import {
 } from "./checks/system.js";
 import { renderOptions, write } from "./io.js";
 import type { SetupAction, SetupFacts, SetupMode, SetupPlan } from "./model.js";
-import { renderActionComplete, renderActionFailed, renderActionStart } from "./render.js";
+import {
+  formatCommand,
+  renderActionComplete,
+  renderActionFailed,
+  renderActionStart,
+} from "./render.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
 
 export function collectForCommand(
@@ -63,6 +71,82 @@ export function applyOptions(
     };
   }
   return options;
+}
+
+export async function activateCompletedConfigWrite(
+  plan: SetupPlan,
+  homeDir: string,
+  deps: SetupCommandDeps,
+): Promise<RuntimeSafeError | undefined> {
+  const completedWrite = plan.actions.find(
+    (action) => action.kind === "write-config" && action.status === "completed",
+  );
+  if (completedWrite === undefined) {
+    return undefined;
+  }
+
+  await write(deps, "Activating observer configuration...\n");
+  try {
+    if (completedWrite.path === undefined) {
+      throw observerActivationError;
+    }
+    await (deps.activateObserverConfig ?? activateObserverConfig)({
+      configPath: completedWrite.path,
+      homeDir,
+    });
+    await write(deps, "Observer configuration active.\n");
+    return undefined;
+  } catch (error) {
+    const safeError = safeErrorFromUnknown(error, observerActivationError);
+    await write(deps, renderObserverActivationFailure(safeError, completedWrite.path));
+    return safeError;
+  }
+}
+
+async function activateObserverConfig(input: {
+  configPath: string;
+  homeDir: string;
+}): Promise<void> {
+  try {
+    const loaded = await loadConfig({ configPath: input.configPath, homeDir: input.homeDir });
+    const paths = resolveObserverPaths(loaded.config, input.homeDir);
+    const status = await restartObserver({
+      config: loaded.config,
+      configPath: loaded.configPath,
+      paths,
+    });
+    if (status.status !== "running") {
+      throw safeErrorFromUnknown(status.error, observerActivationError);
+    }
+  } catch (error) {
+    throw safeErrorFromUnknown(error, observerActivationError);
+  }
+}
+
+const observerActivationError: RuntimeSafeError = {
+  tag: "ObserverActivationError",
+  code: "OBSERVER_ACTIVATION_FAILED",
+  message: "Observer configuration could not be activated.",
+};
+
+function renderObserverActivationFailure(
+  error: RuntimeSafeError,
+  configPath: string | undefined,
+): string {
+  const lines = [
+    "Config was written, but observer activation failed.",
+    error.message,
+    `Code: ${error.code}`,
+  ];
+  if (error.hint !== undefined) {
+    lines.push(`Hint: ${error.hint}`);
+  }
+  const restartCommand =
+    configPath === undefined
+      ? formatCommand(["stn", "observer", "restart"])
+      : formatCommand(["stn", "--config", configPath, "observer", "restart"]);
+  lines.push(`Run: ${restartCommand}`, "");
+  return lines.join("\n");
 }
 
 export function dependencyOptionsForCommand(

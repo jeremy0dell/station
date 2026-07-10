@@ -1,6 +1,7 @@
 import { applySetupPlan } from "../apply.js";
 import { planSetupConfigWrite } from "../configWriter.js";
 import {
+  activateCompletedConfigWrite,
   applyOptions,
   collectForCommand,
   coreReadyForConfigWrite,
@@ -17,7 +18,7 @@ import {
 } from "../harnessInstall.js";
 import { isSupportedHarnessId, selectSetupHarness } from "../harnessSelection.js";
 import { defaultPrompt, renderOptions, write } from "../io.js";
-import type { SetupAction, SetupFacts } from "../model.js";
+import type { SetupAction, SetupFacts, SetupPlan } from "../model.js";
 import { buildSetupPlan } from "../planner.js";
 import { formatCommand, renderSetupApplyResult, renderSetupPlan } from "../render.js";
 import type {
@@ -119,6 +120,7 @@ async function runGuidedSetupWithPrompt(
   }
 
   const configActions = plan.actions.filter(isConfigAction).filter((action) => action.selected);
+  let writtenPlan: SetupPlan | undefined;
   if (configActions.length > 0) {
     const accepted = await prompt.confirm("Write STATION project config?");
     if (!accepted) {
@@ -133,9 +135,11 @@ async function runGuidedSetupWithPrompt(
       await write(deps, "Config write failed. Run: stn setup plan\n");
       return { code: 1 };
     }
+    writtenPlan = writeResult.plan;
   }
 
   const hookActions = plan.actions.filter(isHookSetupAction).filter((action) => action.selected);
+  let hookInstallFailed = false;
   if (hookActions.length > 0) {
     const hookResult = await applySetupPlan(
       plan,
@@ -147,8 +151,16 @@ async function runGuidedSetupWithPrompt(
     );
     if (hookResult.failedAction !== undefined) {
       await write(deps, "Hook install failed. Fix the install error, then run: stn setup\n");
-      return { code: 1 };
+      hookInstallFailed = true;
     }
+  }
+
+  const activationError =
+    writtenPlan === undefined
+      ? undefined
+      : await activateCompletedConfigWrite(writtenPlan, facts.homeDir, deps);
+  if (hookInstallFailed || activationError !== undefined) {
+    return { code: 1 };
   }
 
   const shellIntegration = plan.actions.find(
