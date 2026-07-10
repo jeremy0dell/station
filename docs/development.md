@@ -94,6 +94,19 @@ Use `pnpm setup:system:check` before real lanes. Real lanes may require `STATION
 - Current code, tests, runtime traces, and deterministic fixtures are stronger evidence than historical plans.
 - Do not introduce production behavior through docs-only changes.
 
+## Architecture Documentation
+
+- Read [Observer Architecture](observer-architecture.md) before changing Observer boundaries,
+  composition, state authority, lifecycle, concurrency, or persistence responsibilities.
+- New or materially changed Observer ports, adapter entrypoints, use cases, shared policies,
+  and composition roots must follow
+  [Architecture Documentation](architecture-documentation.md).
+- Update the Observer architecture in the same change when a boundary, dependency rule,
+  runtime flow, state lifetime, or registered deviation changes. Ordinary helper refactors do
+  not require architecture-document churn.
+- Apply role markers to touched seams. Do not classify every exported helper or perform an
+  unrelated repository-wide marker backfill.
+
 ## TUI Work
 
 TUI work has additional OpenTUI/React and terminal-layout expectations. The terminal UI is the OpenTUI renderer in `station/` (package `@station/workspace`, built on `@opentui/core` + `@opentui/react` + `react`). Use [TUI development](tui.md) before changing `station/` components, hooks, sources, keymaps, selectors, popup behavior, or renderer tests.

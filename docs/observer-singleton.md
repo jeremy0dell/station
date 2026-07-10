@@ -1,5 +1,8 @@
 # Observer singleton & step-down
 
+Status: shipped-history and remaining singleton roadmap. For the current Observer runtime
+ownership and lifecycle contract, see [Observer Architecture](observer-architecture.md).
+
 How STATION keeps exactly one observer per state dir, why the old design let
 duplicates accumulate, what has shipped, and the remaining work. Pick up the
 unfinished phases from the "Remaining work" section — each is independently

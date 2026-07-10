@@ -1,6 +1,8 @@
 # Agent Guidance
 
-For architecture or boundary decisions, read `docs/architecture.md`.
+For repository-wide architecture or boundary decisions, read `docs/architecture.md`. For
+Observer ports, adapters, use cases, policies, composition, or dependency direction, also
+read `docs/observer-architecture.md` and `docs/architecture-documentation.md`.
 
 For configuration — the runtime `config.toml` (all sections, including `[workspace]` and `[tui]`), the project-local `.station/config.toml`, and environment variables — read `docs/configuration.md`.
 

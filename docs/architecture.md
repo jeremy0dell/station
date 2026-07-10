@@ -1,8 +1,13 @@
 # Architecture
 
-Status: current living doc for ordinary architecture and boundary decisions.
+Status: current living repository-wide system and boundary map.
 
 Use [Naming](naming.md) for provider hook, provider hook ingress, harness event report, STATION event, and observer event hook terminology.
+
+Use [Observer Architecture](observer-architecture.md) for the Observer's application model,
+dependency direction, runtime flows, state lifetimes, and active deviations. Use
+[Architecture Documentation](architecture-documentation.md) for the controlled JSDoc language
+applied to Observer architectural seams.
 
 station is a terminal-native control plane for AI-agent worktree sessions. It keeps repositories, worktrees, terminal targets, provider hooks, agent runs, commands, and diagnostics in one runtime graph.
 
@@ -28,8 +33,8 @@ The repo is organized around these boundaries:
 - `packages/protocol` owns the observer transport and validates request, response, and event messages.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, and typed error conversion.
 - `packages/client` owns the framework-neutral rich-client observer runtime: snapshot loading, the event subscription/reconnect loop, event-to-snapshot reduction, and command dispatch/completion-wait wrappers consumed by the Station UI.
-- `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Normalization/compaction run observer-side via provider hook adapters.
-- `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs outliving the Station UI, exposing attach/list/close over its own local socket so panes can warm-reattach with scrollback. It is consumed by Station, not by the observer.
+- `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Events sent through this raw path normalize and compact observer-side via provider hook adapters; integrations that submit typed harness reports normalize in their own adapter.
+- `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs outliving the Station UI, exposing attach/list/close over its own local socket so panes can warm-reattach with scrollback. Station consumes it directly; Observer application code can reach host-backed terminal behavior only through an adapter supplied by CLI composition.
 - `packages/config`, `packages/observability`, and `packages/testing` are shared support packages.
 - `integrations/...` adapt external tools: Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, OpenCode, scripted harnesses, and GitHub repository metadata.
 
@@ -60,9 +65,12 @@ When these disagree, reconcile from config, providers, and current observer stat
 - Provider hooks are ingress notifications and fast status reports. They can trigger persistence, projection, spool fallback, or scheduled reconcile, but they are not authoritative graph truth by themselves. Observer event hooks are configured commands triggered by STATION events and should not be conflated with provider hook ingress.
 - Terminal topology is provider-owned. Shared contracts and Station UI behavior should express product intent where possible, not provider target mechanics.
 
-## Module Layout
+## Station UI Module Layout
 
-When a directory outgrows a handful of files, keep its public surface and composition root at the directory root and push internal concern-clusters into lowercase subdirs — mirroring `terminal/`'s `protocol|pty|registry` and `state/`'s `reducers|reconcilers`. For example `input/` keeps the consumed hubs (`router`, `mouse`) and the `stationInput` composition root at root, with `keymap/` and `runtime/` beneath. Colocate each test beside its source and move it with the source. Add an `index.ts` barrel only when a directory's public symbols would otherwise be reached through deep subpaths; skip it when the public surface already sits at the root.
+Within `station/`, when a directory outgrows a handful of files, keep its public surface and composition root at the directory root and push internal concern-clusters into lowercase subdirs — mirroring `terminal/`'s `protocol|pty|registry` and `state/`'s `reducers|reconcilers`. For example `input/` keeps the consumed hubs (`router`, `mouse`) and the `stationInput` composition root at root, with `keymap/` and `runtime/` beneath. Colocate each test beside its source and move it with the source. Add an `index.ts` barrel only when a directory's public symbols would otherwise be reached through deep subpaths; skip it when the public surface already sits at the root.
+
+Observer layout follows ownership and dependency direction rather than this UI-specific shape.
+See [Observer Architecture](observer-architecture.md).
 
 ## Station Subsystem
 

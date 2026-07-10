@@ -1,6 +1,8 @@
 # Overview
 
-Status: conceptual overview — the mental model behind station. For boundary and ownership rules see [Architecture](architecture.md); for setup see the [README](../README.md).
+Status: conceptual overview — the mental model behind station. For repository-wide boundaries
+see [Architecture](architecture.md), for Observer internals see
+[Observer Architecture](observer-architecture.md), and for setup see the [README](../README.md).
 
 ## What station is
 
@@ -14,7 +16,7 @@ The state that would answer those questions is real, but it's scattered across t
 
 ## The core idea
 
-One process — the **observer** — owns the live picture. Everything else either feeds it evidence or asks it questions. The observer never invents state; it correlates what real tools report into a normalized graph and publishes that graph to clients.
+One process — the **observer** — owns the live picture. Everything else either feeds it evidence or asks it questions. The observer does not invent external facts; it correlates what real tools report while minting command IDs and records, events, correlations, and durable overlays needed to operate the normalized graph.
 
 The runtime model reads top to bottom:
 
@@ -30,11 +32,11 @@ A crucial subtlety: **no single layer owns all truth.** Config is authoritative 
 
 ## How the pieces fit
 
-- **Providers** are the only code that touches the outside world. Each one adapts a specific external tool behind a boundary: *worktree* providers (Worktrunk) prove which branches and worktrees exist; *terminal* providers (tmux) own pane and window topology; *harness* providers (Claude Code, Codex, Cursor, Pi, OpenCode) report agent launches and status; *repository* providers fetch code-host metadata like PR and CI state. Provider-specific mechanics never leak past this boundary.
+- **Providers** adapt provider-facing external tools behind boundaries: *worktree* providers (Worktrunk) prove which branches and worktrees exist; *terminal* providers (tmux) own pane and window topology; *harness* providers (Claude Code, Codex, Cursor, Pi, OpenCode) report agent launches and status; *repository* providers fetch code-host metadata like PR and CI state. Other outside-world edges include SQLite, filesystem, sockets, logging, Git, and processes. The adopted Observer architecture puts those mechanics behind application-owned adapter seams and tracks current violations explicitly.
 
 - **The observer** is the long-lived background process. It runs reconciliation, routes commands, tracks provider health, persists durable memory in SQLite, ingests provider hooks, and publishes the graph. It is the one place where scattered evidence becomes a coherent picture.
 
-- **Snapshots and events** are the two ways to read the graph. A *snapshot* is the whole current graph at a moment; *events* (`StationEvent`s like `worktree.agentStateChanged` or `command.failed`) are the incremental changes clients subscribe to. A client loads a snapshot once, then keeps it fresh from the event stream.
+- **Snapshots and events** are the two ways to read the graph. A *snapshot* is the whole current graph at a moment; *events* (`StationEvent`s like `worktree.agentStateChanged` or `command.failed`) are the incremental changes clients subscribe to. A client subscribes, loads a full snapshot while the subscription is live, reduces safe events, and reloads after a gap or an event it cannot reduce safely.
 
 - **Commands** are how clients change the world. Clients never run `git`, `tmux`, or `wt` themselves — they submit a typed command (for example, "create a session for this project on this branch with this harness"), and the observer routes it to the providers that own the mechanics.
 

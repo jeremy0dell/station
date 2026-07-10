@@ -50,9 +50,12 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
 
 ## Invariants
 
-1. **Single normalizer.** One event is normalized by exactly one code version.
-   (Today normalization runs in `stn-ingress`; it moves observer-side so a
-   stale ingress binary cannot bake stale semantics.)
+1. **Single normalizer.** One event is normalized by exactly one adapter
+   version. Raw events delivered by `stn-ingress` normalize observer-side
+   through the selected provider hook adapter, so a stale ingress binary cannot
+   bake stale semantics. Integrations such as Pi that submit an already-typed
+   `HarnessEventReport` normalize in their own adapter and are not normalized
+   again by the observer.
 2. **No provider vocabulary in core.** Observer core and the TUI must not
    match on provider prose (`reason` strings), provider event names, or
    provider keys in `providerData`. If core needs to branch on it, it becomes
