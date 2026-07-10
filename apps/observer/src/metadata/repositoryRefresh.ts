@@ -24,8 +24,15 @@ import {
   readRepositoryGitContext,
   repositoryMetadataCacheKey,
 } from "./repositoryGit.js";
+import { selectRepositoryProvider } from "./repositoryProviderSelection.js";
 import { staleChecks, stalePullRequest } from "./stalePayloads.js";
 
+/**
+ * USE CASE
+ *
+ * Refreshes and persists code-host metadata for snapshot worktrees through
+ * matching repository provider ports.
+ */
 export type RepositoryMetadataRefresher = {
   refresh(input: RepositoryRefreshInput): Promise<void>;
 };
@@ -73,7 +80,7 @@ export function createRepositoryMetadataRefresher(
         return;
       }
 
-      const grouped = await collectRepositoryTasks(input);
+      const grouped = collectRepositoryTasks(input);
       for (const tasks of grouped.values()) {
         if (input.signal.aborted) {
           return;
@@ -91,54 +98,50 @@ export function createRepositoryMetadataRefresher(
     },
   };
 
-  async function collectRepositoryTasks(
+  function collectRepositoryTasks(
     input: RepositoryRefreshInput,
-  ): Promise<Map<string, RepositoryRefreshTask[]>> {
+  ): Map<string, RepositoryRefreshTask[]> {
     const grouped = new Map<string, RepositoryRefreshTask[]>();
-    await forEachConcurrent(
-      input.snapshot.rows,
-      { concurrency: defaultRepositoryConcurrency },
-      async (row) => {
-        if (input.signal.aborted || !options.projectsById.has(row.projectId)) {
-          return;
-        }
+    for (const row of input.snapshot.rows) {
+      if (input.signal.aborted || !options.projectsById.has(row.projectId)) {
+        continue;
+      }
 
-        const git = readRepositoryGitContext({
-          worktree: {
-            id: row.id,
-            projectId: row.projectId,
-            path: row.path,
-            branch: row.branch,
-            state: row.worktree.state,
-            ...(row.worktree.remote !== undefined ? { remote: row.worktree.remote } : {}),
-            ...(row.worktree.headSha !== undefined ? { headSha: row.worktree.headSha } : {}),
-          },
-          clock,
-        });
-        const provider = git === undefined ? undefined : repositoryProviderFor(git);
-        if (git === undefined || provider === undefined) {
-          return;
-        }
+      const git = readRepositoryGitContext({
+        worktree: {
+          id: row.id,
+          projectId: row.projectId,
+          path: row.path,
+          branch: row.branch,
+          state: row.worktree.state,
+          ...(row.worktree.remote !== undefined ? { remote: row.worktree.remote } : {}),
+          ...(row.worktree.headSha !== undefined ? { headSha: row.worktree.headSha } : {}),
+        },
+        clock,
+      });
+      const provider = git === undefined ? undefined : repositoryProviderFor(git);
+      if (git === undefined || provider === undefined) {
+        continue;
+      }
 
-        const task: RepositoryRefreshTask = {
-          row,
-          git,
-          provider,
-        };
-        const existingPullRequest = input.pullRequestByWorktree.get(row.id);
-        const existingChecks = input.checksByWorktree.get(row.id);
-        if (existingPullRequest !== undefined) task.existingPullRequest = existingPullRequest;
-        if (existingChecks !== undefined) task.existingChecks = existingChecks;
+      const task: RepositoryRefreshTask = {
+        row,
+        git,
+        provider,
+      };
+      const existingPullRequest = input.pullRequestByWorktree.get(row.id);
+      const existingChecks = input.checksByWorktree.get(row.id);
+      if (existingPullRequest !== undefined) task.existingPullRequest = existingPullRequest;
+      if (existingChecks !== undefined) task.existingChecks = existingChecks;
 
-        const groupKey = repositoryGroupKey(git);
-        const existingGroup = grouped.get(groupKey);
-        if (existingGroup === undefined) {
-          grouped.set(groupKey, [task]);
-        } else {
-          existingGroup.push(task);
-        }
-      },
-    );
+      const groupKey = repositoryGroupKey(git);
+      const existingGroup = grouped.get(groupKey);
+      if (existingGroup === undefined) {
+        grouped.set(groupKey, [task]);
+      } else {
+        existingGroup.push(task);
+      }
+    }
     return grouped;
   }
 
@@ -405,10 +408,7 @@ export function createRepositoryMetadataRefresher(
   }
 
   function repositoryProviderFor(git: RepositoryGitContext): RepositoryProvider | undefined {
-    if (git.remote.host === "github.com" || git.remote.host.includes("github.")) {
-      return repositoryProviders.get("github");
-    }
-    return undefined;
+    return selectRepositoryProvider(git.remote, repositoryProviders.values());
   }
 }
 

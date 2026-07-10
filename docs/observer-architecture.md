@@ -177,7 +177,7 @@ ownership even where current ownership is still a deviation.
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role; the remaining response payload is host-shaped (OBS-HEX-009). |
 | Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing. |
-| Repository metadata | Driven | `RepositoryProvider` | GitHub repository adapter | The port is generic; selection is still GitHub-specific in application code (OBS-HEX-002). |
+| Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | current `ObserverPersistence` | SQLite persistence modules | A port exists, but it is broad and leaks SQLite representations (OBS-HEX-004 and OBS-HEX-005). |
 | Logging and config mutation | Driven | injected logger and config path today | JSONL logger and config filesystem | These require purpose-owned application ports (OBS-HEX-010). |
 | Worktree metadata evidence | Driven | metadata refresh dependencies today | Git commands, ref watcher, repository adapter | Local Git/process/watch mechanics remain mixed into the use case (OBS-HEX-011). |
@@ -201,7 +201,7 @@ areas contain the following responsibilities:
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
-| `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases depend on repository and local-metadata ports (OBS-HEX-002 and OBS-HEX-011). |
+| `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases select adapters through provider-neutral policy and depend on local-metadata ports (OBS-HEX-011). |
 | `persistence/`, `migrations/`, `sqlite.ts` | persistence contract, SQL translation, transactions, migrations, and rows | Application persistence ports are distinct from the SQLite adapter (OBS-HEX-004 and OBS-HEX-005). |
 | `diagnostics/` | doctor and diagnostic collection plus local evidence traversal | Diagnostic use cases depend on an evidence-source port (OBS-HEX-012). |
 | `features/` | feature-flag evaluation | Deterministic application policy. |
@@ -518,7 +518,6 @@ and exit condition here.
 
 | ID | Current evidence and risk | Containment and exit evidence | Tracking |
 | --- | --- | --- | --- |
-| `OBS-HEX-002` | Repository refresh recognizes GitHub hosts and selects provider ID `github`; another repository adapter requires application edits. | Keep repository behavior behind the existing port. Exit when adapters declare remote support and a non-GitHub fake is selected without application changes; ambiguous matches fail explicitly. | Repository adapter selection remediation. |
 | `OBS-HEX-003` | `ObserverApi` and external-launch application DTOs are owned by `packages/protocol`. The semantic boundary and one transport share an owner. | Do not add more application semantics to transport. Exit when application contracts live in `packages/contracts` and protocol owns only transport mapping and validation. | Observer application contract move. |
 | `OBS-HEX-004` | `ObserverCore` accepts `ObserverSqliteHandle`, exposes SQLite health, and imports persisted representations. Storage technology crosses inward. | Keep new SQLite details out of core. Exit when core depends only on application-purpose persistence and health capabilities. | SQLite/core isolation. |
 | `OBS-HEX-005` | `ObserverPersistence` combines unrelated use cases, complete Observer tests require SQLite, and the existing fake is not a safe substitute. | Add no new generic persistence bucket. Exit when consumers use the seven purpose-owned ports, SQLite and in-memory adapters pass shared contracts, and the full application runs without SQLite. | Persistence port and substitution remediation. |
@@ -526,15 +525,17 @@ and exit condition here.
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
 | `OBS-HEX-009` | External-launch application results still expose `TerminalReattachInfo` with host endpoint and socket data. A host-specific representation crosses the application API. | The managed lifecycle remains explicitly injected and application code must not construct the payload. Exit when the API returns an opaque managed-terminal attachment resolved by Station-side attachment behavior. | Managed attachment protocol cutover. |
 | `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Keep behavior behind existing narrow call sites. Exit with purpose-owned `StationLogger` and `ProjectConfigWriter` ports and adapters. | Logging and project-config edge inversion. |
-| `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers while also selecting repository behavior. Use case and local adapter mechanics are mixed. | Keep new provider-specific parsing out of metadata orchestration. Exit when `WorktreeMetadataSource` owns local Git/ref evidence and repository matching is adapter-owned. | Local metadata source isolation. |
+| `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Use case and local adapter mechanics are mixed. | Keep new provider-specific parsing out of metadata orchestration. Exit when `WorktreeMetadataSource` owns local Git/ref evidence. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only and paths stay composition-supplied. Exit when a `DiagnosticEvidenceSource` adapter owns local traversal and the use case runs against a fake. | Diagnostic evidence isolation. |
 
 The managed-terminal lifecycle leak formerly tracked as `OBS-HEX-001` is
 resolved: application code receives `ManagedTerminalLifecycle` from composition,
 does not select the Station adapter by ID, and does not construct its target
-format. This document resolves `OBS-HEX-008`, the missing canonical Observer
-architecture contract. Resolved history belongs in its issue and pull request,
-not in the active register.
+format. `OBS-HEX-002` is resolved: a non-GitHub repository adapter can be
+selected without application changes, and overlapping support fails explicitly.
+This document resolves `OBS-HEX-008`, the missing canonical Observer architecture
+contract. Resolved history belongs in its issue and pull request, not in the
+active register.
 
 ## Related Living Documents
 

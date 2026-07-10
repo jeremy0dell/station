@@ -15,6 +15,7 @@ import type {
   HarnessEventObservation,
   HarnessRunObservation,
   HarnessStatusObservation,
+  RepositoryRemote,
   TerminalIdentityBinding,
   TerminalTargetObservation,
   WorktreeChecksSummary,
@@ -457,8 +458,15 @@ export interface HarnessProvider {
   stop?(request: HarnessStopRequest): Promise<HarnessStopResult>;
 }
 
+/**
+ * DRIVEN PORT
+ *
+ * Supplies code-host metadata and declares deterministic, I/O-free remote
+ * support so application policy can select an adapter.
+ */
 export interface RepositoryProvider {
   id: ProviderId;
+  supportsRemote(remote: RepositoryRemote): boolean;
   capabilities(): RepositoryCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;

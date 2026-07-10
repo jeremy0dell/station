@@ -23,7 +23,6 @@ import type {
   HarnessProvider,
   HarnessRunObservation,
   ProviderHealth,
-  RepositoryCapabilities,
   RepositoryProvider,
   SafeError,
   TerminalCapabilities,
@@ -600,30 +599,6 @@ class UnavailableHarnessProvider implements HarnessProvider {
   }
 
   async classifyRun(): Promise<never> {
-    throw providerUnavailableError(this.id);
-  }
-}
-
-export class UnavailableRepositoryProvider implements RepositoryProvider {
-  constructor(readonly id: string) {}
-
-  capabilities(): RepositoryCapabilities {
-    return {
-      canDiscoverPullRequests: false,
-      canReadChecks: false,
-      canUseCliAuth: false,
-    };
-  }
-
-  async health(): Promise<ProviderHealth> {
-    return unavailableHealth(this.id, "repository", this.capabilities());
-  }
-
-  async discoverPullRequest(): Promise<never> {
-    throw providerUnavailableError(this.id);
-  }
-
-  async readChecks(): Promise<never> {
     throw providerUnavailableError(this.id);
   }
 }
