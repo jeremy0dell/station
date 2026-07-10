@@ -137,8 +137,9 @@ stn (bun build --compile, per platform, no ambient env)
 - **Runtime-mode seam** `packages/runtime/src/buildInfo.ts`: build-time
   defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` behind `typeof`
   guards; dev tsc reports `{ version: "0.0.0-dev", compiled: false }`.
-  Self-spawns route through `selfExecArgv(entry)`: compiled →
-  `[process.execPath, entry]`, dev → today's command. All
+  Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
+  `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
+  internal target; dev → today's command. All
   `import.meta.url === file://${process.argv[1]}` self-exec guards become
   `import.meta.main` (S1 proved the legacy form double-executes under
   compile; S4 proved `import.meta.main` is correct everywhere).
@@ -265,22 +266,38 @@ for at least one week. In-field undo for binary users is
 
 ### A3 — self-exec seam + raw-argv dispatch
 
-`apps/cli/src/selfExec.ts`; raw-argv dispatcher in the compile entry and a
-dev-mode equivalent, routing `__observer`/`__ingress`/`__tui`/`__dashboard`/
-`__station-host`/`__tmux-popup` **before** `runCli` (F5). Export the
-run-functions from `observerMain.ts`/`ingressMain.ts`/renderer/host so
-dispatch is unit-testable. Swap every self-exec guard to `import.meta.main`.
-Rewrite spawn sites (`observerProcess.ts`, `ingress/observerStartup.ts`,
-`commands/tui.ts`, `observerProviders.ts` + `ensureHostRunning.ts`,
-`notify/focusAction.ts`, `registry/popup.ts`, `scripted/launch.ts`) through
-`selfExecArgv`. `Bun.env → process.env` in `station/src`.
+**Status: implemented.** `apps/cli/src/selfExec.ts` exports `SelfExecTarget`,
+`ExecutableArgv`, `SelfExecRuntime`, `selfExecArgv`, `SelfExecRunners`, and
+`dispatchSelfExec`. Source mode preserves each supplied executable tuple;
+compiled mode maps it to the binary plus an exact internal token. The raw
+dispatcher gives `stn-ingress` argv0 precedence, consumes exactly one known
+internal token, and sends unknown `__*` values to the normal CLI unchanged.
+A3 exports and tests this dispatcher; A4 owns the compiled entry that composes
+its runners.
+
+The callable process entries are `runCliMain`, `runCliObserverMain`,
+`runCliIngressMain`, `runStationMain`, `runDashboardMain`, and
+`runStationHostMain`. Their modules and the Observer runtime now use
+`import.meta.main`, supported by the source-development Node.js floor of 24.2.
+Station-local environment reads use `process.env`.
+
+Migrated launch sites are Observer lifecycle spawn; provider-ingress
+auto-start; Station/dashboard launch; CLI-composed Station Host launch through
+the terminal adapter; notification focus actions; and nested popup TUI
+commands. The host and ingress boundaries receive finalized executable tuples
+and append only their operation-specific flags. The scripted harness remains
+an on-disk development/test runner: there is no `__scripted` mode.
+
+`__tmux-popup` is reserved and dispatches only to A3's injected placeholder
+runner. A4 chooses and packages the executable popup implementation; A3 leaves
+the POSIX launcher unchanged.
 
 ### A4 — compile entry + build script + asset extraction + CI smoke
 
-`station/src/bin/stnMain.ts`; `scripts/build-binary.mjs` + `build:binary`.
-Compile command carries **both** ambient-config disable flags (F1) and the
-version/compiled defines. `link-station-packages.sh` is extended for the app
-links.
+`station/src/bin/stnMain.ts` composes `dispatchSelfExec` with lazy route imports;
+`scripts/build-binary.mjs` + `build:binary`. Compile command carries **both**
+ambient-config disable flags (F1) and the version/compiled defines.
+`link-station-packages.sh` is extended for the app links.
 
 A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
 

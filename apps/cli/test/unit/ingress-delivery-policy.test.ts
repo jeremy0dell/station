@@ -15,6 +15,36 @@ import { deliverProviderHookWithSpooling } from "../../src/ingress/deliveryPolic
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("provider hook delivery policy", () => {
+  it("forwards the finalized observer command unchanged to auto-start", async () => {
+    const fixture = await createTempState();
+    const state = { running: false, spawnCount: 0, spooled: 0 };
+    const observerCommand = ["/opt/station/stn", "__observer"] as const;
+    let observedCommand: readonly string[] | undefined;
+    const deps = {
+      clock: { now: () => new Date(now) },
+      clientFactory: () =>
+        ({
+          health: async (): Promise<ObserverHealth> => {
+            if (!state.running) throw new Error("observer offline");
+            return healthyObserver(fixture);
+          },
+        }) as never,
+      spawnObserver: async (input: { observerCommand?: readonly string[] }) => {
+        state.spawnCount += 1;
+        observedCommand = input.observerCommand;
+        state.running = true;
+        return { pid: 12345, unref: () => undefined };
+      },
+    };
+
+    await expect(
+      deliverProviderHookWithSpooling(
+        deliveryInput(fixture, "hook_finalized_command", state, deps, { observerCommand }),
+      ),
+    ).resolves.toMatchObject({ status: "ingested" });
+    expect(observedCommand).toBe(observerCommand);
+  });
+
   it("serializes concurrent observer auto-start attempts across hook senders", async () => {
     const fixture = await createTempState();
     const state = { running: false, spawnCount: 0, spooled: 0 };
@@ -125,10 +155,13 @@ function deliveryInput(
   hookId: string,
   state: { running: boolean; spooled: number },
   deps: Parameters<typeof deliverProviderHookWithSpooling>[0]["deps"],
-  options: { startupTimeoutMs?: number } = {},
+  options: {
+    startupTimeoutMs?: number;
+    observerCommand?: readonly [command: string, ...prefixArgs: string[]];
+  } = {},
 ): Parameters<typeof deliverProviderHookWithSpooling>[0] {
   const event = hookEvent(hookId);
-  return {
+  const input: Parameters<typeof deliverProviderHookWithSpooling>[0] = {
     paths,
     event,
     payloadSummary: emptyPayloadSummary,
@@ -145,6 +178,10 @@ function deliveryInput(
       return spooledReceipt(event, error);
     },
   };
+  if (options.observerCommand !== undefined) {
+    input.observerCommand = options.observerCommand;
+  }
+  return input;
 }
 
 const emptyPayloadSummary: ProviderHookPayloadSummary = {

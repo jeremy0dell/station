@@ -33,12 +33,12 @@ export async function checkSetupToolchain(
 
 function checkNodeVersion(options: CheckToolchainOptions): ToolchainFact {
   const actual = normalizeVersion(options.nodeVersion ?? process.version);
-  if (actual.startsWith("24.")) {
+  if (isSupportedNodeVersion(actual)) {
     return {
       status: "ok",
       label: "Node.js",
       actual,
-      expected: "24.x",
+      expected: ">=24.2 <25",
       message: `Node.js ${actual} is compatible.`,
     };
   }
@@ -46,9 +46,18 @@ function checkNodeVersion(options: CheckToolchainOptions): ToolchainFact {
     status: "incompatible",
     label: "Node.js",
     actual,
-    expected: "24.x",
-    message: `Node.js ${actual} is incompatible; STATION development expects Node.js 24.x.`,
+    expected: ">=24.2 <25",
+    message: `Node.js ${actual} is incompatible; STATION development expects Node.js 24.2+ and below 25.`,
   };
+}
+
+function isSupportedNodeVersion(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (match === null) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  return major === 24 && (minor > 2 || (minor === 2 && patch >= 0));
 }
 
 async function checkPnpmVersion(options: CheckToolchainOptions): Promise<ToolchainFact> {

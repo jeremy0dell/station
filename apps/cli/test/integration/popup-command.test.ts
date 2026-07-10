@@ -387,11 +387,16 @@ describe("CLI popup command", () => {
       },
       preferRegisteredDevPopup: true,
     });
-    expect(calls[0]?.tuiCommand).toContain("--config");
-    expect(calls[0]?.tuiCommand).toContain(shellQuote(configPath));
-    expect(calls[0]?.tuiCommand).toContain("tui --popup --persistent");
-    expect(calls[0]?.tuiCommand).toContain(
-      shellQuote(fileURLToPath(new URL("../../src/main.ts", import.meta.url))),
+    expect(calls[0]?.tuiCommand).toBe(
+      [
+        shellQuote(process.execPath),
+        shellQuote(fileURLToPath(new URL("../../src/main.ts", import.meta.url))),
+        "--config",
+        shellQuote(configPath),
+        "tui",
+        "--popup",
+        "--persistent",
+      ].join(" "),
     );
   });
 

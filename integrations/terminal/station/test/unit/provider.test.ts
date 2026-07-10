@@ -225,7 +225,7 @@ function hostBackedProvider(client: StationHostClient) {
     {
       socketPath: `/tmp/station-host-${process.pid}-${Math.random().toString(36).slice(2)}.sock`,
       stateDir: "/tmp",
-      hostEntry: "/tmp/hostMain.ts",
+      hostCommand: ["bun", "/tmp/hostMain.ts"],
     },
     { clientFactory: () => client, spawnHost: () => ({ pid: 1, unref: () => undefined }) },
   );

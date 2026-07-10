@@ -8,7 +8,7 @@ stn setup
 
 This configures the core local workflow: the required tools, an agent CLI, and your first project. Optional integrations can be added later.
 
-The local checkout also expects Node.js 24.x and pnpm 11 for development. Real-provider test lanes remain opt-in.
+The local checkout also expects Node.js 24.2+ (and below 25) and pnpm 11 for development. Real-provider test lanes remain opt-in.
 `stn setup system --check` reports those versions, but it does not change the active Node or pnpm
 installation automatically.
 

@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type FileHandle, mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { selfExecArgv } from "../selfExec.js";
 import type { ChildExitResult, ChildProcessLike, SpawnObserverInput } from "./types.js";
 
 export async function defaultSpawnObserver(input: SpawnObserverInput): Promise<ChildProcessLike> {
@@ -42,14 +43,14 @@ export async function defaultSpawnObserver(input: SpawnObserverInput): Promise<C
   }
 }
 
-function observerSpawnArgv(input: SpawnObserverInput): [string, ...string[]] {
+export function observerSpawnArgv(input: SpawnObserverInput): [string, ...string[]] {
   // Compiled dist/observerProcess/spawn.js must resolve ../observerMain.js; source-alias tests launch the built entry instead.
   const observerEntry = import.meta.url.endsWith(".ts")
     ? new URL("../../dist/observerMain.js", import.meta.url)
     : new URL("../observerMain.js", import.meta.url);
+  const observerCommand = selfExecArgv("observer", [process.execPath, observerEntry.pathname]);
   return [
-    process.execPath,
-    observerEntry.pathname,
+    ...observerCommand,
     "--socket",
     input.paths.socketPath,
     "--state-dir",

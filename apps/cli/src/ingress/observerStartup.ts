@@ -11,6 +11,13 @@ import {
   safeErrorFromUnknown,
   systemClock,
 } from "@station/runtime";
+import type { ExecutableArgv } from "../selfExec.js";
+
+/**
+ * An executable and fixed observer entry prefix forwarded unchanged until
+ * startup appends observer socket, state, and config flags.
+ */
+export type ProviderHookObserverCommand = ExecutableArgv;
 
 export type ProviderHookObserverStatus =
   | {
@@ -35,7 +42,7 @@ export type ProviderHookObserverStartupDeps = {
 
 export type SpawnProviderHookObserverInput = {
   paths: ObserverPaths;
-  observerEntryPath?: string;
+  observerCommand?: ProviderHookObserverCommand;
   configPath?: string;
 };
 
@@ -45,7 +52,7 @@ export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
 
 export type ProviderHookObserverStartupOptions = {
   configPath?: string;
-  observerEntryPath?: string;
+  observerCommand?: ProviderHookObserverCommand;
   paths: ObserverPaths;
   timeoutMs?: number;
 };
@@ -115,8 +122,8 @@ export async function startProviderHookObserver(
       await mkdir(paths.stateDir, { recursive: true, mode: 0o700 });
       await mkdir(dirname(paths.socketPath), { recursive: true, mode: 0o700 });
       const spawnInput: SpawnProviderHookObserverInput = { paths };
-      if (options.observerEntryPath !== undefined) {
-        spawnInput.observerEntryPath = options.observerEntryPath;
+      if (options.observerCommand !== undefined) {
+        spawnInput.observerCommand = options.observerCommand;
       }
       if (options.configPath !== undefined) {
         spawnInput.configPath = options.configPath;
@@ -182,18 +189,19 @@ function defaultClientFactory(socketPath: string) {
 }
 
 function defaultSpawnObserver(input: SpawnProviderHookObserverInput): ChildProcessLike {
-  if (input.observerEntryPath === undefined || input.observerEntryPath.length === 0) {
-    throw new Error("observerEntryPath is required to auto-start observer from provider hooks");
+  if (input.observerCommand === undefined) {
+    throw new Error("observerCommand is required to auto-start observer from provider hooks");
   }
+  const [command, ...prefixArgs] = input.observerCommand;
   const args = [
-    input.observerEntryPath,
+    ...prefixArgs,
     "--socket",
     input.paths.socketPath,
     "--state-dir",
     input.paths.stateDir,
     ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
   ];
-  return spawn(process.execPath, args, {
+  return spawn(command, args, {
     detached: true,
     stdio: "ignore",
   });

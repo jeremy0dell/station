@@ -43,6 +43,69 @@ async function writeConfigWithProject(root: string, projectRoot: string): Promis
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("provider hook ingress command", () => {
+  it("turns raw observer flags into one finalized startup command", async () => {
+    const fixture = await createTempState();
+    const observerEntry = join(fixture.root, "custom-observer.js");
+    let running = false;
+    let spawnInput:
+      | Parameters<NonNullable<Parameters<typeof runProviderIngressCommand>[2]["spawnObserver"]>>[0]
+      | undefined;
+
+    const receipt = await runProviderIngressCommand(
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--observer-entry",
+        observerEntry,
+        "--startup-timeout-ms",
+        "500",
+        "worktrunk",
+        "post-create",
+      ],
+      { stdin: JSON.stringify({ branch: "feature/final-command" }) },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_final_command",
+        clientFactory: () =>
+          ({
+            health: async () => {
+              if (!running) throw new Error("offline");
+              return { schemaVersion: "0.6.0", status: "healthy" };
+            },
+            ingestProviderHookEvent: async (event: ProviderHookEvent) => {
+              if (!running) throw new Error("offline");
+              return {
+                schemaVersion: "0.6.0",
+                hookId: event.hookId ?? "hook_final_command",
+                provider: event.provider,
+                event: event.event,
+                accepted: true,
+                status: "ingested",
+                receivedAt: event.receivedAt,
+                reconciled: false,
+              } satisfies ProviderHookReceipt;
+            },
+          }) as never,
+        spawnObserver: async (input) => {
+          spawnInput = input;
+          running = true;
+          return { pid: 12345, unref: () => undefined };
+        },
+      },
+    );
+
+    expect(receipt.status).toBe("ingested");
+    expect(spawnInput).toEqual({
+      paths: expect.objectContaining({
+        socketPath: fixture.socketPath,
+        stateDir: fixture.stateDir,
+      }),
+      observerCommand: [process.execPath, observerEntry],
+    });
+  });
+
   it("delivers Worktrunk lifecycle hooks through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     let observedPayload: unknown;

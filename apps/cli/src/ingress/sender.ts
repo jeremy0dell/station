@@ -28,13 +28,16 @@ import {
 import { normalizeWorktrunkLifecycleEvent } from "@station/worktrunk";
 import { z } from "zod";
 import { deliverProviderHookWithSpooling, type ProviderDeliveryAttempt } from "./deliveryPolicy.js";
-import type { ProviderHookObserverStartupDeps } from "./observerStartup.js";
+import type {
+  ProviderHookObserverCommand,
+  ProviderHookObserverStartupDeps,
+} from "./observerStartup.js";
 import { writeProviderHookSpoolRecord } from "./spool.js";
 
 export type ProviderHookSenderOptions = {
   paths: ObserverPaths;
   configPath?: string;
-  observerEntryPath?: string;
+  observerCommand?: ProviderHookObserverCommand;
   autoStart?: boolean;
   deliveryTimeoutMs?: number;
   startupTimeoutMs?: number;
@@ -146,8 +149,8 @@ export async function sendProviderHookEvent(
   if (input.configPath !== undefined) {
     deliveryInput.configPath = input.configPath;
   }
-  if (input.observerEntryPath !== undefined) {
-    deliveryInput.observerEntryPath = input.observerEntryPath;
+  if (input.observerCommand !== undefined) {
+    deliveryInput.observerCommand = input.observerCommand;
   }
   return deliverProviderHookWithSpooling(deliveryInput);
 }

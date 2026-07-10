@@ -10,6 +10,7 @@ import {
 import type { ProviderHookReceipt } from "@station/contracts";
 import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { resolveLocalPath, systemClock, toIsoTimestamp } from "@station/runtime";
+import { type ExecutableArgv, selfExecArgv } from "../selfExec.js";
 import {
   type ProviderHookSenderDeps,
   type ProviderHookSenderOptions,
@@ -24,6 +25,7 @@ import { readStdinIfAvailable } from "./stdin.js";
 export type ProviderIngressCommandOptions = {
   stdin?: string;
   env?: NodeJS.ProcessEnv;
+  observerCommand?: ExecutableArgv;
   observerEntryPath?: string;
 };
 
@@ -149,14 +151,7 @@ export async function runProviderIngressMain(
   options: ProviderIngressCommandOptions = {},
 ): Promise<ProviderIngressMainResult> {
   try {
-    const receipt = await runProviderIngressCommand(
-      argv,
-      {
-        ...options,
-        observerEntryPath: options.observerEntryPath ?? defaultObserverEntryPath(),
-      },
-      {},
-    );
+    const receipt = await runProviderIngressCommand(argv, options, {});
     if (receipt.status === "rejected") {
       return {
         code: 1,
@@ -297,8 +292,7 @@ function senderOptionsFromParsed(
   };
   if (parsed.configPath !== undefined) senderOptions.configPath = parsed.configPath;
   if (parsed.projectRoots !== undefined) senderOptions.projectRoots = parsed.projectRoots;
-  const observerEntryPath = options.observerEntryPath ?? parsed.observerEntryPath;
-  if (observerEntryPath !== undefined) senderOptions.observerEntryPath = observerEntryPath;
+  senderOptions.observerCommand = resolveObserverCommand(parsed, options);
   if (parsed.autoStart !== undefined) senderOptions.autoStart = parsed.autoStart;
   if (parsed.deliveryTimeoutMs !== undefined) {
     senderOptions.deliveryTimeoutMs = parsed.deliveryTimeoutMs;
@@ -393,8 +387,18 @@ function parsePositiveInteger(value: string, flag: string): number {
   return parsed;
 }
 
-function defaultObserverEntryPath(): string {
-  return fileURLToPath(new URL("../observerMain.js", import.meta.url));
+function resolveObserverCommand(
+  parsed: ParsedOptions,
+  options: ProviderIngressCommandOptions,
+): ExecutableArgv {
+  if (options.observerCommand !== undefined) {
+    return options.observerCommand;
+  }
+  const observerEntryPath = options.observerEntryPath ?? parsed.observerEntryPath;
+  return selfExecArgv("observer", [
+    process.execPath,
+    observerEntryPath ?? fileURLToPath(new URL("../observerMain.js", import.meta.url)),
+  ]);
 }
 
 function formatRejectedReceipt(receipt: ProviderHookReceipt): string {

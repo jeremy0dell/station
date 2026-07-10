@@ -35,7 +35,7 @@ function absentSocketPath(): string {
 describe("ensureStationHostRunning", () => {
   it("reports unavailable when no host entry is configured", async () => {
     const handle = await ensureStationHostRunning(
-      { socketPath: absentSocketPath(), stateDir: tmpdir(), hostEntry: "" },
+      { socketPath: absentSocketPath(), stateDir: tmpdir(), hostCommand: [""] },
       { clientFactory: () => fakeClient() },
     );
     expect(handle.status).toBe("unavailable");
@@ -49,12 +49,19 @@ describe("ensureStationHostRunning", () => {
       (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
     );
     const handle = await ensureStationHostRunning(
-      { socketPath: absentSocketPath(), stateDir: tmpdir(), hostEntry: "/tmp/hostMain.ts" },
+      {
+        socketPath: absentSocketPath(),
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+      },
       { clientFactory: () => fakeClient(), spawnHost },
     );
     expect(handle.status).toBe("running");
     expect(spawnHost).toHaveBeenCalledTimes(1);
-    expect(spawnHost.mock.calls[0]?.[0]).toMatchObject({ hostEntry: "/tmp/hostMain.ts" });
+    expect(spawnHost.mock.calls[0]?.[0]).toEqual({
+      argv: ["bun", "/tmp/hostMain.ts", "--socket", expect.any(String), "--state-dir", tmpdir()],
+      spawnOptions: { detached: true, stdio: "ignore" },
+    });
   });
 
   it("kills the spawned child and reports unavailable when it never gets healthy", async () => {
@@ -68,7 +75,7 @@ describe("ensureStationHostRunning", () => {
       {
         socketPath: absentSocketPath(),
         stateDir: tmpdir(),
-        hostEntry: "/tmp/hostMain.ts",
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
         timeoutMs: 120,
       },
       {

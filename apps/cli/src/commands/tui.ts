@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { StationConfig } from "@station/config";
 import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { safeErrorFromUnknown, systemClock } from "@station/runtime";
+import { isCompiledBinary, safeErrorFromUnknown, systemClock } from "@station/runtime";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
@@ -12,6 +12,7 @@ import {
   startObserver,
 } from "../observerProcess.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
+import { type SelfExecRuntime, selfExecArgv } from "../selfExec.js";
 import {
   isStationUiInstalled,
   resolveStationWorkspaceDir,
@@ -36,6 +37,9 @@ export type RendererSpawnOptions = {
 export type TuiCommandDeps = {
   observer?: ObserverProcessDeps;
   spawnRenderer?: (options: RendererSpawnOptions) => Promise<TuiRunResult>;
+  spawnProcess?: typeof spawn;
+  stationUiInstalled?: () => Promise<boolean>;
+  selfExecRuntime?: SelfExecRuntime;
   env?: CliEnv;
 };
 
@@ -132,26 +136,47 @@ function runRenderer(
   env: Record<string, string>,
   entry: RendererEntry,
 ): Promise<TuiRunResult> {
-  return (deps.spawnRenderer ?? spawnRenderer)({ env, entry });
+  return deps.spawnRenderer?.({ env, entry }) ?? spawnRenderer({ env, entry }, deps);
 }
 
-async function spawnRenderer({ env, entry }: RendererSpawnOptions): Promise<TuiRunResult> {
+async function spawnRenderer(
+  { env, entry }: RendererSpawnOptions,
+  deps: TuiCommandDeps,
+): Promise<TuiRunResult> {
   const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
   const override = process.env.STATION_DASHBOARD_COMMAND;
-  // Bare stn shells into `bun run` against the station/ lane; if it was never
-  // bun-installed the child dies with a raw "@opentui not found", so pre-flight the
-  // lane and surface the same remediation doctor gives (STATION_UI_NOT_INSTALLED).
-  if (override === undefined && !(await isStationUiInstalled())) {
+  const compiled = deps.selfExecRuntime?.compiled ?? isCompiledBinary();
+  // The installation preflight applies to the source Bun workspace, not a compiled self-exec.
+  if (
+    override === undefined &&
+    !compiled &&
+    !(await (deps.stationUiInstalled ?? isStationUiInstalled)())
+  ) {
     process.stderr.write(`${stationUiInstallHint} Or run stn doctor.\n`);
     return { status: "exited", code: 1 };
   }
   if (override === undefined) {
     process.stderr.write(`Launching STATION ${entry === "dashboard" ? "dashboard" : "TUI"}…\n`);
   }
+  const developmentArgv = [
+    "bun",
+    "run",
+    "--silent",
+    "--cwd",
+    resolveStationWorkspaceDir(),
+    entry,
+  ] as const;
+  const rendererArgv = selfExecArgv(
+    entry === "dashboard" ? "dashboard" : "tui",
+    developmentArgv,
+    deps.selfExecRuntime,
+  );
+  const [command, ...args] = rendererArgv;
+  const spawnProcess = deps.spawnProcess ?? spawn;
   const child =
     override !== undefined
-      ? spawn(override, { shell: true, stdio: "inherit", env: childEnv })
-      : spawn("bun", ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), entry], {
+      ? spawnProcess(override, { shell: true, stdio: "inherit", env: childEnv })
+      : spawnProcess(command, args, {
           stdio: "inherit",
           env: childEnv,
         });

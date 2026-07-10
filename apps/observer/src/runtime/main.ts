@@ -245,7 +245,7 @@ function createConfiguredEventHooks(
   return createObserverEventHookRuntime({ hooks, eventBus, clock: systemClock, logger });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   process.stderr.write(
     "apps/observer/dist/runtime/main.js is no longer a standalone production bootstrap. Use apps/cli/dist/observerMain.js.\n",
   );

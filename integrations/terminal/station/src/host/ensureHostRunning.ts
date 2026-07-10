@@ -14,11 +14,15 @@ export type StationHostHandle =
   | { status: "running"; socketPath: string; client: StationHostClient }
   | { status: "unavailable"; socketPath: string; error: SafeError };
 
+/**
+ * An executable plus its fixed entry prefix; the host layer appends socket and
+ * state flags.
+ */
+export type StationHostCommand = readonly [command: string, ...prefixArgs: string[]];
+
 export type SpawnStationHostInput = {
-  bunCommand: string;
-  hostEntry: string;
-  socketPath: string;
-  stateDir: string;
+  argv: StationHostCommand;
+  spawnOptions: { detached: true; stdio: "ignore" };
 };
 
 export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
@@ -33,10 +37,7 @@ export type EnsureStationHostDeps = {
 export type EnsureStationHostOptions = {
   socketPath: string;
   stateDir: string;
-  /** Defaults to env `STATION_HOST_ENTRY`. */
-  hostEntry?: string;
-  /** Defaults to env `STATION_BUN` then `"bun"`. */
-  bunCommand?: string;
+  hostCommand: StationHostCommand;
   timeoutMs?: number;
 };
 
@@ -85,26 +86,20 @@ export async function ensureStationHostRunning(
     }
   }
 
-  const hostEntry = options.hostEntry ?? process.env.STATION_HOST_ENTRY;
-  const bunCommand = options.bunCommand ?? process.env.STATION_BUN ?? "bun";
-  if (hostEntry === undefined || hostEntry.length === 0) {
+  if (options.hostCommand[0].length === 0) {
     disposeOwned();
     return {
       status: "unavailable",
       socketPath,
-      error: stationHostSafeError("HOST_UNREACHABLE", "Station host entry is not configured.", {
-        hint: "Set STATION_HOST_ENTRY, or disable feature_flags.stationPersistentAgents.",
-      }),
+      error: stationHostSafeError("HOST_UNREACHABLE", "Station host command is not configured."),
     };
   }
 
   try {
     await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
     const child = (deps.spawnHost ?? defaultSpawnHost)({
-      bunCommand,
-      hostEntry,
-      socketPath,
-      stateDir: options.stateDir,
+      argv: [...options.hostCommand, "--socket", socketPath, "--state-dir", options.stateDir],
+      spawnOptions: { detached: true, stdio: "ignore" },
     });
     child.unref?.();
 
@@ -150,11 +145,8 @@ function defaultSpawnHost(input: SpawnStationHostInput): ChildProcessLike {
   // The HOST daemon is spawned detached+ignore (it owns the socket, not a pipe).
   // NB: the host in turn spawns the node-pty BRIDGE with piped stdio — never copy
   // this detached/ignore shape onto the bridge or its PTYs die at spawn.
-  return spawn(
-    input.bunCommand,
-    [input.hostEntry, "--socket", input.socketPath, "--state-dir", input.stateDir],
-    { detached: true, stdio: "ignore" },
-  );
+  const [command, ...args] = input.argv;
+  return spawn(command, args, input.spawnOptions);
 }
 
 async function socketExists(socketPath: string): Promise<boolean> {
