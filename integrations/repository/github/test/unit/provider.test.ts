@@ -12,6 +12,30 @@ const remote = {
 };
 
 describe("GitHub repository provider", () => {
+  it("supports github.com remotes", () => {
+    expect(new GithubRepositoryProvider().supportsRemote(remote)).toBe(true);
+  });
+
+  it("supports hosts containing github.", () => {
+    expect(
+      new GithubRepositoryProvider().supportsRemote({
+        host: "git.github.example",
+        owner: "example",
+        repo: "web",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects unrelated remotes", () => {
+    expect(
+      new GithubRepositoryProvider().supportsRemote({
+        host: "forge.example",
+        owner: "example",
+        repo: "web",
+      }),
+    ).toBe(false);
+  });
+
   it("discovers a unique pull request with gh pr list", async () => {
     const calls: string[] = [];
     const provider = providerWithResponses(calls, {

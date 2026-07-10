@@ -5,6 +5,7 @@ import type {
   RepositoryChecksRequest,
   RepositoryProvider,
   RepositoryPullRequestRequest,
+  RepositoryRemote,
   WorktreeChecksSummary,
   WorktreePullRequest,
 } from "@station/contracts";
@@ -358,6 +359,7 @@ describe("observer worktree metadata refresh", () => {
     const reasons: string[] = [];
     const repository = new FakeRepositoryProvider({
       clock: fixture.clock,
+      supportsRemote: supportsGithubRemote,
       pullRequest: {
         number: 77,
         url: "https://github.com/example/web/pull/77",
@@ -419,6 +421,110 @@ describe("observer worktree metadata refresh", () => {
     fixture.sqlite.close();
   });
 
+  it("refreshes repository metadata through a non-GitHub provider", async () => {
+    const fixture = createFixture({ host: "forge.example", owner: "example", repo: "web" });
+    const repository = new FakeRepositoryProvider({
+      id: "forge",
+      clock: fixture.clock,
+      supportsRemote: (remote) => remote.host === "forge.example",
+      pullRequest: {
+        number: 88,
+        url: "https://forge.example/example/web/pulls/88",
+        host: "forge.example",
+        baseRef: "main",
+        headRef: "feature",
+        checkedAt: now,
+      },
+      checks: {
+        state: "pass",
+        total: 1,
+        passed: 1,
+        source: "forge",
+        checkedAt: now,
+      },
+    });
+    const runner = gitRunner({
+      "rev-parse --verify HEAD^{commit}": headSha,
+      remote: "origin\n",
+      "rev-parse --verify refs/remotes/origin/main^{commit}": baseSha,
+      "merge-base origin/main HEAD": mergeBaseSha,
+      [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
+      "remote get-url origin": "git@forge.example:example/web.git\n",
+    });
+    const service = createWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: () => undefined,
+      clock: fixture.clock,
+      runner,
+      repositoryProviders: [repository],
+    });
+
+    const snapshot = await fixture.core.reconcile("metadata-forge-before");
+    await service.refresh(snapshot);
+
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({
+        kind: ["pull_request", "checks"],
+        now,
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "pull_request",
+          payload: expect.objectContaining({ number: 88, host: "forge.example" }),
+        }),
+        expect.objectContaining({
+          kind: "checks",
+          payload: expect.objectContaining({ state: "pass", source: "forge" }),
+        }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("rejects ambiguous repository support before provider operations run", async () => {
+    const fixture = createFixture({ host: "forge.example", owner: "example", repo: "web" });
+    let operations = 0;
+    const providers = ["forge-a", "forge-b"].map(
+      (id) =>
+        new FakeRepositoryProvider({
+          id,
+          clock: fixture.clock,
+          supportsRemote: (remote) => remote.host === "forge.example",
+          discover: async () => {
+            operations += 1;
+            return null;
+          },
+        }),
+    );
+    const runner = gitRunner({
+      "rev-parse --verify HEAD^{commit}": headSha,
+      remote: "origin\n",
+      "rev-parse --verify refs/remotes/origin/main^{commit}": baseSha,
+      "merge-base origin/main HEAD": mergeBaseSha,
+      [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
+      "remote get-url origin": "git@forge.example:example/web.git\n",
+    });
+    const service = createWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: () => undefined,
+      clock: fixture.clock,
+      runner,
+      repositoryProviders: providers,
+    });
+
+    const snapshot = await fixture.core.reconcile("metadata-ambiguous-before");
+
+    await expect(service.refresh(snapshot)).rejects.toMatchObject({
+      tag: "RepositoryProviderError",
+      code: "REPOSITORY_PROVIDER_AMBIGUOUS",
+    });
+    expect(operations).toBe(0);
+    fixture.sqlite.close();
+  });
+
   it("marks existing repository metadata stale when remote refresh fails", async () => {
     const fixture = createFixture();
     await fixture.persistence.upsertWorktreeMetadataCurrent({
@@ -434,6 +540,7 @@ describe("observer worktree metadata refresh", () => {
     });
     const repository = new FakeRepositoryProvider({
       clock: fixture.clock,
+      supportsRemote: supportsGithubRemote,
       error: {
         tag: "RepositoryProviderError",
         code: "GITHUB_NETWORK_FAILED",
@@ -483,6 +590,7 @@ describe("observer worktree metadata refresh", () => {
     let aborted = false;
     const repository = new FakeRepositoryProvider({
       clock: fixture.clock,
+      supportsRemote: supportsGithubRemote,
       discover: async (request) => {
         started = true;
         await new Promise<void>((_resolve, reject) => {
@@ -522,7 +630,9 @@ describe("observer worktree metadata refresh", () => {
   });
 });
 
-function createFixture() {
+function createFixture(
+  remote: RepositoryRemote = { host: "github.com", owner: "example", repo: "web" },
+) {
   const clock = { now: () => new Date(now) };
   const providers = new ProviderRegistry({
     worktree: new FakeWorktreeProvider({
@@ -533,7 +643,7 @@ function createFixture() {
           projectId: "web",
           branch: "feature",
           path: "/tmp/station/web/feature",
-          remote: { host: "github.com", owner: "example", repo: "web" },
+          remote,
           headSha,
           now,
         }),
@@ -586,28 +696,37 @@ function ids() {
 }
 
 class FakeRepositoryProvider implements RepositoryProvider {
-  readonly id = "github";
+  readonly id: string;
 
   readonly #clock: RuntimeClock;
   readonly #pullRequest: WorktreePullRequest | null;
   readonly #checks: WorktreeChecksSummary | null;
   readonly #error: unknown;
+  readonly #supportsRemote: (remote: RepositoryRemote) => boolean;
   readonly #discover:
     | ((request: RepositoryPullRequestRequest) => Promise<WorktreePullRequest | null>)
     | undefined;
 
   constructor(input: {
+    id?: string;
     clock: RuntimeClock;
     pullRequest?: WorktreePullRequest | null;
     checks?: WorktreeChecksSummary | null;
     error?: unknown;
+    supportsRemote: (remote: RepositoryRemote) => boolean;
     discover?: (request: RepositoryPullRequestRequest) => Promise<WorktreePullRequest | null>;
   }) {
+    this.id = input.id ?? "github";
     this.#clock = input.clock;
     this.#pullRequest = input.pullRequest ?? null;
     this.#checks = input.checks ?? null;
     this.#error = input.error;
+    this.#supportsRemote = input.supportsRemote;
     this.#discover = input.discover;
+  }
+
+  supportsRemote(remote: RepositoryRemote): boolean {
+    return this.#supportsRemote(remote);
   }
 
   capabilities(): RepositoryCapabilities {
@@ -646,6 +765,10 @@ class FakeRepositoryProvider implements RepositoryProvider {
     }
     return this.#checks;
   }
+}
+
+function supportsGithubRemote(remote: RepositoryRemote): boolean {
+  return remote.host === "github.com" || remote.host.includes("github.");
 }
 
 function toIso(clock: RuntimeClock): string {

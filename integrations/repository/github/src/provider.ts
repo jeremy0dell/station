@@ -80,6 +80,12 @@ const GithubChecksSchema = z.array(GithubCheckSchema);
 
 type GithubCheck = z.infer<typeof GithubCheckSchema>;
 
+/**
+ * ADAPTER
+ *
+ * Translates repository metadata operations to the GitHub CLI and owns
+ * matching GitHub remotes.
+ */
 export class GithubRepositoryProvider implements RepositoryProvider {
   readonly id = "github";
 
@@ -94,6 +100,10 @@ export class GithubRepositoryProvider implements RepositoryProvider {
     this.#timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
     this.#runner = options.runner;
     this.#clock = options.clock ?? systemClock;
+  }
+
+  supportsRemote(remote: RepositoryRemote): boolean {
+    return remote.host === "github.com" || remote.host.includes("github.");
   }
 
   capabilities(): RepositoryCapabilities {
