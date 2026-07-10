@@ -1,4 +1,5 @@
 import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
+import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type { Automation } from "../config/stationConfig.js";
 import type { StoreApi } from "zustand/vanilla";
@@ -162,6 +163,8 @@ export type StationInputRuntimeOptions = {
    * Absent in tests/mock mode ⇒ aux shells are always local.
    */
   resolveAuxShellPlacement?: AuxShellPlacement;
+  /** Resolves opaque managed-agent attachments before any pane is created. */
+  managedTerminalAttacher?: ManagedTerminalAttacher;
   /** Observer service for managed primary-agent launches; absent in mock mode. */
   observerService?: ObserverService;
   openExternalUrl?: (url: string) => void;
@@ -203,6 +206,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
     stationViewStore: options.stationViewStore,
     observerService: options.observerService,
     registry,
+    managedTerminalAttacher: options.managedTerminalAttacher,
   });
 
   // Pane chords are `reserved`, so they pierce the context-menu catch-all; gate on that real modal

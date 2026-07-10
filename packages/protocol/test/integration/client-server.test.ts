@@ -121,6 +121,10 @@ describe("protocol client/server", () => {
           env: { STATION_SESSION_ID: "ses_round_trip" },
           mode: "interactive",
         },
+        attachment: {
+          kind: "managed-terminal",
+          terminalTargetId: `native:${params.worktreeId}`,
+        },
       }),
       reportExternalExit: async (params) => ({
         acknowledged: true,
@@ -144,6 +148,10 @@ describe("protocol client/server", () => {
           cwd: "/tmp/station/web/feature",
           env: { STATION_SESSION_ID: "ses_round_trip" },
           mode: "interactive",
+        },
+        attachment: {
+          kind: "managed-terminal",
+          terminalTargetId: "native:wt_web_feature",
         },
       });
       await expect(
@@ -276,7 +284,7 @@ describe("protocol client/server", () => {
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
         message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.6.0.",
+          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.7.0.",
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

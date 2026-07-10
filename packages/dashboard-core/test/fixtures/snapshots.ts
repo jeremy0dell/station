@@ -56,27 +56,6 @@ export function createCommandSnapshot(
   ]);
 }
 
-export function createPromptCapableSnapshot(): StationSnapshot {
-  const snapshot = createCommandSnapshot("idle");
-  const sessions = snapshot.sessions.map((session) => {
-    const nextSession: SessionView = {
-      ...session,
-      harness: {
-        ...session.harness,
-        capabilities: {
-          ...session.harness.capabilities,
-          canReceivePrompt: true,
-        },
-      },
-    };
-    return nextSession;
-  });
-  return {
-    ...snapshot,
-    sessions,
-  };
-}
-
 export function createExternalAgentSnapshot(): StationSnapshot {
   const snapshot = createDashboardSnapshot();
   const externalRow = snapshot.rows.find((candidate) => candidate.id === "wt_web_idle");

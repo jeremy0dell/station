@@ -50,11 +50,11 @@ const reconcileCommand: StationCommand = {
   },
 };
 
-const sendPromptCommand: StationCommand = {
-  type: "session.sendPrompt",
+const renameSessionCommand: StationCommand = {
+  type: "session.rename",
   payload: {
     sessionId: "ses_web_main",
-    prompt: "Summarize current status.",
+    title: "Web main",
   },
 };
 
@@ -63,13 +63,6 @@ const createWorktreeCommand: StationCommand = {
   payload: {
     projectId: "web",
     branch: "feature/auth",
-  },
-};
-
-const installHooksCommand: StationCommand = {
-  type: "hooks.install",
-  payload: {
-    provider: "worktrunk",
   },
 };
 
@@ -251,17 +244,11 @@ describe("observer command queue", () => {
   it("fails accepted commands that do not have registered handlers", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue();
 
-    const receipts = await Promise.all([
-      queue.dispatch(createWorktreeCommand),
-      queue.dispatch(sendPromptCommand),
-      queue.dispatch(installHooksCommand),
-    ]);
+    const receipts = await Promise.all([queue.dispatch(createWorktreeCommand)]);
     await queue.drain();
 
     expect(receipts).toEqual([
       expect.objectContaining({ commandId: "cmd_1", accepted: true, status: "accepted" }),
-      expect.objectContaining({ commandId: "cmd_2", accepted: true, status: "accepted" }),
-      expect.objectContaining({ commandId: "cmd_3", accepted: true, status: "accepted" }),
     ]);
     expect(await persistence.listCommands()).toEqual([
       expect.objectContaining({
@@ -273,28 +260,6 @@ describe("observer command queue", () => {
           code: "COMMAND_HANDLER_MISSING",
           commandId: "cmd_1",
           traceId: receipts[0]?.traceId,
-        }),
-      }),
-      expect.objectContaining({
-        id: "cmd_2",
-        status: "failed",
-        traceId: receipts[1]?.traceId,
-        error: expect.objectContaining({
-          tag: "CommandRoutingError",
-          code: "COMMAND_HANDLER_MISSING",
-          commandId: "cmd_2",
-          traceId: receipts[1]?.traceId,
-        }),
-      }),
-      expect.objectContaining({
-        id: "cmd_3",
-        status: "failed",
-        traceId: receipts[2]?.traceId,
-        error: expect.objectContaining({
-          tag: "CommandRoutingError",
-          code: "COMMAND_HANDLER_MISSING",
-          commandId: "cmd_3",
-          traceId: receipts[2]?.traceId,
         }),
       }),
     ]);
@@ -323,7 +288,7 @@ describe("observer command queue", () => {
       releaseFirst = resolve;
     });
 
-    queue.registerHandler("session.sendPrompt", async ({ commandId }) => {
+    queue.registerHandler("session.rename", async ({ commandId }) => {
       starts.push(commandId);
       if (commandId === "cmd_1") {
         await firstBlocked;
@@ -331,8 +296,8 @@ describe("observer command queue", () => {
       finishes.push(commandId);
     });
 
-    const first = queue.dispatch(sendPromptCommand);
-    const second = queue.dispatch(sendPromptCommand);
+    const first = queue.dispatch(renameSessionCommand);
+    const second = queue.dispatch(renameSessionCommand);
     await Promise.all([first, second]);
     await new Promise((resolve) => setImmediate(resolve));
 

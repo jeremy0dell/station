@@ -280,7 +280,7 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
-  it("skips command rows that no longer match current command contracts", async () => {
+  it("skips retired command rows without requiring a migration", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createObserverPersistence({
       sqlite,
@@ -293,16 +293,28 @@ describe("observer persistence", () => {
     `);
 
     insertCommand.run(
-      "cmd_legacy_focus",
-      "terminal.focus",
+      "cmd_retired_send_prompt",
+      "session.sendPrompt",
       JSON.stringify({
-        type: "terminal.focus",
+        type: "session.sendPrompt",
         payload: {
-          targetId: "tmux:station:@83:%83",
-          origin: {
-            provider: "tmux",
-            clientId: "/dev/ttys008",
-          },
+          sessionId: "ses_web_main",
+          prompt: "Summarize current status.",
+          delivery: "harness-native",
+        },
+      }),
+      "succeeded",
+      now,
+      null,
+      null,
+    );
+    insertCommand.run(
+      "cmd_retired_hooks_install",
+      "hooks.install",
+      JSON.stringify({
+        type: "hooks.install",
+        payload: {
+          provider: "worktrunk",
         },
       }),
       "succeeded",
@@ -320,7 +332,7 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
-  it("skips event rows that no longer match current event contracts", async () => {
+  it("skips retired command events in historical diagnostic reads", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createObserverPersistence({
       sqlite,
@@ -333,19 +345,39 @@ describe("observer persistence", () => {
     `);
 
     insertEvent.run(
-      "evt_legacy_command",
+      "evt_retired_send_prompt",
       "command.accepted",
       "observer",
-      "cmd_legacy_focus",
+      "cmd_retired_send_prompt",
       null,
       null,
       JSON.stringify({
         type: "command.accepted",
-        commandId: "cmd_legacy_focus",
+        commandId: "cmd_retired_send_prompt",
         command: {
-          type: "terminal.focus",
+          type: "session.sendPrompt",
           payload: {
-            targetId: "tmux:station:@83:%83",
+            sessionId: "ses_web_main",
+            prompt: "Summarize current status.",
+          },
+        },
+      }),
+      now,
+    );
+    insertEvent.run(
+      "evt_retired_hooks_install",
+      "command.accepted",
+      "observer",
+      "cmd_retired_hooks_install",
+      null,
+      null,
+      JSON.stringify({
+        type: "command.accepted",
+        commandId: "cmd_retired_hooks_install",
+        command: {
+          type: "hooks.install",
+          payload: {
+            provider: "worktrunk",
           },
         },
       }),

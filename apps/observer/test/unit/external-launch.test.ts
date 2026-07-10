@@ -1,6 +1,7 @@
 import type {
   AgentState,
   HarnessHooksStatus,
+  ManagedTerminalAttachment,
   ManagedTerminalLaunchProcessResult,
   ManagedTerminalLifecycle,
   OpenWorkspaceRequest,
@@ -13,7 +14,6 @@ import type {
   TerminalAttachment,
   TerminalCapabilities,
   TerminalLaunchProcessRequest,
-  TerminalReattachInfo,
   TerminalTargetId,
   TerminalTargetObservation,
   WorktreeRow,
@@ -38,7 +38,7 @@ function managedTargetId(worktreeId: string): TerminalTargetId {
 
 type FakeManagedTerminalOptions = {
   started?: boolean;
-  reattach?: TerminalReattachInfo;
+  attachment?: ManagedTerminalAttachment;
   launchFailure?: SafeError;
   releaseFailure?: SafeError;
 };
@@ -51,7 +51,7 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
   readonly #targets: TerminalTargetObservation[] = [];
   readonly #terminal: FakeTerminalProvider;
   readonly #started: boolean;
-  readonly #reattach: TerminalReattachInfo | undefined;
+  readonly #attachment: ManagedTerminalAttachment | undefined;
   readonly #launchFailure: SafeError | undefined;
   readonly #releaseFailure: SafeError | undefined;
 
@@ -62,7 +62,7 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
       targets: this.#targets,
     });
     this.#started = options.started ?? false;
-    this.#reattach = options.reattach;
+    this.#attachment = options.attachment;
     this.#launchFailure = options.launchFailure;
     this.#releaseFailure = options.releaseFailure;
   }
@@ -134,14 +134,16 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     if (!this.#started) {
       return { ...result, started: false };
     }
-    if (this.#reattach === undefined) {
-      throw new Error("Fake managed terminal needs reattach info when started.");
+    if (this.#attachment === undefined) {
+      throw new Error("Fake managed terminal needs an attachment when started.");
     }
-    return { ...result, started: true, reattach: this.#reattach };
+    return { ...result, started: true, attachment: this.#attachment };
   }
 
-  async reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined> {
-    return this.#targets.some((target) => target.id === targetId) ? this.#reattach : undefined;
+  async attachmentForTarget(
+    targetId: TerminalTargetId,
+  ): Promise<ManagedTerminalAttachment | undefined> {
+    return this.#targets.some((target) => target.id === targetId) ? this.#attachment : undefined;
   }
 
   async releaseTarget(targetId: TerminalTargetId): Promise<boolean> {
@@ -383,7 +385,11 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("returns the already-registered session for a concurrent prepare (snapshot lags)", async () => {
-    const station = new FakeManagedTerminalLifecycle();
+    const attachment: ManagedTerminalAttachment = {
+      kind: "managed-terminal",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    };
+    const station = new FakeManagedTerminalLifecycle({ started: true, attachment });
     const first = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (first.outcome.kind !== "prepared") throw new Error("expected prepared");
 
@@ -396,6 +402,7 @@ describe("prepareExternalLaunch", () => {
         kind: "existing-session",
         sessionId: first.outcome.sessionId,
         harnessProvider: "fake-harness",
+        attachment,
       },
       reconcile: false,
     });
@@ -706,25 +713,27 @@ describe("prepareExternalLaunch existing-agent state matrix", () => {
   });
 });
 
-describe("prepareExternalLaunch reattachment", () => {
-  it("attaches a reattachHandle to the prepared result", async () => {
+describe("prepareExternalLaunch managed attachments", () => {
+  it("passes the adapter's opaque attachment through to the prepared result", async () => {
+    const attachment: ManagedTerminalAttachment = {
+      kind: "managed-terminal",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    };
     const station = new FakeManagedTerminalLifecycle({
       started: true,
-      reattach: { endpointId: "endpoint-1", socketPath: "/tmp/managed-test.sock" },
+      attachment,
     });
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
-    expect(result.outcome.reattachHandle).toMatchObject({
-      ptyId: "endpoint-1",
-      terminalTargetId: managedTargetId("wt_web_feature"),
-      hostSocketPath: "/tmp/managed-test.sock",
-    });
+    expect(result.outcome.attachment).toBe(attachment);
   });
 
-  it("attaches a reattachHandle to an existing-session result", async () => {
-    const station = new FakeManagedTerminalLifecycle({
-      reattach: { endpointId: "endpoint-1", socketPath: "/tmp/managed-test.sock" },
-    });
+  it("passes the adapter's opaque attachment through to an existing-session result", async () => {
+    const attachment: ManagedTerminalAttachment = {
+      kind: "managed-terminal",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    };
+    const station = new FakeManagedTerminalLifecycle({ attachment });
     station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_live" });
     const result = await prepareExternalLaunch(
       deps([row({ agentSessionId: "ses_live" })], station),
@@ -734,16 +743,16 @@ describe("prepareExternalLaunch reattachment", () => {
       kind: "existing-session",
       sessionId: "ses_live",
       harnessProvider: "fake-harness",
-      reattachHandle: {
-        ptyId: "endpoint-1",
-        terminalTargetId: managedTargetId("wt_web_feature"),
-      },
+      attachment,
     });
   });
 
   it("does not attach a replacement target from a different session", async () => {
     const station = new FakeManagedTerminalLifecycle({
-      reattach: { endpointId: "endpoint-new", socketPath: "/tmp/managed-test.sock" },
+      attachment: {
+        kind: "managed-terminal",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
     });
     station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_replacement" });
 
@@ -759,10 +768,10 @@ describe("prepareExternalLaunch reattachment", () => {
     });
   });
 
-  it("omits the reattachHandle when the managed adapter does not start the process", async () => {
+  it("omits the attachment when the managed adapter does not start the process", async () => {
     const station = new FakeManagedTerminalLifecycle();
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
-    expect(result.outcome.reattachHandle).toBeUndefined();
+    expect(result.outcome.attachment).toBeUndefined();
   });
 });

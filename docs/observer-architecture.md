@@ -159,8 +159,8 @@ must not compensate for it by selecting concrete adapters at runtime.
 
 The Station terminal adapter may use Station Host when CLI composition enables
 host-backed terminals. Observer application code knows only the injected
-`ManagedTerminalLifecycle`; it must not know Station Host socket, process, or
-target-format mechanics.
+`ManagedTerminalLifecycle` and its opaque managed-terminal attachment; Station
+resolves that attachment to host socket and PTY mechanics at its own boundary.
 
 ## Port, Actor, And Adapter Map
 
@@ -170,12 +170,12 @@ ownership even where current ownership is still a deviation.
 | Conversation | Direction | Application seam | Actor or adapter | Rule and current status |
 | --- | --- | --- | --- | --- |
 | Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. |
-| Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; registration is not yet exhaustive (OBS-HEX-006). |
+| Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
-| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role; the remaining response payload is host-shaped (OBS-HEX-009). |
+| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Station owns host attachment resolution. |
 | Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | current `ObserverPersistence` | SQLite persistence modules | A port exists, but it is broad and leaks SQLite representations (OBS-HEX-004 and OBS-HEX-005). |
@@ -350,9 +350,11 @@ patch.
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. The current
-wire result still exposes host-shaped reattachment data; OBS-HEX-009 tracks its
-replacement with an opaque managed-terminal attachment.
+opaquely, and request reconcile after relevant lifecycle changes. A managed
+launch result may include an opaque attachment that Station resolves to its
+host mechanics. An absent attachment permits Station's local launch path; once
+an attachment is advertised, resolution or later attachment failure must not
+fall through to a second local spawn.
 
 ### Diagnostics
 
@@ -501,8 +503,8 @@ Current enforcement is partial. The boundary inventory catches forbidden
 package imports but cannot detect copied provider IDs, reconstructed target
 formats, or application logic that selects a concrete adapter. Marker and
 declared-seam checks begin with documented or touched seams. Complete
-conformance requires dependency-direction checks, exhaustive command
-registration, substitutable persistence/local-evidence adapters, and an
+conformance requires dependency-direction checks, substitutable
+persistence/local-evidence adapters, and an
 Observer application lane that does not require SQLite.
 
 A new architecture diagnostic must enforce declarations and dependency facts,
@@ -520,9 +522,7 @@ and exit condition here.
 | --- | --- | --- | --- |
 | `OBS-HEX-004` | `ObserverCore` accepts `ObserverSqliteHandle`, exposes SQLite health, and imports persisted representations. Storage technology crosses inward. | Keep new SQLite details out of core. Exit when core depends only on application-purpose persistence and health capabilities. | SQLite/core isolation. |
 | `OBS-HEX-005` | `ObserverPersistence` combines unrelated use cases, complete Observer tests require SQLite, and the existing fake is not a safe substitute. | Add no new generic persistence bucket. Exit when consumers use the seven purpose-owned ports, SQLite and in-memory adapters pass shared contracts, and the full application runs without SQLite. | Persistence port and substitution remediation. |
-| `OBS-HEX-006` | `StationCommand` includes `session.sendPrompt` and `hooks.install`, but the Observer router registers neither; accepted commands can fail only after queueing. | Do not add another non-executable contract member. Exit when unsupported members are removed and construction proves exhaustive registration or an explicit reviewed unsupported allowlist. | Command surface cleanup and exhaustive registration. |
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
-| `OBS-HEX-009` | External-launch application results still expose `AgentReattachHandle` with host PTY and socket data. A host-specific representation crosses the application API. | The managed lifecycle remains explicitly injected and application code must not construct the payload. Exit when the API returns an opaque managed-terminal attachment resolved by Station-side attachment behavior. | Managed attachment protocol cutover. |
 | `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Keep behavior behind existing narrow call sites. Exit with purpose-owned `StationLogger` and `ProjectConfigWriter` ports and adapters. | Logging and project-config edge inversion. |
 | `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Use case and local adapter mechanics are mixed. | Keep new provider-specific parsing out of metadata orchestration. Exit when `WorktreeMetadataSource` owns local Git/ref evidence. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only and paths stay composition-supplied. Exit when a `DiagnosticEvidenceSource` adapter owns local traversal and the use case runs against a fake. | Diagnostic evidence isolation. |
@@ -535,7 +535,12 @@ selected without application changes, and overlapping support fails explicitly.
 `OBS-HEX-003` is resolved: `ObserverApi` and external-launch application
 contracts are owned by `packages/contracts`, protocol retains transport mapping
 and validation, and a boundary diagnostic confines Observer protocol imports to
-the runtime server adapter.
+the runtime server adapter. `OBS-HEX-006` is resolved: the two unsupported
+command members are gone, and production registration is constructed from one
+handler map that is exhaustive over `StationCommand["type"]`. `OBS-HEX-009` is
+resolved: external launch exposes only an opaque managed-terminal attachment,
+Station owns host PTY and socket resolution, and an advertised attachment can
+never fail over to a duplicate local spawn.
 This document resolves `OBS-HEX-008`, the missing canonical Observer architecture
 contract. Resolved history belongs in its issue and pull request, not in the
 active register.

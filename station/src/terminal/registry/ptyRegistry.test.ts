@@ -225,6 +225,28 @@ describe("createPtyRegistry", () => {
     expect(registry.write(PANE_A, "x")).toBe(false);
   });
 
+  it("never falls back to the local terminal when a managed attach fails lazily", () => {
+    let localAttempts = 0;
+    let attachAttempts = 0;
+    const registry = createPtyRegistry({
+      createTerminal: () => {
+        localAttempts += 1;
+        return createScriptedTerminal().terminal;
+      },
+    });
+    registry.ensure(PANE_A, undefined, () => {
+      attachAttempts += 1;
+      throw new Error("host attach failed");
+    });
+
+    registry.resize(PANE_A, SIZE);
+
+    expect(attachAttempts).toBe(1);
+    expect(localAttempts).toBe(0);
+    expect(registry.get(PANE_A)?.status).toBe("failed to start shell");
+    expect(registry.get(PANE_A)?.terminal).toBeNull();
+  });
+
   it("dispose tears down the pane and removes its entry", () => {
     const { registry, scripted } = harness();
     registry.resize(PANE_A, SIZE);

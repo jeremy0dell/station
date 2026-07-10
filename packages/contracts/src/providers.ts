@@ -10,7 +10,13 @@ import type {
   TerminalTargetId,
   WorktreeId,
 } from "./ids.js";
-import { ProjectIdSchema, ProviderIdSchema, TimestampSchema, WorktreeIdSchema } from "./ids.js";
+import {
+  ProjectIdSchema,
+  ProviderIdSchema,
+  TerminalTargetIdSchema,
+  TimestampSchema,
+  WorktreeIdSchema,
+} from "./ids.js";
 import type {
   HarnessEventObservation,
   HarnessRunObservation,
@@ -278,12 +284,21 @@ export type TerminalLaunchProcessRequest = {
   signal?: AbortSignal;
 };
 
+export const ManagedTerminalAttachmentSchema = z
+  .object({
+    kind: z.literal("managed-terminal"),
+    terminalTargetId: TerminalTargetIdSchema,
+  })
+  .strict();
+
+export type ManagedTerminalAttachment = z.infer<typeof ManagedTerminalAttachmentSchema>;
+
 export type TerminalLaunchProcessResult = {
   terminalTargetId: TerminalTargetId;
   agentEndpointId: string;
   started: boolean;
-  /** When `started` and the process is reattachable, where a client reattaches. */
-  reattach?: TerminalReattachInfo;
+  /** When `started` and managed, the opaque target a client may attach to. */
+  attachment?: ManagedTerminalAttachment;
   providerData?: unknown;
 };
 
@@ -391,32 +406,26 @@ export interface TerminalProvider {
   sendInput?(targetId: TerminalTargetId, input: string): Promise<void>;
 }
 
-export type TerminalReattachInfo = {
-  /** Provider-opaque id of the live process to reattach to. */
-  endpointId: string;
-  /** Endpoint a client uses to reach the process host. */
-  socketPath: string;
-};
-
 export type ManagedTerminalLaunchProcessResult =
-  | (Omit<TerminalLaunchProcessResult, "started" | "reattach"> & {
+  | (Omit<TerminalLaunchProcessResult, "started" | "attachment"> & {
       started: false;
-      reattach?: never;
+      attachment?: never;
     })
-  | (Omit<TerminalLaunchProcessResult, "started" | "reattach"> & {
+  | (Omit<TerminalLaunchProcessResult, "started" | "attachment"> & {
       started: true;
-      reattach: TerminalReattachInfo;
+      attachment: ManagedTerminalAttachment;
     });
 
 /**
  * DRIVEN PORT
  *
  * Owns the single managed terminal target used for an external Station launch.
- * Target identity is adapter-owned and at most one target may exist per worktree.
+ * Attachments expose only adapter-owned target identity, and at most one target
+ * may exist per worktree.
  */
 export interface ManagedTerminalLifecycle extends TerminalProvider {
   launchProcess(request: TerminalLaunchProcessRequest): Promise<ManagedTerminalLaunchProcessResult>;
-  reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined>;
+  attachmentForTarget(targetId: TerminalTargetId): Promise<ManagedTerminalAttachment | undefined>;
   /** Forgets an abandoned or already-exited target without terminating its process. */
   releaseTarget(targetId: TerminalTargetId): Promise<boolean>;
 }

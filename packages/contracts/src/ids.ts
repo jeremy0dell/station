@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { nonEmptyStringSchema } from "./shared.js";
 
-export const STATION_SCHEMA_VERSION = "0.6.0" as const;
+export const STATION_SCHEMA_VERSION = "0.7.0" as const;
 
 const timestampSchema = z.string().datetime({ offset: true });
 declare const stationIdKind: unique symbol;

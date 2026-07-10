@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import {
   AgentPrepareExternalLaunchParamsSchema,
   AgentPrepareExternalLaunchResultSchema,
-  AgentReattachHandleSchema,
   AgentReportExternalExitParamsSchema,
   AgentReportExternalExitResultSchema,
   CommandRecordSchema,
@@ -22,6 +21,7 @@ import {
   HarnessResumeTargetSchema,
   HarnessRunObservationSchema,
   HarnessStatusObservationSchema,
+  ManagedTerminalAttachmentSchema,
   ObservedStatusSchema,
   type ObserverApi,
   ObserverEventHookConfigSchema,
@@ -45,6 +45,7 @@ import {
   SafeErrorSchema,
   STATION_SCHEMA_VERSION,
   StationCommandSchema,
+  StationCommandTypeSchema,
   StationEventSchema,
   StationHookIdentityPayloadSchema,
   StationSnapshotSchema,
@@ -89,7 +90,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.6.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.7.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -124,12 +125,20 @@ describe("contract schemas", () => {
       "external launch params with transport detail",
     );
 
-    const reattachHandle = {
-      ptyId: "pty_api",
+    const attachment = {
+      kind: "managed-terminal",
       terminalTargetId: "native:wt_api",
-      hostSocketPath: "/tmp/station-host.sock",
-    };
-    expectParses(AgentReattachHandleSchema, reattachHandle, "agent reattach handle");
+    } as const;
+    expectParses(ManagedTerminalAttachmentSchema, attachment, "managed terminal attachment");
+    expectFails(
+      ManagedTerminalAttachmentSchema,
+      {
+        ...attachment,
+        ptyId: "pty_api",
+        hostSocketPath: "/tmp/station-host.sock",
+      },
+      "managed terminal attachment with host fields",
+    );
     expectParses(
       AgentPrepareExternalLaunchResultSchema,
       {
@@ -144,9 +153,31 @@ describe("contract schemas", () => {
           env: { STATION_SESSION_ID: "ses_api" },
           mode: "interactive",
         },
-        reattachHandle,
+        attachment,
       },
       "prepared external launch result",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchResultSchema,
+      {
+        kind: "prepared",
+        sessionId: "ses_api",
+        terminalTargetId: "native:wt_api",
+        launchPlan: {
+          provider: "codex",
+          command: "codex",
+          args: ["--resume"],
+          cwd: "/tmp/worktree",
+          env: { STATION_SESSION_ID: "ses_api" },
+          mode: "interactive",
+        },
+        reattachHandle: {
+          ptyId: "pty_api",
+          terminalTargetId: "native:wt_api",
+          hostSocketPath: "/tmp/station-host.sock",
+        },
+      },
+      "prepared external launch result with legacy reattach handle",
     );
     expectParses(
       AgentPrepareExternalLaunchResultSchema,
@@ -732,25 +763,28 @@ describe("contract schemas", () => {
       .map((command) => (command as { type: string }).type)
       .sort();
 
-    expect(commandTypes).toEqual([
-      "hooks.install",
-      "observer.reconcile",
-      "project.add",
-      "project.remove",
-      "project.setDefaultHarness",
-      "session.acknowledgeTurn",
-      "session.close",
-      "session.create",
-      "session.fork",
-      "session.rename",
-      "session.resumeAgent",
-      "session.sendPrompt",
-      "session.startAgent",
-      "terminal.close",
-      "terminal.focus",
-      "worktree.create",
-      "worktree.remove",
-    ]);
+    expect(commandTypes).toEqual([...StationCommandTypeSchema.options].sort());
+
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "session.sendPrompt",
+        payload: {
+          sessionId: "ses_api_cache",
+          prompt: "Summarize current status.",
+          delivery: "harness-native",
+        },
+      },
+      "retired session.sendPrompt command",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "hooks.install",
+        payload: { provider: "worktrunk" },
+      },
+      "retired hooks.install command",
+    );
 
     expectFails(
       StationCommandSchema,

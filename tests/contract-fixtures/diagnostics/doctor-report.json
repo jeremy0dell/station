@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "0.6.0",
+  "schemaVersion": "0.7.0",
   "generatedAt": "2026-05-20T12:00:00.000Z",
   "status": "degraded",
   "checks": [
@@ -15,7 +15,7 @@
     }
   ],
   "observer": {
-    "schemaVersion": "0.6.0",
+    "schemaVersion": "0.7.0",
     "status": "healthy",
     "pid": 1234,
     "startedAt": "2026-05-20T12:00:00.000Z",
@@ -68,7 +68,7 @@
     }
   },
   "snapshot": {
-    "schemaVersion": "0.6.0",
+    "schemaVersion": "0.7.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 1234,

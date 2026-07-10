@@ -1,4 +1,5 @@
 import type {
+  ManagedTerminalAttachment,
   ManagedTerminalLaunchProcessResult,
   ManagedTerminalLifecycle,
   OpenWorkspaceRequest,
@@ -11,7 +12,6 @@ import type {
   TerminalCapabilities,
   TerminalIdentityBinding,
   TerminalLaunchProcessRequest,
-  TerminalReattachInfo,
   TerminalTargetId,
   TerminalTargetObservation,
   WorktreeId,
@@ -40,8 +40,8 @@ export type StationTerminalProviderOptions = {
  * ADAPTER
  *
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
- * mode uses `host.list` as liveness truth so reattach/restart re-derives the
- * same session instead of minting another.
+ * mode uses `host.list` as liveness truth and exposes only opaque target identity
+ * for Station-side attachment resolution.
  */
 export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
@@ -195,7 +195,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   /**
    * Host-backed spawn ownership: spawn the agent into the host so it outlives the
    * UI. Returns `started: false` when not host-backed or the host is unavailable,
-   * so the observer falls back to the UI spawning from the launch plan.
+   * so the observer permits the UI to spawn from the launch plan.
    */
   async launchProcess(
     request: TerminalLaunchProcessRequest,
@@ -212,14 +212,15 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       return { ...base, started: false };
     }
     try {
-      const spawned = await handle.client.spawn(buildSpawnParams(request));
+      await handle.client.spawn(buildSpawnParams(request));
       this.#hostBackedTargets.add(request.terminalTarget.targetId);
-      // Hand back the reattach info from the spawn result so the caller need not
-      // re-query host.list — and so "started" and "has a handle" never diverge.
       return {
         ...base,
         started: true,
-        reattach: { endpointId: spawned.ptyId, socketPath: this.#host.socketPath },
+        attachment: {
+          kind: "managed-terminal",
+          terminalTargetId: request.terminalTarget.targetId,
+        },
       };
     } catch (error) {
       // A rejected host spawn must not leave the provisional target visible to reconcile.
@@ -228,7 +229,9 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     }
   }
 
-  async reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined> {
+  async attachmentForTarget(
+    targetId: TerminalTargetId,
+  ): Promise<ManagedTerminalAttachment | undefined> {
     if (this.#host === undefined) {
       return undefined;
     }
@@ -236,7 +239,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     if (entry === undefined) {
       return undefined;
     }
-    return { endpointId: entry.ptyId, socketPath: this.#host.socketPath };
+    return { kind: "managed-terminal", terminalTargetId: targetId };
   }
 
   async focusTarget(targetId: TerminalTargetId): Promise<void> {
@@ -272,7 +275,9 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     } catch {
       return undefined;
     }
-    return live.find((entry) => entry.terminalTargetId === targetId && entry.alive);
+    return live.find(
+      (entry) => entry.kind === "agent" && entry.terminalTargetId === targetId && entry.alive,
+    );
   }
 
   async #requirePtyId(targetId: TerminalTargetId): Promise<string> {

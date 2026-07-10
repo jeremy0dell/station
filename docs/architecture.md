@@ -56,7 +56,8 @@ When these disagree, reconcile from config, providers, and current observer stat
 ## Boundary Rules
 
 - Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces.
-- Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward target IDs returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or discover lifecycle operations through runtime method probing.
+- Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward opaque managed-terminal attachments returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or expose Station Host PTY and socket mechanics.
+- Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; it must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.
 - The CLI is the command/debug entrypoint, but long-lived runtime correlation belongs in the observer.
 - `packages/contracts` defines shared language with strict schemas for untrusted input and shared payloads.
@@ -77,6 +78,7 @@ See [Observer Architecture](observer-architecture.md).
 The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime:
 
 - The `station-station-host` daemon (`packages/station-host`) owns PTYs that outlive the UI. Its socket defaults beside the observer socket at `<state_dir>/run/station-host.sock` (override `STATION_HOST_SOCKET_PATH`).
+- Observer external-launch results carry only an opaque managed-terminal target identity. Station resolves that identity to a live Station Host PTY immediately before pane creation, keeping socket paths and PTY IDs on the Station side of the boundary.
 - Pane liveness is split from pane layout. On a UI restart while the host survives, panes **warm-reattach** to live PTYs with scrollback via the host's attach call; on a cold start (reboot or host down) the saved layout spec **cold-respawns** fresh shells in their saved working directory. Layout persists to `<state_dir>/station/layout.json` (override `STATION_LAYOUT_PATH`), which deliberately does not fall back to `XDG_RUNTIME_DIR` so it survives a reboot.
 - "New Session" in Station hosts the agent in a Station pane by dispatching the observer `worktree.create` command, rather than launching an external tmux session. Liveness decisions (launch vs. focus, destructive guards) route through the shared `worktreeHasLiveAgent` contract in `packages/contracts`.
 

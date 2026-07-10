@@ -4,17 +4,11 @@ import {
   buildFocusCommand,
   buildRenameSessionCommand,
   buildResumeAgentCommand,
-  buildSendPromptCommand,
   buildStartAgentCommand,
-  canSendPromptToRow,
   cleanupForceRequired,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import {
-  createCommandSnapshot,
-  createDashboardSnapshot,
-  createPromptCapableSnapshot,
-} from "../../fixtures/snapshots.js";
+import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI command builders", () => {
   it("maps focusable rows to terminal.focus using the agent session", () => {
@@ -147,25 +141,6 @@ describe("TUI command builders", () => {
       payload: {
         sessionId: "ses_wt_web_idle",
         title: "Readable feature task",
-      },
-    });
-  });
-
-  it("keeps idle-agent primary actions focus-only unless prompt delivery is supported", () => {
-    const snapshot = createCommandSnapshot("idle");
-    const row = snapshot.rows[0];
-
-    expect(canSendPromptToRow(row, snapshot.sessions)).toBe(false);
-
-    const promptCapable = createPromptCapableSnapshot();
-    const promptCapableRow = promptCapable.rows[0];
-    expect(canSendPromptToRow(promptCapableRow, promptCapable.sessions)).toBe(true);
-    expect(buildSendPromptCommand(promptCapableRow, promptCapable.sessions, "continue")).toEqual({
-      type: "session.sendPrompt",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        prompt: "continue",
-        delivery: "harness-native",
       },
     });
   });

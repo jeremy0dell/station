@@ -1,4 +1,5 @@
-import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
+import { StationHostProviderError } from "@station/host";
+import type { ManagedTerminalAttacher } from "../../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import type { StationTerminalSpawnOptions } from "../../terminal/types.js";
 import type { StoreApi } from "zustand/vanilla";
@@ -69,10 +70,11 @@ type ManagedLaunchDeps = {
   stationViewStore: StoreApi<TuiStore> | undefined;
   observerService: ObserverService | undefined;
   registry: PtyRegistry | undefined;
+  managedTerminalAttacher: ManagedTerminalAttacher | undefined;
 };
 
 export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
-  const { store, stationViewStore, observerService, registry } = deps;
+  const { store, stationViewStore, observerService, registry, managedTerminalAttacher } = deps;
   // Guards a managed launch's async window: between a click's synchronous return
   // and its `prepareExternalLaunch` resolving, no pane record exists yet, so a
   // second click would otherwise fire a second prepare for the same pane and
@@ -212,21 +214,27 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         pushLaunchError(error);
         return;
       }
-      // A persistent host PTY backs this worktree (the observer spawned it): attach to the host
-      // instead of spawning locally. Covers both a fresh launch and a reopen onto a running agent.
-      if (prepared.reattachHandle !== undefined) {
-        const handle = prepared.reattachHandle;
-        registry?.ensure(paneId, { cwd: target.cwd }, (spawn) =>
-          createHostAttachedTerminal({
-            hostSocketPath: handle.hostSocketPath,
-            ptyId: handle.ptyId,
-            size: { cols: spawn.size?.cols ?? 80, rows: spawn.size?.rows ?? 24 },
-          }),
-        );
+      // Resolve an advertised attachment before touching the registry or store.
+      // Failure is terminal for this launch: falling through would double-spawn locally.
+      if (prepared.attachment !== undefined) {
+        if (managedTerminalAttacher === undefined) {
+          pushLaunchError(
+            new StationHostProviderError("HOST_UNREACHABLE", "Station host is not reachable."),
+          );
+          return;
+        }
+        let createTerminal: Awaited<ReturnType<ManagedTerminalAttacher["resolve"]>>;
+        try {
+          createTerminal = await managedTerminalAttacher.resolve(prepared.attachment);
+        } catch (error) {
+          pushLaunchError(error);
+          return;
+        }
+        registry?.ensure(paneId, { cwd: target.cwd }, createTerminal);
         store.actions.createPane(paneId, { role: "primary-agent" });
         const identity: AgentIdentity = {
           sessionId: prepared.sessionId,
-          terminalTargetId: handle.terminalTargetId,
+          terminalTargetId: prepared.attachment.terminalTargetId,
           harnessProvider:
             prepared.kind === "prepared" ? prepared.launchPlan.provider : prepared.harnessProvider,
         };

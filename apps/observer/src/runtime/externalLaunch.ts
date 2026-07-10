@@ -1,10 +1,8 @@
 import type {
   AgentPrepareExternalLaunchParams,
   AgentPrepareExternalLaunchResult,
-  AgentReattachHandle,
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
-  ManagedTerminalLifecycle,
   SafeError,
   TerminalTargetId,
 } from "@station/contracts";
@@ -26,17 +24,6 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { nowIso } from "../utils/time.js";
 
-async function resolveReattachHandle(
-  managedTerminal: ManagedTerminalLifecycle,
-  targetId: TerminalTargetId,
-): Promise<AgentReattachHandle | undefined> {
-  const info = await managedTerminal.reattachInfo(targetId);
-  if (info === undefined) {
-    return undefined;
-  }
-  return { ptyId: info.endpointId, terminalTargetId: targetId, hostSocketPath: info.socketPath };
-}
-
 export type ExternalLaunchDeps = {
   core: ObserverCore;
   providers: ProviderRegistry;
@@ -54,7 +41,7 @@ export type ExternalLaunchOutcome<T> = {
 /**
  * USE CASE
  *
- * Prepare Station-hosted agent identity, launch plan, and managed process handoff;
+ * Prepare Station-hosted agent identity, launch plan, and opaque managed attachment;
  * the managed target lets reconcile surface the session immediately.
  */
 export async function prepareExternalLaunch(
@@ -86,16 +73,16 @@ export async function prepareExternalLaunch(
             (target) =>
               target.worktreeId === params.worktreeId && target.sessionId === agent.sessionId,
           );
-    const reattachHandle =
+    const attachment =
       managedTerminal === undefined || managedTarget === undefined
         ? undefined
-        : await resolveReattachHandle(managedTerminal, managedTarget.id);
+        : await managedTerminal.attachmentForTarget(managedTarget.id);
     return {
       outcome: {
         kind: "existing-session",
         sessionId: agent.sessionId,
         harnessProvider: agent.harness,
-        ...(reattachHandle === undefined ? {} : { reattachHandle }),
+        ...(attachment === undefined ? {} : { attachment }),
       },
       reconcile: false,
     };
@@ -146,14 +133,14 @@ export async function prepareExternalLaunch(
         )
       : undefined;
   if (concurrentManagedTarget?.sessionId !== undefined) {
-    const reattachHandle = await resolveReattachHandle(managedTerminal, concurrentManagedTarget.id);
+    const attachment = await managedTerminal.attachmentForTarget(concurrentManagedTarget.id);
     return {
       outcome: {
         kind: "existing-session",
         sessionId: concurrentManagedTarget.sessionId,
         harnessProvider:
           concurrentManagedTarget.harnessBinding?.harnessProvider ?? harnessProviderId,
-        ...(reattachHandle === undefined ? {} : { reattachHandle }),
+        ...(attachment === undefined ? {} : { attachment }),
       },
       reconcile: false,
     };
@@ -189,12 +176,8 @@ export async function prepareExternalLaunch(
       sessionId,
     });
 
-    // Spawn the agent into the host so it outlives the UI, then hand the client a
-    // reattach handle built FROM the spawn result — so "spawned remotely" and "has
-    // a handle" never diverge (a divergence would double-spawn: host PTY + local
-    // UI PTY). `started: false` (no host / host unavailable) ⇒ no handle and the UI
-    // spawns the PTY locally from launchPlan.
-    let reattachHandle: AgentReattachHandle | undefined;
+    // The managed result requires an attachment exactly when it starts the process,
+    // so a remote spawn can never be advertised as eligible for local fallback.
     const launched = await managedTerminal.launchProcess({
       project,
       worktree,
@@ -202,13 +185,7 @@ export async function prepareExternalLaunch(
       agentEndpointId: opened.agentEndpointId,
       launchPlan,
     });
-    if (launched.started) {
-      reattachHandle = {
-        ptyId: launched.reattach.endpointId,
-        terminalTargetId: opened.target.targetId,
-        hostSocketPath: launched.reattach.socketPath,
-      };
-    }
+    const attachment = launched.started ? launched.attachment : undefined;
 
     return {
       outcome: {
@@ -216,7 +193,7 @@ export async function prepareExternalLaunch(
         sessionId,
         terminalTargetId: opened.target.targetId,
         launchPlan,
-        ...(reattachHandle === undefined ? {} : { reattachHandle }),
+        ...(attachment === undefined ? {} : { attachment }),
       },
       reconcile: true,
     };

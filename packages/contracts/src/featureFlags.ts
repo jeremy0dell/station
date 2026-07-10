@@ -53,8 +53,8 @@ export const FeatureFlagDefinitions = {
   stationPersistentAgents: {
     defaultValue: false,
     // Server-exposed: the observer/provider gate spawning in the host and
-    // populating the launch result's reattachHandle. The Station UI keys off
-    // that handle's presence, so it needs no client-side flag value.
+    // populating the launch result's attachment. Station keys off attachment
+    // presence, so it needs no client-side flag value.
     exposure: "server",
     owner: "observer",
     surfaces: ["config", "observer", "protocol", "provider"],
