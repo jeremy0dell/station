@@ -67,6 +67,38 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
+  it("converges concurrent cold starts on one healthy observer", async () => {
+    const fixture = await createTempState();
+    const config = {
+      ...emptyConfig(),
+      observer: {
+        stateDir: fixture.stateDir,
+        socketPath: fixture.socketPath,
+      },
+    };
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    let started = false;
+
+    try {
+      const statuses = await Promise.all(
+        Array.from({ length: 5 }, () => startObserver({ config, timeoutMs: 30_000 })),
+      );
+      started = statuses.some((status) => status.status === "running");
+
+      expect(statuses.every((status) => status.status === "running")).toBe(true);
+      const pids = statuses.map((status) =>
+        status.status === "running" ? status.health.pid : undefined,
+      );
+      expect(new Set(pids).size).toBe(1);
+      expect(pids[0]).toBeTypeOf("number");
+    } finally {
+      if (started) {
+        await client.stop();
+        await waitForSocketClosed(fixture.socketPath);
+      }
+    }
+  });
+
   it("reports a malformed-config child exit without waiting for the startup timeout", async () => {
     const fixture = await createTempState();
     const configPath = join(fixture.root, "malformed.toml");
@@ -87,13 +119,62 @@ describe("observer lifecycle e2e", () => {
       error: {
         code: "OBSERVER_EXITED_ON_START",
         message: expect.stringContaining("exit code 1"),
-        hint: expect.stringContaining(`Observer boot log: ${bootLogPath}`),
+        hint: expect.stringContaining(`Latest observer boot log: ${bootLogPath}`),
       },
     });
     expect(status.error?.hint).toContain("Station config file is not valid TOML.");
     await expect(readFile(bootLogPath, "utf8")).resolves.toContain(
       "Station config file is not valid TOML.",
     );
+  });
+
+  it("keeps concurrent failed startup diagnostics isolated and publishes one coherent latest log", async () => {
+    const fixture = await createTempState();
+    const malformedConfigPath = join(fixture.root, "malformed.toml");
+    const missingConfigPath = join(fixture.root, "missing.toml");
+    const bootLogPath = join(fixture.stateDir, "logs", "observer-boot.log");
+    await writeFile(malformedConfigPath, "not = [valid toml", "utf8");
+
+    const [malformedStatus, missingStatus] = await Promise.all([
+      startObserver({
+        config: fixture.config,
+        configPath: malformedConfigPath,
+        timeoutMs: 30_000,
+      }),
+      startObserver({
+        config: fixture.config,
+        configPath: missingConfigPath,
+        timeoutMs: 30_000,
+      }),
+    ]);
+
+    expect(malformedStatus).toMatchObject({
+      status: "unhealthy",
+      error: { code: "OBSERVER_EXITED_ON_START" },
+    });
+    expect(malformedStatus.error?.hint).toContain("Station config file is not valid TOML.");
+    expect(malformedStatus.error?.hint).not.toContain("Station config file was not found.");
+    expect(missingStatus).toMatchObject({
+      status: "unhealthy",
+      error: { code: "OBSERVER_EXITED_ON_START" },
+    });
+    expect(missingStatus.error?.hint).toContain("Station config file was not found.");
+    expect(missingStatus.error?.hint).not.toContain("Station config file is not valid TOML.");
+
+    const bootLog = await readFile(bootLogPath, "utf8");
+    const [header = "", ...bodyLines] = bootLog.split(/\r?\n/);
+    const command = JSON.parse(header).command as string[];
+    const configPath = command[command.indexOf("--config") + 1];
+    const body = bodyLines.join("\n");
+    if (configPath === malformedConfigPath) {
+      expect(body).toContain("Station config file is not valid TOML.");
+      expect(body).not.toContain("Station config file was not found.");
+    } else {
+      expect(configPath).toBe(missingConfigPath);
+      expect(body).toContain("Station config file was not found.");
+      expect(body).not.toContain("Station config file is not valid TOML.");
+    }
+    expect((await stat(bootLogPath)).mode & 0o777).toBe(0o600);
   });
 
   it("starts a real observer process, serves protocol requests, and stops cleanly", async () => {

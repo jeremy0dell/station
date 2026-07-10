@@ -20,61 +20,14 @@ export async function waitForObserverHealth(
   const retries = Math.max(1, Math.ceil(timeoutMs / 25));
   const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath);
   const result = await runRuntimeBoundaryWithRetryAndTimeout(
-    {
-      operation: "cli.observer.waitForHealth",
-      timeoutMs,
-      error: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_FAILED",
-        message: "Observer health check failed.",
-        ...(options.trace?.traceId === undefined
-          ? {}
-          : {
-              hint: `Run station debug trace ${options.trace.traceId}.`,
-              traceId: options.trace.traceId,
-            }),
-      },
-      timeoutError: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_TIMEOUT",
-        message: "Observer did not report healthy before the timeout.",
-        ...(options.trace?.traceId === undefined
-          ? {}
-          : {
-              hint: `Run station debug trace ${options.trace.traceId}.`,
-              traceId: options.trace.traceId,
-            }),
-      },
-      retry: {
-        retries,
-        delayMs: 25,
-        shouldRetry: (error, attempt) =>
-          error.code !== "OBSERVER_HEALTH_WAIT_CANCELLED" && attempt < retries,
-      },
-      trace: options.trace,
-    },
-    async ({ signal }) => {
-      const signals = [signal, options.signal].filter(isAbortSignal);
-      if (signals.some((candidate) => candidate.aborted)) {
-        throw observerHealthWaitCancelledError();
-      }
-      return abortableObserverHealth(client.health(), signals);
-    },
+    observerHealthBoundaryOptions(timeoutMs, retries, options.trace),
+    ({ signal }) => requestObserverHealth(() => client.health(), [signal, options.signal]),
   );
 
   if (!result.ok) {
     throw result.error;
   }
   return result.value;
-}
-
-export function probeObserverHealth(
-  paths: SpawnObserverInput["paths"],
-  deps: ObserverProcessDeps,
-  signal: AbortSignal,
-): Promise<ObserverHealth> {
-  const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath);
-  return abortableObserverHealth(client.health(), [signal]);
 }
 
 function abortableObserverHealth(
@@ -122,4 +75,52 @@ export function observerHealthWaitCancelledError(): SafeError {
 
 function isAbortSignal(value: AbortSignal | undefined): value is AbortSignal {
   return value !== undefined;
+}
+
+function observerHealthBoundaryOptions(
+  timeoutMs: number,
+  retries: number,
+  trace: RuntimeTraceContext | undefined,
+): Parameters<typeof runRuntimeBoundaryWithRetryAndTimeout>[0] {
+  const traceFields =
+    trace?.traceId === undefined
+      ? {}
+      : {
+          hint: `Run station debug trace ${trace.traceId}.`,
+          traceId: trace.traceId,
+        };
+  return {
+    operation: "cli.observer.waitForHealth",
+    timeoutMs,
+    error: {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_HEALTH_FAILED",
+      message: "Observer health check failed.",
+      ...traceFields,
+    },
+    timeoutError: {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_HEALTH_TIMEOUT",
+      message: "Observer did not report healthy before the timeout.",
+      ...traceFields,
+    },
+    retry: {
+      retries,
+      delayMs: 25,
+      shouldRetry: (error, attempt) =>
+        error.code !== "OBSERVER_HEALTH_WAIT_CANCELLED" && attempt < retries,
+    },
+    trace,
+  };
+}
+
+function requestObserverHealth(
+  health: () => Promise<ObserverHealth>,
+  candidates: readonly (AbortSignal | undefined)[],
+): Promise<ObserverHealth> {
+  const signals = candidates.filter(isAbortSignal);
+  if (signals.some((candidate) => candidate.aborted)) {
+    return Promise.reject(observerHealthWaitCancelledError());
+  }
+  return abortableObserverHealth(health(), signals);
 }

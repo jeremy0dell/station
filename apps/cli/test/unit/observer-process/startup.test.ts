@@ -56,6 +56,7 @@ describe("CLI observer process startup", () => {
     const progress: string[] = [];
     let spawned = false;
     let kills = 0;
+    let bootLogDisposals = 0;
 
     vi.useFakeTimers();
     try {
@@ -74,6 +75,9 @@ describe("CLI observer process startup", () => {
                 kills += 1;
                 return true;
               },
+              disposeBootLog: async () => {
+                bootLogDisposals += 1;
+              },
             });
           },
           clientFactory: fakeClientFactory(async () => {
@@ -85,6 +89,7 @@ describe("CLI observer process startup", () => {
 
       expect(result).toMatchObject({ status: "running", health: { pid: 1234 } });
       expect(kills).toBe(0);
+      expect(bootLogDisposals).toBe(1);
       await vi.advanceTimersByTimeAsync(5_000);
       expect(progress).toEqual([]);
     } finally {
@@ -92,55 +97,77 @@ describe("CLI observer process startup", () => {
     }
   });
 
-  it("fails immediately when the child exits and includes only a redacted 15-line tail", async () => {
+  it("waits briefly for an incumbent, then reports the failed child's redacted tail", async () => {
     const fixture = await createTempState();
     const lines = Array.from({ length: 20 }, (_, index) => `boot-line-${index + 1}`);
     lines[19] = "API_TOKEN=super-secret-value";
-    const noisyPrefix = "x".repeat(70 * 1024);
+    const attemptTail = lines.slice(-15).join("\n");
     let healthCalls = 0;
-    const bootLogPath = await writeObserverBootLog(
-      fixture.stateDir,
-      `${noisyPrefix}\n${lines.join("\n")}\n`,
-    );
+    let bootLogDisposals = 0;
+    let settled = false;
+    const spawnedSignal = deferred<void>();
+    const bootLogPath = await writeObserverBootLog(fixture.stateDir, "winning-attempt\n");
 
-    const result = await startObserver(
-      { config: fixture.config, timeoutMs: 5_000 },
-      {
-        spawnObserver: async (): Promise<ChildProcessLike> =>
-          fakeChild({
-            exited: Promise.resolve({ type: "exit", code: 17, signal: null }),
+    vi.useFakeTimers();
+    try {
+      const startup = startObserver(
+        { config: fixture.config, timeoutMs: 5_000 },
+        {
+          spawnObserver: async (): Promise<ChildProcessLike> => {
+            spawnedSignal.resolve(undefined);
+            return fakeChild({
+              exited: Promise.resolve({ type: "exit", code: 17, signal: null }),
+              readBootLogTail: async () => attemptTail,
+              disposeBootLog: async () => {
+                bootLogDisposals += 1;
+              },
+            });
+          },
+          clientFactory: fakeClientFactory(async () => {
+            healthCalls += 1;
+            throw new Error("stopped");
           }),
-        clientFactory: fakeClientFactory(async () => {
-          healthCalls += 1;
-          throw new Error("stopped");
-        }),
-      },
-    );
+        },
+      );
+      void startup.then(() => {
+        settled = true;
+      });
+      await spawnedSignal.promise;
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      const result = await startup;
 
-    expect(result).toMatchObject({
-      status: "unhealthy",
-      error: {
-        code: "OBSERVER_EXITED_ON_START",
-        message: expect.stringContaining("exit code 17"),
-        hint: expect.stringContaining(`Observer boot log: ${bootLogPath}`),
-      },
-    });
-    expect(result.error?.hint).toContain("boot-line-6");
-    expect(result.error?.hint).not.toContain("boot-line-5\n");
-    expect(result.error?.hint).toContain("API_TOKEN=[REDACTED]");
-    expect(result.error?.hint).not.toContain("super-secret-value");
-    await expect(readFile(bootLogPath, "utf8")).resolves.toContain("super-secret-value");
-    const healthCallsAtExit = healthCalls;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(healthCalls).toBe(healthCallsAtExit);
+      expect(result).toMatchObject({
+        status: "unhealthy",
+        error: {
+          code: "OBSERVER_EXITED_ON_START",
+          message: expect.stringContaining("exit code 17"),
+          hint: expect.stringContaining(`Latest observer boot log: ${bootLogPath}`),
+        },
+      });
+      expect(result.error?.hint).toContain("This attempt's last 15 lines (redacted):");
+      expect(result.error?.hint).toContain("boot-line-6");
+      expect(result.error?.hint).not.toContain("boot-line-5\n");
+      expect(result.error?.hint).toContain("API_TOKEN=[REDACTED]");
+      expect(result.error?.hint).not.toContain("super-secret-value");
+      expect(result.error?.hint).not.toContain("winning-attempt");
+      await expect(readFile(bootLogPath, "utf8")).resolves.toBe("winning-attempt\n");
+      expect(bootLogDisposals).toBe(1);
+      const healthCallsAtExit = healthCalls;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(healthCalls).toBe(healthCallsAtExit);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("attaches to a concurrent incumbent when the spawned child exits", async () => {
     const fixture = await createTempState();
     const exited = deferred<{ type: "exit"; code: number; signal: null }>();
-    const pendingHealth = new Promise<never>(() => undefined);
     let healthCalls = 0;
     let kills = 0;
+    let exitWaitDisposals = 0;
 
     const result = await startObserver(
       { config: fixture.config, timeoutMs: 5_000 },
@@ -152,22 +179,76 @@ describe("CLI observer process startup", () => {
               kills += 1;
               return true;
             },
+            disposeExitWait: () => {
+              exitWaitDisposals += 1;
+            },
           }),
         clientFactory: fakeClientFactory(async () => {
           healthCalls += 1;
           if (healthCalls === 1) throw new Error("initially stopped");
           if (healthCalls === 2) {
             exited.resolve({ type: "exit", code: 1, signal: null });
-            return pendingHealth;
+            throw new Error("winner still booting");
           }
+          if (healthCalls === 3) throw new Error("winner not ready yet");
           return healthyObserver(9876);
         }),
       },
     );
 
     expect(result).toMatchObject({ status: "running", health: { pid: 9876 } });
-    expect(healthCalls).toBe(3);
+    expect(healthCalls).toBe(4);
     expect(kills).toBe(0);
+    expect(exitWaitDisposals).toBe(1);
+  });
+
+  it("lets the outer startup timeout preempt incumbent convergence", async () => {
+    const fixture = await createTempState();
+    const spawnedSignal = deferred<void>();
+    let healthCalls = 0;
+    let kills = 0;
+    let settled = false;
+
+    vi.useFakeTimers();
+    try {
+      const startup = startObserver(
+        { config: fixture.config, timeoutMs: 100 },
+        {
+          spawnObserver: async (): Promise<ChildProcessLike> => {
+            spawnedSignal.resolve(undefined);
+            return fakeChild({
+              exited: Promise.resolve({ type: "exit", code: 1, signal: null }),
+              kill: () => {
+                kills += 1;
+                return true;
+              },
+            });
+          },
+          clientFactory: fakeClientFactory(async () => {
+            healthCalls += 1;
+            throw new Error("still down");
+          }),
+        },
+      );
+      void startup.then(() => {
+        settled = true;
+      });
+      await spawnedSignal.promise;
+
+      await vi.advanceTimersByTimeAsync(99);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      await expect(startup).resolves.toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_START_FAILED" },
+      });
+      expect(kills).toBe(1);
+      const healthCallsAtTimeout = healthCalls;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(healthCalls).toBe(healthCallsAtTimeout);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reports a redacted child spawn error", async () => {

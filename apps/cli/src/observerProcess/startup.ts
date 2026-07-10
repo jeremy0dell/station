@@ -8,12 +8,9 @@ import {
   type RuntimeClock,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithTimeout,
+  withTimeout,
 } from "@station/runtime";
-import {
-  observerHealthWaitCancelledError,
-  probeObserverHealth,
-  waitForObserverHealth,
-} from "./health.js";
+import { observerHealthWaitCancelledError, waitForObserverHealth } from "./health.js";
 import { defaultSpawnObserver, observerBootLogPath, readObserverBootLogTail } from "./spawn.js";
 import type {
   ChildExitResult,
@@ -22,6 +19,8 @@ import type {
   ObserverProcessOptions,
   SpawnObserverInput,
 } from "./types.js";
+
+const incumbentHealthGraceMs = 1_000;
 
 export async function startObserverProcess(
   input: {
@@ -86,6 +85,7 @@ export async function startObserverProcess(
   if (!result.ok && result.error.code !== "OBSERVER_EXITED_ON_START") {
     child?.kill?.();
   }
+  await disposeObserverBootLog(child);
   return result;
 }
 
@@ -148,16 +148,15 @@ async function waitForStartedObserver(
       return outcome.health;
     }
 
-    healthController.abort();
     try {
-      // A competing observer may have won the socket immediately before this child exited.
-      return await probeObserverHealth(input.paths, deps, input.signal);
+      // A losing child can exit just before the winning observer becomes healthy, so preserve its retry loop briefly.
+      return await waitForIncumbentHealth(healthPromise, healthController);
     } catch {
       if (input.signal.aborted) {
         throw observerHealthWaitCancelledError();
       }
     }
-    throw await observerExitedOnStartError(input.paths, outcome.exit, input.trace);
+    throw await observerExitedOnStartError(input.paths, input.child, outcome.exit, input.trace);
   } finally {
     input.signal.removeEventListener("abort", cancelHealth);
     healthController.abort();
@@ -168,10 +167,11 @@ async function waitForStartedObserver(
 
 async function observerExitedOnStartError(
   paths: SpawnObserverInput["paths"],
+  child: ChildProcessLike,
   exit: ChildExitResult,
   trace: RuntimeTraceContext,
 ): Promise<SafeError> {
-  const bootLogHint = await observerBootLogHint(paths);
+  const bootLogHint = await observerBootLogHint(paths, child);
   const traceHint =
     trace.traceId === undefined ? "" : `\nRun station debug trace ${trace.traceId}.`;
   const error: SafeError = {
@@ -199,8 +199,21 @@ function childExitDescription(exit: ChildExitResult): string {
   return "unknown exit status";
 }
 
-async function observerBootLogHint(paths: SpawnObserverInput["paths"]): Promise<string> {
+async function observerBootLogHint(
+  paths: SpawnObserverInput["paths"],
+  child: ChildProcessLike,
+): Promise<string> {
   const path = observerBootLogPath(paths);
+  if (child.readBootLogTail !== undefined) {
+    const pathHint = `Latest observer boot log: ${path}`;
+    try {
+      const tail = await child.readBootLogTail();
+      if (tail === undefined) return pathHint;
+      return `${pathHint}\nThis attempt's last 15 lines (redacted):\n${redactString(tail)}`;
+    } catch {
+      return pathHint;
+    }
+  }
   const pathHint = `Observer boot log: ${path}`;
   try {
     const tail = await readObserverBootLogTail(path);
@@ -210,6 +223,44 @@ async function observerBootLogHint(paths: SpawnObserverInput["paths"]): Promise<
     return `${pathHint}\nLast 15 lines (redacted):\n${redactString(tail)}`;
   } catch {
     return pathHint;
+  }
+}
+
+function waitForIncumbentHealth(
+  healthPromise: Promise<ObserverHealth>,
+  healthController: AbortController,
+): Promise<ObserverHealth> {
+  return withTimeout(
+    async ({ signal }) => {
+      const cancelHealth = () => healthController.abort();
+      signal.addEventListener("abort", cancelHealth, { once: true });
+      try {
+        return await healthPromise;
+      } finally {
+        signal.removeEventListener("abort", cancelHealth);
+      }
+    },
+    {
+      timeoutMs: incumbentHealthGraceMs,
+      error: {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_INCUMBENT_HEALTH_FAILED",
+        message: "Competing observer health check failed.",
+      },
+      timeoutError: {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_INCUMBENT_HEALTH_TIMEOUT",
+        message: "Competing observer did not become healthy during startup convergence.",
+      },
+    },
+  );
+}
+
+async function disposeObserverBootLog(child: ChildProcessLike | undefined): Promise<void> {
+  try {
+    await child?.disposeBootLog?.();
+  } catch {
+    // Diagnostic handle cleanup must not replace the observer startup result.
   }
 }
 

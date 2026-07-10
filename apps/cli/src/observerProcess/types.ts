@@ -49,6 +49,8 @@ export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
   kill?: ChildProcess["kill"];
   exited?: Promise<ChildExitResult>;
   disposeExitWait?: () => void;
+  readBootLogTail?: () => Promise<string | undefined>;
+  disposeBootLog?: () => Promise<void>;
 };
 
 export type ObserverProcessOptions = {
