@@ -42,6 +42,7 @@ describe("setup core flow e2e", () => {
         "brew",
         'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 0\n',
       );
+      await writeShim(bin, "npm", "echo 0.1.0\n");
       // diffnav + delta are required; the checks only need the binaries on PATH.
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
@@ -165,6 +166,7 @@ describe("setup core flow e2e", () => {
         "codex",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
+      await writeShim(bin, "npm", "echo 0.1.0\n");
       // diffnav + delta are required; without them config write is blocked.
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
