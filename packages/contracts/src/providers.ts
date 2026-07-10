@@ -391,21 +391,33 @@ export interface TerminalProvider {
 }
 
 export type TerminalReattachInfo = {
-  /** Provider-opaque id of the live process to reattach to (e.g. a host PTY id). */
+  /** Provider-opaque id of the live process to reattach to. */
   endpointId: string;
-  /** Socket a client uses to reach the process's host. */
+  /** Endpoint a client uses to reach the process host. */
   socketPath: string;
 };
 
+export type ManagedTerminalLaunchProcessResult =
+  | (Omit<TerminalLaunchProcessResult, "started" | "reattach"> & {
+      started: false;
+      reattach?: never;
+    })
+  | (Omit<TerminalLaunchProcessResult, "started" | "reattach"> & {
+      started: true;
+      reattach: TerminalReattachInfo;
+    });
+
 /**
- * Optional persistence capability: reattaching to a live, out-of-client process.
- * Implemented only by the host-backed `native` station provider; tmux/zellij omit
- * it (their server/session is the backend). `launchProcess` deliberately stays on
- * `TerminalProvider` — launching is general (tmux respawns a pane); only the
- * reattach lookup is host-specific.
+ * DRIVEN PORT
+ *
+ * Owns the single managed terminal target used for an external Station launch.
+ * Target identity is adapter-owned and at most one target may exist per worktree.
  */
-export interface TerminalReattachCapability {
+export interface ManagedTerminalLifecycle extends TerminalProvider {
+  launchProcess(request: TerminalLaunchProcessRequest): Promise<ManagedTerminalLaunchProcessResult>;
   reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined>;
+  /** Forgets an abandoned or already-exited target without terminating its process. */
+  releaseTarget(targetId: TerminalTargetId): Promise<boolean>;
 }
 
 /** Best-effort version probe result; omit fields (or the method) when unknown. */

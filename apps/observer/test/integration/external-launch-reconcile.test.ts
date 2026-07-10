@@ -98,7 +98,7 @@ function createFixture(spoolDir: string) {
       ],
     }),
     terminal: new FakeTerminalProvider({ now }),
-    terminals: [station],
+    managedTerminal: station,
     harnesses: [new FakeHarnessProvider({ now })],
   });
   const core = createObserverCore({ config, providers, persistence, sqlite, clock });

@@ -1,18 +1,29 @@
 import type {
   AgentState,
   HarnessHooksStatus,
+  ManagedTerminalLaunchProcessResult,
+  ManagedTerminalLifecycle,
+  OpenWorkspaceRequest,
+  OpenWorkspaceResult,
+  ProviderHealth,
+  ProviderId,
   ProviderProjectConfig,
+  SafeError,
   StationSnapshot,
   TerminalAttachment,
+  TerminalCapabilities,
+  TerminalLaunchProcessRequest,
+  TerminalReattachInfo,
+  TerminalTargetId,
+  TerminalTargetObservation,
   WorktreeRow,
 } from "@station/contracts";
-import type { HostListEntry, StationHostClient } from "@station/host";
 import {
-  createStationHostController,
-  StationTerminalProvider,
-  stationTargetId,
-} from "@station/terminal";
-import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
+  createFakeTerminalTarget,
+  FakeHarnessProvider,
+  FakeTerminalProvider,
+  FakeWorktreeProvider,
+} from "@station/testing";
 import { describe, expect, it } from "vitest";
 import type { ObserverPersistence } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
@@ -20,6 +31,158 @@ import type { ObserverCore } from "../../src/reconcile/core";
 import { prepareExternalLaunch, reportExternalExit } from "../../src/runtime/externalLaunch";
 
 const now = "2026-05-21T12:00:00.000Z";
+
+function managedTargetId(worktreeId: string): TerminalTargetId {
+  return `managed://${worktreeId}` as TerminalTargetId;
+}
+
+type FakeManagedTerminalOptions = {
+  started?: boolean;
+  reattach?: TerminalReattachInfo;
+  launchFailure?: SafeError;
+  releaseFailure?: SafeError;
+};
+
+/** Deliberately differs from the Station adapter in both provider id and target format. */
+class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
+  readonly id: ProviderId = "managed-test";
+  readonly released: TerminalTargetId[] = [];
+
+  readonly #targets: TerminalTargetObservation[] = [];
+  readonly #terminal: FakeTerminalProvider;
+  readonly #started: boolean;
+  readonly #reattach: TerminalReattachInfo | undefined;
+  readonly #launchFailure: SafeError | undefined;
+  readonly #releaseFailure: SafeError | undefined;
+
+  constructor(options: FakeManagedTerminalOptions = {}) {
+    this.#terminal = new FakeTerminalProvider({
+      id: this.id,
+      now: () => new Date(now),
+      targets: this.#targets,
+    });
+    this.#started = options.started ?? false;
+    this.#reattach = options.reattach;
+    this.#launchFailure = options.launchFailure;
+    this.#releaseFailure = options.releaseFailure;
+  }
+
+  capabilities(): TerminalCapabilities {
+    return this.#terminal.capabilities();
+  }
+
+  health(): Promise<ProviderHealth> {
+    return this.#terminal.health();
+  }
+
+  listTargets(): Promise<TerminalTargetObservation[]> {
+    return this.#terminal.listTargets();
+  }
+
+  async openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult> {
+    const targetId = managedTargetId(request.worktree.id);
+    const target = createFakeTerminalTarget({
+      id: targetId,
+      provider: this.id,
+      projectId: request.project.id,
+      worktreeId: request.worktree.id,
+      ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
+      now,
+      harnessBinding: {
+        role: "main-agent",
+        harnessProvider: request.harness,
+        worktreePath: request.worktree.path,
+      },
+    });
+    const existingIndex = this.#targets.findIndex(
+      (candidate) => candidate.worktreeId === request.worktree.id,
+    );
+    if (existingIndex < 0) {
+      this.#targets.push(target);
+    } else {
+      this.#targets[existingIndex] = target;
+    }
+    return {
+      target: {
+        provider: this.id,
+        targetId,
+        projectId: request.project.id,
+        worktreeId: request.worktree.id,
+        ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
+        harnessBinding: {
+          role: "main-agent",
+          harnessProvider: request.harness,
+          worktreePath: request.worktree.path,
+        },
+        confidence: "high",
+        reason: "Fake managed terminal registered a target.",
+      },
+      agentEndpointId: targetId,
+    };
+  }
+
+  async launchProcess(
+    request: TerminalLaunchProcessRequest,
+  ): Promise<ManagedTerminalLaunchProcessResult> {
+    if (this.#launchFailure !== undefined) {
+      throw this.#launchFailure;
+    }
+    const result = {
+      terminalTargetId: request.terminalTarget.targetId,
+      agentEndpointId: request.agentEndpointId,
+    };
+    if (!this.#started) {
+      return { ...result, started: false };
+    }
+    if (this.#reattach === undefined) {
+      throw new Error("Fake managed terminal needs reattach info when started.");
+    }
+    return { ...result, started: true, reattach: this.#reattach };
+  }
+
+  async reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined> {
+    return this.#targets.some((target) => target.id === targetId) ? this.#reattach : undefined;
+  }
+
+  async releaseTarget(targetId: TerminalTargetId): Promise<boolean> {
+    this.released.push(targetId);
+    if (this.#releaseFailure !== undefined) {
+      throw this.#releaseFailure;
+    }
+    const index = this.#targets.findIndex((target) => target.id === targetId);
+    if (index < 0) {
+      return false;
+    }
+    this.#targets.splice(index, 1);
+    return true;
+  }
+
+  focusTarget(targetId: TerminalTargetId): Promise<void> {
+    return this.#terminal.focusTarget(targetId);
+  }
+
+  closeTarget(targetId: TerminalTargetId): Promise<void> {
+    return this.#terminal.closeTarget(targetId);
+  }
+
+  seedTarget(input: { worktreeId: string; sessionId: string }): void {
+    this.#targets.push(
+      createFakeTerminalTarget({
+        id: managedTargetId(input.worktreeId),
+        provider: this.id,
+        projectId: project.id,
+        worktreeId: input.worktreeId,
+        sessionId: input.sessionId,
+        now,
+        harnessBinding: {
+          role: "main-agent",
+          harnessProvider: "fake-harness",
+          worktreePath: "/tmp/station/web/feature",
+        },
+      }),
+    );
+  }
+}
 
 const project: ProviderProjectConfig = {
   id: "web",
@@ -57,7 +220,7 @@ function row(
     };
   }
   if (overrides.terminalState !== undefined) {
-    base.terminal = { provider: "native", state: overrides.terminalState };
+    base.terminal = { provider: "managed-test", state: overrides.terminalState };
   }
   return base;
 }
@@ -106,7 +269,7 @@ class HookableHarness extends FakeHarnessProvider {
 type Harnesses = ConstructorParameters<typeof ProviderRegistry>[0]["harnesses"];
 
 function registryWith(
-  station: StationTerminalProvider,
+  managedTerminal: ManagedTerminalLifecycle,
   harnesses: Harnesses = [
     new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) }),
   ],
@@ -114,15 +277,19 @@ function registryWith(
   return new ProviderRegistry({
     worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
     terminal: new FakeTerminalProvider({ now: () => new Date(now) }),
-    terminals: [station],
+    managedTerminal,
     harnesses,
   });
 }
 
-function deps(rows: WorktreeRow[], station: StationTerminalProvider, harnesses?: Harnesses) {
+function deps(
+  rows: WorktreeRow[],
+  managedTerminal: ManagedTerminalLifecycle,
+  harnesses?: Harnesses,
+) {
   return {
     core: fakeCore(rows),
-    providers: registryWith(station, harnesses),
+    providers: registryWith(managedTerminal, harnesses),
     persistence: fakePersistence,
     clock: { now: () => new Date(now) },
   };
@@ -130,16 +297,44 @@ function deps(rows: WorktreeRow[], station: StationTerminalProvider, harnesses?:
 
 const prepareParams = { projectId: "web", worktreeId: "wt_web_feature" };
 
+describe("ProviderRegistry managed terminal role", () => {
+  it("registers one adapter when the managed lifecycle is also the default terminal", () => {
+    const managedTerminal = new FakeManagedTerminalLifecycle();
+    const registry = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
+      terminal: managedTerminal,
+      managedTerminal,
+      harnesses: [],
+    });
+
+    expect(registry.terminal).toBe(managedTerminal);
+    expect(registry.managedTerminal).toBe(managedTerminal);
+    expect([...registry.terminals.values()]).toEqual([managedTerminal]);
+  });
+
+  it("rejects a different terminal adapter with the managed lifecycle id", () => {
+    expect(
+      () =>
+        new ProviderRegistry({
+          worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
+          terminal: new FakeManagedTerminalLifecycle(),
+          managedTerminal: new FakeManagedTerminalLifecycle(),
+          harnesses: [],
+        }),
+    ).toThrow("Duplicate terminal provider id: managed-test");
+  });
+});
+
 describe("prepareExternalLaunch", () => {
-  it("mints one session + one station target + a launch plan", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+  it("mints one session + one managed target + a launch plan", async () => {
+    const station = new FakeManagedTerminalLifecycle();
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
 
     expect(result.reconcile).toBe(true);
     expect(result.outcome.kind).toBe("prepared");
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
     expect(result.outcome.sessionId).toMatch(/^ses_/);
-    expect(result.outcome.terminalTargetId).toBe(stationTargetId("wt_web_feature"));
+    expect(result.outcome.terminalTargetId).toBe(managedTargetId("wt_web_feature"));
     expect(result.outcome.launchPlan.provider).toBe("fake-harness");
     expect(result.outcome.launchPlan.env?.STATION_SESSION_ID).toBe(result.outcome.sessionId);
 
@@ -150,7 +345,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("rejects when the harness's status hooks are not installed", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     await expect(
       prepareExternalLaunch(deps([row()], station, [new HookableHarness(false)]), prepareParams),
     ).rejects.toMatchObject({
@@ -163,7 +358,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("passes the gate when hooks are installed", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     const result = await prepareExternalLaunch(
       deps([row()], station, [new HookableHarness(true)]),
       prepareParams,
@@ -172,7 +367,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("guides the user to the config flag when hooks are not requested", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     // installed:false because requested:false — installing artifacts alone would
     // not satisfy the gate, so the hint must point at the config flag, not install.
     await expect(
@@ -188,7 +383,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("returns the already-registered session for a concurrent prepare (snapshot lags)", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     const first = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (first.outcome.kind !== "prepared") throw new Error("expected prepared");
 
@@ -208,7 +403,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("returns the existing session id instead of minting a second identity", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     const result = await prepareExternalLaunch(
       deps([row({ agentSessionId: "ses_existing" })], station),
       prepareParams,
@@ -226,7 +421,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("relaunches an exited agent instead of returning its dead session", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     // A station agent whose PTY died (state "exited") must be relaunchable on a
     // re-click — not blocked as "already has a running agent".
     const result = await prepareExternalLaunch(
@@ -240,7 +435,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("relaunches an unknown-state agent whose terminal went stale (the `?` row)", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     // The dashboard `?` row: an agent reported "unknown" because its terminal is
     // stale (e.g. Station closed and the station target went stale). It is NOT
     // genuinely running, so a row-click must relaunch it — not noop as
@@ -259,7 +454,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("relaunches an unknown-state agent that has no terminal at all", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     // Unknown with a missing (undefined) terminal and no session id is the worst
     // case the old gate hit: it threw SESSION_ALREADY_HAS_AGENT, a dead-end noop.
     // It must now relaunch.
@@ -272,7 +467,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("still defers to a live unknown agent whose terminal is still open", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     // Unknown but with an open, focusable terminal is genuinely reachable — hand
     // back its session rather than launching a second agent.
     const result = await prepareExternalLaunch(
@@ -290,7 +485,7 @@ describe("prepareExternalLaunch", () => {
     expect(await station.listTargets()).toEqual([]);
   });
 
-  it("rejects when the station provider is not registered", async () => {
+  it("rejects when the managed terminal lifecycle is not registered", async () => {
     const registry = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
       terminal: new FakeTerminalProvider({ now: () => new Date(now) }),
@@ -306,11 +501,40 @@ describe("prepareExternalLaunch", () => {
         },
         prepareParams,
       ),
-    ).rejects.toMatchObject({ code: "TERMINAL_PROVIDER_UNAVAILABLE", provider: "native" });
+    ).rejects.toMatchObject({
+      code: "TERMINAL_PROVIDER_UNAVAILABLE",
+      message: "No managed terminal lifecycle is registered for external launch.",
+    });
+  });
+
+  it("returns an existing live session without a managed lifecycle", async () => {
+    const registry = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
+      terminal: new FakeTerminalProvider({ now: () => new Date(now) }),
+      harnesses: [new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) })],
+    });
+    await expect(
+      prepareExternalLaunch(
+        {
+          core: fakeCore([row({ agentSessionId: "ses_existing" })]),
+          providers: registry,
+          persistence: fakePersistence,
+          clock: { now: () => new Date(now) },
+        },
+        prepareParams,
+      ),
+    ).resolves.toEqual({
+      outcome: {
+        kind: "existing-session",
+        sessionId: "ses_existing",
+        harnessProvider: "fake-harness",
+      },
+      reconcile: false,
+    });
   });
 
   it("rejects a worktree that belongs to another configured project", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     const otherProject: ProviderProjectConfig = { ...project, id: "other", label: "Other" };
     const core = {
       getProjects: () => [project, otherProject],
@@ -334,7 +558,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("rejects when the worktree is not in the snapshot", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     await expect(
       prepareExternalLaunch(deps([], station), { projectId: "web", worktreeId: "wt_ghost" }),
     ).rejects.toMatchObject({ code: "WORKTREE_NOT_FOUND" });
@@ -342,7 +566,7 @@ describe("prepareExternalLaunch", () => {
   });
 
   it("rolls back the half-prepared target if buildLaunch fails", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     const failing = new FakeHarnessProvider({
       id: "fake-harness",
       now: () => new Date(now),
@@ -359,30 +583,75 @@ describe("prepareExternalLaunch", () => {
     ).rejects.toMatchObject({ code: "HARNESS_BUILD_LAUNCH_FAILED" });
     // openWorkspace registered a target; the failure rolled it back so a retry is clean.
     expect(await station.listTargets()).toEqual([]);
+    expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+  });
+
+  it("releases the opened target when managed process launch fails", async () => {
+    const station = new FakeManagedTerminalLifecycle({
+      launchFailure: {
+        tag: "TerminalProviderError",
+        code: "MANAGED_LAUNCH_FAILED",
+        message: "launch failed",
+      },
+    });
+
+    await expect(
+      prepareExternalLaunch(deps([row()], station), prepareParams),
+    ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
+    expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+    expect(await station.listTargets()).toEqual([]);
+  });
+
+  it("preserves the launch failure when rollback release also fails", async () => {
+    const station = new FakeManagedTerminalLifecycle({
+      launchFailure: {
+        tag: "TerminalProviderError",
+        code: "MANAGED_LAUNCH_FAILED",
+        message: "launch failed",
+      },
+      releaseFailure: {
+        tag: "TerminalProviderError",
+        code: "MANAGED_RELEASE_FAILED",
+        message: "release failed",
+      },
+    });
+
+    await expect(
+      prepareExternalLaunch(deps([row()], station), prepareParams),
+    ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
+    expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
   });
 });
 
 describe("reportExternalExit", () => {
   it("drops the registered target and asks for a reconcile", async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     await prepareExternalLaunch(deps([row()], station), prepareParams);
-    const targetId = stationTargetId("wt_web_feature");
+    const targetId = managedTargetId("wt_web_feature");
 
     const exit = await reportExternalExit(deps([row()], station), { terminalTargetId: targetId });
     expect(exit).toEqual({
       outcome: { acknowledged: true, terminalTargetId: targetId },
       reconcile: true,
     });
+    expect(station.released).toEqual([targetId]);
     expect(await station.listTargets()).toEqual([]);
+
+    await expect(
+      reportExternalExit(deps([row()], station), { terminalTargetId: targetId }),
+    ).resolves.toEqual({
+      outcome: { acknowledged: false, terminalTargetId: targetId },
+      reconcile: false,
+    });
   });
 
   it("acknowledges an unknown target without asking for a reconcile", async () => {
-    const station = new StationTerminalProvider();
+    const station = new FakeManagedTerminalLifecycle();
     const exit = await reportExternalExit(deps([row()], station), {
-      terminalTargetId: "native:nope",
+      terminalTargetId: "managed://nope",
     });
     expect(exit).toEqual({
-      outcome: { acknowledged: false, terminalTargetId: "native:nope" },
+      outcome: { acknowledged: false, terminalTargetId: "managed://nope" },
       reconcile: false,
     });
   });
@@ -410,7 +679,7 @@ describe("prepareExternalLaunch existing-agent state matrix", () => {
 
   for (const { state, expected } of matrix) {
     it(`a "${state}" agent → ${expected}`, async () => {
-      const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+      const station = new FakeManagedTerminalLifecycle();
       const result = await prepareExternalLaunch(
         deps([row({ agentSessionId: "ses_live", agentState: state })], station),
         prepareParams,
@@ -431,83 +700,32 @@ describe("prepareExternalLaunch existing-agent state matrix", () => {
   }
 
   it('"no agent" (undefined) → prepared', async () => {
-    const station = new StationTerminalProvider({ clock: { now: () => new Date(now) } });
+    const station = new FakeManagedTerminalLifecycle();
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
     expect(result.outcome.kind).toBe("prepared");
   });
 });
 
-function fakeHostClient(over: Partial<StationHostClient> = {}): StationHostClient {
-  return {
-    health: async () => ({ ok: true, protocolVersion: 1 }),
-    spawn: async () => ({ ptyId: "pty-1", pid: 99 }),
-    write: async () => undefined,
-    resize: async () => undefined,
-    list: async () => [],
-    focus: async () => undefined,
-    close: async () => ({ closed: true }),
-    attach: async () => {
-      throw new Error("unused");
-    },
-    dispose: () => undefined,
-    ...over,
-  };
-}
-
-function liveEntry(): HostListEntry {
-  return {
-    ptyId: "pty-1",
-    terminalTargetId: stationTargetId("wt_web_feature"),
-    worktreeId: "wt_web_feature",
-    projectId: "web",
-    sessionId: "ses_live",
-    worktreePath: "/tmp/station/web/feature",
-    harnessProvider: "fake-harness",
-    pid: 99,
-    alive: true,
-    cols: 80,
-    rows: 24,
-  };
-}
-
-function hostBackedStation(client: StationHostClient): StationTerminalProvider {
-  const controller = createStationHostController(
-    {
-      socketPath: `/tmp/ext-host-${process.pid}-${Math.random().toString(36).slice(2)}.sock`,
-      stateDir: "/tmp",
-      hostEntry: "/tmp/hostMain.ts",
-      timeoutMs: 50, // keep the host-unavailable path fast in tests
-    },
-    { clientFactory: () => client, spawnHost: () => ({ pid: 1, unref: () => undefined }) },
-  );
-  return new StationTerminalProvider({ clock: { now: () => new Date(now) }, host: controller });
-}
-
-describe("prepareExternalLaunch (host-backed)", () => {
+describe("prepareExternalLaunch reattachment", () => {
   it("attaches a reattachHandle to the prepared result", async () => {
-    // No host PTY yet (so the prepare isn't short-circuited to existing-session);
-    // launchProcess spawns one, then the prepared result carries its handle.
-    let spawned = false;
-    const station = hostBackedStation(
-      fakeHostClient({
-        spawn: async () => {
-          spawned = true;
-          return { ptyId: "pty-1", pid: 99 };
-        },
-        list: async () => (spawned ? [liveEntry()] : []),
-      }),
-    );
+    const station = new FakeManagedTerminalLifecycle({
+      started: true,
+      reattach: { endpointId: "endpoint-1", socketPath: "/tmp/managed-test.sock" },
+    });
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
     expect(result.outcome.reattachHandle).toMatchObject({
-      ptyId: "pty-1",
-      terminalTargetId: stationTargetId("wt_web_feature"),
+      ptyId: "endpoint-1",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+      hostSocketPath: "/tmp/managed-test.sock",
     });
-    expect(result.outcome.reattachHandle?.hostSocketPath).toContain("ext-host-");
   });
 
   it("attaches a reattachHandle to an existing-session result", async () => {
-    const station = hostBackedStation(fakeHostClient({ list: async () => [liveEntry()] }));
+    const station = new FakeManagedTerminalLifecycle({
+      reattach: { endpointId: "endpoint-1", socketPath: "/tmp/managed-test.sock" },
+    });
+    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_live" });
     const result = await prepareExternalLaunch(
       deps([row({ agentSessionId: "ses_live" })], station),
       prepareParams,
@@ -516,19 +734,33 @@ describe("prepareExternalLaunch (host-backed)", () => {
       kind: "existing-session",
       sessionId: "ses_live",
       harnessProvider: "fake-harness",
-      reattachHandle: { ptyId: "pty-1" },
+      reattachHandle: {
+        ptyId: "endpoint-1",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
     });
   });
 
-  it("omits the reattachHandle when the host is unavailable (UI spawns locally)", async () => {
-    // launchProcess can't reach the host → started:false → no handle → Path A.
-    const station = hostBackedStation(
-      fakeHostClient({
-        health: async () => {
-          throw new Error("host down");
-        },
-      }),
-    );
+  it("does not attach a replacement target from a different session", async () => {
+    const station = new FakeManagedTerminalLifecycle({
+      reattach: { endpointId: "endpoint-new", socketPath: "/tmp/managed-test.sock" },
+    });
+    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_replacement" });
+
+    await expect(
+      prepareExternalLaunch(deps([row({ agentSessionId: "ses_live" })], station), prepareParams),
+    ).resolves.toEqual({
+      outcome: {
+        kind: "existing-session",
+        sessionId: "ses_live",
+        harnessProvider: "fake-harness",
+      },
+      reconcile: false,
+    });
+  });
+
+  it("omits the reattachHandle when the managed adapter does not start the process", async () => {
+    const station = new FakeManagedTerminalLifecycle();
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
     expect(result.outcome.reattachHandle).toBeUndefined();

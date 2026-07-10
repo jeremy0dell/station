@@ -80,7 +80,7 @@ describe("StationTerminalProvider", () => {
       },
     });
     expect(result.started).toBe(false);
-    await expect(provider.reattachInfo?.("native:web-feature")).resolves.toBeUndefined();
+    await expect(provider.reattachInfo("native:web-feature")).resolves.toBeUndefined();
   });
 
   it("reports healthy", async () => {
@@ -142,15 +142,15 @@ describe("StationTerminalProvider", () => {
     expect(targets[0]?.sessionId).toBe("ses_two");
   });
 
-  it("markExited drops the target so reconcile stops observing it", async () => {
+  it("releaseTarget drops the target so reconcile stops observing it", async () => {
     const provider = new StationTerminalProvider({ clock });
     await provider.openWorkspace(openRequest());
     const targetId = stationTargetId(worktree.id);
 
-    expect(provider.markExited(targetId)).toBe(true);
+    await expect(provider.releaseTarget(targetId)).resolves.toBe(true);
     await expect(provider.listTargets()).resolves.toEqual([]);
     // Idempotent: a second exit report for the same target is a no-op.
-    expect(provider.markExited(targetId)).toBe(false);
+    await expect(provider.releaseTarget(targetId)).resolves.toBe(false);
   });
 
   it("rejects focusTarget with a typed station-hosted error (never a crash)", async () => {
@@ -262,6 +262,28 @@ describe("StationTerminalProvider (host-backed)", () => {
     });
   });
 
+  it("releaseTarget forgets host-backed bookkeeping without closing the process", async () => {
+    const close = vi.fn(async () => ({ closed: true }));
+    const provider = hostBackedProvider(fakeHostClient({ close }));
+    const opened = await provider.openWorkspace(openRequest());
+    await provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: opened.target,
+      agentEndpointId: opened.agentEndpointId,
+      launchPlan,
+    });
+
+    await expect(provider.releaseTarget(opened.target.targetId)).resolves.toBe(true);
+    expect(close).not.toHaveBeenCalled();
+    await expect(provider.listTargets()).resolves.toEqual([]);
+
+    await provider.openWorkspace(openRequest({ sessionId: "ses_ui_fallback" }));
+    await expect(provider.listTargets()).resolves.toMatchObject([
+      { id: opened.target.targetId, sessionId: "ses_ui_fallback" },
+    ]);
+  });
+
   it("never rebuilds an aux PTY into a terminal target (Station-UI-owned)", async () => {
     // A live aux shell + a live agent share host.list; only the agent surfaces.
     const provider = hostBackedProvider(
@@ -344,7 +366,7 @@ describe("StationTerminalProvider (host-backed)", () => {
     const targets = await provider.listTargets();
     expect(targets).toHaveLength(1);
     expect(targets[0]?.sessionId).toBe("ses_first");
-    await expect(provider.reattachInfo?.(stationTargetId(worktree.id))).resolves.toMatchObject({
+    await expect(provider.reattachInfo(stationTargetId(worktree.id))).resolves.toMatchObject({
       endpointId: "pty-first",
     });
   });
@@ -405,7 +427,7 @@ describe("StationTerminalProvider (host-backed)", () => {
 
   it("reattachInfo returns the live host PTY endpoint and socket", async () => {
     const provider = hostBackedProvider(fakeHostClient({ list: async () => [liveEntry()] }));
-    const info = await provider.reattachInfo?.(stationTargetId(worktree.id));
+    const info = await provider.reattachInfo(stationTargetId(worktree.id));
     expect(info).toMatchObject({ endpointId: "pty-1" });
     expect(info?.socketPath).toContain("station-host-");
   });

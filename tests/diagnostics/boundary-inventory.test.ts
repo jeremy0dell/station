@@ -19,6 +19,7 @@ const observerConcreteProviderImports = [
   "@station/opencode",
   "@station/pi",
   "@station/scripted-harness",
+  "@station/terminal",
   "@station/github-repository",
 ];
 
