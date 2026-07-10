@@ -83,7 +83,7 @@ export async function activateCompletedConfigWrite(
   await write(deps, "Activating observer configuration...\n");
   try {
     if (completedWrite.path === undefined) {
-      throw observerActivationError();
+      throw observerActivationError;
     }
     await (deps.activateObserverConfig ?? activateObserverConfig)({
       configPath: completedWrite.path,
@@ -92,7 +92,7 @@ export async function activateCompletedConfigWrite(
     await write(deps, "Observer configuration active.\n");
     return undefined;
   } catch (error) {
-    const safeError = safeErrorFromUnknown(error, observerActivationError());
+    const safeError = safeErrorFromUnknown(error, observerActivationError);
     await write(deps, renderObserverActivationFailure(safeError));
     return safeError;
   }
@@ -111,20 +111,18 @@ async function activateObserverConfig(input: {
       paths,
     });
     if (status.status !== "running") {
-      throw safeErrorFromUnknown(status.error, observerActivationError());
+      throw safeErrorFromUnknown(status.error, observerActivationError);
     }
   } catch (error) {
-    throw safeErrorFromUnknown(error, observerActivationError());
+    throw safeErrorFromUnknown(error, observerActivationError);
   }
 }
 
-function observerActivationError(): RuntimeSafeError {
-  return {
-    tag: "ObserverActivationError",
-    code: "OBSERVER_ACTIVATION_FAILED",
-    message: "Observer configuration could not be activated.",
-  };
-}
+const observerActivationError: RuntimeSafeError = {
+  tag: "ObserverActivationError",
+  code: "OBSERVER_ACTIVATION_FAILED",
+  message: "Observer configuration could not be activated.",
+};
 
 function renderObserverActivationFailure(error: RuntimeSafeError): string {
   const lines = [
