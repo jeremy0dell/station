@@ -196,19 +196,21 @@ describe("Bun PTY helper validation", () => {
 if (RUN_REAL_BUN_PTY) {
   describe("BunTerminalProcess real PTY", () => {
     it("passes interactive input to the child and output to the subscriber", async () => {
-      const terminal = trackTerminal(
-        createLocalPtyTerminal({
-          command: "/bin/sh",
-          args: ["-c", 'read line; printf "got:%s" "$line"'],
-        }),
-      );
-      const observed = observe(terminal);
+      for (let attempt = 0; attempt < 32; attempt += 1) {
+        const terminal = trackTerminal(
+          createLocalPtyTerminal({
+            command: "/bin/sh",
+            args: ["-c", 'read line; printf "got:%s" "$line"'],
+          }),
+        );
+        const observed = observe(terminal);
 
-      terminal.write("hello\n");
-      await waitFor(() => observed.exit() !== undefined, 5_000);
+        terminal.write("hello\n");
+        await waitFor(() => observed.exit() !== undefined, 5_000);
 
-      expect(observed.output()).toContain("got:hello");
-      expect(observed.exit()).toEqual({ exitCode: 0 });
+        expect(observed.output()).toContain("got:hello");
+        expect(observed.exit()).toEqual({ exitCode: 0 });
+      }
     });
 
     it("delivers a fast large final burst and exact nonzero exit code", async () => {

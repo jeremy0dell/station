@@ -126,6 +126,14 @@ export class BunTerminalProcess implements StationTerminalProcess {
         emitPayloadExitAfterDrain();
       },
     });
+    const closeTerminalAfterQueuedReads = () => {
+      // Bun/Linux needs a timers turn to deliver queued PTY reads before close discards them.
+      setTimeout(() => {
+        if (!terminal.closed) {
+          terminal.close();
+        }
+      }, 0);
+    };
 
     let child: BunSubprocess;
     try {
@@ -149,12 +157,7 @@ export class BunTerminalProcess implements StationTerminalProcess {
           event.signal = signal;
         }
         payloadExit = event;
-        // Bun may settle the payload before the reusable PTY drains its final bytes.
-        setImmediate(() => {
-          if (!terminal.closed) {
-            terminal.close();
-          }
-        });
+        closeTerminalAfterQueuedReads();
         emitPayloadExitAfterDrain();
       },
       (error) => {
@@ -162,9 +165,7 @@ export class BunTerminalProcess implements StationTerminalProcess {
           error instanceof Error ? error.message : "Bun failed while waiting for the terminal payload.",
         );
         payloadExit = { exitCode: 1 };
-        if (!terminal.closed) {
-          terminal.close();
-        }
+        closeTerminalAfterQueuedReads();
         emitPayloadExitAfterDrain();
       },
     );
