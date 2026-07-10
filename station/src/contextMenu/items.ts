@@ -3,6 +3,7 @@ import type { Automation } from "../config/stationConfig.js";
 import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../state/types.js";
 import {
   selectDashboardViewport,
+  isExternalAgentRemovalUnavailable,
   sessionForWorktreeRow,
   type TuiState,
 } from "@station/dashboard-core";
@@ -132,7 +133,9 @@ function buildStationItems(
   if (project === undefined || !samePath(row.path, project.root)) {
     items.push({
       id: "station.removeWorktree",
-      label: "Delete Session",
+      label: isExternalAgentRemovalUnavailable(row, state.snapshot)
+        ? "Delete Worktree…"
+        : "Delete Session",
       danger: true,
       action: { kind: "removeWorktree", rowId: row.id },
     });

@@ -16,7 +16,10 @@ import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyReg
 import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../terminal/types.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { waitFor } from "../terminal/testing/waitFor.js";
-import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import {
+  externalAgentSnapshot,
+  manyProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
 import type { AgentPrepareExternalLaunchResult } from "@station/client";
 import type { StationSnapshot, WorktreeRow } from "@station/contracts";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
@@ -932,8 +935,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
 });
 
 describe("createStationInputRuntime STATION context-menu actions", () => {
-  function contextMenuHarness() {
-    const snapshot = manyProjectsSnapshot();
+  function contextMenuHarness(snapshot: StationSnapshot = manyProjectsSnapshot()) {
     const stationViewStore = createTuiStore({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
@@ -1004,6 +1006,24 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       forceRequired: true,
       label: "pty-buffer",
     });
+  });
+
+  it("opens removal information for an external unstoppable agent", () => {
+    const { runtime, stationViewStore, rightClickRow } = contextMenuHarness(
+      externalAgentSnapshot(),
+    );
+
+    rightClickRow();
+    // Menu order: Fork, Delete Worktree… — one down reaches the informational action.
+    runtime.handleSequence("\x1b[B");
+    runtime.handleSequence("\r");
+
+    expect(stationViewStore.getState().screen).toEqual({
+      name: "removeWorktree",
+      step: "unavailable",
+    });
+    stationViewStore.getState().handleKey({ input: "y" });
+    expect(stationViewStore.getState().localRows.pendingRemove).toEqual([]);
   });
 
   it("confirms right-click remove through the optimistic remove-worktree path", () => {

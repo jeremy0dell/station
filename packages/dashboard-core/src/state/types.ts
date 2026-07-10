@@ -72,6 +72,7 @@ export type TuiScreen =
   | { name: "projectCollapse" }
   | { name: "projectSettingsPicker" }
   | { name: "removeWorktree"; step: "chooseSlot" }
+  | { name: "removeWorktree"; step: "unavailable" }
   | {
       name: "removeWorktree";
       step: "confirm";

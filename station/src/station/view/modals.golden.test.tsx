@@ -5,11 +5,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { TextRenderable, type BaseRenderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import type { StoreApi } from "zustand/vanilla";
-import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
+import {
+  attentionAndFailuresSnapshot,
+  externalAgentSnapshot,
+  manyProjectsSnapshot,
+} from "../fixtures/scenarios.js";
 import type { TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import {
   addPendingProjectDefaultHarness,
+  openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
 } from "@station/dashboard-core";
@@ -27,6 +32,7 @@ type ModalCase = {
   prepare?: (store: StoreApi<TuiStore>) => void;
   trimSnapshotTrailingWhitespace?: true;
   expect: string[];
+  reject?: string[];
 };
 
 const CASES: ModalCase[] = [
@@ -112,6 +118,23 @@ const CASES: ModalCase[] = [
     name: "remove confirm sheet",
     keys: [{ input: "X" }, { input: "1" }],
     expect: ["Delete session?", "Session", "cli-help-man", "Yes (y)", "No (n)"],
+  },
+  {
+    name: "external agent removal information",
+    keys: [],
+    snapshot: externalAgentSnapshot,
+    trimSnapshotTrailingWhitespace: true,
+    prepare: (store) => {
+      store.setState(openRemoveWorktreeConfirmForRow(store.getState(), "wt_station_idle"));
+    },
+    expect: [
+      "Cannot delete worktree",
+      "This agent was started outside Station.",
+      "Station can see its status, but cannot stop it.",
+      "Stop or remove it from its original terminal or external tooling.",
+      "Esc/Enter:close",
+    ],
+    reject: ["Yes (y)", "No (n)"],
   },
   {
     name: "rename slot prompt",
@@ -249,6 +272,9 @@ describe("modal flow golden frames", () => {
           : capturedFrame;
       for (const expected of modal.expect) {
         expect(frame).toContain(expected);
+      }
+      for (const rejected of modal.reject ?? []) {
+        expect(frame).not.toContain(rejected);
       }
       expect(frame).toMatchSnapshot();
     });

@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
+  createExternalAgentSnapshot,
   createZeroWorktreeSnapshot,
 } from "../../fixtures/snapshots.js";
 
@@ -266,6 +267,74 @@ describe("TUI screen transitions", () => {
       forceRequired: true,
       label: "fix-nav-mobile",
     });
+  });
+
+  it("opens removal information without dispatching for an external unstoppable agent", () => {
+    const snapshot = createExternalAgentSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "5" });
+
+    expect(opened.state.screen).toEqual({
+      name: "removeWorktree",
+      step: "unavailable",
+    });
+    expect(deriveTuiInputMode(opened.state)).toBe("removeUnavailable");
+
+    const attempted = handleTuiKey(opened.state, { input: "y" });
+    expect(attempted.state).toBe(opened.state);
+    expect(attempted.operations).toBeUndefined();
+    expect(attempted.state.localRows.pendingRemove).toEqual([]);
+
+    const closed = handleTuiKey(opened.state, { input: "\r", return: true });
+    expect(closed.state.screen).toEqual({ name: "dashboard" });
+    expect(closed.operations).toBeUndefined();
+
+    const escaped = handleTuiKey(opened.state, { input: "", escape: true });
+    expect(escaped.state.screen).toEqual({ name: "dashboard" });
+    expect(escaped.operations).toBeUndefined();
+  });
+
+  it("keeps removal confirmation when an external agent has an effective stop path", () => {
+    const stoppableSnapshot = createExternalAgentSnapshot();
+    const codexHealth = stoppableSnapshot.providerHealth.codex;
+    if (codexHealth?.capabilities === undefined) {
+      throw new Error("External-agent fixture must expose Codex capabilities.");
+    }
+    const withProviderStop = {
+      ...stoppableSnapshot,
+      providerHealth: {
+        ...stoppableSnapshot.providerHealth,
+        codex: {
+          ...codexHealth,
+          capabilities: { ...codexHealth.capabilities, canStop: true },
+        },
+      },
+    };
+    const withTerminalStop = {
+      ...stoppableSnapshot,
+      rows: stoppableSnapshot.rows.map((row) =>
+        row.id === "wt_web_idle"
+          ? {
+              ...row,
+              terminal: {
+                provider: "tmux",
+                state: "open" as const,
+                closeable: true,
+              },
+            }
+          : row,
+      ),
+    };
+
+    for (const snapshot of [withProviderStop, withTerminalStop]) {
+      const state = createInitialTuiState({ initialSnapshot: snapshot });
+      const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "5" });
+      expect(opened.state.screen).toMatchObject({
+        name: "removeWorktree",
+        step: "confirm",
+        rowId: "wt_web_idle",
+      });
+    }
   });
 
   it("confirms remove worktree with y and returns a remove operation", () => {

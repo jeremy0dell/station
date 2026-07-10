@@ -100,6 +100,40 @@ export function manyProjectsSnapshot(): StationSnapshot {
   );
 }
 
+export function externalAgentSnapshot(): StationSnapshot {
+  const snapshot = manyProjectsSnapshot();
+  const externalRow = snapshot.rows.find((candidate) => candidate.id === "wt_station_idle");
+  if (externalRow?.agent === undefined) {
+    throw new Error("Fixture row wt_station_idle must have an agent.");
+  }
+  const rowWithoutStationOwnership: WorktreeRow = {
+    ...externalRow,
+    agent: { ...externalRow.agent },
+  };
+  delete rowWithoutStationOwnership.terminal;
+  delete rowWithoutStationOwnership.agent?.sessionId;
+
+  return {
+    ...snapshot,
+    providerHealth: {
+      ...snapshot.providerHealth,
+      codex: {
+        providerId: "codex",
+        providerType: "harness",
+        status: "healthy",
+        lastCheckedAt: SCENARIO_NOW,
+        capabilities: { canStop: false },
+      },
+    },
+    rows: snapshot.rows.map((candidate) =>
+      candidate.id === rowWithoutStationOwnership.id ? rowWithoutStationOwnership : candidate,
+    ),
+    sessions: snapshot.sessions.filter(
+      (session) => session.worktreeId !== rowWithoutStationOwnership.id,
+    ),
+  };
+}
+
 /** First-run: no projects configured at all. */
 export function noProjectsSnapshot(): StationSnapshot {
   return snapshotFromRows([], { projects: [] });

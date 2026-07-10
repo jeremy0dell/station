@@ -77,6 +77,40 @@ export function createPromptCapableSnapshot(): StationSnapshot {
   };
 }
 
+export function createExternalAgentSnapshot(): StationSnapshot {
+  const snapshot = createDashboardSnapshot();
+  const externalRow = snapshot.rows.find((candidate) => candidate.id === "wt_web_idle");
+  if (externalRow?.agent === undefined) {
+    throw new Error("Fixture row wt_web_idle must have an agent.");
+  }
+  const rowWithoutStationOwnership: WorktreeRow = {
+    ...externalRow,
+    agent: { ...externalRow.agent },
+  };
+  delete rowWithoutStationOwnership.terminal;
+  delete rowWithoutStationOwnership.agent?.sessionId;
+
+  return {
+    ...snapshot,
+    providerHealth: {
+      ...snapshot.providerHealth,
+      codex: {
+        providerId: "codex",
+        providerType: "harness",
+        status: "healthy",
+        lastCheckedAt: fixtureNow,
+        capabilities: { ...defaultCapabilities, canStop: false },
+      },
+    },
+    rows: snapshot.rows.map((candidate) =>
+      candidate.id === rowWithoutStationOwnership.id ? rowWithoutStationOwnership : candidate,
+    ),
+    sessions: snapshot.sessions.filter(
+      (session) => session.worktreeId !== rowWithoutStationOwnership.id,
+    ),
+  };
+}
+
 export function createZeroWorktreeSnapshot(): StationSnapshot {
   return snapshotFromRows([]);
 }

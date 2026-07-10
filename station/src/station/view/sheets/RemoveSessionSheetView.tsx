@@ -18,7 +18,10 @@ export type RemoveSessionSheetViewProps = {
 };
 
 export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionSheetViewProps) {
-  const sheetWidth = compactSheetWidth(columns);
+  const sheetWidth =
+    screen.step === "unavailable"
+      ? Math.min(Math.max(1, Math.floor(columns)), 68)
+      : compactSheetWidth(columns);
   const contentWidth = bottomSheetContentWidth(sheetWidth);
   if (screen.step === "chooseSlot") {
     return (
@@ -33,6 +36,32 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         <SheetLine width={contentWidth}> </SheetLine>
         <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
         <SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>
+      </BottomSheetFrameView>
+    );
+  }
+
+  if (screen.step === "unavailable") {
+    return (
+      <BottomSheetFrameView
+        columns={columns}
+        rows={rows}
+        width={sheetWidth}
+        title="Cannot delete worktree"
+        contentRows={7}
+        minHeight={9}
+      >
+        <SheetMessageLine width={contentWidth}>
+          This agent was started outside Station.
+        </SheetMessageLine>
+        <SheetMessageLine width={contentWidth}>
+          Station can see its status, but cannot stop it.
+        </SheetMessageLine>
+        <SheetLine width={contentWidth}> </SheetLine>
+        <SheetMessageLine width={contentWidth}>
+          Stop or remove it from its original terminal or external tooling.
+        </SheetMessageLine>
+        <SheetLine width={contentWidth}> </SheetLine>
+        <SheetFooter width={contentWidth}>Esc/Enter:close</SheetFooter>
       </BottomSheetFrameView>
     );
   }
