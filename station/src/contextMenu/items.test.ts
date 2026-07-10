@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { createInitialTuiState } from "@station/dashboard-core";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, type StationState } from "../state/types.js";
-import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import {
+  externalAgentSnapshot,
+  manyProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
 import type { Automation } from "../config/stationConfig.js";
 import { buildContextMenuItems, resolveContextMenuAction } from "./items.js";
 
@@ -190,6 +193,24 @@ describe("buildContextMenuItems", () => {
         action: { kind: "removeWorktree", rowId: "wt_station_none" },
       },
     ]);
+  });
+
+  it("labels external unstoppable-agent removal as a worktree action", () => {
+    const store = createStationStore();
+    const stationState = createInitialTuiState({ initialSnapshot: externalAgentSnapshot() });
+
+    const items = buildContextMenuItems(
+      { kind: "station", target: { kind: "row", rowId: "wt_station_idle" } },
+      store.getState(),
+      stationState,
+    );
+
+    expect(items.at(-1)).toEqual({
+      id: "station.removeWorktree",
+      label: "Delete Worktree…",
+      danger: true,
+      action: { kind: "removeWorktree", rowId: "wt_station_idle" },
+    });
   });
 
   it("hides remove-worktree for project root rows", () => {

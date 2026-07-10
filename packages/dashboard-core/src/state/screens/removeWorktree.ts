@@ -1,4 +1,5 @@
-import { worktreeRowDisplayTitle } from "../../selectors/selectors.js";
+import { isRunningAgentState, type StationSnapshot, type WorktreeRow } from "@station/contracts";
+import { sessionForWorktreeRow, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
@@ -27,7 +28,33 @@ export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransi
     }));
   }
 
+  if (state.screen.step === "unavailable") {
+    if (!isReturnKey(key)) {
+      return { state };
+    }
+    return {
+      state: {
+        ...state,
+        screen: { name: "dashboard" },
+      },
+    };
+  }
+
   return handleConfirmKey(state, key);
+}
+
+export function isExternalAgentRemovalUnavailable(
+  row: WorktreeRow,
+  snapshot: StationSnapshot,
+): boolean {
+  const agent = row.agent;
+  return (
+    agent !== undefined &&
+    isRunningAgentState(agent.state) &&
+    sessionForWorktreeRow(row, snapshot.sessions) === undefined &&
+    snapshot.providerHealth[agent.harness]?.capabilities?.canStop === false &&
+    row.terminal?.closeable !== true
+  );
 }
 
 export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string): TuiState {
@@ -41,6 +68,15 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string):
   const row = snapshot.rows.find((candidate) => candidate.id === rowId);
   if (row === undefined) {
     return state;
+  }
+  if (isExternalAgentRemovalUnavailable(row, snapshot)) {
+    return {
+      ...state,
+      screen: {
+        name: "removeWorktree",
+        step: "unavailable",
+      },
+    };
   }
   const label =
     worktreeRowDisplayTitle(row, snapshot.sessions, state.localRows).trim() || row.branch;

@@ -24,6 +24,7 @@ export type StationInputMode =
   | "projectSettingsPicker"
   | "removeChooseSlot"
   | "removeConfirm"
+  | "removeUnavailable"
   | "renameChooseSlot"
   | "renameEdit"
   | "forkChooseSlot"
@@ -51,7 +52,8 @@ export function deriveStationMode(state: TuiState): StationInputMode {
     case "projectSettingsPicker":
       return "projectSettingsPicker";
     case "removeWorktree":
-      return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
+      if (screen.step === "chooseSlot") return "removeChooseSlot";
+      return screen.step === "unavailable" ? "removeUnavailable" : "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
     case "fork":
@@ -210,6 +212,10 @@ export const STATION_KEYMAP: Record<StationInputMode, readonly StationBinding[]>
     // Ctrl-N/Ctrl-Y control bytes cancel/confirm too (upstream behavior).
     { id: "station.removeConfirm.cancelCtrlN", pattern: { kind: "char", char: "n", ctrl: true }, action: "station.remove.cancel", outcome: "handled" },
     { id: "station.removeConfirm.confirmCtrlY", pattern: { kind: "char", char: "y", ctrl: true }, action: "station.remove.confirm", outcome: "handled" },
+  ],
+  removeUnavailable: [
+    { id: "station.removeUnavailable.closeEsc", pattern: { kind: "named", named: "escape" }, action: "station.remove.close", outcome: "handled", help: { keys: "esc/enter", label: "close" } },
+    { id: "station.removeUnavailable.closeEnter", pattern: { kind: "named", named: "return" }, action: "station.remove.close", outcome: "handled" },
   ],
   // Two-pane Project Settings panel. Like addProject, every key routes to one
   // action and the dashboard-core machine decodes it against the panel's focus

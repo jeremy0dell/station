@@ -11,6 +11,7 @@ export type TuiInputMode =
   | "projectSettingsPicker"
   | "removeChooseSlot"
   | "removeConfirm"
+  | "removeUnavailable"
   | "renameChooseSlot"
   | "renameEdit"
   | "forkChooseSlot"
@@ -38,7 +39,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
     case "projectSettingsPicker":
       return "projectSettingsPicker";
     case "removeWorktree":
-      return screen.step === "chooseSlot" ? "removeChooseSlot" : "removeConfirm";
+      if (screen.step === "chooseSlot") return "removeChooseSlot";
+      return screen.step === "unavailable" ? "removeUnavailable" : "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
     case "fork":
@@ -438,6 +440,21 @@ export const TUI_KEYMAP = {
       id: "tui.removeConfirm.confirmCtrlY",
       pattern: { kind: "char", char: "y", ctrl: true },
       action: "tui.remove.confirm",
+      outcome: "handled",
+    },
+  ],
+  removeUnavailable: [
+    {
+      id: "tui.removeUnavailable.closeEsc",
+      pattern: { kind: "named", named: "escape" },
+      action: "tui.remove.close",
+      outcome: "handled",
+      help: { keys: "esc/enter", label: "close" },
+    },
+    {
+      id: "tui.removeUnavailable.closeEnter",
+      pattern: { kind: "named", named: "return" },
+      action: "tui.remove.close",
       outcome: "handled",
     },
   ],

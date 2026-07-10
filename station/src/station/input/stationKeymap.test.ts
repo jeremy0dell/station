@@ -12,9 +12,14 @@
 //    outcome derived from actually dispatching its key (close-overlay iff
 //    the transition reports dismissPopup/exitCode).
 import { describe, expect, it } from "bun:test";
-import { attentionAndFailuresSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
+import {
+  attentionAndFailuresSnapshot,
+  externalAgentSnapshot,
+  manyProjectsSnapshot,
+} from "../fixtures/scenarios.js";
 import {
   createInitialTuiState,
+  openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
 } from "@station/dashboard-core";
@@ -119,6 +124,10 @@ function drive(state: TuiState, keys: TuiKey[]): TuiState {
  */
 function representativeStates(): Record<StationInputMode, TuiState> {
   const base = dashboardState();
+  const externalBase = createInitialTuiState({
+    initialSnapshot: externalAgentSnapshot(),
+    runtime: { persistentPopup: true, canDismissPopup: true },
+  });
   const renameBase = createInitialTuiState({
     initialSnapshot: attentionAndFailuresSnapshot(),
     runtime: { persistentPopup: true, canDismissPopup: true },
@@ -131,6 +140,7 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     projectSettingsPicker: drive(base, [{ input: "P" }]),
     removeChooseSlot: drive(base, [{ input: "X" }]),
     removeConfirm: drive(base, [{ input: "X" }, { input: "1" }]),
+    removeUnavailable: openRemoveWorktreeConfirmForRow(externalBase, "wt_station_idle"),
     projectSettings: openProjectSettings(base, "station"),
     renameChooseSlot: drive(renameBase, [{ input: "R" }]),
     renameEdit: drive(renameBase, [{ input: "R" }, { input: "1" }]),
