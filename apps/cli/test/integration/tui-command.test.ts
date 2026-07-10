@@ -27,11 +27,11 @@ const tuiConfig: TuiConfig = {
 
 function emptySnapshot(reason: string) {
   return {
-    schemaVersion: "0.6.0",
+    schemaVersion: "0.7.0",
     reason,
     reconciledAt: now,
     snapshot: {
-      schemaVersion: "0.6.0",
+      schemaVersion: "0.7.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
       providerHealth: {},
@@ -71,7 +71,7 @@ function runningObserverDeps(
         health: async () => {
           if (!running) throw new Error("stopped");
           return {
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -211,7 +211,7 @@ describe("CLI tui command", () => {
                   if (!spawned) throw new Error("stopped");
                   await healthReady;
                   return {
-                    schemaVersion: "0.6.0",
+                    schemaVersion: "0.7.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -276,7 +276,7 @@ describe("CLI tui command", () => {
               clientFactory: () =>
                 ({
                   health: async () => ({
-                    schemaVersion: "0.6.0",
+                    schemaVersion: "0.7.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,

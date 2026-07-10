@@ -24,7 +24,11 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
-import { HarnessLaunchPlanSchema, ProviderHealthSchema } from "./providers.js";
+import {
+  HarnessLaunchPlanSchema,
+  ManagedTerminalAttachmentSchema,
+  ProviderHealthSchema,
+} from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
@@ -134,22 +138,6 @@ export type AgentPrepareExternalLaunchParams = z.infer<
   typeof AgentPrepareExternalLaunchParamsSchema
 >;
 
-/**
- * Where a reattaching Station client picks up a persistent host-owned agent: the
- * live host PTY id, its STATION target id, and the host socket to attach to. Present
- * only behind `stationPersistentAgents` when a live host PTY exists — absent ⇒
- * the UI spawns the PTY locally from `launchPlan`.
- */
-export const AgentReattachHandleSchema = z
-  .object({
-    ptyId: z.string().min(1),
-    terminalTargetId: TerminalTargetIdSchema,
-    hostSocketPath: z.string().min(1),
-  })
-  .strict();
-
-export type AgentReattachHandle = z.infer<typeof AgentReattachHandleSchema>;
-
 export const AgentPrepareExternalLaunchResultSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -157,7 +145,7 @@ export const AgentPrepareExternalLaunchResultSchema = z.discriminatedUnion("kind
       sessionId: SessionIdSchema,
       terminalTargetId: TerminalTargetIdSchema,
       launchPlan: HarnessLaunchPlanSchema,
-      reattachHandle: AgentReattachHandleSchema.optional(),
+      attachment: ManagedTerminalAttachmentSchema.optional(),
     })
     .strict(),
   z
@@ -165,7 +153,7 @@ export const AgentPrepareExternalLaunchResultSchema = z.discriminatedUnion("kind
       kind: z.literal("existing-session"),
       sessionId: SessionIdSchema,
       harnessProvider: ProviderIdSchema,
-      reattachHandle: AgentReattachHandleSchema.optional(),
+      attachment: ManagedTerminalAttachmentSchema.optional(),
     })
     .strict(),
 ]);

@@ -179,16 +179,6 @@ export const CloseSessionPayloadSchema = z
 
 export type CloseSessionPayload = z.infer<typeof CloseSessionPayloadSchema>;
 
-export const SendPromptPayloadSchema = z
-  .object({
-    sessionId: SessionIdSchema,
-    prompt: nonEmptyStringSchema,
-    delivery: z.enum(["harness-native", "paste-and-focus"]).optional(),
-  })
-  .strict();
-
-export type SendPromptPayload = z.infer<typeof SendPromptPayloadSchema>;
-
 export const RenameSessionPayloadSchema = z
   .object({
     sessionId: SessionIdSchema,
@@ -243,14 +233,6 @@ export const SetProjectDefaultHarnessPayloadSchema = z
 
 export type SetProjectDefaultHarnessPayload = z.infer<typeof SetProjectDefaultHarnessPayloadSchema>;
 
-export const InstallHooksPayloadSchema = z
-  .object({
-    provider: ProviderIdSchema,
-  })
-  .strict();
-
-export type InstallHooksPayload = z.infer<typeof InstallHooksPayloadSchema>;
-
 export const StationCommandTypeSchema = z.enum([
   "worktree.create",
   "worktree.fork",
@@ -262,14 +244,12 @@ export const StationCommandTypeSchema = z.enum([
   "terminal.focus",
   "terminal.close",
   "session.close",
-  "session.sendPrompt",
   "session.rename",
   "session.acknowledgeTurn",
   "observer.reconcile",
   "project.add",
   "project.remove",
   "project.setDefaultHarness",
-  "hooks.install",
 ]);
 
 export const CreateWorktreeCommandSchema = z
@@ -312,10 +292,6 @@ export const CloseSessionCommandSchema = z
   .object({ type: z.literal("session.close"), payload: CloseSessionPayloadSchema })
   .strict();
 
-export const SendPromptCommandSchema = z
-  .object({ type: z.literal("session.sendPrompt"), payload: SendPromptPayloadSchema })
-  .strict();
-
 export const RenameSessionCommandSchema = z
   .object({ type: z.literal("session.rename"), payload: RenameSessionPayloadSchema })
   .strict();
@@ -343,10 +319,6 @@ export const SetProjectDefaultHarnessCommandSchema = z
   })
   .strict();
 
-export const InstallHooksCommandSchema = z
-  .object({ type: z.literal("hooks.install"), payload: InstallHooksPayloadSchema })
-  .strict();
-
 export const StationCommandSchema = z.discriminatedUnion("type", [
   CreateWorktreeCommandSchema,
   ForkWorktreeCommandSchema,
@@ -358,14 +330,12 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   TerminalFocusCommandSchema,
   TerminalCloseCommandSchema,
   CloseSessionCommandSchema,
-  SendPromptCommandSchema,
   RenameSessionCommandSchema,
   AcknowledgeTurnCommandSchema,
   ObserverReconcileCommandSchema,
   AddProjectCommandSchema,
   RemoveProjectCommandSchema,
   SetProjectDefaultHarnessCommandSchema,
-  InstallHooksCommandSchema,
 ]);
 
 export type StationCommand = z.infer<typeof StationCommandSchema>;

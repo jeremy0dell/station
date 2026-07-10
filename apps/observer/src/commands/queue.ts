@@ -344,7 +344,6 @@ function commandScope(command: StationCommand): string {
     case "terminal.close":
       return terminalCommandScope(command.payload);
     case "session.close":
-    case "session.sendPrompt":
     case "session.rename":
     case "session.acknowledgeTurn":
       return `session:${command.payload.sessionId}`;
@@ -361,7 +360,6 @@ function commandScope(command: StationCommand): string {
     case "project.add":
     case "project.remove":
     case "project.setDefaultHarness":
-    case "hooks.install":
       return "global";
   }
   const _exhaustive: never = command;

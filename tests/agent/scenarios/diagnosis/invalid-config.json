@@ -2,7 +2,7 @@
   "name": "invalid-config",
   "expectedRootCause": "INVALID_CONFIG",
   "evidenceIndex": {
-    "schemaVersion": "0.6.0",
+    "schemaVersion": "0.7.0",
     "generatedAt": "2026-05-22T12:00:00.000Z",
     "summary": {
       "status": "unavailable",

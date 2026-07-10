@@ -17,7 +17,6 @@ import {
   LogRecordSchema,
   SafeErrorSchema,
   SpanIdSchema,
-  StationCommandTypeSchema,
   TraceIdSchema,
 } from "@station/contracts";
 import { z } from "zod";
@@ -93,7 +92,7 @@ const DebugTraceLogAttributesSchema = z
     commandId: CommandIdSchema.optional(),
     traceId: TraceIdSchema.optional(),
     spanId: SpanIdSchema.optional(),
-    commandType: StationCommandTypeSchema.optional(),
+    commandType: z.string().min(1).optional(),
     error: z.unknown().optional(),
   })
   .passthrough();

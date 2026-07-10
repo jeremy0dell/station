@@ -21,7 +21,7 @@ describe("CLI observer commands", () => {
               throw new Error("stopped");
             }
             return {
-              schemaVersion: "0.6.0",
+              schemaVersion: "0.7.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -30,7 +30,7 @@ describe("CLI observer commands", () => {
           },
           stop: async () => {
             running = false;
-            return { schemaVersion: "0.6.0", stopped: true, at: now };
+            return { schemaVersion: "0.7.0", stopped: true, at: now };
           },
         }) as never,
       sleep: async () => undefined,
@@ -66,7 +66,7 @@ describe("CLI observer commands", () => {
               throw new Error("stopped");
             }
             return {
-              schemaVersion: "0.6.0",
+              schemaVersion: "0.7.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -75,7 +75,7 @@ describe("CLI observer commands", () => {
           },
           stop: async () => {
             running = false;
-            return { schemaVersion: "0.6.0", stopped: true, at: now };
+            return { schemaVersion: "0.7.0", stopped: true, at: now };
           },
         }) as never,
       sleep: async () => undefined,

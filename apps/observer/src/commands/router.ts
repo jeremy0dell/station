@@ -1,4 +1,4 @@
-import type { ProviderProjectConfig } from "@station/contracts";
+import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import { createFeatureFlagEvaluator, type FeatureFlagEvaluator } from "../features/evaluator.js";
@@ -11,7 +11,7 @@ import {
   createProjectRemoveHandler,
   createProjectSetDefaultHarnessHandler,
 } from "./project.js";
-import type { CommandQueue } from "./queue.js";
+import type { CommandHandler, CommandQueue } from "./queue.js";
 import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
 import { createSessionCloseHandler } from "./session/close.js";
@@ -70,38 +70,35 @@ export function registerObserverCommandHandlers(
       logger: options.logger,
       commandTimeoutMs: options.commandTimeoutMs,
     });
-  options.queue.registerHandler(
-    "observer.reconcile",
-    createObserverReconcileHandler({
+  const handlers = {
+    "worktree.create": createWorktreeCreateHandler({
+      getProjects,
+      providers: options.providers,
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
-    }),
-  );
-  options.queue.registerHandler(
-    "terminal.focus",
-    createTerminalFocusHandler({
-      core: options.core,
-      providers: options.providers,
-      terminalIntentRunner,
       commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
     }),
-  );
-  options.queue.registerHandler(
-    "terminal.close",
-    createTerminalCloseHandler({
+    "worktree.fork": createWorktreeForkHandler({
+      getProjects,
       core: options.core,
       providers: options.providers,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
+    }),
+    "worktree.remove": createWorktreeRemoveHandler({
+      providers: options.providers,
       terminalIntentRunner,
+      core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "session.create",
-    createSessionCreateHandler({
+    "session.create": createSessionCreateHandler({
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
@@ -113,10 +110,7 @@ export function registerObserverCommandHandlers(
       logger: options.logger,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "session.startAgent",
-    createSessionStartAgentHandler({
+    "session.startAgent": createSessionStartAgentHandler({
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
@@ -128,10 +122,7 @@ export function registerObserverCommandHandlers(
       logger: options.logger,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "session.resumeAgent",
-    createSessionResumeAgentHandler({
+    "session.resumeAgent": createSessionResumeAgentHandler({
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
@@ -143,10 +134,7 @@ export function registerObserverCommandHandlers(
       idFactory: options.idFactory,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "session.fork",
-    createSessionForkHandler({
+    "session.fork": createSessionForkHandler({
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
@@ -158,10 +146,13 @@ export function registerObserverCommandHandlers(
       logger: options.logger,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "session.close",
-    createSessionCloseHandler({
+    "terminal.focus": createTerminalFocusHandler({
+      core: options.core,
+      providers: options.providers,
+      terminalIntentRunner,
+      commandTimeoutMs: options.commandTimeoutMs,
+    }),
+    "terminal.close": createTerminalCloseHandler({
       providers: options.providers,
       terminalIntentRunner,
       core: options.core,
@@ -170,51 +161,7 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "session.rename",
-    createSessionRenameHandler({
-      core: options.core,
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      clock: options.clock,
-    }),
-  );
-  options.queue.registerHandler(
-    "session.acknowledgeTurn",
-    createSessionAcknowledgeTurnHandler({
-      core: options.core,
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-    }),
-  );
-  options.queue.registerHandler(
-    "worktree.create",
-    createWorktreeCreateHandler({
-      getProjects,
-      providers: options.providers,
-      core: options.core,
-      eventBus: options.eventBus,
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-      logger: options.logger,
-    }),
-  );
-  options.queue.registerHandler(
-    "worktree.fork",
-    createWorktreeForkHandler({
-      getProjects,
-      providers: options.providers,
-      core: options.core,
-      eventBus: options.eventBus,
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-      logger: options.logger,
-    }),
-  );
-  options.queue.registerHandler(
-    "worktree.remove",
-    createWorktreeRemoveHandler({
+    "session.close": createSessionCloseHandler({
       providers: options.providers,
       terminalIntentRunner,
       core: options.core,
@@ -223,56 +170,51 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
     }),
-  );
-  options.queue.registerHandler(
-    "project.add",
-    createProjectAddHandler({
+    "session.rename": createSessionRenameHandler({
+      core: options.core,
+      persistence: options.persistence,
+      eventBus: options.eventBus,
+      clock: options.clock,
+    }),
+    "session.acknowledgeTurn": createSessionAcknowledgeTurnHandler({
+      core: options.core,
+      persistence: options.persistence,
+      eventBus: options.eventBus,
+    }),
+    "observer.reconcile": createObserverReconcileHandler({
+      core: options.core,
+      eventBus: options.eventBus,
+      clock: options.clock,
+    }),
+    "project.add": createProjectAddHandler({
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
-  );
-  options.queue.registerHandler(
-    "project.remove",
-    createProjectRemoveHandler({
+    "project.remove": createProjectRemoveHandler({
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
-  );
-  options.queue.registerHandler(
-    "project.setDefaultHarness",
-    createProjectSetDefaultHarnessHandler({
+    "project.setDefaultHarness": createProjectSetDefaultHarnessHandler({
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
-  );
+  } satisfies Record<StationCommand["type"], CommandHandler>;
+
+  const commandTypes = Object.keys(handlers) as StationCommand["type"][];
+  for (const commandType of commandTypes) {
+    options.queue.registerHandler(commandType, handlers[commandType]);
+  }
 
   void options.logger?.info("Observer command handlers registered.", {
-    commandTypes: [
-      "observer.reconcile",
-      "terminal.focus",
-      "terminal.close",
-      "session.create",
-      "session.startAgent",
-      "session.resumeAgent",
-      "session.fork",
-      "session.close",
-      "session.rename",
-      "session.acknowledgeTurn",
-      "worktree.create",
-      "worktree.fork",
-      "worktree.remove",
-      "project.add",
-      "project.remove",
-      "project.setDefaultHarness",
-    ],
+    commandTypes,
   });
 }

@@ -12,6 +12,7 @@ import type { StationInputRuntime } from "../input/stationInput.js";
 import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import type { StationStore } from "../state/store.js";
 import type { StationClient } from "../sources/types.js";
+import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type {
   StationTerminalProcess,
@@ -65,6 +66,8 @@ export type CreateStationOptions = {
    * otherwise. Absent in tests/mock mode ⇒ aux shells are always local.
    */
   hostSocketPath?: string;
+  /** Test seam for resolving observer-advertised managed-terminal attachments. */
+  managedTerminalAttacher?: ManagedTerminalAttacher;
   /**
    * Persist the aux-pane layout to disk so a cold restart restores it. Absent in
    * tests/mock mode. `write` is a test seam; main supplies the state-dir path and

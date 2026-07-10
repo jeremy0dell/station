@@ -27,7 +27,7 @@ describe("protocol message envelopes", () => {
   it("rejects unknown protocol methods", () => {
     expect(
       ProtocolRequestSchema.safeParse({
-        schemaVersion: "0.6.0",
+        schemaVersion: "0.7.0",
         jsonrpc: "2.0",
         id: "req_bad",
         method: "provider.rawCall",

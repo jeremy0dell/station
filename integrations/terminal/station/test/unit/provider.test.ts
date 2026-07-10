@@ -84,7 +84,7 @@ describe("StationTerminalProvider", () => {
       },
     });
     expect(result.started).toBe(false);
-    await expect(provider.reattachInfo("native:web-feature")).resolves.toBeUndefined();
+    await expect(provider.attachmentForTarget("native:web-feature")).resolves.toBeUndefined();
   });
 
   it("reports healthy", async () => {
@@ -256,7 +256,15 @@ describe("StationTerminalProvider (host-backed)", () => {
       agentEndpointId: opened.agentEndpointId,
       launchPlan,
     });
-    expect(result.started).toBe(true);
+    expect(result).toEqual({
+      terminalTargetId: stationTargetId(worktree.id),
+      agentEndpointId: stationTargetId(worktree.id),
+      started: true,
+      attachment: {
+        kind: "managed-terminal",
+        terminalTargetId: stationTargetId(worktree.id),
+      },
+    });
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn.mock.calls[0]?.[0]).toMatchObject({
       terminalTargetId: stationTargetId(worktree.id),
@@ -396,8 +404,9 @@ describe("StationTerminalProvider (host-backed)", () => {
     const targets = await provider.listTargets();
     expect(targets).toHaveLength(1);
     expect(targets[0]?.sessionId).toBe("ses_first");
-    await expect(provider.reattachInfo(stationTargetId(worktree.id))).resolves.toMatchObject({
-      endpointId: "pty-first",
+    await expect(provider.attachmentForTarget(stationTargetId(worktree.id))).resolves.toEqual({
+      kind: "managed-terminal",
+      terminalTargetId: stationTargetId(worktree.id),
     });
   });
 
@@ -455,11 +464,33 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toHaveLength(1);
   });
 
-  it("reattachInfo returns the live host PTY endpoint and socket", async () => {
+  it("attachmentForTarget returns only opaque target identity for a live host entry", async () => {
     const provider = hostBackedProvider(fakeHostClient({ list: async () => [liveEntry()] }));
-    const info = await provider.reattachInfo(stationTargetId(worktree.id));
-    expect(info).toMatchObject({ endpointId: "pty-1" });
-    expect(info?.socketPath).toContain("station-host-");
+    await expect(provider.attachmentForTarget(stationTargetId(worktree.id))).resolves.toEqual({
+      kind: "managed-terminal",
+      terminalTargetId: stationTargetId(worktree.id),
+    });
+  });
+
+  it("attachmentForTarget ignores an alive aux entry with the target id", async () => {
+    const provider = hostBackedProvider(
+      fakeHostClient({ list: async () => [liveEntry({ kind: "aux" })] }),
+    );
+    await expect(
+      provider.attachmentForTarget(stationTargetId(worktree.id)),
+    ).resolves.toBeUndefined();
+  });
+
+  it("attachmentForTarget omits missing and dead host targets", async () => {
+    const provider = hostBackedProvider(
+      fakeHostClient({ list: async () => [liveEntry({ alive: false })] }),
+    );
+    await expect(
+      provider.attachmentForTarget(stationTargetId(worktree.id)),
+    ).resolves.toBeUndefined();
+    await expect(
+      provider.attachmentForTarget(stationTargetId("wt_missing")),
+    ).resolves.toBeUndefined();
   });
 
   it("focus/close resolve the host PTY id and drive the host", async () => {

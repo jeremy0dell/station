@@ -11,6 +11,16 @@
       }
     }
   },
+  "worktreeFork": {
+    "type": "worktree.fork",
+    "payload": {
+      "projectId": "web",
+      "sourceWorktreeId": "wt_web_main",
+      "branch": "feature/auth-fork",
+      "base": "main",
+      "copyDirty": true
+    }
+  },
   "worktreeRemove": {
     "type": "worktree.remove",
     "payload": {
@@ -118,14 +128,6 @@
       "force": true
     }
   },
-  "sessionSendPrompt": {
-    "type": "session.sendPrompt",
-    "payload": {
-      "sessionId": "ses_api_cache",
-      "prompt": "Summarize current status.",
-      "delivery": "harness-native"
-    }
-  },
   "sessionRename": {
     "type": "session.rename",
     "payload": {
@@ -166,12 +168,6 @@
     "payload": {
       "projectId": "web",
       "harness": "codex"
-    }
-  },
-  "hooksInstall": {
-    "type": "hooks.install",
-    "payload": {
-      "provider": "worktrunk"
     }
   }
 }

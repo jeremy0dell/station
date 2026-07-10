@@ -23,6 +23,7 @@ import type { StationStore } from "../state/store.js";
 import type { PaneId } from "../state/types.js";
 import type { StationClient } from "../sources/types.js";
 import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
+import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { createStationViewStore } from "../station/store/stationViewStore.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
@@ -344,6 +345,11 @@ function createInputRuntime(
     options.hostSocketPath === undefined
       ? undefined
       : resolveAuxShellPlacement(options.hostSocketPath);
+  const managedTerminalAttacher =
+    options.managedTerminalAttacher ??
+    (options.hostSocketPath === undefined
+      ? undefined
+      : createStationHostManagedTerminalAttacher(options.hostSocketPath));
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
@@ -358,6 +364,9 @@ function createInputRuntime(
   }
   if (auxShellPlacement !== undefined) {
     inputOptions.resolveAuxShellPlacement = auxShellPlacement;
+  }
+  if (managedTerminalAttacher !== undefined) {
+    inputOptions.managedTerminalAttacher = managedTerminalAttacher;
   }
   return createStationInputRuntime(inputOptions);
 }

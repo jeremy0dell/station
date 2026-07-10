@@ -108,7 +108,7 @@ describe("observe snapshot context", () => {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.6.0",
+    schemaVersion: "0.7.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {},

@@ -76,6 +76,10 @@ describe("observer client service", () => {
               env: { STATION_SESSION_ID: "ses_external_1" },
               mode: "interactive",
             },
+            attachment: {
+              kind: "managed-terminal",
+              terminalTargetId: `native:${params.worktreeId}`,
+            },
           };
         },
         reportExternalExit: async (params) => {
@@ -93,6 +97,10 @@ describe("observer client service", () => {
       sessionId: "ses_external_1",
       terminalTargetId: "native:wt_web_feature",
       launchPlan: { provider: "claude", env: { STATION_SESSION_ID: "ses_external_1" } },
+      attachment: {
+        kind: "managed-terminal",
+        terminalTargetId: "native:wt_web_feature",
+      },
     });
     await expect(
       service.reportExternalExit({ terminalTargetId: "native:wt_web_feature" }),

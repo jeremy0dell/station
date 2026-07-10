@@ -18,7 +18,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -34,7 +34,7 @@ describe("CLI diagnostic commands", () => {
     ).resolves.toMatchObject({
       code: 0,
       output: {
-        schemaVersion: "0.6.0",
+        schemaVersion: "0.7.0",
         status: "healthy",
         debugBundle: {
           available: true,
@@ -129,7 +129,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -163,7 +163,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -199,7 +199,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -261,7 +261,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -301,7 +301,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.6.0",
+            schemaVersion: "0.7.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -355,7 +355,7 @@ describe("CLI diagnostic commands", () => {
     });
   });
 
-  it("resolves latest debug trace failure from live logs without observer RPC", async () => {
+  it("resolves historical command types from live logs without observer RPC", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
@@ -369,7 +369,7 @@ describe("CLI diagnostic commands", () => {
           message: "Command failed.",
           attributes: {
             commandId: "cmd_old",
-            commandType: "session.create",
+            commandType: "hooks.install",
             traceId: "trc_old",
             error: { tag: "WorktreeProviderError", code: "OLD", message: "Old failure." },
           },
@@ -381,7 +381,7 @@ describe("CLI diagnostic commands", () => {
           message: "Command failed.",
           attributes: {
             commandId: "cmd_new",
-            commandType: "session.create",
+            commandType: "session.sendPrompt",
             traceId: "trc_new",
             error: {
               tag: "WorktreeProviderError",
@@ -408,6 +408,7 @@ describe("CLI diagnostic commands", () => {
         source: "log",
         command: {
           id: "cmd_new",
+          type: "session.sendPrompt",
           traceId: "trc_new",
         },
         error: {
@@ -650,12 +651,12 @@ describe("CLI diagnostic commands", () => {
 
 function doctorReport(stateDir: string): DoctorReport {
   return {
-    schemaVersion: "0.6.0",
+    schemaVersion: "0.7.0",
     generatedAt: now,
     status: "healthy",
     checks: [{ name: "observer", status: "ok", message: "Observer is healthy." }],
     observer: {
-      schemaVersion: "0.6.0",
+      schemaVersion: "0.7.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
@@ -683,17 +684,17 @@ function doctorReport(stateDir: string): DoctorReport {
 
 function diagnosticSnapshot(): DiagnosticSnapshot {
   return {
-    schemaVersion: "0.6.0",
+    schemaVersion: "0.7.0",
     collectedAt: now,
     observerHealth: {
-      schemaVersion: "0.6.0",
+      schemaVersion: "0.7.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
       version: "0.0.0",
     },
     snapshot: {
-      schemaVersion: "0.6.0",
+      schemaVersion: "0.7.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
       providerHealth: {},

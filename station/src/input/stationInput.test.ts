@@ -14,6 +14,10 @@ import {
 import type { Automation } from "../config/stationConfig.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../terminal/types.js";
+import type {
+  ManagedTerminalAttacher,
+  ManagedTerminalFactory,
+} from "../terminal/pty/managedTerminalAttacher.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { waitFor } from "../terminal/testing/waitFor.js";
 import {
@@ -1134,6 +1138,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   function agentHarness(
     prepared: AgentPrepareExternalLaunchResult = preparedPlan(),
     snapshot: StationSnapshot = manyProjectsSnapshot(),
+    managedTerminalAttacher?: ManagedTerminalAttacher,
   ) {
     const observerService = new FakeTuiObserverService(snapshot);
     observerService.nextPreparedLaunch = prepared;
@@ -1149,16 +1154,20 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     const base = createPtyRegistry({ createTerminal: () => scripted.terminal });
     const calls: string[] = [];
     const ensured: StationTerminalSpawnOptions[] = [];
+    const terminalFactories: ManagedTerminalFactory[] = [];
     const registry: PtyRegistry = {
       ...base,
-      ensure: (paneId, spawnOptions) => {
+      ensure: (paneId, spawnOptions, createTerminalOverride) => {
         if (spawnOptions !== undefined) {
           ensured.push(spawnOptions);
+        }
+        if (createTerminalOverride !== undefined) {
+          terminalFactories.push(createTerminalOverride);
         }
         calls.push(
           `ensure:${paneId}:${spawnOptions?.cwd ?? ""}:${spawnOptions?.command ?? ""}:${(spawnOptions?.args ?? []).join(",")}`,
         );
-        return base.ensure(paneId, spawnOptions);
+        return base.ensure(paneId, spawnOptions, createTerminalOverride);
       },
     };
     const store = createStationStore();
@@ -1178,6 +1187,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       stationViewStore,
       registry,
       observerService,
+      ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
     });
     const dispatch = (
       target: { kind: "row"; rowId: string } | { kind: "openShellForRow"; rowId: string },
@@ -1185,7 +1195,17 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
     // The launch is fire-and-forget; flush its microtask chain.
     const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-    return { store, calls, ensured, dispatch, pressKey, settle, observerService, stationViewStore };
+    return {
+      store,
+      calls,
+      ensured,
+      terminalFactories,
+      dispatch,
+      pressKey,
+      settle,
+      observerService,
+      stationViewStore,
+    };
   }
 
   // A snapshot whose ROW_ID is Station-hosted (terminal.provider "native")
@@ -1468,71 +1488,123 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
-  it("attaches to a host-attached agent: seeds cwd only and records the handle's target", async () => {
-    // A persistent host PTY already backs this worktree, so prepare returns a
-    // reattach handle. Station attaches (no local launch command/args) and the
-    // primary-agent identity is the HANDLE's terminalTargetId, not the row's.
-    const handle = {
-      ptyId: "pty_host_1",
+  it("resolves a prepared attachment before seeding the managed pane", async () => {
+    const attachment = {
+      kind: "managed-terminal",
       terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
-      hostSocketPath: "/tmp/station-station-host.sock",
-    };
+    } as const;
     const base = preparedPlan();
     if (base.kind !== "prepared") {
       throw new Error("preparedPlan must be a prepared launch");
     }
-    const { store, calls, ensured, dispatch, settle } = agentHarness({
-      ...base,
-      reattachHandle: handle,
-    });
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    // Attach, not spawn: cwd seeded but no launch command/args.
-    expect(calls).toEqual([
-      `ensure:${AGENT_PANE_ID}:${CWD}::`,
-      `createPane:${AGENT_PANE_ID}:primary-agent`,
-      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${handle.terminalTargetId}`,
-    ]);
-    expect(ensured[0]).toEqual({ cwd: CWD });
-    expect(
-      store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.agentIdentity,
-    ).toEqual({
-      sessionId: "ses_managed",
-      terminalTargetId: handle.terminalTargetId,
-      harnessProvider: "codex",
-    });
-  });
-
-  it("records the provider when reattaching to an existing host-attached agent", async () => {
-    const handle = {
-      ptyId: "pty_host_1",
-      terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
-      hostSocketPath: "/tmp/station-station-host.sock",
-    };
-    const { store, dispatch, settle } = agentHarness(
-      {
-        kind: "existing-session",
-        sessionId: "ses_live",
-        harnessProvider: "codex",
-        reattachHandle: handle,
+    const resolutions: unknown[] = [];
+    const scripted = createScriptedTerminal();
+    const factory: ManagedTerminalFactory = () => scripted.terminal;
+    const managedTerminalAttacher: ManagedTerminalAttacher = {
+      resolve: async (candidate) => {
+        resolutions.push(candidate);
+        return factory;
       },
-      stationHostedSnapshot({ focusable: true }),
+    };
+    const { store, calls, ensured, terminalFactories, dispatch, settle } = agentHarness(
+      { ...base, attachment },
+      manyProjectsSnapshot(),
+      managedTerminalAttacher,
     );
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
     dispatch({ kind: "row", rowId: ROW_ID });
     await settle();
 
+    expect(resolutions).toEqual([attachment]);
+    expect(calls).toEqual([
+      `ensure:${AGENT_PANE_ID}:${CWD}::`,
+      `createPane:${AGENT_PANE_ID}:primary-agent`,
+      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${attachment.terminalTargetId}`,
+    ]);
+    expect(ensured[0]).toEqual({ cwd: CWD });
+    expect(terminalFactories).toEqual([factory]);
+    expect(
+      store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.agentIdentity,
+    ).toEqual({
+      sessionId: "ses_managed",
+      terminalTargetId: attachment.terminalTargetId,
+      harnessProvider: "codex",
+    });
+  });
+
+  it("uses the resolver and records the provider for an existing attached agent", async () => {
+    const attachment = {
+      kind: "managed-terminal",
+      terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
+    } as const;
+    const resolutions: unknown[] = [];
+    const scripted = createScriptedTerminal();
+    const { store, dispatch, settle } = agentHarness(
+      {
+        kind: "existing-session",
+        sessionId: "ses_live",
+        harnessProvider: "codex",
+        attachment,
+      },
+      stationHostedSnapshot({ focusable: true }),
+      {
+        resolve: async (candidate) => {
+          resolutions.push(candidate);
+          return () => scripted.terminal;
+        },
+      },
+    );
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(resolutions).toEqual([attachment]);
     expect(
       store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.agentIdentity,
     ).toEqual({
       sessionId: "ses_live",
-      terminalTargetId: handle.terminalTargetId,
+      terminalTargetId: attachment.terminalTargetId,
       harnessProvider: "codex",
     });
+  });
+
+  it("toasts attachment resolution failures without creating or locally spawning a pane", async () => {
+    const attachment = {
+      kind: "managed-terminal",
+      terminalTargetId: `${TERMINAL_TARGET_ID}-gone`,
+    } as const;
+    const base = preparedPlan();
+    if (base.kind !== "prepared") {
+      throw new Error("preparedPlan must be a prepared launch");
+    }
+    const { store, calls, dispatch, settle, stationViewStore } = agentHarness(
+      { ...base, attachment },
+      manyProjectsSnapshot(),
+      {
+        resolve: async () => {
+          throw {
+            tag: "TerminalProviderError",
+            code: "HOST_ATTACH_GONE",
+            message: "The managed terminal is no longer available.",
+            provider: "native",
+          };
+        },
+      },
+    );
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(calls).toEqual([]);
+    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
+    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "The managed terminal is no longer available.",
+    });
+    expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
   it("toasts the observer's error when prepareExternalLaunch rejects", async () => {

@@ -2,7 +2,6 @@ import type {
   ProjectView,
   ProviderId,
   SessionId,
-  SessionView,
   StationCommand,
   TerminalFocusOrigin,
   WorktreeId,
@@ -243,37 +242,6 @@ export function buildReconcileCommand(reason?: string): StationCommand {
   return {
     type: "observer.reconcile",
     payload: reason === undefined ? {} : { reason },
-  };
-}
-
-export function canSendPromptToRow(row: WorktreeRow, sessions: readonly SessionView[]): boolean {
-  const sessionId = row.agent?.sessionId;
-  if (sessionId === undefined) {
-    return false;
-  }
-  const session = sessions.find((candidate) => candidate.id === sessionId);
-  return session?.harness.capabilities.canReceivePrompt === true;
-}
-
-export function buildSendPromptCommand(
-  row: WorktreeRow,
-  sessions: readonly SessionView[],
-  prompt: string,
-): StationCommand {
-  if (!canSendPromptToRow(row, sessions)) {
-    throw new Error("The target harness cannot receive prompts safely.");
-  }
-  const sessionId = row.agent?.sessionId;
-  if (sessionId === undefined) {
-    throw new Error("The target row has no session.");
-  }
-  return {
-    type: "session.sendPrompt",
-    payload: {
-      sessionId,
-      prompt,
-      delivery: "harness-native",
-    },
   };
 }
 
