@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type { StationTerminalProcess } from "../types.js";
 import {
   createLocalPtyTerminal,
-  type StationTerminalProcess,
-} from "../index.js";
-import { createPtyEnv } from "./localPtyTerminal.js";
+  createPtyEnv,
+  resolvePtyImplementation,
+} from "./localPtyTerminal.js";
 
 declare const Bun: {
   env: Record<string, string | undefined>;
@@ -33,6 +34,40 @@ describe("createPtyEnv", () => {
       restoreEnv("FORCE_COLOR", previousForceColor);
     }
   });
+
+  it("treats empty terminal capability values as absent", () => {
+    const previousTerm = process.env.TERM;
+    const previousColorTerm = process.env.COLORTERM;
+    process.env.TERM = "";
+    process.env.COLORTERM = "";
+    try {
+      const env = createPtyEnv({ TERM: "", COLORTERM: "" });
+      expect(env.TERM).toBe("xterm-256color");
+      expect(env.COLORTERM).toBe("truecolor");
+    } finally {
+      restoreEnv("TERM", previousTerm);
+      restoreEnv("COLORTERM", previousColorTerm);
+    }
+  });
+});
+
+describe("resolvePtyImplementation", () => {
+  it("keeps the bridge as the default", () => {
+    expect(resolvePtyImplementation(undefined)).toBe("bridge");
+    expect(resolvePtyImplementation("")).toBe("bridge");
+    expect(resolvePtyImplementation("bridge")).toBe("bridge");
+  });
+
+  it("accepts the two explicit Bun modes", () => {
+    expect(resolvePtyImplementation("bun")).toBe("bun");
+    expect(resolvePtyImplementation("bun-nocctty")).toBe("bun-nocctty");
+  });
+
+  it("rejects unsupported values", () => {
+    expect(() => resolvePtyImplementation("auto")).toThrow(
+      /Unsupported STATION_PTY_IMPL value "auto"/,
+    );
+  });
 });
 
 function restoreEnv(key: string, value: string | undefined): void {
@@ -44,6 +79,18 @@ function restoreEnv(key: string, value: string | undefined): void {
 }
 
 describe("createLocalPtyTerminal", () => {
+  it("surfaces an unsupported selector value in the spawn error", () => {
+    const previous = process.env.STATION_PTY_IMPL;
+    process.env.STATION_PTY_IMPL = "auto";
+    try {
+      expect(() => createLocalPtyTerminal({ command: "/bin/true" })).toThrow(
+        /Unsupported STATION_PTY_IMPL value "auto"/,
+      );
+    } finally {
+      restoreEnv("STATION_PTY_IMPL", previous);
+    }
+  });
+
   it("spawns a command in a pty when the smoke probe is enabled", async () => {
     if (Bun.env.STATION_PTY_SMOKE !== "1") {
       expect(true).toEqual(true);

@@ -12,10 +12,18 @@ import type {
   StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../types.js";
+import {
+  CTTY_HELPER_PATH,
+  createBunTerminalProcess,
+  type BunTerminalProcessOptions,
+} from "./bunTerminalProcess.js";
 import { StationTerminalSpawnError } from "./errors.js";
+import { TerminalProcessEmitter } from "./terminalProcessEmitter.js";
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
+const MIN_COLS = 2;
+const MIN_ROWS = 1;
 const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
 let nextTerminalSequence = 0;
 
@@ -76,18 +84,46 @@ function ensureSpawnHelperExecutable(): void {
 export function createLocalPtyTerminal(
   options: StationTerminalSpawnOptions = {},
 ): StationTerminalProcess {
-  ensureSpawnHelperExecutable();
   const size = normalizeSize(options.size);
   const env = createPtyEnv(options.env);
   const command = options.command ?? defaultShell();
   const args = options.args === undefined ? defaultShellArgs() : [...options.args];
+  let implementation: PtyImplementation;
+  try {
+    implementation = resolvePtyImplementation(process.env.STATION_PTY_IMPL);
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : "STATION_PTY_IMPL selects an unsupported value.";
+    throw new StationTerminalSpawnError(command, error, detail);
+  }
+  const id = options.id ?? createTerminalId();
+  const cwd = options.cwd ?? process.cwd();
+  const name = options.name ?? env.TERM ?? "xterm-256color";
+
+  if (implementation !== "bridge") {
+    const bunOptions: BunTerminalProcessOptions = {
+      id,
+      command,
+      args,
+      cwd,
+      env,
+      name,
+      size,
+    };
+    if (implementation === "bun") {
+      bunOptions.cttyHelperPath = CTTY_HELPER_PATH;
+    }
+    return createBunTerminalProcess(bunOptions);
+  }
+
+  ensureSpawnHelperExecutable();
   const bridgeOptions = {
     args,
     cols: size.cols,
     command,
-    cwd: options.cwd ?? process.cwd(),
+    cwd,
     env,
-    name: options.name ?? env.TERM ?? "xterm-256color",
+    name,
     rows: size.rows,
   };
 
@@ -98,7 +134,7 @@ export function createLocalPtyTerminal(
     ]);
 
     return new LocalPtyTerminalProcess(
-      options.id ?? createTerminalId(),
+      id,
       command,
       size,
       bridge,
@@ -113,13 +149,8 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   readonly command: string;
 
   #bridge: ChildProcessWithoutNullStreams;
-  #dataListeners = new Set<(data: string) => void>();
-  #exitListeners = new Set<(event: StationTerminalExit) => void>();
-  #diagnosticListeners = new Set<(message: string) => void>();
-  #pendingData: string[] = [];
+  #events = new TerminalProcessEmitter();
   #stdoutBuffer = "";
-  #disposed = false;
-  #exited = false;
   #pid: number;
   #size: StationTerminalSize;
 
@@ -158,10 +189,6 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
       this.emitData(error.message);
     });
     bridge.on("exit", (code, signal) => {
-      if (this.#exited) {
-        return;
-      }
-
       // An abnormal bridge death (signal kill, code null) must not read as a
       // clean "exited 0" in the pane title.
       const signalNumber = signal === null ? undefined : signalToNumber(signal);
@@ -184,44 +211,22 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   onData(listener: (data: string) => void): StationTerminalDisposable {
-    this.assertActive("subscribe to terminal data");
-    this.#dataListeners.add(listener);
-    for (const data of this.#pendingData) {
-      listener(data);
-    }
-    this.#pendingData = [];
-    return {
-      dispose: () => {
-        this.#dataListeners.delete(listener);
-      },
-    };
+    return this.#events.onData(listener);
   }
 
   onExit(listener: (event: StationTerminalExit) => void): StationTerminalDisposable {
-    this.assertActive("subscribe to terminal exit");
-    this.#exitListeners.add(listener);
-    return {
-      dispose: () => {
-        this.#exitListeners.delete(listener);
-      },
-    };
+    return this.#events.onExit(listener);
   }
 
   onDiagnostic(listener: (message: string) => void): StationTerminalDisposable {
-    this.assertActive("subscribe to terminal diagnostics");
-    this.#diagnosticListeners.add(listener);
-    return {
-      dispose: () => {
-        this.#diagnosticListeners.delete(listener);
-      },
-    };
+    return this.#events.onDiagnostic(listener);
   }
 
   write(data: string): void {
     this.assertActive("write to terminal");
     // After exit the bridge stdin pipe is dead; a keystroke or forwarded VT
     // query reply must drop silently instead of raising EPIPE.
-    if (this.#exited) {
+    if (this.#events.exited) {
       return;
     }
     this.sendBridgeCommand({
@@ -232,7 +237,7 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
 
   resize(size: StationTerminalSize): void {
     this.assertActive("resize terminal");
-    if (this.#exited) {
+    if (this.#events.exited) {
       return;
     }
     const nextSize = normalizeSize(size);
@@ -245,7 +250,7 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   kill(signal?: string): void {
-    if (this.#disposed || this.#exited) {
+    if (this.#events.disposed || this.#events.exited) {
       return;
     }
 
@@ -256,17 +261,14 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   dispose(): void {
-    if (this.#disposed) {
+    if (this.#events.disposed) {
       return;
     }
 
-    this.#disposed = true;
-    this.#pendingData = [];
-    this.#dataListeners.clear();
-    this.#exitListeners.clear();
-    this.#diagnosticListeners.clear();
+    const exited = this.#events.exited;
+    this.#events.dispose();
 
-    if (!this.#exited) {
+    if (!exited) {
       // Closing stdin arms the bridge's stdin-close kill backstop, which
       // covers children that trap the SIGHUP a plain SIGTERM path delivers.
       this.#bridge.stdin.end();
@@ -322,36 +324,15 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   private emitDiagnostic(message: string): void {
-    if (this.#disposed) {
-      return;
-    }
-    for (const listener of this.#diagnosticListeners) {
-      listener(message);
-    }
+    this.#events.emitDiagnostic(message);
   }
 
   private emitData(data: string): void {
-    // After dispose the listener set is empty by design; buffering into
-    // #pendingData would grow without bound while a slow-dying child keeps
-    // streaming.
-    if (this.#disposed) {
-      return;
-    }
-    if (this.#dataListeners.size === 0) {
-      this.#pendingData.push(data);
-      return;
-    }
-
-    for (const listener of this.#dataListeners) {
-      listener(data);
-    }
+    this.#events.emitData(data);
   }
 
   private emitExit(event: StationTerminalExit): void {
-    this.#exited = true;
-    for (const listener of this.#exitListeners) {
-      listener(event);
-    }
+    this.#events.emitExit(event);
   }
 
   private sendBridgeCommand(command: object): void {
@@ -359,9 +340,25 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   private assertActive(action: string): void {
-    if (this.#disposed) {
-      throw new Error(`Cannot ${action} after terminal ${this.id} is disposed.`);
-    }
+    this.#events.assertActive(action);
+  }
+}
+
+export type PtyImplementation = "bridge" | "bun" | "bun-nocctty";
+
+export function resolvePtyImplementation(value: string | undefined): PtyImplementation {
+  switch (value) {
+    case undefined:
+    case "":
+    case "bridge":
+      return "bridge";
+    case "bun":
+    case "bun-nocctty":
+      return value;
+    default:
+      throw new Error(
+        `Unsupported STATION_PTY_IMPL value ${JSON.stringify(value)}. Expected bridge, bun, or bun-nocctty.`,
+      );
   }
 }
 
@@ -402,7 +399,7 @@ export function createPtyEnv(
   };
 
   // Station renders panes itself, so children should see stable xterm-style capabilities.
-  nextEnv.TERM = env?.TERM ?? process.env.TERM ?? "xterm-256color";
+  nextEnv.TERM = env?.TERM || process.env.TERM || "xterm-256color";
   nextEnv.COLORTERM = env?.COLORTERM || process.env.COLORTERM || "truecolor";
 
   // The host owns terminal capabilities; a NO_COLOR/FORCE_COLOR leaked from the
@@ -415,17 +412,16 @@ export function createPtyEnv(
 
 function normalizeSize(size: Partial<StationTerminalSize> | undefined): StationTerminalSize {
   return {
-    cols: normalizePositiveInteger(size?.cols, DEFAULT_COLS),
-    rows: normalizePositiveInteger(size?.rows, DEFAULT_ROWS),
+    cols: normalizeDimension(size?.cols, DEFAULT_COLS, MIN_COLS),
+    rows: normalizeDimension(size?.rows, DEFAULT_ROWS, MIN_ROWS),
   };
 }
 
-function normalizePositiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) {
+function normalizeDimension(value: number | undefined, fallback: number, minimum: number): number {
+  if (value === undefined) {
     return fallback;
   }
-
-  return value;
+  return Number.isInteger(value) && value >= minimum ? value : minimum;
 }
 
 function signalToNumber(signal: NodeJS.Signals): number {

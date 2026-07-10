@@ -137,13 +137,26 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
       const cols = Math.max(MIN_COLS, params.cols);
       const rows = Math.max(MIN_ROWS, params.rows);
-      const terminal = createTerminal({
-        command: params.command,
-        args: params.args,
-        cwd: params.cwd,
-        ...(params.env === undefined ? {} : { env: params.env }),
-        size: { cols, rows },
-      });
+      let terminal: StationTerminalProcess;
+      try {
+        terminal = createTerminal({
+          command: params.command,
+          args: params.args,
+          cwd: params.cwd,
+          ...(params.env === undefined ? {} : { env: params.env }),
+          size: { cols, rows },
+        });
+      } catch (error) {
+        throw new StationHostProviderError(
+          "HOST_SPAWN_FAILED",
+          error instanceof Error ? error.message : "Could not spawn the host PTY.",
+          {
+            cause: error,
+            worktreeId: params.worktreeId,
+            sessionId: params.sessionId,
+          },
+        );
+      }
 
       sequence += 1;
       const entry: PtyEntry = {
@@ -157,6 +170,16 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         sinks: new Set(),
         subscriptions: [],
       };
+
+      // Retained data/exit may replay synchronously during subscription, so the
+      // entry and its spawn event must exist before a replay can reap it.
+      entries.set(entry.ptyId, entry);
+      emit("agent.spawn", {
+        ptyId: entry.ptyId,
+        worktreeId: params.worktreeId,
+        sessionId: params.sessionId,
+        terminalTargetId: params.terminalTargetId,
+      });
 
       entry.subscriptions.push(
         terminal.onData((data) => {
@@ -179,13 +202,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         }),
       );
 
-      entries.set(entry.ptyId, entry);
-      emit("agent.spawn", {
-        ptyId: entry.ptyId,
-        worktreeId: params.worktreeId,
-        sessionId: params.sessionId,
-        terminalTargetId: params.terminalTargetId,
-      });
       // pid stabilizes to PTY's child once bridge reports ready; host.list is authoritative.
       return { ptyId: entry.ptyId, pid: terminal.pid };
     },

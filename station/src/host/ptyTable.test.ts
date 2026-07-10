@@ -1,5 +1,6 @@
 import type { HostSpawnParams } from "@station/host";
 import { describe, expect, it } from "bun:test";
+import type { StationTerminalProcess } from "../terminal/types.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createPtyTable } from "./ptyTable.js";
 
@@ -111,6 +112,44 @@ describe("createPtyTable", () => {
     // entries) and the terminal disposed.
     expect(table.list()).toEqual([]);
     expect(scripteds[0]?.helpers.isDisposed()).toBe(true);
+  });
+
+  it("does not insert a dead entry when output and exit replay during subscription", () => {
+    const events: string[] = [];
+    let disposed = false;
+    const terminal: StationTerminalProcess = {
+      id: "immediate",
+      command: "true",
+      pid: 42,
+      size: { cols: 80, rows: 24 },
+      onData(listener) {
+        listener("complete");
+        return { dispose() {} };
+      },
+      onExit(listener) {
+        listener({ exitCode: 0 });
+        return { dispose() {} };
+      },
+      onDiagnostic() {
+        return { dispose() {} };
+      },
+      write() {},
+      resize() {},
+      kill() {},
+      dispose() {
+        disposed = true;
+      },
+    };
+    const table = createPtyTable({
+      createTerminal: () => terminal,
+      onEvent: (event) => events.push(event),
+    });
+
+    table.spawn(baseParams);
+
+    expect(table.list()).toEqual([]);
+    expect(disposed).toBe(true);
+    expect(events).toEqual(["agent.spawn", "agent.exit"]);
   });
 
   it("does not accumulate a duplicate target when a worktree's PTY exits then relaunches", () => {

@@ -7,7 +7,8 @@ the main pnpm/Node toolchain.
 ## Runtime
 
 - Bun: `1.3.14`
-- Node: required for the Station-local `node-pty` sidecar
+- Node: required for the default Station-local `node-pty` bridge
+- Native `cc`: required only to build the opt-in controlling-terminal helper
 - OpenTUI: `@opentui/core@0.4.0`, `@opentui/react@0.4.0`
 - React: `19.2.7`
 
@@ -37,9 +38,10 @@ station/scripts/run-host.sh --hot
 station/scripts/run-host.sh --hot --mock
 ```
 
-Host mode requires Bun `1.3.14` and Node to already be active. Set
-`STATION_NODE=/path/to/node` to override the Node executable used by the
-PTY sidecar. Host mode is for explicit local development only.
+Host mode requires Bun `1.3.14`. The default PTY bridge also requires Node;
+set `STATION_NODE=/path/to/node` to override its executable. The opt-in
+`STATION_PTY_IMPL=bun` path instead requires the helper built by
+`bun run build:ctty-helper`. Host mode is for explicit local development only.
 
 ## STATION State Source
 
@@ -124,8 +126,14 @@ inside the container.
 ## Terminal PTY
 
 The Station app has a local `src/terminal/` boundary for creating PTYs. The
-first backend uses `node-pty`; it is intentionally app-local to the Station
-workspace.
+Node/node-pty bridge remains the default and is intentionally app-local to the
+Station workspace. `STATION_PTY_IMPL=bun` selects `Bun.Terminal` and wraps the
+payload with the controlling-terminal helper; build it first with
+`bun run build:ctty-helper`. `STATION_PTY_IMPL=bun-nocctty` is an explicit
+degraded escape hatch: it launches without the helper, so shell job control and
+orphan-cleanup guarantees do not apply. Station never falls back to it
+automatically. See [Configuration](../docs/configuration.md) for all accepted
+selector values.
 
 ### 2026-06-11 POC Status
 
@@ -145,17 +153,19 @@ selection tests), so panes render a proper terminal buffer. Cursor movement,
 wrapping, alternate screen, prompt redraws, colors, and full-screen TUIs are now
 in scope, and formatting bugs against the VT model are worth filing.
 
-Run the explicit smoke probe with:
+Run the explicit bridge and Bun smoke probes with:
 
 ```bash
 cd station
 bun run test:pty
+bun run build:ctty-helper
+bun run test:pty:bun
 ```
 
 If this fails, keep the failure local to Station; PTY runtime work stays in the
 Station workspace rather than the shared STATION packages.
 
-The smoke command runs a Station-local `node-pty` repair first because Bun can
+The bridge smoke command runs a Station-local `node-pty` repair first because Bun can
 extract `spawn-helper` without its executable bit. Station runs `node-pty` in a
 Node sidecar while Bun owns the OpenTUI process. Keep those workarounds local to
 the Station workspace.

@@ -61,6 +61,30 @@ creates observer databases under Node and Bun, then reopens each database under
 the other runtime to verify the shared SQLite contract and migrations. The
 mandatory `station-bun` CI job runs this gate.
 
+For focused Station PTY work, run both implementations explicitly:
+
+```bash
+cd station
+bun run test:pty                 # existing Node/node-pty bridge smoke
+bun run build:ctty-helper
+bun run test:pty:bun             # Bun.Terminal + controlling-terminal helper
+```
+
+To daily-drive the Bun implementation in the isolated devbox, return to the
+repo root and start a fresh host with the selector in its environment:
+
+```bash
+pnpm station:devbox stop
+STATION_PTY_IMPL=bun pnpm station:devbox start
+pnpm station:devbox logs --follow
+```
+
+The `host.start` record in `.dev-state/observer/logs/station-host.jsonl` should
+report `ptyImplementation` as `bun`. `station:devbox restart` deliberately
+preserves the existing host, so changing PTY implementations requires `stop`
+followed by `start`. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`,
+then press Ctrl-C. Finally stop the devbox and confirm no pane payload remains.
+
 For CI install parity, use:
 
 ```bash

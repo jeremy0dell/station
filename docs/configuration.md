@@ -432,6 +432,7 @@ Advanced development/demo overrides:
 | --- | --- | --- |
 | `STATION_SOURCE` | Native Station TUI data source | unset/empty/`observer` for live observer, `mock` for fixture data. |
 | `STATION_SCENARIO` | Native Station mock data | Fixture scenario name when `STATION_SOURCE=mock`; defaults to `baseline`. |
+| `STATION_PTY_IMPL` | Station local and persistent-host PTYs | unset, empty, or `bridge` uses the Node/node-pty bridge (default); `bun` uses `Bun.Terminal` through the controlling-terminal helper; `bun-nocctty` starts the payload directly without job-control or orphan-cleanup guarantees. |
 | `STATION_NODE` | Station local PTY bridge | Node executable path/name; fallback is `node`. |
 | `STATION_BUN` | Station host controller | Bun executable path/name; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Station host controller | Non-standard override for the host entry file. Usually leave unset. |
@@ -439,6 +440,13 @@ Advanced development/demo overrides:
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
 | `STATION_SHELL_AUTOCLOSE` | Native Station TUI | `1`/`true` or `0`/`false`; auto-close overlay when a `+sh` shell opens. |
 | `STATION_PROFILE` | Native Station TUI | `1`/`true` or `0`/`false`; enables dev render profiling. |
+
+Source installs using `STATION_PTY_IMPL=bun` must first run
+`cd station && bun run build:ctty-helper`. A missing, non-executable, or
+`noexec`-blocked helper is a visible error; Station never falls back
+automatically to `bun-nocctty`. Any other selector value is also an error.
+An existing station host keeps the implementation setting it inherited at
+startup, so stop and start the host when changing this variable.
 
 Default state paths (all under `state_dir`, default `~/.local/state/station`):
 

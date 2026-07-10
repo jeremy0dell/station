@@ -3,8 +3,10 @@ export class StationTerminalSpawnError extends Error {
   readonly code = "STATION_TERMINAL_SPAWN_FAILED";
   readonly command: string;
 
-  constructor(command: string, cause: unknown) {
-    super(`Failed to spawn node-pty terminal for ${command}.`, { cause });
+  constructor(command: string, cause: unknown, detail?: string) {
+    super(`Failed to spawn terminal for ${command}.${detail === undefined ? "" : ` ${detail}`}`, {
+      cause,
+    });
     Object.defineProperty(this, "name", {
       value: this.tag,
       enumerable: false,
