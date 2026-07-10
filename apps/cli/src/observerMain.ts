@@ -2,17 +2,25 @@
 import { runObserverMain } from "@station/observer";
 import { createProviderRegistry } from "./observerProviders.js";
 
-export async function runCliObserverMain(argv = process.argv.slice(2)): Promise<number> {
-  return runObserverMain(argv, { providerRegistryFactory: createProviderRegistry });
+/**
+ * Receives raw observer arguments and delegates provider composition to the
+ * Observer bootstrap.
+ */
+export async function runCliObserverMain(
+  argv: readonly string[] = process.argv.slice(2),
+): Promise<number> {
+  return runObserverMain([...argv], { providerRegistryFactory: createProviderRegistry });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runCliObserverMain()
-    .then((code) => {
-      process.exitCode = code;
-    })
-    .catch((error) => {
-      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-      process.exitCode = 1;
-    });
+async function runCliObserverProcess(): Promise<void> {
+  try {
+    process.exitCode = await runCliObserverMain();
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
+}
+
+if (import.meta.main) {
+  void runCliObserverProcess();
 }

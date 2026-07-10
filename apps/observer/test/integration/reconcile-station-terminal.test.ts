@@ -329,7 +329,7 @@ function hostBackedStation(client: StationHostClient): StationTerminalProvider {
     {
       socketPath: "/tmp/reconcile-station-host.sock",
       stateDir: "/tmp",
-      hostEntry: "/tmp/hostMain.ts",
+      hostCommand: ["bun", "/tmp/hostMain.ts"],
     },
     { clientFactory: () => client, spawnHost: () => ({ pid: 1, unref: () => undefined }) },
   );

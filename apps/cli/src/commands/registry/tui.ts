@@ -38,9 +38,8 @@ async function handleTuiConfigError(error: unknown, context: CliCommandConfigErr
 
 async function runTuiCliCommand(context: CliCommandRunContext) {
   const tuiDeps: TuiCommandDeps = {};
+  if (context.options.tuiDeps !== undefined) Object.assign(tuiDeps, context.options.tuiDeps);
   if (context.options.observerDeps !== undefined) tuiDeps.observer = context.options.observerDeps;
-  if (context.options.tuiDeps?.spawnRenderer !== undefined)
-    tuiDeps.spawnRenderer = context.options.tuiDeps.spawnRenderer;
   const tuiEnv = context.options.tuiDeps?.env ?? context.options.env;
   if (tuiEnv !== undefined) tuiDeps.env = tuiEnv;
   const result = await runTuiCommand(context.args, loadedCommandOptions(context), tuiDeps);

@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { emptyConfig } from "@station/config";
 import type { CliEnv } from "../../env.js";
+import { selfExecArgv } from "../../selfExec.js";
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type {
   CliCommandConfigErrorContext,
@@ -85,7 +86,9 @@ function defaultPopupTuiCommand(
 ): string {
   const command = nonEmptyString(env?.STATION_TUI_COMMAND);
   const parts =
-    command === undefined ? [shellQuote(process.execPath), shellQuote(cliEntryPath)] : [command];
+    command === undefined
+      ? [...selfExecArgv("cli", [process.execPath, cliEntryPath])].map(shellQuote)
+      : [command];
   if (configPath !== undefined) {
     parts.push("--config", shellQuote(configPath));
   }

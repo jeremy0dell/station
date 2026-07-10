@@ -1,11 +1,6 @@
 import { startStationHost } from "./startHost.js";
 
-/**
- * Standalone station-station-host daemon entry, spawned detached by the
- * observer-side station provider. Parses --socket/--state-dir and shuts down
- * cleanly on signal.
- */
-function parseArgs(argv: string[]): { socketPath: string; stateDir: string } {
+function parseArgs(argv: readonly string[]): { socketPath: string; stateDir: string } {
   let socketPath: string | undefined;
   let stateDir: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
@@ -24,8 +19,13 @@ function parseArgs(argv: string[]): { socketPath: string; stateDir: string } {
   return { socketPath, stateDir };
 }
 
-async function main(): Promise<void> {
-  const { socketPath, stateDir } = parseArgs(process.argv.slice(2));
+/**
+ * Standalone station-station-host daemon entry, spawned detached by the
+ * observer-side station provider. Parses raw --socket/--state-dir arguments and
+ * shuts down cleanly on signal.
+ */
+export async function runStationHostMain(argv: readonly string[]): Promise<void> {
+  const { socketPath, stateDir } = parseArgs(argv);
   const host = await startStationHost({ socketPath, stateDir });
 
   const shutdown = () => {
@@ -35,4 +35,6 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
 }
 
-void main();
+if (import.meta.main) {
+  await runStationHostMain(process.argv.slice(2));
+}

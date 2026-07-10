@@ -1,12 +1,13 @@
 import type { StationCommand, StationEvent } from "@station/contracts";
 import { shellQuote } from "@station/tmux";
+import { type ExecutableArgv, type SelfExecRuntime, selfExecArgv } from "../../selfExec.js";
 
 type TerminalFocusCommand = Extract<StationCommand, { type: "terminal.focus" }>;
 type WorktreeAgentStateChangedEvent = Extract<StationEvent, { type: "worktree.agentStateChanged" }>;
 
 export type BuildClickFocusShellCommandInput = {
   command: TerminalFocusCommand;
-  cliCommandParts: string[];
+  cliCommandParts: readonly string[];
   configPath?: string;
 };
 
@@ -40,10 +41,9 @@ export function buildClickFocusShellCommand(input: BuildClickFocusShellCommandIn
   ].join(" ");
 }
 
-export function defaultCliCommandParts(): string[] {
+export function defaultCliCommandParts(runtime?: SelfExecRuntime): ExecutableArgv {
   const entry = process.argv[1];
-  if (entry === undefined || entry.length === 0) {
-    return ["stn"];
-  }
-  return [process.execPath, entry];
+  const developmentArgv: ExecutableArgv =
+    entry === undefined || entry.length === 0 ? ["stn"] : [process.execPath, entry];
+  return selfExecArgv("cli", developmentArgv, runtime);
 }

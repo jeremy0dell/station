@@ -162,14 +162,14 @@ function runtimeToolchainHints(toolchain: { node: ToolchainFact; pnpm: Toolchain
   const hints: string[] = [];
   if (toolchain.node.status !== "ok") {
     hints.push(
-      "  Use your Node version manager to install and select Node.js 24.x, for example:",
+      "  Use your Node version manager to install and select Node.js 24.2+ (and below 25), for example:",
       "    fnm install 24 && fnm use 24",
       "    nvm install 24 && nvm use 24",
     );
   }
   if (toolchain.pnpm.status !== "ok") {
     hints.push(
-      "  After Node.js 24 is active, enable the repo-pinned package manager with:",
+      "  After Node.js 24.2+ (and below 25) is active, enable the repo-pinned package manager with:",
       "    corepack enable",
       "    corepack prepare pnpm@11.0.0 --activate",
     );

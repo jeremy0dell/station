@@ -77,30 +77,40 @@ function defaultCommandEnv(options: CliRunOptions): CliEnv {
   return options.env ?? options.popupDeps?.env ?? options.tuiDeps?.env ?? process.env;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/**
+ * Runs the CLI as a process adapter around `runCli`, rendering output and errors
+ * and applying the existing command-specific exit policy.
+ */
+export async function runCliMain(
+  argv: readonly string[] = process.argv.slice(2),
+  options: CliRunOptions = {},
+): Promise<void> {
   let suppressOutput = false;
   try {
-    suppressOutput = shouldSuppressCliProcessOutput(parseGlobalOptions(process.argv.slice(2)).args);
+    suppressOutput = shouldSuppressCliProcessOutput(parseGlobalOptions([...argv]).args);
   } catch {
     suppressOutput = false;
   }
-  runCli()
-    .then((result) => {
-      if (!suppressOutput && result.output !== undefined) {
-        process.stdout.write(formatCliOutput(result));
+  try {
+    const result = await runCli([...argv], options);
+    if (!suppressOutput && result.output !== undefined) {
+      process.stdout.write(formatCliOutput(result));
+    }
+    if (suppressOutput) {
+      if (result.code !== 0 && result.output !== undefined) {
+        process.stderr.write(`${JSON.stringify(result.output, null, 2)}\n`);
       }
-      if (suppressOutput) {
-        if (result.code !== 0 && result.output !== undefined) {
-          process.stderr.write(`${JSON.stringify(result.output, null, 2)}\n`);
-        }
-        process.exit(result.code);
-      }
-      process.exitCode = result.code;
-    })
-    .catch((error) => {
-      process.stderr.write(`${formatCliError(error)}\n`);
-      process.exitCode = 1;
-    });
+      process.exit(result.code);
+    }
+    process.exitCode = result.code;
+  } catch (error) {
+    process.stderr.write(`${formatCliError(error)}\n`);
+    process.exitCode = 1;
+  }
+}
+
+if (import.meta.main) {
+  void runCliMain();
 }
 
 export function shouldSuppressCliProcessOutput(invoked: readonly string[]): boolean {

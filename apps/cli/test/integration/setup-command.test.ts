@@ -323,7 +323,9 @@ describe("CLI setup command", () => {
 
     const output = chunks.join("");
     expect(result.code).toBe(1);
+    expect(output).toContain("expected >=24.2 <25");
     expect(output).toContain("incompatible pnpm 8.15.0 (expected 11.x)");
+    expect(output).toContain("After Node.js 24.2+ (and below 25) is active");
     expect(output).toContain("corepack prepare pnpm@11.0.0 --activate");
     expect(output).toContain("STATION setup does not change Node or pnpm automatically.");
   });

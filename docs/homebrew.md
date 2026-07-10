@@ -3,7 +3,7 @@
 Status: live, internal/team tap at
 [`jeremy0dell/homebrew-station`](https://github.com/jeremy0dell/homebrew-station).
 Station is not ready for `homebrew/core` yet: the `station` repo itself is
-private, uses Node 24 plus a separate Bun workspace, and requires explicit
+private, uses Node.js 24.2+ (and below 25) plus a separate Bun workspace, and requires explicit
 first-run setup. v0.1.0 is the first tagged release.
 
 Because `jeremy0dell/station` is a private GitHub repo, this tap is for

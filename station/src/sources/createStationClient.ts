@@ -8,10 +8,6 @@ import {
 } from "../station/fixtures/scenarios.js";
 import type { StationAttentionEvent } from "./attentionEvents.js";
 
-declare const Bun: {
-  env: Record<string, string | undefined>;
-};
-
 type StationSourceName = "observer" | "mock";
 
 export type CreateStationClientOptions = {
@@ -21,7 +17,7 @@ export type CreateStationClientOptions = {
 // The only place that decides whether Station shows live or mock STATION state.
 // Downstream code receives one identity-free client boundary either way.
 export function createStationClient(
-  env: Record<string, string | undefined> = Bun.env,
+  env: Record<string, string | undefined> = process.env,
   options: CreateStationClientOptions = {},
 ): StationClient {
   const source = readSourceName(env.STATION_SOURCE);

@@ -49,6 +49,7 @@ import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
 import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
+import { selfExecArgv } from "./selfExec.js";
 
 export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
@@ -79,7 +80,7 @@ export function createProviderRegistry(
         host: createStationHostController({
           socketPath: stationHostSocketPath(config),
           stateDir: resolveObserverPaths(config).stateDir,
-          hostEntry: resolveStationHostEntry(),
+          hostCommand: resolveStationHostCommand(),
         }),
       })
     : new StationTerminalProvider();
@@ -107,6 +108,13 @@ function resolveStationHostEntry(): string {
   }
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
   return join(repoRoot, "station/src/host/hostMain.ts");
+}
+
+function resolveStationHostCommand() {
+  return selfExecArgv("station-host", [
+    process.env.STATION_BUN ?? "bun",
+    resolveStationHostEntry(),
+  ]);
 }
 
 function createWorktreeProvider(config: StationConfig): WorktreeProvider {

@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
@@ -5,6 +6,7 @@ import { type ObserverProcessDeps, runTuiCommand } from "@station/cli/internal";
 import type { TuiConfig } from "@station/config";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const tuiConfig: TuiConfig = {
@@ -376,6 +378,154 @@ describe("CLI tui command", () => {
     );
 
     expect(entries).toEqual(["station", "dashboard", "dashboard"]);
+  });
+
+  it("uses compiled self-exec and skips the source workspace installation preflight", async () => {
+    const fixture = await createTempState();
+    const stationUiInstalled = vi.fn(async () => false);
+    const spawnProcess = vi.fn(() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("exit", 0));
+      return child as never;
+    });
+    const previousOverride = process.env.STATION_DASHBOARD_COMMAND;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+
+    try {
+      await expect(
+        runTuiCommand(
+          ["--dev-fake-dashboard"],
+          { config: fixture.config },
+          {
+            selfExecRuntime: { compiled: true, execPath: "/opt/station/stn" },
+            stationUiInstalled,
+            spawnProcess: spawnProcess as never,
+          },
+        ),
+      ).resolves.toEqual({ status: "exited", code: 0 });
+    } finally {
+      if (previousOverride === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = previousOverride;
+    }
+
+    expect(stationUiInstalled).not.toHaveBeenCalled();
+    expect(spawnProcess).toHaveBeenCalledWith(
+      "/opt/station/stn",
+      ["__dashboard"],
+      expect.objectContaining({
+        stdio: "inherit",
+        env: expect.objectContaining({
+          STATION_SOURCE: "mock",
+          STATION_QUIET_PRELAUNCH: "1",
+        }),
+      }),
+    );
+  });
+
+  it("preserves the source Bun renderer command, environment, and inherited stdio", async () => {
+    const fixture = await createTempState();
+    const stationUiInstalled = vi.fn(async () => true);
+    const spawnProcess = vi.fn(() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("exit", 0));
+      return child as never;
+    });
+    const previousOverride = process.env.STATION_DASHBOARD_COMMAND;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+
+    try {
+      await expect(
+        runTuiCommand(
+          ["--dev-fake-dashboard"],
+          { config: fixture.config },
+          {
+            selfExecRuntime: { compiled: false, execPath: "/unused/stn" },
+            stationUiInstalled,
+            spawnProcess: spawnProcess as never,
+          },
+        ),
+      ).resolves.toEqual({ status: "exited", code: 0 });
+    } finally {
+      if (previousOverride === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = previousOverride;
+    }
+
+    expect(stationUiInstalled).toHaveBeenCalledOnce();
+    expect(spawnProcess).toHaveBeenCalledWith(
+      "bun",
+      ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), "dashboard"],
+      expect.objectContaining({
+        stdio: "inherit",
+        env: expect.objectContaining({
+          STATION_SOURCE: "mock",
+          STATION_QUIET_PRELAUNCH: "1",
+        }),
+      }),
+    );
+  });
+
+  it("keeps the source installation preflight ahead of renderer spawn", async () => {
+    const fixture = await createTempState();
+    const spawnProcess = vi.fn();
+    const previousOverride = process.env.STATION_DASHBOARD_COMMAND;
+    delete process.env.STATION_DASHBOARD_COMMAND;
+
+    try {
+      await expect(
+        runTuiCommand(
+          ["--dev-fake-dashboard"],
+          { config: fixture.config },
+          {
+            selfExecRuntime: { compiled: false, execPath: "/unused/stn" },
+            stationUiInstalled: async () => false,
+            spawnProcess: spawnProcess as never,
+          },
+        ),
+      ).resolves.toEqual({ status: "exited", code: 1 });
+    } finally {
+      if (previousOverride === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = previousOverride;
+    }
+
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it("preserves the explicit dashboard command shell override", async () => {
+    const fixture = await createTempState();
+    const stationUiInstalled = vi.fn(async () => false);
+    const spawnProcess = vi.fn(() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit("exit", 0));
+      return child as never;
+    });
+    const previousOverride = process.env.STATION_DASHBOARD_COMMAND;
+    process.env.STATION_DASHBOARD_COMMAND = "custom-dashboard --flag";
+
+    try {
+      await expect(
+        runTuiCommand(
+          ["--dev-fake-dashboard"],
+          { config: fixture.config },
+          { stationUiInstalled, spawnProcess: spawnProcess as never },
+        ),
+      ).resolves.toEqual({ status: "exited", code: 0 });
+    } finally {
+      if (previousOverride === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = previousOverride;
+    }
+
+    expect(stationUiInstalled).not.toHaveBeenCalled();
+    expect(spawnProcess).toHaveBeenCalledWith(
+      "custom-dashboard --flag",
+      expect.objectContaining({
+        shell: true,
+        stdio: "inherit",
+        env: expect.objectContaining({
+          STATION_SOURCE: "mock",
+          STATION_QUIET_PRELAUNCH: "1",
+        }),
+      }),
+    );
   });
 
   it("accepts --popup --persistent (no separate lifecycle) and signals popup mode", async () => {

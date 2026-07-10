@@ -9,6 +9,7 @@ import type {
 } from "@station/contracts";
 import { safeErrorFromUnknown, systemClock } from "@station/runtime";
 import {
+  type ProviderHookObserverCommand,
   type ProviderHookObserverStartupDeps,
   startProviderHookObserver,
   waitForProviderHookObserverHealth,
@@ -37,7 +38,7 @@ export async function deliverProviderHookWithSpooling(input: {
   startupTimeoutMs: number;
   rateLimitMs: number;
   configPath?: string;
-  observerEntryPath?: string;
+  observerCommand?: ProviderHookObserverCommand;
   deps: ProviderHookObserverStartupDeps;
   deliver: () => Promise<ProviderDeliveryAttempt>;
   spoolReceipt: (error: SafeError | undefined) => Promise<ProviderHookReceipt>;
@@ -58,8 +59,8 @@ export async function deliverProviderHookWithSpooling(input: {
     if (input.configPath !== undefined) {
       startupInput.configPath = input.configPath;
     }
-    if (input.observerEntryPath !== undefined) {
-      startupInput.observerEntryPath = input.observerEntryPath;
+    if (input.observerCommand !== undefined) {
+      startupInput.observerCommand = input.observerCommand;
     }
     const startResult = await maybeStartObserver(startupInput);
     if (startResult.ok) {
@@ -98,7 +99,7 @@ async function recordReceipt(
 async function maybeStartObserver(input: {
   paths: ObserverPaths;
   configPath?: string;
-  observerEntryPath?: string;
+  observerCommand?: ProviderHookObserverCommand;
   timeoutMs: number;
   rateLimitMs: number;
   deps: ProviderHookObserverStartupDeps;
@@ -128,8 +129,8 @@ async function maybeStartObserver(input: {
     if (input.configPath !== undefined) {
       startupOptions.configPath = input.configPath;
     }
-    if (input.observerEntryPath !== undefined) {
-      startupOptions.observerEntryPath = input.observerEntryPath;
+    if (input.observerCommand !== undefined) {
+      startupOptions.observerCommand = input.observerCommand;
     }
     const started = await startProviderHookObserver(startupOptions, input.deps);
     if (started.status === "running") {

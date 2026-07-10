@@ -2,21 +2,25 @@
 import { runProviderIngressMain } from "./ingress/command.js";
 import { readStdinIfAvailable } from "./ingress/stdin.js";
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const stdin = await readStdinIfAvailable();
+/** Owns one raw-stdin read, renders the ingress result, and applies its exit code. */
+export async function runCliIngressMain(
+  argv: readonly string[] = process.argv.slice(2),
+): Promise<void> {
+  const stdin = (await readStdinIfAvailable()) ?? "";
   const options: Parameters<typeof runProviderIngressMain>[1] = {
     env: process.env,
+    stdin,
   };
-  if (stdin !== undefined) {
-    options.stdin = stdin;
+  const result = await runProviderIngressMain([...argv], options);
+  if (result.stdout.length > 0) {
+    process.stdout.write(result.stdout);
   }
-  runProviderIngressMain(process.argv.slice(2), options).then((result) => {
-    if (result.stdout.length > 0) {
-      process.stdout.write(result.stdout);
-    }
-    if (result.stderr.length > 0) {
-      process.stderr.write(result.stderr);
-    }
-    process.exitCode = result.code;
-  });
+  if (result.stderr.length > 0) {
+    process.stderr.write(result.stderr);
+  }
+  process.exitCode = result.code;
+}
+
+if (import.meta.main) {
+  void runCliIngressMain();
 }

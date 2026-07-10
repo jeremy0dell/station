@@ -279,7 +279,7 @@ node apps/cli/dist/main.js --config /abs/iso-config.toml debug logs
 
 ## 5. Prerequisites & running your checkout's code
 
-- **Node 24.x / pnpm 11.** First time: `pnpm install && pnpm build`. The observer
+- **Node.js 24.2+ (and below 25) / pnpm 11.** First time: `pnpm install && pnpm build`. The observer
   and CLI **spawn from `dist/`**, so rebuild after changing observer/CLI/provider
   code (`pnpm build`, or `pnpm dev` which watches `@station/cli`).
 - **Run this checkout's CLI** with `pnpm stn …` or `node apps/cli/dist/main.js …`

@@ -4,12 +4,45 @@ import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import * as contracts from "@station/contracts";
 import { installCursorHooks } from "@station/cursor";
-import { describe, expect, it } from "vitest";
+import { createStationHostController } from "@station/terminal";
+import { describe, expect, it, vi } from "vitest";
 import { createProviderRegistry } from "../../src/observerProviders";
+
+vi.mock("@station/terminal", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@station/terminal")>();
+  return {
+    ...actual,
+    createStationHostController: vi.fn(actual.createStationHostController),
+  };
+});
 
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("observer providers", () => {
+  it("supplies a finalized source host command from CLI composition", () => {
+    const previousBun = process.env.STATION_BUN;
+    const previousEntry = process.env.STATION_HOST_ENTRY;
+    process.env.STATION_BUN = "/opt/station/bun";
+    process.env.STATION_HOST_ENTRY = "/opt/station/hostMain.ts";
+    try {
+      createProviderRegistry({
+        ...config,
+        featureFlags: { stationPersistentAgents: true },
+      });
+    } finally {
+      if (previousBun === undefined) delete process.env.STATION_BUN;
+      else process.env.STATION_BUN = previousBun;
+      if (previousEntry === undefined) delete process.env.STATION_HOST_ENTRY;
+      else process.env.STATION_HOST_ENTRY = previousEntry;
+    }
+
+    expect(vi.mocked(createStationHostController)).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        hostCommand: ["/opt/station/bun", "/opt/station/hostMain.ts"],
+      }),
+    );
+  });
+
   it("assigns one Station adapter to the managed lifecycle and terminal registry", () => {
     const registry = createProviderRegistry(config);
     const managedTerminal = registry.managedTerminal;
