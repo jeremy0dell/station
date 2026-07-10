@@ -149,14 +149,12 @@ export class BunTerminalProcess implements StationTerminalProcess {
           event.signal = signal;
         }
         payloadExit = event;
-        // Bun may settle the payload before the PTY drains its final bytes.
-        if (options.cttyHelperPath === undefined && !terminal.closed) {
-          setImmediate(() => {
-            if (!terminal.closed) {
-              terminal.close();
-            }
-          });
-        }
+        // Bun may settle the payload before the reusable PTY drains its final bytes.
+        setImmediate(() => {
+          if (!terminal.closed) {
+            terminal.close();
+          }
+        });
         emitPayloadExitAfterDrain();
       },
       (error) => {
