@@ -1,5 +1,10 @@
 import { readFile } from "node:fs/promises";
 import {
+  AgentPrepareExternalLaunchParamsSchema,
+  AgentPrepareExternalLaunchResultSchema,
+  AgentReattachHandleSchema,
+  AgentReportExternalExitParamsSchema,
+  AgentReportExternalExitResultSchema,
   CommandRecordSchema,
   createClientFeatureFlagsSchema,
   createEvaluatedFeatureFlagsSchema,
@@ -18,6 +23,7 @@ import {
   HarnessRunObservationSchema,
   HarnessStatusObservationSchema,
   ObservedStatusSchema,
+  type ObserverApi,
   ObserverEventHookConfigSchema,
   ObserverEventHookInvocationSchema,
   ObserverHealthSchema,
@@ -93,6 +99,75 @@ describe("contract schemas", () => {
     for (const [name, snapshot] of Object.entries(snapshots)) {
       expect(snapshot.schemaVersion, name).toBe(STATION_SCHEMA_VERSION);
     }
+  });
+
+  it("owns the observer application port and external-launch contracts", () => {
+    expectTypeOf<ObserverApi>().toHaveProperty("prepareExternalLaunch");
+    expectTypeOf<ObserverApi>().toHaveProperty("reportExternalExit");
+
+    expectParses(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        harness: "codex",
+      },
+      "external launch params",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        transport: "ndjson",
+      },
+      "external launch params with transport detail",
+    );
+
+    const reattachHandle = {
+      ptyId: "pty_api",
+      terminalTargetId: "native:wt_api",
+      hostSocketPath: "/tmp/station-host.sock",
+    };
+    expectParses(AgentReattachHandleSchema, reattachHandle, "agent reattach handle");
+    expectParses(
+      AgentPrepareExternalLaunchResultSchema,
+      {
+        kind: "prepared",
+        sessionId: "ses_api",
+        terminalTargetId: "native:wt_api",
+        launchPlan: {
+          provider: "codex",
+          command: "codex",
+          args: ["--resume"],
+          cwd: "/tmp/worktree",
+          env: { STATION_SESSION_ID: "ses_api" },
+          mode: "interactive",
+        },
+        reattachHandle,
+      },
+      "prepared external launch result",
+    );
+    expectParses(
+      AgentPrepareExternalLaunchResultSchema,
+      {
+        kind: "existing-session",
+        sessionId: "ses_api",
+        harnessProvider: "codex",
+      },
+      "existing external launch result without reattachment",
+    );
+
+    expectParses(
+      AgentReportExternalExitParamsSchema,
+      { terminalTargetId: "native:wt_api" },
+      "external exit params",
+    );
+    expectParses(
+      AgentReportExternalExitResultSchema,
+      { acknowledged: true, terminalTargetId: "native:wt_api" },
+      "external exit result",
+    );
   });
 
   it("parses valid snapshot scenarios and rejects invalid snapshots", async () => {

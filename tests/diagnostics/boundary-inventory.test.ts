@@ -153,6 +153,25 @@ describe("boundary inventory guard", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps protocol imports at the observer runtime server adapter", async () => {
+    const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
+      isProductionSourceFile,
+    );
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      const path = relative(process.cwd(), file);
+      for (const match of source.matchAll(/\b(?:from|import)\s*(?:\(\s*)?["']([^"']+)["']/g)) {
+        if (match[1] === "@station/protocol" && path !== "apps/observer/src/runtime/server.ts") {
+          violations.push(`${path}: protocol import`);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   it("keeps command orchestration out of observer provider modules", async () => {
     const commandsRoot = join(process.cwd(), "apps/observer/src/commands");
     const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src/providers"))).filter(

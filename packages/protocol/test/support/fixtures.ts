@@ -2,6 +2,7 @@ import type {
   DiagnosticSnapshot,
   DoctorReport,
   HarnessEventReportReceipt,
+  ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
   ProviderHookReceipt,
@@ -10,7 +11,6 @@ import type {
   StationSnapshot,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import type { ObserverApi } from "../../src/api.js";
 
 export const protocolTestNow = "2026-05-20T12:00:00.000Z";
 

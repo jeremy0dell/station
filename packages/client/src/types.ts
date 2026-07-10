@@ -1,4 +1,8 @@
 import type {
+  AgentPrepareExternalLaunchParams,
+  AgentPrepareExternalLaunchResult,
+  AgentReportExternalExitParams,
+  AgentReportExternalExitResult,
   CommandId,
   CommandReceipt,
   SafeError,
@@ -6,19 +10,13 @@ import type {
   StationEvent,
   StationSnapshot,
 } from "@station/contracts";
-import type {
-  AgentPrepareExternalLaunchParams,
-  AgentPrepareExternalLaunchResult,
-  AgentReportExternalExitParams,
-  AgentReportExternalExitResult,
-} from "@station/protocol";
 
 export type {
   AgentPrepareExternalLaunchParams,
   AgentPrepareExternalLaunchResult,
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
-} from "@station/protocol";
+} from "@station/contracts";
 
 export type StationClientCommandCompletion =
   | {

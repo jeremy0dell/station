@@ -2,11 +2,12 @@ import { runCli } from "@station/cli";
 import { runObserveCommand } from "@station/cli/internal";
 import type {
   EventFilter,
+  ObserverApi,
   ReconcileReceipt,
   StationEvent,
   StationSnapshot,
 } from "@station/contracts";
-import { listenUnixSocket, type ObserverApi } from "@station/protocol";
+import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 

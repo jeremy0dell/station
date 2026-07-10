@@ -1,12 +1,14 @@
-import type { ManagedTerminalLifecycle, SafeError, TerminalTargetId } from "@station/contracts";
-import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
 import type {
   AgentPrepareExternalLaunchParams,
   AgentPrepareExternalLaunchResult,
   AgentReattachHandle,
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
-} from "@station/protocol";
+  ManagedTerminalLifecycle,
+  SafeError,
+  TerminalTargetId,
+} from "@station/contracts";
+import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import { worktreeMissingError } from "../commands/errors.js";
 import {

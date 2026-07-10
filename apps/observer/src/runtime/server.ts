@@ -1,4 +1,5 @@
-import { type ObserverApi, startProtocolServer, type UnixSocketServer } from "@station/protocol";
+import type { ObserverApi } from "@station/contracts";
+import { startProtocolServer, type UnixSocketServer } from "@station/protocol";
 import { type RuntimeClock, runRuntimeBoundary, systemClock } from "@station/runtime";
 
 export type ObserverServer = {

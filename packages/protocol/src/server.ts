@@ -1,5 +1,7 @@
-import type { StationEvent } from "@station/contracts";
+import type { ObserverApi, StationEvent } from "@station/contracts";
 import {
+  AgentPrepareExternalLaunchParamsSchema,
+  AgentReportExternalExitParamsSchema,
   DiagnosticCollectionOptionsSchema,
   DoctorOptionsSchema,
   SafeErrorSchema,
@@ -7,10 +9,7 @@ import {
 } from "@station/contracts";
 import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { ZodError } from "zod";
-import type { ObserverApi } from "./api.js";
 import {
-  AgentPrepareExternalLaunchParamsSchema,
-  AgentReportExternalExitParamsSchema,
   CommandDispatchParamsSchema,
   CommandGetParamsSchema,
   EventsSubscribeParamsSchema,
@@ -37,6 +36,11 @@ export type ProtocolServerOptions = {
   requestTimeoutMs?: number;
 };
 
+/**
+ * ADAPTER
+ *
+ * Exposes Observer operations through validated NDJSON requests on a Unix socket.
+ */
 export async function startProtocolServer(
   options: ProtocolServerOptions,
 ): Promise<UnixSocketServer> {

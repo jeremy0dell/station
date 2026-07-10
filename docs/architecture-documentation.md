@@ -154,10 +154,9 @@ operation that fulfills an intent behind that contract. One driving port may
 expose several use cases, and a use case may be called by more than one driving
 adapter.
 
-`ObserverApi` is the expected Observer `DRIVING PORT` when its application
-contract ownership is moved inward. Its current ownership by
-`packages/protocol` remains a documented deviation, so this standard does not
-silently declare that migration complete.
+[`ObserverApi`](../packages/contracts/src/observer.ts) is the Observer `DRIVING
+PORT`. Protocol client and server adapters translate between that
+application-owned contract and NDJSON transport mechanics.
 
 [`prepareExternalLaunch`](../apps/observer/src/runtime/externalLaunch.ts) and
 [`reportExternalExit`](../apps/observer/src/runtime/externalLaunch.ts) are

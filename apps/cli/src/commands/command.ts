@@ -3,11 +3,12 @@ import type {
   CommandId,
   CommandReceipt,
   CommandRecord,
+  ObserverApi,
   SafeError,
   StationCommand,
 } from "@station/contracts";
 import { CommandIdSchema, StationCommandSchema } from "@station/contracts";
-import { createObserverClient, type ObserverApi, type ObserverClient } from "@station/protocol";
+import { createObserverClient, type ObserverClient } from "@station/protocol";
 import { isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { parsePositiveIntegerOption } from "../args.js";
 import {

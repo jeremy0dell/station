@@ -5,6 +5,7 @@ import type {
   DoctorOptions,
   EventFilter,
   HarnessEventReport,
+  ObserverApi,
   ProviderHookEvent,
   StationCommand,
   StationEvent,
@@ -12,7 +13,6 @@ import type {
 import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
 import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { z } from "zod";
-import type { ObserverApi } from "./api.js";
 import {
   type ProtocolMethod,
   type ProtocolResponse,
@@ -68,6 +68,11 @@ const ProtocolEventEnvelopeMessageSchema = z
   })
   .strict();
 
+/**
+ * ADAPTER
+ *
+ * Presents Observer operations to clients through validated NDJSON requests.
+ */
 export function createObserverClient(options: CreateObserverClientOptions): ObserverClient {
   const requestId = options.requestId ?? defaultRequestId;
 
