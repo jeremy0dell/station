@@ -135,6 +135,7 @@ Important files and directories:
 
 ```text
 observer.sqlite
+logs/observer-boot.log
 logs/observer.jsonl
 logs/hooks.jsonl
 logs/cli.jsonl
@@ -149,6 +150,7 @@ spool/hooks/
 
 ## Reading Evidence
 
+- `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
 - `diagnostic-index.json` is the fastest summary for root-cause codes and correlated evidence.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.

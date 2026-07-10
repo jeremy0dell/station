@@ -110,6 +110,7 @@ async function prepareObserverForPopup(
     {
       config: options.config,
       paths,
+      onStartupProgress: (message) => process.stderr.write(`${message}\n`),
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     },

@@ -4,13 +4,13 @@ import { getObserverStatus, startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it } from "vitest";
-import { createStaleSocketFile } from "../../../../tests/support/sockets";
-import { fileExists } from "../../../../tests/support/spool";
-import { createTempState } from "../../../../tests/support/temp-projects";
+import { createStaleSocketFile } from "../../../../../tests/support/sockets";
+import { fileExists } from "../../../../../tests/support/spool";
+import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
 
-describe("CLI observer process helpers", () => {
+describe("CLI observer process lifecycle", () => {
   it("maps stale sockets distinctly from stopped observers", async () => {
     const fixture = await createTempState();
     await createStaleSocketFile(fixture.socketPath);

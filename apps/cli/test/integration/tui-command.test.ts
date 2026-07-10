@@ -177,6 +177,123 @@ describe("CLI tui command", () => {
     await vi.waitFor(() => expect(reconciles).toEqual(["tui-startup"]));
   });
 
+  it("reports slow observer startup before opening the native renderer", async () => {
+    const fixture = await createTempState();
+    let spawned = false;
+    let markSpawned = () => undefined;
+    let releaseHealth = () => undefined;
+    const observerSpawned = new Promise<void>((resolve) => {
+      markSpawned = resolve;
+    });
+    const healthReady = new Promise<void>((resolve) => {
+      releaseHealth = resolve;
+    });
+    const spawnRenderer = vi.fn(async () => ({ status: "exited" as const, code: 0 }));
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    vi.useFakeTimers();
+
+    try {
+      const resultPromise = runTuiCommand(
+        [],
+        { config: fixture.config },
+        {
+          observer: {
+            spawnObserver: async () => {
+              spawned = true;
+              markSpawned();
+              return { pid: 1234, unref: () => undefined };
+            },
+            clientFactory: () =>
+              ({
+                health: async () => {
+                  if (!spawned) throw new Error("stopped");
+                  await healthReady;
+                  return {
+                    schemaVersion: "0.6.0",
+                    status: "healthy",
+                    pid: 1234,
+                    startedAt: now,
+                    version: "0.0.0",
+                  };
+                },
+                reconcile: async () => emptySnapshot("tui-startup"),
+              }) as never,
+          },
+          spawnRenderer,
+        },
+      );
+
+      await observerSpawned;
+      await vi.advanceTimersByTimeAsync(1_499);
+      expect(stderrWrite).not.toHaveBeenCalled();
+      expect(spawnRenderer).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(stderrWrite).toHaveBeenNthCalledWith(1, "Starting STATION observer…\n");
+
+      await vi.advanceTimersByTimeAsync(3_499);
+      expect(stderrWrite).toHaveBeenCalledTimes(1);
+      expect(spawnRenderer).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(stderrWrite).toHaveBeenNthCalledWith(
+        2,
+        `Still waiting for STATION observer; boot log: ${join(
+          fixture.stateDir,
+          "logs/observer-boot.log",
+        )}\n`,
+      );
+      expect(spawnRenderer).not.toHaveBeenCalled();
+
+      releaseHealth();
+      await expect(resultPromise).resolves.toEqual({ status: "exited", code: 0 });
+      expect(spawnRenderer).toHaveBeenCalledOnce();
+    } finally {
+      releaseHealth();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+      stderrWrite.mockRestore();
+    }
+  });
+
+  it("keeps warm observer attachment silent", async () => {
+    const fixture = await createTempState();
+    const spawnRenderer = vi.fn(async () => ({ status: "exited" as const, code: 0 }));
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    try {
+      await expect(
+        runTuiCommand(
+          [],
+          { config: fixture.config },
+          {
+            observer: {
+              spawnObserver: async () => {
+                throw new Error("observer should not spawn for a warm attachment");
+              },
+              clientFactory: () =>
+                ({
+                  health: async () => ({
+                    schemaVersion: "0.6.0",
+                    status: "healthy",
+                    pid: 1234,
+                    startedAt: now,
+                    version: "0.0.0",
+                  }),
+                  reconcile: async () => emptySnapshot("tui-startup"),
+                }) as never,
+            },
+            spawnRenderer,
+          },
+        ),
+      ).resolves.toEqual({ status: "exited", code: 0 });
+      expect(stderrWrite).not.toHaveBeenCalled();
+      expect(spawnRenderer).toHaveBeenCalledOnce();
+    } finally {
+      stderrWrite.mockRestore();
+    }
+  });
+
   it("defaults bare station to the fullscreen renderer outside tmux", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -330,29 +447,36 @@ describe("CLI tui command", () => {
     expect(reconciles).toEqual([]);
   });
 
-  it("returns a nonzero result when observer startup is unavailable", async () => {
+  it("does not open the renderer when the observer exits during startup", async () => {
     const fixture = await createTempState();
+    const spawnRenderer = vi.fn(async () => ({ status: "exited" as const, code: 0 }));
     const result = await runTuiCommand(
       [],
-      { config: fixture.config, timeoutMs: 1 },
+      { config: fixture.config },
       {
         observer: {
-          spawnObserver: async () => ({ pid: 1234, unref: () => undefined }),
+          spawnObserver: async () => ({
+            pid: 1234,
+            unref: () => undefined,
+            exited: Promise.resolve({ type: "exit" as const, code: 1, signal: null }),
+          }),
           clientFactory: () =>
             ({
               health: async () => {
                 throw new Error("still down");
               },
             }) as never,
-          sleep: async () => undefined,
         },
-        spawnRenderer: async () => {
-          throw new Error("renderer should not run when observer is unavailable.");
-        },
+        spawnRenderer,
       },
     );
 
-    expect(result).toMatchObject({ status: "unavailable", code: 1 });
+    expect(result).toMatchObject({
+      status: "unavailable",
+      code: 1,
+      observer: { error: { code: "OBSERVER_EXITED_ON_START" } },
+    });
+    expect(spawnRenderer).not.toHaveBeenCalled();
   });
 
   it("runs the mock dashboard without observer startup or startup reconcile", async () => {

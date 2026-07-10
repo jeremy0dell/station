@@ -1,60 +1,32 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { lstat, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-import type { StationConfig } from "@station/config";
-import type { ObserverHealth, ObserverStopReceipt, SafeError } from "@station/contracts";
-import {
-  componentLogPath,
-  createJsonlLogger,
-  createTraceContext,
-  type JsonlLogger,
-} from "@station/observability";
+import { lstat } from "node:fs/promises";
+import type { ObserverStopReceipt, SafeError } from "@station/contracts";
+import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
 import { createObserverClient, isSocketStale, removeStaleSocket } from "@station/protocol";
 import {
   type RuntimeClock,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithRetryAndTimeout,
-  runRuntimeBoundaryWithTimeout,
   safeErrorFromUnknown,
   systemClock,
 } from "@station/runtime";
+import { defaultClientFactory } from "./observerProcess/health.js";
+import { startObserverProcess } from "./observerProcess/startup.js";
+import type {
+  ObserverProcessDeps,
+  ObserverProcessOptions,
+  ObserverStatus,
+} from "./observerProcess/types.js";
 import { type ObserverPaths, resolveObserverPaths } from "./paths.js";
 
-export type ObserverStatus =
-  | {
-      status: "running";
-      paths: ObserverPaths;
-      health: ObserverHealth;
-    }
-  | {
-      status: "stopped" | "stale" | "unhealthy";
-      paths: ObserverPaths;
-      error?: SafeError;
-    };
-
-export type ObserverProcessDeps = {
-  clientFactory?: (socketPath: string) => ReturnType<typeof createObserverClient>;
-  spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;
-  clock?: RuntimeClock;
-  sleep?: (ms: number) => Promise<void>;
-  logger?: JsonlLogger;
-};
-
-export type SpawnObserverInput = {
-  paths: ObserverPaths;
-  configPath?: string;
-};
-
-export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
-  kill?: ChildProcess["kill"];
-};
-
-export type ObserverProcessOptions = {
-  config?: StationConfig;
-  configPath?: string;
-  paths?: ObserverPaths;
-  timeoutMs?: number;
-};
+export { waitForObserverHealth } from "./observerProcess/health.js";
+// Commands intentionally keep one stable lifecycle import while implementation lives in observerProcess/.
+export type {
+  ChildProcessLike,
+  ObserverProcessDeps,
+  ObserverProcessOptions,
+  ObserverStatus,
+  SpawnObserverInput,
+} from "./observerProcess/types.js";
 
 export async function getObserverStatus(
   options: ObserverProcessOptions = {},
@@ -93,7 +65,7 @@ export async function startObserver(
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
-  const timeoutMs = options.timeoutMs ?? 30_000;
+  const timeoutMs = options.timeoutMs ?? 10_000;
   const clock = deps.clock ?? systemClock;
   const trace = createTraceContext({ operation: "cli.observer.start" });
   const existing = await getObserverStatus({ ...options, paths }, deps);
@@ -107,41 +79,19 @@ export async function startObserver(
     return existing;
   }
 
-  // Spawning only starts the daemon; report running only after the socket health check succeeds.
-  let child: ChildProcessLike | undefined;
-  const result = await runRuntimeBoundaryWithTimeout(
+  const result = await startObserverProcess(
     {
-      operation: "cli.observer.start",
-      clock,
+      paths,
       timeoutMs,
-      error: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_START_FAILED",
-        message: "Observer startup failed.",
-        hint: `Run station debug trace ${trace.traceId}.`,
-        traceId: trace.traceId,
-      },
-      timeoutError: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_START_FAILED",
-        message: "Observer did not become healthy before the startup timeout.",
-        hint: `Run station debug trace ${trace.traceId}.`,
-        traceId: trace.traceId,
-      },
       trace,
+      clock,
+      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      ...(options.onStartupProgress === undefined
+        ? {}
+        : { onStartupProgress: options.onStartupProgress }),
     },
-    async () => {
-      await mkdir(paths.stateDir, { recursive: true, mode: 0o700 });
-      await mkdir(dirname(paths.socketPath), { recursive: true, mode: 0o700 });
-      child = await (deps.spawnObserver ?? defaultSpawnObserver)({
-        paths,
-        ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      });
-      child.unref?.();
-      return waitForObserverHealth({ paths, timeoutMs, trace }, deps);
-    },
+    deps,
   );
-
   if (result.ok) {
     return {
       status: "running",
@@ -150,7 +100,6 @@ export async function startObserver(
     };
   }
 
-  child?.kill?.();
   await logObserverLifecycleFailure({
     paths,
     operation: "cli.observer.start",
@@ -217,53 +166,6 @@ export async function restartObserver(
   return startObserver({ ...options, paths: status.paths }, deps);
 }
 
-export async function waitForObserverHealth(
-  options: { paths: ObserverPaths; timeoutMs?: number; trace?: RuntimeTraceContext },
-  deps: ObserverProcessDeps = {},
-): Promise<ObserverHealth> {
-  const timeoutMs = options.timeoutMs ?? 2000;
-  const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath);
-  const result = await runRuntimeBoundaryWithRetryAndTimeout(
-    {
-      operation: "cli.observer.waitForHealth",
-      timeoutMs,
-      error: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_FAILED",
-        message: "Observer health check failed.",
-        ...(options.trace?.traceId === undefined
-          ? {}
-          : {
-              hint: `Run station debug trace ${options.trace.traceId}.`,
-              traceId: options.trace.traceId,
-            }),
-      },
-      timeoutError: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_TIMEOUT",
-        message: "Observer did not report healthy before the timeout.",
-        ...(options.trace?.traceId === undefined
-          ? {}
-          : {
-              hint: `Run station debug trace ${options.trace.traceId}.`,
-              traceId: options.trace.traceId,
-            }),
-      },
-      retry: {
-        retries: Math.max(1, Math.ceil(timeoutMs / 25)),
-        delayMs: 25,
-      },
-      trace: options.trace,
-    },
-    async () => client.health(),
-  );
-
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.value;
-}
-
 export function observerStatusErrorMessage(
   status: Exclude<ObserverStatus, { status: "running" }>,
 ): string {
@@ -280,26 +182,6 @@ export function observerStatusErrorMessage(
     lines.push(`Code: ${error.code}`);
   }
   return lines.join("\n");
-}
-
-function defaultClientFactory(socketPath: string) {
-  return createObserverClient({ socketPath, timeoutMs: 500 });
-}
-
-function defaultSpawnObserver(input: SpawnObserverInput): ChildProcessLike {
-  const observerEntry = new URL("../dist/observerMain.js", import.meta.url);
-  const args = [
-    observerEntry.pathname,
-    "--socket",
-    input.paths.socketPath,
-    "--state-dir",
-    input.paths.stateDir,
-    ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
-  ];
-  return spawn(process.execPath, args, {
-    detached: true,
-    stdio: "ignore",
-  });
 }
 
 export async function logObserverLifecycleFailure(input: {
