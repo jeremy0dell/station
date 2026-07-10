@@ -102,6 +102,15 @@ export class BunTerminalProcess implements StationTerminalProcess {
 
     const decoder = new TextDecoder();
     const events = this.#events;
+    let payloadExit: StationTerminalExit | undefined;
+    let terminalExited = false;
+    const emitPayloadExitAfterDrain = () => {
+      if (!terminalExited || payloadExit === undefined) {
+        return;
+      }
+      events.emitData(decoder.decode());
+      events.emitExit(payloadExit);
+    };
     const terminal = new Bun.Terminal({
       cols: this.#size.cols,
       rows: this.#size.rows,
@@ -110,9 +119,11 @@ export class BunTerminalProcess implements StationTerminalProcess {
         events.emitData(decoder.decode(data, { stream: true }));
       },
       exit(_terminal, exitCode) {
+        terminalExited = true;
         if (exitCode !== 0 && !events.exited) {
           events.emitDiagnostic(`Bun terminal stream closed with status ${exitCode}.`);
         }
+        emitPayloadExitAfterDrain();
       },
     });
 
@@ -132,26 +143,31 @@ export class BunTerminalProcess implements StationTerminalProcess {
 
     void child.exited.then(
       (exitCode) => {
-        events.emitData(decoder.decode());
         const event: StationTerminalExit = { exitCode };
         const signal = signalToNumber(child.signalCode);
         if (signal !== undefined) {
           event.signal = signal;
         }
-        events.emitExit(event);
-        if (!terminal.closed) {
-          terminal.close();
+        payloadExit = event;
+        // Bun may settle the payload before the PTY drains its final bytes.
+        if (options.cttyHelperPath === undefined && !terminal.closed) {
+          setImmediate(() => {
+            if (!terminal.closed) {
+              terminal.close();
+            }
+          });
         }
+        emitPayloadExitAfterDrain();
       },
       (error) => {
-        events.emitData(decoder.decode());
         events.emitDiagnostic(
           error instanceof Error ? error.message : "Bun failed while waiting for the terminal payload.",
         );
-        events.emitExit({ exitCode: 1 });
+        payloadExit = { exitCode: 1 };
         if (!terminal.closed) {
           terminal.close();
         }
+        emitPayloadExitAfterDrain();
       },
     );
   }
