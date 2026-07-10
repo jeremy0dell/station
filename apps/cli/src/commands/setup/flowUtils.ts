@@ -11,7 +11,12 @@ import {
 } from "./checks/system.js";
 import { renderOptions, write } from "./io.js";
 import type { SetupAction, SetupFacts, SetupMode, SetupPlan } from "./model.js";
-import { renderActionComplete, renderActionFailed, renderActionStart } from "./render.js";
+import {
+  formatCommand,
+  renderActionComplete,
+  renderActionFailed,
+  renderActionStart,
+} from "./render.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
 
 export function collectForCommand(
@@ -93,7 +98,7 @@ export async function activateCompletedConfigWrite(
     return undefined;
   } catch (error) {
     const safeError = safeErrorFromUnknown(error, observerActivationError);
-    await write(deps, renderObserverActivationFailure(safeError));
+    await write(deps, renderObserverActivationFailure(safeError, completedWrite.path));
     return safeError;
   }
 }
@@ -124,7 +129,10 @@ const observerActivationError: RuntimeSafeError = {
   message: "Observer configuration could not be activated.",
 };
 
-function renderObserverActivationFailure(error: RuntimeSafeError): string {
+function renderObserverActivationFailure(
+  error: RuntimeSafeError,
+  configPath: string | undefined,
+): string {
   const lines = [
     "Config was written, but observer activation failed.",
     error.message,
@@ -133,7 +141,11 @@ function renderObserverActivationFailure(error: RuntimeSafeError): string {
   if (error.hint !== undefined) {
     lines.push(`Hint: ${error.hint}`);
   }
-  lines.push("Run: stn observer restart", "");
+  const restartCommand =
+    configPath === undefined
+      ? formatCommand(["stn", "observer", "restart"])
+      : formatCommand(["stn", "--config", configPath, "observer", "restart"]);
+  lines.push(`Run: ${restartCommand}`, "");
   return lines.join("\n");
 }
 

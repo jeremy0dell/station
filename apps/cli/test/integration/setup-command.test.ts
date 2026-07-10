@@ -207,7 +207,7 @@ describe("CLI setup command", () => {
     const root = await tempRoot(tempRoots);
     const home = join(root, "home");
     const repo = join(root, "repo");
-    const configPath = join(root, "config.toml");
+    const configPath = join(root, "custom config.toml");
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
     const chunks: string[] = [];
@@ -238,7 +238,7 @@ describe("CLI setup command", () => {
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: OBSERVER_EXITED_ON_START");
     expect(output).toContain("Hint: Inspect the observer boot log.");
-    expect(output).toContain("Run: stn observer restart");
+    expect(output).toContain(`Run: stn --config '${configPath}' observer restart`);
     expect(output).not.toContain("Core setup complete.");
   });
 
