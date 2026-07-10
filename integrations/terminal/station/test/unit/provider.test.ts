@@ -3,7 +3,11 @@ import type {
   ProviderProjectConfig,
   WorktreeObservation,
 } from "@station/contracts";
-import type { HostListEntry, StationHostClient } from "@station/host";
+import {
+  type HostListEntry,
+  type StationHostClient,
+  StationHostProviderError,
+} from "@station/host";
 import type { RuntimeClock } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { StationTerminalProviderError } from "../../src/errors";
@@ -260,6 +264,32 @@ describe("StationTerminalProvider (host-backed)", () => {
       harnessProvider: "claude",
       sessionId: "ses_web_feature",
     });
+  });
+
+  it("releases the registered target when host spawn fails", async () => {
+    const spawnError = new StationHostProviderError(
+      "HOST_SPAWN_FAILED",
+      "The controlling-terminal helper is unavailable.",
+    );
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        spawn: async () => {
+          throw spawnError;
+        },
+      }),
+    );
+    const opened = await provider.openWorkspace(openRequest());
+
+    await expect(
+      provider.launchProcess({
+        project,
+        worktree,
+        terminalTarget: opened.target,
+        agentEndpointId: opened.agentEndpointId,
+        launchPlan,
+      }),
+    ).rejects.toBe(spawnError);
+    await expect(provider.listTargets()).resolves.toEqual([]);
   });
 
   it("releaseTarget forgets host-backed bookkeeping without closing the process", async () => {

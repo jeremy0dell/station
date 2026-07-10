@@ -211,15 +211,21 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     if (handle.status !== "running") {
       return { ...base, started: false };
     }
-    const spawned = await handle.client.spawn(buildSpawnParams(request));
-    this.#hostBackedTargets.add(request.terminalTarget.targetId);
-    // Hand back the reattach info from the spawn result so the caller need not
-    // re-query host.list — and so "started" and "has a handle" never diverge.
-    return {
-      ...base,
-      started: true,
-      reattach: { endpointId: spawned.ptyId, socketPath: this.#host.socketPath },
-    };
+    try {
+      const spawned = await handle.client.spawn(buildSpawnParams(request));
+      this.#hostBackedTargets.add(request.terminalTarget.targetId);
+      // Hand back the reattach info from the spawn result so the caller need not
+      // re-query host.list — and so "started" and "has a handle" never diverge.
+      return {
+        ...base,
+        started: true,
+        reattach: { endpointId: spawned.ptyId, socketPath: this.#host.socketPath },
+      };
+    } catch (error) {
+      // A rejected host spawn must not leave the provisional target visible to reconcile.
+      await this.releaseTarget(request.terminalTarget.targetId);
+      throw error;
+    }
   }
 
   async reattachInfo(targetId: TerminalTargetId): Promise<TerminalReattachInfo | undefined> {
