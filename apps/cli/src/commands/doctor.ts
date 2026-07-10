@@ -3,7 +3,11 @@ import type { StationConfig } from "@station/config";
 import type { DoctorCheck, DoctorOptions, DoctorReport } from "@station/contracts";
 import { DoctorOptionsSchema } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { resolveExecutablePath, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import {
+  isCompiledBinary,
+  resolveExecutablePath,
+  runRuntimeBoundaryWithTimeout,
+} from "@station/runtime";
 import { parseRequiredOptionValue } from "../args.js";
 import {
   type ObserverProcessDeps,
@@ -81,17 +85,20 @@ export async function runDoctorCommand(
 }
 
 /**
- * Bare `stn` renders the TUI by shelling out to `bun run` against the station
- * workspace, so a missing Bun — or an installed Bun whose station/ lane was never
- * `bun install`ed — leaves the primary terminal UI silently broken even when the
- * observer is healthy. Surface either as a degraded (warn) doctor finding.
+ * Source `stn` renders the TUI through the station Bun workspace, so missing
+ * runtime dependencies surface as a degraded finding; compiled binaries carry
+ * the renderer and skip this source-only check.
  */
 export async function rendererRuntimeCheck(
   resolve: (command: string) => Promise<string | undefined> = (command) =>
     resolveExecutablePath(command),
   dashboardCommandOverride: string | undefined = process.env.STATION_DASHBOARD_COMMAND,
   uiInstalled: () => Promise<boolean> = () => isStationUiInstalled(),
+  compiled = isCompiledBinary(),
 ): Promise<DoctorCheck | undefined> {
+  if (compiled) {
+    return undefined;
+  }
   // Mirror tui.ts: STATION_DASHBOARD_COMMAND replaces `bun run` with a custom
   // renderer command, so neither Bun nor the station/ lane is required when set.
   if (dashboardCommandOverride !== undefined) {

@@ -56,6 +56,8 @@ export const SetupActionSchema = z
 
 export const SetupSummarySchema = z
   .object({
+    launchReady: z.boolean(),
+    workflowReady: z.boolean(),
     requiredOk: z.boolean(),
     requiredMissing: z.number().int().nonnegative(),
     warnings: z.number().int().nonnegative(),
@@ -63,7 +65,11 @@ export const SetupSummarySchema = z
     selectedHarness: SupportedHarnessIdSchema.optional(),
     configPath: z.string(),
   })
-  .strict();
+  .strict()
+  .refine((summary) => summary.requiredOk === summary.workflowReady, {
+    message: "requiredOk must match workflowReady",
+    path: ["requiredOk"],
+  });
 
 export const SetupPlanSchema = z
   .object({
@@ -190,6 +196,7 @@ export type SetupConfigFact =
       status: "valid";
       path: string;
       source: string;
+      observerStateDir: string;
       hasProjectForRoot: boolean;
       configuredHarnesses: readonly string[];
       configuredHookHarnesses: readonly string[];
@@ -235,11 +242,24 @@ export type SetupStationUiFact = {
   status: "installed" | "missing" | "skipped";
 };
 
+export type SetupStateDirFact =
+  | {
+      status: "ok";
+      path: string;
+    }
+  | {
+      status: "missing";
+      path: string;
+      message: string;
+    };
+
 export type SetupFacts = {
   generatedAt: string;
   mode: SetupMode;
   configPath: string;
   homeDir: string;
+  compiled: boolean;
+  stateDir: SetupStateDirFact;
   worktrunk: SetupDependencyFact;
   worktrunkAutomation: SetupWorktrunkAutomationFact;
   tmux: SetupDependencyFact;

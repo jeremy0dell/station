@@ -193,7 +193,7 @@ async function runGuidedSetupWithPrompt(
   await write(
     deps,
     renderSetupApplyResult(
-      { ...plan, summary: { ...plan.summary, requiredOk: true } },
+      { ...plan, summary: { ...plan.summary, workflowReady: true, requiredOk: true } },
       renderOptions(deps),
     ),
   );

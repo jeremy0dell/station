@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
-import type { ExternalCommandRunner } from "@station/runtime";
+import { resolveObserverPaths } from "@station/config";
+import { type ExternalCommandRunner, isCompiledBinary } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
 import { isStationUiInstalled } from "../../../stationWorkspace.js";
 import type { SetupDependencyFact, SetupFacts, SetupMode, SetupStationUiFact } from "../model.js";
@@ -17,6 +18,7 @@ import { type CheckGitOptions, checkSetupGit } from "./git.js";
 import { checkSetupGitDelta } from "./gitDelta.js";
 import { type CheckHarnessesOptions, checkSetupHarnesses } from "./harnesses.js";
 import { checkSetupLaunchers } from "./launchers.js";
+import { checkSetupStateDir, type SetupStateDirFileSystem } from "./stateDir.js";
 import { checkSetupTmux } from "./tmux.js";
 import { checkSetupTmuxBinding } from "./tmuxBinding.js";
 import { checkSetupWorktrunk, checkSetupWorktrunkAutomation } from "./worktrunk.js";
@@ -45,6 +47,9 @@ export type CollectSetupFactsOptions = {
   // Defaults to process.platform; injectable so machine-state tests can drive the
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
+  compiled?: boolean;
+  stateDirExecute?: (path: string) => Promise<void>;
+  stateDirFs?: SetupStateDirFileSystem;
 };
 
 export async function collectSetupFacts(options: CollectSetupFactsOptions): Promise<SetupFacts> {
@@ -52,6 +57,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   const cwd = options.cwd ?? process.cwd();
   const homeDir = options.homeDir ?? env.HOME ?? homedir();
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
+  const compiled = options.compiled ?? isCompiledBinary();
   const commandInput: {
     runner?: ExternalCommandRunner;
     env: CliEnv;
@@ -85,14 +91,18 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     await Promise.all([
       checkSetupWorktrunk(dependencyOptions),
       checkSetupTmux(dependencyOptions),
-      checkSetupBun(dependencyOptions),
+      compiled
+        ? Promise.resolve({ status: "ok" as const, command: "bun" })
+        : checkSetupBun(dependencyOptions),
       checkSetupDiffnav(dependencyOptions),
       checkSetupGitDelta(dependencyOptions),
       checkBrewDependency({
         ...commandOptions,
         ...(options.noBrew === undefined ? {} : { noBrew: options.noBrew }),
       }),
-      checkSetupXcode(xcodeOptions),
+      compiled
+        ? Promise.resolve({ status: "ok" as const, applicable: false })
+        : checkSetupXcode(xcodeOptions),
       checkSetupHarnesses(commandOptions),
       checkSetupConfig({ ...configPathOptions, configPath }),
       checkSetupLaunchers(dependencyOptions),
@@ -113,10 +123,22 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     ...(options.runner === undefined ? {} : { runner: options.runner }),
     tmuxCommand: tmux.command,
   });
-  const stationUi = await resolveStationUiFact({
-    env,
-    bunStatus: bun.status,
-    uiInstalled: options.stationUiInstalled ?? isStationUiInstalled,
+  const stationUi = compiled
+    ? ({ status: "skipped" } as const)
+    : await resolveStationUiFact({
+        env,
+        bunStatus: bun.status,
+        uiInstalled: options.stationUiInstalled ?? isStationUiInstalled,
+      });
+  const stateDirPath =
+    config.status === "valid"
+      ? config.observerStateDir
+      : resolveObserverPaths(undefined, homeDir).stateDir;
+  const stateDir = await checkSetupStateDir({
+    path: stateDirPath,
+    executable: compiled,
+    ...(options.stateDirExecute === undefined ? {} : { execute: options.stateDirExecute }),
+    ...(options.stateDirFs === undefined ? {} : { fs: options.stateDirFs }),
   });
 
   return {
@@ -124,6 +146,8 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     mode: options.mode,
     configPath,
     homeDir,
+    compiled,
+    stateDir,
     worktrunk,
     worktrunkAutomation,
     tmux,

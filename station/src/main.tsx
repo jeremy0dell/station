@@ -35,6 +35,12 @@ import { resolveOpenUrlCommand } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
+import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
+
+export type RunStationMainOptions = {
+  /** Compiled entrypoint seam: prepare embedded PTY assets after state-dir resolution. */
+  preparePtyRuntime?: (stateDir: string) => Promise<PreparedPtyRuntime>;
+};
 
 // A 1/0/true/false flag in the readSourceName style: opt in to auto-closing
 // the STATION overlay when a `[+sh]` shell pane opens. Unset/empty keeps the
@@ -87,8 +93,9 @@ function openExternalUrl(rawUrl: string): void {
 
 /**
  * Callable native OpenTUI process entry; standalone and HMR module startup invoke it once.
+ * Compiled startup may inject packaged PTY preparation without changing source defaults.
  */
-export async function runStationMain(): Promise<void> {
+export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const env = process.env;
   const stationClient = createStationClient(env, {
     onAttentionNeeded: () => {
@@ -172,6 +179,7 @@ export async function runStationMain(): Promise<void> {
   if (tuiConfig.warning !== undefined) {
     console.error(`[station] ${tuiConfig.warning}`);
   }
+  const ptyRuntime = await options.preparePtyRuntime?.(stationConfig.stateDir);
 
   // Corruption telemetry sink: detectors count regardless; with this wired they
   // also log to logs/tui.jsonl and write pane evidence dumps under
@@ -230,9 +238,11 @@ export async function runStationMain(): Promise<void> {
     shellAutoCloseOverlay: readShellAutoCloseOverlay(env.STATION_SHELL_AUTOCLOSE),
     ...(hostSocketPath === undefined ? {} : { hostSocketPath }),
     ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),
+    ...(ptyRuntime === undefined ? {} : { createTerminal: ptyRuntime.createTerminal }),
     shutdown: () => {
       rootForShutdown?.unmount();
       rendererForInput?.destroy();
+      ptyRuntime?.dispose();
       process.exit(0);
     },
   });

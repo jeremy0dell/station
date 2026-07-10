@@ -2,6 +2,7 @@ import type { ExternalCommandRunner } from "@station/runtime";
 import type { CliEnv } from "../../env.js";
 import type { SetupApplyFileSystem } from "./apply.js";
 import type { SetupFileSystemReader } from "./checks/config.js";
+import type { SetupStateDirFileSystem } from "./checks/stateDir.js";
 
 export type SetupPromptChoice = {
   value: string;
@@ -28,6 +29,9 @@ export type SetupCommandDeps = {
   // Defaults to process.platform; injected by machine-state tests to drive the
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
+  compiled?: boolean;
+  stateDirExecute?: (path: string) => Promise<void>;
+  stateDirFs?: SetupStateDirFileSystem;
 };
 
 export type SetupCommandOptions = {

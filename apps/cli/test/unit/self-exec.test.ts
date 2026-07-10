@@ -100,6 +100,15 @@ describe("dispatchSelfExec", () => {
     expect(calls).toEqual([{ runner: "ingress", argv }]);
   });
 
+  it("gives the stn-tmux-popup argv0 route precedence over internal tokens", async () => {
+    const argv = ["__observer", "--socket", "/tmp/observer.sock"] as const;
+    const { calls, runners } = createRecordingRunners();
+
+    await dispatchSelfExec({ argv0: "/usr/local/bin/stn-tmux-popup", argv }, runners);
+
+    expect(calls).toEqual([{ runner: "tmuxPopup", argv }]);
+  });
+
   it.each(INTERNAL_ROUTES)("consumes only $token and invokes only the $runner runner", async ({
     token,
     runner,

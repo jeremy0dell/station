@@ -1,4 +1,10 @@
 import { startStationHost } from "./startHost.js";
+import type { PreparedPtyRuntime } from "../bin/packagedAssets.js";
+
+export type RunStationHostMainOptions = {
+  /** Compiled entrypoint seam: prepare embedded PTY assets for the parsed state dir. */
+  preparePtyRuntime?: (stateDir: string) => Promise<PreparedPtyRuntime>;
+};
 
 function parseArgs(argv: readonly string[]): { socketPath: string; stateDir: string } {
   let socketPath: string | undefined;
@@ -22,14 +28,37 @@ function parseArgs(argv: readonly string[]): { socketPath: string; stateDir: str
 /**
  * Standalone station-station-host daemon entry, spawned detached by the
  * observer-side station provider. Parses raw --socket/--state-dir arguments and
- * shuts down cleanly on signal.
+ * shuts down cleanly on signal. Compiled startup may inject packaged PTY
+ * preparation without changing the source-host default.
  */
-export async function runStationHostMain(argv: readonly string[]): Promise<void> {
+export async function runStationHostMain(
+  argv: readonly string[],
+  options: RunStationHostMainOptions = {},
+): Promise<void> {
   const { socketPath, stateDir } = parseArgs(argv);
-  const host = await startStationHost({ socketPath, stateDir });
+  const ptyRuntime = await options.preparePtyRuntime?.(stateDir);
+  let host;
+  try {
+    host = await startStationHost({
+      socketPath,
+      stateDir,
+      ...(ptyRuntime === undefined
+        ? {}
+        : {
+            ptyImplementation: ptyRuntime.implementation,
+            ptyTableOptions: { createTerminal: ptyRuntime.createTerminal },
+          }),
+    });
+  } catch (error) {
+    ptyRuntime?.dispose();
+    throw error;
+  }
 
   const shutdown = () => {
-    void host.close().finally(() => process.exit(0));
+    void host.close().finally(() => {
+      ptyRuntime?.dispose();
+      process.exit(0);
+    });
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);

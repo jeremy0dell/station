@@ -1,13 +1,14 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
 import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.js";
 import { checkSetupDiffnav } from "../../src/commands/setup/checks/diffnav.js";
 import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
 import { checkSetupGitDelta } from "../../src/commands/setup/checks/gitDelta.js";
+import { checkSetupStateDir } from "../../src/commands/setup/checks/stateDir.js";
 import { collectSetupFacts } from "../../src/commands/setup/checks/system.js";
 import {
   checkSetupTmuxBinding,
@@ -23,6 +24,105 @@ describe("setup dependency checks", () => {
     await Promise.all(
       tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
     );
+  });
+
+  it("creates and proves a writable private state directory", async () => {
+    const root = await tempRoot(tempRoots);
+    const path = join(root, "state");
+
+    await expect(checkSetupStateDir({ path, probeName: ".probe" })).resolves.toEqual({
+      status: "ok",
+      path,
+    });
+  });
+
+  it("executes the compiled asset probe from the state directory", async () => {
+    const root = await tempRoot(tempRoots);
+    const path = join(root, "state");
+
+    await expect(
+      checkSetupStateDir({ path, executable: true, probeName: ".probe" }),
+    ).resolves.toEqual({ status: "ok", path });
+    await expect(access(join(path, ".probe"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects and cleans up a compiled state directory that cannot execute assets", async () => {
+    const root = await tempRoot(tempRoots);
+    const path = join(root, "state");
+
+    await expect(
+      checkSetupStateDir({
+        path,
+        executable: true,
+        probeName: ".probe",
+        execute: async () => {
+          throw Object.assign(new Error("execution denied"), { code: "EACCES" });
+        },
+      }),
+    ).resolves.toEqual({
+      status: "missing",
+      path,
+      message: `STATION state directory does not permit executable assets at ${path}.`,
+    });
+    await expect(access(join(path, ".probe"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports an actionable state-directory failure and cleans up the probe", async () => {
+    const unlinked: string[] = [];
+    const path = "/readonly/state";
+
+    await expect(
+      checkSetupStateDir({
+        path,
+        probeName: ".probe",
+        fs: {
+          async mkdir() {},
+          async open() {
+            throw Object.assign(new Error("read only"), { code: "EACCES" });
+          },
+          async unlink(probePath) {
+            unlinked.push(probePath);
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      status: "missing",
+      path,
+      message: `STATION state directory is not writable at ${path}.`,
+    });
+    expect(unlinked).toEqual([join(path, ".probe")]);
+  });
+
+  it("skips source renderer and Xcode probes in compiled setup", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const stationUiInstalled = vi.fn(async () => false);
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: join(root, "home"),
+      compiled: true,
+      platform: "darwin",
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      }),
+      access: fakeAccess([]),
+      fs: readOnlyFs({}),
+      stationUiInstalled,
+    });
+    const plan = buildSetupPlan(facts);
+
+    expect(stationUiInstalled).not.toHaveBeenCalled();
+    expect(calls.some((call) => call.command === "xcode-select")).toBe(false);
+    expect(plan.summary.launchReady).toBe(true);
+    expect(plan.checks.some((check) => check.id === "bun")).toBe(false);
+    expect(plan.checks.some((check) => check.id === "station-ui")).toBe(false);
+    expect(plan.checks.some((check) => check.id === "command-line-tools")).toBe(false);
   });
 
   it("collects core facts through injected effects only", async () => {

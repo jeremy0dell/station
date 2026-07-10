@@ -71,6 +71,10 @@ export function harnessInstallPlan(facts: SetupFacts, actions: readonly SetupAct
     checks: [],
     actions: [...actions],
     summary: {
+      launchReady:
+        facts.stateDir.status === "ok" &&
+        (facts.compiled || (facts.bun.status === "ok" && facts.stationUi.status !== "missing")),
+      workflowReady: false,
       requiredOk: false,
       requiredMissing: 1,
       warnings: 0,

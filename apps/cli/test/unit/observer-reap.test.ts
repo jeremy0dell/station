@@ -39,6 +39,19 @@ describe("parseObserverPsOutput", () => {
       "88888 Sat Jul  4 17:47:24 2026 /bin/zsh -c ps -axww | grep observerMain.js --state-dir /x";
     expect(parseObserverPsOutput(out)).toEqual([]);
   });
+
+  it("keeps only the exact compiled stn observer command shape", () => {
+    const out = [
+      " 4001 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /compiled/o.sock",
+      " 4002 Sat Jul  4 17:45:34 2026 /opt/station/stn observer start --socket /wrong/o.sock",
+      " 4003 Sat Jul  4 17:45:35 2026 /opt/station/stn-copy __observer --socket /wrong/o.sock",
+      " 4004 Sat Jul  4 17:45:36 2026 /bin/zsh -c /opt/station/stn __observer --socket /wrong/o.sock",
+    ].join("\n");
+
+    expect(parseObserverPsOutput(out)).toEqual([
+      expect.objectContaining({ pid: 4001, socketPath: "/compiled/o.sock" }),
+    ]);
+  });
 });
 
 describe("selectReapPlan", () => {

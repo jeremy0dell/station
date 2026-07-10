@@ -241,13 +241,16 @@ and reloads after later gaps or events that cannot be reduced safely.
 
 Current startup proceeds in this order:
 
-1. CLI composition supplies the concrete provider registry factory.
-2. Observer runtime loads config, resolves the state and socket paths, and
-   creates the state directory.
+1. CLI composition supplies the concrete, optionally asynchronous provider
+   registry factory.
+2. Observer runtime loads config, resolves the canonical state and socket paths,
+   creates the state directory, and passes that resolved directory to CLI
+   composition. Compiled composition materializes the Pi extension here before
+   constructing providers; Observer code remains provider-neutral.
 3. SQLite opens, applies pending migrations, and constructs persistence.
-4. The runtime creates the event bus, logger, command queue, provider registry,
-   feature evaluator, Observer core, command handlers, and configured event
-   hooks.
+4. The runtime creates the event bus, logger, command queue, feature evaluator,
+   Observer core, command handlers, and configured event hooks around the
+   awaited provider registry.
 5. The API constructs ingress queues, reconcile scheduling, metadata refresh,
    diagnostics dependencies, and spool draining.
 6. The protocol server binds the socket before startup reconcile. A

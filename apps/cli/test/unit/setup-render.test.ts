@@ -122,6 +122,8 @@ function plan(): SetupPlan {
       },
     ],
     summary: {
+      launchReady: true,
+      workflowReady: false,
       requiredOk: false,
       requiredMissing: 1,
       warnings: 0,

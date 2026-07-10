@@ -37,6 +37,8 @@ describe("setup model", () => {
         },
       ],
       summary: {
+        launchReady: true,
+        workflowReady: true,
         requiredOk: true,
         requiredMissing: 0,
         warnings: 0,
@@ -48,6 +50,8 @@ describe("setup model", () => {
     });
 
     expect(parsed.summary.requiredOk).toBe(true);
+    expect(parsed.summary.launchReady).toBe(true);
+    expect(parsed.summary.workflowReady).toBe(true);
   });
 
   it("rejects unexpected output fields", () => {
@@ -58,6 +62,8 @@ describe("setup model", () => {
         checks: [],
         actions: [],
         summary: {
+          launchReady: true,
+          workflowReady: true,
           requiredOk: true,
           requiredMissing: 0,
           warnings: 0,
@@ -68,5 +74,26 @@ describe("setup model", () => {
         extra: true,
       }),
     ).toThrow();
+  });
+
+  it("keeps requiredOk as a compatibility alias of workflowReady", () => {
+    expect(() =>
+      SetupPlanSchema.parse({
+        generatedAt: "2026-06-08T12:00:00.000Z",
+        mode: "check",
+        checks: [],
+        actions: [],
+        summary: {
+          launchReady: true,
+          workflowReady: false,
+          requiredOk: true,
+          requiredMissing: 1,
+          warnings: 0,
+          selectedActions: 0,
+          configPath: "/tmp/config.toml",
+        },
+        nextSteps: [],
+      }),
+    ).toThrow("requiredOk must match workflowReady");
   });
 });

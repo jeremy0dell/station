@@ -85,6 +85,36 @@ preserves the existing host, so changing PTY implementations requires `stop`
 followed by `start`. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`,
 then press Ctrl-C. Finally stop the devbox and confirm no pane payload remains.
 
+For standalone-binary work, Bun 1.3.14 is required. From `station/`, install the
+native UI dependencies, return to the repository root, then build and run the
+binary smoke:
+
+```bash
+bun install
+cd ..
+pnpm build:binary -- --version 0.1.0-dev
+pnpm smoke:binary -- --expected-version 0.1.0-dev
+```
+
+The staged artifact is `station/dist/bin/stn`, with `stn-ingress` and
+`stn-tmux-popup` symlinks beside it. The build is native-only: it compiles the
+portable C controlling-terminal helper with the host `cc`, bundles the Pi
+extension, and selects the matching Bun target. Intel/x64 builds use Bun's
+baseline target for older CPU compatibility. The smoke runs the binary with a
+child `PATH` that contains neither Node nor Bun and covers Observer self-spawn,
+ingress and popup argv0 dispatch, packaged assets, hostile working-directory
+configuration, and a real host-backed Bun PTY.
+
+To inspect the UX manually after the smoke:
+
+```bash
+./station/dist/bin/stn
+```
+
+Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
+The isolated or configured `logs/station-host.jsonl` should record
+`ptyImplementation` as `bun`.
+
 For CI install parity, use:
 
 ```bash

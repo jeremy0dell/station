@@ -36,6 +36,9 @@ export function collectForCommand(
   if (deps.fs !== undefined) collectOptions.fs = deps.fs;
   if (deps.now !== undefined) collectOptions.now = deps.now;
   if (deps.platform !== undefined) collectOptions.platform = deps.platform;
+  if (deps.compiled !== undefined) collectOptions.compiled = deps.compiled;
+  if (deps.stateDirExecute !== undefined) collectOptions.stateDirExecute = deps.stateDirExecute;
+  if (deps.stateDirFs !== undefined) collectOptions.stateDirFs = deps.stateDirFs;
   if (flags.noBrew !== undefined) collectOptions.noBrew = flags.noBrew;
   return collectSetupFacts(collectOptions);
 }
@@ -185,6 +188,7 @@ export function markRequiredIncomplete(plan: SetupPlan): SetupPlan {
     ...plan,
     summary: {
       ...plan.summary,
+      workflowReady: false,
       requiredOk: false,
       requiredMissing: Math.max(1, plan.summary.requiredMissing),
     },

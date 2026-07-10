@@ -1,15 +1,35 @@
 #!/usr/bin/env node
 import { runObserverMain } from "@station/observer";
-import { createProviderRegistry } from "./observerProviders.js";
+import { type CreateProviderRegistryOptions, createProviderRegistry } from "./observerProviders.js";
+
+export type RunCliObserverMainOptions = {
+  preparePiExtension?: (stateDir: string) => string | Promise<string>;
+};
 
 /**
- * Receives raw observer arguments and delegates provider composition to the
- * Observer bootstrap.
+ * ADAPTER
+ *
+ * Translates raw process arguments and optional compiled Pi asset preparation
+ * into CLI-owned Observer provider composition.
  */
 export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),
+  options: RunCliObserverMainOptions = {},
 ): Promise<number> {
-  return runObserverMain([...argv], { providerRegistryFactory: createProviderRegistry });
+  return runObserverMain([...argv], {
+    providerRegistryFactory: async (config, providerOptions) => {
+      const registryOptions: CreateProviderRegistryOptions = {};
+      if (providerOptions.configPath !== undefined) {
+        registryOptions.configPath = providerOptions.configPath;
+      }
+      if (options.preparePiExtension !== undefined) {
+        registryOptions.piExtensionPath = await options.preparePiExtension(
+          providerOptions.stateDir,
+        );
+      }
+      return createProviderRegistry(config, registryOptions);
+    },
+  });
 }
 
 async function runCliObserverProcess(): Promise<void> {

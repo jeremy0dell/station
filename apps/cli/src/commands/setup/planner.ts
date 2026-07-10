@@ -26,8 +26,13 @@ export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
   const warnings = checks.filter((check) => check.status === "warning").length;
+  const workflowReady = checks.every((check) => check.tier !== "required" || check.status === "ok");
   const summary = {
-    requiredOk: checks.every((check) => check.tier !== "required" || check.status === "ok"),
+    launchReady:
+      facts.stateDir.status === "ok" &&
+      (facts.compiled || (facts.bun.status === "ok" && facts.stationUi.status !== "missing")),
+    workflowReady,
+    requiredOk: workflowReady,
     requiredMissing,
     warnings,
     selectedActions: actions.filter((action) => action.selected).length,
@@ -50,7 +55,8 @@ function setupChecks(
   selectedHarness: SupportedHarnessId | undefined,
 ): SetupCheck[] {
   return [
-    ...xcodeChecks(facts),
+    stateDirCheck(facts),
+    ...(facts.compiled ? [] : xcodeChecks(facts)),
     dependencyCheck({
       id: "worktrunk",
       label: "Worktrunk / wt",
@@ -63,19 +69,23 @@ function setupChecks(
       missingMessage: facts.tmux.message ?? "tmux is required for the reference terminal workflow.",
       dependency: facts.tmux,
     }),
-    dependencyCheck({
-      id: "bun",
-      label: "Bun",
-      missingMessage:
-        facts.bun.message ?? "Bun is required to run the STATION terminal UI (bare stn).",
-      dependency: facts.bun,
-    }),
+    ...(facts.compiled
+      ? []
+      : [
+          dependencyCheck({
+            id: "bun",
+            label: "Bun",
+            missingMessage:
+              facts.bun.message ?? "Bun is required to run the STATION terminal UI (bare stn).",
+            dependency: facts.bun,
+          }),
+        ]),
     gitCheck(facts),
     harnessCheck(facts, selectedHarness),
     configCheck(facts),
     ...configDiagnosticsChecks(facts),
     launcherCheck(facts),
-    stationUiCheck(facts),
+    ...(facts.compiled ? [] : [stationUiCheck(facts)]),
     {
       id: "worktrunk-shell-integration",
       tier: "recommended",
@@ -116,6 +126,20 @@ function setupChecks(
       message: "Run stn doctor after setup to validate the observer runtime.",
     },
   ];
+}
+
+function stateDirCheck(facts: SetupFacts): SetupCheck {
+  return {
+    id: "state-dir",
+    tier: "required",
+    status: facts.stateDir.status === "ok" ? "ok" : "missing",
+    label: "STATION state directory",
+    message:
+      facts.stateDir.status === "ok"
+        ? "STATION state directory is writable."
+        : facts.stateDir.message,
+    details: { path: facts.stateDir.path },
+  };
 }
 
 function launcherCheck(facts: SetupFacts): SetupCheck {
@@ -589,7 +613,7 @@ function setupActions(
   if (facts.tmux.status === "missing") {
     actions.push(installAction("install-tmux", "tmux", "tmux", facts.brew));
   }
-  if (facts.bun.status === "missing") {
+  if (!facts.compiled && facts.bun.status === "missing") {
     actions.push(installAction("install-bun", "Bun", "bun", facts.brew));
   }
   if (facts.diffnav.status === "missing") {
@@ -824,6 +848,9 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   if (requiredMissing === 0) {
     const stationCommand = quoteCommandPart(facts.launchers.station.command);
     return [`${stationCommand} doctor`, stationCommand];
+  }
+  if (facts.stateDir.status === "missing") {
+    return [facts.stateDir.message];
   }
   if (facts.xcode.status === "missing") {
     return [facts.xcode.message];

@@ -271,6 +271,8 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
     mode: "plan",
     configPath: "/tmp/config.toml",
     homeDir: "/tmp/home",
+    compiled: false,
+    stateDir: { status: "ok", path: "/tmp/home/.local/state/station" },
     worktrunk: { status: "ok", command: "wt" },
     worktrunkAutomation: {
       status: "ok",

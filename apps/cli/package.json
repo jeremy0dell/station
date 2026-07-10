@@ -15,6 +15,22 @@
     "./ingress": {
       "types": "./dist/ingress/index.d.ts",
       "import": "./dist/ingress/index.js"
+    },
+    "./self-exec": {
+      "types": "./dist/selfExec.d.ts",
+      "import": "./dist/selfExec.js"
+    },
+    "./main": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    },
+    "./observer-main": {
+      "types": "./dist/observerMain.d.ts",
+      "import": "./dist/observerMain.js"
+    },
+    "./ingress-main": {
+      "types": "./dist/ingressMain.d.ts",
+      "import": "./dist/ingressMain.js"
     }
   },
   "bin": {
