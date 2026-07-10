@@ -46,7 +46,7 @@ station keeps track of everything that's running and makes it visible:
 
 ### macOS: one command
 
-From a fresh clone, one script installs the system dependencies via Homebrew, builds **both** lanes (the pnpm/Node CLI + observer *and* the Bun terminal UI), and links `stn`:
+From a fresh clone, one script installs the system dependencies via Homebrew, builds **both** lanes (the pnpm/Node CLI + observer *and* the Bun terminal UI), and links all three checkout launchers:
 
 ```sh
 ./scripts/setup/bootstrap.sh
@@ -74,7 +74,7 @@ pnpm stn reconcile --reason manual
 pnpm stn
 ```
 
-To use bare `stn` from any directory, link the CLI globally (the macOS script already does this):
+To use bare `stn`, `stn-ingress`, and `stn-tmux-popup` from any directory, link the checkout globally (the macOS script already does this):
 
 ```sh
 pnpm station:link

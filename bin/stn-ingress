@@ -11,7 +11,8 @@ while [ -h "$script" ]; do
   esac
 done
 
-root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd)
+# pnpm's global shim enters through a symlinked package directory, so resolve the checkout itself.
+root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd -P)
 entry=$root/apps/cli/dist/ingressMain.js
 
 if [ ! -f "$entry" ]; then

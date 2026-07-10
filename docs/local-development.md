@@ -284,7 +284,7 @@ node apps/cli/dist/main.js --config /abs/iso-config.toml debug logs
   code (`pnpm build`, or `pnpm dev` which watches `@station/cli`).
 - **Run this checkout's CLI** with `pnpm stn …` or `node apps/cli/dist/main.js …`
   from the worktree root — not a globally-installed `stn`, which may point
-  elsewhere. (`pnpm station:link` mutates the global `stn`; avoid it for isolated dev.)
+  elsewhere. (`pnpm station:link` mutates all three global launchers; avoid it for isolated dev.)
 - **Station (Bun) workspace** is off the pnpm/Node build. After a root `pnpm build`:
   `cd station && bun install && bun run link:station && bun run repair:node-pty`.
   The `bun run station*`/`host*`/`e2e:persist` scripts do the link/repair for you.

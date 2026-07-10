@@ -11,7 +11,8 @@ while [ -h "$script" ]; do
   esac
 done
 
-root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd)
+# pnpm's global shim enters through a symlinked package directory, so resolve the checkout itself.
+root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd -P)
 tmux_popup=$root/integrations/terminal/tmux/bin/stn-popup
 entry=$root/apps/cli/dist/main.js
 

@@ -206,6 +206,46 @@ describe("setup planner", () => {
     });
   });
 
+  it("installs checkout launchers through the pnpm 11-compatible package script", () => {
+    const base = facts();
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...base.launchers,
+          station: {
+            ...base.launchers.station,
+            source: "checkout",
+            command: base.launchers.station.checkoutPath,
+          },
+          ingress: {
+            ...base.launchers.ingress,
+            source: "checkout",
+            command: base.launchers.ingress.checkoutPath,
+          },
+          tmuxPopup: {
+            ...base.launchers.tmuxPopup,
+            source: "checkout",
+            command: base.launchers.tmuxPopup.checkoutPath,
+          },
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      status: "warning",
+      details: {
+        station: "/tmp/station/bin/stn",
+        ingress: "/tmp/station/bin/stn-ingress",
+        tmuxPopup: "/tmp/station/integrations/terminal/tmux/bin/stn-popup",
+      },
+    });
+    expect(plan.actions.find((action) => action.id === "link-station-launchers")).toMatchObject({
+      kind: "run-command",
+      selected: false,
+      command: ["pnpm", "--dir", "/tmp/station", "station:link"],
+    });
+  });
+
   it("plans a safe append for an existing config", () => {
     const plan = buildSetupPlan(facts(), {
       configWrite: {

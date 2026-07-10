@@ -4,7 +4,7 @@ This setup path is for a local development checkout. station remains a private w
 
 ## Quick start (macOS)
 
-From a fresh clone, one script installs the system dependencies via Homebrew, builds the workspace, and links the `stn` command:
+From a fresh clone, one script installs the system dependencies via Homebrew, builds the workspace, and links all three checkout launchers onto `PATH`:
 
 ```bash
 ./scripts/setup/bootstrap.sh
@@ -12,7 +12,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm link --global`. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — the design and phased roadmap live in [Single-binary Station](single-binary.md); until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — the design and phased roadmap live in [Single-binary Station](single-binary.md); until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
 
 ## Requirements
 
@@ -57,7 +57,7 @@ Optional integrations can be added later.
 
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
-Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. When bare `stn` launchers are not on `PATH`, setup uses launcher paths from the current checkout for generated tmux and hook commands and offers `pnpm --dir <checkout> link --global` as the convenience path for bare terminal commands.
+Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. When bare `stn` launchers are not on `PATH`, setup uses launcher paths from the current checkout for generated tmux and hook commands and offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 
 Useful smoke options:
 
@@ -78,14 +78,14 @@ pnpm stn snapshot --json
 pnpm stn
 ```
 
-or link the built CLI after setup:
+or link all three checkout launchers after setup:
 
 ```bash
 pnpm station:link
 stn doctor
 ```
 
-The tmux popup binding and generated provider hooks no longer require a global link when setup can resolve the current checkout launchers. Linking is still useful when you want to type bare `stn` from arbitrary directories.
+The tmux popup binding and generated provider hooks no longer require a global link when setup can resolve the current checkout launchers. Linking is still useful when you want bare `stn`, `stn-ingress`, and `stn-tmux-popup` from arbitrary directories.
 
 ## Local Real Config
 

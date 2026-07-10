@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it } from "vitest";
+import { setupPackageRoot } from "../../src/commands/setup/checks/launchers.js";
 import { runSetupCommand, type SetupPromptAdapter } from "../../src/commands/setup/index.js";
 
 describe("guided setup command", () => {
@@ -57,6 +58,67 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain(`Applying: Write STATION config (${configPath})`);
     expect(chunks.join("")).toContain("Completed: Write STATION config");
     expect(chunks.join("")).toContain("Core setup complete.");
+  });
+
+  it("continues with all three checkout launchers when global installation fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    const packageRoot = setupPackageRoot();
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "brew --version": "Homebrew 4.0.0\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          join(packageRoot, "bin/stn"),
+          join(packageRoot, "bin/stn-ingress"),
+          join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
+        ]),
+        fs,
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Link STATION launchers") ||
+              message.includes("Write STATION project config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(calls.find((call) => call.command === "pnpm")).toMatchObject({
+      args: ["--dir", packageRoot, "station:link"],
+      stdio: "inherit",
+    });
+    expect(chunks.join("")).toContain(
+      "STATION launcher link failed. Continuing with checkout launcher paths.",
+    );
+    expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("[[projects]]");
   });
 
   it("runs Worktrunk shell integration non-interactively after the STATION prompt", async () => {

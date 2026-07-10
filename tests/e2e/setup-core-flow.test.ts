@@ -1,11 +1,147 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadConfig } from "@station/config";
 import { describe, expect, it } from "vitest";
 
 describe("setup core flow e2e", () => {
+  it("bootstraps setup and runs all checkout launchers with the pinned pnpm", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-launcher-install-e2e-"));
+    try {
+      const repoRoot = process.cwd();
+      const home = join(root, "home");
+      const pnpmHome = join(root, "pnpm-home");
+      const bin = join(root, "bin");
+      const pnpmBin = run("/bin/sh", ["-c", "command -v pnpm"], {
+        cwd: repoRoot,
+      }).stdout.trim();
+      await mkdir(bin, { recursive: true });
+      await writeShim(
+        bin,
+        "pnpm",
+        [
+          'case "$1" in',
+          "  install|build) exit 0 ;;",
+          `  station:link) exec ${shellQuote(pnpmBin)} --dir "$PWD" station:link ;;`,
+          `  add|--version) exec ${shellQuote(pnpmBin)} "$@" ;;`,
+          "esac",
+          'echo "unexpected pnpm $*" >&2',
+          "exit 2",
+          "",
+        ].join("\n"),
+      );
+      await writeShim(
+        bin,
+        "brew",
+        [
+          'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi',
+          'if [ "$1" = "bundle" ]; then exit 0; fi',
+          'if [ "$1 $2" = "--prefix node@24" ]; then exit 1; fi',
+          'echo "unexpected brew $*" >&2',
+          "exit 2",
+          "",
+        ].join("\n"),
+      );
+      await writeShim(bin, "corepack", "exit 0\n");
+      await writeShim(
+        bin,
+        "xcode-select",
+        'if [ "$1" = "-p" ]; then echo "/Library/Developer/CommandLineTools"; exit 0; fi\nexit 2\n',
+      );
+      await writeShim(
+        bin,
+        "bun",
+        'if [ "$1" = "--version" ]; then echo "1.2.0"; exit 0; fi\nexit 0\n',
+      );
+      await writeShim(
+        bin,
+        "wt",
+        'if [ "$1" = "--version" ]; then echo "worktrunk 1.2.3"; exit 0; fi\nexit 0\n',
+      );
+      await writeShim(
+        bin,
+        "tmux",
+        'if [ "$1" = "-V" ]; then echo "tmux 3.5a"; exit 0; fi\nexit 0\n',
+      );
+      await writeShim(
+        bin,
+        "codex",
+        'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
+      );
+      await writeShim(bin, "diffnav", "exit 0\n");
+      await writeShim(bin, "delta", "exit 0\n");
+      const env = {
+        ...process.env,
+        HOME: home,
+        PNPM_HOME: pnpmHome,
+        XDG_CONFIG_HOME: join(root, "xdg-config"),
+        XDG_DATA_HOME: join(root, "xdg-data"),
+        XDG_CACHE_HOME: join(root, "xdg-cache"),
+        XDG_STATE_HOME: join(root, "xdg-state"),
+        COREPACK_HOME: join(root, "corepack"),
+        PATH: `${join(pnpmHome, "bin")}:${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        NO_COLOR: "1",
+        STATION_FAST_POPUP_NO_FALLBACK: "1",
+      };
+      await Promise.all([
+        mkdir(home, { recursive: true }),
+        mkdir(join(pnpmHome, "bin"), { recursive: true }),
+        mkdir(env.XDG_CONFIG_HOME, { recursive: true }),
+        mkdir(env.XDG_DATA_HOME, { recursive: true }),
+        mkdir(env.XDG_CACHE_HOME, { recursive: true }),
+        mkdir(env.XDG_STATE_HOME, { recursive: true }),
+        mkdir(env.COREPACK_HOME, { recursive: true }),
+      ]);
+
+      expect(run("pnpm", ["--version"], { cwd: repoRoot, env }).stdout.trim()).toBe("11.0.0");
+      const bootstrap = run(join(repoRoot, "scripts/setup/bootstrap.sh"), [], { cwd: root, env });
+      expect(bootstrap.stdout).toContain("Linking STATION launchers onto your PATH");
+      expect(bootstrap.stdout).toContain("Station is installed.");
+
+      const globalStation = await findGlobalStationLink(pnpmHome);
+      await expect(realpath(globalStation)).resolves.toBe(repoRoot);
+      expect(run("stn", ["--help"], { cwd: root, env }).stdout).toContain("stn --help");
+
+      const project = join(root, "project");
+      const configPath = join(home, ".config", "station", "config.toml");
+      await mkdir(project, { recursive: true });
+      run("git", ["init", "-b", "main"], { cwd: project, env });
+      const setup = run("stn", ["--config", configPath, "setup", "apply", "--yes", "--no-brew"], {
+        cwd: project,
+        env,
+      });
+      expect(setup.stdout).toContain("Core setup complete.");
+      await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
+
+      const ingress = run("stn-ingress", [], { cwd: root, env, allowFailure: true });
+      expect(ingress.status).toBe(1);
+      expect(ingress.stderr).toContain("Usage: stn-ingress [options] <provider> [event]");
+
+      const popup = run("stn-tmux-popup", [], {
+        cwd: root,
+        env: {
+          ...env,
+          STATION_DISABLE_FAST_POPUP: "1",
+          STATION_FAST_POPUP_NO_FALLBACK: "0",
+          STATION_POPUP_FALLBACK_COMMAND: 'printf "stn-tmux-popup ok\\n"',
+        },
+      });
+      expect(popup.stdout.trim()).toBe("stn-tmux-popup ok");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("creates core config from a temp git repo without real external tools", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-setup-e2e-"));
     let passed = false;
@@ -290,6 +426,20 @@ describe("setup core flow e2e", () => {
     }
   });
 });
+
+async function findGlobalStationLink(pnpmHome: string): Promise<string> {
+  const globalRoot = join(pnpmHome, "global", "v11");
+  for (const entry of await readdir(globalRoot)) {
+    const candidate = join(globalRoot, entry, "node_modules", "station");
+    try {
+      await realpath(candidate);
+      return candidate;
+    } catch {
+      // pnpm v11 keeps global installs beside non-package metadata in this directory.
+    }
+  }
+  throw new Error(`Global station link was not found under ${globalRoot}.`);
+}
 
 async function writeShim(bin: string, name: string, body: string): Promise<void> {
   const path = join(bin, name);
