@@ -2,7 +2,9 @@ import { spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
+import { waitForSocketClosed } from "../support/sockets";
 
 describe("setup guided feedback e2e", () => {
   it("exits instead of hanging when every agent install choice is declined", async () => {
@@ -92,6 +94,7 @@ type Fixture = {
 
 async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), "station-setup-guided-feedback-"));
+  const runtimeDir = await mkdtemp(join(tmpdir(), "stn-setup-run-"));
   const home = join(root, "home");
   const repo = join(root, "repo");
   const bin = join(root, "bin");
@@ -170,6 +173,7 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
 
   const env: NodeJS.ProcessEnv = {
     HOME: home,
+    XDG_RUNTIME_DIR: runtimeDir,
     PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
     NO_COLOR: "1",
     STATION_WORKTRUNK_BIN: "wt",
@@ -191,9 +195,31 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
     configPath,
     env,
     async cleanup() {
-      await rm(root, { recursive: true, force: true });
+      try {
+        await stopObservers([
+          join(runtimeDir, "station", "observer.sock"),
+          join(home, ".local", "state", "station", "observer.sock"),
+        ]);
+      } finally {
+        await Promise.all([
+          rm(root, { recursive: true, force: true }),
+          rm(runtimeDir, { recursive: true, force: true }),
+        ]);
+      }
     },
   };
+}
+
+async function stopObservers(socketPaths: readonly string[]): Promise<void> {
+  const results = await Promise.allSettled(
+    socketPaths.map(async (socketPath) => {
+      const client = createObserverClient({ socketPath, timeoutMs: 1_000 });
+      await client.stop().catch(() => undefined);
+      await waitForSocketClosed(socketPath, { timeoutMs: 5_000 });
+    }),
+  );
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
 }
 
 async function writeCodexShim(bin: string): Promise<void> {
@@ -226,7 +252,7 @@ function runStation(
     timeoutMs?: number;
   },
 ): Promise<StationProcessResult> {
-  const timeoutMs = options.timeoutMs ?? 5_000;
+  const timeoutMs = options.timeoutMs ?? 15_000;
   return new Promise((resolve) => {
     const child = spawn(join(process.cwd(), "bin", "stn"), [...args], {
       cwd: options.cwd,

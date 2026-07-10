@@ -23,6 +23,7 @@ export type SetupCommandDeps = {
   env?: CliEnv;
   cwd?: string;
   homeDir?: string;
+  activateObserverConfig?: (input: { configPath: string; homeDir: string }) => Promise<void>;
   now?: () => Date;
   // Defaults to process.platform; injected by machine-state tests to drive the
   // macOS Command Line Tools check on any host.

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfigFromToml } from "@station/config";
+import { emptyConfig, loadConfigFromToml, resolveObserverPaths } from "@station/config";
 import { afterEach, describe, expect, it } from "vitest";
 import { planSetupConfigWrite } from "../../src/commands/setup/configWriter.js";
 import type { SetupFacts } from "../../src/commands/setup/model.js";
@@ -31,6 +31,7 @@ describe("setup config writer", () => {
 
     expect(write.operation).toBe("create");
     if (write.operation !== "create") throw new Error("expected create plan");
+    expect(write.content).not.toMatch(/^socket_path\s*=/m);
     const loaded = await loadConfigFromToml(write.content, {
       configPath: write.path,
       homeDir: root,
@@ -45,6 +46,43 @@ describe("setup config writer", () => {
       id: "repo",
       root: repo,
     });
+  });
+
+  it("keeps generated config on the first-run observer socket", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const write = await planSetupConfigWrite(
+      setupFacts(repo, {
+        config: {
+          status: "missing",
+          path: join(root, "config.toml"),
+          message: "missing",
+        },
+      }),
+    );
+
+    expect(write.operation).toBe("create");
+    if (write.operation !== "create") throw new Error("expected create plan");
+    const loaded = await loadConfigFromToml(write.content, {
+      configPath: write.path,
+      homeDir: root,
+    });
+    const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+
+    try {
+      for (const runtimeDir of [undefined, join(root, "runtime")]) {
+        if (runtimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+        else process.env.XDG_RUNTIME_DIR = runtimeDir;
+
+        expect(resolveObserverPaths(loaded.config, root).socketPath).toBe(
+          resolveObserverPaths(emptyConfig(), root).socketPath,
+        );
+      }
+    } finally {
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+    }
   });
 
   it("writes hook flags when guided setup accepts hooks", async () => {

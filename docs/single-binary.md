@@ -360,23 +360,20 @@ schema-mismatch UX — never an out-of-band kill.
 
 ### B-config — config activation (F4 — v1 was wrong)
 
-v1 claimed B3 closes the "config-less observer keeps serving
-`emptyConfig()` after `stn setup`" gap. It does not: B3 restarts only an
-**older-version** observer, so a same-version first-run `setup` leaves the
-observer on `emptyConfig()` indefinitely. Fix, one of (pick in
-implementation, prefer the first):
+**Status: implemented.** Guided `stn setup` and non-interactive
+`stn setup apply --yes` activate every successfully written config, including
+harness-only changes. Setup loads the completed file with its normalized path
+and setup home, resolves its observer paths, and starts or restarts the observer
+through the stable lifecycle facade. Completion is reported only after the
+observer is running with the written config. Activation stays outside the apply
+engine, so a lifecycle failure retains the successful write, exits nonzero,
+preserves the lifecycle error, and points to `stn observer restart`.
 
-1. **`stn setup` explicitly reloads/restarts the observer** on writing a
-   config that changes project membership — a targeted `restartObserver`
-   (same-version safe: stop via RPC works) after `configWriter` succeeds,
-   with a user-visible line.
-2. **Health exposes configuration identity** (config path + a content hash);
-   the CLI restarts when the running observer's config identity differs from
-   the on-disk config. This also generalizes to external edits.
-
-Either way, the first-run flow must guarantee the observer reflects the new
-project without a manual restart — that is the headline UX and must be in
-the acceptance suite.
+New setup configs omit `observer.socket_path` while retaining
+`observer.state_dir`. Config-less and configured startup therefore resolve the
+same default or XDG socket, so an open TUI reconnects to the configured observer
+without manual intervention. Existing configs and explicit socket overrides are
+untouched.
 
 ### B3 — version + schema UX (scoped down)
 
@@ -446,8 +443,9 @@ flow:
 1. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
 2. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
-3. Run `stn setup` adding a project → the **same** observer reflects the new
-   project immediately (B-config), no manual restart.
+3. Run `stn setup` adding a project → the observer restarts on the **same
+   socket** and reflects the new project immediately (B-config); an open TUI
+   reconnects without a manual restart.
 4. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
 5. `stn-ingress` symlink delivers a provider hook event end to end.
 6. Upgrade the binary while **live host PTYs** exist → reattach without

@@ -101,6 +101,7 @@ describe("CLI setup command", () => {
     await mkdir(repo, { recursive: true });
     const calls: ExternalCommandInput[] = [];
     const fs = fakeFs({});
+    let activationCount = 0;
 
     const result = await runCli(
       ["--config", join(root, "config.toml"), "setup", "apply", "--dry-run"],
@@ -125,6 +126,9 @@ describe("CLI setup command", () => {
             "/fake/bin/delta",
           ]),
           fs,
+          activateObserverConfig: async () => {
+            activationCount += 1;
+          },
           writeStdout: () => undefined,
         },
       },
@@ -135,6 +139,107 @@ describe("CLI setup command", () => {
     expect(calls.some((call) => call.command === "brew" && call.args?.[0] === "install")).toBe(
       false,
     );
+    expect(activationCount).toBe(0);
+  });
+
+  it("activates an appended project with the normalized config path and setup home", async () => {
+    const root = await tempRoot(tempRoots);
+    const home = join(root, "home");
+    const repo = join(root, "repo");
+    const otherRepo = join(root, "other");
+    const configPath = join(home, "station", "config.toml");
+    await mkdir(repo, { recursive: true });
+    await mkdir(otherRepo, { recursive: true });
+    const fs = fakeFs({ [configPath]: setupConfigToml(otherRepo, { includeHarness: true }) });
+    const activations: Array<{ configPath: string; homeDir: string }> = [];
+
+    const result = await runCli(["--config", "~/station/config.toml", "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: home,
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs,
+        activateObserverConfig: async (input) => {
+          expect(fs.files[input.configPath]).toContain(`root = ${JSON.stringify(repo)}`);
+          activations.push(input);
+        },
+        writeStdout: () => undefined,
+      },
+    });
+
+    expect(result.code).toBe(0);
+    expect(activations).toEqual([{ configPath, homeDir: home }]);
+  });
+
+  it("activates a harness-only config write", async () => {
+    const root = await tempRoot(tempRoots);
+    const home = join(root, "home");
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [configPath]: setupConfigToml(repo) });
+    let activationCount = 0;
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: home,
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs,
+        activateObserverConfig: async () => {
+          activationCount += 1;
+          expect(fs.files[configPath]).toContain("[harness.codex]");
+          expect(fs.files[configPath]?.match(/\[\[projects\]\]/g)).toHaveLength(1);
+        },
+        writeStdout: () => undefined,
+      },
+    });
+
+    expect(result.code).toBe(0);
+    expect(activationCount).toBe(1);
+  });
+
+  it("keeps a successful config write when observer activation fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const home = join(root, "home");
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: home,
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs,
+        activateObserverConfig: async () => {
+          throw {
+            tag: "ObserverStartupError",
+            code: "OBSERVER_EXITED_ON_START",
+            message: "Observer exited during activation.",
+            hint: "Inspect the observer boot log.",
+          };
+        },
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    });
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(output).toContain("Config was written, but observer activation failed.");
+    expect(output).toContain("Code: OBSERVER_EXITED_ON_START");
+    expect(output).toContain("Hint: Inspect the observer boot log.");
+    expect(output).toContain("Run: stn observer restart");
+    expect(output).not.toContain("Core setup complete.");
   });
 
   it("rejects bare setup --dry-run without writing files", async () => {
@@ -362,6 +467,48 @@ function fakeAccess(paths: readonly string[]): (path: string) => Promise<void> {
       throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
     }
   };
+}
+
+function readySetupRunner(repo: string) {
+  return fakeRunner([], {
+    "git rev-parse --show-toplevel": `${repo}\n`,
+    "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+    "wt --version": "worktrunk 1.2.3\n",
+    "tmux -V": "tmux 3.5a\n",
+    "brew --version": "Homebrew 4.0.0\n",
+    "codex --version": "codex 0.1.0\n",
+  });
+}
+
+function readySetupAccess(): (path: string) => Promise<void> {
+  return fakeAccess([
+    "/fake/bin/wt",
+    "/fake/bin/tmux",
+    "/fake/bin/bun",
+    "/fake/bin/diffnav",
+    "/fake/bin/delta",
+  ]);
+}
+
+function setupConfigToml(projectRoot: string, options: { includeHarness?: boolean } = {}): string {
+  return [
+    "schema_version = 1",
+    "",
+    "[defaults]",
+    'worktree_provider = "worktrunk"',
+    'terminal = "tmux"',
+    'harness = "codex"',
+    'layout = "agent-shell"',
+    "",
+    ...(options.includeHarness === true
+      ? ["[harness.codex]", "enabled = true", 'command = "codex"', ""]
+      : []),
+    "[[projects]]",
+    `id = ${JSON.stringify(basename(projectRoot))}`,
+    `label = ${JSON.stringify(basename(projectRoot))}`,
+    `root = ${JSON.stringify(projectRoot)}`,
+    "",
+  ].join("\n");
 }
 
 function readOnlyFs(files: Record<string, string>) {

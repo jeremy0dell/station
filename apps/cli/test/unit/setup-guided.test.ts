@@ -21,6 +21,7 @@ describe("guided setup command", () => {
     const calls: ExternalCommandInput[] = [];
     const fs = fakeFs({});
     const chunks: string[] = [];
+    const activations: { configPath: string; homeDir: string }[] = [];
 
     const result = await runSetupCommand(
       [],
@@ -45,6 +46,10 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
+        activateObserverConfig: async (input) => {
+          expect(fs.files[input.configPath]).toContain("[[projects]]");
+          activations.push(input);
+        },
         prompt: prompt({ confirms: [false, false, true, false, false] }),
         writeStdout: (chunk) => chunks.push(chunk),
         now: () => new Date("2026-06-08T12:00:00.000Z"),
@@ -54,8 +59,10 @@ describe("guided setup command", () => {
     expect(result.code).toBe(0);
     const configPath = join(root, "home/.config/station/config.toml");
     expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(activations).toEqual([{ configPath, homeDir: join(root, "home") }]);
     expect(chunks.join("")).toContain(`Applying: Write STATION config (${configPath})`);
     expect(chunks.join("")).toContain("Completed: Write STATION config");
+    expect(chunks.join("")).toContain("Observer configuration active.");
     expect(chunks.join("")).toContain("Core setup complete.");
   });
 
@@ -90,6 +97,7 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
         writeStdout: (chunk) => chunks.push(chunk),
       },
@@ -109,6 +117,7 @@ describe("guided setup command", () => {
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
+    let activations = 0;
 
     const result = await runSetupCommand(
       [],
@@ -132,6 +141,9 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+        },
         prompt: prompt({ confirms: [false, false, false] }),
         writeStdout: () => undefined,
       },
@@ -139,6 +151,115 @@ describe("guided setup command", () => {
 
     expect(result.code).toBe(1);
     expect(Object.keys(fs.files)).toEqual([]);
+    expect(activations).toBe(0);
+  });
+
+  it("does not activate when the existing config needs no write", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
+    let activations = 0;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        ...readySetupDeps(repo),
+        fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+        },
+        prompt: prompt({ confirms: [false, false] }),
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(activations).toBe(0);
+    expect(fs.files[configPath]).toBe(configuredProjectToml(repo));
+  });
+
+  it("does not activate when the config write fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    fs.rename = async () => {
+      throw new Error("synthetic rename failure");
+    };
+    let activations = 0;
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        ...readySetupDeps(repo),
+        fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+        },
+        prompt: prompt({ confirms: [false, false, true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(activations).toBe(0);
+    expect(fs.files[join(root, "home/.config/station/config.toml")]).toBeUndefined();
+    expect(chunks.join("")).toContain("Config write failed.");
+  });
+
+  it("retains config and reports observer activation failure", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "home/.config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    let activations = 0;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        ...readySetupDeps(repo),
+        fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+          throw {
+            tag: "ObserverStartupError",
+            code: "TEST_ACTIVATION_FAILED",
+            message: "The observer did not become healthy.",
+            hint: "Inspect observer logs.",
+          };
+        },
+        prompt: prompt({ confirms: [false, false, true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(activations).toBe(1);
+    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(output).toContain("Config was written, but observer activation failed.");
+    expect(output).toContain("Code: TEST_ACTIVATION_FAILED");
+    expect(output).toContain("Hint: Inspect observer logs.");
+    expect(output).toContain("Run: stn observer restart");
+    expect(output).not.toContain("Core setup complete.");
   });
 
   it("selects among multiple available harnesses", async () => {
@@ -170,6 +291,7 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, false, false], selects: ["opencode"] }),
         writeStdout: () => undefined,
       },
@@ -208,6 +330,7 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
         writeStdout: () => undefined,
       },
@@ -224,6 +347,16 @@ describe("guided setup command", () => {
     const fs = fakeFs({});
     const calls: ExternalCommandInput[] = [];
     const configPath = join(root, "home/.config/station/config.toml");
+    const order: string[] = [];
+    const runner = fakeRunner(calls, {
+      "git rev-parse --show-toplevel": repo,
+      "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "codex --version": "codex 0.1.0\n",
+      [`stn --config ${configPath} hooks install worktrunk --yes --hook-bin stn-ingress`]: "",
+      [`stn --config ${configPath} hooks install codex --yes --hook-bin stn-ingress`]: "",
+    });
 
     const result = await runSetupCommand(
       [],
@@ -232,15 +365,13 @@ describe("guided setup command", () => {
         cwd: repo,
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
-        runner: fakeRunner(calls, {
-          "git rev-parse --show-toplevel": repo,
-          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
-          "wt --version": "worktrunk 1.2.3\n",
-          "tmux -V": "tmux 3.5a\n",
-          "codex --version": "codex 0.1.0\n",
-          [`stn --config ${configPath} hooks install worktrunk --yes --hook-bin stn-ingress`]: "",
-          [`stn --config ${configPath} hooks install codex --yes --hook-bin stn-ingress`]: "",
-        }),
+        runner: async (input) => {
+          const result = await runner(input);
+          if (input.command === "stn" && input.args?.[2] === "hooks") {
+            order.push(`hook:${input.args[4]}`);
+          }
+          return result;
+        },
         access: fakeAccess([
           "/fake/bin/wt",
           "/fake/bin/tmux",
@@ -252,12 +383,16 @@ describe("guided setup command", () => {
           "/fake/bin/stn-tmux-popup",
         ]),
         fs,
+        activateObserverConfig: async () => {
+          order.push("activate");
+        },
         prompt: prompt({ confirms: [true, true, true, false, false] }),
         writeStdout: () => undefined,
       },
     );
 
     expect(result.code).toBe(0);
+    expect(order).toEqual(["hook:worktrunk", "hook:codex", "activate"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(fs.files[configPath]).toContain("install_hooks = true");
     expect(calls).toEqual(
@@ -292,6 +427,57 @@ describe("guided setup command", () => {
         }),
       ]),
     );
+  });
+
+  it("attempts activation after a hook install fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "home/.config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    let activations = 0;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+        },
+        prompt: prompt({ confirms: [true, false, true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(activations).toBe(1);
+    expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
+    expect(output).toContain("Hook install failed.");
+    expect(output).toContain("Observer configuration active.");
+    expect(output).not.toContain("Core setup complete.");
   });
 
   it("installs a selected agent CLI when no harness is available, then continues", async () => {
@@ -335,6 +521,7 @@ describe("guided setup command", () => {
           "/fake/bin/delta",
         ]),
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         // Accept the Codex install and the config write; decline the rest. Match on
         // message text so the test is robust to the exact prompt count (e.g. which
         // optional prompts fire depends on launcher detection on the host).
@@ -620,6 +807,7 @@ describe("guided setup command", () => {
           }
         },
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         // Accept the bootstrap, the core-tool installs, and the config write; decline
         // every optional extra. Matching on text keeps this robust to prompt ordering.
         prompt: {
@@ -746,6 +934,7 @@ describe("guided setup command", () => {
           }
         },
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         prompt: {
           async confirm(message: string) {
             return (
@@ -788,6 +977,52 @@ function prompt(input: { confirms: boolean[]; selects?: string[] }): SetupPrompt
       return selects.shift() ?? "codex";
     },
   };
+}
+
+function readySetupDeps(repo: string) {
+  return {
+    runner: fakeRunner([], {
+      "git rev-parse --show-toplevel": repo,
+      "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "brew --version": "Homebrew 4.0.0\n",
+      "codex --version": "codex 0.1.0\n",
+    }),
+    access: fakeAccess([
+      "/fake/bin/wt",
+      "/fake/bin/tmux",
+      "/fake/bin/bun",
+      "/fake/bin/diffnav",
+      "/fake/bin/delta",
+    ]),
+  };
+}
+
+function configuredProjectToml(repo: string): string {
+  return [
+    "schema_version = 1",
+    "",
+    "[defaults]",
+    'worktree_provider = "worktrunk"',
+    'terminal = "tmux"',
+    'harness = "codex"',
+    'layout = "agent-shell"',
+    "",
+    "[harness.codex]",
+    "enabled = true",
+    'command = "codex"',
+    "",
+    "[[projects]]",
+    'id = "repo"',
+    'label = "repo"',
+    `root = ${JSON.stringify(repo)}`,
+    "",
+  ].join("\n");
+}
+
+function noopActivateObserverConfig(): Promise<void> {
+  return Promise.resolve();
 }
 
 function fakeRunner(
