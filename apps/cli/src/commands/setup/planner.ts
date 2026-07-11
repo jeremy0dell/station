@@ -177,7 +177,7 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
     tier: "recommended",
     status: "ok",
     label: "STATION launchers",
-    message: "station, stn-ingress, and stn-tmux-popup are available on PATH.",
+    message: "stn, stn-ingress, and stn-tmux-popup are available on PATH.",
     details,
   };
 }
@@ -633,8 +633,8 @@ function setupActions(
       tier: "recommended",
       selected: false,
       label: "Link STATION launchers",
-      message: "Link station, stn-ingress, and stn-tmux-popup globally for bare terminal commands.",
-      command: ["pnpm", "--dir", facts.launchers.packageRoot, "link", "--global"],
+      message: "Link stn, stn-ingress, and stn-tmux-popup globally for bare terminal commands.",
+      command: ["pnpm", "--dir", facts.launchers.packageRoot, "station:link"],
     });
   }
   actions.push({

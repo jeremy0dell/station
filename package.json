@@ -29,7 +29,7 @@
     "station:tui-dev": "node scripts/tui-dev.mjs",
     "station:ui-dev": "cd station && bun run dev",
     "stn-ingress": "bin/stn-ingress",
-    "station:link": "pnpm link --global",
+    "station:link": "pnpm add --global .",
     "dev": "node scripts/tui-dev.mjs",
     "station:devbox": "node scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",

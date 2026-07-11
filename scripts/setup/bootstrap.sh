@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-command setup for a fresh Station checkout (macOS).
-# Installs system dependencies via Homebrew, builds the workspace, and links `stn`.
+# Installs system dependencies via Homebrew, builds the workspace, and links the launchers.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -74,8 +74,8 @@ step "Installing the Station UI (Bun workspace)"
   bun run repair:node-pty
 )
 
-step "Linking 'stn' onto your PATH"
-pnpm link --global
+step "Linking STATION launchers onto your PATH"
+pnpm station:link
 
 cat <<'EOF'
 
