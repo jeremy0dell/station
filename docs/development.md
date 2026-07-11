@@ -79,7 +79,11 @@ pnpm smoke:install
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
 authenticated GitHub responses and temporary homes, so it is deterministic and
-does not download a real release.
+does not download a real release. CI runs it once in a dedicated
+`ubuntu-24.04`/`macos-15` matrix; the heavier Ubuntu gate does not duplicate it.
+The four-target native PTY matrix also packages the local binary through the
+release helper and installs it with real platform utilities and no Node or Bun
+on the runtime `PATH`.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
@@ -165,8 +169,11 @@ exactly equal `v${package.json.version}`, come from a commit on `origin/main`,
 and have no existing GitHub release. Pushing a `v*` tag runs the callable
 standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
 for all four supported targets, archive/checksum assembly, and an authenticated
-installer smoke against the resulting GitHub release draft. The workflow never
-publishes the draft automatically.
+installer smoke against the resulting GitHub release draft. PR and release
+jobs use the same archive-packaging helper. Draft acceptance fetches
+`scripts/install.sh` from the tag through the authenticated Contents API, then
+passes that same tag with `--version`; it never substitutes checkout-local or
+`main` installer code. The workflow never publishes the draft automatically.
 
 The initial immutable baseline is `v0.1.1-rc.1`:
 
@@ -198,57 +205,82 @@ draft and rerun the unchanged tag workflow. If the source needs a fix, leave
 the pushed tag alone and use the next prerelease tag. Never delete or mutate a
 published release.
 
-Installer acceptance uses the destination lock
-`<install-dir>/.station-install.lock`, acquired before release lookup or
-download; `<install-dir>/.station-install.lock/owner` records the PID and
-requested tag or `latest`. A lock refusal must name the lock path and recorded
-owner PID when readable, state that the existing Station installation was
-unchanged, and tell the user to wait and retry. The installer never auto-removes
-an uncertain lock: after confirming that no installer with the recorded PID is
-alive, the operator removes the lock directory manually and retries.
+Installer acceptance uses both `<install-dir>/.station-install.lock` and
+`<data-home>/station/.station-install.lock`. Their corresponding
+`<install-dir>/.station-install.lock/owner` and
+`<data-home>/station/.station-install.lock/owner` files record the PID and
+requested tag or `latest`. The command lock is acquired first and the license
+lock second, with the duplicate path skipped, and they are released in reverse
+order. Either refusal must name the lock and readable owner PID, state that the
+existing Station installation was unchanged, and tell the user to wait and
+retry; a license-lock refusal also releases the command lock without making a
+release API request. The installer never auto-removes an uncertain lock. Only
+after confirming that no installer with the recorded PID is alive may an
+operator remove the affected lock directory manually and retry.
 
-The staged binary's `--version` probe must finish within 10 seconds. A timeout
-terminates and reaps the probe and preserves the existing install. HUP, INT,
-and TERM use the rollback/cleanup path and exit 129, 130, and 143 respectively.
-The verified `stn` rename is the sole runtime commit point: aliases already
-resolve to `stn`, and pre-commit caught failures restore the old license and
-remove aliases created by that attempt. SIGKILL and power loss cannot clean up;
-they may leave a stale lock, stage, or old/new `LICENSE` metadata when the data
-and install directories are on different filesystems, but pre-existing runtime
-entrypoints must still resolve coherently to the complete old or new binary.
+The staged binary's `--version` probe must finish within 10 seconds. Its
+watchdog returns 124 for timeout and 125 for timer failure, bounds output at the
+filesystem level, TERM/KILLs and reaps the probe, and shows at most 4096
+sanitized bytes of compatibility stderr. Every potentially blocking `gh`
+operation is a tracked file-backed child; HUP, INT, and TERM forward to that
+child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
+
+The verified `stn` rename is the sole runtime commit point. Immediately before
+it, both aliases must still be exact symlinks to `stn` and binary/license
+destinations must retain accepted types. A failure with the staged `stn` still
+present restores the old license and removes only aliases this attempt created.
+If the staged `stn` disappeared, activation is ambiguous: preserve the new
+license and aliases, exit nonzero, and print the absolute `stn --version`
+inspection command without claiming the previous installation was unchanged.
+
+SIGKILL cannot clean up and may leave either lock or a stage behind. Atomic
+rename makes process-level readers observe a coherent complete old or new
+binary. Power loss is different: because the installer does not fsync the file
+or containing directories, it makes no post-power-loss durability guarantee;
+old/new cross-filesystem `LICENSE` metadata may also remain.
 
 For each target, install through the authenticated script into a clean home and
 manually verify the actual user experience, not a dashboard override:
 
-1. With the installed binary's runtime `PATH` containing neither Node nor Bun,
+1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
+   directory absent from `PATH`. Confirm all three missing launchers are named,
+   the printed current-shell block prepends the safely quoted directory and
+   runs `hash -r` plus `stn setup`, and the absolute `stn` fallback works.
+2. Repeat with an older `stn` shadowing the install and then with one shadowed
+   sibling launcher. Confirm each mismatch is named and no shell profile is
+   edited. With all three launchers resolving physically to the install
+   directory, confirm the short `Next: run stn setup` success message.
+3. With the installed binary's runtime `PATH` containing neither Node nor Bun,
    run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
    and connects to a healthy Observer.
-2. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
-3. Run `stn setup` to add a project. Confirm the open TUI reconnects and shows
+4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
+5. Run `stn setup` to add a project. Confirm the open TUI reconnects and shows
    it after activation on the same Observer socket.
-4. Run bare `stn` inside tmux and confirm `stn-tmux-popup` opens the popup.
-5. Deliver a provider event through `stn-ingress` and confirm it appears in
+6. Run bare `stn` inside tmux and confirm `stn-tmux-popup` opens the popup.
+7. Deliver a provider event through `stn-ingress` and confirm it appears in
    Station.
-6. Leave a hosted PTY alive under the RC, run
-   `scripts/install.sh --version v0.1.1`, and confirm launch reports
+8. Leave a hosted PTY alive under the RC, fetch the `v0.1.1` installer by tag,
+   run it with `--version v0.1.1`, and confirm launch reports
    `HOST_UPGRADE_BLOCKED` without losing the terminal or scrollback. Reinstall
    the RC to reattach and close every hosted terminal; reinstall `v0.1.1` and
    confirm the idle host is replaced.
-7. In terminal A, continuously run the installed `stn --version`. In terminal
+9. In terminal A, continuously run the installed `stn --version`. In terminal
    B, install RC → stable → RC. Terminal A may print only complete old or
    new versions: never command-not-found or malformed output. After each
    transition, confirm `stn-ingress` and `stn-tmux-popup` still link to `stn`,
    so the runtime never has mixed entrypoints.
-8. In an isolated install directory, create an abandoned
-   `.station-install.lock` with representative owner metadata. Run the
-   installer and follow its printed inspection, manual removal, and retry
-   instructions exactly; do not remove the lock until no owner process is
-   alive.
-9. Interrupt a real authenticated upgrade with Ctrl-C. Confirm the prior TUI
+10. In an isolated home, test abandoned locks separately at
+    `<install-dir>/.station-install.lock` and
+    `<data-home>/station/.station-install.lock` with representative owner
+    metadata. Follow each printed inspection, dead-PID confirmation, manual
+    removal, and retry instruction exactly; never remove a lock while its owner
+    may be alive.
+11. Interrupt a real authenticated upgrade with Ctrl-C. Confirm the prior TUI
    still opens, the installer exits with status 130 and leaves no owned lock or
    stage, then retry successfully.
-10. Run `scripts/install.sh --version v0.1.1-rc.1`, confirm the version changed,
-    then reinstall `v0.1.1` to complete the explicit rollback check.
+12. Fetch and run the tagged `v0.1.1-rc.1` installer, confirm the version
+    changed, then fetch and reinstall `v0.1.1` to complete the explicit rollback
+    check.
 
 Record the oldest supported macOS version or built-against glibc version in the
 release notes. Signing and notarization are not part of A5; integrity is the

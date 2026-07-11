@@ -10,12 +10,15 @@ Authenticate `gh` for `jeremy0dell/station`, then run the installer directly fro
 gh auth login --hostname github.com
 (
   set -e
+  tag=v0.1.1-rc.1
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
-  GH_HOST=github.com gh api repos/jeremy0dell/station/contents/scripts/install.sh \
-    -H "Accept: application/vnd.github.raw+json" > "$installer"
+  GH_HOST=github.com gh api --method GET \
+    repos/jeremy0dell/station/contents/scripts/install.sh \
+    -H "Accept: application/vnd.github.raw+json" \
+    -f ref="$tag" > "$installer"
   test -s "$installer"
-  sh "$installer" --version v0.1.1-rc.1
+  sh "$installer" --version "$tag"
 )
 ```
 
@@ -26,21 +29,32 @@ stn setup
 stn
 ```
 
-The explicit RC is the A5 validation baseline. Once `v0.1.1` is published, omitting `--version` selects the latest stable release:
+`v0.1.1-rc.1` is the first supported private-binary baseline. Once `v0.1.1`
+is published, resolve the latest stable tag first, then fetch and invoke that
+tag's installer:
 
 ```bash
 (
   set -e
+  tag="$(
+    GH_HOST=github.com gh api --method GET \
+      repos/jeremy0dell/station/releases/latest --jq '.tag_name'
+  )"
+  test -n "$tag"
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
-  GH_HOST=github.com gh api repos/jeremy0dell/station/contents/scripts/install.sh \
-    -H "Accept: application/vnd.github.raw+json" > "$installer"
+  GH_HOST=github.com gh api --method GET \
+    repos/jeremy0dell/station/contents/scripts/install.sh \
+    -H "Accept: application/vnd.github.raw+json" \
+    -f ref="$tag" > "$installer"
   test -s "$installer"
-  sh "$installer"
+  sh "$installer" --version "$tag"
 )
 ```
 
-Use `--version` whenever an exact install or rollback is required.
+Use the explicit form with the desired `tag` for every exact install or
+rollback. Both forms pair installer code and artifacts from one immutable tag;
+they never fall back to `main`.
 
 Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface.
 
@@ -49,46 +63,62 @@ The installer:
 - accepts only `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64`;
 - downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` through authenticated `gh api` calls (`{version}` excludes the tag's leading `v`);
 - verifies the matching SHA-256 before extraction and rejects an unexpected archive manifest;
-- stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command;
+- stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
 - keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
 - removes `com.apple.quarantine` from the verified binary defensively on macOS; and
-- prints `stn setup` plus a PATH hint only when the selected bin directory is not already on `PATH`.
+- resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints a safely quoted current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and also prints the absolute installed `stn` path. It never edits a shell profile.
 
 ### Concurrent and interrupted installs
 
-Each destination has one installer lock at
-`<install-dir>/.station-install.lock` (by default
-`~/.local/bin/.station-install.lock`); its `owner` file records the installer
-PID and requested tag or `latest`. The installer acquires the lock before
-release lookup or download and holds it through cleanup. If the lock already
-exists, the installer does not contact the release API or mutate the
-destination. It prints the lock path and the owner PID when readable, says that
-the existing Station installation was unchanged, and instructs the user to
-wait for the other installer to finish before retrying.
+Every install serializes both mutated resources with these locks:
 
-The installer never guesses that a lock is stale. For an abandoned lock, read
-`<install-dir>/.station-install.lock/owner` and confirm that no installer
-process with the recorded PID is alive. Only then remove
-`<install-dir>/.station-install.lock` manually and retry the same install. Do
-not remove a lock while its owner may still be running.
+- `<install-dir>/.station-install.lock` (by default
+  `~/.local/bin/.station-install.lock`) for the commands; and
+- `<data-home>/station/.station-install.lock` (by default
+  `~/.local/share/station/.station-install.lock`) for `LICENSE`.
 
-The staged `stn --version` probe has a 10-second deadline. On timeout the
-installer terminates and reaps the probe, reports that the artifact did not
-respond in time, and leaves the existing Station installation unchanged.
-HUP, INT, and TERM run the same rollback/cleanup path and exit with the
-signal-appropriate status (129, 130, and 143 respectively), so Ctrl-C does not
-return to an interrupted install. Before the final `stn` rename, caught
-failures restore the prior license and remove only aliases created by that
-attempt. After the rename, every runtime entrypoint resolves through the new
-binary and cleanup failures are warnings rather than a failed install.
+Each lock's `owner` file records the installer PID and requested tag or
+`latest`. The installer acquires the command lock first and the license lock
+second, skips the second acquisition if both paths coincide, and releases them
+in reverse order. A refusal happens before release lookup or download, names
+the lock and readable owner PID, states that the existing Station installation
+was unchanged, and tells the user to wait and retry. A license-lock refusal
+releases the command lock and performs no release API request.
 
-SIGKILL and power loss cannot run shell cleanup. They may leave the lock or a
-staging path behind, and because `LICENSE` may live on another filesystem they
-may leave license metadata from the old or new release. During an upgrade, the
-pre-existing command entrypoints still resolve coherently to the complete old
-or new runtime; exact cross-filesystem license consistency is not claimed.
-Recover an abandoned lock only with the inspection-and-manual-removal procedure
-above.
+The installer never guesses that either lock is stale. For an abandoned lock,
+read its `owner` file—`<install-dir>/.station-install.lock/owner` or
+`<data-home>/station/.station-install.lock/owner`—and confirm that no installer
+process with the recorded PID is alive. Only then remove that lock directory
+manually and retry the same install. Do not remove a lock while its owner may
+still be running.
+
+The staged `stn --version` probe has a 10-second supervised deadline and a
+bounded output file. Timeout status 124 means the watchdog terminated, killed
+if necessary, and reaped the probe; status 125 means the timer machinery
+failed. A loader or compatibility failure prints no more than 4096 sanitized
+bytes of probe stderr. HUP, INT, and TERM forward to the active child, run the
+same TERM/KILL/reap and rollback path, and exit with status 129, 130, and 143
+respectively, so Ctrl-C does not return to an interrupted install.
+
+Immediately before commit, the installer revalidates both aliases as exact
+symlinks to `stn` and the accepted binary and license destination types. Before
+the final rename, a caught failure restores the prior license and removes only
+an alias that this attempt successfully created and that still matches it. If
+a failed final `mv` leaves the staged `stn` present, rollback restores the
+previous state and the installer reports it unchanged. If the staged `stn`
+disappeared, activation may have committed: the installer preserves the new
+license and aliases, exits nonzero, and prints an absolute
+`<install-dir>/stn --version` inspection command. It does not claim that the previous installation
+was unchanged in that ambiguous case. Post-commit cleanup failures are warnings.
+
+SIGKILL cannot run shell cleanup, so it can leave a stale lock or staging path;
+recover a lock only with the inspection-and-manual-removal procedure above.
+Atomic rename gives coherent process-level visibility—continuous readers see a
+complete old or new runtime—but this installer does not fsync the files or
+containing directories. It therefore makes no post-power-loss durability
+guarantee, and power loss can also leave old/new cross-filesystem `LICENSE`
+metadata. Inspect the absolute installed `stn --version` and both locks before
+retrying after a machine loss.
 
 The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, diffnav and git-delta for diff automation, and a supported agent CLI for agent sessions.
 
@@ -104,7 +134,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — the design and phased roadmap live in [Single-binary Station](single-binary.md); until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. The compiled release design and phased roadmap live in [Single-binary Station](single-binary.md); the separate source-package path is documented in [Homebrew packaging](homebrew.md).
 
 ## Development Requirements
 
@@ -150,7 +180,13 @@ Optional integrations can be added later.
 
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
-`pnpm smoke:install` exercises latest and explicit-version selection, all four platform mappings, checksums, archive safety, atomic replacement, rollback, symlinks, license placement, authentication failure, and PATH hints against local fake release assets. It does not contact GitHub or modify the real home directory.
+`pnpm smoke:install` exercises latest, explicit, and draft selection; strict
+authenticated API arguments; all four platform mappings; default-home and PATH
+shadow behavior; checksum/archive/probe failures; dual-lock concurrency and
+stale recovery; rollback and ambiguous commit points; continuous readers;
+HUP/INT/TERM/SIGKILL; and runner self-interruption against local fake release
+assets. Every child and the overall runner have deadlines. It does not contact
+GitHub or modify the real home directory.
 
 Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. When bare `stn` launchers are not on `PATH`, setup uses launcher paths from the current checkout for generated tmux and hook commands and offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 

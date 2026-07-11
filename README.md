@@ -48,12 +48,15 @@ The authenticated private binary is the user install path. Authenticate the GitH
 gh auth login --hostname github.com
 (
   set -e
+  tag=v0.1.1-rc.1
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
-  GH_HOST=github.com gh api repos/jeremy0dell/station/contents/scripts/install.sh \
-    -H "Accept: application/vnd.github.raw+json" > "$installer"
+  GH_HOST=github.com gh api --method GET \
+    repos/jeremy0dell/station/contents/scripts/install.sh \
+    -H "Accept: application/vnd.github.raw+json" \
+    -f ref="$tag" > "$installer"
   test -s "$installer"
-  sh "$installer" --version v0.1.1-rc.1
+  sh "$installer" --version "$tag"
 )
 ```
 
@@ -66,7 +69,25 @@ stn
 
 The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. Git, Worktrunk (`wt`), tmux, diffnav/git-delta, GitHub integration, and agent CLIs remain feature-gated external tools; `stn setup` and `stn doctor` say which workflow capabilities are ready.
 
-The explicit RC is the A5 validation baseline. Once `v0.1.1` is published, omit `--version` to select the latest stable release. See [Install](docs/install.md) for version pinning, rollback, custom install directories, and the supported-platform contract.
+The explicit RC is the first supported private-binary baseline. The installer
+code and artifacts always come from the same immutable tag. Once `v0.1.1` is
+published, the latest-install recipe first resolves that stable tag and then
+fetches and invokes its installer. See [Install](docs/install.md) for that
+recipe, version pinning, rollback, PATH recovery, custom install directories,
+and the supported-platform contract.
+
+Installs serialize commands and license data with
+`<install-dir>/.station-install.lock` and
+`<data-home>/station/.station-install.lock`; inspect each lock's `owner`,
+confirm its PID is not alive, and remove it manually only for abandoned work.
+Compatibility diagnostics are sanitized and bounded to 4096 bytes. If final
+activation is ambiguous, follow the printed absolute `stn --version` inspection
+command rather than assuming the previous install is unchanged. After success,
+the installer checks all three bare launchers and prints a current-shell PATH
+block for anything missing or shadowed without editing a profile. SIGKILL can
+leave recoverable locks/stages; atomic rename gives coherent process-level
+visibility, but without file/directory fsync there is no post-power-loss
+durability guarantee.
 
 ### Development checkout
 

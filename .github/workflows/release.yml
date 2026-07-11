@@ -131,15 +131,7 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           bin_dir="station/dist/bin"
-          test -x "$bin_dir/stn"
-          test "$(readlink "$bin_dir/stn-ingress")" = stn
-          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
-          test -f "$bin_dir/LICENSE"
-
-          archive="stn-v$VERSION-$TARGET.tar.gz"
-          tar -C "$bin_dir" -czf "$archive" stn stn-ingress stn-tmux-popup LICENSE
-          tar -tzf "$archive" > "$RUNNER_TEMP/archive-manifest"
-          diff -u <(printf '%s\n' stn stn-ingress stn-tmux-popup LICENSE) "$RUNNER_TEMP/archive-manifest"
+          scripts/release/package-archive.sh "$VERSION" "$TARGET"
 
           if [[ "$RUNNER_OS" == Linux ]]; then
             floor="$(getconf GNU_LIBC_VERSION)"
@@ -295,6 +287,21 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch tagged installer
+        env:
+          GH_HOST: github.com
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          installer="$RUNNER_TEMP/station-install.sh"
+          gh api --method GET \
+            -f ref="$TAG" \
+            -H "Accept: application/vnd.github.raw+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$GITHUB_REPOSITORY/contents/scripts/install.sh" > "$installer"
+          test -s "$installer"
+          /bin/sh -n "$installer"
+          chmod 0700 "$installer"
       - name: Seed existing installation
         run: |
           install_home="$RUNNER_TEMP/install-home"
@@ -329,7 +336,7 @@ jobs:
           umask 0777
           HOME="$install_home" \
             XDG_DATA_HOME="$data_home" \
-            scripts/install.sh --version "$TAG" --install-dir "$bin_dir"
+            /bin/sh "$RUNNER_TEMP/station-install.sh" --version "$TAG" --install-dir "$bin_dir"
       - name: Verify installed artifact
         env:
           EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
@@ -396,7 +403,7 @@ jobs:
             umask 0777
             HOME="$install_home" \
               XDG_DATA_HOME="$data_home" \
-              scripts/install.sh --version "$TAG" --install-dir "$bin_dir"
+              /bin/sh "$RUNNER_TEMP/station-install.sh" --version "$TAG" --install-dir "$bin_dir"
           ) > "$RUNNER_TEMP/locked-install.stdout" 2> "$lock_stderr"; then
             echo "Installer unexpectedly succeeded while $lock_dir was owned." >&2
             exit 1
@@ -418,7 +425,7 @@ jobs:
             umask 0777
             HOME="$install_home" \
               XDG_DATA_HOME="$data_home" \
-              scripts/install.sh --version "$TAG" --install-dir "$bin_dir"
+              /bin/sh "$RUNNER_TEMP/station-install.sh" --version "$TAG" --install-dir "$bin_dir"
           )
 
           test ! -e "$lock_dir"

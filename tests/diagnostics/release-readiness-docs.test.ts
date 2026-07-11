@@ -60,8 +60,12 @@ describe("release readiness docs", () => {
 
     expect(readme).toContain("authenticated private binary");
     expect(readme).toContain("without Node.js, pnpm, Bun");
-    expect(install).toContain("latest stable release");
-    expect(install).toContain("--version v0.1.1-rc.1");
+    expect(install).toContain("latest stable tag");
+    expect(install).toContain("tag=v0.1.1-rc.1");
+    expect(install).toContain('-f ref="$tag"');
+    expect(install).toContain('sh "$installer" --version "$tag"');
+    expect(readme).toContain('-f ref="$tag"');
+    expect(readme.replace(/\s+/g, " ")).toContain("installer code and artifacts");
     expect(install).toContain("SHA256SUMS");
     expect(install).toContain("stn-tmux-popup");
     for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
@@ -90,15 +94,23 @@ describe("release readiness docs", () => {
     );
 
     for (const [path, document] of documents) {
+      const normalized = document.replace(/\s+/g, " ");
       expect(document, path).toContain("<install-dir>/.station-install.lock");
       expect(document, path).toContain("<install-dir>/.station-install.lock/owner");
-      expect(document, path).toContain("requested tag or `latest`");
+      expect(document, path).toContain("<data-home>/station/.station-install.lock");
+      expect(document, path).toContain("<data-home>/station/.station-install.lock/owner");
+      expect(normalized, path).toContain("requested tag or `latest`");
       expect(document, path).toMatch(/10(?:-second| seconds)/);
       expect(document, path).toMatch(/existing\s+Station\s+installation\s+was\s+unchanged/);
       expect(document, path).toContain("sole runtime commit point");
       expect(document, path).toMatch(/129, 130, (?:and|or) 143/);
+      expect(document, path).toContain("4096");
+      expect(document, path).toContain("124");
+      expect(document, path).toContain("125");
       expect(document, path).toContain("SIGKILL");
-      expect(document, path).toMatch(/power\s+loss/);
+      expect(document, path).toMatch(/power\s+loss/i);
+      expect(normalized, path).toMatch(/no post-power-loss durability guarantee/);
+      expect(document, path).toContain("fsync");
       expect(document, path).toContain("manually");
       expect(document, path).toContain("alive");
     }

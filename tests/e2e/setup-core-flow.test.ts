@@ -90,6 +90,7 @@ describe("setup core flow e2e", () => {
         ...process.env,
         HOME: home,
         PNPM_HOME: pnpmHome,
+        XDG_RUNTIME_DIR: runtimeDir,
         XDG_CONFIG_HOME: join(root, "xdg-config"),
         XDG_DATA_HOME: join(root, "xdg-data"),
         XDG_CACHE_HOME: join(root, "xdg-cache"),

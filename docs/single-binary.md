@@ -362,13 +362,16 @@ Every archive contains exactly `stn`, the `stn-ingress` and
 `stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
 duplicate targets, emits a stably sorted `SHA256SUMS`, and creates a GitHub
 release **draft** without clobbering an existing release. A second native
-matrix uses the authenticated installer against that real draft and verifies
-the binary version, both argv0 aliases, license, and launch without Node or Bun
-on the runtime PATH. Publication remains a manual decision after the real-TTY
-acceptance below. GitHub's tag endpoint exposes published releases only, so the
-workflow captures the new draft's numeric release ID from the authenticated
-release list and passes it only to these acceptance jobs; normal installs keep
-using the latest/published-tag endpoints.
+matrix fetches the installer from the release tag through the authenticated
+Contents API, invokes it with the same explicit tag against that real draft,
+and verifies the binary version, both argv0 aliases, license, and launch without
+Node or Bun on the runtime PATH. The PR matrix and release matrix use one
+archive-packaging helper, so their manifests cannot drift. Publication remains
+a manual decision after the real-TTY acceptance below. GitHub's tag endpoint
+exposes published releases only, so the workflow captures the new draft's
+numeric release ID from the authenticated release list and passes it only to
+these acceptance jobs; normal installs keep using the latest/published-tag
+endpoints.
 
 `SHA256SUMS` is unsigned in A5 because no signing-key infrastructure exists;
 the trust chain is authenticated GitHub access plus immutable release assets.
@@ -376,37 +379,72 @@ The pipeline pins inputs, gates, targets, names, and manifest, but does not
 claim bit-for-bit reproducible Bun executables or archives.
 
 `scripts/install.sh` supports latest stable, explicit `--version`, and
-`--install-dir` (default `~/.local/bin`). It uses authenticated `gh api`
-release endpoints, accepts only the four supported targets, verifies the one
-matching `SHA256SUMS` entry and exhaustive archive manifest before touching an
-existing install, and stages replacement on the destination filesystem. The
-staged binary's `--version` probe has a 10-second deadline; timeout terminates
-and reaps it, reports that the artifact did not respond in time, and leaves the
-existing Station installation unchanged.
+`--install-dir` (default `~/.local/bin`). The supported binary-install baseline
+starts at `v0.1.1-rc.1`. Explicit install and rollback set a tag, fetch
+`scripts/install.sh` from that tag through the authenticated Contents API, and
+invoke it with `--version` set to the same tag. Latest install first resolves
+the latest stable tag, then performs the same tagged fetch and explicit invoke.
+There is no silent `main` fallback, so installer code and release artifacts are
+always paired.
 
-The destination-scoped lock is `<install-dir>/.station-install.lock`. It is
-held from before release lookup/download through cleanup, and its `owner` file
-records the PID and requested tag or `latest`. An existing lock causes a
-fail-fast refusal with no release request or destination mutation; the message
+The installer uses authenticated `gh api` release endpoints, accepts only the
+four supported targets, verifies the one matching `SHA256SUMS` entry and exact
+archive manifest before touching an existing install, and stages replacement
+on each destination filesystem. Every potentially blocking `gh` operation is a
+tracked file-backed child rather than a command substitution.
+
+The staged binary's `--version` probe has a 10-second supervised deadline and
+a POSIX file-size limit on stdout/stderr. Watchdog exit 124 reports timeout;
+125 reports timer machinery failure. Cleanup sends TERM, waits one second,
+sends KILL if needed, and reaps the probe without depending on a marker file.
+Compatibility failures show at most 4096 sanitized bytes of stderr, and the
+existing Station installation was unchanged before activation.
+
+The command lock is `<install-dir>/.station-install.lock`; the license lock is
+`<data-home>/station/.station-install.lock`. Their owner files—
+`<install-dir>/.station-install.lock/owner` and
+`<data-home>/station/.station-install.lock/owner`—record the PID and requested
+tag or `latest`. The installer acquires the command lock first and the license
+lock second, skips a duplicate path, and releases in reverse order. An existing
+lock causes a fail-fast refusal before release requests; a license-lock refusal
+releases the command lock and performs no release API request. The message
 names the lock and readable owner PID, states that the existing Station
 installation was unchanged, and tells the user to wait before retrying. The
 installer never auto-reclaims a possibly active lock. An operator may remove
-an abandoned lock manually only after reading
-`<install-dir>/.station-install.lock/owner` and confirming that no installer
-process with the recorded PID is alive, then retry.
+either abandoned lock manually only after reading its owner file and confirming
+that no installer process with the recorded PID is alive, then retry.
 
-Existing exact `stn-ingress` and `stn-tmux-popup` symlinks remain stable; any
-missing aliases are created before activation. The previous license is backed
-up, the new `LICENSE` is installed, and the verified staged `stn` is atomically
-renamed last as the sole runtime commit point. A caught HUP, INT, or TERM runs
-rollback/cleanup and exits 129, 130, or 143 rather than resuming the interrupted
-operation. Before commit, caught failures restore the license and remove only
-new aliases. After commit, cleanup failures are warnings. SIGKILL and power
-loss cannot run cleanup, so a stale lock/stage or old/new cross-filesystem
-`LICENSE` metadata may remain; exact license consistency is not claimed, but
-pre-existing command entrypoints resolve to one complete old or new runtime.
-The deterministic `smoke:install` suite exercises this boundary with fake
-authenticated release assets and is part of `test:all`.
+Existing exact `stn-ingress` and `stn-tmux-popup` symlinks remain stable; a
+missing alias is considered created only after `ln` succeeds and cleanup
+removes it only while it still exactly matches this attempt. Immediately before
+commit, both aliases are revalidated as symlinks to `stn` and binary/license
+destinations are revalidated against their accepted types. The previous license
+is backed up, the new `LICENSE` is installed, and the verified staged `stn` is
+atomically renamed last as the sole runtime commit point.
+
+A caught HUP, INT, or TERM forwards to the active child, runs bounded
+TERM/KILL/reap cleanup, and exits 129, 130, or 143. If a failed final rename
+leaves staged `stn`, pre-commit rollback restores the license and matching new
+aliases and reports the install unchanged. If staged `stn` disappeared,
+activation may be committed: preserve the new license and aliases, exit
+nonzero, print an absolute `stn --version` inspection command, and do not claim
+the previous installation was unchanged. After commit, cleanup failures are
+warnings.
+
+SIGKILL cannot run cleanup and may leave either lock or a stage. Atomic rename
+still gives coherent process-level visibility to continuous readers. Power loss
+is not equivalent: the installer does not fsync files or containing directories
+and therefore makes no post-power-loss durability guarantee; old/new
+cross-filesystem `LICENSE` metadata may also remain. The deterministic
+`smoke:install` suite exercises this boundary with fake authenticated release
+assets and is part of `test:all`.
+
+After success, all three bare launchers are resolved physically. If every one
+points into the new install directory, the installer prints
+`Next: run stn setup`. Otherwise it names every missing or shadowed launcher,
+prints a safely shell-quoted current-shell block that prepends the directory,
+runs `hash -r`, and invokes `stn setup`, plus the absolute installed `stn`
+fallback. It never edits a shell profile.
 
 The release starts with immutable `v0.1.1-rc.1`, promotes only after all four
 native targets pass automated and manual acceptance, then repeats the gates for
@@ -587,30 +625,36 @@ COMMAND=true` and `HOME=$(mktemp -d)` do **not** count — and note
 must scrub `XDG_RUNTIME_DIR`/`XDG_STATE_HOME` too. The manual/automated
 flow:
 
-1. Launch bare `stn` outside tmux in a sanitized, isolated env → real
+1. Install in a clean default home with the directory missing from `PATH`,
+   then with an older `stn` and one sibling launcher shadowing it → every
+   mismatch is named, the current-shell recovery block works, and no profile is
+   edited. With all three physical resolutions correct, the short setup next
+   step is printed.
+2. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
-2. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
-3. Run `stn setup` adding a project → the observer restarts on the **same
+3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
+4. Run `stn setup` adding a project → the observer restarts on the **same
    socket** and reflects the new project immediately (B-config); an open TUI
    reconnects without a manual restart.
-4. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
-5. `stn-ingress` symlink delivers a provider hook event end to end.
-6. Upgrade the binary while **live host PTYs** exist → the new build reports
+5. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
+6. `stn-ingress` symlink delivers a provider hook event end to end.
+7. Upgrade the binary while **live host PTYs** exist → the new build reports
    `HOST_UPGRADE_BLOCKED`; the old host and sessions remain reattachable with
    the old build. After every hosted terminal closes, retry → the idle host is
    stopped; open a hosted terminal → the replacement health reports the new
    build (B-host).
-7. Rollback → install script returns to the prior good version (immutable).
-8. With terminal A continuously running installed `stn --version`, terminal B
+8. Tagged rollback → the tagged installer returns to the prior immutable
+   version, then the stable tagged installer restores the upgrade.
+9. With terminal A continuously running installed `stn --version`, terminal B
    installs RC → stable → RC → only complete old or new versions appear,
    never command-not-found or malformed output; both aliases remain links to
    `stn`, so entrypoints never mix.
-9. An abandoned `.station-install.lock` in an isolated destination refuses the
-   install until its recorded PID is confirmed dead, the lock is manually
-   removed, and the same install is retried successfully.
-10. Ctrl-C during a real authenticated upgrade exits 130, preserves the prior
-    launchable TUI, cleans its owned stage and lock, and permits a successful
-    retry.
+10. Abandoned command and license `.station-install.lock` directories each
+    refuse the install until their recorded PID is confirmed dead, the lock is
+    manually removed, and the same install is retried successfully.
+11. Ctrl-C during a real authenticated upgrade exits 130, preserves the prior
+    launchable TUI, cleans its owned stages and both locks, and permits a
+    successful retry.
 
 ## Audit findings (all confirmed)
 

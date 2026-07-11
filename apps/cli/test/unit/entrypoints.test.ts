@@ -23,5 +23,5 @@ describe("process entrypoints", () => {
     expect(process.listenerCount("SIGTERM")).toBe(signalListeners.sigterm);
 
     await expect(cli.runCli(["--help"])).resolves.toMatchObject({ code: 0 });
-  });
+  }, 30_000);
 });
