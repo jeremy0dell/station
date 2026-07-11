@@ -1,11 +1,13 @@
 import {
   createStationHostClient,
+  isStationHostCompatibilityError,
   STATION_HOST_PROVIDER_ID,
   type HostAttachment,
   type HostSpawnParamsInput,
   type StationHostClient,
 } from "@station/host";
 import { type SafeErrorFallback, toSafeError } from "@station/observability";
+import { stationBuildInfo } from "@station/runtime";
 import { ControlByte } from "../protocol/controlBytes.js";
 import type {
   StationTerminalDisposable,
@@ -28,8 +30,8 @@ const HOST_DATA_PLANE_FALLBACK: SafeErrorFallback = {
 
 // A dropped attach connection (host restart, socket hiccup, hot-reload) is
 // transient: reconnect a bounded number of times with backoff before giving up,
-// so a blip doesn't permanently kill a pane whose PTY is still alive. These two
-// host error codes mean the PTY is genuinely gone — those end the pane instead.
+// so a blip doesn't permanently kill a pane whose PTY is still alive. Permanent
+// host faults end the pane because retrying cannot recover this attachment.
 const MAX_ATTACH_ATTEMPTS = 6;
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 2_000;
@@ -74,7 +76,12 @@ export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
 ): StationTerminalProcess {
   const makeClient =
-    options.clientFactory ?? ((path) => createStationHostClient({ socketPath: path }));
+    options.clientFactory ??
+    ((path) =>
+      createStationHostClient({
+        socketPath: path,
+        expectedBuildVersion: stationBuildInfo().version,
+      }));
   const now = options.now ?? (() => Date.now());
   // Reassigned on reconnect: the host client does not auto-reconnect, so a dropped
   // connection is replaced with a fresh one.
@@ -298,8 +305,9 @@ export function createHostAttachedTerminal(
         if (disposed) {
           return;
         }
+        const compatibilityFailure = isStationHostCompatibilityError(error);
         const safe = toSafeError(error, HOST_DATA_PLANE_FALLBACK);
-        if (PTY_GONE_CODES.has(safe.code)) {
+        if (PTY_GONE_CODES.has(safe.code) || compatibilityFailure) {
           emitDiagnostic(safe.message);
           emitExit({ exitCode: 1 });
           return;

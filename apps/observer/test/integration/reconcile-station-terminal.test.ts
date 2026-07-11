@@ -5,7 +5,8 @@ import {
 } from "@station/claude";
 import type { StationConfig } from "@station/config";
 import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
-import type { HostListEntry, StationHostClient } from "@station/host";
+import { HOST_PROTOCOL_VERSION, type HostListEntry, type StationHostClient } from "@station/host";
+import { stationBuildInfo } from "@station/runtime";
 import {
   createStationHostController,
   StationTerminalProvider,
@@ -309,7 +310,12 @@ function stationClaudeReport(
 
 function fakeHostClient(over: Partial<StationHostClient> = {}): StationHostClient {
   return {
-    health: async () => ({ ok: true, protocolVersion: 1 }),
+    health: async () => ({
+      ok: true,
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: stationBuildInfo().version,
+    }),
+    stopIfIdle: async () => ({ stopping: true }),
     spawn: async () => ({ ptyId: "pty-1", pid: 99 }),
     write: async () => undefined,
     resize: async () => undefined,

@@ -1,4 +1,9 @@
-import type { SafeError } from "@station/contracts";
+import { type SafeError, SafeErrorSchema } from "@station/contracts";
+import {
+  classifyHostCompatibility,
+  HOST_PROTOCOL_VERSION,
+  type HostHealthResult,
+} from "./protocol.js";
 
 export const STATION_HOST_PROVIDER_ID = "native";
 
@@ -8,6 +13,8 @@ export type StationHostErrorCode =
   | "HOST_ATTACH_GONE"
   | "HOST_UNREACHABLE"
   | "HOST_REQUEST_FAILED"
+  | "HOST_VERSION_INCOMPATIBLE"
+  | "HOST_UPGRADE_BLOCKED"
   | "HOST_BAD_REQUEST";
 
 export type StationHostErrorOptions = {
@@ -69,15 +76,55 @@ export function stationHostSafeError(
   return error;
 }
 
-function isSafeError(value: unknown): value is SafeError {
+/** Identify compatibility failures that callers must not collapse into host absence. */
+export function isStationHostCompatibilityError(error: unknown): error is SafeError {
+  const parsed = SafeErrorSchema.safeParse(error);
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "tag" in value &&
-    "code" in value &&
-    "message" in value &&
-    typeof (value as { code: unknown }).code === "string"
+    parsed.success &&
+    (parsed.data.code === "HOST_VERSION_INCOMPATIBLE" ||
+      parsed.data.code === "HOST_UPGRADE_BLOCKED")
   );
+}
+
+/** Build the canonical compatibility error, or return undefined when reuse is safe. */
+export function stationHostCompatibilityError(
+  health: HostHealthResult,
+  expectedBuildVersion: string,
+): StationHostProviderError | undefined {
+  const compatibility = classifyHostCompatibility(health, expectedBuildVersion);
+  if (compatibility.action === "reuse") {
+    return undefined;
+  }
+
+  const hint =
+    "Reopen Station with the build that started this host, finish or close its terminals, then retry.";
+  if (compatibility.action === "replace") {
+    return new StationHostProviderError(
+      "HOST_VERSION_INCOMPATIBLE",
+      `Station host build "${compatibility.runningBuildVersion}" does not match this Station build "${expectedBuildVersion}".`,
+      { hint },
+    );
+  }
+  if (compatibility.reason === "protocol-mismatch") {
+    return new StationHostProviderError(
+      "HOST_VERSION_INCOMPATIBLE",
+      `Station host protocol ${health.protocolVersion} does not match protocol ${HOST_PROTOCOL_VERSION} for Station build "${expectedBuildVersion}".`,
+      { hint },
+    );
+  }
+  return new StationHostProviderError(
+    "HOST_VERSION_INCOMPATIBLE",
+    `Station host did not report a build version and cannot be safely reused by Station build "${expectedBuildVersion}".`,
+    { hint },
+  );
+}
+
+/** Require exact protocol/build reuse and throw the canonical compatibility SafeError otherwise. */
+export function assertHostReusable(health: HostHealthResult, expectedBuildVersion: string): void {
+  const error = stationHostCompatibilityError(health, expectedBuildVersion);
+  if (error !== undefined) {
+    throw error;
+  }
 }
 
 /**
@@ -96,8 +143,9 @@ export function stationHostErrorFromUnknown(
       ...(error.sessionId === undefined ? {} : { sessionId: error.sessionId }),
     });
   }
-  if (isSafeError(error)) {
-    return error;
+  const safeError = SafeErrorSchema.safeParse(error);
+  if (safeError.success) {
+    return safeError.data;
   }
   return stationHostSafeError(fallback.code, fallback.message, {
     ...(fallback.hint === undefined ? {} : { hint: fallback.hint }),

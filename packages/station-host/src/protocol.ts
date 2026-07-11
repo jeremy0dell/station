@@ -5,7 +5,7 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 1;
+export const HOST_PROTOCOL_VERSION = 2;
 
 const idSchema = z.string().min(1);
 
@@ -14,9 +14,17 @@ export const HostRequestSchema = z
     id: idSchema,
     method: z.string().min(1),
     params: z.unknown().optional(),
+    protocolVersion: z.number().int().optional(),
+    buildVersion: z.string().min(1).optional(),
   })
   .strict();
 export type HostRequest = z.infer<typeof HostRequestSchema>;
+
+/** Exact client identity carried by operational requests so the host can reject old callers. */
+export type HostClientIdentity = {
+  protocolVersion: number;
+  buildVersion: string;
+};
 
 export const HostResponseSchema = z.union([
   z.object({ id: idSchema, ok: z.literal(true), result: z.unknown() }).strict(),
@@ -24,8 +32,18 @@ export const HostResponseSchema = z.union([
 ]);
 export type HostResponse = z.infer<typeof HostResponseSchema>;
 
-export function hostRequest(id: string, method: string, params?: unknown): HostRequest {
-  return params === undefined ? { id, method } : { id, method, params };
+export function hostRequest(
+  id: string,
+  method: string,
+  params?: unknown,
+  client?: HostClientIdentity,
+): HostRequest {
+  const request: HostRequest = params === undefined ? { id, method } : { id, method, params };
+  if (client !== undefined) {
+    request.protocolVersion = client.protocolVersion;
+    request.buildVersion = client.buildVersion;
+  }
+  return request;
 }
 
 export function hostSuccess(id: string, result: unknown): HostResponse {
@@ -109,9 +127,44 @@ export const HostCloseResultSchema = z.object({ closed: z.boolean() }).strict();
 export type HostCloseResult = z.infer<typeof HostCloseResultSchema>;
 
 export const HostHealthResultSchema = z
-  .object({ ok: z.literal(true), protocolVersion: z.number().int() })
+  .object({
+    ok: z.literal(true),
+    protocolVersion: z.number().int(),
+    buildVersion: z.string().min(1).optional(),
+  })
   .strict();
 export type HostHealthResult = z.infer<typeof HostHealthResultSchema>;
+
+/** The only three actions allowed by the host protocol/build compatibility policy. */
+export type HostCompatibility =
+  | { action: "reuse" }
+  | { action: "replace"; runningBuildVersion: string }
+  | { action: "refuse"; reason: "protocol-mismatch" | "legacy-health" };
+
+/** Classify opaque build versions without inferring SemVer compatibility. */
+export function classifyHostCompatibility(
+  health: HostHealthResult,
+  expectedBuildVersion: string,
+): HostCompatibility {
+  if (health.protocolVersion !== HOST_PROTOCOL_VERSION) {
+    return { action: "refuse", reason: "protocol-mismatch" };
+  }
+  if (health.buildVersion === undefined) {
+    return { action: "refuse", reason: "legacy-health" };
+  }
+  if (health.buildVersion === expectedBuildVersion) {
+    return { action: "reuse" };
+  }
+  return { action: "replace", runningBuildVersion: health.buildVersion };
+}
+
+export const HostStopIfIdleParamsSchema = z
+  .object({ requestingBuildVersion: z.string().min(1) })
+  .strict();
+export type HostStopIfIdleParams = z.infer<typeof HostStopIfIdleParamsSchema>;
+
+export const HostStopIfIdleResultSchema = z.object({ stopping: z.literal(true) }).strict();
+export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
 
 export const HostAttachParamsSchema = z.object({ ptyId: idSchema }).strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;

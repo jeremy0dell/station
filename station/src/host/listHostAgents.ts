@@ -1,4 +1,5 @@
 import { createStationHostClient } from "@station/host";
+import { toSafeError } from "@station/observability";
 import { devHostSocketPath } from "./devPaths.js";
 
 /**
@@ -40,10 +41,16 @@ async function main(): Promise<void> {
       );
     }
     process.stdout.write(`  ${ptys.filter((p) => p.alive).length} live / ${ptys.length} total\n`);
-  } catch {
+  } catch (error) {
+    const safeError = toSafeError(error, {
+      tag: "TerminalProviderError",
+      code: "HOST_UNREACHABLE",
+      message: `No station host is reachable at ${socketPath}.`,
+      provider: "native",
+    });
     process.stdout.write(
-      `No station host reachable at ${socketPath}.\n` +
-        "  Start one with `bun run e2e:persist -- --hold` (prints its socket), or pass --socket <path>.\n",
+      `${safeError.code}: ${safeError.message}\n` +
+        `  ${safeError.hint ?? "Start one with `bun run e2e:persist -- --hold`, or pass --socket <path>."}\n`,
     );
     process.exitCode = 1;
   } finally {

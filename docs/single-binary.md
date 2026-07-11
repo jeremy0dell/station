@@ -429,19 +429,38 @@ plan does not implement its own version eviction.
 
 ### B-host — station-host upgrade behavior (F7 — was undefined)
 
-`ensureHostRunning` reuses an existing host if health responds, but host
-health carries only `{ok, protocolVersion}` (`packages/station-host/src/
-protocol.ts`). An upgraded binary would keep talking to an old host process
-driving **live PTYs**. Define:
+**Status: implemented.** Host health carries the Station build version as well
+as the host protocol version. Build versions are opaque: a host is reused only
+when both values exactly match the client. This deliberately does not infer a
+SemVer compatibility range for a process that owns live terminals.
 
-- Host health must carry the build version (mirror A1's observer fix).
-- Compatibility rule: reuse iff `protocolVersion` matches **and** version is
-  compatible; otherwise graceful replacement.
-- Live-PTY policy: what happens to existing PTYs + scrollback on
-  replacement — either a reattach/handoff (preferred; the host already
-  snapshots scrollback on attach) or an explicit, announced session end.
-  Undefined behavior here means silent session loss on upgrade; the
-  acceptance suite exercises upgrade-with-live-host.
+A current-protocol host from a different build supports one guarded lifecycle
+operation: stop only if its complete PTY table is empty. The host checks all
+agent and auxiliary PTYs and enters draining state atomically, so a concurrent
+spawn cannot land between the empty check and shutdown. Once the response is
+sent, the host closes. Observer-backed launch replaces it immediately; a plain
+TUI boot starts the current host on demand when the next hosted terminal opens.
+A host with a different protocol, or legacy health without a build version, is
+never sent an unknown lifecycle request and is left running for explicit
+operator recovery.
+
+Live hosts are never replaced. `HOST_UPGRADE_BLOCKED` names the running and
+requested builds and reports the live-terminal count; Station leaves the host,
+PTYs, in-memory scrollback, socket, and saved layout untouched.
+Reopen with the running build, finish or explicitly close those terminals, then
+retry the upgrade. The host owns the PTY master handles and scrollback rings in
+process, while attach transports only replay bytes and live frames, so seamless
+handoff would require fd/state transfer or a persistent broker and remains a
+larger protocol project.
+
+Implementation basis: `packages/station-host/src/protocol.ts` defines the wire
+surface; `station/src/host/ptyTable.ts` and `scrollbackRing.ts` prove PTY and
+replay ownership is process-local; `station/src/terminal/pty/hostAttachedTerminal.ts`
+shows reattachment targets the same socket and PTY id; `station/src/state/layout/layoutSnapshot.ts`
+persists lookup identity but no process handle or scrollback; and
+`integrations/terminal/station/src/host/ensureHostRunning.ts` owns daemon reuse,
+replacement, and spawn decisions. Those current boundaries, rather than the older roadmap
+assumption, determine the shipped refusal policy.
 
 ## Dependency graph
 
@@ -495,8 +514,11 @@ flow:
    reconnects without a manual restart.
 4. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
 5. `stn-ingress` symlink delivers a provider hook event end to end.
-6. Upgrade the binary while **live host PTYs** exist → reattach without
-   session loss (B-host).
+6. Upgrade the binary while **live host PTYs** exist → the new build reports
+   `HOST_UPGRADE_BLOCKED`; the old host and sessions remain reattachable with
+   the old build. After every hosted terminal closes, retry → the idle host is
+   stopped; open a hosted terminal → the replacement health reports the new
+   build (B-host).
 7. Rollback → install script returns to the prior good version (immutable).
 
 ## Audit findings (all confirmed)
@@ -522,8 +544,8 @@ Against `e0d4307`, reproduced this session (bun 1.3.14, darwin-arm64):
 6. **PTY rollback promise false** — `STATION_PTY_IMPL=bridge` needs Node +
    node-pty assets a binary lacks; ctty helper had no lifecycle. Fixed in
    A2 + architecture.
-7. **station-host upgrades undefined** — health is protocol-number-only.
-   New B-host.
+7. **station-host upgrades undefined** — fixed by B-host's exact-build health,
+   guarded idle replacement, and visible live-terminal refusal.
 8. **Artifact inventory incomplete** — `stn-tmux-popup`, Pi extension file,
    LICENSE. New manifest + extraction policy.
 9. **Release not shippable** — runner label, OS/CPU/glibc floors, gate

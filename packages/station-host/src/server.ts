@@ -1,10 +1,15 @@
 import type { SafeError } from "@station/contracts";
 import type { NdjsonConnection } from "@station/protocol";
-import { stationHostErrorFromUnknown } from "./errors.js";
+import {
+  type StationHostErrorCode,
+  stationHostErrorFromUnknown,
+  stationHostSafeError,
+} from "./errors.js";
 import {
   type HostAttachAck,
   type HostAttachParams,
   HostAttachParamsSchema,
+  type HostClientIdentity,
   HostDetachParamsSchema,
   type HostFrame,
   HostRequestSchema,
@@ -25,8 +30,12 @@ export type HostAttachmentSource = {
  * method answers with a classified `HOST_BAD_REQUEST` rather than crashing.
  */
 export type HostHandlers = {
+  /** Exact identity required on every operational request; lifecycle negotiation is exempt. */
+  hostIdentity: HostClientIdentity;
   unary?: Record<string, (params: unknown) => Promise<unknown> | unknown>;
   attach?: (params: HostAttachParams) => HostAttachmentSource | Promise<HostAttachmentSource>;
+  /** Called only after a successful unary response has been written to the connection. */
+  afterUnaryResponseSent?: (method: string) => void;
 };
 
 export type HostServerLogger = {
@@ -75,6 +84,23 @@ async function handleMessage(
   }
   const request = parsed.data;
 
+  if (
+    request.method !== "host.health" &&
+    request.method !== "host.stopIfIdle" &&
+    (request.protocolVersion !== handlers.hostIdentity.protocolVersion ||
+      request.buildVersion !== handlers.hostIdentity.buildVersion)
+  ) {
+    fail(
+      connection,
+      logger,
+      request.id,
+      "HOST_VERSION_INCOMPATIBLE",
+      `Station host build "${handlers.hostIdentity.buildVersion}" rejected a client without matching protocol and build identity.`,
+      "Use the Station build that started this host, or let the current build negotiate a guarded idle replacement.",
+    );
+    return;
+  }
+
   if (request.method === "host.attach") {
     await runAttach(connection, handlers, logger, attachments, request.id, request.params);
     return;
@@ -103,9 +129,9 @@ async function handleMessage(
     return;
   }
 
+  let result: unknown;
   try {
-    const result = await handler(request.params);
-    connection.send(hostSuccess(request.id, result));
+    result = await handler(request.params);
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_REQUEST_FAILED",
@@ -113,7 +139,10 @@ async function handleMessage(
     });
     logger.onError?.(safeError);
     connection.send(hostFailure(request.id, safeError));
+    return;
   }
+  connection.send(hostSuccess(request.id, result));
+  handlers.afterUnaryResponseSent?.(request.method);
 }
 
 async function runAttach(
@@ -193,10 +222,11 @@ function fail(
   connection: NdjsonConnection,
   logger: HostServerLogger,
   id: string,
-  code: "HOST_BAD_REQUEST",
+  code: StationHostErrorCode,
   message: string,
+  hint?: string,
 ): void {
-  const safeError = stationHostErrorFromUnknown(undefined, { code, message });
+  const safeError = stationHostSafeError(code, message, hint === undefined ? {} : { hint });
   logger.onError?.(safeError);
   connection.send(hostFailure(id, safeError));
 }

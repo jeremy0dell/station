@@ -1,12 +1,19 @@
 import { connectUnixSocket, type NdjsonConnection } from "@station/protocol";
+import { stationBuildInfo } from "@station/runtime";
 import type { z } from "zod";
-import { StationHostProviderError, stationHostErrorFromUnknown } from "./errors.js";
 import {
+  assertHostReusable,
+  StationHostProviderError,
+  stationHostErrorFromUnknown,
+} from "./errors.js";
+import {
+  HOST_PROTOCOL_VERSION,
   type HostAttachAck,
   HostAttachAckSchema,
   HostCloseResultSchema,
   type HostFrame,
   HostFrameSchema,
+  type HostHealthResult,
   HostHealthResultSchema,
   HostListResultSchema,
   HostOkResultSchema,
@@ -16,12 +23,16 @@ import {
   HostResponseSchema,
   type HostSpawnResult,
   HostSpawnResultSchema,
+  type HostStopIfIdleResult,
+  HostStopIfIdleResultSchema,
   hostRequest,
 } from "./protocol.js";
 
 export type StationHostClientOptions = {
   socketPath: string;
   timeoutMs?: number;
+  /** Build expected by operational calls; defaults to this Station build. */
+  expectedBuildVersion?: string;
   /** Test seam: supply a connection instead of dialing the unix socket. */
   connect?: () => Promise<NdjsonConnection>;
 };
@@ -36,7 +47,9 @@ export type HostAttachment = {
 };
 
 export type StationHostClient = {
-  health(): Promise<{ ok: true; protocolVersion: number }>;
+  health(): Promise<HostHealthResult>;
+  /** Lifecycle-only request; intentionally available before compatibility is established. */
+  stopIfIdle(requestingBuildVersion: string): Promise<HostStopIfIdleResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
   write(ptyId: string, data: string): Promise<void>;
   resize(ptyId: string, cols: number, rows: number): Promise<void>;
@@ -75,10 +88,12 @@ const defaultTimeoutMs = 5000;
 
 export function createStationHostClient(options: StationHostClientOptions): StationHostClient {
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
+  const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
   const pending = new Map<string, Pending>();
   const sinks = new Map<string, FrameSink>();
   let connection: NdjsonConnection | undefined;
   let connecting: Promise<NdjsonConnection> | undefined;
+  let compatibilityCheck: Promise<void> | undefined;
   let disposed = false;
   let nextId = 0;
 
@@ -96,6 +111,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     sinks.clear();
     connection = undefined;
     connecting = undefined;
+    compatibilityCheck = undefined;
   }
 
   async function readLoop(active: NdjsonConnection): Promise<void> {
@@ -166,10 +182,11 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     return connecting;
   }
 
-  async function request<TResult>(
+  async function rawRequest<TResult>(
     method: string,
     params: unknown,
     schema: { parse(value: unknown): TResult },
+    includeClientIdentity = false,
   ): Promise<TResult> {
     const active = await ensureConnection();
     const id = `h${nextId++}`;
@@ -184,12 +201,47 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         );
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer });
-      active.send(hostRequest(id, method, params));
+      active.send(
+        hostRequest(
+          id,
+          method,
+          params,
+          includeClientIdentity
+            ? { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: expectedBuildVersion }
+            : undefined,
+        ),
+      );
     });
     if (!response.ok) {
       throw response.error;
     }
     return schema.parse(response.result);
+  }
+
+  function ensureCompatible(): Promise<void> {
+    if (compatibilityCheck === undefined) {
+      const check = rawRequest("host.health", undefined, HostHealthResultSchema).then((health) => {
+        assertHostReusable(health, expectedBuildVersion);
+      });
+      compatibilityCheck = check;
+      // A failed preflight may precede host startup, so only a successful
+      // handshake remains memoized for this connection lifecycle.
+      void check.catch(() => {
+        if (compatibilityCheck === check) {
+          compatibilityCheck = undefined;
+        }
+      });
+    }
+    return compatibilityCheck;
+  }
+
+  async function request<TResult>(
+    method: string,
+    params: unknown,
+    schema: { parse(value: unknown): TResult },
+  ): Promise<TResult> {
+    await ensureCompatible();
+    return rawRequest(method, params, schema, true);
   }
 
   function registerSink(ptyId: string): AsyncIterable<HostFrame> {
@@ -245,7 +297,9 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   }
 
   return {
-    health: () => request("host.health", undefined, HostHealthResultSchema),
+    health: () => rawRequest("host.health", undefined, HostHealthResultSchema),
+    stopIfIdle: (requestingBuildVersion) =>
+      rawRequest("host.stopIfIdle", { requestingBuildVersion }, HostStopIfIdleResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     write: async (ptyId, data) => {
       await request("host.write", { ptyId, data }, HostOkResultSchema);

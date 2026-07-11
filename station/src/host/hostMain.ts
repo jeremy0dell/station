@@ -4,6 +4,8 @@ import type { PreparedPtyRuntime } from "../bin/packagedAssets.js";
 export type RunStationHostMainOptions = {
   /** Compiled entrypoint seam: prepare embedded PTY assets for the parsed state dir. */
   preparePtyRuntime?: (stateDir: string) => Promise<PreparedPtyRuntime>;
+  /** Test seam for observing daemon exit without terminating the test process. */
+  exit?: (code: number) => void;
 };
 
 function parseArgs(argv: readonly string[]): { socketPath: string; stateDir: string } {
@@ -54,12 +56,22 @@ export async function runStationHostMain(
     throw error;
   }
 
+  let exiting = false;
   const shutdown = () => {
-    void host.close().finally(() => {
-      ptyRuntime?.dispose();
-      process.exit(0);
-    });
+    void host.close();
   };
+  const exit = () => {
+    if (exiting) {
+      return;
+    }
+    exiting = true;
+    process.off("SIGTERM", shutdown);
+    process.off("SIGINT", shutdown);
+    ptyRuntime?.dispose();
+    (options.exit ?? process.exit)(0);
+  };
+  void host.closed.then(exit, exit);
+
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 }

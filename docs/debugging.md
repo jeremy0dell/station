@@ -168,9 +168,9 @@ Station (the OpenTUI terminal workspace under `station/`) adds a second runtime 
 When Station "does nothing" or panes read "exited", check the process topology before the code:
 
 - Exactly one Station UI should be running. Two `bun --hot src/main.tsx` instances on one TTY fight over the screen and mouse. `pgrep -f src/main.tsx` should return a single process.
-- The host the UI dials must match the UI build. A stale or version-mismatched host at the socket rejects requests, so host-backed aux shells (splits / `+sh`) fail and the pane reads "exited". Look for `host.error` / `HOST_REQUEST_FAILED` in `station-host.jsonl` at the moment a split was attempted.
+- The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy or speaks another protocol. Both are deliberate preservation failures, not stale-socket evidence.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
-- Recovery is to bring up one coherent stack: stop all `src/main.tsx` and `hostMain.ts` processes, remove the stale socket, then start a single UI + host from an up-to-date checkout.
+- Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
 
 Other Station diagnostics:
 
