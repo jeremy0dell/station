@@ -102,6 +102,7 @@ describe("guided setup command", () => {
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
         ]),
         fs,
+        activateObserverConfig: noopActivateObserverConfig,
         prompt: {
           async confirm(message: string) {
             return (

@@ -19,9 +19,13 @@ import { waitForSocketClosed } from "../support/sockets";
 describe("setup core flow e2e", () => {
   it("bootstraps setup and runs all checkout launchers with the pinned pnpm", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-launcher-install-e2e-"));
+    const home = join(root, "home");
+    const runtimeDir = await mkdtemp(join(tmpdir(), "stn-r-"));
+    const observerSocket = join(runtimeDir, "station", "observer.sock");
+    const fallbackObserverSocket = join(home, ".local/state/station/run/observer.sock");
+    let passed = false;
     try {
       const repoRoot = process.cwd();
-      const home = join(root, "home");
       const pnpmHome = join(root, "pnpm-home");
       const bin = join(root, "bin");
       const pnpmBin = run("/bin/sh", ["-c", "command -v pnpm"], {
@@ -90,6 +94,7 @@ describe("setup core flow e2e", () => {
         XDG_DATA_HOME: join(root, "xdg-data"),
         XDG_CACHE_HOME: join(root, "xdg-cache"),
         XDG_STATE_HOME: join(root, "xdg-state"),
+        XDG_RUNTIME_DIR: runtimeDir,
         COREPACK_HOME: join(root, "corepack"),
         PATH: `${join(pnpmHome, "bin")}:${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
         NO_COLOR: "1",
@@ -125,6 +130,15 @@ describe("setup core flow e2e", () => {
       expect(setup.stdout).toContain("Core setup complete.");
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
 
+      const observer = createObserverClient({ socketPath: observerSocket, timeoutMs: 1000 });
+      const health = await observer.health();
+      const snapshot = await observer.getSnapshot();
+      expect(health.pid).toBeTypeOf("number");
+      expect(snapshot.projects).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "project" })]),
+      );
+      expect(snapshot.counts.projects).toBe(1);
+
       const ingress = run("stn-ingress", [], { cwd: root, env, allowFailure: true });
       expect(ingress.status).toBe(1);
       expect(ingress.stderr).toContain("Usage: stn-ingress [options] <provider> [event]");
@@ -139,8 +153,15 @@ describe("setup core flow e2e", () => {
         },
       });
       expect(popup.stdout.trim()).toBe("stn-tmux-popup ok");
+      passed = true;
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await stopObserverCandidates([observerSocket, fallbackObserverSocket]);
+      if (passed || process.env.STATION_KEEP_SETUP_E2E_TEMP !== "1") {
+        await Promise.all([
+          rm(root, { recursive: true, force: true }),
+          rm(runtimeDir, { recursive: true, force: true }),
+        ]);
+      }
     }
   });
 
