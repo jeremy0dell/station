@@ -16,7 +16,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
 } from "../../src/internal";
@@ -239,7 +239,7 @@ describe("observer provider hook ingress", () => {
   it("acks harness event reports before slow queue processing finishes", async () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock,
       idFactory: ids(),
@@ -294,7 +294,7 @@ describe("observer provider hook ingress", () => {
   it("coalesces repeated harness reports and exposes queue metrics", async () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock,
       idFactory: ids(),
@@ -394,7 +394,7 @@ describe("observer provider hook ingress", () => {
   it("deduplicates harness report ids before duplicate persistence", async () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ clock });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock,
       idFactory: ids(),

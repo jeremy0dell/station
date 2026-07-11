@@ -8,7 +8,7 @@ import {
   createCommandQueue,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -59,7 +59,7 @@ describe("scripted agent lifecycle", () => {
     );
 
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite") });
-    const persistence = createObserverPersistence({ sqlite, idFactory: ids() });
+    const persistence = createSqliteObserverPersistence({ sqlite, idFactory: ids() });
     const core = createObserverCore({
       config: config(root, stateDir),
       providers: new ProviderRegistry({
@@ -154,7 +154,7 @@ describe("scripted agent lifecycle", () => {
     });
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite") });
     const idFactory = ids();
-    const persistence = createObserverPersistence({ sqlite, idFactory });
+    const persistence = createSqliteObserverPersistence({ sqlite, idFactory });
     const eventBus = createObserverEventBus();
     const queue = createCommandQueue({
       persistence,

@@ -1,7 +1,7 @@
 import type { StationCommand } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
-import { createObserverPersistence } from "../../src/persistence";
+import { createSqliteObserverPersistence } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -29,7 +29,7 @@ function commandIds() {
 function createPersistenceAndQueue(options: { commandTimeoutMs?: number } = {}) {
   const ids = commandIds();
   const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-  const persistence = createObserverPersistence({
+  const persistence = createSqliteObserverPersistence({
     sqlite,
     clock: { now: () => new Date(now) },
     idFactory: ids,

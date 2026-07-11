@@ -13,7 +13,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -67,7 +67,7 @@ describe("observer protocol server", () => {
 function createObserverFixture(socketPath: string) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
-  const persistence = createObserverPersistence({
+  const persistence = createSqliteObserverPersistence({
     sqlite,
     clock,
     idFactory: observerIds(),

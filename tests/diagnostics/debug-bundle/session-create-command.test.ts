@@ -9,7 +9,7 @@ import {
   createObserverCore,
   createObserverEventBus,
   createObserverLogger,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -33,7 +33,7 @@ describe("session.create debug bundle diagnostics", () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     const ids = observerIds();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
     const eventBus = createObserverEventBus();
     const logger = createObserverLogger({ stateDir, clock });
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus, logger });
@@ -121,7 +121,7 @@ describe("session.create debug bundle diagnostics", () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     const ids = observerIds();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
     const eventBus = createObserverEventBus();
     const logger = createObserverLogger({ stateDir, clock });
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus, logger });

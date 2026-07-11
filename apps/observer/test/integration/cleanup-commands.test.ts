@@ -13,7 +13,7 @@ import {
   createCommandQueue,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -365,7 +365,7 @@ function createFixture(input: {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const ids = observerIds();
-  const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids });
+  const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
   const eventBus = createObserverEventBus();
   const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
   const worktree = new FakeWorktreeProvider({

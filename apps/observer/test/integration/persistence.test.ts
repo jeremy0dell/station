@@ -9,7 +9,7 @@ import {
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { createErrorEnvelope, toSafeError } from "../../src/diagnostics/errors";
-import { createObserverPersistence } from "../../src/persistence";
+import { createSqliteObserverPersistence } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -65,7 +65,7 @@ describe("observer persistence", () => {
   it("stores command lifecycle, event history, and SafeError separately from envelopes", async () => {
     const dbPath = await tempDbPath();
     const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -115,7 +115,7 @@ describe("observer persistence", () => {
     sqlite.close();
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
-    const reloaded = createObserverPersistence({
+    const reloaded = createSqliteObserverPersistence({
       sqlite: reopened,
       clock: { now: () => new Date(later) },
       idFactory: ids(),
@@ -153,7 +153,7 @@ describe("observer persistence", () => {
 
   it("upserts session recovery handles by provider-native target without provider payloads", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -208,7 +208,7 @@ describe("observer persistence", () => {
 
   it("stores only the newest unacknowledged turn readiness per session", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -282,7 +282,7 @@ describe("observer persistence", () => {
 
   it("skips retired command rows without requiring a migration", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -334,7 +334,7 @@ describe("observer persistence", () => {
 
   it("skips retired command events in historical diagnostic reads", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -398,7 +398,7 @@ describe("observer persistence", () => {
 
   it("drops retired provider hook event rows rather than upgrading them", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -441,7 +441,7 @@ describe("observer persistence", () => {
 
   it("expires and prunes provider observations", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -507,7 +507,7 @@ describe("observer persistence", () => {
 
   it("can return only the latest provider observation per entity", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -564,7 +564,7 @@ describe("observer persistence", () => {
 
   it("seeds session titles from branches and preserves custom titles across reconcile persistence", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -634,7 +634,7 @@ describe("observer persistence", () => {
 
   it("seeds session titles once before launch and preserves them across reconcile and rename", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -725,7 +725,7 @@ describe("observer persistence", () => {
 
   it("deletes a pre-launch title seed when launch cleanup requests it", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -747,7 +747,7 @@ describe("observer persistence", () => {
   it("persists correlation records across observer restart", async () => {
     const dbPath = await tempDbPath();
     const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -787,7 +787,7 @@ describe("observer persistence", () => {
     sqlite.close();
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
-    const reloaded = createObserverPersistence({ sqlite: reopened, idFactory: ids() });
+    const reloaded = createSqliteObserverPersistence({ sqlite: reopened, idFactory: ids() });
 
     expect(await reloaded.listProjects()).toEqual([expect.objectContaining({ id: "web" })]);
     expect(await reloaded.listWorktrees()).toEqual([
@@ -813,7 +813,7 @@ describe("observer persistence", () => {
 
   it("creates and manages current worktree metadata rows by kind", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -930,7 +930,7 @@ describe("observer persistence", () => {
       message: "Local git change summary refresh failed.",
     });
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),
@@ -978,7 +978,7 @@ describe("observer persistence", () => {
 
   it("omits current metadata rows whose payload no longer parses", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
       idFactory: ids(),

@@ -6,7 +6,7 @@ import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createObserverCore,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
 } from "@station/observer/internal";
@@ -25,7 +25,7 @@ describe("Worktrunk dependency debug bundle diagnostics", () => {
 
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
     const config = stationConfig(stateDir);
     const providers = new ProviderRegistry({
       worktree: new WorktrunkProvider({

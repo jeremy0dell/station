@@ -6,7 +6,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   type ProviderRegistry,
 } from "../../src/internal";
@@ -90,7 +90,7 @@ export function createTestObserverCore(input: CreateTestObserverCoreInput) {
   const sqliteOptions: { clock: TestClock; path?: string } = { clock };
   if (input.sqlitePath !== undefined) sqliteOptions.path = input.sqlitePath;
   const sqlite = openObserverSqlite(sqliteOptions);
-  const persistence = createObserverPersistence({
+  const persistence = createSqliteObserverPersistence({
     sqlite,
     clock,
     idFactory: createTestIdFactory(),

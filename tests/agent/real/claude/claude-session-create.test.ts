@@ -11,7 +11,7 @@ import {
   createCommandQueue,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -69,7 +69,7 @@ describeRealClaude("real Claude session.create", () => {
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     cleanupTasks.push(async () => sqlite.close());
     const idFactory = ids();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory });
     const eventBus = createObserverEventBus();
     const queue = createCommandQueue({
       persistence,
@@ -218,7 +218,7 @@ async function poll<T>(probe: () => Promise<T | false | undefined>, message: str
 async function writeFailureBundle(input: {
   config: StationConfig;
   core: ReturnType<typeof createObserverCore>;
-  persistence: ReturnType<typeof createObserverPersistence>;
+  persistence: ReturnType<typeof createSqliteObserverPersistence>;
   stateDir: string;
   diagnosticsDir: string;
 }): Promise<void> {

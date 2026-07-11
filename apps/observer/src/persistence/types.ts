@@ -9,7 +9,6 @@ import type {
   ProviderId,
   ProviderProjectConfig,
   SafeError,
-  SessionRecoveryHandle,
   StationCommand,
   StationEvent,
   TerminalState,
@@ -21,8 +20,6 @@ import type {
   WorktreeSource,
   WorktreeState,
 } from "@station/contracts";
-import type { RuntimeClock } from "@station/runtime";
-import type { ObserverSqliteHandle } from "../sqlite.js";
 
 export type PersistedCommandStatus = "accepted" | "started" | "succeeded" | "failed";
 
@@ -249,127 +246,4 @@ export type PersistReconcileResultInput = {
   observedAt?: string;
   expiresAt?: string | undefined;
   providerObservationRetentionDays?: number | undefined;
-};
-
-export type ObserverPersistence = {
-  recordCommandAccepted(input: {
-    commandId: CommandId;
-    command: StationCommand;
-    createdAt?: string;
-    traceId?: string;
-    spanId?: string;
-  }): Promise<PersistedCommand>;
-  markCommandStarted(commandId: CommandId, startedAt?: string): Promise<PersistedCommand>;
-  markCommandSucceeded(commandId: CommandId, finishedAt?: string): Promise<PersistedCommand>;
-  markCommandFailed(input: {
-    commandId: CommandId;
-    safeError: SafeError;
-    envelope: ErrorEnvelope;
-    finishedAt?: string;
-  }): Promise<PersistedCommand>;
-  getCommand(commandId: CommandId): Promise<PersistedCommand | undefined>;
-  listCommands(): Promise<PersistedCommand[]>;
-  listCommandErrors(commandId?: CommandId): Promise<PersistedCommandError[]>;
-  recordEvent(event: StationEvent, options?: EventRecordOptions): Promise<PersistedEvent>;
-  recordEventWithIngressDedupe(
-    event: StationEvent,
-    options: EventRecordOptions & {
-      dedupe: IngressDedupeKey;
-    },
-  ): Promise<EventIngressDedupeResult>;
-  recordEventAndProviderObservationWithIngressDedupe(input: {
-    event: StationEvent;
-    eventOptions: EventRecordOptions;
-    observation: RecordProviderObservationInput;
-    dedupe: IngressDedupeKey;
-  }): Promise<EventAndObservationIngressDedupeResult>;
-  listEvents(filter?: {
-    commandId?: CommandId;
-    type?: StationEvent["type"];
-  }): Promise<PersistedEvent[]>;
-  recordProviderObservation(
-    input: RecordProviderObservationInput,
-  ): Promise<PersistedProviderObservation>;
-  listProviderObservations(options?: {
-    entityKind?: ProviderObservationKind | readonly ProviderObservationKind[];
-    includeExpired?: boolean;
-    latestOnly?: boolean;
-    now?: string;
-  }): Promise<PersistedProviderObservation[]>;
-  listCurrentProviderEntityObservations(options?: {
-    entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-    includeExpired?: boolean;
-    now?: string;
-  }): Promise<PersistedProviderObservation[]>;
-  pruneExpiredProviderObservations(now?: string): Promise<number>;
-  upsertWorktreeMetadataCurrent<TKind extends WorktreeMetadataCurrentKind>(input: {
-    worktreeId: string;
-    kind: TKind;
-    payload: WorktreeMetadataCurrentPayloadByKind[TKind];
-    cacheKey?: string;
-    updatedAt?: string;
-    expiresAt?: string | undefined;
-    stale?: boolean;
-    lastError?: SafeError;
-  }): Promise<PersistedWorktreeMetadataCurrent<TKind>>;
-  listWorktreeMetadataCurrent<TKind extends WorktreeMetadataCurrentKind>(options?: {
-    kind?: TKind | readonly TKind[];
-    includeExpired?: boolean;
-    now?: string;
-  }): Promise<PersistedWorktreeMetadataCurrent<TKind>[]>;
-  deleteWorktreeMetadataCurrent(input: {
-    worktreeId: string;
-    kind?: WorktreeMetadataCurrentKind;
-  }): Promise<number>;
-  pruneExpiredWorktreeMetadataCurrent(now?: string): Promise<number>;
-  persistReconcileResult(input: PersistReconcileResultInput): Promise<void>;
-  listProjects(): Promise<PersistedProject[]>;
-  listWorktrees(): Promise<PersistedWorktree[]>;
-  listTerminalTargets(): Promise<PersistedTerminalTarget[]>;
-  listHarnessRuns(): Promise<PersistedHarnessRun[]>;
-  listSessions(): Promise<PersistedSession[]>;
-  seedSessionTitle(input: {
-    sessionId: string;
-    projectId: string;
-    worktreeId: string;
-    title: string;
-    createdAt: string;
-    lastSeenAt: string;
-  }): Promise<PersistedSession>;
-  deleteSessionTitleSeed(sessionId: string): Promise<number>;
-  renameSession(input: { sessionId: string; title: string }): Promise<PersistedSession | undefined>;
-  recordRecoveryBreadcrumb(input: {
-    projectId: string;
-    location: string;
-    path: string;
-    payload: unknown;
-    worktreeId?: string;
-    sessionId?: string;
-    createdAt?: string;
-    lastSeenAt?: string;
-  }): Promise<PersistedRecoveryBreadcrumb>;
-  listRecoveryBreadcrumbs(): Promise<PersistedRecoveryBreadcrumb[]>;
-  upsertSessionRecoveryHandle(input: SessionRecoveryHandle): Promise<SessionRecoveryHandle>;
-  getSessionRecoveryHandle(handleId: string): Promise<SessionRecoveryHandle | undefined>;
-  listSessionRecoveryHandles(
-    options?: ListSessionRecoveryHandlesOptions,
-  ): Promise<SessionRecoveryHandle[]>;
-  upsertSessionTurnReadiness(input: {
-    sessionId: string;
-    projectId: string;
-    worktreeId: string;
-    token: string;
-    completedAt: string;
-    createdAt?: string;
-    updatedAt?: string;
-  }): Promise<PersistedSessionTurnReadiness>;
-  getSessionTurnReadiness(sessionId: string): Promise<PersistedSessionTurnReadiness | undefined>;
-  listSessionTurnReadiness(): Promise<PersistedSessionTurnReadiness[]>;
-  deleteSessionTurnReadiness(input: { sessionId: string; token?: string }): Promise<number>;
-};
-
-export type CreateObserverPersistenceOptions = {
-  sqlite: ObserverSqliteHandle;
-  clock?: RuntimeClock;
-  idFactory?: Partial<ObserverIdFactory>;
 };
