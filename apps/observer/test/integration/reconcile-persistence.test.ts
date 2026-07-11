@@ -210,7 +210,6 @@ describe("observer reconcile persistence", () => {
         harnesses: [new FakeHarnessProvider({ now, runs: [] })],
       }),
       persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
     });
     const snapshot = await secondCore.reconcile("providers-empty");

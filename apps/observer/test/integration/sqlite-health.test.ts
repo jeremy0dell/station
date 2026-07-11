@@ -1,3 +1,4 @@
+import { createFakeTerminalTarget } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
   createSqliteObserverPersistence,
@@ -104,6 +105,70 @@ describe("observer SQLite health", () => {
       status: "unavailable",
       lastError: { code: "PERSISTENCE_TRANSACTION_FAILED" },
     });
+
+    sqlite.close();
+  });
+
+  it("rejects malformed observations before writing and records the failure in health", async () => {
+    const sqlite = openObserverSqlite({
+      path: ":memory:",
+      clock: { now: () => new Date(now) },
+    });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+    });
+    const malformedObservation = {
+      provider: "fake-harness",
+      providerType: "harness",
+      entityKind: "provider_health",
+      entityKey: "fake-harness",
+      payload: { status: "healthy" },
+      observedAt: now,
+    } as unknown as Parameters<typeof persistence.recordProviderObservation>[0];
+
+    await expect(persistence.recordProviderObservation(malformedObservation)).rejects.toThrow(
+      "PERSISTENCE_TRANSACTION_FAILED",
+    );
+    expect(
+      sqlite.database.prepare("SELECT COUNT(*) AS count FROM provider_observations").get(),
+    ).toMatchObject({ count: 0 });
+    expect(persistence.health()).toMatchObject({
+      status: "unavailable",
+      lastError: { code: "PERSISTENCE_TRANSACTION_FAILED" },
+    });
+
+    sqlite.close();
+  });
+
+  it("strips terminal provider data before storing the observation payload", async () => {
+    const sqlite = openObserverSqlite({
+      path: ":memory:",
+      clock: { now: () => new Date(now) },
+    });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+    });
+    const terminal = createFakeTerminalTarget({
+      id: "term_private_data",
+      now,
+      providerData: { socketPath: "/tmp/private.sock" },
+    });
+
+    await persistence.recordProviderObservation({
+      provider: terminal.provider,
+      providerType: "terminal",
+      entityKind: "terminal_target",
+      entityKey: terminal.id,
+      payload: terminal,
+      observedAt: now,
+    });
+
+    const row = sqlite.database
+      .prepare("SELECT payload_json FROM provider_observations WHERE entity_key = ?")
+      .get(terminal.id) as { payload_json: string };
+    expect(JSON.parse(row.payload_json)).not.toHaveProperty("providerData");
 
     sqlite.close();
   });

@@ -15,15 +15,30 @@ import {
   createObserverEventBus,
   createSqliteObserverPersistence,
   openObserverSqlite,
+  type PersistenceHealthSource,
   ProviderRegistry,
   registerObserverCommandHandlers,
   startObserverServer,
 } from "../../src/internal";
 
 const now = "2026-05-20T12:00:00.000Z";
+const persistenceFailure = {
+  tag: "PersistenceError",
+  code: "PERSISTENCE_TRANSACTION_FAILED",
+  message: "Observer SQLite transaction failed.",
+} as const;
+const degradedSqliteHealth = {
+  path: "/tmp/degraded-observer.sqlite",
+  open: true,
+  status: "unavailable",
+  schemaVersion: 11,
+  migrations: [{ version: 11, name: "session_turn_readiness", appliedAt: now }],
+  lastCheckedAt: now,
+  lastError: persistenceFailure,
+} as const;
 
 describe("observer protocol server", () => {
-  it("serves health, snapshot, command dispatch, command get, and reconcile", async () => {
+  it("serves health, diagnostics, command dispatch, command get, and reconcile", async () => {
     const { socketPath } = await createTempSocketPath();
     const fixture = createObserverFixture(socketPath);
     const server = await startObserverServer({
@@ -37,6 +52,27 @@ describe("observer protocol server", () => {
     await expect(client.health()).resolves.toMatchObject({
       status: "healthy",
       socketPath,
+      sqlite: degradedSqliteHealth,
+    });
+    await expect(client.collectDiagnostics({ includeLogs: false })).resolves.toMatchObject({
+      observerHealth: {
+        sqlite: degradedSqliteHealth,
+      },
+    });
+    await expect(client.runDoctor()).resolves.toMatchObject({
+      status: "degraded",
+      observer: {
+        sqlite: degradedSqliteHealth,
+      },
+      sqlite: degradedSqliteHealth,
+      checks: expect.arrayContaining([
+        {
+          name: "sqlite",
+          status: "warn",
+          message: "SQLite is unavailable.",
+          error: persistenceFailure,
+        },
+      ]),
     });
     await expect(client.reconcile("protocol-server-test")).resolves.toMatchObject({
       reason: "protocol-server-test",
@@ -93,10 +129,13 @@ function createObserverFixture(socketPath: string) {
     persistence,
     clock,
   });
+  const persistenceHealth: PersistenceHealthSource = {
+    health: () => degradedSqliteHealth,
+  };
   const api = createObserverApi({
     core,
     persistence,
-    persistenceHealth: persistence,
+    persistenceHealth,
     commandQueue: queue,
     eventBus,
     clock,
