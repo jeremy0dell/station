@@ -1,14 +1,11 @@
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createInMemoryObserverPersistence } from "../../src/persistence/inMemoryAdapter";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
-import {
-  emptyStationSnapshot,
-  fakeObserverCommandQueue,
-  fakeObserverPersistence,
-} from "../support/testObserver";
+import { emptyStationSnapshot, fakeObserverCommandQueue } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -101,9 +98,10 @@ function createProfilingApi(input: {
   hookReconcileDebounceMs?: number;
 }) {
   const eventBus = createObserverEventBus();
+  const clock = { now: () => new Date(now) };
   const options = {
     core: fakeCore(input.reconcileDelayMs),
-    persistence: fakeObserverPersistence(),
+    persistence: createInMemoryObserverPersistence({ clock }),
     persistenceHealth: {
       health: () => ({
         path: ":memory:",
@@ -115,7 +113,7 @@ function createProfilingApi(input: {
     },
     commandQueue: fakeObserverCommandQueue(),
     eventBus,
-    clock: { now: () => new Date(now) },
+    clock,
     logger: input.logger,
     metadataRefresh: {
       refresh: async () => undefined,

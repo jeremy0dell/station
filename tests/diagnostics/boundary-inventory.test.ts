@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const roots = ["apps", "packages", "integrations"];
@@ -25,10 +26,19 @@ const observerConcreteProviderImports = [
 
 const observerPersistenceBundleAllowlist = new Set([
   "apps/observer/src/persistence/ports.ts",
+  "apps/observer/src/persistence/inMemoryAdapter.ts",
   "apps/observer/src/persistence/sqliteAdapter.ts",
   "apps/observer/src/runtime/api.ts",
   "apps/observer/src/runtime/main.ts",
 ]);
+
+const observerNoSqliteLane = [
+  "apps/observer/src/persistence/inMemoryAdapter.ts",
+  "apps/observer/src/persistence/observationParser.ts",
+  "apps/observer/test/integration/in-memory-observer-api.test.ts",
+  "apps/observer/test/integration/in-memory-persistence-ports.test.ts",
+  "apps/observer/test/support/observerPersistenceContract.ts",
+];
 
 const observerSqliteHandleAllowlist = new Set([
   "apps/observer/src/persistence/sqliteAdapter.ts",
@@ -245,7 +255,134 @@ describe("boundary inventory guard", () => {
 
     expect(violations).toEqual([]);
   });
+
+  it("keeps the in-memory adapter and no-SQLite composition lane independent of SQLite rows", async () => {
+    const violations = new Set<string>();
+
+    for (const path of observerNoSqliteLane) {
+      for (const violation of await noSqliteImportViolations(path)) {
+        violations.add(violation);
+      }
+    }
+
+    expect([...violations].sort()).toEqual([]);
+  });
 });
+
+async function noSqliteImportViolations(entryPath: string): Promise<string[]> {
+  const entryFile = resolve(process.cwd(), entryPath);
+  const queue = [entryFile];
+  const visited = new Set<string>();
+  const violations: string[] = [];
+  const persistenceIndexPath = resolve(process.cwd(), "apps/observer/src/persistence/index");
+  const rowsPath = resolve(process.cwd(), "apps/observer/src/persistence/rows");
+
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (file === undefined || visited.has(file)) continue;
+    visited.add(file);
+    const path = relative(process.cwd(), file);
+    const source = await readFile(file, "utf8");
+
+    for (const imported of sourceImports(source, file)) {
+      if (file !== entryFile && !imported.runtime) continue;
+      const { specifier } = imported;
+      if (specifier.toLowerCase().includes("sqlite")) {
+        violations.push(`${path}: SQLite import ${specifier}`);
+      }
+      if (
+        specifier === "@station/observer/internal" ||
+        /(?:^|\/)src\/internal(?:\.js)?$/.test(specifier)
+      ) {
+        violations.push(`${path}: src/internal import ${specifier}`);
+      }
+      if (!specifier.startsWith(".")) continue;
+
+      const target = resolve(dirname(file), specifier).replace(/\.(?:js|ts|tsx)$/, "");
+      if (target === persistenceIndexPath) {
+        violations.push(`${path}: SQLite-reexporting persistence barrel ${specifier}`);
+      }
+      if (target === rowsPath) {
+        violations.push(`${path}: SQLite row translation import ${specifier}`);
+      }
+      const targetFile = await resolveSourceModule(target);
+      if (targetFile === undefined) continue;
+      const targetSource = await readFile(targetFile, "utf8");
+      if (/\bSqlDatabase\b/.test(targetSource)) {
+        violations.push(`${path}: SQLite-backed persistence import ${specifier}`);
+      }
+      if (imported.runtime) queue.push(targetFile);
+    }
+  }
+
+  return violations;
+}
+
+type SourceImport = { specifier: string; runtime: boolean };
+
+function sourceImports(source: string, path: string): SourceImport[] {
+  const scriptKind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind);
+  const imports: SourceImport[] = [];
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+      imports.push({
+        specifier: statement.moduleSpecifier.text,
+        runtime: importDeclarationRuns(statement),
+      });
+    }
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      const runtime =
+        !statement.isTypeOnly &&
+        (!statement.exportClause ||
+          !ts.isNamedExports(statement.exportClause) ||
+          statement.exportClause.elements.some((element) => !element.isTypeOnly));
+      imports.push({ specifier: statement.moduleSpecifier.text, runtime });
+    }
+  }
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] !== undefined &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      imports.push({ specifier: node.arguments[0].text, runtime: true });
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sourceFile, visit);
+
+  return imports;
+}
+
+function importDeclarationRuns(statement: ts.ImportDeclaration): boolean {
+  const clause = statement.importClause;
+  if (clause === undefined) return true;
+  if (clause.isTypeOnly) return false;
+  if (clause.name !== undefined) return true;
+  const bindings = clause.namedBindings;
+  return (
+    bindings === undefined ||
+    ts.isNamespaceImport(bindings) ||
+    bindings.elements.length === 0 ||
+    bindings.elements.some((element) => !element.isTypeOnly)
+  );
+}
+
+async function resolveSourceModule(target: string): Promise<string | undefined> {
+  for (const candidate of [`${target}.ts`, `${target}.tsx`, join(target, "index.ts")]) {
+    if ((await readFile(candidate, "utf8").catch(() => undefined)) !== undefined) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
 
 async function sourceFiles(): Promise<string[]> {
   const files: string[] = [];
