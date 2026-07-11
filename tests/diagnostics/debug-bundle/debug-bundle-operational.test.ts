@@ -8,7 +8,7 @@ import {
   createCommandQueue,
   createObserverCore,
   createObserverLogger,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
 } from "@station/observer/internal";
@@ -28,7 +28,7 @@ describe("operational debug bundle", () => {
 
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock,
       idFactory: ids(),

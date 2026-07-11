@@ -13,7 +13,7 @@ import {
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { createObserverCore, ProviderRegistry } from "../../src/internal";
-import { createObserverPersistence } from "../../src/persistence";
+import { createSqliteObserverPersistence } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
 import { createTestObserverCore } from "../support/testObserver";
 
@@ -156,7 +156,7 @@ describe("observer reconcile persistence", () => {
     sqlite.close();
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
-    const reloaded = createObserverPersistence({ sqlite: reopened, idFactory: ids() });
+    const reloaded = createSqliteObserverPersistence({ sqlite: reopened, idFactory: ids() });
     expect(await reloaded.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_web_main",

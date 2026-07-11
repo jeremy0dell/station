@@ -21,7 +21,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   drainProviderIngressSpool,
   type HarnessEventReportIngestion,
   openObserverSqlite,
@@ -340,7 +340,7 @@ function createFixture(
 ) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
-  const persistence = createObserverPersistence({
+  const persistence = createSqliteObserverPersistence({
     sqlite,
     clock,
     idFactory: ids(),

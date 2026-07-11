@@ -10,7 +10,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   startObserverServer,
@@ -72,7 +72,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     cleanupTasks.push(async () => sqlite.close());
     const idFactory = ids();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory });
     const eventBus = createObserverEventBus();
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({
@@ -250,7 +250,7 @@ async function runOpenCode(input: {
 }
 
 async function pollForOpenCodeStatusObservation(
-  persistence: ReturnType<typeof createObserverPersistence>,
+  persistence: ReturnType<typeof createSqliteObserverPersistence>,
 ) {
   return poll(async () => {
     const observations = await persistence.listProviderObservations();
@@ -264,7 +264,9 @@ async function pollForOpenCodeStatusObservation(
   }, "Observer did not ingest a status-bearing OpenCode plugin event.");
 }
 
-async function pollForOpenCodeReadiness(persistence: ReturnType<typeof createObserverPersistence>) {
+async function pollForOpenCodeReadiness(
+  persistence: ReturnType<typeof createSqliteObserverPersistence>,
+) {
   return poll(async () => {
     const observations = await persistence.listProviderObservations();
     return observations.find((observation) => {
@@ -295,7 +297,7 @@ async function poll<T>(probe: () => Promise<T | false | undefined>, message: str
 async function writeFailureBundle(input: {
   config: StationConfig;
   core: ReturnType<typeof createObserverCore>;
-  persistence: ReturnType<typeof createObserverPersistence>;
+  persistence: ReturnType<typeof createSqliteObserverPersistence>;
   stateDir: string;
   diagnosticsDir: string;
 }): Promise<void> {

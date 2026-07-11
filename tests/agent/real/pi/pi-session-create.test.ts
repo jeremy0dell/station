@@ -11,7 +11,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -92,7 +92,7 @@ describeRealPi("real Pi session.create launch lane", () => {
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     cleanupTasks.push(async () => sqlite.close());
     const idFactory = ids();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory });
     const eventBus = createObserverEventBus();
     const queue = createCommandQueue({
       persistence,
@@ -238,7 +238,7 @@ describeRealPi("real Pi session.create launch lane", () => {
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     cleanupTasks.push(async () => sqlite.close());
     const idFactory = ids();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory });
     const eventBus = createObserverEventBus();
     const queue = createCommandQueue({ persistence, idFactory, clock, eventBus });
     const testConfig = config(root, stateDir);
@@ -419,7 +419,7 @@ async function runPi(input: {
   });
 }
 
-async function pollForPiReadiness(persistence: ReturnType<typeof createObserverPersistence>) {
+async function pollForPiReadiness(persistence: ReturnType<typeof createSqliteObserverPersistence>) {
   return poll(async () => {
     const observations = await persistence.listProviderObservations();
     return observations.find((observation) => {
@@ -450,7 +450,7 @@ async function poll<T>(probe: () => Promise<T | false | undefined>, message: str
 async function writeFailureBundle(input: {
   config: StationConfig;
   core: ReturnType<typeof createObserverCore>;
-  persistence: ReturnType<typeof createObserverPersistence>;
+  persistence: ReturnType<typeof createSqliteObserverPersistence>;
   stateDir: string;
   diagnosticsDir: string;
 }): Promise<void> {

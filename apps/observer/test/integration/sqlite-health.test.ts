@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   latestSchemaVersion,
   migrations,
   openObserverSqlite,
@@ -46,7 +46,7 @@ describe("observer SQLite health", () => {
         now: () => new Date(now),
       },
     });
-    const persistence = createObserverPersistence({
+    const persistence = createSqliteObserverPersistence({
       sqlite,
       clock: { now: () => new Date(now) },
     });

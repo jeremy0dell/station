@@ -7,7 +7,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -35,7 +35,7 @@ describe("full session cleanup e2e", () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     const ids = observerIds();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
     const eventBus = createObserverEventBus();
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
     const harness = new FakeHarnessProvider({ now });

@@ -9,7 +9,7 @@ import {
   createObserverCore,
   createObserverEventBus,
   createObserverEventHookRuntime,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -36,7 +36,7 @@ describe("full session lifecycle e2e", () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     const ids = observerIds();
-    const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
     const eventBus = createObserverEventBus();
     const eventHookCalls: ExternalCommandInput[] = [];
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });

@@ -14,7 +14,7 @@ import {
   createCommandQueue,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -178,7 +178,7 @@ function fixtureCore() {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const ids = observerIds();
-  const persistence = createObserverPersistence({
+  const persistence = createSqliteObserverPersistence({
     sqlite,
     clock,
     idFactory: ids,

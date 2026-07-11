@@ -18,7 +18,7 @@ import {
   type ObserverEventHookRuntime,
 } from "../hooks/observerEventHooks.js";
 import { providerIngressSpoolDir } from "../hooks/spool.js";
-import { createObserverPersistence } from "../persistence/index.js";
+import { createSqliteObserverPersistence } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { createObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { openObserverSqlite } from "../sqlite.js";
@@ -93,7 +93,7 @@ export async function runObserverMain(
     path: join(stateDir, "observer.sqlite"),
     clock: systemClock,
   });
-  const persistence = createObserverPersistence({ sqlite, clock: systemClock });
+  const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
   const pruneAt = toIsoTimestamp(systemClock.now());

@@ -16,7 +16,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
-  createObserverPersistence,
+  createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
   providerIngressSpoolDir,
@@ -79,7 +79,7 @@ describe("observer external-launch reconcile", () => {
 function createFixture(spoolDir: string) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
-  const persistence = createObserverPersistence({ sqlite, clock, idFactory: ids() });
+  const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
   const eventBus = createObserverEventBus();
   const station = new StationTerminalProvider({ clock });
   const providers = new ProviderRegistry({
