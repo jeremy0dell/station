@@ -106,6 +106,7 @@ export async function startStationTuiInTmux(input: {
     "--config",
     shellQuote(input.configPath),
     "tui",
+    "--popup",
   ].join(" ");
   await execFileAsync(
     requireToolPath(input.env, "tmux"),

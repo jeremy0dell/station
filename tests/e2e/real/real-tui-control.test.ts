@@ -85,7 +85,6 @@ describeReal("real TUI control", () => {
     const row = findRowByBranch(snapshot, branch);
     expect(row.agent).toMatchObject({ harness: "codex" });
 
-    await sendTmuxKeys({ env, target: tuiSession, keys: ["1"] });
     await expect(activeTmuxWindow(env, config.tmuxSession)).resolves.toBe(
       expectedWindowName(config.projectId, branch, row.id, row.path),
     );
