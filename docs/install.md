@@ -49,11 +49,46 @@ The installer:
 - accepts only `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64`;
 - downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` through authenticated `gh api` calls (`{version}` excludes the tag's leading `v`);
 - verifies the matching SHA-256 before extraction and rejects an unexpected archive manifest;
-- stages the verified binary on the destination filesystem and requires its `--version` to match, so an incompatible OS/libc/CPU artifact or version mismatch fails before replacing an existing command;
-- replaces the compiled `stn`, `stn-ingress`, and `stn-tmux-popup` paths by atomic rename, preserving an existing install on any pre-install failure;
-- installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`;
+- stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command;
+- keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
 - removes `com.apple.quarantine` from the verified binary defensively on macOS; and
 - prints `stn setup` plus a PATH hint only when the selected bin directory is not already on `PATH`.
+
+### Concurrent and interrupted installs
+
+Each destination has one installer lock at
+`<install-dir>/.station-install.lock` (by default
+`~/.local/bin/.station-install.lock`); its `owner` file records the installer
+PID and requested tag or `latest`. The installer acquires the lock before
+release lookup or download and holds it through cleanup. If the lock already
+exists, the installer does not contact the release API or mutate the
+destination. It prints the lock path and the owner PID when readable, says that
+the existing Station installation was unchanged, and instructs the user to
+wait for the other installer to finish before retrying.
+
+The installer never guesses that a lock is stale. For an abandoned lock, read
+`<install-dir>/.station-install.lock/owner` and confirm that no installer
+process with the recorded PID is alive. Only then remove
+`<install-dir>/.station-install.lock` manually and retry the same install. Do
+not remove a lock while its owner may still be running.
+
+The staged `stn --version` probe has a 10-second deadline. On timeout the
+installer terminates and reaps the probe, reports that the artifact did not
+respond in time, and leaves the existing Station installation unchanged.
+HUP, INT, and TERM run the same rollback/cleanup path and exit with the
+signal-appropriate status (129, 130, and 143 respectively), so Ctrl-C does not
+return to an interrupted install. Before the final `stn` rename, caught
+failures restore the prior license and remove only aliases created by that
+attempt. After the rename, every runtime entrypoint resolves through the new
+binary and cleanup failures are warnings rather than a failed install.
+
+SIGKILL and power loss cannot run shell cleanup. They may leave the lock or a
+staging path behind, and because `LICENSE` may live on another filesystem they
+may leave license metadata from the old or new release. During an upgrade, the
+pre-existing command entrypoints still resolve coherently to the complete old
+or new runtime; exact cross-filesystem license consistency is not claimed.
+Recover an abandoned lock only with the inspection-and-manual-removal procedure
+above.
 
 The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, diffnav and git-delta for diff automation, and a supported agent CLI for agent sessions.
 

@@ -295,31 +295,138 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - name: Seed existing installation
+        run: |
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          license_dir="$data_home/station"
+          mkdir -p "$bin_dir" "$license_dir"
+
+          cat > "$bin_dir/stn" <<'EOF'
+          #!/bin/sh
+          printf '%s\n' 0.0.0-old-fixture
+          EOF
+          chmod 0755 "$bin_dir/stn"
+          ln -s stn "$bin_dir/stn-ingress"
+          ln -s stn "$bin_dir/stn-tmux-popup"
+          printf '%s\n' 'old Station license fixture' > "$license_dir/LICENSE"
+          chmod 0644 "$license_dir/LICENSE"
+          cp "$bin_dir/stn" "$RUNNER_TEMP/old-stn-fixture"
+
+          test "$("$bin_dir/stn" --version)" = 0.0.0-old-fixture
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
       - name: Install from draft release
         env:
           GH_TOKEN: ${{ github.token }}
           STATION_INSTALL_RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          mkdir -p "$RUNNER_TEMP/install-home" "$RUNNER_TEMP/install-data"
-          HOME="$RUNNER_TEMP/install-home" \
-            XDG_DATA_HOME="$RUNNER_TEMP/install-data" \
-            scripts/install.sh --version "$TAG" --install-dir "$RUNNER_TEMP/station-bin"
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          umask 0777
+          HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            scripts/install.sh --version "$TAG" --install-dir "$bin_dir"
       - name: Verify installed artifact
         env:
           EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          bin_dir="$RUNNER_TEMP/station-bin"
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          license_path="$data_home/station/LICENSE"
           runtime_path="$RUNNER_TEMP/runtime-path"
           mkdir -p "$runtime_path"
+
+          mode() {
+            if [[ "$RUNNER_OS" == Linux ]]; then
+              stat -c '%a' "$1"
+            else
+              stat -f '%Lp' "$1"
+            fi
+          }
+
           test -x "$bin_dir/stn"
           test "$(readlink "$bin_dir/stn-ingress")" = stn
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
-          test -f "$RUNNER_TEMP/install-data/station/LICENSE"
+          test -f "$license_path"
+          test ! -L "$license_path"
+          test "$(mode "$bin_dir/stn")" = 755
+          test "$(mode "$license_path")" = 644
+          ! cmp -s "$RUNNER_TEMP/old-stn-fixture" "$bin_dir/stn"
+          cmp -s LICENSE "$license_path"
 
           actual="$(env -i \
-            HOME="$RUNNER_TEMP/install-home" \
-            XDG_DATA_HOME="$RUNNER_TEMP/install-data" \
+            HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
             PATH="$bin_dir:$runtime_path" \
-            "$bin_dir/stn" --version)"
+            stn --version)"
+          test "$actual" = "$EXPECTED_VERSION"
+      - name: Verify lock refusal and same-version retry
+        env:
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          STATION_INSTALL_RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          license_path="$data_home/station/LICENSE"
+          lock_dir="$bin_dir/.station-install.lock"
+          lock_stderr="$RUNNER_TEMP/locked-install.stderr"
+
+          mkdir "$lock_dir"
+          chmod 0700 "$lock_dir"
+          (
+            umask 077
+            {
+              printf 'pid=%s\n' "$$"
+              printf 'requested=%s\n' "$TAG"
+            } > "$lock_dir/owner"
+          )
+
+          before_binary="$(cksum < "$bin_dir/stn")"
+          before_license="$(cksum < "$license_path")"
+          before_entries="$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$license_path")"
+          if (
+            umask 0777
+            HOME="$install_home" \
+              XDG_DATA_HOME="$data_home" \
+              scripts/install.sh --version "$TAG" --install-dir "$bin_dir"
+          ) > "$RUNNER_TEMP/locked-install.stdout" 2> "$lock_stderr"; then
+            echo "Installer unexpectedly succeeded while $lock_dir was owned." >&2
+            exit 1
+          fi
+
+          grep -F "$lock_dir" "$lock_stderr"
+          grep -F "$$" "$lock_stderr"
+          grep -Eiq 'existing Station( installation)? was unchanged' "$lock_stderr"
+          grep -Eiq 'wait' "$lock_stderr"
+          test -d "$lock_dir"
+          test "$(cksum < "$bin_dir/stn")" = "$before_binary"
+          test "$(cksum < "$license_path")" = "$before_license"
+          test "$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$license_path")" = "$before_entries"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+
+          rm -rf "$lock_dir"
+          (
+            umask 0777
+            HOME="$install_home" \
+              XDG_DATA_HOME="$data_home" \
+              scripts/install.sh --version "$TAG" --install-dir "$bin_dir"
+          )
+
+          test ! -e "$lock_dir"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          actual="$(env -i \
+            HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            PATH="$bin_dir:$RUNNER_TEMP/runtime-path" \
+            stn --version)"
           test "$actual" = "$EXPECTED_VERSION"

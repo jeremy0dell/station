@@ -82,6 +82,46 @@ describe("release readiness docs", () => {
     expect(packageJson.scripts["test:all"]).toContain("pnpm smoke:install");
   });
 
+  it("keeps installer continuity and interrupted-upgrade recovery documented", async () => {
+    const documents = await Promise.all(
+      ["docs/install.md", "docs/development.md", "docs/single-binary.md"].map(
+        async (path) => [path, await read(path)] as const,
+      ),
+    );
+
+    for (const [path, document] of documents) {
+      expect(document, path).toContain("<install-dir>/.station-install.lock");
+      expect(document, path).toContain("<install-dir>/.station-install.lock/owner");
+      expect(document, path).toContain("requested tag or `latest`");
+      expect(document, path).toMatch(/10(?:-second| seconds)/);
+      expect(document, path).toMatch(/existing\s+Station\s+installation\s+was\s+unchanged/);
+      expect(document, path).toContain("sole runtime commit point");
+      expect(document, path).toMatch(/129, 130, (?:and|or) 143/);
+      expect(document, path).toContain("SIGKILL");
+      expect(document, path).toMatch(/power\s+loss/);
+      expect(document, path).toContain("manually");
+      expect(document, path).toContain("alive");
+    }
+
+    const development = await read("docs/development.md");
+    const normalizedDevelopment = development.replace(/\s+/g, " ");
+    for (const acceptance of [
+      "terminal A",
+      "terminal B",
+      "RC → stable → RC",
+      "command-not-found",
+      "Ctrl-C",
+      "Ctrl-Z",
+      "stn-tmux-popup",
+      "stn-ingress",
+      "HOST_UPGRADE_BLOCKED",
+      "same Observer socket",
+      "explicit rollback check",
+    ]) {
+      expect(normalizedDevelopment).toContain(acceptance);
+    }
+  });
+
   it("does not advertise removed Crush harness surfaces", async () => {
     const files = ["README.md", "AGENTS.md", ...(await markdownFiles("docs"))];
 

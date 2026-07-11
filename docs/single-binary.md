@@ -379,14 +379,34 @@ claim bit-for-bit reproducible Bun executables or archives.
 `--install-dir` (default `~/.local/bin`). It uses authenticated `gh api`
 release endpoints, accepts only the four supported targets, verifies the one
 matching `SHA256SUMS` entry and exhaustive archive manifest before touching an
-existing install, and stages replacement on the destination filesystem. It
-then strips `com.apple.quarantine` on macOS and runs the staged binary's
-`--version`, refusing incompatible OS/libc/CPU artifacts or an embedded-version
-mismatch before any existing command is replaced. Successful installs replace
-`stn` and both symlinks by atomic rename, retain `LICENSE` under the Station
-data directory, and print a PATH hint only when needed. The deterministic
-`smoke:install` suite exercises this boundary with fake authenticated release
-assets and is part of `test:all`.
+existing install, and stages replacement on the destination filesystem. The
+staged binary's `--version` probe has a 10-second deadline; timeout terminates
+and reaps it, reports that the artifact did not respond in time, and leaves the
+existing Station installation unchanged.
+
+The destination-scoped lock is `<install-dir>/.station-install.lock`. It is
+held from before release lookup/download through cleanup, and its `owner` file
+records the PID and requested tag or `latest`. An existing lock causes a
+fail-fast refusal with no release request or destination mutation; the message
+names the lock and readable owner PID, states that the existing Station
+installation was unchanged, and tells the user to wait before retrying. The
+installer never auto-reclaims a possibly active lock. An operator may remove
+an abandoned lock manually only after reading
+`<install-dir>/.station-install.lock/owner` and confirming that no installer
+process with the recorded PID is alive, then retry.
+
+Existing exact `stn-ingress` and `stn-tmux-popup` symlinks remain stable; any
+missing aliases are created before activation. The previous license is backed
+up, the new `LICENSE` is installed, and the verified staged `stn` is atomically
+renamed last as the sole runtime commit point. A caught HUP, INT, or TERM runs
+rollback/cleanup and exits 129, 130, or 143 rather than resuming the interrupted
+operation. Before commit, caught failures restore the license and remove only
+new aliases. After commit, cleanup failures are warnings. SIGKILL and power
+loss cannot run cleanup, so a stale lock/stage or old/new cross-filesystem
+`LICENSE` metadata may remain; exact license consistency is not claimed, but
+pre-existing command entrypoints resolve to one complete old or new runtime.
+The deterministic `smoke:install` suite exercises this boundary with fake
+authenticated release assets and is part of `test:all`.
 
 The release starts with immutable `v0.1.1-rc.1`, promotes only after all four
 native targets pass automated and manual acceptance, then repeats the gates for
@@ -581,6 +601,16 @@ flow:
    stopped; open a hosted terminal → the replacement health reports the new
    build (B-host).
 7. Rollback → install script returns to the prior good version (immutable).
+8. With terminal A continuously running installed `stn --version`, terminal B
+   installs RC → stable → RC → only complete old or new versions appear,
+   never command-not-found or malformed output; both aliases remain links to
+   `stn`, so entrypoints never mix.
+9. An abandoned `.station-install.lock` in an isolated destination refuses the
+   install until its recorded PID is confirmed dead, the lock is manually
+   removed, and the same install is retried successfully.
+10. Ctrl-C during a real authenticated upgrade exits 130, preserves the prior
+    launchable TUI, cleans its owned stage and lock, and permits a successful
+    retry.
 
 ## Audit findings (all confirmed)
 

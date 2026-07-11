@@ -198,6 +198,25 @@ draft and rerun the unchanged tag workflow. If the source needs a fix, leave
 the pushed tag alone and use the next prerelease tag. Never delete or mutate a
 published release.
 
+Installer acceptance uses the destination lock
+`<install-dir>/.station-install.lock`, acquired before release lookup or
+download; `<install-dir>/.station-install.lock/owner` records the PID and
+requested tag or `latest`. A lock refusal must name the lock path and recorded
+owner PID when readable, state that the existing Station installation was
+unchanged, and tell the user to wait and retry. The installer never auto-removes
+an uncertain lock: after confirming that no installer with the recorded PID is
+alive, the operator removes the lock directory manually and retries.
+
+The staged binary's `--version` probe must finish within 10 seconds. A timeout
+terminates and reaps the probe and preserves the existing install. HUP, INT,
+and TERM use the rollback/cleanup path and exit 129, 130, and 143 respectively.
+The verified `stn` rename is the sole runtime commit point: aliases already
+resolve to `stn`, and pre-commit caught failures restore the old license and
+remove aliases created by that attempt. SIGKILL and power loss cannot clean up;
+they may leave a stale lock, stage, or old/new `LICENSE` metadata when the data
+and install directories are on different filesystems, but pre-existing runtime
+entrypoints must still resolve coherently to the complete old or new binary.
+
 For each target, install through the authenticated script into a clean home and
 manually verify the actual user experience, not a dashboard override:
 
@@ -215,8 +234,21 @@ manually verify the actual user experience, not a dashboard override:
    `HOST_UPGRADE_BLOCKED` without losing the terminal or scrollback. Reinstall
    the RC to reattach and close every hosted terminal; reinstall `v0.1.1` and
    confirm the idle host is replaced.
-7. Run `scripts/install.sh --version v0.1.1-rc.1`, confirm the version changed,
-   then reinstall `v0.1.1`.
+7. In terminal A, continuously run the installed `stn --version`. In terminal
+   B, install RC → stable → RC. Terminal A may print only complete old or
+   new versions: never command-not-found or malformed output. After each
+   transition, confirm `stn-ingress` and `stn-tmux-popup` still link to `stn`,
+   so the runtime never has mixed entrypoints.
+8. In an isolated install directory, create an abandoned
+   `.station-install.lock` with representative owner metadata. Run the
+   installer and follow its printed inspection, manual removal, and retry
+   instructions exactly; do not remove the lock until no owner process is
+   alive.
+9. Interrupt a real authenticated upgrade with Ctrl-C. Confirm the prior TUI
+   still opens, the installer exits with status 130 and leaves no owned lock or
+   stage, then retry successfully.
+10. Run `scripts/install.sh --version v0.1.1-rc.1`, confirm the version changed,
+    then reinstall `v0.1.1` to complete the explicit rollback check.
 
 Record the oldest supported macOS version or built-against glibc version in the
 release notes. Signing and notarization are not part of A5; integrity is the
