@@ -39,7 +39,9 @@ The deterministic local gate is:
 pnpm test:all
 ```
 
-It runs build, typecheck, lint, unit tests, contract tests, integration tests, diagnostics tests, and the scripted-agent lane. It intentionally excludes real provider lanes.
+It runs build, typecheck, lint, unit tests, contract tests, integration tests,
+diagnostics tests, the scripted-agent lane, setup E2E coverage, and a production
+Observer SQLite restart smoke. It intentionally excludes real provider lanes.
 
 Useful focused commands:
 

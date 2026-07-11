@@ -483,7 +483,9 @@ seven-port behavioral contract proves both adapters' atomicity, ordering,
 expiry, parsing, coalescing, and failure behavior. A separate complete
 ObserverApi lane composes fake providers, the real core, event bus, command
 queue, production handlers, and ingress against the in-memory adapter without
-importing SQLite. Production runtime composition remains SQLite-only.
+importing SQLite. A mandatory production E2E smoke also runs the built CLI,
+persists a successful command through SQLite, restarts the Observer, and reloads
+the exact record. Production runtime composition remains SQLite-only.
 
 Migration rules:
 
