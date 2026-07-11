@@ -337,28 +337,89 @@ reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
 
-`.github/workflows/release.yml` on `v*` tags, native-runner matrix
-(labels resolved at build time per the platform table — not `macos-13`).
-Requirements v1 omitted:
+**Status: implemented.** `.github/workflows/release.yml` runs on `v*` tags.
+It requires release SemVer without `+` build metadata, exact agreement between
+the tag and root package version, ancestry from `origin/main`, and a tag with no
+existing GitHub release. An administrator must enable GitHub immutable releases
+before tagging; `GITHUB_TOKEN` cannot read that administration setting, so the
+workflow cannot enforce the precondition itself. It then reuses the callable
+`standard-ci` gate, runs
+`pnpm smoke:release`, and builds natively on the four dated runner labels
+checked on 2026-07-11: `ubuntu-24.04`, `ubuntu-24.04-arm`,
+`macos-15-intel`, and `macos-15`.
 
-- **Reuse the existing gate**: tag builds must run the same deterministic
-  checks as hosted `standard-ci` + `pnpm smoke:release`, not bypass them.
-- **Checksums**: emit `SHA256SUMS`, sign or at least publish it; the
-  install script verifies each artifact against it before extraction.
-- **License**: include `LICENSE` in every archive (F9 / LICENSE:67).
-- **Homebrew (F10)**: a release created with the default `GITHUB_TOKEN`
-  **does not** trigger the existing `release: published` bump workflow
-  (`homebrew-bump.yml`). Either fold the tap update into `release.yml` (with
-  a PAT / `COMMITTER_TOKEN`) or dispatch it explicitly. **Until a tested
-  private-asset download strategy exists, defer the binary formula** and
-  ship only the authenticated install script.
-- **Rollback**: deleting a published tag is **not** rollback. Define
-  immutable rollback = publish a superseding patch release pointing the
-  install script / `latest` at the prior good version; never mutate or
-  delete a published artifact.
-- `scripts/install.sh`: authenticated `gh api` download → checksum verify →
-  `xattr -d com.apple.quarantine` (defensive; gh/curl set none per S3) →
-  install to `~/.local/bin` with the `stn-ingress` symlink → PATH hint.
+Each native job runs the full binary smoke and uploads one archive:
+
+- `stn-v{version}-linux-x64.tar.gz`
+- `stn-v{version}-linux-arm64.tar.gz`
+- `stn-v{version}-darwin-x64.tar.gz`
+- `stn-v{version}-darwin-arm64.tar.gz`
+
+Here `{version}` is the package version without the tag's leading `v`, for
+example `stn-v0.1.1-rc.1-darwin-arm64.tar.gz`.
+
+Every archive contains exactly `stn`, the `stn-ingress` and
+`stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
+duplicate targets, emits a stably sorted `SHA256SUMS`, and creates a GitHub
+release **draft** without clobbering an existing release. A second native
+matrix uses the authenticated installer against that real draft and verifies
+the binary version, both argv0 aliases, license, and launch without Node or Bun
+on the runtime PATH. Publication remains a manual decision after the real-TTY
+acceptance below. GitHub's tag endpoint exposes published releases only, so the
+workflow captures the new draft's numeric release ID from the authenticated
+release list and passes it only to these acceptance jobs; normal installs keep
+using the latest/published-tag endpoints.
+
+`SHA256SUMS` is unsigned in A5 because no signing-key infrastructure exists;
+the trust chain is authenticated GitHub access plus immutable release assets.
+The pipeline pins inputs, gates, targets, names, and manifest, but does not
+claim bit-for-bit reproducible Bun executables or archives.
+
+`scripts/install.sh` supports latest stable, explicit `--version`, and
+`--install-dir` (default `~/.local/bin`). It uses authenticated `gh api`
+release endpoints, accepts only the four supported targets, verifies the one
+matching `SHA256SUMS` entry and exhaustive archive manifest before touching an
+existing install, and stages replacement on the destination filesystem. It
+then strips `com.apple.quarantine` on macOS and runs the staged binary's
+`--version`, refusing incompatible OS/libc/CPU artifacts or an embedded-version
+mismatch before any existing command is replaced. Successful installs replace
+`stn` and both symlinks by atomic rename, retain `LICENSE` under the Station
+data directory, and print a PATH hint only when needed. The deterministic
+`smoke:install` suite exercises this boundary with fake authenticated release
+assets and is part of `test:all`.
+
+The release starts with immutable `v0.1.1-rc.1`, promotes only after all four
+native targets pass automated and manual acceptance, then repeats the gates for
+`v0.1.1`. Explicit installation of the RC proves rollback before stable
+publication. Published tags and assets are never deleted, moved, or overwritten:
+users may explicitly reinstall the prior good version for recovery, while the
+release line rolls forward with a superseding patch containing the revert or
+fix.
+
+Drafts are still mutable. Release notes record the workflow commit, and the
+manual promotion gate re-fetches the remote tag, compares its peeled commit to
+that SHA, and rechecks the exact five-asset inventory immediately before
+publication; GitHub immutability begins only when the draft is published.
+An unpublished draft left by a transient workflow failure may be deleted and
+the unchanged tag workflow rerun; a source fix uses a new prerelease tag, while
+published releases are never deleted or mutated.
+
+The source-based Homebrew formula remains separate and manually dispatched.
+The default release `GITHUB_TOKEN` cannot trigger another workflow, and the tap
+`COMMITTER_TOKEN` is intentionally not configured for A5; no binary Homebrew
+formula is claimed until private asset authentication is proven there.
+
+Implementation sources: the target and manifest policy above; the existing
+[`build:binary` staging](../scripts/build-binary.mjs),
+[`standard-ci` gates](../.github/workflows/standard-ci.yml), and
+[`smoke:release`](../scripts/test-runners/run-release-smoke.mjs); the
+redistribution requirement in [`LICENSE`](../LICENSE); B-host's shipped live
+PTY refusal policy; and GitHub's official documentation for
+[hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-private-repositories),
+[reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),
+[`GITHUB_TOKEN` permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token),
+[release API draft visibility](https://docs.github.com/en/rest/releases/releases#list-releases),
+and [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
 
 ### A6 — cleanup (after one release on the ctty PTY path)
 

@@ -46,6 +46,42 @@ describe("release readiness docs", () => {
     expect(JSON.parse(await read("package.json")).engines.node).toBe(">=24.2 <25");
   });
 
+  it("documents the authenticated private binary release contract", async () => {
+    const [readme, install, development, singleBinary, homebrew] = await Promise.all(
+      [
+        "README.md",
+        "docs/install.md",
+        "docs/development.md",
+        "docs/single-binary.md",
+        "docs/homebrew.md",
+      ].map(read),
+    );
+    const packageJson = JSON.parse(await read("package.json"));
+
+    expect(readme).toContain("authenticated private binary");
+    expect(readme).toContain("without Node.js, pnpm, Bun");
+    expect(install).toContain("latest stable release");
+    expect(install).toContain("--version v0.1.1-rc.1");
+    expect(install).toContain("SHA256SUMS");
+    expect(install).toContain("stn-tmux-popup");
+    for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
+      expect(singleBinary).toContain(target);
+    }
+    expect(singleBinary).toContain("**Status: implemented.**");
+    expect(singleBinary).toContain("release **draft**");
+    expect(singleBinary).toContain("GitHub immutable");
+    expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
+    expect(singleBinary).toContain("without `+` build metadata");
+    expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
+    expect(development).toContain("HOST_UPGRADE_BLOCKED");
+    expect(homebrew).toContain("`workflow_dispatch` only");
+    expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
+    expect(packageJson.scripts["smoke:install"]).toBe(
+      "node scripts/test-runners/run-install-smoke.mjs",
+    );
+    expect(packageJson.scripts["test:all"]).toContain("pnpm smoke:install");
+  });
+
   it("does not advertise removed Crush harness surfaces", async () => {
     const files = ["README.md", "AGENTS.md", ...(await markdownFiles("docs"))];
 

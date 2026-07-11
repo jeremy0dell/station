@@ -74,7 +74,12 @@ pnpm test:sqlite:bun
 pnpm test:diagnostics
 pnpm test:agent:scripted
 pnpm smoke:release
+pnpm smoke:install
 ```
+
+`pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
+authenticated GitHub responses and temporary homes, so it is deterministic and
+does not download a real release.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
@@ -136,7 +141,7 @@ The isolated or configured `logs/station-host.jsonl` should record
 `ptyImplementation` as `bun`.
 
 To verify binary host upgrades, build two copies with distinct prerelease
-versions (for example `0.1.0-host-a` and `0.1.0-host-b`) and use an isolated
+versions (for example `0.1.1-host-a` and `0.1.1-host-b`) and use an isolated
 config with `station_persistent_agents = true`. Start A, open a hosted terminal,
 print a recognizable marker, leave a long command running, and exit the UI so
 the host survives. Because Observer version eviction is separate B3 work,
@@ -150,6 +155,73 @@ replaced on demand. The next `host.start` record in `logs/station-host.jsonl`
 must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
+
+## Private Binary Release
+
+Before tagging, an administrator must enable GitHub immutable releases; the
+workflow token cannot read that administration setting. The workflow validates
+that release tags use supported release SemVer without `+` build metadata,
+exactly equal `v${package.json.version}`, come from a commit on `origin/main`,
+and have no existing GitHub release. Pushing a `v*` tag runs the callable
+standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
+for all four supported targets, archive/checksum assembly, and an authenticated
+installer smoke against the resulting GitHub release draft. The workflow never
+publishes the draft automatically.
+
+The initial immutable baseline is `v0.1.1-rc.1`:
+
+1. Enable GitHub immutable releases, merge the A5 implementation with
+   `package.json` at `0.1.1-rc.1`, then create and push `v0.1.1-rc.1`.
+2. Confirm the draft contains exactly four native archives plus
+   `SHA256SUMS`, and that every native build and installer job passed. Immediately
+   before publishing, fetch the remote tag and verify its peeled commit
+   (`git rev-parse "v0.1.1-rc.1^{commit}"`) still equals the successful release
+   workflow SHA recorded in the draft notes; drafts do not receive immutable
+   tag protection until publication.
+3. Install the explicit RC on clean native machines for `darwin-arm64`,
+   `darwin-x64`, `linux-arm64`, and `linux-x64`; complete the manual UX gate
+   below, then publish it as a prerelease.
+4. Merge only the version change to `0.1.1`, create and push `v0.1.1`, and
+   repeat the automated and manual gates against the stable draft.
+5. Prove RC-to-stable upgrade and explicit RC rollback before manually
+   publishing `v0.1.1` as latest. Repeat the remote-tag/workflow-SHA comparison
+   and five-asset inventory immediately before publishing the stable draft.
+
+Published tags and assets are immutable. Recovery may explicitly reinstall a
+prior version, but the release line moves forward with a superseding patch; it
+never deletes, retags, or overwrites a published release. The source Homebrew
+formula is a separate manually dispatched workflow and is not part of this
+binary release gate.
+
+If a transient workflow failure leaves an unpublished draft, delete only that
+draft and rerun the unchanged tag workflow. If the source needs a fix, leave
+the pushed tag alone and use the next prerelease tag. Never delete or mutate a
+published release.
+
+For each target, install through the authenticated script into a clean home and
+manually verify the actual user experience, not a dashboard override:
+
+1. With the installed binary's runtime `PATH` containing neither Node nor Bun,
+   run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
+   and connects to a healthy Observer.
+2. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
+3. Run `stn setup` to add a project. Confirm the open TUI reconnects and shows
+   it after activation on the same Observer socket.
+4. Run bare `stn` inside tmux and confirm `stn-tmux-popup` opens the popup.
+5. Deliver a provider event through `stn-ingress` and confirm it appears in
+   Station.
+6. Leave a hosted PTY alive under the RC, run
+   `scripts/install.sh --version v0.1.1`, and confirm launch reports
+   `HOST_UPGRADE_BLOCKED` without losing the terminal or scrollback. Reinstall
+   the RC to reattach and close every hosted terminal; reinstall `v0.1.1` and
+   confirm the idle host is replaced.
+7. Run `scripts/install.sh --version v0.1.1-rc.1`, confirm the version changed,
+   then reinstall `v0.1.1`.
+
+Record the oldest supported macOS version or built-against glibc version in the
+release notes. Signing and notarization are not part of A5; integrity is the
+authenticated GitHub asset plus `SHA256SUMS` verification and immutable
+publication.
 
 For CI install parity, use:
 

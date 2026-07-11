@@ -1,6 +1,6 @@
 # System Dependencies
 
-station ships Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, and OpenCode as external provider integrations. They are not npm packages bundled into the workspace. The primary first-run path is:
+Station integrates with Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, and OpenCode as external programs. They are not bundled into the compiled binary. Bare compiled `stn` can launch the first-run TUI without them; configure the full local workflow with:
 
 ```bash
 stn setup
@@ -8,7 +8,7 @@ stn setup
 
 This configures the core local workflow: the required tools, an agent CLI, and your first project. Optional integrations can be added later.
 
-The local checkout also expects Node.js 24.2+ (and below 25) and pnpm 11 for development. Real-provider test lanes remain opt-in.
+The compiled `stn` launches its TUI and Observer without Node.js, pnpm, or Bun. A local source checkout expects Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14 for development. Real-provider test lanes remain opt-in.
 `stn setup system --check` reports those versions, but it does not change the active Node or pnpm
 installation automatically.
 
@@ -36,11 +36,14 @@ Exit codes:
 
 ## Dependency Tiers
 
-Required for the default useful workflow:
+The binary itself is sufficient for `launchReady`: it can start the TUI and a
+healthy Observer with a writable state directory. These external tools gate the
+corresponding `workflowReady` features and are required for the default useful
+workflow, not for launch:
 
 - Worktrunk / `wt`
 - tmux
-- Bun — bare `stn` renders the terminal UI by shelling out to `bun run` against the station workspace, so the dashboard cannot launch without it
+- Bun — only a source-checkout launcher shells out to `bun run`; the compiled binary embeds the renderer
 - diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
 - git (the binary) and a git repository for the first project
 - one supported agent CLI: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
@@ -157,7 +160,11 @@ diagnostics.installHint
 
 The same provider-health evidence is included in `stn debug bundle`, so a failed `session.create` can be tied back to the missing external binary. Failed Worktrunk commands can also surface redacted command diagnostics through `stn command get <commandId>` and `stn debug trace <traceOrCommandId>`.
 
-`stn doctor` also runs a CLI-side `renderer-runtime` check: when Bun is not on PATH it reports a `warn` (degraded) finding with code `BUN_RUNTIME_MISSING`, because bare `stn` cannot render the TUI without `bun run` even when the observer is healthy. This catches an already-set-up machine that later loses Bun.
+In a source development checkout, `stn doctor` also runs a CLI-side
+`renderer-runtime` check. When Bun is not on PATH it reports a `warn` finding
+with code `BUN_RUNTIME_MISSING`, because the source launcher cannot render the
+TUI without `bun run` even when the Observer is healthy. Compiled mode embeds
+the renderer and does not require that runtime.
 
 ## Hooks
 

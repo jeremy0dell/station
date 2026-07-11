@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_call:
 
 concurrency:
   group: standard-ci-${{ github.event.pull_request.number || github.ref }}
@@ -42,6 +43,8 @@ jobs:
         run: pnpm test:agent:scripted
       - name: Setup e2e tests
         run: pnpm test:e2e:setup
+      - name: Installer smoke
+        run: pnpm smoke:install
 
   # Station is the sole UI (Ink retired), so the Bun lane is mandatory: it
   # typechecks and tests the OpenTUI dashboard renderer and its view goldens.

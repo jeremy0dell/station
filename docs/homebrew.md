@@ -1,10 +1,16 @@
 # Homebrew Packaging
 
-Status: live, internal/team tap at
+Status: live, internal/team **source formula** at
 [`jeremy0dell/homebrew-station`](https://github.com/jeremy0dell/homebrew-station).
 Station is not ready for `homebrew/core` yet: the `station` repo itself is
 private, uses Node.js 24.2+ (and below 25) plus a separate Bun workspace, and requires explicit
-first-run setup. v0.1.0 is the first tagged release.
+first-run setup. v0.1.0 is the first source-formula baseline.
+
+The authenticated compiled binary is the primary private user channel. The tap
+remains a separate source-build option for development and internal packaging
+validation; it does not consume A5 binary archives and is not updated when a
+binary release is published. A binary Homebrew formula remains deferred until
+private release-asset downloads have a tested Homebrew authentication strategy.
 
 Because `jeremy0dell/station` is a private GitHub repo, this tap is for
 internal/team use, not public onboarding. There is no built-in Homebrew
@@ -16,7 +22,7 @@ for github.com (SSH key, or `gh auth login`'s git credential helper) -- no
 extra token/env var needed at install time. Revisit this once `station` goes
 public.
 
-## Target user flow
+## Source-formula user flow
 
 ```bash
 brew tap jeremy0dell/station
@@ -66,22 +72,26 @@ Runtime launchers should wrap the installed tree and prepend Homebrew's
 
 ## Release checklist
 
-1. Bump `version` in root `package.json`, commit, tag (`git tag vX.Y.Z`), push
-   the commit and tag.
-2. `gh release create vX.Y.Z --generate-notes`.
-3. `.github/workflows/homebrew-bump.yml` runs on `release: published` and
-   updates `Formula/station.rb`'s `tag`/`revision` in the tap automatically,
-   committing directly to the tap's default branch (no PR, single maintainer).
-   It needs a `COMMITTER_TOKEN` repo secret on `jeremy0dell/station`: a PAT
-   (fine-grained, `contents: write` on `jeremy0dell/homebrew-station`, or
-   classic with `repo` scope) -- create one and run
-   `gh secret set COMMITTER_TOKEN -R jeremy0dell/station`. Without it the
-   workflow fails to push to the tap (cross-repo push needs an explicit
-   token; the default `GITHUB_TOKEN` only has access to the repo the
-   workflow runs in).
-4. If the bump workflow isn't set up yet, update `Formula/station.rb`'s `tag`
-   and `revision` by hand (`git rev-parse vX.Y.Z` for the revision).
-5. Test locally:
+Binary publication never updates the source formula. When a published Station
+source tag should be packaged separately:
+
+1. Confirm the tag contains the source checkout version intended for the
+   formula and that its normal CI is green.
+2. Manually dispatch the source-formula workflow with the exact published tag:
+
+   ```bash
+   gh workflow run homebrew-bump.yml -f tag=vX.Y.Z
+   ```
+
+   `.github/workflows/homebrew-bump.yml` is `workflow_dispatch` only; it does
+   not listen to `release: published`. The workflow updates
+   `Formula/station.rb`'s `tag` and revision in the tap and commits directly to
+   the tap's default branch.
+3. `COMMITTER_TOKEN` remains intentionally unconfigured for A5. A future
+   source-formula dispatch needs a PAT with cross-repository contents write
+   access on `jeremy0dell/homebrew-station`; the default `GITHUB_TOKEN` cannot
+   push to that repository. Until then, update the tap formula manually.
+4. Test locally:
 
    ```bash
    brew untap jeremy0dell/station; brew tap jeremy0dell/station
@@ -94,7 +104,7 @@ Runtime launchers should wrap the installed tree and prepend Homebrew's
    stn
    ```
 
-6. Publish bottles from the tap once the formula is reviewed and the tap CI is
+5. Publish bottles from the tap once the formula is reviewed and the tap CI is
    green.
 
 ## Known issues

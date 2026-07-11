@@ -157,6 +157,11 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
+if (args.includes("--help")) {
+  console.log("Options: --no-hooks --yes");
+  process.exit(0);
+}
+
 function current() {
   try {
     return JSON.parse(readFileSync(stateFile, "utf8"));
