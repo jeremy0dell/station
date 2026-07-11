@@ -1,18 +1,12 @@
 import type { StationCommand } from "@station/contracts";
 import {
   ErrorEnvelopeSchema,
-  HarnessEventObservationSchema,
-  HarnessRunObservationSchema,
-  ProviderHealthSchema,
   SafeErrorSchema,
   StationCommandSchema,
   StationEventSchema,
-  TerminalTargetObservationSchema,
-  WorktreeObservationSchema,
 } from "@station/contracts";
-import { z } from "zod";
 import { parseJson } from "./json.js";
-import { stripTerminalProviderData } from "./terminalObservations.js";
+import { parseProviderObservation } from "./observationParser.js";
 import type {
   PersistedCommand,
   PersistedCommandError,
@@ -20,42 +14,8 @@ import type {
   PersistedEvent,
   PersistedProviderObservation,
   PersistedSession,
-  ProviderObservation,
   ProviderObservationType,
 } from "./types.js";
-
-const ProviderObservationSchema = z.discriminatedUnion("entityKind", [
-  z
-    .object({
-      entityKind: z.literal("worktree"),
-      payload: WorktreeObservationSchema,
-    })
-    .strict(),
-  z
-    .object({
-      entityKind: z.literal("terminal_target"),
-      payload: TerminalTargetObservationSchema,
-    })
-    .strict(),
-  z
-    .object({
-      entityKind: z.literal("harness_run"),
-      payload: HarnessRunObservationSchema,
-    })
-    .strict(),
-  z
-    .object({
-      entityKind: z.literal("harness_event"),
-      payload: HarnessEventObservationSchema,
-    })
-    .strict(),
-  z
-    .object({
-      entityKind: z.literal("provider_health"),
-      payload: ProviderHealthSchema,
-    })
-    .strict(),
-]);
 
 export type SqliteCommandRow = {
   id: string;
@@ -172,19 +132,6 @@ export function providerObservationFromRow(
   };
   if (expiresAt !== undefined) observation.expiresAt = expiresAt;
   return observation;
-}
-
-export function parseProviderObservation(
-  entityKind: unknown,
-  payload: unknown,
-): ProviderObservation {
-  const observation = ProviderObservationSchema.parse({ entityKind, payload });
-  return observation.entityKind === "terminal_target"
-    ? {
-        ...observation,
-        payload: stripTerminalProviderData(observation.payload),
-      }
-    : observation;
 }
 
 export function sessionFromRow(row: SqliteSessionRow): PersistedSession {

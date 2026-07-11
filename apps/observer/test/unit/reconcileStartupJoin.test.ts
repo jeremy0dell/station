@@ -3,11 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
-import {
-  emptyStationSnapshot,
-  fakeObserverCommandQueue,
-  fakeObserverPersistence,
-} from "../support/testObserver";
+import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
+import { emptyStationSnapshot, fakeObserverCommandQueue } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -106,9 +103,10 @@ function controllableCore(): { core: ObserverCore; scans: ControlledScan[] } {
 }
 
 function createJoinApi(core: ObserverCore) {
+  const clock = { now: () => new Date(now) };
   return createObserverApi({
     core,
-    persistence: fakeObserverPersistence(),
+    persistence: createInMemoryObserverPersistence({ clock }),
     persistenceHealth: {
       health: () => ({
         path: ":memory:",
@@ -120,7 +118,7 @@ function createJoinApi(core: ObserverCore) {
     },
     commandQueue: fakeObserverCommandQueue(),
     eventBus: createObserverEventBus(),
-    clock: { now: () => new Date(now) },
+    clock,
     metadataRefresh: {
       refresh: async () => undefined,
       shutdown: async () => undefined,

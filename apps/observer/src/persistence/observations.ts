@@ -1,12 +1,11 @@
 import type { ProviderId } from "@station/contracts";
 import type { SqlDatabase, SqlParam } from "../sqlite/driver.js";
-import { isRecord } from "../utils/guards.js";
 import { parseJson, stringifyJson } from "./json.js";
 import {
   parseProviderObservation,
-  providerObservationFromRow,
-  type SqliteProviderObservationRow,
-} from "./rows.js";
+  stableProviderObservationPayloadKey,
+} from "./observationParser.js";
+import { providerObservationFromRow, type SqliteProviderObservationRow } from "./rows.js";
 import type {
   CurrentProviderObservationKind,
   PersistedProviderObservation,
@@ -261,31 +260,4 @@ function readProviderObservation(database: SqlDatabase, id: string): SqliteProvi
   return database
     .prepare("SELECT * FROM provider_observations WHERE id = ?")
     .get(id) as SqliteProviderObservationRow;
-}
-
-function stableProviderObservationPayloadKey(payload: unknown): string {
-  return stringifyJson(normalizeProviderObservationPayloadForCoalescing(payload, true));
-}
-
-function normalizeProviderObservationPayloadForCoalescing(
-  payload: unknown,
-  omitVolatileFields: boolean,
-): unknown {
-  if (Array.isArray(payload)) {
-    return payload.map((item) => normalizeProviderObservationPayloadForCoalescing(item, false));
-  }
-  if (!isRecord(payload)) {
-    return payload;
-  }
-  const stable: Record<string, unknown> = {};
-  for (const key of Object.keys(payload).sort()) {
-    if (
-      omitVolatileFields &&
-      (key === "observedAt" || key === "lastCheckedAt" || key === "latencyMs")
-    ) {
-      continue;
-    }
-    stable[key] = normalizeProviderObservationPayloadForCoalescing(payload[key], false);
-  }
-  return stable;
 }

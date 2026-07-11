@@ -5,7 +5,11 @@ export default defineConfig({
   ...commonResolveConfig,
   test: {
     ...commonTestConfig,
-    include: ["tests/e2e/setup-core-flow.test.ts", "tests/e2e/setup-guided-feedback.test.ts"],
+    include: [
+      "tests/e2e/observer-sqlite-smoke.test.ts",
+      "tests/e2e/setup-core-flow.test.ts",
+      "tests/e2e/setup-guided-feedback.test.ts",
+    ],
     fileParallelism: false,
     testTimeout: 60_000,
   },

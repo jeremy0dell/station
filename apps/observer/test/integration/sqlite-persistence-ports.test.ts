@@ -1,378 +1,121 @@
-import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
-import {
-  createFakeHarnessRun,
-  createFakeTerminalTarget,
-  createFakeWorktree,
-} from "@station/testing";
 import { describe, expect, it } from "vitest";
-import {
-  type CommandJournal,
-  createSqliteObserverPersistence,
-  type EventJournal,
-  type IngressJournal,
-  type ObservationStore,
-  type ObserverPersistenceBundle,
-  type PersistenceHealthSource,
-  type ReconcileStore,
-  type SessionStore,
-  type WorktreeMetadataStore,
-} from "../../src/persistence";
+import { createSqliteObserverPersistence, type IngressJournal } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
+import { observerPersistenceContract } from "../support/observerPersistenceContract";
 
 const now = "2026-05-20T12:00:00.000Z";
-const later = "2026-05-20T12:01:00.000Z";
 
-const command: StationCommand = {
-  type: "observer.reconcile",
-  payload: { reason: "sqlite-port-contract" },
-};
+observerPersistenceContract("SQLite", ({ clock, idFactory }) => {
+  const sqlite = openObserverSqlite({ clock });
+  return {
+    persistence: createSqliteObserverPersistence({ sqlite, clock, idFactory }),
+    close: () => sqlite.close(),
+  };
+});
 
-const project: ProviderProjectConfig = {
-  id: "web",
-  label: "web",
-  root: "/tmp/station/web",
-  defaults: {
-    harness: "fake-harness",
-    terminal: "fake-terminal",
-    layout: "agent-shell",
-  },
-  worktrunk: { enabled: true },
-};
+describe("SQLite-only Observer persistence behavior", () => {
+  it("exposes healthy SQLite status in addition to the seven application ports", () => {
+    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({
+        sqlite,
+        clock: { now: () => new Date(now) },
+      });
 
-function ids(prefix = "port") {
+      expect(persistence.health()).toMatchObject({
+        open: true,
+        status: "healthy",
+        lastCheckedAt: now,
+      });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("rolls back a trigger-rejected ingress write before permitting the same key to retry", async () => {
+    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({
+        sqlite,
+        clock: { now: () => new Date(now) },
+        idFactory: ids(),
+      });
+      const input: Parameters<
+        IngressJournal["recordEventAndProviderObservationWithIngressDedupe"]
+      >[0] = {
+        event: {
+          type: "providerHook.ingested",
+          at: now,
+          hookId: "hook_atomic",
+          provider: "fake-harness",
+          event: "run.updated",
+        },
+        eventOptions: { createdAt: now, source: "hook" },
+        observation: {
+          provider: "fake-harness",
+          providerType: "harness",
+          entityKind: "provider_health",
+          entityKey: "reject-once",
+          payload: {
+            providerId: "fake-harness",
+            providerType: "harness",
+            status: "healthy",
+            lastCheckedAt: now,
+          },
+          observedAt: now,
+        },
+        dedupe: { kind: "hook", id: "hook_atomic" },
+      };
+
+      sqlite.database.exec(`
+        CREATE TRIGGER reject_atomic_observation
+        BEFORE INSERT ON provider_observations
+        WHEN NEW.entity_key = 'reject-once'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced observation failure');
+        END;
+      `);
+
+      await expect(
+        persistence.recordEventAndProviderObservationWithIngressDedupe(input),
+      ).rejects.toThrow("PERSISTENCE_TRANSACTION_FAILED");
+      await expect(persistence.listEvents()).resolves.toEqual([]);
+      await expect(
+        persistence.listProviderObservations({ includeExpired: true, now }),
+      ).resolves.toEqual([]);
+      expect(
+        sqlite.database.prepare("SELECT COUNT(*) AS count FROM hook_ingress_dedupe").get(),
+      ).toMatchObject({ count: 0 });
+      expect(sqlite.database.prepare("SELECT COUNT(*) AS count FROM events").get()).toMatchObject({
+        count: 0,
+      });
+      expect(
+        sqlite.database.prepare("SELECT COUNT(*) AS count FROM provider_observations").get(),
+      ).toMatchObject({ count: 0 });
+
+      sqlite.database.exec("DROP TRIGGER reject_atomic_observation");
+
+      await expect(
+        persistence.recordEventAndProviderObservationWithIngressDedupe(input),
+      ).resolves.toMatchObject({
+        deduped: false,
+        event: { id: "atomic_evt_2" },
+        observation: { id: "atomic_obs_2", entityKey: "reject-once" },
+      });
+      await expect(
+        persistence.recordEventAndProviderObservationWithIngressDedupe(input),
+      ).resolves.toEqual({ deduped: true });
+    } finally {
+      sqlite.close();
+    }
+  });
+});
+
+function ids() {
   let event = 0;
   let observation = 0;
   return {
-    eventId: () => `${prefix}_evt_${++event}`,
-    observationId: () => `${prefix}_obs_${++observation}`,
+    eventId: () => `atomic_evt_${++event}`,
+    observationId: () => `atomic_obs_${++observation}`,
   };
 }
-
-function narrowPersistencePorts(persistence: ObserverPersistenceBundle & PersistenceHealthSource): {
-  commandJournal: CommandJournal;
-  eventJournal: EventJournal;
-  ingressJournal: IngressJournal;
-  observationStore: ObservationStore;
-  reconcileStore: ReconcileStore;
-  sessionStore: SessionStore;
-  worktreeMetadataStore: WorktreeMetadataStore;
-} {
-  return {
-    commandJournal: persistence,
-    eventJournal: persistence,
-    ingressJournal: persistence,
-    observationStore: persistence,
-    reconcileStore: persistence,
-    sessionStore: persistence,
-    worktreeMetadataStore: persistence,
-  };
-}
-
-describe("SQLite observer persistence ports", () => {
-  it("satisfies every application persistence port with unchanged SQLite behavior", async () => {
-    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createSqliteObserverPersistence({
-      sqlite,
-      clock: { now: () => new Date(now) },
-      idFactory: ids(),
-    });
-    const {
-      commandJournal,
-      eventJournal,
-      ingressJournal,
-      observationStore,
-      reconcileStore,
-      sessionStore,
-      worktreeMetadataStore,
-    } = narrowPersistencePorts(persistence);
-
-    await commandJournal.recordCommandAccepted({ commandId: "cmd_port", command, createdAt: now });
-    await commandJournal.markCommandSucceeded("cmd_port", later);
-    await expect(commandJournal.getCommand("cmd_port")).resolves.toMatchObject({
-      id: "cmd_port",
-      status: "succeeded",
-      finishedAt: later,
-    });
-
-    await eventJournal.recordEvent({ type: "observer.started", at: now }, { createdAt: now });
-    await expect(eventJournal.listEvents({ type: "observer.started" })).resolves.toEqual([
-      expect.objectContaining({ id: "port_evt_1", type: "observer.started" }),
-    ]);
-
-    const ingressEvent = {
-      type: "providerHook.ingested" as const,
-      at: now,
-      hookId: "hook_port",
-      provider: "fake-harness",
-      event: "run.updated",
-    };
-    const ingressOptions = {
-      createdAt: now,
-      source: "hook",
-      dedupe: { kind: "hook" as const, id: "hook_port" },
-    };
-    await expect(
-      ingressJournal.recordEventWithIngressDedupe(ingressEvent, ingressOptions),
-    ).resolves.toMatchObject({ deduped: false, event: { id: "port_evt_2" } });
-    await expect(
-      ingressJournal.recordEventWithIngressDedupe(ingressEvent, ingressOptions),
-    ).resolves.toEqual({ deduped: true });
-
-    await observationStore.recordProviderObservation({
-      provider: "fake-harness",
-      providerType: "harness",
-      entityKind: "provider_health",
-      entityKey: "fake-harness",
-      payload: {
-        providerId: "fake-harness",
-        providerType: "harness",
-        status: "healthy",
-        lastCheckedAt: now,
-      },
-      observedAt: now,
-      expiresAt: later,
-    });
-    await expect(
-      observationStore.listProviderObservations({ entityKind: "provider_health", now }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        id: "port_obs_1",
-        entityKey: "fake-harness",
-        payload: expect.objectContaining({ status: "healthy" }),
-      }),
-    ]);
-
-    const worktree = createFakeWorktree({
-      id: "wt_web_port",
-      projectId: "web",
-      branch: "feature/persistence-ports",
-      now,
-    });
-    const terminalTarget = createFakeTerminalTarget({
-      id: "term_web_port",
-      projectId: "web",
-      worktreeId: worktree.id,
-      sessionId: "ses_web_port",
-      harnessRunId: "run_web_port",
-      now,
-    });
-    const harnessRun = createFakeHarnessRun({
-      id: "run_web_port",
-      projectId: "web",
-      worktreeId: worktree.id,
-      sessionId: "ses_web_port",
-      now,
-    });
-    await reconcileStore.persistReconcileResult({
-      projects: [project],
-      worktrees: [worktree],
-      terminalTargets: [terminalTarget],
-      harnessRuns: [harnessRun],
-      observedAt: now,
-    });
-    await expect(sessionStore.listSessions()).resolves.toEqual([
-      expect.objectContaining({ id: "ses_web_port", title: "feature/persistence-ports" }),
-    ]);
-    await expect(
-      sessionStore.findRememberedHarnessProviderForWorktree({
-        projectId: "web",
-        worktreeId: worktree.id,
-        worktreePath: worktree.path,
-      }),
-    ).resolves.toBe("fake-harness");
-
-    await sessionStore.renameSession({
-      sessionId: "ses_web_port",
-      title: "Persistence ports",
-    });
-    await expect(sessionStore.listSessions()).resolves.toEqual([
-      expect.objectContaining({ id: "ses_web_port", title: "Persistence ports" }),
-    ]);
-
-    await worktreeMetadataStore.upsertWorktreeMetadataCurrent({
-      worktreeId: worktree.id,
-      kind: "change_summary",
-      expiresAt: later,
-      payload: {
-        kind: "branch_diff",
-        additions: 7,
-        deletions: 2,
-        source: "local_git",
-        checkedAt: now,
-      },
-    });
-    await expect(
-      worktreeMetadataStore.listWorktreeMetadataCurrent({ kind: "change_summary", now }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        worktreeId: worktree.id,
-        kind: "change_summary",
-        payload: expect.objectContaining({ additions: 7, deletions: 2 }),
-      }),
-    ]);
-    await expect(
-      worktreeMetadataStore.deleteWorktreeMetadataCurrent({ worktreeId: worktree.id }),
-    ).resolves.toBe(1);
-    expect(persistence.health()).toMatchObject({ status: "healthy" });
-
-    sqlite.close();
-  });
-
-  it("remembers the newest project-scoped harness across normalized worktree path changes", async () => {
-    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createSqliteObserverPersistence({
-      sqlite,
-      clock: { now: () => new Date(now) },
-      idFactory: ids("remembered"),
-    });
-
-    sqlite.database
-      .prepare(
-        `
-          INSERT INTO worktrees (id, project_id, path, provider, last_seen_at)
-          VALUES (?, ?, ?, ?, ?)
-        `,
-      )
-      .run("wt_old", "web", "/private/var/tmp/station/web/", "fake-worktree", now);
-    sqlite.database
-      .prepare(
-        `
-          INSERT INTO worktrees (id, project_id, path, provider, last_seen_at)
-          VALUES (?, ?, ?, ?, ?)
-        `,
-      )
-      .run("wt_direct", "web", "/var/tmp/station/web", "fake-worktree", now);
-    sqlite.database
-      .prepare(
-        `
-          INSERT INTO sessions
-            (id, project_id, worktree_id, harness, created_at, last_seen_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-      )
-      .run("ses_a", "web", "wt_old", "codex", now, later);
-    sqlite.database
-      .prepare(
-        `
-          INSERT INTO sessions
-            (id, project_id, worktree_id, harness, created_at, last_seen_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-      )
-      .run("ses_z", "other", "wt_old", "claude", later, later);
-    sqlite.database
-      .prepare(
-        `
-          INSERT INTO sessions
-            (id, project_id, worktree_id, harness, created_at, last_seen_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-      )
-      .run("ses_direct", "web", "wt_direct", "pi", now, now);
-
-    await expect(
-      persistence.findRememberedHarnessProviderForWorktree({
-        projectId: "web",
-        worktreeId: "wt_new",
-        worktreePath: "/var/tmp/station/web",
-      }),
-    ).resolves.toBe("codex");
-    await expect(
-      persistence.findRememberedHarnessProviderForWorktree({
-        projectId: "web",
-        worktreeId: "wt_direct",
-        worktreePath: "/var/tmp/station/web",
-      }),
-    ).resolves.toBe("pi");
-    await expect(
-      persistence.findRememberedHarnessProviderForWorktree({
-        projectId: "other",
-        worktreeId: "wt_new",
-        worktreePath: "/var/tmp/station/web",
-      }),
-    ).resolves.toBeUndefined();
-
-    sqlite.close();
-  });
-
-  it("rolls back a failed atomic ingress write so the same dedupe key can be retried", async () => {
-    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
-    const persistence = createSqliteObserverPersistence({
-      sqlite,
-      clock: { now: () => new Date(now) },
-      idFactory: ids("atomic"),
-    });
-    const { eventJournal, ingressJournal, observationStore } = narrowPersistencePorts(persistence);
-    const input: Parameters<
-      IngressJournal["recordEventAndProviderObservationWithIngressDedupe"]
-    >[0] = {
-      event: {
-        type: "providerHook.ingested",
-        at: now,
-        hookId: "hook_atomic",
-        provider: "fake-harness",
-        event: "run.updated",
-      },
-      eventOptions: { createdAt: now, source: "hook" },
-      observation: {
-        provider: "fake-harness",
-        providerType: "harness",
-        entityKind: "provider_health",
-        entityKey: "reject-once",
-        payload: {
-          providerId: "fake-harness",
-          providerType: "harness",
-          status: "healthy",
-          lastCheckedAt: now,
-        },
-        observedAt: now,
-      },
-      dedupe: { kind: "hook", id: "hook_atomic" },
-    };
-
-    sqlite.database.exec(`
-      CREATE TRIGGER reject_atomic_observation
-      BEFORE INSERT ON provider_observations
-      WHEN NEW.entity_key = 'reject-once'
-      BEGIN
-        SELECT RAISE(ABORT, 'forced observation failure');
-      END;
-    `);
-
-    await expect(
-      ingressJournal.recordEventAndProviderObservationWithIngressDedupe(input),
-    ).rejects.toThrow("PERSISTENCE_TRANSACTION_FAILED");
-    await expect(eventJournal.listEvents()).resolves.toEqual([]);
-    await expect(
-      observationStore.listProviderObservations({ includeExpired: true, now }),
-    ).resolves.toEqual([]);
-    expect(
-      sqlite.database.prepare("SELECT COUNT(*) AS count FROM hook_ingress_dedupe").get(),
-    ).toMatchObject({ count: 0 });
-    expect(sqlite.database.prepare("SELECT COUNT(*) AS count FROM events").get()).toMatchObject({
-      count: 0,
-    });
-    expect(
-      sqlite.database.prepare("SELECT COUNT(*) AS count FROM provider_observations").get(),
-    ).toMatchObject({ count: 0 });
-
-    sqlite.database.exec("DROP TRIGGER reject_atomic_observation");
-
-    await expect(
-      ingressJournal.recordEventAndProviderObservationWithIngressDedupe(input),
-    ).resolves.toMatchObject({
-      deduped: false,
-      event: { id: "atomic_evt_2" },
-      observation: { id: "atomic_obs_2", entityKey: "reject-once" },
-    });
-    await expect(
-      ingressJournal.recordEventAndProviderObservationWithIngressDedupe(input),
-    ).resolves.toEqual({ deduped: true });
-    await expect(eventJournal.listEvents()).resolves.toHaveLength(1);
-    await expect(
-      observationStore.listProviderObservations({ includeExpired: true, now }),
-    ).resolves.toHaveLength(1);
-
-    sqlite.close();
-  });
-});

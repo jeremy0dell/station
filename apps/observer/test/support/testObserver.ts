@@ -10,15 +10,8 @@ import {
   openObserverSqlite,
   type ProviderRegistry,
 } from "../../src/internal";
-import type { ObserverPersistenceBundle } from "../../src/persistence";
 
 export type TestClock = { now: () => Date };
-
-export function fakeObserverPersistence(): ObserverPersistenceBundle {
-  return {
-    recordEventWithIngressDedupe: async () => ({ deduped: false }),
-  } as unknown as ObserverPersistenceBundle;
-}
 
 export function fakeObserverCommandQueue(): CommandQueue {
   return {
