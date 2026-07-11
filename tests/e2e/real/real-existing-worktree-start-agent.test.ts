@@ -74,7 +74,7 @@ describeReal("real existing Worktrunk worktree start-agent", () => {
     const row = findRowByBranch(before, branch);
     expect(row.agent).toBeUndefined();
 
-    const sentinel = createCodexSentinel(repo, "start-agent");
+    const sentinel = createCodexSentinel(repo, "start-agent", row.path);
     const command: StationCommand = {
       type: "session.startAgent",
       payload: {

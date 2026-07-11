@@ -26,15 +26,19 @@ export type CodexHookFixture = {
   cleanup: () => Promise<void>;
 };
 
-export function createCodexSentinel(repo: RealTempRepo, label: string): CodexSentinel {
+export function createCodexSentinel(
+  repo: RealTempRepo,
+  label: string,
+  targetRoot?: string,
+): CodexSentinel {
   const token = `station-real-${label}-${process.pid}-${Date.now()}`;
   const relativePath = `.station-real-e2e/sentinels/${sanitize(label)}-${Date.now()}.txt`;
-  const absolutePath = join(repo.repoPath, relativePath);
+  const absolutePath = join(targetRoot ?? repo.repoPath, relativePath);
   return {
     relativePath,
     absolutePath,
     token,
-    prompt: boundedCodexPrompt(relativePath, token),
+    prompt: boundedCodexPrompt(targetRoot === undefined ? relativePath : absolutePath, token),
   };
 }
 
