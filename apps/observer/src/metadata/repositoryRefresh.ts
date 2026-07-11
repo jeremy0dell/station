@@ -15,8 +15,8 @@ import {
 } from "@station/runtime";
 import { toSafeError } from "../diagnostics/errors.js";
 import type {
-  ObserverPersistence,
   PersistedWorktreeMetadataCurrent,
+  WorktreeMetadataStore,
 } from "../persistence/index.js";
 import { addMs } from "../utils/time.js";
 import {
@@ -46,7 +46,7 @@ export type RepositoryRefreshInput = {
 
 export type CreateRepositoryMetadataRefresherOptions = {
   projectsById: ReadonlyMap<string, ProviderProjectConfig>;
-  persistence: ObserverPersistence;
+  persistence: WorktreeMetadataStore;
   requestReconcile(reason: string): void;
   clock?: RuntimeClock;
   logger?: JsonlLogger;

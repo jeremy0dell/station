@@ -109,6 +109,15 @@ function createJoinApi(core: ObserverCore) {
   return createObserverApi({
     core,
     persistence: fakeObserverPersistence(),
+    persistenceHealth: {
+      health: () => ({
+        path: ":memory:",
+        open: true,
+        status: "healthy",
+        schemaVersion: 0,
+        lastCheckedAt: now,
+      }),
+    },
     commandQueue: fakeObserverCommandQueue(),
     eventBus: createObserverEventBus(),
     clock: { now: () => new Date(now) },

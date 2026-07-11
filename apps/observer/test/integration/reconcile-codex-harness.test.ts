@@ -189,14 +189,6 @@ describe("observer reconcile with Codex harness", () => {
       attention: 0,
       unknown: 0,
     });
-    expect(await persistence.listHarnessRuns()).toEqual([
-      expect.objectContaining({
-        id: "codex:tmux:station:@1:%2",
-        state: "working",
-        confidence: "medium",
-        lastSeenAt: now,
-      }),
-    ]);
     await expect(persistence.listProviderObservations()).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({

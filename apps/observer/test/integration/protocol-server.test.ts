@@ -91,12 +91,12 @@ function createObserverFixture(socketPath: string) {
     config,
     providers,
     persistence,
-    sqlite,
     clock,
   });
   const api = createObserverApi({
     core,
     persistence,
+    persistenceHealth: persistence,
     commandQueue: queue,
     eventBus,
     clock,

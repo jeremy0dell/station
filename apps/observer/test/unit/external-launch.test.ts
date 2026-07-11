@@ -25,7 +25,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import type { ObserverPersistence } from "../../src/persistence/index";
+import type { SessionStore } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { prepareExternalLaunch, reportExternalExit } from "../../src/runtime/externalLaunch";
@@ -244,9 +244,8 @@ function fakeCore(rows: WorktreeRow[]): ObserverCore {
 }
 
 const fakePersistence = {
-  listSessions: async () => [],
-  listWorktrees: async () => [],
-} as unknown as ObserverPersistence;
+  findRememberedHarnessProviderForWorktree: async () => undefined,
+} as unknown as SessionStore;
 
 /** A harness that reports hook installation status (the gate input). */
 class HookableHarness extends FakeHarnessProvider {

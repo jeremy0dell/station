@@ -3,7 +3,6 @@ import type {
   HarnessRunObservation,
   ObservedStatus,
 } from "@station/contracts";
-import { HarnessEventObservationSchema } from "@station/contracts";
 import type { PersistedProviderObservation } from "../persistence/index.js";
 
 export type ObserverHarnessRun = {
@@ -64,8 +63,8 @@ export function synthesizeExternalHarnessRuns(input: {
     if (observation.expired || observation.entityKind !== "harness_event") {
       continue;
     }
-    const event = parseHarnessEventObservation(observation);
-    if (event === undefined || event.provider !== observation.provider) {
+    const event = observation.payload;
+    if (event.provider !== observation.provider) {
       continue;
     }
     // Station-launched sessions carry station identity (session, run, or
@@ -182,8 +181,8 @@ export function applyHarnessEventStatusOverlays(input: {
       continue;
     }
 
-    const event = parseHarnessEventObservation(observation);
-    if (event === undefined || event.provider !== observation.provider) {
+    const event = observation.payload;
+    if (event.provider !== observation.provider) {
       continue;
     }
     if (event.status === undefined || event.status.value === "unknown") {
@@ -218,16 +217,6 @@ export function applyHarnessEventStatusOverlays(input: {
     }
     return applyStatusOverlay(run, overlay);
   });
-}
-
-function parseHarnessEventObservation(
-  observation: PersistedProviderObservation,
-): HarnessEventObservation | undefined {
-  const result = HarnessEventObservationSchema.safeParse(observation.payload);
-  if (!result.success) {
-    return undefined;
-  }
-  return result.data;
 }
 
 // The strongest available ordering timestamp: the harness-assigned status time,

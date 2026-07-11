@@ -111,7 +111,6 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock,
       providerTimeoutMs: 20_000,
     });
@@ -272,7 +271,6 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock,
       providerTimeoutMs: 20_000,
     });
@@ -280,6 +278,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       core,
       providers,
       persistence,
+      persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
       clock,
@@ -528,6 +527,7 @@ async function writeFailureBundle(input: {
     config: input.config,
     core: input.core,
     persistence: input.persistence,
+    persistenceHealth: input.persistence,
     paths: {
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,

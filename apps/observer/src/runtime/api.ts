@@ -44,7 +44,7 @@ import {
   createWorktreeMetadataRefreshService,
   type WorktreeMetadataRefreshService,
 } from "../metadata/refresh.js";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import type { ObserverEventBus } from "./eventBus.js";
@@ -66,7 +66,8 @@ import { createSpoolDrainer, type SpoolDrainDeps } from "./spoolDrain.js";
 export type CreateObserverApiOptions = {
   core: ObserverCore;
   providers?: ProviderRegistry;
-  persistence: ObserverPersistence;
+  persistence: ObserverPersistenceBundle;
+  persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
   eventBus: ObserverEventBus;
   clock?: RuntimeClock;
@@ -392,7 +393,7 @@ async function buildHealth(
   if (options.stateDir !== undefined) health.stateDir = options.stateDir;
   if (spoolDepth !== undefined) health.hookSpoolDepth = spoolDepth;
   health.harnessIngressQueue = harnessIngressQueue.health();
-  if (coreHealth.sqlite !== undefined) health.sqlite = coreHealth.sqlite;
+  health.sqlite = options.persistenceHealth.health();
   if (coreHealth.lastReconcile !== undefined) health.lastReconcile = coreHealth.lastReconcile;
   return health;
 }
@@ -438,6 +439,7 @@ function buildDiagnosticDeps(
     config: options.config ?? emptyConfig(),
     core: options.core,
     persistence: options.persistence,
+    persistenceHealth: options.persistenceHealth,
     paths,
     clock,
   };

@@ -83,7 +83,11 @@ describe("observer turn readiness", () => {
         }),
       ]),
     );
-    expect(await fixture.persistence.getSessionTurnReadiness("ses_web_ready")).toMatchObject({
+    expect(
+      (await fixture.persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_ready",
+      ),
+    ).toMatchObject({
       sessionId: "ses_web_ready",
       token: "report_turn_complete",
       completedAt,
@@ -99,9 +103,11 @@ describe("observer turn readiness", () => {
     await fixture.queue.drain();
 
     expect(receipt.accepted).toBe(true);
-    await expect(
-      fixture.persistence.getSessionTurnReadiness("ses_web_ready"),
-    ).resolves.toBeUndefined();
+    expect(
+      (await fixture.persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_ready",
+      ),
+    ).toBeUndefined();
     expect(fixture.core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
     expect(
       (await fixture.persistence.listEvents({ commandId: receipt.commandId })).map(
@@ -122,9 +128,11 @@ describe("observer turn readiness", () => {
 
     expect(plainIdle.projected).toBe(true);
     expect(plainIdle.snapshot.rows[0]?.agent).not.toHaveProperty("turnReadiness");
-    await expect(
-      plainFixture.persistence.getSessionTurnReadiness("ses_web_ready"),
-    ).resolves.toBeUndefined();
+    expect(
+      (await plainFixture.persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_ready",
+      ),
+    ).toBeUndefined();
     plainFixture.sqlite.close();
   });
 
@@ -135,9 +143,11 @@ describe("observer turn readiness", () => {
     await fixture.core.projectHarnessEventStatus(
       report({ reportId: "report_ready_then_active", turnCompleted: true }),
     );
-    await expect(
-      fixture.persistence.getSessionTurnReadiness("ses_web_ready"),
-    ).resolves.toMatchObject({ token: "report_ready_then_active" });
+    expect(
+      (await fixture.persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_ready",
+      ),
+    ).toMatchObject({ token: "report_ready_then_active" });
 
     // The user re-engages the harness directly: the new turn's working event
     // must close the readiness interval without an explicit acknowledgment.
@@ -145,9 +155,11 @@ describe("observer turn readiness", () => {
       workingReport("report_new_turn_working"),
     );
     expect(working.projected).toBe(true);
-    await expect(
-      fixture.persistence.getSessionTurnReadiness("ses_web_ready"),
-    ).resolves.toBeUndefined();
+    expect(
+      (await fixture.persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_ready",
+      ),
+    ).toBeUndefined();
     expect(fixture.core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
     fixture.sqlite.close();
   });
@@ -229,7 +241,7 @@ function fixtureCore() {
       }),
     ],
   });
-  const core = createObserverCore({ config, providers, persistence, sqlite, clock });
+  const core = createObserverCore({ config, providers, persistence, clock });
   registerObserverCommandHandlers({
     queue,
     core,

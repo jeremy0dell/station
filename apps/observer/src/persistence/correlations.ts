@@ -1,11 +1,13 @@
 import type {
   HarnessRunObservation,
+  ProviderId,
   ProviderProjectConfig,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
 import {
   HarnessRunObservationSchema,
+  sameObservedPath,
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
 } from "@station/contracts";
@@ -13,28 +15,9 @@ import type { SqlDatabase } from "../sqlite/driver.js";
 import { maxIso, optionalJson } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
 import { providerObservationExpiresAt } from "./retention.js";
-import {
-  harnessRunFromRow,
-  projectFromRow,
-  type SqliteHarnessRunRow,
-  type SqliteProjectRow,
-  type SqliteSessionRow,
-  type SqliteTerminalTargetRow,
-  type SqliteWorktreeRow,
-  sessionFromRow,
-  terminalTargetFromRow,
-  worktreeFromRow,
-} from "./rows.js";
+import { type SqliteSessionRow, sessionFromRow } from "./rows.js";
 import { stripTerminalProviderData } from "./terminalObservations.js";
-import type {
-  ObserverIdFactory,
-  PersistedHarnessRun,
-  PersistedProject,
-  PersistedSession,
-  PersistedTerminalTarget,
-  PersistedWorktree,
-  PersistReconcileResultInput,
-} from "./types.js";
+import type { ObserverIdFactory, PersistedSession, PersistReconcileResultInput } from "./types.js";
 
 type ProjectPersistenceInput = {
   id: string;
@@ -120,36 +103,53 @@ function expiresAtFor(input: PersistReconcileResultInput, observedAt: string): s
   return input.expiresAt;
 }
 
-export function listProjects(database: SqlDatabase): PersistedProject[] {
-  return (database.prepare("SELECT * FROM projects ORDER BY id").all() as SqliteProjectRow[]).map(
-    projectFromRow,
-  );
-}
-
-export function listWorktrees(database: SqlDatabase): PersistedWorktree[] {
-  return (database.prepare("SELECT * FROM worktrees ORDER BY id").all() as SqliteWorktreeRow[]).map(
-    worktreeFromRow,
-  );
-}
-
-export function listTerminalTargets(database: SqlDatabase): PersistedTerminalTarget[] {
-  return (
-    database
-      .prepare("SELECT * FROM terminal_targets ORDER BY id")
-      .all() as SqliteTerminalTargetRow[]
-  ).map(terminalTargetFromRow);
-}
-
-export function listHarnessRuns(database: SqlDatabase): PersistedHarnessRun[] {
-  return (
-    database.prepare("SELECT * FROM harness_runs ORDER BY id").all() as SqliteHarnessRunRow[]
-  ).map(harnessRunFromRow);
-}
-
 export function listSessions(database: SqlDatabase): PersistedSession[] {
   return (database.prepare("SELECT * FROM sessions ORDER BY id").all() as SqliteSessionRow[]).map(
     sessionFromRow,
   );
+}
+
+type RememberedHarnessSessionRow = {
+  id: string;
+  worktree_id: string;
+  harness: ProviderId;
+  created_at: string;
+  last_seen_at: string;
+  worktree_path: string | null;
+};
+
+export function findRememberedHarnessProviderForWorktree(
+  database: SqlDatabase,
+  input: { projectId: string; worktreeId: string; worktreePath: string },
+): ProviderId | undefined {
+  const rows = database
+    .prepare(
+      `
+        SELECT
+          sessions.id,
+          sessions.worktree_id,
+          sessions.harness,
+          sessions.created_at,
+          sessions.last_seen_at,
+          worktrees.path AS worktree_path
+        FROM sessions
+        LEFT JOIN worktrees
+          ON worktrees.id = sessions.worktree_id
+          AND worktrees.project_id = sessions.project_id
+        WHERE sessions.project_id = ?
+          AND sessions.harness IS NOT NULL
+        ORDER BY sessions.last_seen_at DESC, sessions.created_at DESC, sessions.id DESC
+      `,
+    )
+    .all(input.projectId) as RememberedHarnessSessionRow[];
+
+  const directMatch = rows.find((row) => row.worktree_id === input.worktreeId);
+  if (directMatch !== undefined) {
+    return directMatch.harness;
+  }
+  return rows.find(
+    (row) => row.worktree_path !== null && sameObservedPath(row.worktree_path, input.worktreePath),
+  )?.harness;
 }
 
 export function renameSession(

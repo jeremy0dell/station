@@ -57,7 +57,7 @@ describe("session.create debug bundle diagnostics", () => {
       ],
     });
     const config = configFor(root, stateDir);
-    const core = createObserverCore({ config, providers, persistence, sqlite, clock, logger });
+    const core = createObserverCore({ config, providers, persistence, clock, logger });
     registerObserverCommandHandlers({
       queue,
       core,
@@ -88,6 +88,7 @@ describe("session.create debug bundle diagnostics", () => {
         configPath: join(root, "config.toml"),
         core,
         persistence,
+        persistenceHealth: persistence,
         paths: {
           stateDir,
           diagnosticsDir,
@@ -141,7 +142,7 @@ describe("session.create debug bundle diagnostics", () => {
       harnesses: [new FakeHarnessProvider({ now })],
     });
     const config = configFor(root, stateDir);
-    const core = createObserverCore({ config, providers, persistence, sqlite, clock, logger });
+    const core = createObserverCore({ config, providers, persistence, clock, logger });
     registerObserverCommandHandlers({
       queue,
       core,
@@ -172,6 +173,7 @@ describe("session.create debug bundle diagnostics", () => {
         configPath: join(root, "config.toml"),
         core,
         persistence,
+        persistenceHealth: persistence,
         paths: {
           stateDir,
           diagnosticsDir,

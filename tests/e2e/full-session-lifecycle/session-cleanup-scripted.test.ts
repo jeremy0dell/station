@@ -70,7 +70,7 @@ describe("full session cleanup e2e", () => {
       terminal,
       harnesses: [harness],
     });
-    const core = createObserverCore({ config, providers, persistence, sqlite, clock });
+    const core = createObserverCore({ config, providers, persistence, clock });
     registerObserverCommandHandlers({
       queue,
       core,
@@ -86,6 +86,7 @@ describe("full session cleanup e2e", () => {
     const api = createObserverApi({
       core,
       persistence,
+      persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
       clock,

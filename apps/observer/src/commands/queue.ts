@@ -12,7 +12,7 @@ import { CommandReceiptSchema, StationCommandSchema } from "@station/contracts";
 import { createTraceContext, type JsonlLogger } from "@station/observability";
 import { type RuntimeClock, runRuntimeBoundaryWithTimeout, systemClock } from "@station/runtime";
 import { createErrorEnvelope, toSafeError } from "../diagnostics/errors.js";
-import type { ObserverIdFactory, ObserverPersistence } from "../persistence/index.js";
+import type { CommandJournal, EventJournal, ObserverIdFactory } from "../persistence/index.js";
 import { nowIso } from "../utils/time.js";
 import { commandCancellationError, linkAbortSignals, throwIfAborted } from "./cancellation.js";
 
@@ -35,7 +35,7 @@ export type CommandQueue = {
 };
 
 export type CreateCommandQueueOptions = {
-  persistence: ObserverPersistence;
+  persistence: CommandJournal & EventJournal;
   clock?: RuntimeClock;
   idFactory?: Partial<Pick<ObserverIdFactory, "commandId" | "errorId">>;
   handlers?: Partial<Record<StationCommand["type"], CommandHandler>>;
@@ -180,7 +180,7 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
 }
 
 async function executeCommand(
-  persistence: ObserverPersistence,
+  persistence: CommandJournal & EventJournal,
   handlers: Map<StationCommand["type"], CommandHandler>,
   clock: RuntimeClock,
   idFactory: Pick<ObserverIdFactory, "errorId">,

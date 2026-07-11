@@ -30,6 +30,7 @@ describe("release doctor boundaries", () => {
       config,
       core,
       persistence,
+      persistenceHealth: persistence,
       providers,
       paths: { stateDir },
       clock,

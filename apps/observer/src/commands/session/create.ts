@@ -1,7 +1,7 @@
 import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -29,7 +29,7 @@ export type CreateSessionCreateHandlerOptions = {
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
-  persistence: ObserverPersistence;
+  persistence: SessionStore & EventJournal;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;

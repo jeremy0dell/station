@@ -19,7 +19,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { EventJournal } from "../persistence/index.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 
 export type ProviderIngressSpoolDrainResult = {
@@ -32,7 +32,7 @@ export type DrainProviderIngressSpoolOptions = {
   spoolDir: string;
   ingest(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
   report?(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
-  persistence?: ObserverPersistence;
+  persistence?: EventJournal;
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
 };

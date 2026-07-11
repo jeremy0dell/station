@@ -107,18 +107,6 @@ export function deleteWorktreeMetadataCurrent(
   return Number(result.changes);
 }
 
-export function pruneExpiredWorktreeMetadataCurrent(
-  database: SqlDatabase,
-  expiresBefore: string,
-): number {
-  const result = database
-    .prepare(
-      "DELETE FROM worktree_metadata_current WHERE expires_at IS NOT NULL AND expires_at <= ?",
-    )
-    .run(expiresBefore);
-  return Number(result.changes);
-}
-
 function buildListWorktreeMetadataCurrentQuery<TKind extends WorktreeMetadataCurrentKind>(options: {
   kind?: TKind | readonly TKind[];
   includeExpired?: boolean;

@@ -40,7 +40,6 @@ const project: ProviderProjectConfig = {
 function ids() {
   let event = 0;
   let observation = 0;
-  let breadcrumb = 0;
   return {
     eventId: () => {
       event += 1;
@@ -49,10 +48,6 @@ function ids() {
     observationId: () => {
       observation += 1;
       return `obs_${observation}`;
-    },
-    breadcrumbId: () => {
-      breadcrumb += 1;
-      return `crumb_${breadcrumb}`;
     },
   };
 }
@@ -237,11 +232,14 @@ describe("observer persistence", () => {
       completedAt: earlier,
       updatedAt: later,
     });
-    expect(await persistence.getSessionTurnReadiness("ses_web_ready")).toMatchObject({
-      token: "report_first",
-      completedAt: now,
-      updatedAt: now,
-    });
+    expect(await persistence.listSessionTurnReadiness()).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_web_ready",
+        token: "report_first",
+        completedAt: now,
+        updatedAt: now,
+      }),
+    ]);
 
     await persistence.upsertSessionTurnReadiness({
       sessionId: "ses_web_ready",
@@ -266,9 +264,9 @@ describe("observer persistence", () => {
         token: "report_first",
       }),
     ).resolves.toBe(0);
-    expect(await persistence.getSessionTurnReadiness("ses_web_ready")).toMatchObject({
-      token: "report_newer",
-    });
+    expect(await persistence.listSessionTurnReadiness()).toEqual([
+      expect.objectContaining({ token: "report_newer" }),
+    ]);
 
     await expect(
       persistence.deleteSessionTurnReadiness({
@@ -276,7 +274,7 @@ describe("observer persistence", () => {
         token: "report_newer",
       }),
     ).resolves.toBe(1);
-    await expect(persistence.getSessionTurnReadiness("ses_web_ready")).resolves.toBeUndefined();
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
     sqlite.close();
   });
 
@@ -789,16 +787,14 @@ describe("observer persistence", () => {
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
     const reloaded = createSqliteObserverPersistence({ sqlite: reopened, idFactory: ids() });
 
-    expect(await reloaded.listProjects()).toEqual([expect.objectContaining({ id: "web" })]);
-    expect(await reloaded.listWorktrees()).toEqual([
-      expect.objectContaining({ id: "wt_web_main" }),
-    ]);
-    expect(await reloaded.listTerminalTargets()).toEqual([
-      expect.objectContaining({ id: "term_web_main", sessionId: "ses_web_main" }),
-    ]);
-    expect(await reloaded.listHarnessRuns()).toEqual([
-      expect.objectContaining({ id: "run_web_main", sessionId: "ses_web_main" }),
-    ]);
+    expect(
+      (
+        await reloaded.listCurrentProviderEntityObservations({
+          entityKind: ["worktree", "terminal_target"],
+          now: later,
+        })
+      ).map((item) => `${item.entityKind}:${item.entityKey}`),
+    ).toEqual(["worktree:wt_web_main", "terminal_target:term_web_main"]);
     expect(await reloaded.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_web_main",
@@ -808,6 +804,13 @@ describe("observer persistence", () => {
         terminalProvider: "fake-terminal",
       }),
     ]);
+    await expect(
+      reloaded.findRememberedHarnessProviderForWorktree({
+        projectId: "web",
+        worktreeId: "wt_web_main",
+        worktreePath: worktree.path,
+      }),
+    ).resolves.toBe("fake-harness");
     reopened.close();
   });
 
@@ -915,8 +918,10 @@ describe("observer persistence", () => {
         now,
       }),
     ).toHaveLength(4);
-    expect(await persistence.pruneExpiredWorktreeMetadataCurrent(now)).toBe(1);
     expect(await persistence.deleteWorktreeMetadataCurrent({ worktreeId: "wt_web_main" })).toBe(3);
+    expect(await persistence.deleteWorktreeMetadataCurrent({ worktreeId: "wt_web_expired" })).toBe(
+      1,
+    );
     expect(await persistence.listWorktreeMetadataCurrent({ includeExpired: true, now })).toEqual(
       [],
     );

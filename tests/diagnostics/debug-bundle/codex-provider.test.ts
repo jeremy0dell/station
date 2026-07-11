@@ -50,7 +50,6 @@ describe("Codex provider debug bundle diagnostics", () => {
       config,
       providers,
       persistence,
-      sqlite,
       clock,
     });
 
@@ -61,6 +60,7 @@ describe("Codex provider debug bundle diagnostics", () => {
       configPath: join(root, "config.toml"),
       core,
       persistence,
+      persistenceHealth: persistence,
       paths: {
         stateDir,
         diagnosticsDir,

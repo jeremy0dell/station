@@ -101,12 +101,13 @@ function createFixture(spoolDir: string) {
     managedTerminal: station,
     harnesses: [new FakeHarnessProvider({ now })],
   });
-  const core = createObserverCore({ config, providers, persistence, sqlite, clock });
+  const core = createObserverCore({ config, providers, persistence, clock });
   const queue = createCommandQueue({ persistence, clock, idFactory: ids(), eventBus });
   const api = createObserverApi({
     core,
     providers,
     persistence,
+    persistenceHealth: persistence,
     commandQueue: queue,
     eventBus,
     hookSpoolDir: spoolDir,

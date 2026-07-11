@@ -50,7 +50,6 @@ describe("Claude provider debug bundle diagnostics", () => {
       config,
       providers,
       persistence,
-      sqlite,
       clock,
     });
 
@@ -61,6 +60,7 @@ describe("Claude provider debug bundle diagnostics", () => {
       configPath: join(root, "config.toml"),
       core,
       persistence,
+      persistenceHealth: persistence,
       paths: {
         stateDir,
         diagnosticsDir,

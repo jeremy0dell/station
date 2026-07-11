@@ -1,5 +1,5 @@
 import type { RuntimeClock } from "@station/runtime";
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { nowIso } from "../../utils/time.js";
@@ -10,7 +10,7 @@ import { throwIfAborted } from "./shared.js";
 
 export type CreateSessionRenameHandlerOptions = {
   core: ObserverCore;
-  persistence: ObserverPersistence;
+  persistence: SessionStore & EventJournal;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
 };

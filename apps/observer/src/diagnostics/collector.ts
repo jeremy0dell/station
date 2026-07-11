@@ -32,10 +32,12 @@ import type { RuntimeClock } from "@station/runtime";
 import { runRuntimeBoundaryWithTimeout, systemClock, toIsoTimestamp } from "@station/runtime";
 import { commandRecordFromPersisted } from "../commands/record.js";
 import type {
-  ObserverPersistence,
+  CommandJournal,
+  EventJournal,
   PersistedCommand,
   PersistedCommandError,
   PersistedEvent,
+  PersistenceHealthSource,
 } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
@@ -54,7 +56,8 @@ export type ObserverDiagnosticsDeps = {
   configPath?: string;
   configDiagnostics?: ConfigDiagnostic[];
   core: ObserverCore;
-  persistence: ObserverPersistence;
+  persistence: CommandJournal & EventJournal;
+  persistenceHealth: PersistenceHealthSource;
   providers?: ProviderRegistry;
   paths: DiagnosticRuntimePaths;
   clock?: RuntimeClock;
@@ -73,6 +76,7 @@ export async function collectDiagnosticSnapshot(
     pid: deps.core.getSnapshot().observer.pid,
     version: deps.core.getSnapshot().observer.version,
     stateDir: deps.paths.stateDir,
+    sqlite: deps.persistenceHealth.health(),
   };
   if (deps.paths.socketPath !== undefined) {
     observerHealth.socketPath = deps.paths.socketPath;

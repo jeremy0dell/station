@@ -1,87 +1,86 @@
+import { createFakeTerminalTarget, createFakeWorktree } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
-  harnessRunFromRow,
-  type SqliteHarnessRunRow,
-  type SqliteTerminalTargetRow,
-  type SqliteWorktreeRow,
-  terminalTargetFromRow,
-  worktreeFromRow,
+  providerObservationFromRow,
+  type SqliteProviderObservationRow,
 } from "../../src/persistence/rows";
 
-const lastSeenAt = "2026-05-21T12:00:00.000Z";
+const now = "2026-05-21T12:00:00.000Z";
 
 describe("persistence row conversion", () => {
-  it("parses persisted enum-like fields through contract schemas", () => {
-    expect(worktreeFromRow(worktreeRow({ source: "worktrunk", state: "exists" }))).toMatchObject({
-      source: "worktrunk",
-      state: "exists",
-    });
-    expect(terminalTargetFromRow(terminalTargetRow({ state: "detached" }))).toMatchObject({
-      state: "detached",
-    });
+  it("parses the entity kind and payload together through the matching strict schema", () => {
+    const worktree = createFakeWorktree({ now });
+
     expect(
-      harnessRunFromRow(harnessRunRow({ state: "working", confidence: "medium" })),
+      providerObservationFromRow(providerObservationRow("worktree", worktree), now),
     ).toMatchObject({
-      state: "working",
-      confidence: "medium",
+      entityKind: "worktree",
+      payload: worktree,
     });
+    expect(() =>
+      providerObservationFromRow(
+        providerObservationRow("worktree", { ...worktree, state: "archived" }),
+        now,
+      ),
+    ).toThrow();
+    expect(() =>
+      providerObservationFromRow(providerObservationRow("retired_kind", worktree), now),
+    ).toThrow();
   });
 
-  it("rejects stale persisted enum strings instead of widening them to plain string", () => {
-    expect(() => worktreeFromRow(worktreeRow({ state: "archived" }))).toThrow();
-    expect(() => terminalTargetFromRow(terminalTargetRow({ state: "busy" }))).toThrow();
-    expect(() => harnessRunFromRow(harnessRunRow({ confidence: "certain" }))).toThrow();
+  it("strictly parses health observations", () => {
+    expect(
+      providerObservationFromRow(
+        providerObservationRow("provider_health", {
+          providerId: "fake-harness",
+          providerType: "harness",
+          status: "healthy",
+          lastCheckedAt: now,
+        }),
+        now,
+      ),
+    ).toMatchObject({
+      entityKind: "provider_health",
+      payload: { providerId: "fake-harness", status: "healthy" },
+    });
+    expect(() =>
+      providerObservationFromRow(
+        providerObservationRow("provider_health", { status: "healthy" }),
+        now,
+      ),
+    ).toThrow();
+  });
+
+  it("strips terminal provider data after strict parsing", () => {
+    const terminal = createFakeTerminalTarget({
+      now,
+      providerData: { socketPath: "/tmp/private.sock" },
+    });
+
+    const observation = providerObservationFromRow(
+      providerObservationRow("terminal_target", terminal),
+      now,
+    );
+
+    expect(observation.entityKind).toBe("terminal_target");
+    if (observation.entityKind === "terminal_target") {
+      expect(observation.payload.providerData).toBeUndefined();
+    }
   });
 });
 
-function worktreeRow(overrides: Partial<SqliteWorktreeRow> = {}): SqliteWorktreeRow {
+function providerObservationRow(
+  entityKind: string,
+  payload: unknown,
+): SqliteProviderObservationRow {
   return {
-    id: "wt_web_main",
-    project_id: "web",
-    path: "/tmp/station/web",
-    branch: "main",
-    source: null,
-    state: null,
-    dirty: null,
-    provider: null,
-    provider_data_json: null,
-    last_seen_at: lastSeenAt,
-    ...overrides,
-  };
-}
-
-function terminalTargetRow(
-  overrides: Partial<SqliteTerminalTargetRow> = {},
-): SqliteTerminalTargetRow {
-  return {
-    id: "term_web_main",
-    session_id: null,
-    project_id: null,
-    worktree_id: null,
-    provider: "tmux",
-    state: null,
-    provider_key: null,
-    provider_data_json: null,
-    last_seen_at: lastSeenAt,
-    ...overrides,
-  };
-}
-
-function harnessRunRow(overrides: Partial<SqliteHarnessRunRow> = {}): SqliteHarnessRunRow {
-  return {
-    id: "run_web_main",
-    session_id: null,
-    project_id: null,
-    worktree_id: null,
-    harness: "scripted",
-    pid: null,
-    external_run_id: null,
-    state: null,
-    confidence: null,
-    reason: null,
-    provider_data_json: null,
-    last_event_at: null,
-    last_seen_at: lastSeenAt,
-    ...overrides,
+    id: "obs_1",
+    provider: "fake-provider",
+    provider_type: "observer",
+    entity_kind: entityKind,
+    entity_key: "fake-provider",
+    payload_json: JSON.stringify(payload),
+    observed_at: now,
+    expires_at: null,
   };
 }

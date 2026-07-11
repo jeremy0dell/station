@@ -253,13 +253,13 @@ describe("observer provider hook ingress", () => {
         harnesses: [new FakeHarnessProvider({ now })],
       }),
       persistence,
-      sqlite,
       clock,
     });
     const gate = deferred();
     const api = createObserverApi({
       core,
       persistence,
+      persistenceHealth: persistence,
       commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
       eventBus,
       clock,
@@ -308,13 +308,13 @@ describe("observer provider hook ingress", () => {
         harnesses: [new FakeHarnessProvider({ now })],
       }),
       persistence,
-      sqlite,
       clock,
     });
     const gate = deferred();
     const api = createObserverApi({
       core,
       persistence,
+      persistenceHealth: persistence,
       commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
       eventBus,
       clock,

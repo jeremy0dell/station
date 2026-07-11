@@ -132,7 +132,11 @@ describe("observer reconcile with OpenCode harness", () => {
       state: "ready_to_read",
       completedAt: "2026-05-20T12:00:02.000Z",
     });
-    await expect(persistence.getSessionTurnReadiness("ses_web_task")).resolves.toMatchObject({
+    expect(
+      (await persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_task",
+      ),
+    ).toMatchObject({
       worktreeId: "wt_web_task",
       completedAt: "2026-05-20T12:00:02.000Z",
     });

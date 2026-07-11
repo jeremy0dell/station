@@ -69,4 +69,42 @@ describe("observer SQLite health", () => {
       },
     });
   });
+
+  it("reports malformed stored observations as persistence failures", async () => {
+    const sqlite = openObserverSqlite({
+      path: ":memory:",
+      clock: { now: () => new Date(now) },
+    });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+    });
+    sqlite.database
+      .prepare(
+        `
+          INSERT INTO provider_observations
+            (id, provider, provider_type, entity_kind, entity_key, payload_json, observed_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "obs_corrupt",
+        "fake-harness",
+        "observer",
+        "provider_health",
+        "fake-harness",
+        JSON.stringify({ status: "healthy" }),
+        now,
+      );
+
+    await expect(
+      persistence.listProviderObservations({ includeExpired: true, now }),
+    ).rejects.toThrow("PERSISTENCE_TRANSACTION_FAILED");
+    expect(persistence.health()).toMatchObject({
+      status: "unavailable",
+      lastError: { code: "PERSISTENCE_TRANSACTION_FAILED" },
+    });
+
+    sqlite.close();
+  });
 });

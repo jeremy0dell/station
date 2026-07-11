@@ -37,6 +37,7 @@ describe("Worktrunk diagnostics", () => {
       config: config(stateDir),
       core,
       persistence,
+      persistenceHealth: persistence,
       providers,
       paths: { stateDir },
       clock,

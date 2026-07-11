@@ -354,13 +354,13 @@ function createFixture(
       harnesses: [new FakeHarnessProvider({ now })],
     }),
     persistence,
-    sqlite,
     clock,
   });
   const queue = createCommandQueue({ persistence, clock, idFactory: ids(), eventBus });
   const api = createObserverApi({
     core,
     persistence,
+    persistenceHealth: persistence,
     commandQueue: queue,
     eventBus,
     ...(options.providerHookIngress === undefined

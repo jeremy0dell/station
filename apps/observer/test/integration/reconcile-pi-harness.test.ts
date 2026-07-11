@@ -110,14 +110,6 @@ describe("observer reconcile with Pi harness", () => {
     });
     await reconciled.close();
     await stateEvents.return?.();
-    expect(await persistence.listHarnessRuns()).toEqual([
-      expect.objectContaining({
-        id: "pi:tmux:station:@1:%2",
-        state: "working",
-        confidence: "medium",
-      }),
-    ]);
-
     await expect(
       api.reportHarnessEvent(
         piHookPayloadToHarnessEventReport({
@@ -150,7 +142,11 @@ describe("observer reconcile with Pi harness", () => {
         completedAt: "2026-05-27T12:00:02.000Z",
       },
     });
-    await expect(persistence.getSessionTurnReadiness("ses_web_task")).resolves.toMatchObject({
+    expect(
+      (await persistence.listSessionTurnReadiness()).find(
+        (readiness) => readiness.sessionId === "ses_web_task",
+      ),
+    ).toMatchObject({
       worktreeId: "wt_web_task",
       token: "report_pi_done",
       completedAt: "2026-05-27T12:00:02.000Z",

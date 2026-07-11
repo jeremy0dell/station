@@ -23,6 +23,19 @@ const observerConcreteProviderImports = [
   "@station/github-repository",
 ];
 
+const observerPersistenceBundleAllowlist = new Set([
+  "apps/observer/src/persistence/ports.ts",
+  "apps/observer/src/persistence/sqliteAdapter.ts",
+  "apps/observer/src/runtime/api.ts",
+  "apps/observer/src/runtime/main.ts",
+]);
+
+const observerSqliteHandleAllowlist = new Set([
+  "apps/observer/src/persistence/sqliteAdapter.ts",
+  "apps/observer/src/runtime/main.ts",
+  "apps/observer/src/sqlite.ts",
+]);
+
 const tmuxImplementationMarkers = [
   "@station/tmux",
   "display-popup",
@@ -193,6 +206,40 @@ describe("boundary inventory guard", () => {
         if (target === commandsRoot || target.startsWith(`${commandsRoot}${sep}`)) {
           violations.push(`${path}: command import ${specifier}`);
         }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps SQLite persistence details at the adapter and runtime composition edge", async () => {
+    const files = await sourceFiles();
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      const path = relative(process.cwd(), file);
+
+      if (/\bObserverPersistence\b/.test(source)) {
+        violations.push(`${path}: obsolete ObserverPersistence symbol`);
+      }
+      if (
+        /\bObserverPersistenceBundle\b/.test(source) &&
+        !observerPersistenceBundleAllowlist.has(path)
+      ) {
+        violations.push(`${path}: ObserverPersistenceBundle outside composition`);
+      }
+      if (/\bObserverSqliteHandle\b/.test(source) && !observerSqliteHandleAllowlist.has(path)) {
+        violations.push(`${path}: ObserverSqliteHandle outside SQLite edge`);
+      }
+    }
+
+    const reconcileCorePath = join(process.cwd(), "apps/observer/src/reconcile/core.ts");
+    const reconcileCore = await readFile(reconcileCorePath, "utf8");
+    for (const match of reconcileCore.matchAll(/\b(?:from|import)\s*(?:\(\s*)?["']([^"']+)["']/g)) {
+      const specifier = match[1];
+      if (specifier?.toLowerCase().includes("sqlite")) {
+        violations.push(`apps/observer/src/reconcile/core.ts: SQLite import ${specifier}`);
       }
     }
 

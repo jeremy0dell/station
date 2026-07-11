@@ -62,7 +62,6 @@ describe("operational debug bundle", () => {
         harnesses: [new FakeHarnessProvider({ now })],
       }),
       persistence,
-      sqlite,
       clock,
       logger,
     });
@@ -80,6 +79,7 @@ describe("operational debug bundle", () => {
         configPath: join(root, "config.toml"),
         core,
         persistence,
+        persistenceHealth: persistence,
         paths: {
           stateDir,
           diagnosticsDir,

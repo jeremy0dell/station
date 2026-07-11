@@ -184,7 +184,8 @@ ownership even where current ownership is still a deviation.
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Station owns host attachment resolution. |
 | Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
-| Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | SQLite adapter created by `createSqliteObserverPersistence` | The initial Observer-private, application-purpose ports separate current conversations from SQLite; the set may evolve with use-case ownership. The current `ObserverPersistence` intersection is still passed to consumers pending OBS-HEX-005. |
+| Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | SQLite adapter created by `createSqliteObserverPersistence` | Observer-private, application-purpose ports separate current conversations from SQLite. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only for adapter and runtime composition. |
+| Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
 | Logging and config mutation | Driven | target `StationLogger` and `ProjectConfigWriter` | JSONL logger and project-config adapters | Logger methods expose no path or JSONL result; project commands expose no config or home path (OBS-HEX-010). |
 | Worktree metadata evidence | Driven | target `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | One role reads typed change evidence; the other owns watcher replacement and shutdown (OBS-HEX-011). |
 | Diagnostic evidence | Driven | target `DiagnosticEvidenceSource` | local state, log, and hook-spool adapter | Only typed local evidence traversal crosses the port; command/event persistence, providers, core, and SQLite remain separate inputs (OBS-HEX-012). |
@@ -209,8 +210,8 @@ areas contain the following responsibilities:
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
 | `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases select adapters through provider-neutral policy and depend on local-metadata ports (OBS-HEX-011). |
-| `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their composition intersection, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. |
-| `persistence/sqliteAdapter.ts`, persistence implementation modules, `migrations/`, `sqlite.ts` | SQLite implementation, SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Outbound SQLite adapter edge selected and lifecycle-managed by runtime composition; OBS-HEX-004 and OBS-HEX-005 track the remaining inward dependencies. |
+| `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
+| `persistence/sqliteAdapter.ts`, persistence implementation modules, `migrations/`, `sqlite.ts` | SQLite implementation, SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Outbound SQLite adapter edge selected and lifecycle-managed by runtime composition; OBS-HEX-005 tracks the remaining adapter-substitution work. |
 | `diagnostics/` | doctor and diagnostic collection plus local evidence traversal | Diagnostic use cases depend on an evidence-source port (OBS-HEX-012). |
 | `features/` | feature-flag evaluation | Deterministic application policy. |
 | `apps/cli/src/observerProviders.ts` | concrete provider construction and role assignment | Outer composition root. |
@@ -257,8 +258,9 @@ Current startup proceeds in this order:
    constructing providers; Observer code remains provider-neutral.
 3. SQLite opens and applies pending migrations, then
    `createSqliteObserverPersistence` binds the seven application persistence
-   ports to that handle. Runtime composition retains shutdown ownership of the
-   concrete handle.
+   ports and `PersistenceHealthSource` to that handle. Runtime composition
+   retains the concrete handle only for open/close lifecycle ownership and
+   distributes the composition bundle into narrow application views.
 4. The runtime creates the event bus, logger, command queue, feature evaluator,
    Observer core, command handlers, and configured event hooks around the
    awaited provider registry.
@@ -373,10 +375,12 @@ fall through to a second local spawn.
 ### Diagnostics
 
 Doctor and diagnostic collection are direct query operations over current core
-health, durable Observer records, config diagnostics, provider checks, and
-local runtime evidence. Collection must remain read-only with respect to product
-state. OBS-HEX-012 tracks separation of filesystem, log, and spool traversal
-from the diagnostic use case.
+health, persistence health, durable Observer records, config diagnostics,
+provider checks, and local runtime evidence. They receive
+`PersistenceHealthSource` separately from the command and event journals, so
+neither use case needs a concrete SQLite handle. Collection must remain
+read-only with respect to product state. OBS-HEX-012 tracks separation of
+filesystem, log, and spool traversal from the diagnostic use case.
 
 ## Concurrency, Failure, And Backpressure
 
@@ -431,44 +435,40 @@ when it changes several tables:
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 
-Each interface is a `DRIVEN PORT`. The current `ObserverPersistence` type is an
-unmarked intersection rather than an eighth port. The adopted end state renames
-it to `ObserverPersistenceBundle` and restricts it to SQLite plus runtime/test
-composition; core, handlers, policies, and use cases receive only the individual
-ports they consume. Import diagnostics enforce that restriction.
+Each interface is a `DRIVEN PORT`. `PersistenceHealthSource` is a separate
+driven port that exposes only the public SQLite health projection needed by
+runtime health and diagnostics. `ObserverPersistenceBundle` is an unmarked
+intersection of the seven persistence ports rather than an eighth port. It is
+restricted to the SQLite adapter and runtime composition; core, handlers,
+policies, and use cases receive only the individual named ports they consume.
+Import diagnostics enforce those restrictions and keep SQLite imports out of
+reconcile core.
 
 `createSqliteObserverPersistence` is the named `ADAPTER` that implements the
-intersection. SQL, `Sqlite*Row` representations, parsing and translation,
-`BEGIN IMMEDIATE` transaction boundaries, driver differences, schema health,
-and migrations remain at the SQLite edge. Ports expose Observer application
-records and inputs, so persistence representations are parsed and translated
-once and do not travel further inward. Runtime composition opens and closes the
-concrete SQLite handle around that adapter.
+bundle and `PersistenceHealthSource`. SQL, `Sqlite*Row` representations, parsing
+and translation, `BEGIN IMMEDIATE` transaction boundaries, driver differences,
+schema health, and migrations remain at the SQLite edge. Runtime composition
+opens and closes the concrete SQLite handle around that adapter; application
+core never receives it.
 
-Consumer narrowing is not part of the completed separation: existing use cases
-and core modules may still receive the full `ObserverPersistence` intersection.
-`ObserverCore` also still receives `ObserverSqliteHandle` for SQLite health.
-OBS-HEX-004 and OBS-HEX-005 remain active until those concrete and aggregate
-dependencies are removed and a safe non-SQLite substitute can run the complete
-Observer application.
+Provider observations cross the application boundary as a discriminated union
+keyed by `entityKind`. The SQLite adapter applies the same strict parser on
+writes and reads, including JSON decoding and `entity_kind` correlation, so
+`payload: unknown` does not cross into Observer use cases. Malformed stored
+observations fail the port call through the normal persistence-transaction
+failure and health path rather than disappearing from a projection. Terminal
+provider data stripping remains adapter-owned.
 
-Before narrowing consumers, remove or justify persistence operations with no
-production caller instead of carrying dead surface into the final ports. The
-current candidates are `recordRecoveryBreadcrumb`, `listRecoveryBreadcrumbs`,
-`listProjects`, `listTerminalTargets`, `listHarnessRuns`, and
-`pruneExpiredWorktreeMetadataCurrent`. Replace the current `listSessions` plus
-`listWorktrees` join with a purpose-specific remembered-harness query.
+The persistence surface contains only production conversations. Remembered
+harness selection is one project-scoped `SessionStore` query with direct
+worktree identity and normalized observed-path continuity semantics. Historical
+tables and migrations may remain after a dead public operation is removed; an
+applied migration is still immutable.
 
-Provider observations must become an application discriminated union keyed by
-`entityKind`. The SQLite adapter parses stored JSON once with the matching
-strict schema; `payload: unknown` does not cross into Observer use cases. The
-in-memory adapter must pass the same atomicity, ordering, expiry, parsing, and
-failure contracts as SQLite.
-
-After SQLite leaves `ObserverCore`, runtime health and diagnostic assembly read
-adapter health through a narrow `PersistenceHealthSource`. Runtime composition
-retains open/close ownership. A public SQLite diagnostic projection may remain,
-but core never receives an `ObserverSqliteHandle`.
+SQLite/core isolation is complete. Adapter substitution is not: Stage 9 must
+supply an in-memory adapter, shared behavioral contracts for both adapters, and
+a complete Observer application lane that runs without SQLite before
+OBS-HEX-005 can close.
 
 Migration rules:
 
@@ -589,8 +589,7 @@ and exit condition here.
 
 | ID | Current evidence and risk | Containment and exit evidence | Tracking |
 | --- | --- | --- | --- |
-| `OBS-HEX-004` | `ObserverCore` still accepts `ObserverSqliteHandle` and exposes SQLite health even though persistence representations now stay behind application ports. Concrete storage technology therefore still crosses inward. | Keep new SQLite details at the adapter edge. Exit when runtime composition owns the handle lifecycle, health/diagnostic assembly reads a narrow `PersistenceHealthSource`, and core contains no SQLite type. | SQLite/core isolation. |
-| `OBS-HEX-005` | The initial seven purpose-owned ports exist, but consumers still receive the full `ObserverPersistence` intersection, provider observation payloads remain `unknown`, dead persistence methods remain exposed, complete Observer tests still require SQLite, and the existing fake is not a safe substitute. | Add no generic persistence bucket. Exit when the bundle is composition-only, consumers declare only the capabilities they use, observations are parsed once into a strict `entityKind` union, unused methods are removed or justified, both adapters pass shared behavioral contracts, and the full application runs without SQLite. | Persistence consumer narrowing and substitution remediation. |
+| `OBS-HEX-005` | Consumers now receive narrow named persistence ports and observations are typed, but SQLite remains the only complete adapter. Complete Observer tests still require SQLite, and the existing fake is not a safe substitute, so the application boundary has not proved storage substitution. | Keep `ObserverPersistenceBundle` composition-only and add no generic persistence bucket. Exit in Stage 9 when an in-memory adapter and shared behavioral contracts prove both adapters' atomicity, ordering, expiry, parsing, and failure behavior, and the complete Observer application runs without SQLite. | Persistence adapter substitution remediation. |
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
 | `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Exit when `StationLogger` exposes only `info`/`warn`/`error`, `ProjectConfigWriter` exposes only the three project mutations returning updated config, and their adapters alone own log/config/home paths. | Logging and project-config edge inversion. |
 | `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Read evidence and long-lived watcher lifecycle are mixed into the use case. | Exit when `WorktreeChangeSource` owns typed Git reads, `WorktreeMetadataInvalidationSource` separately owns watched-worktree replacement and shutdown, and use cases receive neither Git runners nor filesystem paths. | Local metadata source isolation. |
@@ -604,9 +603,12 @@ selected without application changes, and overlapping support fails explicitly.
 `OBS-HEX-003` is resolved: `ObserverApi` and external-launch application
 contracts are owned by `packages/contracts`, protocol retains transport mapping
 and validation, and a boundary diagnostic confines Observer protocol imports to
-the runtime server adapter. `OBS-HEX-006` is resolved: the two unsupported
-command members are gone, and production registration is constructed from one
-handler map that is exhaustive over `StationCommand["type"]`. `OBS-HEX-009` is
+the runtime server adapter. `OBS-HEX-004` is resolved: runtime composition owns
+the SQLite handle lifecycle, runtime health and diagnostics depend on
+`PersistenceHealthSource`, and Observer core has no SQLite dependency.
+`OBS-HEX-006` is resolved: the two unsupported command members are gone, and
+production registration is constructed from one handler map that is exhaustive
+over `StationCommand["type"]`. `OBS-HEX-009` is
 resolved: external launch exposes only an opaque managed-terminal attachment,
 Station owns host PTY and socket resolution, and an advertised attachment can
 never fail over to a duplicate local spawn.
