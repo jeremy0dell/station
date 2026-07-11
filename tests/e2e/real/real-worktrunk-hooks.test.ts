@@ -166,7 +166,7 @@ async function runWorktrunkIngress(
     ],
     {
       stdin: input.stdin,
-      observerEntryPath: join(env.repoRoot, "apps", "observer", "dist", "runtime", "main.js"),
+      observerEntryPath: join(env.repoRoot, "apps", "cli", "dist", "observerMain.js"),
     },
   );
   return {
