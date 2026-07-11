@@ -1,3 +1,4 @@
+import { HarnessEventObservationSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
   codexAppServerEventToHarnessEventObservation,
@@ -9,7 +10,22 @@ import { CodexHarnessProviderError } from "../../src/errors";
 const now = "2026-06-17T12:00:00.000Z";
 
 describe("Codex app-server event parsing", () => {
-  it("ignores completed plan items because they do not directly request input", () => {
+  it("maps a completed proposed plan to plan approval attention", () => {
+    expect(
+      codexAppServerEventToHarnessEventObservation(
+        {
+          method: "item/plan/delta",
+          params: {
+            threadId: "thr_plan",
+            turnId: "turn_1",
+            itemId: "item_plan_1",
+            delta: "1. Inspect the code.",
+          },
+        },
+        context(),
+      ),
+    ).toEqual([]);
+
     const event = parseCodexAppServerEvent({
       method: "item/completed",
       params: {
@@ -28,26 +44,54 @@ describe("Codex app-server event parsing", () => {
       kind: "item-completed",
       itemType: "plan",
     });
-    expect(statusFromCodexAppServerEvent(event, now)).toBeUndefined();
+    expect(statusFromCodexAppServerEvent(event, now)).toMatchObject({
+      value: "needs_attention",
+      confidence: "high",
+      reason: "Codex proposed a plan.",
+      attention: "plan_approval",
+    });
 
-    expect(
-      codexAppServerEventToHarnessEventObservation(
-        {
-          method: "item/completed",
-          params: {
-            threadId: "thr_plan",
-            turnId: "turn_1",
-            completedAtMs: 1781712000000,
-            item: {
-              type: "plan",
-              id: "item_plan_1",
-              text: "Plan text must stay provider-local.",
-            },
+    const observations = codexAppServerEventToHarnessEventObservation(
+      {
+        method: "item/completed",
+        params: {
+          threadId: "thr_plan",
+          turnId: "turn_1",
+          completedAtMs: 1781712000000,
+          item: {
+            type: "plan",
+            id: "item_plan_1",
+            text: "Plan text must stay provider-local.",
           },
         },
-        context(),
-      ),
-    ).toEqual([]);
+      },
+      context(),
+    );
+
+    expect(observations).toHaveLength(1);
+    expect(HarnessEventObservationSchema.parse(observations[0])).toEqual(observations[0]);
+    expect(observations[0]).toMatchObject({
+      provider: "codex",
+      sessionId: "ses_web_task",
+      worktreeId: "wt_web_task",
+      harnessRunId: "codex:app-server:thr_plan",
+      nativeSessionId: "thr_plan",
+      rawEventType: "item/completed",
+      status: {
+        value: "needs_attention",
+        source: "harness_event",
+        attention: "plan_approval",
+      },
+      providerData: {
+        transport: "app-server",
+        appServerMethod: "item/completed",
+        codexThreadId: "thr_plan",
+        codexTurnId: "turn_1",
+        codexItemId: "item_plan_1",
+        itemType: "plan",
+      },
+    });
+    expect(JSON.stringify(observations[0]?.providerData)).not.toContain("Plan text");
   });
 
   it("maps thread approval and user-input flags to needs_attention", () => {

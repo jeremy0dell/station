@@ -111,6 +111,7 @@ describeRealCodex("real Codex app-server plan mode", () => {
           value: "needs_attention",
           confidence: "high",
           reason: "Codex proposed a plan.",
+          attention: "plan_approval",
         },
         providerData: {
           transport: "app-server",
@@ -159,6 +160,8 @@ function startCodexAppServer(input: {
   const planRejecters: Array<(reason: unknown) => void> = [];
   let requestId = 0;
   let closed = false;
+  let planObserved = false;
+  let turnCompletedWithoutPlanError: Error | undefined;
 
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
@@ -204,10 +207,21 @@ function startCodexAppServer(input: {
           observation.status.reason === "Codex proposed a plan.",
       );
       if (planObservation !== undefined) {
+        planObserved = true;
         for (const resolve of planWaiters.splice(0)) {
           resolve(planObservation);
         }
         planRejecters.length = 0;
+      } else if (message.method === "turn/completed" && !planObserved) {
+        const summary = methods.join(", ");
+        const error = new Error(
+          `Codex turn completed without a plan observation. Methods: ${summary}.\n${stderr()}`,
+        );
+        turnCompletedWithoutPlanError = error;
+        for (const reject of planRejecters.splice(0)) {
+          reject(error);
+        }
+        planWaiters.length = 0;
       }
       return;
     }
@@ -270,6 +284,9 @@ function startCodexAppServer(input: {
     );
     if (existing !== undefined) {
       return Promise.resolve(existing);
+    }
+    if (turnCompletedWithoutPlanError !== undefined) {
+      return Promise.reject(turnCompletedWithoutPlanError);
     }
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {

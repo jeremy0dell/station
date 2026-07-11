@@ -11,6 +11,17 @@ export function statusFromCodexAppServerEvent(
     case "turn-completed":
       return statusFromTurnCompletion(event.turnStatus, observedAt);
     case "item-completed":
+      // Plan updates are progress; Codex reserves completed plan items for proposed plans.
+      if (event.itemType === "plan") {
+        return {
+          value: "needs_attention",
+          confidence: "high",
+          reason: "Codex proposed a plan.",
+          source: "harness_event",
+          updatedAt: observedAt,
+          attention: "plan_approval",
+        };
+      }
       return undefined;
     case "server-request":
       return statusFromServerRequest(event.method, observedAt);
