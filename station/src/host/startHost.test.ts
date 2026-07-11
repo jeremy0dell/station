@@ -1,7 +1,8 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStationHostClient } from "@station/host";
+import { createStationHostClient, HOST_PROTOCOL_VERSION } from "@station/host";
+import { stationBuildInfo } from "@station/runtime";
 import { afterEach, describe, expect, it } from "bun:test";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { StationTerminalSpawnError } from "../terminal/pty/errors.js";
@@ -45,7 +46,11 @@ describe("startStationHost", () => {
     const socketPath = await startOnTempSocket();
     const client = createStationHostClient({ socketPath });
     try {
-      expect(await client.health()).toEqual({ ok: true, protocolVersion: 1 });
+      expect(await client.health()).toEqual({
+        ok: true,
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: stationBuildInfo().version,
+      });
     } finally {
       client.dispose();
     }
@@ -67,7 +72,11 @@ describe("startStationHost", () => {
 
     expect(records[0]).toMatchObject({
       message: "host.start",
-      attributes: { ptyImplementation: "bun-nocctty" },
+      attributes: {
+        ptyImplementation: "bun-nocctty",
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: stationBuildInfo().version,
+      },
     });
   });
 
@@ -88,7 +97,11 @@ describe("startStationHost", () => {
       // best-effort, so focusing a missing PTY also resolves.
       await client.focus(ptyId);
       await client.focus("pty-missing");
-      expect(await client.health()).toEqual({ ok: true, protocolVersion: 1 });
+      expect(await client.health()).toEqual({
+        ok: true,
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: stationBuildInfo().version,
+      });
     } finally {
       client.dispose();
     }
@@ -215,6 +228,120 @@ describe("startStationHost", () => {
       });
     } finally {
       client.dispose();
+    }
+  });
+
+  it("stops an idle host only after acknowledging the lifecycle request", async () => {
+    const socketPath = await startOnTempSocket();
+    const client = createStationHostClient({ socketPath });
+    try {
+      expect(await client.stopIfIdle("next-build")).toEqual({ stopping: true });
+      await host?.closed;
+      await host?.close();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("blocks upgrades with live agent and auxiliary PTYs without disrupting attachments", async () => {
+    const agent = createScriptedTerminal({ cols: 80, rows: 24 });
+    const auxiliary = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminals = [agent.terminal, auxiliary.terminal];
+    const socketPath = await startOnTempSocket({
+      createTerminal: () => {
+        const terminal = terminals.shift();
+        if (terminal === undefined) {
+          throw new Error("unexpected terminal spawn");
+        }
+        return terminal;
+      },
+    });
+    const client = createStationHostClient({ socketPath });
+    try {
+      const { ptyId } = await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      await client.spawn({
+        ...identity,
+        kind: "aux",
+        terminalTargetId: "aux:pane-shell",
+        worktreeId: "pane-shell",
+        sessionId: "pane-shell",
+        command: "/bin/sh",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+
+      agent.helpers.emitData("scrollback");
+      const attachment = await client.attach(ptyId);
+      expect(attachment.ack.scrollback).toEqual(["scrollback"]);
+      const frames = attachment.frames[Symbol.asyncIterator]();
+
+      await expect(client.stopIfIdle("next-build")).rejects.toMatchObject({
+        code: "HOST_UPGRADE_BLOCKED",
+      });
+      expect(await client.list()).toHaveLength(2);
+
+      agent.helpers.emitData("still-live");
+      await expect(frames.next()).resolves.toMatchObject({
+        value: { type: "data", data: "still-live" },
+      });
+      await attachment.detach();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("serializes stop-if-idle and spawn safely across clients", async () => {
+    let spawnCount = 0;
+    const socketPath = await startOnTempSocket({
+      createTerminal: () => {
+        spawnCount += 1;
+        return createScriptedTerminal({ cols: 80, rows: 24 }).terminal;
+      },
+    });
+    const stoppingClient = createStationHostClient({ socketPath });
+    const spawningClient = createStationHostClient({ socketPath });
+    try {
+      await Promise.all([stoppingClient.list(), spawningClient.list()]);
+      const [stopping, spawning] = await Promise.allSettled([
+        stoppingClient.stopIfIdle("next-build"),
+        spawningClient.spawn({
+          ...identity,
+          command: "claude",
+          args: [],
+          cwd: "/repo/wt-1",
+          cols: 80,
+          rows: 24,
+        }),
+      ]);
+
+      if (stopping.status === "fulfilled") {
+        expect(stopping.value).toEqual({ stopping: true });
+        expect(spawning.status).toBe("rejected");
+        if (spawning.status === "rejected") {
+          expect(["HOST_UPGRADE_BLOCKED", "HOST_UNREACHABLE"]).toContain(
+            (spawning.reason as { code?: string }).code,
+          );
+        }
+        expect(spawnCount).toBe(0);
+        await host?.closed;
+      } else {
+        expect(stopping.reason).toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
+        expect(spawning.status).toBe("fulfilled");
+        expect(spawnCount).toBe(1);
+        expect(await spawningClient.list()).toHaveLength(1);
+      }
+    } finally {
+      stoppingClient.dispose();
+      spawningClient.dispose();
     }
   });
 });

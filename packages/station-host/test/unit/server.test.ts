@@ -1,16 +1,34 @@
 import {
   createStationHostClient,
+  HOST_PROTOCOL_VERSION,
   type HostFrame,
   type HostHandlers,
+  HostResponseSchema,
+  hostRequest,
   serveHostConnection,
 } from "@station/host";
 import { inMemoryNdjsonConnectionPair } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 
-function wire(handlers: HostHandlers) {
+function wire(handlers: Omit<HostHandlers, "hostIdentity">) {
   const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
-  void serveHostConnection(server, handlers);
-  return createStationHostClient({ socketPath: "unused", connect: async () => clientConn });
+  void serveHostConnection(server, {
+    hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+    ...handlers,
+    unary: {
+      "host.health": () => ({
+        ok: true,
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: "test-build",
+      }),
+      ...handlers.unary,
+    },
+  });
+  return createStationHostClient({
+    socketPath: "unused",
+    expectedBuildVersion: "test-build",
+    connect: async () => clientConn,
+  });
 }
 
 /** A pull-based frame stream a test can feed and end. */
@@ -55,6 +73,25 @@ function delay(ms: number): Promise<"timeout"> {
 }
 
 describe("serveHostConnection", () => {
+  it("rejects legacy operational requests without protocol and build identity", async () => {
+    const { client, server } = inMemoryNdjsonConnectionPair();
+    void serveHostConnection(server, {
+      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      unary: { "host.list": () => ({ ptys: [] }) },
+    });
+
+    client.send(hostRequest("legacy", "host.list"));
+    for await (const message of client.messages()) {
+      expect(HostResponseSchema.parse(message)).toMatchObject({
+        id: "legacy",
+        ok: false,
+        error: { code: "HOST_VERSION_INCOMPATIBLE" },
+      });
+      break;
+    }
+    client.close();
+  });
+
   it("dispatches a registered unary method and returns its result", async () => {
     const client = wire({
       unary: { "host.health": () => ({ ok: true, protocolVersion: 1 }) },
@@ -76,7 +113,6 @@ describe("serveHostConnection", () => {
   it("classifies a throwing handler as a SafeError without dropping the connection", async () => {
     const client = wire({
       unary: {
-        "host.health": () => ({ ok: true, protocolVersion: 1 }),
         "host.focus": () => {
           throw new Error("kaboom");
         },
@@ -84,7 +120,11 @@ describe("serveHostConnection", () => {
     });
     await expect(client.focus("pty-x")).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });
     // Connection survives a handler fault: a subsequent request still works.
-    await expect(client.health()).resolves.toEqual({ ok: true, protocolVersion: 1 });
+    await expect(client.health()).resolves.toEqual({
+      ok: true,
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: "test-build",
+    });
     client.dispose();
   });
 
@@ -189,11 +229,19 @@ describe("serveHostConnection", () => {
           await gate;
           return { ptys: [] };
         },
-        "host.health": () => ({ ok: true, protocolVersion: 1 }),
+        "host.health": () => ({
+          ok: true,
+          protocolVersion: HOST_PROTOCOL_VERSION,
+          buildVersion: "test-build",
+        }),
       },
     });
     const listPromise = client.list();
-    await expect(client.health()).resolves.toEqual({ ok: true, protocolVersion: 1 });
+    await expect(client.health()).resolves.toEqual({
+      ok: true,
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: "test-build",
+    });
     release?.();
     await expect(listPromise).resolves.toEqual([]);
     client.dispose();

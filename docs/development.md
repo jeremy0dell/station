@@ -115,6 +115,22 @@ Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 The isolated or configured `logs/station-host.jsonl` should record
 `ptyImplementation` as `bun`.
 
+To verify binary host upgrades, build two copies with distinct prerelease
+versions (for example `0.1.0-host-a` and `0.1.0-host-b`) and use an isolated
+config with `station_persistent_agents = true`. Start A, open a hosted terminal,
+print a recognizable marker, leave a long command running, and exit the UI so
+the host survives. Because Observer version eviction is separate B3 work,
+explicitly stop the A observer and start B's observer before launching B.
+
+B must report `HOST_UPGRADE_BLOCKED` with both versions and the live-terminal
+count without opening or rewriting the saved layout. Reopen A and confirm the
+command and marker scrollback survived. Close every hosted agent and auxiliary
+terminal, retry B, then open a hosted terminal so the stopped idle host is
+replaced on demand. The next `host.start` record in `logs/station-host.jsonl`
+must show B's build and protocol versions. Legacy or different-protocol hosts
+refuse automatic replacement and must be stopped explicitly only after their
+sessions are accounted for.
+
 For CI install parity, use:
 
 ```bash

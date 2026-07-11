@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { HostListEntry } from "@station/host";
+import { StationHostProviderError, type HostListEntry } from "@station/host";
 import { createScriptedTerminal } from "../testing/scriptedTerminal.js";
 import type { HostAttachedTerminalOptions } from "./hostAttachedTerminal.js";
 import { createStationHostManagedTerminalAttacher } from "./managedTerminalAttacher.js";
@@ -78,6 +78,21 @@ describe("createStationHostManagedTerminalAttacher", () => {
 
     await expect(attacher.resolve(ATTACHMENT)).rejects.toMatchObject({
       code: "HOST_ATTACH_GONE",
+    });
+  });
+
+  it("propagates host compatibility failures without a local fallback", async () => {
+    const attacher = createStationHostManagedTerminalAttacher("/run/station-host.sock", {
+      listHost: async () => {
+        throw new StationHostProviderError(
+          "HOST_VERSION_INCOMPATIBLE",
+          "Station host version is incompatible.",
+        );
+      },
+    });
+
+    await expect(attacher.resolve(ATTACHMENT)).rejects.toMatchObject({
+      code: "HOST_VERSION_INCOMPATIBLE",
     });
   });
 });

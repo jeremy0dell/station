@@ -17,8 +17,18 @@ import type {
   WorktreeId,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding } from "@station/contracts";
-import { type HostListEntry, type HostSpawnParamsInput, stationHostSafeError } from "@station/host";
-import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import {
+  type HostListEntry,
+  type HostSpawnParamsInput,
+  isStationHostCompatibilityError,
+  stationHostSafeError,
+} from "@station/host";
+import {
+  type RuntimeClock,
+  safeErrorFromUnknown,
+  systemClock,
+  toIsoTimestamp,
+} from "@station/runtime";
 import { STATION_TERMINAL_PROVIDER_ID, StationTerminalProviderError } from "./errors.js";
 import type { StationHostController } from "./host/hostController.js";
 
@@ -104,13 +114,17 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
           message: `running, owns ${count} agent(s), reattachable`,
         },
       ];
-    } catch {
+    } catch (error) {
+      const safeError = safeErrorFromUnknown(
+        error,
+        stationHostSafeError("HOST_UNREACHABLE", "Station host is not reachable."),
+      );
       return [
         {
           name: "station-host",
           status: "warn",
-          message: `station host unreachable at ${this.#host.socketPath}; persistent agents are unavailable`,
-          error: stationHostSafeError("HOST_UNREACHABLE", "Station host is not reachable."),
+          message: `${safeError.message} Persistent agents are unavailable at ${this.#host.socketPath}.`,
+          error: safeError,
         },
       ];
     }
@@ -127,7 +141,10 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     let live: HostListEntry[];
     try {
       live = await this.#host.client().list();
-    } catch {
+    } catch (error) {
+      if (isStationHostCompatibilityError(error)) {
+        throw error;
+      }
       return [...this.#targets.values()];
     }
     const aliveById = new Map<string, HostListEntry>();
@@ -209,6 +226,10 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     }
     const handle = await this.#host.ensure();
     if (handle.status !== "running") {
+      if (isStationHostCompatibilityError(handle.error)) {
+        await this.releaseTarget(request.terminalTarget.targetId);
+        throw handle.error;
+      }
       return { ...base, started: false };
     }
     try {
@@ -272,7 +293,10 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     let live: HostListEntry[];
     try {
       live = await this.#host.client().list();
-    } catch {
+    } catch (error) {
+      if (isStationHostCompatibilityError(error)) {
+        throw error;
+      }
       return undefined;
     }
     return live.find(

@@ -1,4 +1,5 @@
 import { createStationHostClient, type StationHostClient } from "@station/host";
+import { stationBuildInfo } from "@station/runtime";
 import {
   type EnsureStationHostDeps,
   type EnsureStationHostOptions,
@@ -21,16 +22,22 @@ export function createStationHostController(
   options: EnsureStationHostOptions,
   deps: EnsureStationHostDeps = {},
 ): StationHostController {
+  const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
   const makeClient =
-    deps.clientFactory ?? ((socketPath: string) => createStationHostClient({ socketPath }));
-  const client = makeClient(options.socketPath);
+    deps.clientFactory ??
+    ((socketPath: string, buildVersion: string) =>
+      createStationHostClient({ socketPath, expectedBuildVersion: buildVersion }));
+  const client = makeClient(options.socketPath, expectedBuildVersion);
   return {
     socketPath: options.socketPath,
     client: () => client,
     ensure: () =>
-      ensureStationHostRunning(options, {
-        ...(deps.spawnHost === undefined ? {} : { spawnHost: deps.spawnHost }),
-        clientFactory: () => client,
-      }),
+      ensureStationHostRunning(
+        { ...options, expectedBuildVersion },
+        {
+          ...(deps.spawnHost === undefined ? {} : { spawnHost: deps.spawnHost }),
+          clientFactory: () => client,
+        },
+      ),
   };
 }

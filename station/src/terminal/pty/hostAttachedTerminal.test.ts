@@ -97,6 +97,7 @@ function terminalFor(attachment: HostAttachment) {
           clientDisposed = true;
         },
         health: async () => ({ ok: true, protocolVersion: 1 }),
+        stopIfIdle: async () => ({ stopping: true }),
         spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
         write: async () => undefined,
         resize: async () => undefined,
@@ -162,6 +163,7 @@ function trackingClientFactory(attachment: HostAttachment, tracking: Tracking) {
       attach: async () => attachment,
       dispose: () => {},
       health: async () => ({ ok: true, protocolVersion: 1 }),
+      stopIfIdle: async () => ({ stopping: true }),
       spawn: async (params: unknown) => {
         tracking.spawns.push(params);
         return { ptyId: tracking.spawnPtyId, pid: 4242 };
@@ -279,6 +281,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           },
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
+          stopIfIdle: async () => ({ stopping: true }),
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -321,6 +324,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           },
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
+          stopIfIdle: async () => ({ stopping: true }),
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -364,6 +368,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           },
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
+          stopIfIdle: async () => ({ stopping: true }),
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -406,6 +411,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           },
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
+          stopIfIdle: async () => ({ stopping: true }),
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -453,6 +459,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           },
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
+          stopIfIdle: async () => ({ stopping: true }),
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -476,34 +483,37 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     expect(attachCalls).toBeGreaterThan(8); // it kept redialing each time
   });
 
-  it("ends the pane without retrying when the host reports the PTY is gone", async () => {
-    let attachCalls = 0;
-    const terminal = createHostAttachedTerminal({
-      hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-gone",
-      size: { cols: 80, rows: 24 },
-      clientFactory: () =>
-        ({
-          attach: async () => {
-            attachCalls += 1;
-            throw new StationHostProviderError("HOST_ATTACH_GONE", "pty is gone");
-          },
-          dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
-          spawn: async () => ({ ptyId: "pty-gone", pid: 1 }),
-          write: async () => undefined,
-          resize: async () => undefined,
-          list: async () => [],
-          focus: async () => undefined,
-          close: async () => ({ closed: true }),
-        }) satisfies StationHostClient,
+  for (const code of ["HOST_ATTACH_GONE", "HOST_VERSION_INCOMPATIBLE"] as const) {
+    it(`ends the pane without retrying ${code}`, async () => {
+      let attachCalls = 0;
+      const terminal = createHostAttachedTerminal({
+        hostSocketPath: "/tmp/x.sock",
+        ptyId: "pty-gone",
+        size: { cols: 80, rows: 24 },
+        clientFactory: () =>
+          ({
+            attach: async () => {
+              attachCalls += 1;
+              throw new StationHostProviderError(code, "host attachment is unavailable");
+            },
+            dispose: () => {},
+            health: async () => ({ ok: true, protocolVersion: 1 }),
+            stopIfIdle: async () => ({ stopping: true }),
+            spawn: async () => ({ ptyId: "pty-gone", pid: 1 }),
+            write: async () => undefined,
+            resize: async () => undefined,
+            list: async () => [],
+            focus: async () => undefined,
+            close: async () => ({ closed: true }),
+          }) satisfies StationHostClient,
+      });
+      const exits: number[] = [];
+      terminal.onExit((event) => exits.push(event.exitCode));
+      await flush();
+      expect(exits).toEqual([1]);
+      expect(attachCalls).toBe(1);
     });
-    const exits: number[] = [];
-    terminal.onExit((event) => exits.push(event.exitCode));
-    await flush();
-    expect(exits).toEqual([1]);
-    expect(attachCalls).toBe(1); // a gone PTY is terminal, not retried
-  });
+  }
 
   it("kill() before the spawn resolves still closes the PTY once it exists", async () => {
     const ctrl = controllableAttachment(ack({ ptyId: "pty-late" }));
@@ -522,6 +532,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           attach: async () => ctrl.attachment,
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
+          stopIfIdle: async () => ({ stopping: true }),
           spawn: async (params: unknown) => {
             await gate;
             tracking.spawns.push(params);

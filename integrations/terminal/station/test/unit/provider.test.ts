@@ -4,17 +4,23 @@ import type {
   WorktreeObservation,
 } from "@station/contracts";
 import {
+  HOST_PROTOCOL_VERSION,
   type HostListEntry,
   type StationHostClient,
   StationHostProviderError,
+  stationHostSafeError,
 } from "@station/host";
 import type { RuntimeClock } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { StationTerminalProviderError } from "../../src/errors";
-import { createStationHostController } from "../../src/host/hostController";
+import {
+  createStationHostController,
+  type StationHostController,
+} from "../../src/host/hostController";
 import { StationTerminalProvider, stationTargetId } from "../../src/provider";
 
 const now = "2026-05-21T12:00:00.000Z";
+const expectedBuildVersion = "test-build";
 const clock: RuntimeClock = { now: () => new Date(now) };
 
 const project: ProviderProjectConfig = {
@@ -187,7 +193,12 @@ describe("StationTerminalProvider", () => {
 
 function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHostClient {
   return {
-    health: async () => ({ ok: true, protocolVersion: 1 }),
+    health: async () => ({
+      ok: true,
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: expectedBuildVersion,
+    }),
+    stopIfIdle: async () => ({ stopping: true }),
     spawn: async () => ({ ptyId: "pty-1", pid: 99 }),
     write: async () => undefined,
     resize: async () => undefined,
@@ -226,10 +237,27 @@ function hostBackedProvider(client: StationHostClient) {
       socketPath: `/tmp/station-host-${process.pid}-${Math.random().toString(36).slice(2)}.sock`,
       stateDir: "/tmp",
       hostCommand: ["bun", "/tmp/hostMain.ts"],
+      expectedBuildVersion,
     },
     { clientFactory: () => client, spawnHost: () => ({ pid: 1, unref: () => undefined }) },
   );
   return new StationTerminalProvider({ clock, host: controller });
+}
+
+function providerWithEnsureError(
+  client: StationHostClient,
+  error: ReturnType<typeof stationHostSafeError>,
+): StationTerminalProvider {
+  const host: StationHostController = {
+    socketPath: "/tmp/station-host-test.sock",
+    client: () => client,
+    ensure: async () => ({
+      status: "unavailable",
+      socketPath: "/tmp/station-host-test.sock",
+      error,
+    }),
+  };
+  return new StationTerminalProvider({ clock, host });
 }
 
 const launchPlan = {
@@ -272,6 +300,49 @@ describe("StationTerminalProvider (host-backed)", () => {
       harnessProvider: "claude",
       sessionId: "ses_web_feature",
     });
+  });
+
+  it("keeps generic host unreachability as a UI-hosted launch fallback", async () => {
+    const provider = providerWithEnsureError(
+      fakeHostClient(),
+      stationHostSafeError("HOST_UNREACHABLE", "Station host is unavailable."),
+    );
+    const opened = await provider.openWorkspace(openRequest());
+
+    await expect(
+      provider.launchProcess({
+        project,
+        worktree,
+        terminalTarget: opened.target,
+        agentEndpointId: opened.agentEndpointId,
+        launchPlan,
+      }),
+    ).resolves.toMatchObject({ started: false });
+  });
+
+  it("propagates a live-PTY upgrade block instead of falling back to a local spawn", async () => {
+    const upgradeError = stationHostSafeError(
+      "HOST_UPGRADE_BLOCKED",
+      "Host build older-build owns 2 live terminals; requested build is test-build.",
+      { hint: "Reopen with older-build and finish those terminals." },
+    );
+    const provider = providerWithEnsureError(fakeHostClient(), upgradeError);
+    const opened = await provider.openWorkspace(openRequest());
+
+    await expect(
+      provider.launchProcess({
+        project,
+        worktree,
+        terminalTarget: opened.target,
+        agentEndpointId: opened.agentEndpointId,
+        launchPlan,
+      }),
+    ).rejects.toMatchObject({
+      code: "HOST_UPGRADE_BLOCKED",
+      message: upgradeError.message,
+      hint: upgradeError.hint,
+    });
+    await expect(provider.listTargets()).resolves.toEqual([]);
   });
 
   it("releases the registered target when host spawn fails", async () => {
@@ -358,6 +429,22 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toMatchObject([
       { id: stationTargetId(worktree.id), focusable: true, closeable: true },
     ]);
+  });
+
+  it("preserves UI-hosted state when a generic host list request is unreachable", async () => {
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        list: async () => {
+          throw new Error("host down");
+        },
+      }),
+    );
+    const opened = await provider.openWorkspace(openRequest());
+
+    await expect(provider.listTargets()).resolves.toMatchObject([
+      { id: opened.target.targetId, focusable: false, closeable: false },
+    ]);
+    await expect(provider.attachmentForTarget(opened.target.targetId)).resolves.toBeUndefined();
   });
 
   it("surfaces multiple live host-backed agent targets independently", async () => {
@@ -493,6 +580,27 @@ describe("StationTerminalProvider (host-backed)", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("propagates compatibility failures from listing and attachment resolution", async () => {
+    const compatibilityError = stationHostSafeError(
+      "HOST_VERSION_INCOMPATIBLE",
+      "Station host build older-build is incompatible with requested build test-build.",
+    );
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        list: async () => {
+          throw compatibilityError;
+        },
+      }),
+    );
+
+    await expect(provider.listTargets()).rejects.toMatchObject({
+      code: "HOST_VERSION_INCOMPATIBLE",
+    });
+    await expect(provider.attachmentForTarget(stationTargetId(worktree.id))).rejects.toMatchObject({
+      code: "HOST_VERSION_INCOMPATIBLE",
+    });
+  });
+
   it("focus/close resolve the host PTY id and drive the host", async () => {
     const focus = vi.fn(async () => undefined);
     const close = vi.fn(async () => ({ closed: true }));
@@ -523,6 +631,35 @@ describe("StationTerminalProvider (host-backed)", () => {
     const checks = await provider.doctorChecks?.();
     expect(checks).toMatchObject([{ name: "station-host", status: "warn" }]);
     expect(checks?.[0]?.error?.code).toBe("HOST_UNREACHABLE");
+  });
+
+  it("doctorChecks retains the actionable host compatibility failure", async () => {
+    const compatibilityError = stationHostSafeError(
+      "HOST_UPGRADE_BLOCKED",
+      "Host build older-build owns 1 live terminal; requested build is test-build.",
+      { hint: "Reopen with older-build and finish that terminal." },
+    );
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        list: async () => {
+          throw compatibilityError;
+        },
+      }),
+    );
+
+    const checks = await provider.doctorChecks?.();
+    expect(checks).toMatchObject([
+      {
+        name: "station-host",
+        status: "warn",
+        error: {
+          code: "HOST_UPGRADE_BLOCKED",
+          message: compatibilityError.message,
+          hint: compatibilityError.hint,
+        },
+      },
+    ]);
+    expect(checks?.[0]?.message).toContain(compatibilityError.message);
   });
 
   it("doctorChecks is empty without a host injected", async () => {

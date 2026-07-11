@@ -110,8 +110,14 @@ try {
     },
   );
   const hostDiagnostics = collectOutput(hostProcess);
-  hostClient = createStationHostClient({ socketPath: hostSocketPath, timeoutMs: 1000 });
+  hostClient = createStationHostClient({
+    socketPath: hostSocketPath,
+    timeoutMs: 1000,
+    expectedBuildVersion: expectedVersion,
+  });
   await waitForHost(hostClient, hostDiagnostics);
+  const hostHealth = await hostClient.health();
+  assertEqual(hostHealth.buildVersion, expectedVersion, "compiled station-host build version");
   await access(markerPath).then(
     () => fail("hostile .env or bunfig preload created its marker"),
     () => undefined,

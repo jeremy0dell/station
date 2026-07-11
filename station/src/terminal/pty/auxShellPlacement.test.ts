@@ -35,6 +35,7 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     attach: async () => attachment,
     dispose: () => undefined,
     health: async () => ({ ok: true, protocolVersion: 1 }),
+    stopIfIdle: async () => ({ stopping: true }),
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [],

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { componentLogPath, createJsonlLogger } from "@station/observability";
+import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
@@ -141,6 +141,27 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     console.error(`[station] persistent shells disabled: ${(error as Error).message}`);
   }
 
+  // Compatibility errors must escape before cold restore can drop warm panes or
+  // layout persistence can rewrite the saved session.
+  let liveHostPtys: Awaited<ReturnType<typeof listLiveHostPtys>>;
+  try {
+    liveHostPtys =
+      hostSocketPath === undefined ? undefined : await listLiveHostPtys(hostSocketPath);
+  } catch (error) {
+    const safeError = toSafeError(error, {
+      tag: "TerminalProviderError",
+      code: "HOST_VERSION_INCOMPATIBLE",
+      message: "Station host cannot be safely reused by this Station build.",
+      provider: "native",
+    });
+    process.stderr.write(
+      `[station] ${safeError.code}: ${safeError.message}${safeError.hint === undefined ? "" : `\n${safeError.hint}`}\n`,
+    );
+    await stationClient.stop();
+    process.exitCode = 1;
+    return;
+  }
+
   // Warm-reattach live host PTYs when a host is up, else cold-respawn fresh shells.
   let restorePlanLoading: LayoutRestorePlan | Promise<LayoutRestorePlan> | undefined;
   if (restoredLayout !== undefined) {
@@ -152,7 +173,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
       const socket = hostSocketPath;
       restorePlanLoading = buildBootRestorePlan(restoredLayout, {
         cwdExists: savedCwdExists,
-        listHost: () => listLiveHostPtys(socket),
+        listHost: async () => liveHostPtys,
         makeHostTerminal: (entry) => (options) =>
           createHostAttachedTerminal({
             hostSocketPath: socket,
