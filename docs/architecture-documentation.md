@@ -218,12 +218,17 @@ Architecture diagnostics may mechanically enforce:
 
 - the closed marker vocabulary and exact first-line form;
 - attachment to named, exported production declarations;
-- agreement between controlled markers and the staged seam inventory;
-- absence of orphan markers or stale inventory entries.
+- generation of the seam manifest from controlled markers and the source/import
+  graph; and
+- absence of orphan markers, forbidden dependencies, or stale migration
+  exemptions.
 
-The staged inventory defines migration coverage; it must not claim that every
-legacy seam is already marked. Tests should derive each declaration's role from
-its JSDoc instead of repeating the role in a second hand-maintained list.
+The source-derived manifest defines marked coverage; it must not claim that
+every legacy seam is already marked. A temporary migration exemption may name
+an unmarked legacy declaration and its removal condition, but it must not repeat
+roles, purpose prose, or declarations already discoverable from source. Tests
+derive each declaration's role from its JSDoc instead of maintaining a second
+authoritative list.
 
 Automation cannot prove that a role is truthful, a purpose paragraph is
 accurate, a policy is free of hidden IO, an adapter is substitutable, or
