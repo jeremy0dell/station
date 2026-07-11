@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { observerSpawnArgv } from "../../../src/observerProcess/spawn.js";
@@ -40,5 +42,14 @@ describe("observer spawn argv", () => {
         execPath: "/opt/station/stn",
       }),
     ).toEqual(["/opt/station/stn", "__observer"]);
+  });
+
+  it("keeps real Worktrunk hook auto-start on the CLI observer entry", async () => {
+    const source = await readFile(
+      resolve(process.cwd(), "tests/e2e/real/real-worktrunk-hooks.test.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain('join(env.repoRoot, "apps", "cli", "dist", "observerMain.js")');
   });
 });
