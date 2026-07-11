@@ -104,6 +104,15 @@ function createProfilingApi(input: {
   const options = {
     core: fakeCore(input.reconcileDelayMs),
     persistence: fakeObserverPersistence(),
+    persistenceHealth: {
+      health: () => ({
+        path: ":memory:",
+        open: true,
+        status: "healthy" as const,
+        schemaVersion: 0,
+        lastCheckedAt: now,
+      }),
+    },
     commandQueue: fakeObserverCommandQueue(),
     eventBus,
     clock: { now: () => new Date(now) },

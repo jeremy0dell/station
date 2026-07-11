@@ -432,7 +432,7 @@ function createFixture(input: {
     terminal,
     harnesses: [harnessProvider],
   });
-  const core = createObserverCore({ config, providers, persistence, sqlite, clock });
+  const core = createObserverCore({ config, providers, persistence, clock });
   registerObserverCommandHandlers({
     queue,
     core,

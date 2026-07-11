@@ -40,14 +40,14 @@ export function upsertSessionTurnReadiness(
       input.updatedAt,
     );
 
-  const row = getSessionTurnReadiness(database, input.sessionId);
+  const row = readSessionTurnReadiness(database, input.sessionId);
   if (row === undefined) {
     throw new Error(`Failed to upsert turn readiness for session ${input.sessionId}.`);
   }
   return row;
 }
 
-export function getSessionTurnReadiness(
+function readSessionTurnReadiness(
   database: SqlDatabase,
   sessionId: string,
 ): PersistedSessionTurnReadiness | undefined {

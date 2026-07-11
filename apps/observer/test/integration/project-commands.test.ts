@@ -156,7 +156,6 @@ async function createFixture() {
     config,
     providers,
     persistence,
-    sqlite,
     clock,
   });
   registerObserverCommandHandlers({

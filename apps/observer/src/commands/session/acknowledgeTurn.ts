@@ -1,4 +1,4 @@
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { assertCommandType } from "../assertCommand.js";
@@ -8,7 +8,7 @@ import { throwIfAborted } from "./shared.js";
 
 export type CreateSessionAcknowledgeTurnHandlerOptions = {
   core: ObserverCore;
-  persistence: ObserverPersistence;
+  persistence: SessionStore & EventJournal;
   eventBus?: ObserverEventBus | undefined;
 };
 

@@ -11,7 +11,8 @@ import {
   type EventJournal,
   type IngressJournal,
   type ObservationStore,
-  type ObserverPersistence,
+  type ObserverPersistenceBundle,
+  type PersistenceHealthSource,
   type ReconcileStore,
   type SessionStore,
   type WorktreeMetadataStore,
@@ -47,7 +48,7 @@ function ids(prefix = "port") {
   };
 }
 
-function narrowPersistencePorts(persistence: ObserverPersistence): {
+function narrowPersistencePorts(persistence: ObserverPersistenceBundle & PersistenceHealthSource): {
   commandJournal: CommandJournal;
   eventJournal: EventJournal;
   ingressJournal: IngressJournal;
@@ -122,7 +123,12 @@ describe("SQLite observer persistence ports", () => {
       providerType: "harness",
       entityKind: "provider_health",
       entityKey: "fake-harness",
-      payload: { status: "healthy" },
+      payload: {
+        providerId: "fake-harness",
+        providerType: "harness",
+        status: "healthy",
+        lastCheckedAt: now,
+      },
       observedAt: now,
       expiresAt: later,
     });
@@ -132,7 +138,7 @@ describe("SQLite observer persistence ports", () => {
       expect.objectContaining({
         id: "port_obs_1",
         entityKey: "fake-harness",
-        payload: { status: "healthy" },
+        payload: expect.objectContaining({ status: "healthy" }),
       }),
     ]);
 
@@ -164,27 +170,22 @@ describe("SQLite observer persistence ports", () => {
       harnessRuns: [harnessRun],
       observedAt: now,
     });
-    await expect(reconcileStore.listProjects()).resolves.toEqual([
-      expect.objectContaining({ id: "web" }),
-    ]);
-    await expect(reconcileStore.listWorktrees()).resolves.toEqual([
-      expect.objectContaining({ id: worktree.id }),
-    ]);
-    await expect(reconcileStore.listTerminalTargets()).resolves.toEqual([
-      expect.objectContaining({ id: terminalTarget.id, sessionId: "ses_web_port" }),
-    ]);
-    await expect(reconcileStore.listHarnessRuns()).resolves.toEqual([
-      expect.objectContaining({ id: harnessRun.id, sessionId: "ses_web_port" }),
-    ]);
-    await expect(reconcileStore.listSessions()).resolves.toEqual([
+    await expect(sessionStore.listSessions()).resolves.toEqual([
       expect.objectContaining({ id: "ses_web_port", title: "feature/persistence-ports" }),
     ]);
+    await expect(
+      sessionStore.findRememberedHarnessProviderForWorktree({
+        projectId: "web",
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      }),
+    ).resolves.toBe("fake-harness");
 
     await sessionStore.renameSession({
       sessionId: "ses_web_port",
       title: "Persistence ports",
     });
-    await expect(reconcileStore.listSessions()).resolves.toEqual([
+    await expect(sessionStore.listSessions()).resolves.toEqual([
       expect.objectContaining({ id: "ses_web_port", title: "Persistence ports" }),
     ]);
 
@@ -212,6 +213,84 @@ describe("SQLite observer persistence ports", () => {
     await expect(
       worktreeMetadataStore.deleteWorktreeMetadataCurrent({ worktreeId: worktree.id }),
     ).resolves.toBe(1);
+    expect(persistence.health()).toMatchObject({ status: "healthy" });
+
+    sqlite.close();
+  });
+
+  it("remembers the newest project-scoped harness across normalized worktree path changes", async () => {
+    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+      idFactory: ids("remembered"),
+    });
+
+    sqlite.database
+      .prepare(
+        `
+          INSERT INTO worktrees (id, project_id, path, provider, last_seen_at)
+          VALUES (?, ?, ?, ?, ?)
+        `,
+      )
+      .run("wt_old", "web", "/private/var/tmp/station/web/", "fake-worktree", now);
+    sqlite.database
+      .prepare(
+        `
+          INSERT INTO worktrees (id, project_id, path, provider, last_seen_at)
+          VALUES (?, ?, ?, ?, ?)
+        `,
+      )
+      .run("wt_direct", "web", "/var/tmp/station/web", "fake-worktree", now);
+    sqlite.database
+      .prepare(
+        `
+          INSERT INTO sessions
+            (id, project_id, worktree_id, harness, created_at, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run("ses_a", "web", "wt_old", "codex", now, later);
+    sqlite.database
+      .prepare(
+        `
+          INSERT INTO sessions
+            (id, project_id, worktree_id, harness, created_at, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run("ses_z", "other", "wt_old", "claude", later, later);
+    sqlite.database
+      .prepare(
+        `
+          INSERT INTO sessions
+            (id, project_id, worktree_id, harness, created_at, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run("ses_direct", "web", "wt_direct", "pi", now, now);
+
+    await expect(
+      persistence.findRememberedHarnessProviderForWorktree({
+        projectId: "web",
+        worktreeId: "wt_new",
+        worktreePath: "/var/tmp/station/web",
+      }),
+    ).resolves.toBe("codex");
+    await expect(
+      persistence.findRememberedHarnessProviderForWorktree({
+        projectId: "web",
+        worktreeId: "wt_direct",
+        worktreePath: "/var/tmp/station/web",
+      }),
+    ).resolves.toBe("pi");
+    await expect(
+      persistence.findRememberedHarnessProviderForWorktree({
+        projectId: "other",
+        worktreeId: "wt_new",
+        worktreePath: "/var/tmp/station/web",
+      }),
+    ).resolves.toBeUndefined();
 
     sqlite.close();
   });
@@ -240,7 +319,12 @@ describe("SQLite observer persistence ports", () => {
         providerType: "harness",
         entityKind: "provider_health",
         entityKey: "reject-once",
-        payload: { status: "healthy" },
+        payload: {
+          providerId: "fake-harness",
+          providerType: "harness",
+          status: "healthy",
+          lastCheckedAt: now,
+        },
         observedAt: now,
       },
       dedupe: { kind: "hook", id: "hook_atomic" },

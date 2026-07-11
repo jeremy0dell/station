@@ -3,7 +3,7 @@ import { runRuntimeBoundary } from "@station/runtime";
 import type { HarnessIngressQueue } from "../hooks/harnessIngressQueue.js";
 import type { ProviderHookIngress } from "../hooks/ingestion.js";
 import { drainProviderIngressSpool, type ProviderIngressSpoolDrainResult } from "../hooks/spool.js";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { EventJournal } from "../persistence/index.js";
 import type { ObserverEventBus } from "./eventBus.js";
 import type { HarnessReportProcessorDeps } from "./harnessReportProcessor.js";
 import { processHarnessIngressReport } from "./harnessReportProcessor.js";
@@ -11,7 +11,7 @@ import type { ReconcileScheduler } from "./reconcileScheduler.js";
 
 export type SpoolDrainDeps = {
   hookSpoolDir?: string;
-  persistence: ObserverPersistence;
+  persistence: EventJournal;
   eventBus: ObserverEventBus;
   clock: RuntimeClock;
   providerHookIngress: ProviderHookIngress;

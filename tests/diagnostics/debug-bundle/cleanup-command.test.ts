@@ -81,7 +81,7 @@ describe("cleanup command debug bundle diagnostics", () => {
       ],
     });
     const config = configFor(root, stateDir);
-    const core = createObserverCore({ config, providers, persistence, sqlite, clock, logger });
+    const core = createObserverCore({ config, providers, persistence, clock, logger });
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus, logger });
     registerObserverCommandHandlers({
       queue,
@@ -117,6 +117,7 @@ describe("cleanup command debug bundle diagnostics", () => {
         configPath: join(root, "config.toml"),
         core,
         persistence,
+        persistenceHealth: persistence,
         paths: {
           stateDir,
           diagnosticsDir,

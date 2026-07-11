@@ -24,7 +24,13 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { staleChangeSummary, staleChecks, stalePullRequest } from "../metadata/stalePayloads.js";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type {
+  EventJournal,
+  ObservationStore,
+  ReconcileStore,
+  SessionStore,
+  WorktreeMetadataStore,
+} from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ReconcileTiming } from "./core.js";
@@ -56,7 +62,11 @@ export type ReconcileOnceInput = {
   projects: ProviderProjectConfig[];
   providers: ProviderRegistry;
   read: ProviderReadOptions;
-  persistence?: ObserverPersistence;
+  persistence?: ObservationStore &
+    ReconcileStore &
+    SessionStore &
+    WorktreeMetadataStore &
+    EventJournal;
   providerObservationRetentionDays?: number;
   featureFlags?: ClientFeatureFlags;
 };
@@ -144,7 +154,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 
   const finishedAt = toIsoTimestamp(input.read.clock.now());
   const harnessStatusInput: {
-    persistence?: ObserverPersistence;
+    persistence?: ObservationStore;
     harnessRuns: ObserverHarnessRun[];
     now: string;
   } = {
@@ -164,7 +174,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     terminalTargets,
   });
   const metadataInput: {
-    persistence?: ObserverPersistence;
+    persistence?: WorktreeMetadataStore;
     worktrees: WorktreeObservation[];
     now: string;
   } = {
@@ -676,7 +686,7 @@ async function classifyHarnessRuns(input: {
 }
 
 async function harnessRunsWithPersistedEventStatus(input: {
-  persistence?: ObserverPersistence;
+  persistence?: ObservationStore;
   harnessRuns: ObserverHarnessRun[];
   now: string;
 }): Promise<ObserverHarnessRun[]> {
@@ -695,7 +705,7 @@ async function harnessRunsWithPersistedEventStatus(input: {
 }
 
 async function persistReconcileResult(input: {
-  persistence?: ObserverPersistence;
+  persistence?: ReconcileStore & EventJournal;
   projects: ProviderProjectConfig[];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
@@ -730,7 +740,7 @@ async function persistReconcileResult(input: {
 }
 
 async function worktreesWithCachedMetadata(input: {
-  persistence?: ObserverPersistence;
+  persistence?: WorktreeMetadataStore;
   worktrees: WorktreeObservation[];
   now: string;
 }): Promise<WorktreeObservation[]> {

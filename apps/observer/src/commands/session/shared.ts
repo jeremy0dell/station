@@ -15,7 +15,6 @@ import type {
   WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
-import { sameObservedPath } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import {
   type RuntimeClock,
@@ -24,7 +23,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { linkAbortSignals, throwIfAborted } from "../cancellation.js";
@@ -261,47 +260,20 @@ export function buildEnsureAgentWorkspaceIntent(input: {
  * session.startAgent and external launch so both choose identically.
  */
 export async function rememberedHarnessProviderForWorktree(input: {
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   projectId: string;
   worktreeId: string;
   worktreePath: string;
 }): Promise<ProviderId | undefined> {
-  const [sessions, worktrees] = await Promise.all([
-    input.persistence.listSessions(),
-    input.persistence.listWorktrees(),
-  ]);
-  const matchingWorktreeIds = new Set([input.worktreeId]);
-  for (const worktree of worktrees) {
-    if (
-      worktree.projectId === input.projectId &&
-      sameObservedPath(worktree.path, input.worktreePath)
-    ) {
-      matchingWorktreeIds.add(worktree.id);
-    }
-  }
-  return sessions
-    .filter(
-      (session) =>
-        session.projectId === input.projectId &&
-        matchingWorktreeIds.has(session.worktreeId) &&
-        session.harness !== undefined,
-    )
-    .sort(compareRecentSessions)[0]?.harness;
-}
-
-function compareRecentSessions(
-  left: { id: string; createdAt: string; lastSeenAt: string },
-  right: { id: string; createdAt: string; lastSeenAt: string },
-): number {
-  return (
-    right.lastSeenAt.localeCompare(left.lastSeenAt) ||
-    right.createdAt.localeCompare(left.createdAt) ||
-    right.id.localeCompare(left.id)
-  );
+  return input.persistence.findRememberedHarnessProviderForWorktree({
+    projectId: input.projectId,
+    worktreeId: input.worktreeId,
+    worktreePath: input.worktreePath,
+  });
 }
 
 export async function seedSessionTitle(input: {
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   sessionId: SessionId;
   projectId: string;
   worktreeId: string;
@@ -320,7 +292,7 @@ export async function seedSessionTitle(input: {
 }
 
 export async function deleteSessionTitleSeedBestEffort(input: {
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   sessionId: SessionId;
   context: CommandHandlerContext;
   logger?: JsonlLogger | undefined;
@@ -568,7 +540,7 @@ function focusContext(
 export async function publishSessionCreated(input: {
   snapshot: StationSnapshot;
   sessionId: SessionId;
-  persistence: ObserverPersistence;
+  persistence: EventJournal;
   eventBus?: ObserverEventBus | undefined;
   context: CommandHandlerContext;
   clock?: RuntimeClock | undefined;

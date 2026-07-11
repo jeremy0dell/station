@@ -8,27 +8,20 @@ import type {
   WorktreeObservation,
 } from "@station/contracts";
 import {
-  HarnessEventObservationSchema,
-  TerminalTargetObservationSchema,
-  WorktreeObservationSchema,
-} from "@station/contracts";
-import {
   type RuntimeClock,
   runRuntimeBoundaryWithTimeout,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
 import type {
-  ObserverPersistence,
-  PersistedProviderObservation,
-  ProviderObservationKind,
-  ProviderObservationType,
+  ObservationStore,
+  RecordProviderObservationInput,
+  SessionStore,
 } from "../persistence/index.js";
 import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
-import { stripTerminalProviderData } from "../persistence/terminalObservations.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { persistTurnReadinessFromHarnessObservation } from "./turnReadiness.js";
 
@@ -41,18 +34,13 @@ export type IngestProviderHookEventOptions = {
   event: ProviderHookEvent;
   providers: ProviderRegistry;
   projects: ProviderProjectConfig[];
-  persistence: ObserverPersistence;
+  persistence: ObservationStore & SessionStore;
   clock?: RuntimeClock;
   timeoutMs?: number;
   retention?: ObservabilityRetentionConfig;
 };
 
-type ObservationRecord = {
-  provider: string;
-  providerType: ProviderObservationType;
-  entityKind: ProviderObservationKind;
-  entityKey: string;
-  payload: unknown;
+type ObservationRecord = RecordProviderObservationInput & {
   observedAt: string;
 };
 
@@ -178,34 +166,20 @@ async function harnessEventContext(options: IngestProviderHookEventOptions): Pro
     entityKind: ["worktree", "terminal_target"],
     now: options.event.receivedAt,
   });
+  const worktrees = new Map<string, WorktreeObservation>();
+  const terminalTargets = new Map<string, TerminalTargetObservation>();
+  for (const observation of persisted) {
+    if (observation.entityKind === "worktree") {
+      worktrees.set(observation.entityKey, observation.payload);
+    } else if (observation.entityKind === "terminal_target") {
+      terminalTargets.set(observation.entityKey, observation.payload);
+    }
+  }
   return {
     projects: options.projects,
-    worktrees: latestObservationPayloads(persisted, "worktree", WorktreeObservationSchema),
-    terminalTargets: latestObservationPayloads(
-      persisted,
-      "terminal_target",
-      TerminalTargetObservationSchema,
-    ),
+    worktrees: [...worktrees.values()],
+    terminalTargets: [...terminalTargets.values()],
   };
-}
-
-function latestObservationPayloads<T>(
-  observations: PersistedProviderObservation[],
-  kind: ProviderObservationKind,
-  schema: { safeParse(input: unknown): { success: true; data: T } | { success: false } },
-): T[] {
-  const latest = new Map<string, T>();
-  for (const observation of observations) {
-    if (observation.entityKind !== kind) {
-      continue;
-    }
-    const result = schema.safeParse(observation.payload);
-    if (!result.success) {
-      continue;
-    }
-    latest.set(observation.entityKey, result.data);
-  }
-  return [...latest.values()];
 }
 
 function rawEvent(event: ProviderHookEvent): {
@@ -232,13 +206,12 @@ function worktreeObservationRecord(observation: WorktreeObservation): Observatio
 }
 
 function terminalObservationRecord(observation: TerminalTargetObservation): ObservationRecord {
-  const payload = stripTerminalProviderData(observation);
   return {
     provider: observation.provider,
     providerType: "terminal",
     entityKind: "terminal_target",
     entityKey: observation.id,
-    payload,
+    payload: observation,
     observedAt: observation.observedAt,
   };
 }
@@ -292,6 +265,5 @@ function harnessEventObservationFromRecord(
   if (observation.providerType !== "harness" || observation.entityKind !== "harness_event") {
     return undefined;
   }
-  const result = HarnessEventObservationSchema.safeParse(observation.payload);
-  return result.success ? result.data : undefined;
+  return observation.payload;
 }

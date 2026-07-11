@@ -1,8 +1,8 @@
 import type { HarnessEventObservation } from "@station/contracts";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { SessionStore } from "../persistence/index.js";
 
 export async function persistTurnReadinessFromHarnessObservation(input: {
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   observation: HarnessEventObservation;
   updatedAt: string;
 }): Promise<boolean> {

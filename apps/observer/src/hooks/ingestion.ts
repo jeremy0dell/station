@@ -26,7 +26,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { IngressJournal, ObservationStore, SessionStore } from "../persistence/index.js";
 import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
@@ -55,7 +55,7 @@ export type ProviderHookIngressOptions = {
 };
 
 export type CreateProviderHookIngressOptions = {
-  persistence: ObserverPersistence;
+  persistence: IngressJournal & ObservationStore & SessionStore;
   providers?: ProviderRegistry;
   projects?: ProviderProjectConfig[];
   eventBus?: ObserverEventBus;
@@ -71,7 +71,7 @@ export type CreateProviderHookIngressOptions = {
 };
 
 export type CreateHarnessEventReportIngestionOptions = {
-  persistence: ObserverPersistence;
+  persistence: IngressJournal & SessionStore;
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
   requestReconcile?: (reason: string) => void;

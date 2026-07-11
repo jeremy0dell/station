@@ -2,7 +2,7 @@ import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import { createFeatureFlagEvaluator, type FeatureFlagEvaluator } from "../features/evaluator.js";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { EventJournal, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
@@ -33,7 +33,7 @@ export type RegisterObserverCommandHandlersOptions = {
   providers: ProviderRegistry;
   projects: readonly ProviderProjectConfig[];
   getProjects?: (() => readonly ProviderProjectConfig[]) | undefined;
-  persistence: ObserverPersistence;
+  persistence: SessionStore & EventJournal;
   featureFlags?: FeatureFlagEvaluator | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;

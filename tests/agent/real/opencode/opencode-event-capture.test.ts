@@ -114,7 +114,6 @@ describeRealOpenCode("real OpenCode event capture", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock,
       providerTimeoutMs: 20_000,
     });
@@ -123,6 +122,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
       core,
       providers,
       persistence,
+      persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
       clock,
@@ -183,11 +183,13 @@ describeRealOpenCode("real OpenCode event capture", () => {
           state: "ready_to_read",
         },
       });
-      await expect(persistence.getSessionTurnReadiness("ses_real_opencode")).resolves.toMatchObject(
-        {
-          worktreeId: "wt_real_opencode",
-        },
-      );
+      expect(
+        (await persistence.listSessionTurnReadiness()).find(
+          (readiness) => readiness.sessionId === "ses_real_opencode",
+        ),
+      ).toMatchObject({
+        worktreeId: "wt_real_opencode",
+      });
     } catch (error) {
       await writeFailureBundle({
         config: testConfig,
@@ -305,6 +307,7 @@ async function writeFailureBundle(input: {
     config: input.config,
     core: input.core,
     persistence: input.persistence,
+    persistenceHealth: input.persistence,
     paths: {
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,

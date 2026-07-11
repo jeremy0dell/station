@@ -42,7 +42,6 @@ describe("Worktrunk dependency debug bundle diagnostics", () => {
       config,
       providers,
       persistence,
-      sqlite,
       clock,
     });
 
@@ -53,6 +52,7 @@ describe("Worktrunk dependency debug bundle diagnostics", () => {
       configPath: join(root, "config.toml"),
       core,
       persistence,
+      persistenceHealth: persistence,
       paths: { stateDir, diagnosticsDir },
       clock,
     });

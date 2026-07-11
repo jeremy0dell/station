@@ -126,7 +126,6 @@ describeRealPi("real Pi session.create launch lane", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock,
       providerTimeoutMs: 20_000,
     });
@@ -280,7 +279,6 @@ describeRealPi("real Pi session.create launch lane", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock,
       providerTimeoutMs: 20_000,
     });
@@ -288,6 +286,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       core,
       providers,
       persistence,
+      persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
       clock,
@@ -331,9 +330,11 @@ describeRealPi("real Pi session.create launch lane", () => {
         sessionId: "ses_real_pi_callback",
         state: "exited",
       });
-      await expect(
-        persistence.getSessionTurnReadiness("ses_real_pi_callback"),
-      ).resolves.toMatchObject({
+      expect(
+        (await persistence.listSessionTurnReadiness()).find(
+          (readiness) => readiness.sessionId === "ses_real_pi_callback",
+        ),
+      ).toMatchObject({
         worktreeId: "wt_real_pi_callback",
       });
     } catch (error) {
@@ -458,6 +459,7 @@ async function writeFailureBundle(input: {
     config: input.config,
     core: input.core,
     persistence: input.persistence,
+    persistenceHealth: input.persistence,
     paths: {
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,

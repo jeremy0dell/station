@@ -1,32 +1,61 @@
 import type { StationCommand } from "@station/contracts";
 import {
-  AgentStateSchema,
-  ConfidenceSchema,
   ErrorEnvelopeSchema,
+  HarnessEventObservationSchema,
+  HarnessRunObservationSchema,
+  ProviderHealthSchema,
   SafeErrorSchema,
   StationCommandSchema,
   StationEventSchema,
-  TerminalStateSchema,
-  WorktreeSourceSchema,
-  WorktreeStateSchema,
+  TerminalTargetObservationSchema,
+  WorktreeObservationSchema,
 } from "@station/contracts";
+import { z } from "zod";
 import { parseJson } from "./json.js";
-import { sanitizeTerminalObservationPayload } from "./terminalObservations.js";
+import { stripTerminalProviderData } from "./terminalObservations.js";
 import type {
   PersistedCommand,
   PersistedCommandError,
   PersistedCommandStatus,
   PersistedEvent,
-  PersistedHarnessRun,
-  PersistedProject,
   PersistedProviderObservation,
-  PersistedRecoveryBreadcrumb,
   PersistedSession,
-  PersistedTerminalTarget,
-  PersistedWorktree,
-  ProviderObservationKind,
+  ProviderObservation,
   ProviderObservationType,
 } from "./types.js";
+
+const ProviderObservationSchema = z.discriminatedUnion("entityKind", [
+  z
+    .object({
+      entityKind: z.literal("worktree"),
+      payload: WorktreeObservationSchema,
+    })
+    .strict(),
+  z
+    .object({
+      entityKind: z.literal("terminal_target"),
+      payload: TerminalTargetObservationSchema,
+    })
+    .strict(),
+  z
+    .object({
+      entityKind: z.literal("harness_run"),
+      payload: HarnessRunObservationSchema,
+    })
+    .strict(),
+  z
+    .object({
+      entityKind: z.literal("harness_event"),
+      payload: HarnessEventObservationSchema,
+    })
+    .strict(),
+  z
+    .object({
+      entityKind: z.literal("provider_health"),
+      payload: ProviderHealthSchema,
+    })
+    .strict(),
+]);
 
 export type SqliteCommandRow = {
   id: string;
@@ -63,60 +92,11 @@ export type SqliteProviderObservationRow = {
   id: string;
   provider: string;
   provider_type: ProviderObservationType;
-  entity_kind: ProviderObservationKind;
+  entity_kind: string;
   entity_key: string;
   payload_json: string;
   observed_at: string;
   expires_at: string | null;
-};
-
-export type SqliteProjectRow = {
-  id: string;
-  label: string;
-  root: string;
-  repo: string | null;
-  last_seen_at: string;
-};
-
-export type SqliteWorktreeRow = {
-  id: string;
-  project_id: string;
-  path: string;
-  branch: string | null;
-  source: string | null;
-  state: string | null;
-  dirty: number | null;
-  provider: string | null;
-  provider_data_json: string | null;
-  last_seen_at: string;
-};
-
-export type SqliteTerminalTargetRow = {
-  id: string;
-  session_id: string | null;
-  project_id: string | null;
-  worktree_id: string | null;
-  provider: string;
-  state: string | null;
-  provider_key: string | null;
-  provider_data_json: string | null;
-  last_seen_at: string;
-};
-
-export type SqliteHarnessRunRow = {
-  id: string;
-  session_id: string | null;
-  project_id: string | null;
-  worktree_id: string | null;
-  harness: string;
-  pid: number | null;
-  external_run_id: string | null;
-  state: string | null;
-  confidence: string | null;
-  reason: string | null;
-  provider_data_json: string | null;
-  last_event_at: string | null;
-  last_seen_at: string;
 };
 
 export type SqliteSessionRow = {
@@ -129,18 +109,6 @@ export type SqliteSessionRow = {
   state: string | null;
   created_at: string;
   ended_at: string | null;
-  last_seen_at: string;
-};
-
-export type SqliteRecoveryBreadcrumbRow = {
-  id: string;
-  project_id: string;
-  worktree_id: string | null;
-  session_id: string | null;
-  location: string;
-  path: string;
-  payload_json: string;
-  created_at: string;
   last_seen_at: string;
 };
 
@@ -192,82 +160,31 @@ export function providerObservationFromRow(
   referenceTime: string,
 ): PersistedProviderObservation {
   const expiresAt = row.expires_at ?? undefined;
-  const payload = parseJson(row.payload_json);
+  const parsed = parseProviderObservation(row.entity_kind, parseJson(row.payload_json));
   const observation: PersistedProviderObservation = {
     id: row.id,
     provider: row.provider,
     providerType: row.provider_type,
-    entityKind: row.entity_kind,
     entityKey: row.entity_key,
-    payload:
-      row.entity_kind === "terminal_target" ? sanitizeTerminalObservationPayload(payload) : payload,
     observedAt: row.observed_at,
     expired: expiresAt === undefined ? false : Date.parse(expiresAt) <= Date.parse(referenceTime),
+    ...parsed,
   };
   if (expiresAt !== undefined) observation.expiresAt = expiresAt;
   return observation;
 }
 
-export function projectFromRow(row: SqliteProjectRow): PersistedProject {
-  const project: PersistedProject = {
-    id: row.id,
-    label: row.label,
-    root: row.root,
-    lastSeenAt: row.last_seen_at,
-  };
-  if (row.repo !== null) project.repo = row.repo;
-  return project;
-}
-
-export function worktreeFromRow(row: SqliteWorktreeRow): PersistedWorktree {
-  const worktree: PersistedWorktree = {
-    id: row.id,
-    projectId: row.project_id,
-    path: row.path,
-    lastSeenAt: row.last_seen_at,
-  };
-  if (row.branch !== null) worktree.branch = row.branch;
-  if (row.source !== null) worktree.source = WorktreeSourceSchema.parse(row.source);
-  if (row.state !== null) worktree.state = WorktreeStateSchema.parse(row.state);
-  if (row.dirty !== null) worktree.dirty = Boolean(row.dirty);
-  if (row.provider !== null) worktree.provider = row.provider;
-  if (row.provider_data_json !== null) worktree.providerData = parseJson(row.provider_data_json);
-  return worktree;
-}
-
-export function terminalTargetFromRow(row: SqliteTerminalTargetRow): PersistedTerminalTarget {
-  const target: PersistedTerminalTarget = {
-    id: row.id,
-    provider: row.provider,
-    lastSeenAt: row.last_seen_at,
-  };
-  if (row.session_id !== null) target.sessionId = row.session_id;
-  if (row.project_id !== null) target.projectId = row.project_id;
-  if (row.worktree_id !== null) target.worktreeId = row.worktree_id;
-  if (row.state !== null) target.state = TerminalStateSchema.parse(row.state);
-  if (row.provider_key !== null) target.providerKey = row.provider_key;
-  return target;
-}
-
-export function harnessRunFromRow(row: SqliteHarnessRunRow): PersistedHarnessRun {
-  const harnessRun: PersistedHarnessRun = {
-    id: row.id,
-    harness: row.harness,
-    lastSeenAt: row.last_seen_at,
-  };
-  if (row.session_id !== null) harnessRun.sessionId = row.session_id;
-  if (row.project_id !== null) harnessRun.projectId = row.project_id;
-  if (row.worktree_id !== null) harnessRun.worktreeId = row.worktree_id;
-  if (row.pid !== null) harnessRun.pid = row.pid;
-  if (row.external_run_id !== null) harnessRun.externalRunId = row.external_run_id;
-  if (row.state !== null) harnessRun.state = AgentStateSchema.parse(row.state);
-  if (row.confidence !== null) harnessRun.confidence = ConfidenceSchema.parse(row.confidence);
-  if (row.reason !== null) harnessRun.reason = row.reason;
-  if (row.provider_data_json !== null) {
-    harnessRun.providerData = parseJson(row.provider_data_json);
-  }
-  if (row.last_event_at !== null) harnessRun.lastEventAt = row.last_event_at;
-  return harnessRun;
+export function parseProviderObservation(
+  entityKind: unknown,
+  payload: unknown,
+): ProviderObservation {
+  const observation = ProviderObservationSchema.parse({ entityKind, payload });
+  return observation.entityKind === "terminal_target"
+    ? {
+        ...observation,
+        payload: stripTerminalProviderData(observation.payload),
+      }
+    : observation;
 }
 
 export function sessionFromRow(row: SqliteSessionRow): PersistedSession {
@@ -284,21 +201,4 @@ export function sessionFromRow(row: SqliteSessionRow): PersistedSession {
   if (row.state !== null) session.state = row.state;
   if (row.ended_at !== null) session.endedAt = row.ended_at;
   return session;
-}
-
-export function recoveryBreadcrumbFromRow(
-  row: SqliteRecoveryBreadcrumbRow,
-): PersistedRecoveryBreadcrumb {
-  const breadcrumb: PersistedRecoveryBreadcrumb = {
-    id: row.id,
-    projectId: row.project_id,
-    location: row.location,
-    path: row.path,
-    payload: parseJson(row.payload_json),
-    createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at,
-  };
-  if (row.worktree_id !== null) breadcrumb.worktreeId = row.worktree_id;
-  if (row.session_id !== null) breadcrumb.sessionId = row.session_id;
-  return breadcrumb;
 }

@@ -103,7 +103,6 @@ describeRealCodex("real Codex session.create", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock,
       providerTimeoutMs: 20_000,
     });
@@ -227,6 +226,7 @@ async function writeFailureBundle(input: {
     config: input.config,
     core: input.core,
     persistence: input.persistence,
+    persistenceHealth: input.persistence,
     paths: {
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,

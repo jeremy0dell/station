@@ -1,44 +1,39 @@
 import type { ProviderId } from "@station/contracts";
-import {
-  HarnessEventObservationSchema,
-  HarnessRunObservationSchema,
-  TerminalTargetObservationSchema,
-  WorktreeObservationSchema,
-} from "@station/contracts";
 import type { SqlDatabase, SqlParam } from "../sqlite/driver.js";
 import { isRecord } from "../utils/guards.js";
 import { parseJson, stringifyJson } from "./json.js";
-import { providerObservationFromRow, type SqliteProviderObservationRow } from "./rows.js";
-import { stripTerminalProviderData } from "./terminalObservations.js";
+import {
+  parseProviderObservation,
+  providerObservationFromRow,
+  type SqliteProviderObservationRow,
+} from "./rows.js";
 import type {
   CurrentProviderObservationKind,
   PersistedProviderObservation,
   ProviderObservationKind,
   ProviderObservationType,
+  RecordProviderObservationInput,
 } from "./types.js";
+
+type InsertProviderObservationInput = RecordProviderObservationInput & {
+  id: string;
+  observedAt: string;
+  coalesceUnchanged?: boolean;
+};
 
 export function insertProviderObservation(
   database: SqlDatabase,
-  input: {
-    id: string;
-    provider: ProviderId;
-    providerType: ProviderObservationType;
-    entityKind: ProviderObservationKind;
-    entityKey: string;
-    payload: unknown;
-    observedAt: string;
-    expiresAt?: string | undefined;
-    coalesceUnchanged?: boolean;
-  },
+  input: InsertProviderObservationInput,
 ): PersistedProviderObservation {
-  const payload = validateProviderObservationPayload(input.entityKind, input.payload);
-  const payloadJson = stringifyJson(payload);
+  const observation = parseProviderObservation(input.entityKind, input.payload);
+  const payloadJson = stringifyJson(observation.payload);
   if (input.coalesceUnchanged === true) {
     const latest = latestProviderObservationRow(database, input);
     if (
       latest !== undefined &&
-      stableProviderObservationPayloadKey(parseJson(latest.payload_json)) ===
-        stableProviderObservationPayloadKey(payload)
+      stableProviderObservationPayloadKey(
+        parseProviderObservation(latest.entity_kind, parseJson(latest.payload_json)).payload,
+      ) === stableProviderObservationPayloadKey(observation.payload)
     ) {
       database
         .prepare(
@@ -68,7 +63,7 @@ export function insertProviderObservation(
       input.id,
       input.provider,
       input.providerType,
-      input.entityKind,
+      observation.entityKind,
       input.entityKey,
       payloadJson,
       input.observedAt,
@@ -170,25 +165,6 @@ function buildCurrentProviderEntityObservationQuery(options: {
     `,
     params,
   };
-}
-
-function validateProviderObservationPayload(
-  kind: ProviderObservationKind,
-  payload: unknown,
-): unknown {
-  if (kind === "worktree") {
-    return WorktreeObservationSchema.parse(payload);
-  }
-  if (kind === "terminal_target") {
-    return stripTerminalProviderData(TerminalTargetObservationSchema.parse(payload));
-  }
-  if (kind === "harness_run") {
-    return HarnessRunObservationSchema.parse(payload);
-  }
-  if (kind === "harness_event") {
-    return HarnessEventObservationSchema.parse(payload);
-  }
-  return payload;
 }
 
 function buildProviderObservationQuery(options: {

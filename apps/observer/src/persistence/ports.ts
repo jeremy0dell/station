@@ -1,6 +1,8 @@
 import type {
   CommandId,
   ErrorEnvelope,
+  ObserverHealth,
+  ProviderId,
   SafeError,
   SessionRecoveryHandle,
   StationCommand,
@@ -16,14 +18,9 @@ import type {
   PersistedCommand,
   PersistedCommandError,
   PersistedEvent,
-  PersistedHarnessRun,
-  PersistedProject,
   PersistedProviderObservation,
-  PersistedRecoveryBreadcrumb,
   PersistedSession,
   PersistedSessionTurnReadiness,
-  PersistedTerminalTarget,
-  PersistedWorktree,
   PersistedWorktreeMetadataCurrent,
   PersistReconcileResultInput,
   ProviderObservationKind,
@@ -94,7 +91,7 @@ export interface IngressJournal {
 /**
  * DRIVEN PORT
  *
- * Retains normalized provider observations with their lookup and expiry semantics.
+ * Retains typed provider observations with their lookup and expiry semantics.
  */
 export interface ObservationStore {
   recordProviderObservation(
@@ -117,23 +114,24 @@ export interface ObservationStore {
 /**
  * DRIVEN PORT
  *
- * Persists and retrieves the Observer's correlated reconcile projection as one capability.
+ * Persists the Observer's correlated reconcile projection as one atomic capability.
  */
 export interface ReconcileStore {
   persistReconcileResult(input: PersistReconcileResultInput): Promise<void>;
-  listProjects(): Promise<PersistedProject[]>;
-  listWorktrees(): Promise<PersistedWorktree[]>;
-  listTerminalTargets(): Promise<PersistedTerminalTarget[]>;
-  listHarnessRuns(): Promise<PersistedHarnessRun[]>;
-  listSessions(): Promise<PersistedSession[]>;
 }
 
 /**
  * DRIVEN PORT
  *
- * Maintains Observer-owned session titles, recovery evidence, and turn readiness.
+ * Maintains Observer-owned sessions, titles, remembered harness selection, recovery handles, and turn readiness.
  */
 export interface SessionStore {
+  listSessions(): Promise<PersistedSession[]>;
+  findRememberedHarnessProviderForWorktree(input: {
+    projectId: string;
+    worktreeId: string;
+    worktreePath: string;
+  }): Promise<ProviderId | undefined>;
   seedSessionTitle(input: {
     sessionId: string;
     projectId: string;
@@ -144,17 +142,6 @@ export interface SessionStore {
   }): Promise<PersistedSession>;
   deleteSessionTitleSeed(sessionId: string): Promise<number>;
   renameSession(input: { sessionId: string; title: string }): Promise<PersistedSession | undefined>;
-  recordRecoveryBreadcrumb(input: {
-    projectId: string;
-    location: string;
-    path: string;
-    payload: unknown;
-    worktreeId?: string;
-    sessionId?: string;
-    createdAt?: string;
-    lastSeenAt?: string;
-  }): Promise<PersistedRecoveryBreadcrumb>;
-  listRecoveryBreadcrumbs(): Promise<PersistedRecoveryBreadcrumb[]>;
   upsertSessionRecoveryHandle(input: SessionRecoveryHandle): Promise<SessionRecoveryHandle>;
   getSessionRecoveryHandle(handleId: string): Promise<SessionRecoveryHandle | undefined>;
   listSessionRecoveryHandles(
@@ -169,7 +156,6 @@ export interface SessionStore {
     createdAt?: string;
     updatedAt?: string;
   }): Promise<PersistedSessionTurnReadiness>;
-  getSessionTurnReadiness(sessionId: string): Promise<PersistedSessionTurnReadiness | undefined>;
   listSessionTurnReadiness(): Promise<PersistedSessionTurnReadiness[]>;
   deleteSessionTurnReadiness(input: { sessionId: string; token?: string }): Promise<number>;
 }
@@ -199,13 +185,21 @@ export interface WorktreeMetadataStore {
     worktreeId: string;
     kind?: WorktreeMetadataCurrentKind;
   }): Promise<number>;
-  pruneExpiredWorktreeMetadataCurrent(now?: string): Promise<number>;
 }
 
-export type ObserverPersistence = CommandJournal &
+export type ObserverPersistenceBundle = CommandJournal &
   EventJournal &
   IngressJournal &
   ObservationStore &
   ReconcileStore &
   SessionStore &
   WorktreeMetadataStore;
+
+/**
+ * DRIVEN PORT
+ *
+ * Reports durable persistence health to Observer runtime and diagnostics without exposing adapter handles.
+ */
+export interface PersistenceHealthSource {
+  health(): NonNullable<ObserverHealth["sqlite"]>;
+}

@@ -11,7 +11,7 @@ import { worktreeHasLiveAgent } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import { pathIsSameOrInside } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../../features/evaluator.js";
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -41,7 +41,7 @@ export type CreateSessionResumeAgentHandlerOptions = {
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
-  persistence: ObserverPersistence;
+  persistence: SessionStore & EventJournal;
   featureFlags: FeatureFlagEvaluator;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -180,7 +180,7 @@ export function createSessionResumeAgentHandler(
 }
 
 async function resolveRecoveryHandle(input: {
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   providers: ProviderRegistry;
   projectId: string;
   worktreeId: string;

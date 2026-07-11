@@ -12,11 +12,16 @@ import { ProviderProjectConfigSchema } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../features/evaluator.js";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type {
+  EventJournal,
+  ObservationStore,
+  ReconcileStore,
+  SessionStore,
+  WorktreeMetadataStore,
+} from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import type { ObserverSqliteHandle, ObserverSqliteHealth } from "../sqlite.js";
 import {
   buildInitialSnapshot,
   harnessesFromRegistry,
@@ -45,7 +50,6 @@ export type ObserverCoreHealth = {
   status: "healthy" | "degraded";
   startedAt: string;
   providerHealth: Record<string, ProviderHealth>;
-  sqlite?: ObserverSqliteHealth;
   lastReconcile?: ReconcileTiming;
 };
 
@@ -63,8 +67,11 @@ export type CreateObserverCoreInput = {
   config: StationConfig;
   providers: ProviderRegistry;
   clock?: RuntimeClock;
-  sqlite?: ObserverSqliteHandle;
-  persistence?: ObserverPersistence;
+  persistence?: ObservationStore &
+    ReconcileStore &
+    SessionStore &
+    WorktreeMetadataStore &
+    EventJournal;
   logger?: JsonlLogger;
   pid?: number;
   version?: string;
@@ -209,7 +216,6 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       status: snapshot.observer.healthy ? "healthy" : "degraded",
       startedAt,
       providerHealth,
-      ...(input.sqlite === undefined ? {} : { sqlite: input.sqlite.health() }),
       ...(lastReconcile === undefined ? {} : { lastReconcile }),
     }),
   };
@@ -222,7 +228,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
 async function persistTurnReadinessForReport(input: {
   result: StatusProjectionResult;
   report: HarnessEventReport;
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   updatedAt: string;
 }): Promise<PersistedSessionTurnReadiness | undefined> {
   // Readiness is an interval: a session active again (new turn, or a request

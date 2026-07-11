@@ -1,12 +1,12 @@
 import type { RuntimeClock } from "@station/runtime";
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal } from "../../persistence/index.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { nowIso } from "../../utils/time.js";
 import type { CommandHandlerContext } from "../queue.js";
 
 export async function publishSessionRemoved(input: {
   sessionId: string;
-  persistence: ObserverPersistence;
+  persistence: EventJournal;
   eventBus?: ObserverEventBus | undefined;
   context: CommandHandlerContext;
   clock?: RuntimeClock | undefined;
@@ -23,7 +23,7 @@ export async function publishSessionRemoved(input: {
 
 export async function publishWorktreeRemoved(input: {
   worktreeId: string;
-  persistence: ObserverPersistence;
+  persistence: EventJournal;
   eventBus?: ObserverEventBus | undefined;
   context: CommandHandlerContext;
   clock?: RuntimeClock | undefined;
@@ -41,7 +41,7 @@ export async function publishWorktreeRemoved(input: {
 export async function publishRemovedSessionIfAbsent(input: {
   previousSessionId: string | undefined;
   nextSessionIds: ReadonlySet<string>;
-  persistence: ObserverPersistence;
+  persistence: EventJournal;
   eventBus?: ObserverEventBus | undefined;
   context: CommandHandlerContext;
   clock?: RuntimeClock | undefined;

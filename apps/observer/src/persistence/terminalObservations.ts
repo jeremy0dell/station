@@ -1,6 +1,4 @@
 import type { TerminalTargetObservation } from "@station/contracts";
-import { TerminalTargetObservationSchema } from "@station/contracts";
-import { isRecord } from "../utils/guards.js";
 
 export function stripTerminalProviderData(
   observation: TerminalTargetObservation,
@@ -25,22 +23,4 @@ export function stripTerminalProviderData(
   if (observation.harnessBinding !== undefined)
     stripped.harnessBinding = observation.harnessBinding;
   return stripped;
-}
-
-export function sanitizeTerminalObservationPayload(payload: unknown): unknown {
-  const parsed = TerminalTargetObservationSchema.safeParse(payload);
-  if (parsed.success) {
-    return stripTerminalProviderData(parsed.data);
-  }
-
-  if (!isRecord(payload)) {
-    return payload;
-  }
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(payload)) {
-    if (key !== "providerData") {
-      sanitized[key] = value;
-    }
-  }
-  return sanitized;
 }

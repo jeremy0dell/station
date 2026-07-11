@@ -328,6 +328,7 @@ describe("observer worktree metadata refresh", () => {
     const api = createObserverApi({
       core: fixture.core,
       persistence: fixture.persistence,
+      persistenceHealth: fixture.persistence,
       commandQueue: createCommandQueue({
         persistence: fixture.persistence,
         clock: fixture.clock,

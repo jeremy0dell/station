@@ -79,7 +79,6 @@ describe("scripted agent lifecycle", () => {
         harnesses: [provider],
       }),
       persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
     });
     const queue = createCommandQueue({
@@ -111,6 +110,7 @@ describe("scripted agent lifecycle", () => {
       config: config(root, stateDir),
       core,
       persistence,
+      persistenceHealth: persistence,
       paths: { stateDir, diagnosticsDir: join(stateDir, "diagnostics") },
       clock: { now: () => new Date(now) },
     });
@@ -175,7 +175,6 @@ describe("scripted agent lifecycle", () => {
       config: testConfig,
       providers,
       persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
     });
     registerObserverCommandHandlers({

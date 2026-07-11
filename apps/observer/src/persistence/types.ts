@@ -1,9 +1,8 @@
 import type {
-  AgentState,
   CommandId,
-  Confidence,
   DiagnosticDetail,
   ErrorEnvelope,
+  HarnessEventObservation,
   HarnessRunObservation,
   ProviderHealth,
   ProviderId,
@@ -11,14 +10,11 @@ import type {
   SafeError,
   StationCommand,
   StationEvent,
-  TerminalState,
   TerminalTargetObservation,
   WorktreeChangeSummary,
   WorktreeChecksSummary,
   WorktreeObservation,
   WorktreePullRequest,
-  WorktreeSource,
-  WorktreeState,
 } from "@station/contracts";
 
 export type PersistedCommandStatus = "accepted" | "started" | "succeeded" | "failed";
@@ -28,7 +24,6 @@ export type ObserverIdFactory = {
   eventId(): string;
   errorId(): string;
   observationId(): string;
-  breadcrumbId(): string;
 };
 
 export type PersistedCommand = {
@@ -70,12 +65,22 @@ export type PersistedCommandError = {
   createdAt: string;
 };
 
-export type ProviderObservationKind =
-  | "worktree"
-  | "terminal_target"
-  | "harness_run"
-  | "harness_event"
-  | "provider_health";
+export type ProviderObservationPayloadByKind = {
+  worktree: WorktreeObservation;
+  terminal_target: TerminalTargetObservation;
+  harness_run: HarnessRunObservation;
+  harness_event: HarnessEventObservation;
+  provider_health: ProviderHealth;
+};
+
+export type ProviderObservation = {
+  [TKind in keyof ProviderObservationPayloadByKind]: {
+    entityKind: TKind;
+    payload: ProviderObservationPayloadByKind[TKind];
+  };
+}[keyof ProviderObservationPayloadByKind];
+
+export type ProviderObservationKind = ProviderObservation["entityKind"];
 export type CurrentProviderObservationKind = Extract<
   ProviderObservationKind,
   "worktree" | "terminal_target"
@@ -94,27 +99,27 @@ export type WorktreeMetadataCurrentPayloadByKind = {
 export type WorktreeMetadataCurrentPayload =
   WorktreeMetadataCurrentPayloadByKind[WorktreeMetadataCurrentKind];
 
-export type PersistedProviderObservation = {
+type PersistedProviderObservationFields = {
   id: string;
   provider: ProviderId;
   providerType: ProviderObservationType;
-  entityKind: ProviderObservationKind;
   entityKey: string;
-  payload: unknown;
   observedAt: string;
   expiresAt?: string | undefined;
   expired: boolean;
 };
 
-export type RecordProviderObservationInput = {
+export type PersistedProviderObservation = PersistedProviderObservationFields & ProviderObservation;
+
+type RecordProviderObservationFields = {
   provider: ProviderId;
   providerType: ProviderObservationType;
-  entityKind: ProviderObservationKind;
   entityKey: string;
-  payload: unknown;
   observedAt?: string;
   expiresAt?: string | undefined;
 };
+
+export type RecordProviderObservationInput = RecordProviderObservationFields & ProviderObservation;
 
 export type EventRecordOptions = {
   source?: string;
@@ -147,55 +152,6 @@ export type PersistedWorktreeMetadataCurrent<
   lastError?: SafeError;
 };
 
-export type PersistedProject = {
-  id: string;
-  label: string;
-  root: string;
-  repo?: string;
-  lastSeenAt: string;
-};
-
-export type PersistedWorktree = {
-  id: string;
-  projectId: string;
-  path: string;
-  branch?: string;
-  source?: WorktreeSource;
-  state?: WorktreeState;
-  dirty?: boolean;
-  provider?: string;
-  providerData?: unknown;
-  lastSeenAt: string;
-};
-
-export type PersistedTerminalTarget = {
-  id: string;
-  sessionId?: string;
-  projectId?: string;
-  worktreeId?: string;
-  provider: string;
-  state?: TerminalState;
-  providerKey?: string;
-  providerData?: unknown;
-  lastSeenAt: string;
-};
-
-export type PersistedHarnessRun = {
-  id: string;
-  sessionId?: string;
-  projectId?: string;
-  worktreeId?: string;
-  harness: string;
-  pid?: number;
-  externalRunId?: string;
-  state?: AgentState;
-  confidence?: Confidence;
-  reason?: string;
-  providerData?: unknown;
-  lastEventAt?: string;
-  lastSeenAt: string;
-};
-
 export type PersistedSession = {
   id: string;
   projectId: string;
@@ -206,18 +162,6 @@ export type PersistedSession = {
   state?: string;
   createdAt: string;
   endedAt?: string;
-  lastSeenAt: string;
-};
-
-export type PersistedRecoveryBreadcrumb = {
-  id: string;
-  projectId: string;
-  worktreeId?: string;
-  sessionId?: string;
-  location: string;
-  path: string;
-  payload: unknown;
-  createdAt: string;
   lastSeenAt: string;
 };
 

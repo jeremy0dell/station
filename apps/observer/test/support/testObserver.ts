@@ -10,14 +10,14 @@ import {
   openObserverSqlite,
   type ProviderRegistry,
 } from "../../src/internal";
-import type { ObserverPersistence } from "../../src/persistence";
+import type { ObserverPersistenceBundle } from "../../src/persistence";
 
 export type TestClock = { now: () => Date };
 
-export function fakeObserverPersistence(): ObserverPersistence {
+export function fakeObserverPersistence(): ObserverPersistenceBundle {
   return {
     recordEventWithIngressDedupe: async () => ({ deduped: false }),
-  } as unknown as ObserverPersistence;
+  } as unknown as ObserverPersistenceBundle;
 }
 
 export function fakeObserverCommandQueue(): CommandQueue {
@@ -63,12 +63,10 @@ export function createTestIdFactory() {
   let command = 0;
   let event = 0;
   let observation = 0;
-  let breadcrumb = 0;
   return {
     commandId: () => `cmd_${++command}`,
     eventId: () => `evt_${++event}`,
     observationId: () => `obs_${++observation}`,
-    breadcrumbId: () => `crumb_${++breadcrumb}`,
   };
 }
 
@@ -95,7 +93,7 @@ export function createTestObserverCore(input: CreateTestObserverCoreInput) {
     clock,
     idFactory: createTestIdFactory(),
   });
-  const core = createObserverCore({ config, providers, persistence, sqlite, clock });
+  const core = createObserverCore({ config, providers, persistence, clock });
   return { sqlite, persistence, core };
 }
 
@@ -122,6 +120,7 @@ export function createTestObserver(input: CreateTestObserverInput) {
     core,
     providers,
     persistence,
+    persistenceHealth: persistence,
     commandQueue,
     eventBus,
     clock,

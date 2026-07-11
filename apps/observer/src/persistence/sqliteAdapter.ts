@@ -13,8 +13,7 @@ import {
   listProviderObservations,
   pruneExpiredProviderObservations,
 } from "./observations.js";
-import type { ObserverPersistence } from "./ports.js";
-import * as recoveryBreadcrumbStore from "./recoveryBreadcrumbs.js";
+import type { ObserverPersistenceBundle, PersistenceHealthSource } from "./ports.js";
 import { providerObservationRetentionDays } from "./retention.js";
 import * as sessionRecoveryHandleStore from "./sessionRecoveryHandles.js";
 import * as sessionTurnReadinessStore from "./sessionTurnReadiness.js";
@@ -30,11 +29,11 @@ export type CreateSqliteObserverPersistenceOptions = {
 /**
  * ADAPTER
  *
- * Persists Observer application records through SQLite while keeping SQL rows and transactions at the storage boundary.
+ * Provides Observer persistence and health capabilities through SQLite while keeping SQL rows and transactions at the storage boundary.
  */
 export function createSqliteObserverPersistence(
   options: CreateSqliteObserverPersistenceOptions,
-): ObserverPersistence {
+): ObserverPersistenceBundle & PersistenceHealthSource {
   const clock = options.clock ?? systemClock;
   const idFactory = { ...defaultIdFactory, ...options.idFactory };
   const now = () => toIsoTimestamp(clock.now());
@@ -42,6 +41,8 @@ export function createSqliteObserverPersistence(
     Effect.runPromise(runSqliteTransactionEffect(options.sqlite, task));
 
   return {
+    health: () => options.sqlite.health(),
+
     recordCommandAccepted: (input) =>
       transaction((database) =>
         commandStore.recordCommandAccepted(database, {
@@ -216,14 +217,6 @@ export function createSqliteObserverPersistence(
         worktreeMetadataCurrentStore.deleteWorktreeMetadataCurrent(database, input),
       ),
 
-    pruneExpiredWorktreeMetadataCurrent: (expiresBefore) =>
-      transaction((database) =>
-        worktreeMetadataCurrentStore.pruneExpiredWorktreeMetadataCurrent(
-          database,
-          expiresBefore ?? now(),
-        ),
-      ),
-
     persistReconcileResult: (input) =>
       transaction((database) => {
         const reconcileInput =
@@ -239,15 +232,12 @@ export function createSqliteObserverPersistence(
         });
       }),
 
-    listProjects: () => transaction(correlationStore.listProjects),
-
-    listWorktrees: () => transaction(correlationStore.listWorktrees),
-
-    listTerminalTargets: () => transaction(correlationStore.listTerminalTargets),
-
-    listHarnessRuns: () => transaction(correlationStore.listHarnessRuns),
-
     listSessions: () => transaction(correlationStore.listSessions),
+
+    findRememberedHarnessProviderForWorktree: (input) =>
+      transaction((database) =>
+        correlationStore.findRememberedHarnessProviderForWorktree(database, input),
+      ),
 
     seedSessionTitle: (input) =>
       transaction((database) => correlationStore.seedSessionTitle(database, input)),
@@ -257,21 +247,6 @@ export function createSqliteObserverPersistence(
 
     renameSession: (input) =>
       transaction((database) => correlationStore.renameSession(database, input)),
-
-    recordRecoveryBreadcrumb: (input) =>
-      transaction((database) => {
-        const id = idFactory.breadcrumbId();
-        const createdAt = input.createdAt ?? now();
-        const lastSeenAt = input.lastSeenAt ?? createdAt;
-        return recoveryBreadcrumbStore.recordRecoveryBreadcrumb(database, {
-          ...input,
-          id,
-          createdAt,
-          lastSeenAt,
-        });
-      }),
-
-    listRecoveryBreadcrumbs: () => transaction(recoveryBreadcrumbStore.listRecoveryBreadcrumbs),
 
     upsertSessionRecoveryHandle: (input) =>
       transaction((database) =>
@@ -297,11 +272,6 @@ export function createSqliteObserverPersistence(
           updatedAt: input.updatedAt ?? createdAt,
         });
       }),
-
-    getSessionTurnReadiness: (sessionId) =>
-      transaction((database) =>
-        sessionTurnReadinessStore.getSessionTurnReadiness(database, sessionId),
-      ),
 
     listSessionTurnReadiness: () =>
       transaction((database) => sessionTurnReadinessStore.listSessionTurnReadiness(database)),

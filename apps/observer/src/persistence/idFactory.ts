@@ -6,5 +6,4 @@ export const defaultIdFactory: ObserverIdFactory = {
   eventId: () => `evt_${randomUUID()}`,
   errorId: () => `err_${randomUUID()}`,
   observationId: () => `obs_${randomUUID()}`,
-  breadcrumbId: () => `crumb_${randomUUID()}`,
 };

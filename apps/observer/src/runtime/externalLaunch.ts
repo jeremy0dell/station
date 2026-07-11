@@ -19,7 +19,7 @@ import {
   rememberedHarnessProviderForWorktree,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
-import type { ObserverPersistence } from "../persistence/index.js";
+import type { SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { nowIso } from "../utils/time.js";
@@ -27,7 +27,7 @@ import { nowIso } from "../utils/time.js";
 export type ExternalLaunchDeps = {
   core: ObserverCore;
   providers: ProviderRegistry;
-  persistence: ObserverPersistence;
+  persistence: SessionStore;
   clock?: RuntimeClock | undefined;
   configPath?: string | undefined;
 };

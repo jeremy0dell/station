@@ -1,5 +1,5 @@
 import type { RuntimeClock } from "@station/runtime";
-import type { ObserverPersistence } from "../../persistence/index.js";
+import type { EventJournal } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -23,7 +23,7 @@ export type CreateWorktreeRemoveHandlerOptions = {
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
-  persistence: ObserverPersistence;
+  persistence: EventJournal;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;

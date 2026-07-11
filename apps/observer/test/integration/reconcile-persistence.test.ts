@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
-import { ProviderHealthSchema, StationSnapshotSchema } from "@station/contracts";
+import { StationSnapshotSchema } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -184,11 +184,7 @@ describe("observer reconcile persistence", () => {
     ]);
     const observations = await persistence.listProviderObservations();
     const healthRows = observations.filter((item) => item.entityKind === "provider_health");
-    expect(healthRows.map((row) => ProviderHealthSchema.parse(row.payload).status)).toEqual([
-      "unknown",
-      "unknown",
-      "unknown",
-    ]);
+    expect(healthRows.map((row) => row.payload.status)).toEqual(["unknown", "unknown", "unknown"]);
     sqlite.close();
   });
 
@@ -214,14 +210,16 @@ describe("observer reconcile persistence", () => {
         harnesses: [new FakeHarnessProvider({ now, runs: [] })],
       }),
       persistence,
-      sqlite,
       clock: { now: () => new Date(now) },
     });
     const snapshot = await secondCore.reconcile("providers-empty");
 
-    expect(await persistence.listWorktrees()).toEqual([
-      expect.objectContaining({ id: "wt_web_main" }),
-    ]);
+    expect(
+      await persistence.listProviderObservations({
+        entityKind: "worktree",
+        includeExpired: true,
+      }),
+    ).toEqual([expect.objectContaining({ entityKey: "wt_web_main" })]);
     expect(snapshot.rows).toEqual([]);
     sqlite.close();
   });
@@ -280,14 +278,19 @@ describe("observer reconcile persistence", () => {
       attention: 1,
       unknown: 0,
     });
-    expect(await persistence.listHarnessRuns()).toEqual([
-      expect.objectContaining({
-        id: "run_web_main",
-        state: "needs_attention",
-        confidence: "high",
-        lastSeenAt: now,
-      }),
-    ]);
+    const harnessRuns = await persistence.listProviderObservations({
+      entityKind: "harness_run",
+      latestOnly: true,
+    });
+    expect(harnessRuns).toHaveLength(1);
+    expect(
+      harnessRuns[0]?.entityKind === "harness_run" ? harnessRuns[0].payload : undefined,
+    ).toMatchObject({
+      id: "run_web_main",
+      state: "needs_attention",
+      confidence: "high",
+      observedAt: now,
+    });
     expect(await persistence.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_web_main",
