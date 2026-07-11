@@ -1,9 +1,9 @@
 import type { StationSnapshot } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { createInMemoryObserverPersistence } from "../../src/persistence/inMemoryAdapter";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { emptyStationSnapshot, fakeObserverCommandQueue } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";

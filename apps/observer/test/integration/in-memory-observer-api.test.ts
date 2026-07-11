@@ -11,12 +11,12 @@ import {
 import { describe, expect, it } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
 import { registerObserverCommandHandlers } from "../../src/commands/router";
-import { createInMemoryObserverPersistence } from "../../src/persistence/inMemoryAdapter";
 import type { PersistenceHealthSource } from "../../src/persistence/ports";
 import { ProviderRegistry } from "../../src/providers/registry";
 import { createObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 
 const now = "2026-05-20T12:00:00.000Z";
 const healthStub = {

@@ -26,17 +26,16 @@ const observerConcreteProviderImports = [
 
 const observerPersistenceBundleAllowlist = new Set([
   "apps/observer/src/persistence/ports.ts",
-  "apps/observer/src/persistence/inMemoryAdapter.ts",
   "apps/observer/src/persistence/sqliteAdapter.ts",
   "apps/observer/src/runtime/api.ts",
   "apps/observer/src/runtime/main.ts",
 ]);
 
 const observerNoSqliteLane = [
-  "apps/observer/src/persistence/inMemoryAdapter.ts",
   "apps/observer/src/persistence/observationParser.ts",
   "apps/observer/test/integration/in-memory-observer-api.test.ts",
   "apps/observer/test/integration/in-memory-persistence-ports.test.ts",
+  "apps/observer/test/support/inMemoryObserverPersistence.ts",
   "apps/observer/test/support/observerPersistenceContract.ts",
 ];
 

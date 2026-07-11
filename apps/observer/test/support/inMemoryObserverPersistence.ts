@@ -32,15 +32,18 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import { defaultIdFactory } from "./idFactory.js";
-import { parseJson, stringifyJson } from "./json.js";
+import { defaultIdFactory } from "../../src/persistence/idFactory.js";
+import { parseJson, stringifyJson } from "../../src/persistence/json.js";
 import {
   parseProviderObservation,
   stableProviderObservationPayloadKey,
-} from "./observationParser.js";
-import type { ObserverPersistenceBundle } from "./ports.js";
-import { providerObservationExpiresAt, providerObservationRetentionDays } from "./retention.js";
-import { stripTerminalProviderData } from "./terminalObservations.js";
+} from "../../src/persistence/observationParser.js";
+import type { ObserverPersistenceBundle } from "../../src/persistence/ports.js";
+import {
+  providerObservationExpiresAt,
+  providerObservationRetentionDays,
+} from "../../src/persistence/retention.js";
+import { stripTerminalProviderData } from "../../src/persistence/terminalObservations.js";
 import type {
   CurrentProviderObservationKind,
   EventRecordOptions,
@@ -60,9 +63,9 @@ import type {
   RecordProviderObservationInput,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
-} from "./types.js";
+} from "../../src/persistence/types.js";
 
-export type CreateInMemoryObserverPersistenceOptions = {
+type CreateInMemoryObserverPersistenceOptions = {
   clock?: RuntimeClock;
   idFactory?: Partial<ObserverIdFactory>;
 };
@@ -96,11 +99,6 @@ type InsertProviderObservationInput = RecordProviderObservationInput & {
   coalesceUnchanged?: boolean;
 };
 
-/**
- * ADAPTER
- *
- * Provides Observer persistence capabilities through process-local memory so storage substitution can be proved without SQLite.
- */
 export function createInMemoryObserverPersistence(
   options: CreateInMemoryObserverPersistenceOptions = {},
 ): ObserverPersistenceBundle {

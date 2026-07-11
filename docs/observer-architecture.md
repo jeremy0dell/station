@@ -212,7 +212,7 @@ areas contain the following responsibilities:
 | `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases select adapters through provider-neutral policy and depend on local-metadata ports (OBS-HEX-011). |
 | `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
 | `persistence/sqliteAdapter.ts`, SQLite implementation modules, `migrations/`, `sqlite.ts` | SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Production outbound adapter edge selected and lifecycle-managed by runtime composition. |
-| `persistence/inMemoryAdapter.ts`, `persistence/observationParser.ts` | Process-local transactional persistence plus representation-neutral observation parsing and coalescing | Test-only outbound adapter and shared boundary translation used to prove storage substitution; production remains SQLite-only. |
+| `test/support/inMemoryObserverPersistence.ts`, `persistence/observationParser.ts` | Process-local persistence test support plus representation-neutral observation parsing and coalescing | Test-only storage substitute and shared boundary translation used to prove substitution; production source and runtime remain SQLite-only. |
 | `diagnostics/` | doctor and diagnostic collection plus local evidence traversal | Diagnostic use cases depend on an evidence-source port (OBS-HEX-012). |
 | `features/` | feature-flag evaluation | Deterministic application policy. |
 | `apps/cli/src/observerProviders.ts` | concrete provider construction and role assignment | Outer composition root. |
@@ -455,14 +455,14 @@ schema health, and migrations remain at the SQLite edge. Runtime composition
 opens and closes the concrete SQLite handle around that adapter; application
 core never receives it.
 
-`createInMemoryObserverPersistence` is the second named `ADAPTER`. It implements
+The typechecked `createInMemoryObserverPersistence` test fixture implements
 exactly the seven-port bundle over private process-local state, with synchronous
 copy-on-write transactions so a failed ingress or reconcile mutation cannot
-partially commit. It has no handle lifecycle, does not implement
-`PersistenceHealthSource`, exposes no backing state, and is not selectable by
-production runtime composition. Complete Observer composition tests inject a
-separate persistence-health stub because the public health contract deliberately
-continues to report `health.sqlite`.
+partially commit. It lives under Observer test support, has no handle lifecycle,
+does not implement `PersistenceHealthSource`, exposes no backing state, and is
+absent from production exports and runtime composition. Complete Observer
+composition tests inject a separate persistence-health stub because the public
+health contract deliberately continues to report `health.sqlite`.
 
 Provider observations cross the application boundary as a discriminated union
 keyed by `entityKind`. Both adapters use the same representation-neutral strict
