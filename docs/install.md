@@ -4,9 +4,10 @@ Station is distributed internally as authenticated private GitHub release assets
 
 ## Private Binary
 
-Authenticate `gh` for `jeremy0dell/station`, then use `curl` to fetch the version-pinned installer from the private repository:
+Start in the Git repository you want Station to manage, authenticate `gh` for `jeremy0dell/station`, then use `curl` to fetch the version-pinned installer from the private repository:
 
 ```bash
+cd /path/to/your/git-project
 gh auth login --hostname github.com
 (
   set -e
@@ -41,6 +42,7 @@ gh auth login --hostname github.com
 stable tag first, then fetch and invoke that tag's installer:
 
 ```bash
+cd /path/to/your/git-project
 (
   set -e
   umask 077
@@ -83,10 +85,9 @@ rollback to a prior binary becomes available only after the next binary release.
 
 ### Complete first-run setup
 
-The curl block only installs the Station binaries; it does not configure a project or edit your shell profile. `stn setup` uses the current Git repository as the first Station project, so change into that repository before running it. For the default install location, the complete handoff is:
+The curl block only installs the Station binaries; it does not configure the current project or edit your shell profile. Both recipes begin by changing into the Git repository that `stn setup` will use as the first Station project. For the default install location, the remaining handoff is:
 
 ```bash
-cd /path/to/your/git-project
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
 export PATH
 hash -r
@@ -94,14 +95,14 @@ hash -r
 stn --version
 stn setup
 stn doctor
-stn
+stn tui
 ```
 
-If the installer reported a PATH mismatch, its printed current-shell block is the authoritative equivalent and already ends with `stn setup`; change into the project repository before running that block. If you used `--install-dir`, use its printed path instead of `~/.local/bin`.
+If the installer reported a PATH mismatch, its printed current-shell block is the authoritative equivalent and already ends with `stn setup`. When running the installer outside these recipes, change into the project repository before using that block. If you used `--install-dir`, use its printed path instead of `~/.local/bin`.
 
 Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes `~/.config/station/config.toml` for the current repository; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
 
-The PATH assignment above affects only the current shell. Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if future terminals do not already include that directory. The installer never edits a profile. Outside tmux, `stn` launches the fullscreen workspace; inside tmux it opens the popup dashboard, and `stn tui` forces fullscreen.
+The PATH assignment above affects only the current shell. Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if future terminals do not already include that directory. The installer never edits a profile. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
 
 On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
 

@@ -71,13 +71,20 @@ describe("release readiness docs", () => {
     ] as const) {
       expect(document, path).not.toContain("ref=main");
       const expectedRecipeCount = path === "README.md" ? 1 : 2;
-      const contentsFetches = continuedShellCommands(document).filter((command) =>
+      const curlCommands = shellBlocks(document)
+        .flatMap(continuedShellCommands)
+        .filter((command) => command.startsWith("curl "));
+      expect(curlCommands, path).toHaveLength(expectedRecipeCount);
+      for (const command of curlCommands) {
+        expect(command, path).toMatch(/^curl\s+--disable(?:\s|$)/);
+        expect(command, path).not.toMatch(/\b(?:Authorization|Bearer|token)\b/i);
+        expect(command, path).not.toMatch(/(?:^|\s)(?:-L|--location)(?:\s|$)/);
+        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
+      }
+      const contentsFetches = curlCommands.filter((command) =>
         command.includes("contents/scripts/install.sh"),
       );
       expect(contentsFetches, path).toHaveLength(expectedRecipeCount);
-      for (const command of contentsFetches) {
-        expect(command, path).toMatch(/^curl\s/);
-      }
       const recipes = shellBlocks(document).filter((block) =>
         block.includes(
           "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag",
@@ -85,6 +92,10 @@ describe("release readiness docs", () => {
       );
       expect(recipes, path).toHaveLength(expectedRecipeCount);
       for (const recipe of recipes) {
+        expect(recipe, path).toContain("cd /path/to/your/git-project");
+        expect(recipe.indexOf("cd /path/to/your/git-project"), path).toBeLessThan(
+          recipe.indexOf("curl --disable"),
+        );
         expect(recipe, path).toContain("umask 077");
         expect(recipe, path).toContain('token="$(gh auth token --hostname github.com)"');
         expect(recipe, path).toContain('headers="$(mktemp)"');
@@ -102,7 +113,6 @@ describe("release readiness docs", () => {
         );
         expect(installerFetches, path).toHaveLength(1);
         const command = installerFetches[0] ?? "";
-        expect(command, path).toContain("--disable");
         expect(command, path).toContain("--proto '=https'");
         expect(command, path).toContain("--tlsv1.2");
         expect(command, path).toContain("--fail");
@@ -114,10 +124,6 @@ describe("release readiness docs", () => {
         expect(command, path).toContain(
           "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag",
         );
-        expect(command, path).toMatch(/^curl\s/);
-        expect(command, path).not.toMatch(/\b(?:Authorization|Bearer|token)\b/i);
-        expect(command, path).not.toMatch(/(?:^|\s)(?:-L|--location)(?:\s|$)/);
-        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
       }
     }
     expect(readme.replace(/\s+/g, " ")).toContain("installer code and artifacts");
@@ -222,7 +228,7 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("hash -r");
       expect(document, path).toContain("stn setup");
       expect(document, path).toContain("stn doctor");
-      expect(document, path).toMatch(/\nstn\n/);
+      expect(document, path).toContain("stn tui");
       expect(document, path).toContain("~/.config/station/config.toml");
       expect(document, path).toContain("shell startup file");
       expect(document, path).toContain("cold-boot welcome screen");
