@@ -15,15 +15,23 @@ describe("observer spawn argv", () => {
   it("keeps the source entry prefix and observer flag order", () => {
     const observerEntry = fileURLToPath(new URL("../../../dist/observerMain.js", import.meta.url));
 
-    expect(observerSpawnArgv({ paths })).toEqual([
+    expect(observerSpawnArgv({ paths, startupTimeoutMs: 4321 })).toEqual([
       process.execPath,
       observerEntry,
       "--socket",
       paths.socketPath,
       "--state-dir",
       paths.stateDir,
+      "--startup-timeout-ms",
+      "4321",
     ]);
-    expect(observerSpawnArgv({ paths, configPath: "/tmp/station/config.toml" })).toEqual([
+    expect(
+      observerSpawnArgv({
+        paths,
+        configPath: "/tmp/station/config.toml",
+        startupTimeoutMs: 9876,
+      }),
+    ).toEqual([
       process.execPath,
       observerEntry,
       "--socket",
@@ -32,6 +40,8 @@ describe("observer spawn argv", () => {
       paths.stateDir,
       "--config",
       "/tmp/station/config.toml",
+      "--startup-timeout-ms",
+      "9876",
     ]);
   });
 

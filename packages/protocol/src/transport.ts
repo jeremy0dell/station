@@ -91,10 +91,9 @@ export async function listenUnixSocket(
   };
 }
 
-// Claims the socket path by binding, never by pre-emptively unlinking. A stale
-// file is removed only after a bind fails AND a reconnect confirms nobody is
-// listening — so a socket that another observer is actively serving is never
-// unlinked out from under it (the check-then-unlink race this replaces).
+// Claims the socket path by binding, never by pre-emptively unlinking. The
+// reprobe protects an already-live owner, but does not serialize reclaimers
+// that cached the same stale result; Observer boot owns that exclusion.
 async function bindWithStaleReclaim(server: Server, socketPath: string): Promise<void> {
   try {
     await listenOnce(server, socketPath);

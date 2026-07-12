@@ -137,6 +137,15 @@ and explicit-socket layouts where the socket directory is outside the configured
 state directory. Including the socket filename keeps identities distinct when
 multiple configured sockets share one directory.
 
+The startup claim is `dirname(resolvedSocket)/observer.claim.sqlite`. It is a
+persistent private SQLite file whose active `BEGIN IMMEDIATE` transaction, not
+its existence, identifies a boot owner. Do not delete, rename, replace, or
+"stale reclaim" it. A process exit releases the OS lock, and the next start
+reuses the same inode. The socket directory is mode `0700`; the claim and any
+`-journal`, `-wal`, or `-shm` sidecars are regular non-symlink files at mode
+`0600`. When XDG or an explicit socket moves this file outside `state_dir`, use
+the resolved health `socketPath` to locate it.
+
 Important files and directories:
 
 ```text
@@ -176,6 +185,9 @@ matches its published value.
 ## Reading Evidence
 
 - `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
+- `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with
+  read-only SQLite tooling after confirming no startup is in progress; never
+  infer ownership from the file or sidecars being present.
 - `diagnostic-index.json` is the fastest summary for root-cause codes and correlated evidence.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.

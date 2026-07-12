@@ -42,9 +42,11 @@
     "test:unit": "vitest run --config config/vitest/vitest.unit.config.ts",
     "test:contracts": "vitest run --config config/vitest/vitest.contracts.config.ts",
     "test:integration": "pnpm build && vitest run --config config/vitest/vitest.integration.config.ts",
-    "test:sqlite:bun": "node scripts/test-runners/run-sqlite-cross-runtime.mjs",
+    "test:observer-claim:cross-runtime": "node scripts/test-runners/run-observer-claim-cross-runtime.mjs",
+    "test:sqlite:bun": "node scripts/test-runners/run-sqlite-cross-runtime.mjs && pnpm test:observer-claim:cross-runtime",
     "test:diagnostics": "vitest run --config config/vitest/vitest.diagnostics.config.ts",
     "test:e2e:setup": "vitest run --config config/vitest/vitest.setup-e2e.config.ts",
+    "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts",
     "test:e2e": "vitest run --config config/vitest/vitest.e2e.config.ts",
     "test:e2e:real": "vitest run --config config/vitest/vitest.real-e2e.config.ts",
     "test:e2e:real:local": "node scripts/test-runners/run-real-e2e.mjs",
@@ -61,7 +63,7 @@
     "test:agent:nightly": "STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real",
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
-    "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm smoke:install",
+    "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm test:e2e:observer && pnpm smoke:install",
     "test:pre-push": "pnpm test:all && pnpm test:sqlite:bun && pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty:bun && pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local"
   },
   "devDependencies": {

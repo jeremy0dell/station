@@ -6,7 +6,11 @@ import { environmentWithoutGitLocals } from "@station/runtime";
 import { selfExecArgv } from "../selfExec.js";
 import type { ChildExitResult, ChildProcessLike, SpawnObserverInput } from "./types.js";
 
-export async function defaultSpawnObserver(input: SpawnObserverInput): Promise<ChildProcessLike> {
+type DefaultSpawnObserverInput = SpawnObserverInput & { startupTimeoutMs: number };
+
+export async function defaultSpawnObserver(
+  input: DefaultSpawnObserverInput,
+): Promise<ChildProcessLike> {
   const argv = observerSpawnArgv(input);
   const bootLogPath = observerBootLogPath(input.paths);
   const pendingBootLogPath = observerPendingBootLogPath(input.paths);
@@ -45,7 +49,7 @@ export async function defaultSpawnObserver(input: SpawnObserverInput): Promise<C
   }
 }
 
-export function observerSpawnArgv(input: SpawnObserverInput): [string, ...string[]] {
+export function observerSpawnArgv(input: DefaultSpawnObserverInput): [string, ...string[]] {
   // Compiled dist/observerProcess/spawn.js must resolve ../observerMain.js; source-alias tests launch the built entry instead.
   const observerEntry = import.meta.url.endsWith(".ts")
     ? new URL("../../dist/observerMain.js", import.meta.url)
@@ -58,6 +62,8 @@ export function observerSpawnArgv(input: SpawnObserverInput): [string, ...string
     "--state-dir",
     input.paths.stateDir,
     ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
+    "--startup-timeout-ms",
+    String(input.startupTimeoutMs),
   ];
 }
 

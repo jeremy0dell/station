@@ -1,8 +1,13 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { listHookSpoolFiles, readHookSpoolRecord } from "../../../../tests/support/spool";
+import { createStaleSocketFile } from "../../../../tests/support/sockets";
+import {
+  fileExists,
+  listHookSpoolFiles,
+  readHookSpoolRecord,
+} from "../../../../tests/support/spool";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { runProviderIngressCommand } from "../../src/ingress/command.js";
 
@@ -46,7 +51,9 @@ describe("provider hook ingress command", () => {
   it("turns raw observer flags into one finalized startup command", async () => {
     const fixture = await createTempState();
     const observerEntry = join(fixture.root, "custom-observer.js");
+    await createStaleSocketFile(fixture.socketPath);
     let running = false;
+    let staleSocketPresentAtSpawn = false;
     let spawnInput:
       | Parameters<NonNullable<Parameters<typeof runProviderIngressCommand>[2]["spawnObserver"]>>[0]
       | undefined;
@@ -90,6 +97,7 @@ describe("provider hook ingress command", () => {
           }) as never,
         spawnObserver: async (input) => {
           spawnInput = input;
+          staleSocketPresentAtSpawn = await fileExists(fixture.socketPath);
           running = true;
           return { pid: 12345, unref: () => undefined };
         },
@@ -97,6 +105,7 @@ describe("provider hook ingress command", () => {
     );
 
     expect(receipt.status).toBe("ingested");
+    expect(staleSocketPresentAtSpawn).toBe(true);
     expect(spawnInput).toEqual({
       paths: expect.objectContaining({
         socketPath: fixture.socketPath,
@@ -104,6 +113,72 @@ describe("provider hook ingress command", () => {
       }),
       observerCommand: [process.execPath, observerEntry],
     });
+  });
+
+  it("passes the exact startup timeout to the production observer child", async () => {
+    const fixture = await createTempState();
+    const observerEntry = join(fixture.root, "record-observer-argv.cjs");
+    const argvPath = join(fixture.root, "observer-argv.json");
+    await writeFile(
+      observerEntry,
+      [
+        'const { writeFileSync } = require("node:fs");',
+        `writeFileSync(${JSON.stringify(argvPath)}, JSON.stringify(process.argv.slice(2)));`,
+      ].join("\n"),
+      "utf8",
+    );
+
+    const receipt = await runProviderIngressCommand(
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--observer-entry",
+        observerEntry,
+        "--startup-timeout-ms",
+        "2000",
+        "worktrunk",
+        "post-create",
+      ],
+      { stdin: JSON.stringify({ branch: "feature/child-timeout" }) },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_child_timeout",
+        clientFactory: () =>
+          ({
+            health: async () => {
+              if (!(await fileExists(argvPath))) throw new Error("offline");
+              return { schemaVersion: "0.7.0", status: "healthy" };
+            },
+            ingestProviderHookEvent: async (event: ProviderHookEvent) => {
+              if (!(await fileExists(argvPath))) throw new Error("offline");
+              return {
+                schemaVersion: "0.7.0",
+                hookId: event.hookId ?? "hook_child_timeout",
+                provider: event.provider,
+                event: event.event,
+                accepted: true,
+                status: "ingested",
+                receivedAt: event.receivedAt,
+                reconciled: false,
+              } satisfies ProviderHookReceipt;
+            },
+          }) as never,
+      },
+    );
+
+    expect(receipt.status).toBe("ingested");
+    await expect(readFile(argvPath, "utf8")).resolves.toBe(
+      JSON.stringify([
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--startup-timeout-ms",
+        "2000",
+      ]),
+    );
   });
 
   it("delivers Worktrunk lifecycle hooks through observer.ingestProviderHookEvent", async () => {

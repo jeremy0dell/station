@@ -63,7 +63,10 @@ export async function startObserverProcess(
       if (input.configPath !== undefined) {
         spawnInput.configPath = input.configPath;
       }
-      child = await (deps.spawnObserver ?? defaultSpawnObserver)(spawnInput);
+      child =
+        deps.spawnObserver === undefined
+          ? await defaultSpawnObserver({ ...spawnInput, startupTimeoutMs: input.timeoutMs })
+          : await deps.spawnObserver(spawnInput);
       if (signal.aborted) {
         child.kill?.();
         throw observerHealthWaitCancelledError();
@@ -82,6 +85,15 @@ export async function startObserverProcess(
     },
   ).finally(() => clearObserverStartupProgress(progressTimers));
 
+  // A child queued on the boot claim must not outlive the incumbent this caller attached to.
+  if (
+    result.ok &&
+    child?.pid !== undefined &&
+    result.value.pid !== undefined &&
+    child.pid !== result.value.pid
+  ) {
+    child.kill?.();
+  }
   if (!result.ok && result.error.code !== "OBSERVER_EXITED_ON_START") {
     child?.kill?.();
   }

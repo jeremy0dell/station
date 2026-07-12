@@ -72,30 +72,29 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 | #81 | WAL + `synchronous=NORMAL` sqlite; `stn observer reap` (socket-keyed candidacy, `lsof` keeper + health tiebreak, refuse-on-ambiguity, re-verify argv+start-token before every signal, SIGTERM→SIGKILL). `resolveObserverSocketForProcessArgs` in `@station/config`. |
 | #82 | Seeded socket-ownership watcher (`readSocketIdentity` + `expectedIdentity`); boot reorder — bind (`drainOnStart:false`) → arm seeded watcher → `observer.startup` reconcile, so a takeover during the scan is caught. |
 | #83 | `runShutdownWithBackstop`: `stopObserver` force-exits at a 5s ceiling so a wedged drain can't hang shutdown. Self-stop is now terminal (prerequisite for eviction). |
-| #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a remaining concurrent stale-reclaimer ABA, so this helper is safe only once boot attempts are serialized by 3d-a. |
+| #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a concurrent stale-reclaimer ABA; 3d-a now supplies the serialization required before this helper may reclaim. |
 | 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
+| 3d-a / #135 | The Observer child holds `BEGIN IMMEDIATE` on `dirname(resolvedSocket)/observer.claim.sqlite` across probe, stale reclaim, bind, pidfile publication, seeded watcher setup, and ready commitment. CLI and provider-hook clients only attach or spawn; health opens after synchronous claim release. |
 
 Together these **stop the bleeding**: `reap` clears duplicates on demand, the
 seeded watcher self-heals future displacements, and stop is terminal. Phase 3c
 also gives later handoff and reaping work a durable, socket-relative
 corroborating identity without changing current attach-or-spawn or
-duplicate-reaping behavior. Concurrent reclamation of one already-stale socket
-remains open until 3d-a serializes boot.
+duplicate-reaping behavior. Phase 3d-a now serializes stale-socket reclamation
+before either the socket path or pidfile can be mutated.
 
-## Remaining work
-
-### 3d-a — serialize stale-socket boot ownership ([#135](https://github.com/jeremy0dell/station/issues/135))
+### 3d-a boot contract
 
 Spike result: **NO-GO for both stale-path deletion designs (directory rename and
 AF_UNIX unlink/rebind); GO for a dedicated SQLite transaction claim backed by a
-permanent cross-runtime adversarial test.** The current stale-socket race is
-tracked as `OBS-HEX-013` and in #135.
+permanent cross-runtime adversarial test.** #135 shipped that narrow result;
+version-aware replacement remains separate below.
 
-Move startup ownership mutation into the observer boot (`main.ts`) under the
+Startup ownership mutation lives in observer boot (`main.ts`) under the
 OS-lock-backed claim database
-`C = dirname(resolvedSocket)/observer.claim.sqlite`. Hold one `BEGIN IMMEDIATE`
-transaction from the socket probe through ready-state commitment. Clients
-shrink to attach-or-spawn and never delete the socket path themselves.
+`C = dirname(resolvedSocket)/observer.claim.sqlite`. It holds one `BEGIN
+IMMEDIATE` transaction from the socket probe through ready-state commitment.
+Clients attach or spawn and never delete the socket path themselves.
 
 The singleton identity remains the **resolved socket**, not the state directory
 or claim path. Two different sockets in one directory intentionally share `C`
@@ -128,10 +127,12 @@ Supporting:
 - File existence is never ownership. The claim database and SQLite sidecars are
   persistent private files and are never stale-reclaimed, renamed, or replaced.
 
-Implementation starts red with deterministic two-process regressions for both
-rejected cached-stale ABA schedules. Then preserve the 50-round Node-vs-Bun
-transaction race, killed-owner recovery, production stale-socket races, and
-CLI/hook path-parity cases from the spikes as permanent coverage.
+Permanent coverage includes the 50-round Node-vs-Bun transaction race,
+three-contender rounds, killed-owner recovery, production cold and stale-socket
+races, XDG/state divergence, explicit paths with spaces, and CLI/hook timeout
+and non-mutation cases. It proves mutual exclusion, not fairness.
+
+## Remaining work
 
 ### 3d-b — version-aware incumbent replacement (deferred)
 
@@ -158,7 +159,7 @@ none belongs to #135.
 
 ### 3e — isolate hook auto-start rate limiting
 
-3d-a will route CLI and provider-hook children through the same child-owned
+3d-a routes CLI and provider-hook children through the same child-owned
 claim. Keep `hook-autostart.lock` authoritative only for hook rate limiting,
 never Observer ownership. Its state-directory location may diverge from the
 resolved socket under config and XDG overrides without weakening the 3d-a

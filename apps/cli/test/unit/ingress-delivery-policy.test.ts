@@ -45,6 +45,39 @@ describe("provider hook delivery policy", () => {
     expect(observedCommand).toBe(observerCommand);
   });
 
+  it("cancels a queued hook-started child after attaching to an incumbent", async () => {
+    const fixture = await createTempState();
+    const state = { running: false, spawnCount: 0, spooled: 0 };
+    let childKills = 0;
+    const deps = {
+      clock: { now: () => new Date(now) },
+      clientFactory: () =>
+        ({
+          health: async (): Promise<ObserverHealth> => {
+            if (!state.running) throw new Error("observer offline");
+            return { ...healthyObserver(fixture), pid: 9876 };
+          },
+        }) as never,
+      spawnObserver: async () => {
+        state.spawnCount += 1;
+        state.running = true;
+        return {
+          pid: 12345,
+          unref: () => undefined,
+          kill: () => {
+            childKills += 1;
+            return true;
+          },
+        };
+      },
+    };
+
+    await expect(
+      deliverProviderHookWithSpooling(deliveryInput(fixture, "hook_losing_child", state, deps)),
+    ).resolves.toMatchObject({ status: "ingested" });
+    expect(childKills).toBe(1);
+  });
+
   it("serializes concurrent observer auto-start attempts across hook senders", async () => {
     const fixture = await createTempState();
     const state = { running: false, spawnCount: 0, spooled: 0 };

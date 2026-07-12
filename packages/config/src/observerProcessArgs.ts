@@ -11,7 +11,7 @@ export type ObserverProcessArgs = {
   stateDir?: string;
 };
 
-/** Mirrors runObserverMain's parseArgs so a candidate's socket resolves identically. */
+/** Mirrors runObserverMain's path-affecting flags so a candidate's socket resolves identically. */
 export function parseObserverProcessArgs(argv: readonly string[]): ObserverProcessArgs {
   const result: ObserverProcessArgs = {};
   for (let index = 0; index < argv.length; index += 1) {

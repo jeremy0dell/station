@@ -162,7 +162,7 @@ describe("CLI observer process startup", () => {
     }
   });
 
-  it("attaches to a concurrent incumbent when the spawned child exits", async () => {
+  it("cancels its spawned child after attaching to a concurrent incumbent", async () => {
     const fixture = await createTempState();
     const exited = deferred<{ type: "exit"; code: number; signal: null }>();
     let healthCalls = 0;
@@ -198,7 +198,7 @@ describe("CLI observer process startup", () => {
 
     expect(result).toMatchObject({ status: "running", health: { pid: 9876 } });
     expect(healthCalls).toBe(4);
-    expect(kills).toBe(0);
+    expect(kills).toBe(1);
     expect(exitWaitDisposals).toBe(1);
   });
 

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type SqlParam = string | number | bigint | Uint8Array | null;
 
 export type SqlRunResult = {
@@ -38,6 +40,11 @@ type NativeSqliteConstructor = new (path: string) => NativeSqliteDatabase;
 
 declare const Bun: object;
 
+const SqliteBusyErrorSchema = z.union([
+  z.object({ code: z.literal("ERR_SQLITE_ERROR"), errcode: z.literal(5) }),
+  z.object({ code: z.literal("SQLITE_BUSY"), errno: z.literal(5) }),
+]);
+
 // Import exactly one driver: loading node:sqlite terminates Bun before fallback is possible.
 const openSqlite =
   typeof Bun !== "undefined"
@@ -46,6 +53,10 @@ const openSqlite =
     : adaptNodeSqlite((await import("node:sqlite")).DatabaseSync);
 
 export const openSqlDatabase = (path: string): SqlDatabase => openSqlite(path);
+
+export function isSqliteBusyError(error: unknown): boolean {
+  return SqliteBusyErrorSchema.safeParse(error).success;
+}
 
 function adaptNodeSqlite(Database: NativeSqliteConstructor): (path: string) => SqlDatabase {
   return (path) => adaptDatabase(new Database(path), false);

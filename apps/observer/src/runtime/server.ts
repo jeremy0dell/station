@@ -1,5 +1,6 @@
+import { lstat } from "node:fs/promises";
 import type { ObserverApi } from "@station/contracts";
-import { startProtocolServer, type UnixSocketServer } from "@station/protocol";
+import { connectUnixSocket, startProtocolServer, type UnixSocketServer } from "@station/protocol";
 import { type RuntimeClock, runRuntimeBoundary, systemClock } from "@station/runtime";
 
 export type ObserverServer = {
@@ -13,6 +14,32 @@ export type StartObserverServerOptions = {
   clock?: RuntimeClock;
   drainOnStart?: boolean;
 };
+
+export type ObserverSocketProbe = "absent" | "stale" | "listening";
+
+/**
+ * ADAPTER
+ *
+ * Translates local Unix-socket transport evidence into the boot states used by
+ * Observer composition without exposing connection mechanics there.
+ */
+export async function probeObserverSocket(socketPath: string): Promise<ObserverSocketProbe> {
+  const initial = await socketMetadata(socketPath);
+  if (initial === undefined) {
+    return "absent";
+  }
+  if (!initial.isSocket()) {
+    return "stale";
+  }
+
+  try {
+    const connection = await connectUnixSocket(socketPath, { timeoutMs: 1000 });
+    connection.close();
+    return "listening";
+  } catch {
+    return (await socketMetadata(socketPath)) === undefined ? "absent" : "stale";
+  }
+}
 
 export async function startObserverServer(
   options: StartObserverServerOptions,
@@ -61,5 +88,18 @@ async function closeObserverServer(server: UnixSocketServer, clock: RuntimeClock
   );
   if (!closed.ok) {
     throw closed.error;
+  }
+}
+
+async function socketMetadata(
+  socketPath: string,
+): Promise<Awaited<ReturnType<typeof lstat>> | undefined> {
+  try {
+    return await lstat(socketPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
   }
 }

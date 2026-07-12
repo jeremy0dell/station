@@ -28,11 +28,16 @@ import { createObserverEventBus } from "./eventBus.js";
 import { runShutdownWithBackstop } from "./gracefulExit.js";
 import { createObserverLogger } from "./logging.js";
 import {
+  type AcquiredObserverBootClaim,
+  acquireObserverBootClaim,
+  type ObserverBootClaimReleaseResult,
+} from "./observerBootClaim.js";
+import {
   createObserverProcessIdentity,
   publishObserverProcessIdentity,
   removeObserverProcessIdentity,
 } from "./observerPidfile.js";
-import { type ObserverServer, startObserverServer } from "./server.js";
+import { type ObserverServer, probeObserverSocket, startObserverServer } from "./server.js";
 import {
   readSocketIdentity,
   type SocketIdentity,
@@ -43,6 +48,7 @@ import {
 // Ceiling on a graceful stop; a wedged drain (a handler ignoring its abort)
 // force-exits at this point instead of keeping the observer alive forever.
 const STOP_BACKSTOP_MS = 5000;
+const DEFAULT_STARTUP_TIMEOUT_MS = 10_000;
 
 export type ObserverProviderRegistryFactoryOptions = {
   stateDir: string;
@@ -61,9 +67,9 @@ export type RunObserverMainDeps = {
 /**
  * COMPOSITION ROOT
  *
- * Builds the process-lifetime Observer runtime around provider adapters
- * supplied by awaited CLI composition, including socket identity publication,
- * health readiness, and shutdown of the services created here.
+ * Claims boot ownership before constructing provider or persistence adapters,
+ * owns socket and pidfile publication, and releases the claim before publishing
+ * health for the process lifetime it composes.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -86,8 +92,45 @@ export async function runObserverMain(
     homeDir,
   );
   const socketPath = resolveObserverSocketPath(options.socketPath, config, stateDir, homeDir);
-  const spoolDir = providerIngressSpoolDir(stateDir);
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
+  const claimResult = await acquireObserverBootClaim({
+    socketPath,
+    timeoutMs: options.startupTimeoutMs,
+  });
+  if (claimResult.status !== "acquired") {
+    throw claimResult.error;
+  }
+
+  // This outer lifetime keeps the claim through any pre-ready socket and
+  // pidfile cleanup; the ready gate performs the normal early release.
+  try {
+    if ((await probeObserverSocket(socketPath)) === "listening") {
+      return 0;
+    }
+    return await runClaimedObserverRuntime({
+      options,
+      loadedConfig,
+      stateDir,
+      socketPath,
+      claim: claimResult,
+      deps,
+    });
+  } finally {
+    releaseObserverBootClaim(claimResult);
+  }
+}
+
+async function runClaimedObserverRuntime(input: {
+  options: ReturnType<typeof parseArgs>;
+  loadedConfig: LoadedStationConfig;
+  stateDir: string;
+  socketPath: string;
+  claim: AcquiredObserverBootClaim;
+  deps: RunObserverMainDeps;
+}): Promise<number> {
+  const { options, loadedConfig, stateDir, socketPath, claim, deps } = input;
+  const config = loadedConfig.config;
+  const spoolDir = providerIngressSpoolDir(stateDir);
   const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir };
   if (options.configPath !== undefined) {
     providerOptions.configPath = loadedConfig.configPath;
@@ -156,7 +199,8 @@ export async function runObserverMain(
       async () => {
         let shutdownError: unknown;
         stopReceipt ??= (async () => {
-          // Publication must settle before cleanup so a pre-ready stop cannot leave a late pidfile behind.
+          // Publication must settle before cleanup so a pre-ready stop cannot
+          // leave a late pidfile behind or release the boot claim too early.
           await startupGate.waitUntilSettled();
           return observerApi.stop();
         })();
@@ -289,7 +333,18 @@ export async function runObserverMain(
         void api.stop();
       },
     });
-    shouldReconcile = startupGate.settleReady();
+    const startupCommit = startupGate.settleReady(() => claim.release());
+    shouldReconcile = startupCommit.status === "ready";
+    if (startupCommit.status === "ready" && startupCommit.claimRelease.status === "failed") {
+      // Readiness is already committed; cleanup after a partial SQLite release
+      // could race a successor, so the live Observer remains the socket owner.
+      void logger
+        .error("Observer boot claim could not be released cleanly after startup commitment.", {
+          socketPath,
+          error: startupCommit.claimRelease.error,
+        })
+        .catch(() => undefined);
+    }
   } catch (error) {
     startupGate.settleFailed();
     shutdownExitCode = 1;
@@ -353,12 +408,14 @@ function parseArgs(argv: string[]): {
   configPath?: string;
   socketPath?: string;
   stateDir?: string;
+  startupTimeoutMs: number;
 } {
   const result: {
     configPath?: string;
     socketPath?: string;
     stateDir?: string;
-  } = {};
+    startupTimeoutMs: number;
+  } = { startupTimeoutMs: DEFAULT_STARTUP_TIMEOUT_MS };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
@@ -370,6 +427,16 @@ function parseArgs(argv: string[]): {
       index += 1;
     } else if (arg === "--state-dir" && value !== undefined) {
       result.stateDir = value;
+      index += 1;
+    } else if (arg === "--startup-timeout-ms") {
+      if (value === undefined || !/^[1-9]\d*$/u.test(value)) {
+        throw new Error("--startup-timeout-ms must be a positive integer.");
+      }
+      const timeoutMs = Number(value);
+      if (!Number.isSafeInteger(timeoutMs)) {
+        throw new Error("--startup-timeout-ms must be a positive safe integer.");
+      }
+      result.startupTimeoutMs = timeoutMs;
       index += 1;
     }
   }
@@ -402,15 +469,19 @@ function resolvePath(input: string, homeDir: string): string {
 
 type ObserverStartupGate = {
   requestStop(): void;
-  settleReady(): boolean;
+  settleReady(releaseClaim: () => ObserverBootClaimReleaseResult): ObserverStartupCommit;
   settleFailed(): void;
   waitUntilSettled(): Promise<void>;
   runHealth<T>(operation: () => Promise<T>): Promise<T>;
 };
 
+type ObserverStartupCommit =
+  | { status: "stopped" }
+  | { status: "ready"; claimRelease: ObserverBootClaimReleaseResult };
+
 export function createObserverStartupGate(): ObserverStartupGate {
   let state: "starting" | "ready" | "stopping" | "failed" = "starting";
-  let release: () => void = () => undefined;
+  let releaseHealth: () => void = () => undefined;
   let ready = pending();
   let settleStartup: () => void = () => undefined;
   const startupSettled = new Promise<void>((resolve) => {
@@ -419,7 +490,7 @@ export function createObserverStartupGate(): ObserverStartupGate {
 
   function pending(): Promise<void> {
     return new Promise((resolve) => {
-      release = resolve;
+      releaseHealth = resolve;
     });
   }
 
@@ -429,15 +500,25 @@ export function createObserverStartupGate(): ObserverStartupGate {
       if (state === "ready") ready = pending();
       state = "stopping";
     },
-    settleReady: () => {
+    settleReady: (releaseClaim) => {
       if (state !== "starting") {
         settleStartup();
-        return false;
+        return { status: "stopped" };
       }
       state = "ready";
-      release();
+      let claimRelease: ObserverBootClaimReleaseResult;
+      try {
+        // Ready is committed while the claim is held; health becomes visible
+        // only after synchronous release lets the next child probe this socket.
+        claimRelease = releaseClaim();
+      } catch (error) {
+        state = "failed";
+        settleStartup();
+        throw error;
+      }
+      releaseHealth();
       settleStartup();
-      return true;
+      return { status: "ready", claimRelease };
     },
     settleFailed: () => {
       if (state === "starting") state = "failed";
@@ -453,4 +534,11 @@ export function createObserverStartupGate(): ObserverStartupGate {
       }
     },
   };
+}
+
+function releaseObserverBootClaim(claim: AcquiredObserverBootClaim): void {
+  const released = claim.release();
+  if (released.status === "failed") {
+    throw released.error;
+  }
 }

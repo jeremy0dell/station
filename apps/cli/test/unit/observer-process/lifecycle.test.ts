@@ -31,6 +31,7 @@ describe("CLI observer process lifecycle", () => {
     const fixture = await createTempState();
     let spawned = false;
     let healthAttempts = 0;
+    let spawnInput: unknown;
 
     const result = await startObserver(
       {
@@ -39,7 +40,8 @@ describe("CLI observer process lifecycle", () => {
       },
       {
         clock: { now: () => new Date(now) },
-        spawnObserver: async (): Promise<ChildProcessLike> => {
+        spawnObserver: async (input): Promise<ChildProcessLike> => {
+          spawnInput = input;
           spawned = true;
           return { pid: 1234, unref: () => undefined };
         },
@@ -64,6 +66,9 @@ describe("CLI observer process lifecycle", () => {
     );
 
     expect(spawned).toBe(true);
+    expect(spawnInput).toEqual({
+      paths: expect.objectContaining({ socketPath: fixture.socketPath }),
+    });
     expect(result).toMatchObject({
       status: "running",
       health: {
@@ -72,10 +77,11 @@ describe("CLI observer process lifecycle", () => {
     });
   });
 
-  it("removes a stale socket before spawning the observer", async () => {
+  it("leaves a stale socket for the spawned observer to reclaim", async () => {
     const fixture = await createTempState();
     await createStaleSocketFile(fixture.socketPath);
     let spawned = false;
+    let staleSocketPresentAtSpawn = false;
 
     const result = await startObserver(
       {
@@ -85,6 +91,7 @@ describe("CLI observer process lifecycle", () => {
       {
         clock: { now: () => new Date(now) },
         spawnObserver: async (): Promise<ChildProcessLike> => {
+          staleSocketPresentAtSpawn = await fileExists(fixture.socketPath);
           spawned = true;
           return { pid: 1234, unref: () => undefined };
         },
@@ -108,8 +115,9 @@ describe("CLI observer process lifecycle", () => {
     );
 
     expect(spawned).toBe(true);
+    expect(staleSocketPresentAtSpawn).toBe(true);
     expect(result.status).toBe("running");
-    await expect(fileExists(fixture.socketPath)).resolves.toBe(false);
+    await expect(fileExists(fixture.socketPath)).resolves.toBe(true);
   });
 
   it("returns a safe startup error when health does not arrive before timeout", async () => {
