@@ -91,6 +91,8 @@ stn
 
 `stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, writes `~/.config/station/config.toml` for the current Git repository, and can add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file for future terminals. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
 
+On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
+
 The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. A useful default workflow additionally requires a Git repository, Worktrunk (`wt`), tmux, diffnav/git-delta, and one supported agent CLI; `stn setup` and `stn doctor` establish and verify those capabilities.
 
 `v0.7.0` is the first supported private-binary baseline. The installer code

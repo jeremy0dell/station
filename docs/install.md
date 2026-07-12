@@ -103,6 +103,8 @@ Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta
 
 The PATH assignment above affects only the current shell. Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if future terminals do not already include that directory. The installer never edits a profile. Outside tmux, `stn` launches the fullscreen workspace; inside tmux it opens the popup dashboard, and `stn tui` forces fullscreen.
 
+On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
+
 Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface.
 
 The installer:

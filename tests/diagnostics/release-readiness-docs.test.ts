@@ -225,6 +225,9 @@ describe("release readiness docs", () => {
       expect(document, path).toMatch(/\nstn\n/);
       expect(document, path).toContain("~/.config/station/config.toml");
       expect(document, path).toContain("shell startup file");
+      expect(document, path).toContain("cold-boot welcome screen");
+      expect(document, path).toContain("Create Session");
+      expect(document, path).toContain("start the agent session");
     }
   });
 
