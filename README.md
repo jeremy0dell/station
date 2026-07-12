@@ -42,32 +42,56 @@ station keeps track of everything that's running and makes it visible:
 
 ## Getting started
 
-The authenticated private binary is the user install path. Authenticate the GitHub CLI for the private repository, fetch the installer, then run setup:
+The authenticated private binary is the user install path. Authenticate the GitHub CLI for the private repository, use `curl` to fetch the version-pinned installer, then run setup:
 
 ```sh
 gh auth login --hostname github.com
 (
   set -e
+  umask 077
   tag=v0.7.0
+  token="$(gh auth token --hostname github.com)"
+  test -n "$token"
+  headers="$(mktemp)"
   installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  GH_HOST=github.com gh api --method GET \
-    repos/jeremy0dell/station/contents/scripts/install.sh \
-    -H "Accept: application/vnd.github.raw+json" \
-    -f ref="$tag" > "$installer"
+  trap 'rm -f "$headers" "$installer"' EXIT
+  printf 'Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\nX-GitHub-Api-Version: 2022-11-28\n' \
+    "$token" > "$headers"
+  unset token
+  curl --disable \
+    --proto '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --max-redirs 0 \
+    --header "@$headers" \
+    --output "$installer" \
+    "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag"
+  rm -f "$headers"
   test -s "$installer"
+  sh -n "$installer"
   sh "$installer" --version "$tag"
 )
 ```
 
-After the checked installer exits successfully:
+The curl block only installs the Station binaries; it does not configure a project or edit your shell profile. From the Git repository you want Station to manage, make the default install available in the current shell, run guided setup, verify it, and launch:
 
 ```sh
+cd /path/to/your/git-project
+PATH="$HOME/.local/bin${PATH:+":$PATH"}"
+export PATH
+hash -r
+
+stn --version
 stn setup
+stn doctor
 stn
 ```
 
-The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. Git, Worktrunk (`wt`), tmux, diffnav/git-delta, GitHub integration, and agent CLIs remain feature-gated external tools; `stn setup` and `stn doctor` say which workflow capabilities are ready.
+`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, writes `~/.config/station/config.toml` for the current Git repository, and can add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file for future terminals. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
+
+The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. A useful default workflow additionally requires a Git repository, Worktrunk (`wt`), tmux, diffnav/git-delta, and one supported agent CLI; `stn setup` and `stn doctor` establish and verify those capabilities.
 
 `v0.7.0` is the first supported private-binary baseline. The installer code
 and artifacts always come from the same immutable tag. The latest-install

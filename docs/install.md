@@ -4,29 +4,37 @@ Station is distributed internally as authenticated private GitHub release assets
 
 ## Private Binary
 
-Authenticate `gh` for `jeremy0dell/station`, then run the installer directly from the private repository:
+Authenticate `gh` for `jeremy0dell/station`, then use `curl` to fetch the version-pinned installer from the private repository:
 
 ```bash
 gh auth login --hostname github.com
 (
   set -e
+  umask 077
   tag=v0.7.0
+  token="$(gh auth token --hostname github.com)"
+  test -n "$token"
+  headers="$(mktemp)"
   installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  GH_HOST=github.com gh api --method GET \
-    repos/jeremy0dell/station/contents/scripts/install.sh \
-    -H "Accept: application/vnd.github.raw+json" \
-    -f ref="$tag" > "$installer"
+  trap 'rm -f "$headers" "$installer"' EXIT
+  printf 'Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\nX-GitHub-Api-Version: 2022-11-28\n' \
+    "$token" > "$headers"
+  unset token
+  curl --disable \
+    --proto '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --max-redirs 0 \
+    --header "@$headers" \
+    --output "$installer" \
+    "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag"
+  rm -f "$headers"
   test -s "$installer"
+  sh -n "$installer"
   sh "$installer" --version "$tag"
 )
-```
-
-Only after that block succeeds:
-
-```bash
-stn setup
-stn
 ```
 
 `v0.7.0` is the first supported private-binary baseline. Resolve the latest
@@ -35,26 +43,65 @@ stable tag first, then fetch and invoke that tag's installer:
 ```bash
 (
   set -e
+  umask 077
   tag="$(
     GH_HOST=github.com gh api --method GET \
       repos/jeremy0dell/station/releases/latest --jq '.tag_name'
   )"
   test -n "$tag"
+  token="$(gh auth token --hostname github.com)"
+  test -n "$token"
+  headers="$(mktemp)"
   installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  GH_HOST=github.com gh api --method GET \
-    repos/jeremy0dell/station/contents/scripts/install.sh \
-    -H "Accept: application/vnd.github.raw+json" \
-    -f ref="$tag" > "$installer"
+  trap 'rm -f "$headers" "$installer"' EXIT
+  printf 'Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\nX-GitHub-Api-Version: 2022-11-28\n' \
+    "$token" > "$headers"
+  unset token
+  curl --disable \
+    --proto '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --max-redirs 0 \
+    --header "@$headers" \
+    --output "$installer" \
+    "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag"
+  rm -f "$headers"
   test -s "$installer"
+  sh -n "$installer"
   sh "$installer" --version "$tag"
 )
 ```
 
 Use the explicit form with the desired `tag` for every exact install. Both
 forms pair installer code and artifacts from one immutable tag; they never
-fall back to `main`. Because `v0.7.0` is the first binary release, immutable
+fall back to `main`. `curl` only bootstraps that checked installer; the
+installer continues to use authenticated `gh` for private release discovery
+and asset downloads. Because `v0.7.0` is the first binary release, immutable
 rollback to a prior binary becomes available only after the next binary release.
+
+### Complete first-run setup
+
+The curl block only installs the Station binaries; it does not configure a project or edit your shell profile. `stn setup` uses the current Git repository as the first Station project, so change into that repository before running it. For the default install location, the complete handoff is:
+
+```bash
+cd /path/to/your/git-project
+PATH="$HOME/.local/bin${PATH:+":$PATH"}"
+export PATH
+hash -r
+
+stn --version
+stn setup
+stn doctor
+stn
+```
+
+If the installer reported a PATH mismatch, its printed current-shell block is the authoritative equivalent and already ends with `stn setup`; change into the project repository before running that block. If you used `--install-dir`, use its printed path instead of `~/.local/bin`.
+
+Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes `~/.config/station/config.toml` for the current repository; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
+
+The PATH assignment above affects only the current shell. Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if future terminals do not already include that directory. The installer never edits a profile. Outside tmux, `stn` launches the fullscreen workspace; inside tmux it opens the popup dashboard, and `stn tui` forces fullscreen.
 
 Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface.
 
