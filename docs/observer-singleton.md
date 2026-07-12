@@ -44,25 +44,21 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 
 ## Shipped
 
-| PR | What |
-|----|------|
+| Change | What |
+|--------|------|
 | #81 | WAL + `synchronous=NORMAL` sqlite; `stn observer reap` (socket-keyed candidacy, `lsof` keeper + health tiebreak, refuse-on-ambiguity, re-verify argv+start-token before every signal, SIGTERM→SIGKILL). `resolveObserverSocketForProcessArgs` in `@station/config`. |
 | #82 | Seeded socket-ownership watcher (`readSocketIdentity` + `expectedIdentity`); boot reorder — bind (`drainOnStart:false`) → arm seeded watcher → `observer.startup` reconcile, so a takeover during the scan is caught. |
 | #83 | `runShutdownWithBackstop`: `stopObserver` force-exits at a 5s ceiling so a wedged drain can't hang shutdown. Self-stop is now terminal (prerequisite for eviction). |
 | #84 | `bindWithStaleReclaim`: bind-first, unlink+retry only after a reprobe confirms nobody's listening. A live socket is never unlinked (killed the check-then-unlink race). |
+| 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
 
 Together these **stop the bleeding**: `reap` clears duplicates on demand, the
 seeded watcher self-heals future displacements, and stop/bind are race-safe and
-terminal.
+terminal. Phase 3c also gives later handoff and reaping work a durable,
+socket-relative corroborating identity without changing current attach-or-spawn
+or duplicate-reaping behavior.
 
 ## Remaining work
-
-### 3c — pidfile (small, safe)
-
-Write+fsync `<socketDir>/observer.pid` = `{pid, osStartTime, version, socketPath}`
-**before the first health is answered**; remove on clean stop. Gives the reaper
-and the evictor a corroborating identity source (lsof stays primary). No
-health-ready-without-pidfile window.
 
 ### 3d — explicit step-down negotiation (HIGHEST RISK — spike first)
 

@@ -58,7 +58,7 @@ const tmuxImplementationMarkers = [
 const setTimeoutAllowlist = new Map([
   [
     "apps/observer/src/runtime/main.ts",
-    "One-tick deferral lets observer.stop flush its protocol response before shutdown closes the server.",
+    "Shutdown backstop and final exit timers keep a stopped Observer process from lingering.",
   ],
   [
     "packages/dashboard-core/src/state/operations/localOperationRunner.ts",
