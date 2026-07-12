@@ -36,8 +36,8 @@ Non-goals:
 - **Windows targets.**
 - **Any observer replacement / eviction in this roadmap.** Coordinated
   single-observer behavior is owned entirely by
-  [observer-singleton](observer-singleton.md). This plan uses shipped 3c/3d-a
-  and defers remaining ownership policy to 3d-b/3e; it does not add a second,
+  [observer-singleton](observer-singleton.md). This plan uses shipped 3c/3d-a/3e
+  and defers remaining ownership policy to 3d-b; it does not add a second,
   uncoordinated eviction path (v1 did — removed, see F3).
 - **Replacing the dev workflow.** Dev mode (tsc dist under Node +
   `bun --hot` TUI from source) stays byte-identical; compiled mode is new

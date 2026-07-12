@@ -51,7 +51,7 @@ export type PersistedEvent = {
   spanId?: string;
 };
 
-export type IngressDedupeKind = "hook" | "harness_report";
+export type IngressDedupeKind = "hook" | "hook_processing" | "harness_report";
 
 export type IngressDedupeKey = {
   kind: IngressDedupeKind;
@@ -136,6 +136,11 @@ export type EventIngressDedupeResult = {
 
 export type EventAndObservationIngressDedupeResult = EventIngressDedupeResult & {
   observation?: PersistedProviderObservation;
+};
+
+export type ProviderObservationsIngressDedupeResult = {
+  deduped: boolean;
+  observations?: PersistedProviderObservation[];
 };
 
 export type PersistedWorktreeMetadataCurrent<

@@ -52,6 +52,7 @@ export type HarnessEventReportIngestion = {
 
 export type ProviderHookIngressOptions = {
   triggerReconcile?: boolean;
+  reportHarnessEvent?: (report: HarnessEventReport) => Promise<HarnessEventReportReceipt>;
 };
 
 export type CreateProviderHookIngressOptions = {
@@ -80,6 +81,11 @@ export type CreateHarnessEventReportIngestionOptions = {
 
 const defaultHookId = () => `hook_${randomUUID()}`;
 
+/**
+ * USE CASE
+ *
+ * Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing.
+ */
 export function createProviderHookIngress(
   options: CreateProviderHookIngressOptions,
 ): ProviderHookIngress {
@@ -141,27 +147,14 @@ export function createProviderHookIngress(
         return ProviderHookReceiptSchema.parse(receipt);
       }
 
-      if (persistResult.value.deduped) {
-        return ProviderHookReceiptSchema.parse({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          hookId: id,
-          provider: event.provider,
-          event: event.event,
-          accepted: true,
-          status: "ingested",
-          receivedAt: event.receivedAt,
-          reconciled: false,
-          deduped: true,
-        });
-      }
-
       const adapter =
         event.kind === "harness" ? options.providers?.hookAdapters.get(event.provider) : undefined;
-      if (adapter?.toHarnessEventReport !== undefined && options.reportHarnessEvent !== undefined) {
+      const reportHarnessEvent = ingestOptions.reportHarnessEvent ?? options.reportHarnessEvent;
+      if (adapter?.toHarnessEventReport !== undefined && reportHarnessEvent !== undefined) {
         return ingestViaHookAdapter({
           event,
           adapter,
-          reportHarnessEvent: options.reportHarnessEvent,
+          reportHarnessEvent,
         });
       }
 
@@ -178,7 +171,8 @@ export function createProviderHookIngress(
             });
 
       const shouldReconcile = ingestOptions.triggerReconcile ?? true;
-      if (shouldReconcile && options.requestReconcile !== undefined) {
+      const downstreamDeduped = providerIngestResult?.deduped ?? persistResult.value.deduped;
+      if (shouldReconcile && !downstreamDeduped && options.requestReconcile !== undefined) {
         options.requestReconcile(`hook:${event.provider}:${event.event}`);
       }
 
@@ -191,7 +185,7 @@ export function createProviderHookIngress(
         status: "ingested",
         receivedAt: event.receivedAt,
         reconciled: false,
-        deduped: false,
+        deduped: persistResult.value.deduped,
       };
       if (providerIngestResult?.error !== undefined) {
         receipt.error = providerIngestResult.error;
@@ -298,6 +292,11 @@ async function ingestViaHookAdapter(
   return ProviderHookReceiptSchema.parse(hookReceipt);
 }
 
+/**
+ * USE CASE
+ *
+ * Persists a normalized harness report once and repairs its recovery and readiness projections on every retry.
+ */
 export function createHarnessEventReportIngestion(
   options: CreateHarnessEventReportIngestionOptions,
 ): HarnessEventReportIngestion {
@@ -348,9 +347,7 @@ export function createHarnessEventReportIngestion(
                 expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
               },
             });
-          if (result.deduped) {
-            return { deduped: true };
-          }
+          // Primary dedupe is acceptance evidence, not proof that later idempotent repairs finished.
           const recoveryHandle = sessionRecoveryHandleFromReport(report);
           if (recoveryHandle !== undefined) {
             await options.persistence.upsertSessionRecoveryHandle(recoveryHandle);
@@ -360,8 +357,10 @@ export function createHarnessEventReportIngestion(
             observation,
             updatedAt: receivedAt,
           });
-          options.eventBus?.publish(reportedEvent);
-          return { deduped: false };
+          if (!result.deduped) {
+            options.eventBus?.publish(reportedEvent);
+          }
+          return { deduped: result.deduped };
         },
       );
 

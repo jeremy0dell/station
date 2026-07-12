@@ -109,6 +109,65 @@ describe("SQLite-only Observer persistence behavior", () => {
       sqlite.close();
     }
   });
+
+  it("rolls back a trigger-rejected processing batch before permitting the same key to retry", async () => {
+    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({
+        sqlite,
+        clock: { now: () => new Date(now) },
+        idFactory: ids(),
+      });
+      const observation = {
+        provider: "fake-harness",
+        providerType: "harness" as const,
+        entityKind: "provider_health" as const,
+        entityKey: "reject-processing-once",
+        payload: {
+          providerId: "fake-harness",
+          providerType: "harness" as const,
+          status: "healthy" as const,
+          lastCheckedAt: now,
+        },
+        observedAt: now,
+      };
+      const input: Parameters<IngressJournal["recordProviderObservationsWithIngressDedupe"]>[0] = {
+        observations: [observation],
+        dedupe: { kind: "hook_processing", id: "hook_processing_atomic" },
+        createdAt: now,
+      };
+      sqlite.database.exec(`
+        CREATE TRIGGER reject_processing_observation
+        BEFORE INSERT ON provider_observations
+        WHEN NEW.entity_key = 'reject-processing-once'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced processing failure');
+        END;
+      `);
+
+      await expect(persistence.recordProviderObservationsWithIngressDedupe(input)).rejects.toThrow(
+        "PERSISTENCE_TRANSACTION_FAILED",
+      );
+      expect(
+        sqlite.database
+          .prepare("SELECT COUNT(*) AS count FROM hook_ingress_dedupe WHERE kind = ?")
+          .get("hook_processing"),
+      ).toMatchObject({ count: 0 });
+      sqlite.database.exec("DROP TRIGGER reject_processing_observation");
+
+      await expect(
+        persistence.recordProviderObservationsWithIngressDedupe(input),
+      ).resolves.toMatchObject({
+        deduped: false,
+        observations: [{ entityKey: "reject-processing-once" }],
+      });
+      await expect(persistence.recordProviderObservationsWithIngressDedupe(input)).resolves.toEqual(
+        { deduped: true },
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
 });
 
 function ids() {

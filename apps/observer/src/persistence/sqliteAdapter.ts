@@ -156,6 +156,27 @@ export function createSqliteObserverPersistence(
         };
       }),
 
+    recordProviderObservationsWithIngressDedupe: (input) =>
+      transaction((database) => {
+        const createdAt = input.createdAt ?? now();
+        const claimed = ingressDedupeStore.claimIngressDedupeKey(database, {
+          ...input.dedupe,
+          eventId: input.dedupe.id,
+          createdAt,
+        });
+        if (!claimed) {
+          return { deduped: true };
+        }
+        const observations = input.observations.map((observation) =>
+          insertProviderObservation(database, {
+            ...observation,
+            id: idFactory.observationId(),
+            observedAt: observation.observedAt ?? now(),
+          }),
+        );
+        return { deduped: false, observations };
+      }),
+
     listEvents: (filter = {}) => transaction((database) => listEvents(database, filter)),
 
     recordProviderObservation: (input) =>

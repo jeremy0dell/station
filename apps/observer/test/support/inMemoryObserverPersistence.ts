@@ -249,6 +249,21 @@ export function createInMemoryObserverPersistence(
         return { deduped: false, event, observation };
       }),
 
+    recordProviderObservationsWithIngressDedupe: (input) =>
+      transaction((draft) => {
+        if (!claimIngressDedupeKey(draft, input.dedupe)) {
+          return { deduped: true };
+        }
+        const observations = input.observations.map((observation) =>
+          insertProviderObservation(draft, {
+            ...observation,
+            id: idFactory.observationId(),
+            observedAt: observation.observedAt ?? now(),
+          }),
+        );
+        return { deduped: false, observations };
+      }),
+
     listEvents: (filter = {}) =>
       transaction((draft) =>
         [...draft.events.values()]
