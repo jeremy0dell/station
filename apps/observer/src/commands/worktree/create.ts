@@ -1,9 +1,9 @@
 import type { CreateWorktreeRequest, ProviderProjectConfig } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
@@ -16,7 +16,7 @@ export type CreateWorktreeCreateHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
 };
 
 /**

@@ -1,9 +1,9 @@
 import type { ReconcileReceipt, StationEvent } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, runRuntimeBoundary } from "@station/runtime";
 import type { WorktreeMetadataRefreshService } from "../metadata/refresh.js";
 import type { ObserverCore } from "../reconcile/core.js";
+import type { StationLogger } from "../stationLogger.js";
 import { agentStateChangedEventsFromReconcile } from "./agentEvents.js";
 import type { ObserverEventBus } from "./eventBus.js";
 import { elapsedMs, logReconcileProfile, type ReconcileProfile } from "./reconcileProfiling.js";
@@ -14,7 +14,7 @@ export type ReconcileExecutorDeps = {
   core: ObserverCore;
   eventBus: ObserverEventBus;
   metadataRefresh?: WorktreeMetadataRefreshService;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   clock: RuntimeClock;
   drainSpoolAndQueue: () => Promise<void>;
 };

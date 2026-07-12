@@ -1,10 +1,10 @@
 import type { HarnessEventReport, HarnessEventReportReceipt } from "@station/contracts";
 import { HarnessEventReportReceiptSchema } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, runRuntimeBoundary } from "@station/runtime";
 import type { HarnessEventReportIngestion } from "../hooks/ingestion.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { withWorktreeCorrelationFromCwd } from "../reconcile/statusProjection.js";
+import type { StationLogger } from "../stationLogger.js";
 import type { ObserverEventBus } from "./eventBus.js";
 
 export type HarnessReportProcessorDeps = {
@@ -12,7 +12,7 @@ export type HarnessReportProcessorDeps = {
   core: ObserverCore;
   eventBus: ObserverEventBus;
   clock: RuntimeClock;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
 };
 
 export type HarnessReportProcessResult = {

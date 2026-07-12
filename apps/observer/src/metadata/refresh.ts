@@ -5,7 +5,6 @@ import type {
   WorktreeChangeSummary,
   WorktreePullRequest,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import {
   type ExternalCommandRunner,
   forEachConcurrent,
@@ -18,6 +17,7 @@ import type {
   PersistedWorktreeMetadataCurrent,
   WorktreeMetadataStore,
 } from "../persistence/index.js";
+import type { StationLogger } from "../stationLogger.js";
 import { addMs } from "../utils/time.js";
 import {
   type CreateWorktreeGitRefInvalidationServiceOptions,
@@ -40,7 +40,7 @@ export type CreateWorktreeMetadataRefreshServiceOptions = {
   persistence: WorktreeMetadataStore;
   requestReconcile(reason: string): void;
   clock?: RuntimeClock;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   runner?: ExternalCommandRunner;
   repositoryProviders?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
   gitTimeoutMs?: number;

@@ -19,6 +19,7 @@ import {
 import { FakeWorktreeProvider } from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../../apps/observer/test/support/projectConfigWriter.js";
 
 const execFileAsync = promisify(execFile);
 const realClaudeEnabled = process.env.STATION_REAL_CLAUDE === "1";
@@ -106,6 +107,7 @@ describeRealClaude("real Claude session.create", () => {
       providerTimeoutMs: 20_000,
     });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

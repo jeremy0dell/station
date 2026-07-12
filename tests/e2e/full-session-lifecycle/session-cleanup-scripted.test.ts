@@ -22,6 +22,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 import { createTempSocketPath } from "../../support/sockets";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -72,6 +73,7 @@ describe("full session cleanup e2e", () => {
     });
     const core = createObserverCore({ config, providers, persistence, clock });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

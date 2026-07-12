@@ -15,7 +15,6 @@ import type {
   WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import {
   type RuntimeClock,
   type RuntimeSafeErrorFallback,
@@ -26,6 +25,7 @@ import {
 import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import type { StationLogger } from "../../stationLogger.js";
 import { linkAbortSignals, throwIfAborted } from "../cancellation.js";
 
 export { throwIfAborted } from "../cancellation.js";
@@ -310,7 +310,7 @@ export async function deleteSessionTitleSeedBestEffort(input: {
   persistence: SessionStore;
   sessionId: SessionId;
   context: CommandHandlerContext;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
 }): Promise<void> {
   try {
     await input.persistence.deleteSessionTitleSeed(input.sessionId);
@@ -430,7 +430,7 @@ export async function closeTerminalTargetBestEffort(input: {
   terminal: TerminalProvider;
   targetId: string;
   context: CommandHandlerContext;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
 }): Promise<void> {
@@ -467,7 +467,7 @@ export async function removeWorktreeBestEffort(input: {
   projectId: string;
   worktreeId: string;
   context: CommandHandlerContext;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
 }): Promise<void> {
@@ -510,7 +510,7 @@ export async function focusTerminalTargetBestEffort(input: {
   targetId: string;
   origin?: TerminalFocusOrigin | undefined;
   context: CommandHandlerContext;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
 }): Promise<void> {

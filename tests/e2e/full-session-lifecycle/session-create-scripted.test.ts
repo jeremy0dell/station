@@ -20,6 +20,7 @@ import type { ExternalCommandInput } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 import { runScriptedAgentLaunchPlan } from "../../support/fake-agent";
 import { createTempSocketPath } from "../../support/sockets";
 
@@ -85,6 +86,7 @@ describe("full session lifecycle e2e", () => {
     });
     const core = createObserverCore({ config, providers, persistence, clock });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

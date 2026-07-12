@@ -26,6 +26,7 @@ import {
 } from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../../apps/observer/test/support/projectConfigWriter.js";
 import type { RealE2eEnvironment } from "../../../support/real-station/env";
 import { createPiLaunchLoggingWrapper, waitForPiLaunchLog } from "../../../support/real-station/pi";
 
@@ -130,6 +131,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       providerTimeoutMs: 20_000,
     });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

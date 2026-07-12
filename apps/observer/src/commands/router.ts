@@ -1,16 +1,17 @@
 import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import { createFeatureFlagEvaluator, type FeatureFlagEvaluator } from "../features/evaluator.js";
 import type { EventJournal, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
+import type { StationLogger } from "../stationLogger.js";
 import {
   createProjectAddHandler,
   createProjectRemoveHandler,
   createProjectSetDefaultHarnessHandler,
 } from "./project.js";
+import type { ProjectConfigWriter } from "./projectConfigWriter.js";
 import type { CommandHandler, CommandQueue } from "./queue.js";
 import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
@@ -37,12 +38,11 @@ export type RegisterObserverCommandHandlersOptions = {
   featureFlags?: FeatureFlagEvaluator | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   commandTimeoutMs?: number | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
-  configPath?: string | undefined;
-  homeDir?: string | undefined;
+  projectConfigWriter: ProjectConfigWriter;
 };
 
 /**
@@ -51,8 +51,8 @@ export type RegisterObserverCommandHandlersOptions = {
  * Constructs process-lifetime Observer command use cases and registers their
  * handlers with the command queue.
  *
- * Terminal intent orchestration is created once here and injected directly
- * into every handler that uses it.
+ * Terminal intent orchestration and ProjectConfigWriter are prebound here;
+ * handlers never receive configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
@@ -188,24 +188,21 @@ export function registerObserverCommandHandlers(
     }),
     "project.add": createProjectAddHandler({
       core: options.core,
+      projectConfigWriter: options.projectConfigWriter,
       eventBus: options.eventBus,
       clock: options.clock,
-      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
     "project.remove": createProjectRemoveHandler({
       core: options.core,
+      projectConfigWriter: options.projectConfigWriter,
       eventBus: options.eventBus,
       clock: options.clock,
-      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
     "project.setDefaultHarness": createProjectSetDefaultHarnessHandler({
       core: options.core,
+      projectConfigWriter: options.projectConfigWriter,
       eventBus: options.eventBus,
       clock: options.clock,
-      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
     }),
   } satisfies Record<StationCommand["type"], CommandHandler>;
 

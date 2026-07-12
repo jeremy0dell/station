@@ -12,7 +12,6 @@ import type {
   TerminalTargetId,
   TerminalTargetObservation,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -25,6 +24,7 @@ import {
   type TerminalIntentProviderAccess,
   type TerminalIntentRunner,
 } from "../../src/commands/terminalIntentRunner";
+import type { StationLogger } from "../../src/stationLogger.js";
 
 const now = "2026-06-04T12:00:00.000Z";
 const clock = { now: () => new Date(now) };
@@ -590,50 +590,33 @@ class CapturingHarnessProvider extends FakeHarnessProvider {
   }
 }
 
-class CapturingLogger implements JsonlLogger {
-  readonly path = "/tmp/station/test-observer.jsonl";
+class CapturingLogger implements StationLogger {
   readonly records: LogRecord[] = [];
 
-  async log(
-    record: Omit<LogRecord, "timestamp" | "component"> & { timestamp?: string },
-  ): Promise<LogRecord> {
+  async info(message: string, attributes?: Record<string, unknown>): Promise<void> {
+    this.record("info", message, attributes);
+  }
+
+  async warn(message: string, attributes?: Record<string, unknown>): Promise<void> {
+    this.record("warn", message, attributes);
+  }
+
+  async error(message: string, attributes?: Record<string, unknown>): Promise<void> {
+    this.record("error", message, attributes);
+  }
+
+  private record(
+    level: LogRecord["level"],
+    message: string,
+    attributes?: Record<string, unknown>,
+  ): void {
     const logged: LogRecord = {
       component: "observer",
-      timestamp: record.timestamp ?? now,
-      level: record.level,
-      message: record.message,
+      timestamp: now,
+      level,
+      message,
     };
-    if (record.attributes !== undefined) logged.attributes = record.attributes;
+    if (attributes !== undefined) logged.attributes = attributes;
     this.records.push(logged);
-    return logged;
   }
-
-  async debug(message: string, attributes?: Record<string, unknown>): Promise<LogRecord> {
-    return this.log(logInput("debug", message, attributes));
-  }
-
-  async info(message: string, attributes?: Record<string, unknown>): Promise<LogRecord> {
-    return this.log(logInput("info", message, attributes));
-  }
-
-  async warn(message: string, attributes?: Record<string, unknown>): Promise<LogRecord> {
-    return this.log(logInput("warn", message, attributes));
-  }
-
-  async error(message: string, attributes?: Record<string, unknown>): Promise<LogRecord> {
-    return this.log(logInput("error", message, attributes));
-  }
-}
-
-function logInput(
-  level: LogRecord["level"],
-  message: string,
-  attributes: Record<string, unknown> | undefined,
-): Omit<LogRecord, "timestamp" | "component"> {
-  const input: Omit<LogRecord, "timestamp" | "component"> = {
-    level,
-    message,
-  };
-  if (attributes !== undefined) input.attributes = attributes;
-  return input;
 }

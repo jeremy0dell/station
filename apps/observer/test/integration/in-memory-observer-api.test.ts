@@ -17,6 +17,7 @@ import { createObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
+import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const healthStub = {
@@ -58,6 +59,7 @@ describe("Observer API with in-memory persistence", () => {
       onStop: () => commandQueue.shutdown(),
     });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue: commandQueue,
       core,
       providers,

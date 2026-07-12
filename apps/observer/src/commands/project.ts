@@ -1,39 +1,31 @@
-import {
-  addProjectToConfig,
-  removeProjectFromConfig,
-  setProjectDefaultHarnessInConfig,
-} from "@station/config";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { assertCommandType } from "./assertCommand.js";
+import type { ProjectConfigWriter } from "./projectConfigWriter.js";
 import type { CommandHandler } from "./queue.js";
 import { reconcileAndPublish } from "./reconcile.js";
 
 export type CreateProjectCommandHandlerOptions = {
   core: ObserverCore;
-  configPath?: string | undefined;
-  homeDir?: string | undefined;
+  projectConfigWriter: ProjectConfigWriter;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Adds a managed project through the configuration port, updates the live
+ * configuration, and reconciles the published graph.
+ */
 export function createProjectAddHandler(
   options: CreateProjectCommandHandlerOptions,
 ): CommandHandler {
   return async (context) => {
     assertCommandType(context, "project.add");
-    const payload = context.command.payload;
-    const result = await addProjectToConfig({
-      path: payload.path,
-      ...(payload.id === undefined ? {} : { id: payload.id }),
-      ...(payload.label === undefined ? {} : { label: payload.label }),
-      ...(payload.allowNonGit === undefined ? {} : { allowNonGit: payload.allowNonGit }),
-      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
-    });
-
-    options.core.updateConfig(result.config);
+    const config = await options.projectConfigWriter.addProject(context.command.payload);
+    options.core.updateConfig(config);
     await reconcileAndPublish({
       core: options.core,
       eventBus: options.eventBus,
@@ -44,18 +36,19 @@ export function createProjectAddHandler(
   };
 }
 
+/**
+ * USE CASE
+ *
+ * Removes a managed project through the configuration port, updates the live
+ * configuration, and reconciles the published graph.
+ */
 export function createProjectRemoveHandler(
   options: CreateProjectCommandHandlerOptions,
 ): CommandHandler {
   return async (context) => {
     assertCommandType(context, "project.remove");
-    const result = await removeProjectFromConfig({
-      projectId: context.command.payload.projectId,
-      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
-    });
-
-    options.core.updateConfig(result.config);
+    const config = await options.projectConfigWriter.removeProject(context.command.payload);
+    options.core.updateConfig(config);
     await reconcileAndPublish({
       core: options.core,
       eventBus: options.eventBus,
@@ -66,19 +59,19 @@ export function createProjectRemoveHandler(
   };
 }
 
+/**
+ * USE CASE
+ *
+ * Changes a project's default harness through the configuration port, updates
+ * the live configuration, and reconciles the published graph.
+ */
 export function createProjectSetDefaultHarnessHandler(
   options: CreateProjectCommandHandlerOptions,
 ): CommandHandler {
   return async (context) => {
     assertCommandType(context, "project.setDefaultHarness");
-    const result = await setProjectDefaultHarnessInConfig({
-      projectId: context.command.payload.projectId,
-      harness: context.command.payload.harness,
-      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
-      ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
-    });
-
-    options.core.updateConfig(result.config);
+    const config = await options.projectConfigWriter.setDefaultHarness(context.command.payload);
+    options.core.updateConfig(config);
     await reconcileAndPublish({
       core: options.core,
       eventBus: options.eventBus,

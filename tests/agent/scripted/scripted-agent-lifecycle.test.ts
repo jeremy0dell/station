@@ -21,6 +21,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 import { runScriptedAgentLaunchPlan } from "../../support/fake-agent";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -178,6 +179,7 @@ describe("scripted agent lifecycle", () => {
       clock: { now: () => new Date(now) },
     });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

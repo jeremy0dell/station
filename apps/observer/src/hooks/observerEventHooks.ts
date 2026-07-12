@@ -4,7 +4,6 @@ import {
   STATION_SCHEMA_VERSION,
   stationEventMetadata,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
@@ -15,6 +14,7 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
+import type { StationLogger } from "../stationLogger.js";
 
 export type ObserverEventHookRuntime = {
   shutdown(): Promise<void>;
@@ -24,7 +24,7 @@ export type CreateObserverEventHookRuntimeOptions = {
   hooks: ObserverEventHookConfig[];
   eventBus: ObserverEventBus;
   clock?: RuntimeClock;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   commandRunner?: ExternalCommandRunner;
 };
 
@@ -32,7 +32,7 @@ type ObserverEventHookDispatchInput = {
   event: StationEvent;
   hooks: ObserverEventHookConfig[];
   clock: RuntimeClock;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   commandRunner?: ExternalCommandRunner;
 };
 
@@ -61,7 +61,7 @@ async function runObserverEventHook(input: {
   event: StationEvent;
   hook: ObserverEventHookConfig;
   clock: RuntimeClock;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   commandRunner?: ExternalCommandRunner;
 }): Promise<void> {
   const invocation = ObserverEventHookInvocationSchema.parse({

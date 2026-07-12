@@ -19,9 +19,9 @@ import {
   TerminalIntentSchema,
   terminalTargetObservationFromBinding,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import { toSafeError } from "../diagnostics/errors.js";
+import type { StationLogger } from "../stationLogger.js";
 import { throwIfAborted } from "./cancellation.js";
 import { launchHarnessInTerminal, runProviderMutation } from "./session/shared.js";
 
@@ -55,14 +55,14 @@ export type TerminalIntentProviderAccess = {
 export type DefaultTerminalIntentRunnerOptions = {
   providers: TerminalIntentProviderAccess;
   clock?: RuntimeClock | undefined;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
   commandTimeoutMs?: number | undefined;
 };
 
 class DefaultTerminalIntentRunner implements TerminalIntentRunner {
   readonly #providers: TerminalIntentProviderAccess;
   readonly #clock: RuntimeClock;
-  readonly #logger: JsonlLogger | undefined;
+  readonly #logger: StationLogger | undefined;
   readonly #commandTimeoutMs: number | undefined;
   readonly #receipts = new Map<string, Promise<TerminalIntentReceipt>>();
 

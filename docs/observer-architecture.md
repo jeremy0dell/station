@@ -157,7 +157,7 @@ Composition is intentionally split:
 1. `apps/cli/src/observerProviders.ts` constructs concrete integrations,
    assigns provider roles, and supplies a `ProviderRegistry` factory.
 2. `apps/observer/src/runtime/main.ts` loads config and constructs Observer-
-   private infrastructure: SQLite, persistence, logger, event bus, command
+   private infrastructure: SQLite, persistence, logging and project-config adapters, event bus, command
    queue, core, handlers, ingress queues, schedulers, API, and protocol server.
 
 The split is allowed because both pieces are outer wiring. Application modules
@@ -186,7 +186,7 @@ ownership even where current ownership is still a deviation.
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
-| Logging and config mutation | Driven | target `StationLogger` and `ProjectConfigWriter` | JSONL logger and project-config adapters | Logger methods expose no path or JSONL result; project commands expose no config or home path (OBS-HEX-010). |
+| Logging and config mutation | Driven | `StationLogger` and `ProjectConfigWriter` | `runtime/logging.ts` JSONL adapter and `runtime/projectConfigWriter.ts` config adapter | Conforming ports expose only operational logging and the three project mutations; paths and representations remain adapter-owned. |
 | Worktree metadata evidence | Driven | target `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | One role reads typed change evidence; the other owns watcher replacement and shutdown (OBS-HEX-011). |
 | Diagnostic evidence | Driven | target `DiagnosticEvidenceSource` | local state, log, and hook-spool adapter | Only typed local evidence traversal crosses the port; command/event persistence, providers, core, and SQLite remain separate inputs (OBS-HEX-012). |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
@@ -210,6 +210,8 @@ areas contain the following responsibilities:
 | `reconcile/` | provider reads, correlation, graph construction, projection, and core state | Reconcile use case plus deterministic policies; provider I/O remains at its driven edges. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
+| `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
+| `runtime/logging.ts`, `runtime/projectConfigWriter.ts` | Redacted JSONL writes and `@station/config` project mutation translation | Outbound adapters retaining log, config, and home paths at composition. |
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
 | `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases select adapters through provider-neutral policy and depend on local-metadata ports (OBS-HEX-011). |
 | `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
@@ -282,9 +284,10 @@ Current startup proceeds in this order:
    ports and `PersistenceHealthSource` to that handle. Runtime composition
    retains the concrete handle only for open/close lifecycle ownership and
    distributes the composition bundle into narrow application views.
-6. The runtime creates the event bus, logger, command queue, feature evaluator,
-   Observer core, command handlers, and configured event hooks around the
-   awaited provider registry.
+6. The runtime creates the event bus, `StationLogger` JSONL adapter,
+   `ProjectConfigWriter` configuration adapter, command queue, feature evaluator,
+   Observer core, command handlers, and configured event hooks around the awaited
+   provider registry. Only the two application ports pass inward.
 7. The API constructs ingress queues, reconcile scheduling, metadata refresh,
    diagnostics dependencies, and spool draining.
 8. The runtime constructs a private startup-and-health gate, then the protocol
@@ -667,7 +670,6 @@ and exit condition here.
 | ID | Current evidence and risk | Containment and exit evidence | Tracking |
 | --- | --- | --- | --- |
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
-| `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Exit when `StationLogger` exposes only `info`/`warn`/`error`, `ProjectConfigWriter` exposes only the three project mutations returning updated config, and their adapters alone own log/config/home paths. | Logging and project-config edge inversion. |
 | `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Read evidence and long-lived watcher lifecycle are mixed into the use case. | Exit when `WorktreeChangeSource` owns typed Git reads, `WorktreeMetadataInvalidationSource` separately owns watched-worktree replacement and shutdown, and use cases receive neither Git runners nor filesystem paths. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only. Exit when a `DiagnosticEvidenceSource` adapter owns only local-state, recent-log, and hook-spool traversal, captures its paths, and the use case runs against a fake without absorbing persistence, providers, core, or SQLite. | Diagnostic evidence isolation. |
 
@@ -691,6 +693,9 @@ over `StationCommand["type"]`. `OBS-HEX-009` is
 resolved: external launch exposes only an opaque managed-terminal attachment,
 Station owns host PTY and socket resolution, and an advertised attachment can
 never fail over to a duplicate local spawn.
+`OBS-HEX-010` is resolved: Observer consumers depend on `StationLogger` and
+`ProjectConfigWriter`, while runtime adapters alone retain JSONL records and
+configuration/home paths; static inventory and substitution tests enforce both edges.
 `OBS-HEX-013` is resolved: normal and provider-hook clients no longer unlink
 stale sockets, the child holds the persistent SQLite boot claim through ready
 commitment, and permanent Node/Bun plus production lifecycle races cover
