@@ -92,7 +92,25 @@ try {
     const piExtensionPath = await findFile(join(stateDir, "run", "assets", "pi"), (name) =>
       name.endsWith(".mjs"),
     );
-    await import(`${pathToFileURL(piExtensionPath).href}?smoke=${Date.now()}`);
+    const piExtension = await import(`${pathToFileURL(piExtensionPath).href}?smoke=${Date.now()}`);
+    assertEqual(typeof piExtension.default, "function", "packaged Pi default export");
+    assertEqual(
+      typeof piExtension.registerStationPiExtension,
+      "function",
+      "packaged Pi named export",
+    );
+    const piHandlers = new Map();
+    const deliveredEvents = [];
+    piExtension.registerStationPiExtension(
+      { on: (eventType, handler) => piHandlers.set(eventType, handler) },
+      {
+        env: { STATION_WORKTREE_PATH: root },
+        sendReport: async (input) => deliveredEvents.push(input),
+      },
+    );
+    assertEqual(piHandlers.size > 0, true, "packaged Pi handler registration");
+    await piHandlers.get("session_start")?.({ reason: "startup" }, { cwd: root });
+    assertEqual(deliveredEvents.length, 1, "packaged Pi injected event delivery");
 
     await observerClient.stop();
     observerClient = undefined;
