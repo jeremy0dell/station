@@ -65,9 +65,67 @@ describe("release readiness docs", () => {
     expect(readme).toContain("without Node.js, pnpm, Bun");
     expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
     expect(install).toContain("tag=v0.7.0");
-    expect(install).toContain('-f ref="$tag"');
-    expect(install).toContain('sh "$installer" --version "$tag"');
-    expect(readme).toContain('-f ref="$tag"');
+    for (const [path, document] of [
+      ["README.md", readme],
+      ["docs/install.md", install],
+    ] as const) {
+      expect(document, path).not.toContain("ref=main");
+      const expectedRecipeCount = path === "README.md" ? 1 : 2;
+      const curlCommands = shellBlocks(document)
+        .flatMap(continuedShellCommands)
+        .filter((command) => command.startsWith("curl "));
+      expect(curlCommands, path).toHaveLength(expectedRecipeCount);
+      for (const command of curlCommands) {
+        expect(command, path).toMatch(/^curl\s+--disable(?:\s|$)/);
+        expect(command, path).not.toMatch(/\b(?:Authorization|Bearer|token)\b/i);
+        expect(command, path).not.toMatch(/(?:^|\s)(?:-L|--location)(?:\s|$)/);
+        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
+      }
+      const contentsFetches = curlCommands.filter((command) =>
+        command.includes("contents/scripts/install.sh"),
+      );
+      expect(contentsFetches, path).toHaveLength(expectedRecipeCount);
+      const recipes = shellBlocks(document).filter((block) =>
+        block.includes(
+          "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag",
+        ),
+      );
+      expect(recipes, path).toHaveLength(expectedRecipeCount);
+      for (const recipe of recipes) {
+        expect(recipe, path).toContain("cd /path/to/your/git-project");
+        expect(recipe.indexOf("cd /path/to/your/git-project"), path).toBeLessThan(
+          recipe.indexOf("curl --disable"),
+        );
+        expect(recipe, path).toContain("umask 077");
+        expect(recipe, path).toContain('token="$(gh auth token --hostname github.com)"');
+        expect(recipe, path).toContain('headers="$(mktemp)"');
+        expect(recipe, path).toContain('installer="$(mktemp)"');
+        expect(recipe, path).toContain('trap \'rm -f "$headers" "$installer"\' EXIT');
+        expect(recipe, path).toContain("Authorization: Bearer %s");
+        expect(recipe, path).toContain("Accept: application/vnd.github.raw+json");
+        expect(recipe, path).toContain("unset token");
+        expect(recipe, path).toContain('test -s "$installer"');
+        expect(recipe, path).toContain('sh -n "$installer"');
+        expect(recipe, path).toContain('sh "$installer" --version "$tag"');
+
+        const installerFetches = continuedShellCommands(recipe).filter((command) =>
+          command.includes("contents/scripts/install.sh?ref=$tag"),
+        );
+        expect(installerFetches, path).toHaveLength(1);
+        const command = installerFetches[0] ?? "";
+        expect(command, path).toContain("--proto '=https'");
+        expect(command, path).toContain("--tlsv1.2");
+        expect(command, path).toContain("--fail");
+        expect(command, path).toContain("--silent");
+        expect(command, path).toContain("--show-error");
+        expect(command, path).toContain("--max-redirs 0");
+        expect(command, path).toContain('--header "@$headers"');
+        expect(command, path).toContain('--output "$installer"');
+        expect(command, path).toContain(
+          "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag",
+        );
+      }
+    }
     expect(readme.replace(/\s+/g, " ")).toContain("installer code and artifacts");
     expect(install).toContain("SHA256SUMS");
     expect(install).toContain("stn-tmux-popup");
@@ -158,6 +216,27 @@ describe("release readiness docs", () => {
     }
   });
 
+  it("documents the complete first-run handoff after the binary install", async () => {
+    const documents = await Promise.all(
+      ["README.md", "docs/install.md"].map(async (path) => [path, await read(path)] as const),
+    );
+
+    for (const [path, document] of documents) {
+      expect(document, path).toContain("only installs the Station binaries");
+      expect(document, path).toContain("cd /path/to/your/git-project");
+      expect(document, path).toMatch(/PATH="\$HOME\/\.local\/bin\$\{PATH:\+":\$PATH"\}"/);
+      expect(document, path).toContain("hash -r");
+      expect(document, path).toContain("stn setup");
+      expect(document, path).toContain("stn doctor");
+      expect(document, path).toContain("stn tui");
+      expect(document, path).toContain("~/.config/station/config.toml");
+      expect(document, path).toContain("shell startup file");
+      expect(document, path).toContain("cold-boot welcome screen");
+      expect(document, path).toContain("Create Session");
+      expect(document, path).toContain("start the agent session");
+    }
+  });
+
   it("does not advertise removed Crush harness surfaces", async () => {
     const files = ["README.md", "AGENTS.md", ...(await markdownFiles("docs"))];
 
@@ -170,6 +249,18 @@ describe("release readiness docs", () => {
 
 async function read(path: string): Promise<string> {
   return readFile(path, "utf8");
+}
+
+function continuedShellCommands(document: string): string[] {
+  return document
+    .replace(/\\\r?\n\s*/g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^(?:[A-Z_]+=[^ ]+\s+)*(?:curl|gh)\s/.test(line));
+}
+
+function shellBlocks(document: string): string[] {
+  return [...document.matchAll(/```(?:sh|bash)\r?\n([\s\S]*?)```/g)].map((match) => match[1] ?? "");
 }
 
 async function markdownFiles(root: string): Promise<string[]> {
