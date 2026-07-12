@@ -43,6 +43,19 @@ It runs build, typecheck, lint, unit tests, contract tests, integration tests,
 diagnostics tests, the scripted-agent lane, setup E2E coverage, and a production
 Observer SQLite restart smoke. It intentionally excludes real provider lanes.
 
+After root `pnpm install`, Lefthook runs the broader local gate before pushes:
+
+```bash
+pnpm test:pre-push
+```
+
+In addition to `test:all`, it checks cross-runtime SQLite compatibility, the
+Station renderer, the native PTY implementation, and the compiled binary on
+the developer's current platform. Install both the root pnpm dependencies and
+the `station/` Bun dependencies before pushing. GitHub-hosted CI remains the
+required PR and `main` gate, including cross-platform PTY coverage; the local
+gate is supplementary and can be bypassed with `git push --no-verify`.
+
 Useful focused commands:
 
 ```bash
@@ -60,8 +73,8 @@ pnpm smoke:release
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
-the other runtime to verify the shared SQLite contract and migrations. The
-mandatory `station-bun` CI job runs this gate.
+the other runtime to verify the shared SQLite contract and migrations. Both the
+local pre-push gate and the mandatory hosted `station-bun` job run this check.
 
 For focused Station PTY work, run both implementations explicitly:
 
@@ -94,8 +107,8 @@ binary smoke:
 ```bash
 bun install
 cd ..
-pnpm build:binary -- --version 0.1.0-dev
-pnpm smoke:binary -- --expected-version 0.1.0-dev
+pnpm build:binary -- --version 0.7.0
+pnpm smoke:binary -- --expected-version 0.7.0
 ```
 
 The staged artifact is `station/dist/bin/stn`, with `stn-ingress` and

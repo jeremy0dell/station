@@ -1,6 +1,6 @@
 {
   "name": "station",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -15,6 +15,7 @@
     "pnpm": "11.0.0"
   },
   "scripts": {
+    "prepare": "lefthook install",
     "build": "turbo run build",
     "build:binary": "bun scripts/build-binary.mjs",
     "setup:system": "scripts/setup/setup-system-dependencies.sh",
@@ -59,7 +60,8 @@
     "test:agent:nightly": "STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real",
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
-    "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup"
+    "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup",
+    "test:pre-push": "pnpm test:all && pnpm test:sqlite:bun && pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty:bun && pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
