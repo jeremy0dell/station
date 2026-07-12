@@ -8,6 +8,8 @@ For configuration — the runtime `config.toml` (all sections, including `[works
 
 For development, test, and documentation workflow, read `docs/development.md`.
 
+When creating plans, name the governing documents and other sources of truth, enumerate every file and test expected to change, and identify every JSDoc addition or update required for backend or connector changes.
+
 For harness status, attention, and event semantics, read `docs/harness-signals.md`. For adding or upgrading a harness integration, read `docs/harness-authoring.md`.
 
 For runtime trace IDs, command IDs, diagnostic IDs, or live debugging, read `docs/debugging.md`.
