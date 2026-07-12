@@ -1,6 +1,12 @@
-import { chmod, copyFile, mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { pathExists, readTextFileIfPresent, removeFileIfPresent } from "./files.js";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { copyFile } from "node:fs/promises";
+import {
+  pathExists,
+  readTextFileIfPresent,
+  removeFileIfPresent,
+  replaceTextFile,
+} from "./files.js";
 
 export type HookSetupErrorFactory = (input: {
   operation: "read" | "metadata" | "backup" | "writeConfig" | "writeScript" | "remove";
@@ -110,11 +116,7 @@ async function writeHookFile(
   createError: HookSetupErrorFactory,
 ): Promise<void> {
   try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(path, contents, { mode });
-    if (mode === 0o700) {
-      await chmod(path, mode);
-    }
+    await replaceTextFile({ path, contents, mode, directoryMode: 0o700 });
   } catch (cause) {
     throw createError({
       operation: mode === 0o700 ? "writeScript" : "writeConfig",
@@ -144,9 +146,9 @@ async function backupHookFile(
     throw createError({ operation: "metadata", path, cause });
   }
 
-  const backupPath = `${path}.bak.${new Date().toISOString().replaceAll(/[^0-9]/g, "")}`;
+  const backupPath = `${path}.bak.${new Date().toISOString().replaceAll(/[^0-9]/g, "")}.${randomUUID()}`;
   try {
-    await copyFile(path, backupPath);
+    await copyFile(path, backupPath, constants.COPYFILE_EXCL);
   } catch (cause) {
     throw createError({ operation: "backup", path, cause });
   }

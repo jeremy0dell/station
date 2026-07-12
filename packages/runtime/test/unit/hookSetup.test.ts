@@ -17,7 +17,7 @@ import {
   shellQuote,
   uninstallConfigScriptHook,
 } from "@station/runtime";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Minimal document model so the plan/install/uninstall orchestration can be exercised
 // without pulling in a provider-specific schema. Config is event -> hook-script-path.
@@ -368,6 +368,20 @@ describe("runtime hookSetup", () => {
 
     it("treats an absent file as no backup, not an error", async () => {
       await expect(ops.backupIfPresent(join(root, "missing"))).resolves.toBeUndefined();
+    });
+
+    it("keeps backups distinct when created in the same millisecond", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-07-12T12:00:00.000Z"));
+      try {
+        const first = await ops.backupIfPresent(filePath);
+        const second = await ops.backupIfPresent(filePath);
+        expect(first).not.toBe(second);
+        await expect(readFile(first as string, "utf8")).resolves.toBe("x");
+        await expect(readFile(second as string, "utf8")).resolves.toBe("x");
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
