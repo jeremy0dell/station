@@ -242,6 +242,7 @@ async function waitForContendedAutoStart(input: {
 }
 
 function autoStartLockDir(paths: ObserverPaths): string {
+  // This state-dir lock throttles hook spawns only; the child claim owns Observer boot.
   return join(paths.stateDir, "run", autoStartLockName);
 }
 
@@ -264,7 +265,7 @@ async function writeAutoStartLockOwner(
       { mode: 0o600 },
     );
   } catch {
-    // Owner metadata is diagnostic-only; the lock directory itself is the authority.
+    // Owner metadata is diagnostic-only; the directory itself gates hook rate limiting.
   }
 }
 

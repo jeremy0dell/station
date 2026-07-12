@@ -1,7 +1,7 @@
 import { lstat } from "node:fs/promises";
 import type { ObserverStopReceipt, SafeError } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
-import { createObserverClient, isSocketStale, removeStaleSocket } from "@station/protocol";
+import { createObserverClient, isSocketStale } from "@station/protocol";
 import {
   type RuntimeClock,
   type RuntimeTraceContext,
@@ -60,6 +60,12 @@ export async function getObserverStatus(
   }
 }
 
+/**
+ * USE CASE
+ *
+ * Attaches to a healthy Observer or starts a child while leaving socket
+ * ownership mutation to the child's serialized boot lifecycle.
+ */
 export async function startObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
@@ -71,9 +77,6 @@ export async function startObserver(
   const existing = await getObserverStatus({ ...options, paths }, deps);
   if (existing.status === "running") {
     return existing;
-  }
-  if (existing.status === "stale") {
-    await removeStaleSocket(paths.socketPath);
   }
   if (existing.status === "unhealthy") {
     return existing;

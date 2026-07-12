@@ -235,6 +235,7 @@ No single layer owns all truth.
 | Provider-owned identity | Worktree, target, harness-run, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
+| Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
@@ -251,45 +252,53 @@ and reloads after later gaps or events that cannot be reduced safely.
 
 ### Startup
 
-Normal CLI and provider-hook startup currently probe and may remove a stale
-socket pathname before spawning. Each spawned Observer later uses bind-first
-stale reclamation in the protocol server. Those ownership mutations are not
-serialized across processes; `OBS-HEX-013` tracks the resulting cached-stale
-race.
+Normal CLI and provider-hook startup is attach-or-spawn: clients may classify a
+stale socket, but only the spawned Observer child mutates ownership. The child
+serializes probe, stale reclaim, bind, pidfile publication, watcher setup, and
+ready-state commitment with an OS-backed SQLite transaction.
 
 Current startup proceeds in this order:
 
 1. CLI composition supplies the concrete, optionally asynchronous provider
-   registry factory.
+   registry factory. The normal and provider-hook spawners pass the caller's
+   positive startup budget as internal child argv; custom spawn callback
+   contracts remain unchanged.
 2. Observer runtime loads config, resolves the canonical state and socket paths,
-   creates the state directory, and passes that resolved directory to CLI
-   composition. Compiled composition materializes the Pi extension here before
-   constructing providers; Observer code remains provider-neutral.
-3. SQLite opens and applies pending migrations, then
+   and prepares private state and socket directories.
+3. Before provider construction or main-database access, the child opens the
+   low-level claim database beside the resolved socket and acquires `BEGIN
+   IMMEDIATE` with that startup budget. A listening probe releases the claim and
+   exits successfully so the parent attaches. An absent or stale probe keeps the
+   claim for owned startup; hard contention or claim I/O failure is fatal.
+4. CLI composition receives the resolved state directory and constructs the
+   providers. Compiled composition materializes the Pi extension here; Observer
+   code remains provider-neutral.
+5. The main Observer SQLite opens and applies pending migrations, then
    `createSqliteObserverPersistence` binds the seven application persistence
    ports and `PersistenceHealthSource` to that handle. Runtime composition
    retains the concrete handle only for open/close lifecycle ownership and
    distributes the composition bundle into narrow application views.
-4. The runtime creates the event bus, logger, command queue, feature evaluator,
+6. The runtime creates the event bus, logger, command queue, feature evaluator,
    Observer core, command handlers, and configured event hooks around the
    awaited provider registry.
-5. The API constructs ingress queues, reconcile scheduling, metadata refresh,
+7. The API constructs ingress queues, reconcile scheduling, metadata refresh,
    diagnostics dependencies, and spool draining.
-6. The runtime constructs a private startup-and-health gate, then the protocol
+8. The runtime constructs a private startup-and-health gate, then the protocol
    server binds the resolved socket before startup reconcile. Only the
    successful socket binder may publish process identity.
-7. The runtime captures the bound-socket identity, atomically publishes and
+9. The runtime captures the bound-socket identity, atomically publishes and
    fsyncs `<socketPath>.pid`, then arms the socket-ownership
    watcher from the captured identity. Identity publication or OS-start-token
    failure is fatal: health stays gated while the runtime logs the startup
    failure, tears down its services, socket, and SQLite handle, and exits
    nonzero.
-8. Health responses are enabled only after pidfile publication and watcher
-   setup complete. Startup reconcile then establishes the first provider-backed
-   snapshot; provider health and harness-version probes fill caches in the
-   background. A stop requested before readiness is terminal: shutdown waits
-   for publication to settle, health remains gated, and startup reconcile is
-   skipped.
+10. The startup gate marks the runtime ready, synchronously rolls back and closes
+    the boot claim, then unblocks health responses. Startup reconcile follows
+    outside the claim and establishes the first provider-backed snapshot;
+    provider health and harness-version probes fill caches in the background. A
+    stop requested before readiness is terminal: health remains gated, socket
+    and pidfile cleanup finish while the claim is held, and the outer lifecycle
+    `finally` releases it before exit.
 
 Composition must make lifecycle ownership obvious. Anything that owns a timer,
 fiber, watcher, queue, socket, child process, or durable handle must have a
@@ -417,7 +426,7 @@ from the diagnostic use case.
 
 | Concern | Current contract |
 | --- | --- |
-| Observer boot ownership | The resolved socket defines singleton identity, but client-side stale deletion and server-side stale reclamation are not yet serialized. Different sockets remain independent owners even when their paths share a state or runtime directory (OBS-HEX-013). |
+| Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes all child-side ownership mutation; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Reconcile ordering | Core reconciles form a non-poisoning promise chain. Scheduled requests coalesce; queued work after a run receives a later flush. |
@@ -640,7 +649,6 @@ and exit condition here.
 | `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Exit when `StationLogger` exposes only `info`/`warn`/`error`, `ProjectConfigWriter` exposes only the three project mutations returning updated config, and their adapters alone own log/config/home paths. | Logging and project-config edge inversion. |
 | `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Read evidence and long-lived watcher lifecycle are mixed into the use case. | Exit when `WorktreeChangeSource` owns typed Git reads, `WorktreeMetadataInvalidationSource` separately owns watched-worktree replacement and shutdown, and use cases receive neither Git runners nor filesystem paths. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only. Exit when a `DiagnosticEvidenceSource` adapter owns only local-state, recent-log, and hook-spool traversal, captures its paths, and the use case runs against a fake without absorbing persistence, providers, core, or SQLite. | Diagnostic evidence isolation. |
-| `OBS-HEX-013` | Normal CLI and provider-hook startup may delete a socket pathname after separate stale probes, while `bindWithStaleReclaim` also probes and unlinks without a cross-process critical section. Two contenders can cache the same stale result, unlink a newly bound successor, and leave duplicate live processes for one resolved socket. | The seeded ownership watcher and `stn observer reap` contain displacement but do not prevent the race. Exit when the Observer child serializes probe, stale reclaim, bind, pidfile publication, watcher setup, and ready-state commitment with an OS-backed SQLite transaction at `dirname(resolvedSocket)/observer.claim.sqlite`; clients no longer mutate the socket; and process-level Node/Bun plus CLI/hook races prove one healthy owner. Different sockets in one directory may share the startup claim while retaining separate singleton identities. | [#135](https://github.com/jeremy0dell/station/issues/135) boot serialization. |
 
 The managed-terminal lifecycle leak formerly tracked as `OBS-HEX-001` is
 resolved: application code receives `ManagedTerminalLifecycle` from composition,
@@ -662,6 +670,10 @@ over `StationCommand["type"]`. `OBS-HEX-009` is
 resolved: external launch exposes only an opaque managed-terminal attachment,
 Station owns host PTY and socket resolution, and an advertised attachment can
 never fail over to a duplicate local spawn.
+`OBS-HEX-013` is resolved: normal and provider-hook clients no longer unlink
+stale sockets, the child holds the persistent SQLite boot claim through ready
+commitment, and permanent Node/Bun plus production lifecycle races cover
+contention, owner death, stale reclaim, and distinct sockets sharing a claim.
 This document resolves `OBS-HEX-008`, the missing canonical Observer architecture
 contract. Resolved history belongs in its issue and pull request, not in the
 active register.

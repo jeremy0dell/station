@@ -32,7 +32,7 @@ Not config, but adjacent:
 
 | Directory | Path (default) | Holds | Relocate with |
 | --- | --- | --- | --- |
-| **State dir** | `~/.local/state/station/` | SQLite DB, logs, diagnostics, hook spool, sockets | `observer.state_dir` in config; sockets also follow `XDG_RUNTIME_DIR` |
+| **State dir** | `~/.local/state/station/` | SQLite DB, logs, diagnostics, hook spool, and default runtime paths | `observer.state_dir`; sockets and the boot claim follow `observer.socket_path` or `XDG_RUNTIME_DIR` when set |
 
 The state dir is **not** a config file — never edit anything under
 `~/.local/state/station` by hand. See [debugging.md](./debugging.md).
@@ -463,6 +463,14 @@ Default state paths (all under `state_dir`, default `~/.local/state/station`):
 - `observer.sqlite`, `logs/`, `diagnostics/`, `spool/hooks/` follow `state_dir`.
 - `run/observer.sock` and sibling `run/station-host.sock` sit under a `run/` subdir of
   `state_dir`, **unless** `XDG_RUNTIME_DIR` is set (then `$XDG_RUNTIME_DIR/station/`).
+- `observer.claim.sqlite` sits beside the resolved Observer socket. It is a
+  persistent boot-serialization database, not Observer application state:
+  file existence is never ownership, and startup never removes or replaces it.
+  The socket directory is mode `0700`; the claim and any SQLite sidecars are
+  regular non-symlink files at mode `0600`. Different sockets in one directory
+  share startup serialization while retaining separate sockets and pidfiles.
+  A configured socket filename cannot be `observer.claim.sqlite` or one of its
+  `-journal`, `-wal`, or `-shm` sidecars.
 
 Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_PROJECT_ID`, `STATION_WORKTREE_ID`, `STATION_WORKTREE_PATH`,

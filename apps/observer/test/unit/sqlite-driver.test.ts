@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openSqlDatabase } from "../../src/sqlite/driver";
+import { isSqliteBusyError, openSqlDatabase } from "../../src/sqlite/driver";
 
 describe("SQLite driver", () => {
   it("normalizes Node SQLite statements to the shared contract", () => {
@@ -20,5 +20,18 @@ describe("SQLite driver", () => {
     } finally {
       database.close();
     }
+  });
+
+  it.each([
+    [{ code: "ERR_SQLITE_ERROR", errcode: 5 }, true],
+    [{ code: "SQLITE_BUSY", errno: 5 }, true],
+    [{ code: "ERR_SQLITE_ERROR", errcode: 6 }, false],
+    [{ code: "SQLITE_BUSY", errno: 6 }, false],
+    [{ code: "SQLITE_BUSY", errcode: 5 }, false],
+    [{ code: "ERR_SQLITE_ERROR", errno: 5 }, false],
+    [{ code: "SQLITE_BUSY" }, false],
+    [new Error("busy"), false],
+  ])("classifies only verified native busy error shapes", (error, expected) => {
+    expect(isSqliteBusyError(error)).toBe(expected);
   });
 });

@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import { createObserverClient } from "@station/protocol";
 import {
@@ -6,8 +8,8 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
-import { createTempSocketPath } from "../../../../tests/support/sockets";
+import { describe, expect, it, vi } from "vitest";
+import { createStaleSocketFile, createTempSocketPath } from "../../../../tests/support/sockets";
 import {
   createCommandQueue,
   createObserverApi,
@@ -17,7 +19,9 @@ import {
   openObserverSqlite,
   type PersistenceHealthSource,
   ProviderRegistry,
+  probeObserverSocket,
   registerObserverCommandHandlers,
+  runObserverMain,
   startObserverServer,
 } from "../../src/internal";
 
@@ -38,6 +42,43 @@ const degradedSqliteHealth = {
 } as const;
 
 describe("observer protocol server", () => {
+  it("translates absent, stale, and listening socket transport states", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    await expect(probeObserverSocket(socketPath)).resolves.toBe("absent");
+
+    await createStaleSocketFile(socketPath);
+    await expect(probeObserverSocket(socketPath)).resolves.toBe("stale");
+
+    const fixture = createObserverFixture(socketPath);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+      drainOnStart: false,
+    });
+    try {
+      await expect(probeObserverSocket(socketPath)).resolves.toBe("listening");
+      const stateDir = join(dir, "losing-state");
+      const providerRegistryFactory = vi.fn(() => {
+        throw new Error("providers must not be constructed for a listening socket");
+      });
+      await expect(
+        runObserverMain(
+          ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "100"],
+          { providerRegistryFactory },
+        ),
+      ).resolves.toBe(0);
+      expect(providerRegistryFactory).not.toHaveBeenCalled();
+      await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await server.close();
+      fixture.sqlite.close();
+    }
+  });
+
   it("serves health, diagnostics, command dispatch, command get, and reconcile", async () => {
     const { socketPath } = await createTempSocketPath();
     const fixture = createObserverFixture(socketPath);

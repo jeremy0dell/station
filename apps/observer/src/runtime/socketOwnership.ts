@@ -17,9 +17,10 @@ export type WatchSocketOwnershipOptions = {
   onLost(): void;
 };
 
-// A newer observer claims the socket path by unlinking and rebinding it, which
-// gives the displaced process no signal. Watching the file's inode is the only
-// way it can learn it lost ownership and must shut down instead of lingering.
+// A legacy or otherwise uncoordinated observer can claim the socket path by
+// unlinking and rebinding it, which gives the displaced process no signal.
+// Watching the file's inode is the only way it can learn it lost ownership and
+// must shut down instead of lingering.
 // Inode number alone is ambiguous: a recreated path can reuse the just-freed
 // inode (ext4 does this routinely), so identity pairs it with the birth time.
 // Filesystems without btime report 0n for both files, degrading to inode-only.

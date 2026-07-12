@@ -63,7 +63,10 @@ export async function startObserverProcess(
       if (input.configPath !== undefined) {
         spawnInput.configPath = input.configPath;
       }
-      child = await (deps.spawnObserver ?? defaultSpawnObserver)(spawnInput);
+      child =
+        deps.spawnObserver === undefined
+          ? await defaultSpawnObserver({ ...spawnInput, startupTimeoutMs: input.timeoutMs })
+          : await deps.spawnObserver(spawnInput);
       if (signal.aborted) {
         child.kill?.();
         throw observerHealthWaitCancelledError();

@@ -36,8 +36,8 @@ Non-goals:
 - **Windows targets.**
 - **Any observer replacement / eviction in this roadmap.** Coordinated
   single-observer behavior is owned entirely by
-  [observer-singleton](observer-singleton.md). This plan *depends on* that
-  roadmap's 3c/3d-a/3d-b/3e phases; it does not add a second,
+  [observer-singleton](observer-singleton.md). This plan uses shipped 3c/3d-a
+  and defers remaining ownership policy to 3d-b/3e; it does not add a second,
   uncoordinated eviction path (v1 did — removed, see F3).
 - **Replacing the dev workflow.** Dev mode (tsc dist under Node +
   `bun --hot` TUI from source) stays byte-identical; compiled mode is new
@@ -528,11 +528,10 @@ health wait is 10 seconds; only TUI and popup launches show delayed progress.
 **Removed from v1:** the client-side unhealthy-incumbent SIGTERM eviction.
 It conflicts with [observer-singleton](observer-singleton.md), which is
 split between 3d-a's narrow boot serialization and 3d-b's deferred
-version-aware replacement. Today, CLI and provider-hook clients can delete a
-socket after their own stale probe while the server independently performs
-bind-first stale reclamation; those mutations are not serialized
-(`OBS-HEX-013`). 3d-a ([#135](https://github.com/jeremy0dell/station/issues/135))
-moves mutation into the child under
+version-aware replacement. 3d-a ([#135](https://github.com/jeremy0dell/station/issues/135))
+is implemented: CLI and provider-hook clients only attach or spawn, while the
+child serializes socket probe, stale reclamation, bind, pidfile publication,
+and ready commitment under
 `dirname(resolvedSocket)/observer.claim.sqlite`, without version comparison,
 signals, or eviction. **Dependency, not duplication:** the version-aware
 upgrade behavior this plan needs (B3) belongs to 3d-b. If that lands, B3
@@ -617,7 +616,7 @@ A2a: opt-in PTY + native helper gate    A3: raw dispatch
 A4: packaged assets + compiled default   A2b: folded into A4
 A5: release                              A6: cleanup
 
-External dependency: observer-singleton 3d-a
+Satisfied dependency: observer-singleton 3d-a
   → required for serialized concurrent stale-socket startup.
 External dependency: observer-singleton 3d-b
   → required before any older-version observer handoff is claimed safe.

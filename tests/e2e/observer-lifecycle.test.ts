@@ -1,12 +1,18 @@
+import { execFile } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { promisify } from "node:util";
 import { startObserver } from "@station/cli";
 import { emptyConfig } from "@station/config";
 import { ObserverProcessIdentitySchema } from "@station/contracts";
+import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
-import { waitForSocketClosed } from "../support/sockets";
+import { createRealStaleSocket, waitForSocketClosed } from "../support/sockets";
 import { createTempState, writeConfigToml } from "../support/temp-projects";
+
+const execFileAsync = promisify(execFile);
 
 describe("observer lifecycle e2e", () => {
   it("boots a real observer with in-memory defaults and no config file", async () => {
@@ -75,6 +81,8 @@ describe("observer lifecycle e2e", () => {
           fixture.socketPath,
           "--state-dir",
           fixture.stateDir,
+          "--startup-timeout-ms",
+          "30000",
         ],
       });
       expect((await stat(bootLogPath)).mode & 0o777).toBe(0o600);
@@ -129,6 +137,128 @@ describe("observer lifecycle e2e", () => {
     }
 
     await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("derives the default socket and persistent claim from state when XDG is unset", async () => {
+    const fixture = await createTempState();
+    const socketPath = join(fixture.stateDir, "run", "observer.sock");
+    const claimPath = observerBootClaimPath(socketPath);
+    const config = {
+      ...emptyConfig(),
+      observer: { stateDir: fixture.stateDir },
+    };
+    const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+    delete process.env.XDG_RUNTIME_DIR;
+    const client = createObserverClient({ socketPath, timeoutMs: 1000 });
+    let started = false;
+
+    try {
+      const status = await startObserver({ config, timeoutMs: 30_000 });
+      expect(status).toMatchObject({ status: "running", paths: { socketPath } });
+      started = status.status === "running";
+      await expectClaimDatabase(claimPath);
+    } finally {
+      if (started) {
+        await client.stop();
+        await waitForSocketClosed(socketPath);
+      }
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+    }
+
+    await expectClaimDatabase(claimPath);
+  });
+
+  it("keeps the claim inode stable across clean stop and restart", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    const claimPath = observerBootClaimPath(fixture.socketPath);
+
+    const first = await startObserver({ config, timeoutMs: 30_000 });
+    expect(first.status).toBe("running");
+    const firstClaim = await stat(claimPath);
+    await expectClaimDatabase(claimPath);
+    await client.stop();
+    await waitForSocketClosed(fixture.socketPath);
+
+    const second = await startObserver({ config, timeoutMs: 30_000 });
+    expect(second.status).toBe("running");
+    const secondClaim = await stat(claimPath);
+    expect(secondClaim.ino).toBe(firstClaim.ino);
+    await expectClaimDatabase(claimPath);
+    await client.stop();
+    await waitForSocketClosed(fixture.socketPath);
+
+    expect((await stat(claimPath)).ino).toBe(firstClaim.ino);
+    await expectClaimDatabase(claimPath);
+  });
+
+  it("does not construct Observer state while a production boot claim is held", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const claimResult = await acquireObserverBootClaim({
+      socketPath: fixture.socketPath,
+      timeoutMs: 1000,
+    });
+    expect(claimResult.status).toBe("acquired");
+    if (claimResult.status !== "acquired") {
+      throw new Error(`Could not hold Observer boot claim: ${claimResult.error.code}`);
+    }
+
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    const startup = startObserver({ config, timeoutMs: 10_000 });
+    let released = false;
+    let status: Awaited<typeof startup> | undefined;
+    try {
+      await waitFor(
+        async () => (await observerProcessesForSocket(fixture.socketPath)).length === 1,
+        3000,
+      );
+      await sleep(100);
+      await expect(access(join(fixture.stateDir, "observer.sqlite"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(access(fixture.socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(`${fixture.socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+
+      expect(claimResult.release()).toEqual({ status: "released" });
+      released = true;
+      status = await startup;
+      expect(status.status).toBe("running");
+    } finally {
+      if (!released) claimResult.release();
+      status ??= await startup;
+      if (status.status === "running") {
+        await client.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+    }
+  });
+
+  it("converges five starts from one real stale socket with spaces in its path", async () => {
+    const fixture = await createTempState();
+    const socketDir = await mkdtemp("/tmp/stn socket spaces ");
+    const socketPath = join(socketDir, "observer socket.sock");
+    const config = observerConfig(fixture.stateDir, socketPath);
+    const client = createObserverClient({ socketPath, timeoutMs: 1000 });
+    let started = false;
+
+    try {
+      await createRealStaleSocket(socketPath);
+      const statuses = await Promise.all(
+        Array.from({ length: 5 }, () => startObserver({ config, timeoutMs: 30_000 })),
+      );
+      started = statuses.some((status) => status.status === "running");
+      await expectSingleObserver(statuses, socketPath);
+      await expectClaimDatabase(observerBootClaimPath(socketPath));
+    } finally {
+      if (started) {
+        await client.stop().catch(() => undefined);
+        await waitForSocketClosed(socketPath).catch(() => undefined);
+      }
+      await rm(socketDir, { recursive: true, force: true });
+    }
   });
 
   it("keeps identities distinct for sockets sharing one directory", async () => {
@@ -195,7 +325,7 @@ describe("observer lifecycle e2e", () => {
     await expect(access(`${secondSocketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("publishes identity beside an XDG runtime socket", async () => {
+  it("converges two stale starts on the XDG socket when state and runtime diverge", async () => {
     const fixture = await createTempState();
     const runtimeDir = await mkdtemp("/tmp/stn-xdg-");
     const socketPath = join(runtimeDir, "station", "observer.sock");
@@ -210,16 +340,15 @@ describe("observer lifecycle e2e", () => {
     let started = false;
 
     try {
-      const status = await startObserver({ config, timeoutMs: 30_000 });
-      expect(status).toMatchObject({
-        status: "running",
-        paths: { socketPath },
-        health: { socketPath },
-      });
-      if (status.status !== "running") {
-        throw new Error(`Observer failed to start: ${status.status}`);
-      }
-      started = true;
+      await createRealStaleSocket(socketPath);
+      const statuses = await Promise.all([
+        startObserver({ config, timeoutMs: 30_000 }),
+        startObserver({ config, timeoutMs: 30_000 }),
+      ]);
+      started = statuses.some((status) => status.status === "running");
+      await expectSingleObserver(statuses, socketPath);
+      const status = statuses[0];
+      if (status?.status !== "running") throw new Error("Observer failed to start.");
 
       expect(
         ObserverProcessIdentitySchema.parse(JSON.parse(await readFile(pidfilePath, "utf8"))),
@@ -231,6 +360,10 @@ describe("observer lifecycle e2e", () => {
       await expect(access(join(fixture.stateDir, "observer.sock.pid"))).rejects.toMatchObject({
         code: "ENOENT",
       });
+      await expectClaimDatabase(observerBootClaimPath(socketPath));
+      await expect(
+        access(join(fixture.stateDir, "run", "observer.claim.sqlite")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       if (started) {
         await client.stop();
@@ -395,3 +528,78 @@ describe("observer lifecycle e2e", () => {
     await expect(client.health()).rejects.toBeDefined();
   });
 });
+
+function observerConfig(stateDir: string, socketPath: string) {
+  return {
+    ...emptyConfig(),
+    observer: { stateDir, socketPath },
+  };
+}
+
+async function expectClaimDatabase(path: string): Promise<void> {
+  const info = await stat(path);
+  expect(info.isFile()).toBe(true);
+  expect(info.mode & 0o777).toBe(0o600);
+  expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
+
+  const database = new DatabaseSync(path);
+  try {
+    expect(database.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
+  } finally {
+    database.close();
+  }
+}
+
+async function expectSingleObserver(
+  statuses: readonly Awaited<ReturnType<typeof startObserver>>[],
+  socketPath: string,
+): Promise<void> {
+  expect(statuses.every((status) => status.status === "running")).toBe(true);
+  const pids = statuses.flatMap((status) =>
+    status.status === "running" && status.health.pid !== undefined ? [status.health.pid] : [],
+  );
+  expect(new Set(pids).size).toBe(1);
+  const pid = pids[0];
+  expect(pid).toBeTypeOf("number");
+  if (pid === undefined) throw new Error("Observer start did not report a PID.");
+
+  const identity = ObserverProcessIdentitySchema.parse(
+    JSON.parse(await readFile(`${socketPath}.pid`, "utf8")),
+  );
+  expect(identity).toMatchObject({ pid, socketPath });
+
+  await waitFor(async () => (await observerProcessesForSocket(socketPath)).length === 1, 3000);
+  expect(await observerProcessesForSocket(socketPath)).toEqual([pid]);
+
+  const { stdout } = await execFileAsync("lsof", ["-t", socketPath]);
+  const holders = new Set(
+    stdout
+      .split(/\s+/)
+      .filter((value) => value.length > 0)
+      .map(Number),
+  );
+  expect([...holders]).toEqual([pid]);
+}
+
+async function observerProcessesForSocket(socketPath: string): Promise<number[]> {
+  const { stdout } = await execFileAsync("/bin/ps", ["-axo", "pid=,command="]);
+  return stdout
+    .split(/\r?\n/)
+    .filter((line) => line.includes("observerMain.js") && line.includes(socketPath))
+    .map((line) => Number.parseInt(line.trimStart().split(/\s+/, 1)[0] ?? "", 10))
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
+}
+
+async function waitFor(condition: () => Promise<boolean>, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (await condition()) return;
+    await sleep(25);
+  }
+  throw new Error(`Condition did not become true within ${timeoutMs}ms.`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

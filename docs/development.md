@@ -45,8 +45,9 @@ pnpm test:all
 ```
 
 It runs build, typecheck, lint, unit tests, contract tests, integration tests,
-diagnostics tests, the scripted-agent lane, setup E2E coverage, and a production
-Observer SQLite restart smoke. It intentionally excludes real provider lanes.
+diagnostics tests, the scripted-agent lane, setup and Observer lifecycle E2E
+coverage, and a production Observer SQLite restart smoke. It intentionally
+excludes real provider lanes.
 
 After root `pnpm install`, Lefthook runs the broader local gate before pushes:
 
@@ -70,6 +71,8 @@ pnpm lint
 pnpm test:unit
 pnpm test:contracts
 pnpm test:integration
+pnpm test:e2e:observer
+pnpm test:observer-claim:cross-runtime
 pnpm test:sqlite:bun
 pnpm test:diagnostics
 pnpm test:agent:scripted
@@ -90,8 +93,17 @@ on the runtime `PATH`.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
-the other runtime to verify the shared SQLite contract and migrations. Both the
-local pre-push gate and the mandatory hosted `station-bun` job run this check.
+the other runtime to verify the shared SQLite contract and migrations. It also
+runs the permanent boot-claim race: 50 alternating Node/Bun two-process rounds,
+three-contender rounds, and killed-owner recovery with stable inode and
+`integrity_check=ok`; this gate makes no fairness claim. Both the local pre-push
+gate and the mandatory hosted `station-bun` job run these checks.
+
+`pnpm test:e2e:observer` drives the built production Observer through cold and
+real stale-socket races, XDG/state divergence, explicit paths with spaces,
+claim-held no-side-effect behavior, pidfile publication, and clean restart while
+the persistent claim remains. Run it after `pnpm build` when changing startup,
+socket ownership, pidfiles, or claim lifecycle behavior.
 
 For focused Station PTY work, run both implementations explicitly:
 

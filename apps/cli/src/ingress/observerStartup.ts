@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ObserverPaths } from "@station/config";
 import type { ObserverHealth, SafeError } from "@station/contracts";
-import { createObserverClient, isSocketStale, removeStaleSocket } from "@station/protocol";
+import { createObserverClient, isSocketStale } from "@station/protocol";
 import {
   environmentWithoutGitLocals,
   type RuntimeClock,
@@ -87,6 +87,12 @@ export async function getProviderHookObserverStatus(
   }
 }
 
+/**
+ * USE CASE
+ *
+ * Attaches provider-hook delivery to a healthy Observer or starts a child while
+ * leaving socket ownership mutation to the child's serialized boot lifecycle.
+ */
 export async function startProviderHookObserver(
   options: ProviderHookObserverStartupOptions,
   deps: ProviderHookObserverStartupDeps = {},
@@ -98,10 +104,6 @@ export async function startProviderHookObserver(
   if (existing.status === "running") {
     return existing;
   }
-  if (existing.status === "stale") {
-    await removeStaleSocket(paths.socketPath);
-  }
-
   let child: ChildProcessLike | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
     {
@@ -129,7 +131,10 @@ export async function startProviderHookObserver(
       if (options.configPath !== undefined) {
         spawnInput.configPath = options.configPath;
       }
-      child = await (deps.spawnObserver ?? defaultSpawnObserver)(spawnInput);
+      child =
+        deps.spawnObserver === undefined
+          ? defaultSpawnObserver(spawnInput, timeoutMs)
+          : await deps.spawnObserver(spawnInput);
       child.unref?.();
       return waitForProviderHookObserverHealth({ paths, timeoutMs }, deps);
     },
@@ -189,7 +194,10 @@ function defaultClientFactory(socketPath: string) {
   return createObserverClient({ socketPath, timeoutMs: 500 });
 }
 
-function defaultSpawnObserver(input: SpawnProviderHookObserverInput): ChildProcessLike {
+function defaultSpawnObserver(
+  input: SpawnProviderHookObserverInput,
+  startupTimeoutMs: number,
+): ChildProcessLike {
   if (input.observerCommand === undefined) {
     throw new Error("observerCommand is required to auto-start observer from provider hooks");
   }
@@ -201,6 +209,8 @@ function defaultSpawnObserver(input: SpawnProviderHookObserverInput): ChildProce
     "--state-dir",
     input.paths.stateDir,
     ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
+    "--startup-timeout-ms",
+    String(startupTimeoutMs),
   ];
   return spawn(command, args, {
     detached: true,
