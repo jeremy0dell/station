@@ -141,6 +141,14 @@ export async function startProviderHookObserver(
   );
 
   if (result.ok) {
+    // A child queued on the boot claim must not outlive the incumbent this hook attached to.
+    if (
+      child?.pid !== undefined &&
+      result.value.pid !== undefined &&
+      child.pid !== result.value.pid
+    ) {
+      child.kill?.();
+    }
     return {
       status: "running",
       paths,
