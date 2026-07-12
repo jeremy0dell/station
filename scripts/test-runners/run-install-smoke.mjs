@@ -26,6 +26,11 @@ const inheritedUmask = process.umask(0o077);
 const runner = fileURLToPath(import.meta.url);
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const installer = join(repoRoot, "scripts", "install.sh");
+const timeoutScaleText = process.env.STATION_INSTALL_SMOKE_TIMEOUT_SCALE ?? "1";
+if (!/^(?:[1-9]|10)$/.test(timeoutScaleText)) {
+  throw new Error("STATION_INSTALL_SMOKE_TIMEOUT_SCALE must be an integer from 1 through 10");
+}
+const timeoutScale = Number(timeoutScaleText);
 const root = mkdtempSync(join(tmpdir(), "station-install-smoke-"));
 const releasesDir = join(root, "releases");
 const fakeBinDir = join(root, "bin");
@@ -36,9 +41,9 @@ const ghLogsDir = join(root, "gh-logs");
 const stableTag = "v1.2.3";
 const rollbackTag = "v1.2.3-rc.1";
 const activeChildren = new Set();
-const childTimeoutMs = 15_000;
-const markerTimeoutMs = 10_000;
-const overallTimeoutMs = 240_000;
+const childTimeoutMs = 30_000 * timeoutScale;
+const markerTimeoutMs = 10_000 * timeoutScale;
+const overallTimeoutMs = 240_000 * timeoutScale;
 const startedAt = Date.now();
 const selfInterruptChild = process.argv.includes("--self-interrupt-child");
 let invocationCount = 0;
@@ -88,8 +93,10 @@ try {
     await scenarioPathResolutionAndFilesystemFailures();
     await scenarioProbeDeadline();
     await scenarioProbeDiagnostics();
+    scenarioProbeSecretIsolation();
     await scenarioDestinationLock();
     await scenarioSharedLicenseLock();
+    await scenarioReplacedLockOwnership();
     await scenarioCommitFailures();
     await scenarioAmbiguousRuntimeCommit();
     await scenarioManagedPathReplacement();
@@ -176,6 +183,7 @@ function prepareFixtures() {
     tarSymlink("stn-ingress", "stn"),
     tarSymlink("stn-tmux-popup", "stn"),
   ]);
+  createRelease("v1.2.28", ["linux-x64"], { probeMode: "secret-check" });
 }
 
 function scenarioPlatformInstalls() {
@@ -861,6 +869,29 @@ esac
   assertNoInstallerResidue(installDir, dataHome);
 }
 
+function scenarioProbeSecretIsolation() {
+  const installDir = join(root, "probe-secret-bin");
+  const dataHome = join(root, "probe-secret-data");
+  const result = runInstaller({
+    installDir,
+    platform: linuxX64(),
+    version: "v1.2.28",
+    releaseId: "42",
+    dataHome,
+    environment: {
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: "secret-actions-id",
+      ACTIONS_RUNTIME_TOKEN: "secret-actions-runtime",
+      GH_ENTERPRISE_TOKEN: "secret-gh-enterprise",
+      GH_TOKEN: "secret-gh",
+      GITHUB_ENTERPRISE_TOKEN: "secret-github-enterprise",
+      GITHUB_TOKEN: "secret-github",
+    },
+  });
+  assertSuccess(result, "probe credential isolation");
+  assertInstalled({ installDir, dataHome, tag: "v1.2.28", target: "linux-x64" });
+  assertNoInstallerResidue(installDir, dataHome);
+}
+
 async function scenarioDestinationLock() {
   const installDir = join(root, "concurrent-bin");
   const dataHome = join(root, "concurrent-data");
@@ -884,16 +915,15 @@ async function scenarioDestinationLock() {
   const licenseLockPath = join(dataHome, "station", ".station-install.lock");
   await waitForPath(lockPath, "destination lock");
   await waitForPath(licenseLockPath, "license lock");
-  assertEqual(
-    readFileSync(join(lockPath, "owner"), "utf8"),
-    `pid=${first.child.pid}\nrequested=v1.2.8\n`,
-    "destination lock owner",
-  );
-  assertEqual(
-    readFileSync(join(licenseLockPath, "owner"), "utf8"),
-    `pid=${first.child.pid}\nrequested=v1.2.8\n`,
-    "license lock owner",
-  );
+  const commandOwner = onlyLockOwner(lockPath, "destination lock owner").content;
+  const licenseOwner = onlyLockOwner(licenseLockPath, "license lock owner").content;
+  assertIncludes(commandOwner, `pid=${first.child.pid}\n`, "destination lock owner PID");
+  assertIncludes(commandOwner, "requested=v1.2.8\n", "destination lock owner request");
+  assertIncludes(commandOwner, "token=", "destination lock owner token");
+  assertIncludes(licenseOwner, `pid=${first.child.pid}\n`, "license lock owner PID");
+  assertIncludes(licenseOwner, "requested=v1.2.8\n", "license lock owner request");
+  assertIncludes(licenseOwner, "token=", "license lock owner token");
+  assert(commandOwner !== licenseOwner, "command and license locks use distinct ownership tokens");
 
   const second = runInstaller({ installDir, platform: linuxX64(), dataHome });
   assertFailure(second, lockPath, "concurrent installer lock refusal");
@@ -1023,6 +1053,95 @@ async function scenarioSharedLicenseLock() {
     ],
     "locks are acquired command-first and released license-first",
   );
+}
+
+async function scenarioReplacedLockOwnership() {
+  for (const kind of ["command", "license"]) {
+    const installDir = join(root, `replaced-${kind}-lock-bin`);
+    const contenderInstallDir =
+      kind === "command" ? installDir : join(root, "replaced-license-lock-contender-bin");
+    const dataHome = join(root, `replaced-${kind}-lock-data`);
+    const probePid = join(root, `replaced-${kind}-lock-probe.pid`);
+    const probeRelease = join(root, `replaced-${kind}-lock-probe.release`);
+    const removeMarker = join(root, `replaced-${kind}-lock-remove.ready`);
+    const removeRelease = join(root, `replaced-${kind}-lock-remove.release`);
+    const removeShim = join(root, `replaced-${kind}-lock-remove-shim`);
+    makeDirectory(removeShim);
+    writeExecutable(
+      join(removeShim, "rm"),
+      `#!/bin/sh
+case "\${2:-}" in
+  */.station-install.lock/owner-*-${kind})
+    : > "$FAKE_RM_BLOCK_MARKER"
+    chmod 600 "$FAKE_RM_BLOCK_MARKER"
+    while [ ! -e "$FAKE_RM_BLOCK_RELEASE" ]; do /bin/sleep 0.02; done
+    ;;
+esac
+exec /bin/rm "$@"
+`,
+    );
+    seedInstallation({ installDir, dataHome, tag: "v0.9.0" });
+    if (contenderInstallDir !== installDir) {
+      seedInstallation({ installDir: contenderInstallDir, dataHome, tag: "v0.9.0" });
+    }
+
+    const first = runInstaller({
+      installDir,
+      platform: linuxX64(),
+      version: "v1.2.8",
+      dataHome,
+      commandBinDirs: [removeShim],
+      environment: {
+        FAKE_PROBE_PID_FILE: probePid,
+        FAKE_PROBE_RELEASE_FILE: probeRelease,
+        FAKE_RM_BLOCK_MARKER: removeMarker,
+        FAKE_RM_BLOCK_RELEASE: removeRelease,
+      },
+      asynchronous: true,
+    });
+    const commandLock = join(installDir, ".station-install.lock");
+    const licenseLock = join(dataHome, "station", ".station-install.lock");
+    await waitForPath(probePid, `${kind} replacement probe`);
+    await waitForPath(commandLock, `${kind} replacement command lock`);
+    await waitForPath(licenseLock, `${kind} replacement license lock`);
+
+    const replacedLock = kind === "command" ? commandLock : licenseLock;
+    const replacementOwner = `pid=424242\nrequested=v9.9.9\ntoken=replacement-${kind}\n`;
+    const replacementOwnerPath = join(replacedLock, `owner-replacement-${kind}`);
+
+    writeText(probeRelease, "release\n", 0o600);
+    await waitForPath(removeMarker, `${kind} owner removal`);
+    rmSync(replacedLock, { recursive: true });
+    mkdirSync(replacedLock, { mode: 0o700 });
+    writeText(replacementOwnerPath, replacementOwner, 0o600);
+
+    writeText(removeRelease, "release\n", 0o600);
+    const firstResult = await settleWithin(first, 5_000, `${kind} replacement owner`);
+    assertSuccess(firstResult, `${kind} replacement owner install`);
+    assertIncludes(firstResult.stderr, "changed ownership", `${kind} replacement warning`);
+    assertEqual(
+      readFileSync(replacementOwnerPath, "utf8"),
+      replacementOwner,
+      `${kind} replacement lock survives prior owner cleanup`,
+    );
+
+    const contender = runInstaller({
+      installDir: contenderInstallDir,
+      platform: linuxX64(),
+      version: rollbackTag,
+      dataHome,
+    });
+    assertFailure(contender, replacedLock, `${kind} replacement lock refusal`);
+    assertIncludes(contender.stderr, "424242", `${kind} replacement owner PID`);
+    assertNoGhApiCalls(contender, `${kind} replacement lock refusal`);
+
+    rmSync(replacedLock, { recursive: true });
+    assertInstalled({ installDir, dataHome, tag: "v1.2.8", target: "linux-x64" });
+    assertNoInstallerResidue(installDir, dataHome);
+    if (contenderInstallDir !== installDir) {
+      assertNoInstallerResidue(contenderInstallDir, dataHome);
+    }
+  }
 }
 
 function scenarioCommitFailures() {
@@ -1993,6 +2112,13 @@ function releaseBinarySource(tag, target, { mode, reportedVersion } = {}) {
   if (mode === "diagnostic") {
     versionBody = "printf 'loader \\033[31mdiagnostic\\007\\r\\n' >&2; exit 126";
   }
+  if (mode === "secret-check") {
+    versionBody = [
+      `test -z "\${GH_TOKEN:-}\${GITHUB_TOKEN:-}\${GH_ENTERPRISE_TOKEN:-}\${GITHUB_ENTERPRISE_TOKEN:-}"`,
+      `test -z "\${ACTIONS_RUNTIME_TOKEN:-}\${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}\${STATION_INSTALL_RELEASE_ID:-}"`,
+      `printf '%s\\n' '${version}'`,
+    ].join("\n  ");
+  }
 
   return `#!/bin/sh
 if [ "\${1:-}" = --version ]; then
@@ -2240,6 +2366,13 @@ function runInstaller({
     }
     const stdout = existsSync(stdoutFile) ? readFileSync(stdoutFile, "utf8") : "";
     const stderr = existsSync(stderrFile) ? readFileSync(stderrFile, "utf8") : "";
+    if (result.error?.code === "ETIMEDOUT") {
+      process.stderr.write(
+        `timed_out_phase=${env.FAKE_GH_FAIL_PHASE ?? "none"}\n` +
+          `timed_out_stdout=${JSON.stringify(stdout.slice(-4096))}\n` +
+          `timed_out_stderr=${JSON.stringify(stderr.slice(-4096))}\n`,
+      );
+    }
     for (const path of [supervisorPidFile, stdoutFile, stderrFile]) rmSync(path, { force: true });
     return { ...result, ghArgvLog, ghLog, stderr, stdout };
   }
@@ -2561,6 +2694,7 @@ function makeNoChecksumBin() {
     "chmod",
     "cp",
     "grep",
+    "ls",
     "mkdir",
     "mktemp",
     "mv",
@@ -2808,6 +2942,15 @@ function assertNoInstallerResidue(installDir, dataHome) {
     );
     assertEqual(residue, [], `installer residue in ${directory}`);
   }
+}
+
+function onlyLockOwner(lockPath, label) {
+  const owners = readdirSync(lockPath).filter(
+    (name) => name === "owner" || name.startsWith("owner-"),
+  );
+  assertEqual(owners.length, 1, `${label} count`);
+  const path = join(lockPath, owners[0]);
+  return { content: readFileSync(path, "utf8"), path };
 }
 
 function assertMode(path, expected, label) {

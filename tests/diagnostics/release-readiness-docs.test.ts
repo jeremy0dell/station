@@ -47,21 +47,24 @@ describe("release readiness docs", () => {
   });
 
   it("documents the authenticated private binary release contract", async () => {
-    const [readme, install, development, singleBinary, homebrew] = await Promise.all(
-      [
-        "README.md",
-        "docs/install.md",
-        "docs/development.md",
-        "docs/single-binary.md",
-        "docs/homebrew.md",
-      ].map(read),
-    );
+    const [readme, install, development, singleBinary, homebrew, release, promote] =
+      await Promise.all(
+        [
+          "README.md",
+          "docs/install.md",
+          "docs/development.md",
+          "docs/single-binary.md",
+          "docs/homebrew.md",
+          ".github/workflows/release.yml",
+          ".github/workflows/promote-release.yml",
+        ].map(read),
+      );
     const packageJson = JSON.parse(await read("package.json"));
 
     expect(readme).toContain("authenticated private binary");
     expect(readme).toContain("without Node.js, pnpm, Bun");
-    expect(install).toContain("latest stable tag");
-    expect(install).toContain("tag=v0.1.1-rc.1");
+    expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
+    expect(install).toContain("tag=v0.7.0");
     expect(install).toContain('-f ref="$tag"');
     expect(install).toContain('sh "$installer" --version "$tag"');
     expect(readme).toContain('-f ref="$tag"');
@@ -77,6 +80,26 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
     expect(singleBinary).toContain("without `+` build metadata");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
+    expect(development).toContain("accepted-release-candidate-0.7.0");
+    expect(release).toContain('-f ref="$COMMIT"');
+    expect(release).toContain("persist-credentials: false");
+    expect(release).toContain("accepted-release-candidate-");
+    const installDraft = release.slice(
+      release.indexOf("  install-draft:"),
+      release.indexOf("  record-accepted-candidate:"),
+    );
+    const recordCandidate = release.slice(release.indexOf("  record-accepted-candidate:"));
+    for (const job of [installDraft, recordCandidate]) {
+      expect(job).toContain("contents: read");
+      expect(job).not.toContain("contents: write");
+    }
+    expect(promote).toContain("workflow_dispatch");
+    expect(promote).toContain("manual_acceptance");
+    expect(promote).toContain("asset-ids.txt");
+    expect(promote).toContain("actions/workflows/$workflow_id");
+    expect(promote).toContain("compare/$commit...main");
+    expect(promote).toContain('prerelease="$expected_prerelease"');
+    expect(packageJson.version).toBe("0.7.0");
     expect(development).toContain("HOST_UPGRADE_BLOCKED");
     expect(homebrew).toContain("`workflow_dispatch` only");
     expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
@@ -96,10 +119,11 @@ describe("release readiness docs", () => {
     for (const [path, document] of documents) {
       const normalized = document.replace(/\s+/g, " ");
       expect(document, path).toContain("<install-dir>/.station-install.lock");
-      expect(document, path).toContain("<install-dir>/.station-install.lock/owner");
+      expect(document, path).toContain("<install-dir>/.station-install.lock/owner-*");
       expect(document, path).toContain("<data-home>/station/.station-install.lock");
-      expect(document, path).toContain("<data-home>/station/.station-install.lock/owner");
+      expect(document, path).toContain("<data-home>/station/.station-install.lock/owner-*");
       expect(normalized, path).toContain("requested tag or `latest`");
+      expect(document, path).toContain("token");
       expect(document, path).toMatch(/10(?:-second| seconds)/);
       expect(document, path).toMatch(/existing\s+Station\s+installation\s+was\s+unchanged/);
       expect(document, path).toContain("sole runtime commit point");
@@ -120,7 +144,7 @@ describe("release readiness docs", () => {
     for (const acceptance of [
       "terminal A",
       "terminal B",
-      "RC → stable → RC",
+      "accepted-release-candidate",
       "command-not-found",
       "Ctrl-C",
       "Ctrl-Z",
@@ -128,7 +152,7 @@ describe("release readiness docs", () => {
       "stn-ingress",
       "HOST_UPGRADE_BLOCKED",
       "same Observer socket",
-      "explicit rollback check",
+      "second binary release",
     ]) {
       expect(normalizedDevelopment).toContain(acceptance);
     }

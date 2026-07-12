@@ -22,6 +22,11 @@ command_lock_dir=""
 license_lock_dir=""
 command_lock_owned=0
 license_lock_owned=0
+command_lock_token=""
+license_lock_token=""
+command_lock_inode=""
+license_lock_inode=""
+install_lock_token=""
 lock_acquiring=0
 pending_signal_name=""
 pending_signal_status=0
@@ -183,7 +188,35 @@ stop_children() {
 
 release_lock() {
   release_path=$1
-  rm -f "$release_path/owner" 2>/dev/null || warn "could not remove lock owner '$release_path/owner'."
+  release_token=$2
+  release_inode=$3
+  release_owner=$release_path/owner-$release_token
+  if [ ! -e "$release_path" ] && [ ! -L "$release_path" ]; then
+    return 0
+  fi
+  if ! alias_inode "$release_path" || [ -z "$release_inode" ] || [ "$alias_inode_result" != "$release_inode" ]; then
+    warn "install lock '$release_path' changed ownership; it was not removed."
+    return 0
+  fi
+  lock_token_result=""
+  lock_token_count=0
+  if [ -f "$release_owner" ] && [ ! -L "$release_owner" ] && [ -r "$release_owner" ]; then
+    while IFS='=' read -r owner_key owner_value; do
+      if [ "$owner_key" = token ]; then
+        lock_token_count=$((lock_token_count + 1))
+        lock_token_result=$owner_value
+      fi
+    done < "$release_owner"
+  fi
+  if [ "$lock_token_count" -ne 1 ] || [ -z "$release_token" ] || [ "$lock_token_result" != "$release_token" ]; then
+    warn "install lock '$release_path' changed ownership; it was not removed."
+    return 0
+  fi
+  rm -f "$release_owner" 2>/dev/null || warn "could not remove lock owner '$release_owner'."
+  if ! alias_inode "$release_path" || [ "$alias_inode_result" != "$release_inode" ]; then
+    warn "install lock '$release_path' changed ownership; it was not removed."
+    return 0
+  fi
   if ! rmdir "$release_path" 2>/dev/null; then
     warn "could not remove install lock '$release_path'; inspect and remove it manually before retrying."
   fi
@@ -232,10 +265,10 @@ cleanup() {
   remove_tree "$license_stage"
 
   if [ "$license_lock_owned" -eq 1 ]; then
-    release_lock "$license_lock_dir"
+    release_lock "$license_lock_dir" "$license_lock_token" "$license_lock_inode"
   fi
   if [ "$command_lock_owned" -eq 1 ]; then
-    release_lock "$command_lock_dir"
+    release_lock "$command_lock_dir" "$command_lock_token" "$command_lock_inode"
   fi
 
   exit "$status"
@@ -306,12 +339,26 @@ acquire_lock() {
     trap '' HUP INT TERM
     mkdir "$acquire_path" 2>/dev/null
   ); then
+    if ! alias_inode "$acquire_path"; then
+      fail "could not identify acquired install lock '$acquire_path'."
+    fi
+    acquire_inode=$alias_inode_result
+    acquire_token=$install_lock_token-$acquire_kind
     case "$acquire_kind" in
-      command) command_lock_owned=1 ;;
-      license) license_lock_owned=1 ;;
+      command)
+        command_lock_owned=1
+        command_lock_token=$acquire_token
+        command_lock_inode=$acquire_inode
+        ;;
+      license)
+        license_lock_owned=1
+        license_lock_token=$acquire_token
+        license_lock_inode=$acquire_inode
+        ;;
     esac
-    if ! printf 'pid=%s\nrequested=%s\n' "$$" "$owner_request" > "$acquire_path/owner"; then
-      fail "could not write install lock owner '$acquire_path/owner'."
+    acquire_owner=$acquire_path/owner-$acquire_token
+    if ! printf 'pid=%s\nrequested=%s\ntoken=%s\n' "$$" "$owner_request" "$acquire_token" > "$acquire_owner"; then
+      fail "could not write install lock owner '$acquire_owner'."
     fi
     lock_acquiring=0
     finish_pending_signal
@@ -324,7 +371,16 @@ acquire_lock() {
     fail "could not acquire install lock '$acquire_path'; check the destination permissions."
   fi
   owner_pid=""
-  if [ -f "$acquire_path/owner" ] && [ ! -L "$acquire_path/owner" ] && [ -r "$acquire_path/owner" ]; then
+  owner_file=""
+  owner_file_count=0
+  for owner_candidate in "$acquire_path/owner" "$acquire_path"/owner-*; do
+    if [ ! -e "$owner_candidate" ] && [ ! -L "$owner_candidate" ]; then
+      continue
+    fi
+    owner_file_count=$((owner_file_count + 1))
+    owner_file=$owner_candidate
+  done
+  if [ "$owner_file_count" -eq 1 ] && [ -f "$owner_file" ] && [ ! -L "$owner_file" ] && [ -r "$owner_file" ]; then
     while IFS='=' read -r owner_key owner_value; do
       if [ "$owner_key" = pid ]; then
         case "$owner_value" in
@@ -332,7 +388,7 @@ acquire_lock() {
           *) owner_pid=$owner_value ;;
         esac
       fi
-    done < "$acquire_path/owner"
+    done < "$owner_file"
   fi
   if [ -n "$owner_pid" ]; then
     fail "another Station installer owns '$acquire_path' (owner PID $owner_pid). The existing Station installation was unchanged. Wait for it to finish. If it was interrupted, first confirm no installer process with PID $owner_pid is alive, then manually remove '$acquire_path' and retry."
@@ -406,7 +462,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$requested_version_set" -eq 1 ] && ! valid_version "$requested_version"; then
-  fail "version must be valid v-prefixed SemVer, for example v0.1.1 or v0.1.1-rc.1."
+  fail "version must be valid v-prefixed SemVer, for example v0.7.0 or v0.7.1-rc.1."
 fi
 if [ -n "$release_id" ]; then
   case "$release_id" in
@@ -458,6 +514,7 @@ esac
 
 command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required; install 'gh', then run 'gh auth login --hostname github.com'."
 temp_dir=$(mktemp -d "$tmp_base/station-install.XXXXXX") || fail "could not create a temporary directory."
+install_lock_token=$$-${temp_dir##*/}
 if ! run_gh "$temp_dir/auth.stdout" "$temp_dir/auth.stderr" auth status --hostname "$github_host"; then
   fail "GitHub authentication is required for this private release; run 'gh auth login --hostname github.com', then retry."
 fi
@@ -668,6 +725,9 @@ child_starting=1
   if ! ulimit -f 8; then
     exit 125
   fi
+  # The untrusted compatibility probe must not inherit download or CI credentials.
+  unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
+  unset ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN STATION_INSTALL_RELEASE_ID
   exec "$install_stage/stn" --version
 ) > "$probe_output" 2> "$probe_error" &
 probe_pid=$!

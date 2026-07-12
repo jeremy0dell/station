@@ -81,6 +81,9 @@ pnpm smoke:install
 authenticated GitHub responses and temporary homes, so it is deterministic and
 does not download a real release. CI runs it once in a dedicated
 `ubuntu-24.04`/`macos-15` matrix; the heavier Ubuntu gate does not duplicate it.
+On a heavily contended local host, run
+`STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
+harness deadlines; the default and hosted gate remain strict.
 The four-target native PTY matrix also packages the local binary through the
 release helper and installs it with real platform utilities and no Node or Bun
 on the runtime `PATH`.
@@ -145,7 +148,7 @@ The isolated or configured `logs/station-host.jsonl` should record
 `ptyImplementation` as `bun`.
 
 To verify binary host upgrades, build two copies with distinct prerelease
-versions (for example `0.1.1-host-a` and `0.1.1-host-b`) and use an isolated
+versions (for example `0.7.0-host-a` and `0.7.0-host-b`) and use an isolated
 config with `station_persistent_agents = true`. Start A, open a hosted terminal,
 print a recognizable marker, leave a long command running, and exit the UI so
 the host survives. Because Observer version eviction is separate B3 work,
@@ -170,35 +173,36 @@ and have no existing GitHub release. Pushing a `v*` tag runs the callable
 standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
 for all four supported targets, archive/checksum assembly, and an authenticated
 installer smoke against the resulting GitHub release draft. PR and release
-jobs use the same archive-packaging helper. Draft acceptance fetches
-`scripts/install.sh` from the tag through the authenticated Contents API, then
-passes that same tag with `--version`; it never substitutes checkout-local or
-`main` installer code. The workflow never publishes the draft automatically.
+jobs use the same archive-packaging helper. Draft acceptance revalidates the tag
+but fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
+with `--version`; a moved tag cannot substitute different installer code. After
+all four native installs pass, the workflow re-downloads the five draft assets,
+verifies them against the build checksum, and uploads an immutable
+`accepted-release-candidate-*` Actions artifact containing the commit, release
+ID, asset IDs, and checksums. Draft install and candidate-recording jobs have
+read-only contents permission; only draft creation and manual promotion can
+write releases. The tag workflow never publishes the draft automatically.
 
-The initial immutable baseline is `v0.1.1-rc.1`:
+The initial immutable binary baseline is `v0.7.0`:
 
-1. Enable GitHub immutable releases, merge the A5 implementation with
-   `package.json` at `0.1.1-rc.1`, then create and push `v0.1.1-rc.1`.
-2. Confirm the draft contains exactly four native archives plus
-   `SHA256SUMS`, and that every native build and installer job passed. Immediately
-   before publishing, fetch the remote tag and verify its peeled commit
-   (`git rev-parse "v0.1.1-rc.1^{commit}"`) still equals the successful release
-   workflow SHA recorded in the draft notes; drafts do not receive immutable
-   tag protection until publication.
-3. Install the explicit RC on clean native machines for `darwin-arm64`,
-   `darwin-x64`, `linux-arm64`, and `linux-x64`; complete the manual UX gate
-   below, then publish it as a prerelease.
-4. Merge only the version change to `0.1.1`, create and push `v0.1.1`, and
-   repeat the automated and manual gates against the stable draft.
-5. Prove RC-to-stable upgrade and explicit RC rollback before manually
-   publishing `v0.1.1` as latest. Repeat the remote-tag/workflow-SHA comparison
-   and five-asset inventory immediately before publishing the stable draft.
+1. Enable GitHub immutable releases, merge A5 with `package.json` and source
+   runtime reporting at `0.7.0`, then create and push `v0.7.0`.
+2. Confirm every release job passed and the successful run contains exactly one
+   `accepted-release-candidate-0.7.0-attempt-*` artifact.
+3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
+   `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
+4. Dispatch `promote-release.yml` with the successful release run ID, tag
+   `v0.7.0`, and the manual-acceptance confirmation. It rechecks the successful
+   run SHA, immutable candidate manifest, tag commit, release ID, asset IDs, and
+   all archive hashes immediately before publishing that exact draft.
+5. Treat cross-version immutable rollback as a gate for the second binary
+   release. `v0.7.0` has no prior binary artifact to reinstall.
 
-Published tags and assets are immutable. Recovery may explicitly reinstall a
-prior version, but the release line moves forward with a superseding patch; it
-never deletes, retags, or overwrites a published release. The source Homebrew
-formula is a separate manually dispatched workflow and is not part of this
-binary release gate.
+Published tags and assets are immutable. Once two binary releases exist,
+recovery may explicitly reinstall the prior version, but the release line moves
+forward with a superseding patch; it never deletes, retags, or overwrites a
+published release. The source Homebrew formula is a separate manually
+dispatched workflow and is not part of this binary release gate.
 
 If a transient workflow failure leaves an unpublished draft, delete only that
 draft and rerun the unchanged tag workflow. If the source needs a fix, leave
@@ -206,21 +210,25 @@ the pushed tag alone and use the next prerelease tag. Never delete or mutate a
 published release.
 
 Installer acceptance uses both `<install-dir>/.station-install.lock` and
-`<data-home>/station/.station-install.lock`. Their corresponding
-`<install-dir>/.station-install.lock/owner` and
-`<data-home>/station/.station-install.lock/owner` files record the PID and
-requested tag or `latest`. The command lock is acquired first and the license
-lock second, with the duplicate path skipped, and they are released in reverse
-order. Either refusal must name the lock and readable owner PID, state that the
-existing Station installation was unchanged, and tell the user to wait and
-retry; a license-lock refusal also releases the command lock without making a
-release API request. The installer never auto-removes an uncertain lock. Only
-after confirming that no installer with the recorded PID is alive may an
-operator remove the affected lock directory manually and retry.
+`<data-home>/station/.station-install.lock`. Their sole corresponding
+`<install-dir>/.station-install.lock/owner-*` and
+`<data-home>/station/.station-install.lock/owner-*` files record the PID,
+requested tag or `latest`, and the token embedded in each filename. The command
+lock is acquired first and the license lock second, with the duplicate path
+skipped, and they are released in reverse order. Cleanup removes only its
+token-specific owner file and revalidates the directory inode so it cannot
+remove a replacement owner's lock. Either refusal must name the lock and
+readable owner PID, state that the existing
+Station installation was unchanged, and tell the user to wait and retry; a
+license-lock refusal also releases the command lock without making a release
+API request. The installer never auto-removes an uncertain lock. Only after
+confirming that no installer with the recorded PID is alive may an operator
+remove the affected lock directory manually and retry.
 
 The staged binary's `--version` probe must finish within 10 seconds. Its
 watchdog returns 124 for timeout and 125 for timer failure, bounds output at the
-filesystem level, TERM/KILLs and reaps the probe, and shows at most 4096
+filesystem level, TERM/KILLs and reaps the probe, removes common GitHub and
+Actions token variables from the child environment, and shows at most 4096
 sanitized bytes of compatibility stderr. Every potentially blocking `gh`
 operation is a tracked file-backed child; HUP, INT, and TERM forward to that
 child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
@@ -259,16 +267,15 @@ manually verify the actual user experience, not a dashboard override:
 6. Run bare `stn` inside tmux and confirm `stn-tmux-popup` opens the popup.
 7. Deliver a provider event through `stn-ingress` and confirm it appears in
    Station.
-8. Leave a hosted PTY alive under the RC, fetch the `v0.1.1` installer by tag,
-   run it with `--version v0.1.1`, and confirm launch reports
-   `HOST_UPGRADE_BLOCKED` without losing the terminal or scrollback. Reinstall
-   the RC to reattach and close every hosted terminal; reinstall `v0.1.1` and
-   confirm the idle host is replaced.
+8. Complete the local `0.7.0-host-a` → `0.7.0-host-b` procedure above with a
+   live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
+   scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
-   B, install RC → stable → RC. Terminal A may print only complete old or
-   new versions: never command-not-found or malformed output. After each
-   transition, confirm `stn-ingress` and `stn-tmux-popup` still link to `stn`,
-   so the runtime never has mixed entrypoints.
+   B, repeatedly reinstall the draft. Terminal A may print only `0.7.0`: never
+   command-not-found or malformed output. After each transition, confirm
+   `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
+   has mixed entrypoints. Repeat this with two versions when preparing the
+   second binary release.
 10. In an isolated home, test abandoned locks separately at
     `<install-dir>/.station-install.lock` and
     `<data-home>/station/.station-install.lock` with representative owner
@@ -278,9 +285,10 @@ manually verify the actual user experience, not a dashboard override:
 11. Interrupt a real authenticated upgrade with Ctrl-C. Confirm the prior TUI
    still opens, the installer exits with status 130 and leaves no owned lock or
    stage, then retry successfully.
-12. Fetch and run the tagged `v0.1.1-rc.1` installer, confirm the version
-    changed, then fetch and reinstall `v0.1.1` to complete the explicit rollback
-    check.
+12. Run `promote-release.yml` only after steps 1-11 pass. Confirm it selects the
+    successful release run's `accepted-release-candidate-*` artifact, verifies
+    the exact draft asset IDs and hashes, and publishes that draft without
+    replacing any asset.
 
 Record the oldest supported macOS version or built-against glibc version in the
 release notes. Signing and notarization are not part of A5; integrity is the

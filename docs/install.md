@@ -10,7 +10,7 @@ Authenticate `gh` for `jeremy0dell/station`, then run the installer directly fro
 gh auth login --hostname github.com
 (
   set -e
-  tag=v0.1.1-rc.1
+  tag=v0.7.0
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
   GH_HOST=github.com gh api --method GET \
@@ -29,9 +29,8 @@ stn setup
 stn
 ```
 
-`v0.1.1-rc.1` is the first supported private-binary baseline. Once `v0.1.1`
-is published, resolve the latest stable tag first, then fetch and invoke that
-tag's installer:
+`v0.7.0` is the first supported private-binary baseline. Resolve the latest
+stable tag first, then fetch and invoke that tag's installer:
 
 ```bash
 (
@@ -52,9 +51,10 @@ tag's installer:
 )
 ```
 
-Use the explicit form with the desired `tag` for every exact install or
-rollback. Both forms pair installer code and artifacts from one immutable tag;
-they never fall back to `main`.
+Use the explicit form with the desired `tag` for every exact install. Both
+forms pair installer code and artifacts from one immutable tag; they never
+fall back to `main`. Because `v0.7.0` is the first binary release, immutable
+rollback to a prior binary becomes available only after the next binary release.
 
 Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface.
 
@@ -77,25 +77,30 @@ Every install serializes both mutated resources with these locks:
 - `<data-home>/station/.station-install.lock` (by default
   `~/.local/share/station/.station-install.lock`) for `LICENSE`.
 
-Each lock's `owner` file records the installer PID and requested tag or
-`latest`. The installer acquires the command lock first and the license lock
-second, skips the second acquisition if both paths coincide, and releases them
-in reverse order. A refusal happens before release lookup or download, names
+Each lock's sole `owner-*` file records the installer PID, requested tag or
+`latest`, and the unique ownership token embedded in its filename. Cleanup
+removes only that token-specific file and revalidates the lock inode, so an
+earlier installer cannot remove a replacement lock. The installer acquires
+the command lock first and the license lock second, skips the second acquisition
+if both paths coincide, and releases them in reverse order. A refusal happens
+before release lookup or download, names
 the lock and readable owner PID, states that the existing Station installation
 was unchanged, and tells the user to wait and retry. A license-lock refusal
 releases the command lock and performs no release API request.
 
 The installer never guesses that either lock is stale. For an abandoned lock,
-read its `owner` file—`<install-dir>/.station-install.lock/owner` or
-`<data-home>/station/.station-install.lock/owner`—and confirm that no installer
-process with the recorded PID is alive. Only then remove that lock directory
-manually and retry the same install. Do not remove a lock while its owner may
-still be running.
+read its sole `<install-dir>/.station-install.lock/owner-*` or
+`<data-home>/station/.station-install.lock/owner-*` file and confirm that no
+installer process with the recorded PID is alive. Only then remove that lock
+directory manually and retry the same install. Do not remove a lock while its
+owner may still be running. Legacy locks with a single `owner` file remain
+readable for safe refusal and manual recovery.
 
 The staged `stn --version` probe has a 10-second supervised deadline and a
 bounded output file. Timeout status 124 means the watchdog terminated, killed
 if necessary, and reaped the probe; status 125 means the timer machinery
-failed. A loader or compatibility failure prints no more than 4096 sanitized
+failed. Common GitHub and Actions token variables are removed from the probe's
+environment. A loader or compatibility failure prints no more than 4096 sanitized
 bytes of probe stderr. HUP, INT, and TERM forward to the active child, run the
 same TERM/KILL/reap and rollback path, and exit with status 129, 130, and 143
 respectively, so Ctrl-C does not return to an interrupted install.
@@ -122,7 +127,10 @@ retrying after a machine loss.
 
 The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, diffnav and git-delta for diff automation, and a supported agent CLI for agent sessions.
 
-Rollback is the same authenticated explicit-version install. Published tags and assets are immutable; do not delete, move, or overwrite them. If a stable release is bad, reinstall the prior tag for recovery and publish a higher patch release containing the revert or fix.
+After a second binary version exists, rollback is the same authenticated
+explicit-version install. Published tags and assets are immutable; do not
+delete, move, or overwrite them. If `v0.7.0` itself is bad, publish a higher
+version containing the revert or fix because there is no earlier binary tag.
 
 ## Development Checkout
 
