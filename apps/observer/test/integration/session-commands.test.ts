@@ -894,6 +894,82 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("rejects session.startAgent when the provider only retains a missing worktree", async () => {
+    const missing = createFakeWorktree({
+      id: "wt_web_missing",
+      projectId: "web",
+      branch: "missing",
+      now,
+    });
+    missing.state = "missing";
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [missing] }),
+      terminalIntentRunner,
+    });
+    await fixture.core.reconcile("missing-worktree");
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: missing.id,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        tag: "CommandValidationError",
+        code: "WORKTREE_NOT_FOUND",
+        worktreeId: missing.id,
+      },
+    });
+    expect(terminalIntentRunner.intents).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("rejects session.startAgent when provider lookup crosses project ownership", async () => {
+    const foreign = createFakeWorktree({
+      id: "wt_api_foreign",
+      projectId: "api",
+      branch: "foreign",
+      now,
+    });
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [foreign] }),
+      terminalIntentRunner,
+    });
+    await fixture.core.reconcile("foreign-worktree");
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: foreign.id,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        tag: "CommandValidationError",
+        code: "WORKTREE_PROJECT_MISMATCH",
+        projectId: "web",
+        worktreeId: foreign.id,
+      },
+    });
+    expect(terminalIntentRunner.intents).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("submits session.startAgent launch work through the terminal intent runner seam", async () => {
     const terminalIntentRunner = new CapturingTerminalIntentRunner();
     const terminal = new FakeTerminalProvider({

@@ -196,6 +196,9 @@ export type ProviderDoctorCheck = {
 
 export type ProviderDoctorContext = {
   stationConfigPath?: string;
+  projects?: readonly ProviderProjectConfig[];
+  signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 /**
@@ -373,6 +376,11 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
   signal?: AbortSignal;
 };
 
+/**
+ * DRIVEN PORT
+ *
+ * Supplies worktree lifecycle evidence and mutations without exposing provider mechanics.
+ */
 export interface WorktreeProvider {
   id: ProviderId;
   capabilities(): WorktreeCapabilities;

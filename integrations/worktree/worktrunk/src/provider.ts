@@ -14,6 +14,7 @@ import type {
   RawWorktreeEvent,
   RemoveWorktreeRequest,
   RemoveWorktreeResult,
+  SafeError,
   WorktreeCapabilities,
   WorktreeEventContext,
   WorktreeObservation,
@@ -22,6 +23,7 @@ import type {
 import { ExternalCommandDiagnosticDetailSchema } from "@station/contracts";
 import {
   type ExternalCommandRunner,
+  gitLocalEnvironmentVariables,
   type RuntimeClock,
   runExternalCommand,
   runRuntimeBoundaryWithRetryAndTimeout,
@@ -56,6 +58,12 @@ export type WorktrunkProviderOptions = {
   clock?: RuntimeClock;
 };
 
+type WorktrunkRunPolicy = {
+  retries?: number;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 const defaultCapabilities: WorktreeCapabilities = {
   canCreate: true,
   canRemove: true,
@@ -65,6 +73,11 @@ const defaultCapabilities: WorktreeCapabilities = {
   canSeedWorkingTree: true,
 };
 
+/**
+ * ADAPTER
+ *
+ * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
+ */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
 
@@ -75,6 +88,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
   readonly #observations = new Map<string, WorktreeObservation>();
+  readonly #projectRoots = new Map<string, string>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -120,7 +134,22 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async doctorChecks(context: ProviderDoctorContext = {}): Promise<ProviderDoctorCheck[]> {
-    const checks: ProviderDoctorCheck[] = [await this.#automationCapabilityCheck()];
+    const workBudgetMs = doctorWorkBudgetMs(context.timeoutMs ?? this.#timeoutMs);
+    const budgetSignal = AbortSignal.timeout(workBudgetMs);
+    const signal =
+      context.signal === undefined ? budgetSignal : AbortSignal.any([context.signal, budgetSignal]);
+    const [automationCheck, staleChecks, hookCheck] = await Promise.all([
+      this.#automationCapabilityCheck({ signal, timeoutMs: workBudgetMs }),
+      this.#staleRegistrationChecks(context.projects ?? [], {
+        signal,
+        timeoutMs: workBudgetMs,
+      }),
+      this.#hookCheck(context),
+    ]);
+    return [automationCheck, ...staleChecks, hookCheck];
+  }
+
+  async #hookCheck(context: ProviderDoctorContext): Promise<ProviderDoctorCheck> {
     try {
       const result = await doctorWorktrunkHooks({
         ...(this.#configPath === undefined ? {} : { worktrunkConfigPath: this.#configPath }),
@@ -142,8 +171,7 @@ export class WorktrunkProvider implements WorktreeProvider {
           provider: this.id,
         };
       }
-      checks.push(check);
-      return checks;
+      return check;
     } catch (cause) {
       const error = safeErrorFromUnknown(cause, {
         tag: "WorktrunkHookSetupError",
@@ -151,13 +179,12 @@ export class WorktrunkProvider implements WorktreeProvider {
         message: "Worktrunk hook diagnostics failed.",
         provider: this.id,
       });
-      checks.push({
+      return {
         name: "worktrunk-hooks",
         status: "error",
         message: error.message,
         error,
-      });
-      return checks;
+      };
     }
   }
 
@@ -169,9 +196,17 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+    return this.#listWorktrees(project, { retries: 1 });
+  }
+
+  async #listWorktrees(
+    project: ProviderProjectConfig,
+    policy: WorktrunkRunPolicy,
+  ): Promise<WorktreeObservation[]> {
     if (!project.worktrunk.enabled) {
       return [];
     }
+    this.#projectRoots.set(project.id, project.root);
 
     const output = await this.#run(
       this.#args(["list", "--format=json"]),
@@ -180,7 +215,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         code: "WORKTRUNK_COMMAND_FAILED",
         message: "Worktrunk failed to list worktrees.",
       },
-      { retries: 1 },
+      policy,
     );
     const observations = parseWorktrunkListJson(output.stdout, {
       project,
@@ -202,6 +237,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
+    this.#projectRoots.set(request.project.id, request.project.root);
     const base = request.base ?? request.project.worktrunk.base;
     const output = await this.#run(
       this.#args([
@@ -292,6 +328,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         {
           command,
           args,
+          unsetEnv: gitLocalEnvironmentVariables,
           timeoutMs: this.#timeoutMs,
           ...(options?.env === undefined ? {} : { env: options.env }),
         },
@@ -315,9 +352,19 @@ export class WorktrunkProvider implements WorktreeProvider {
         { hint: "Run listWorktrees before removeWorktree so the provider can resolve the target." },
       );
     }
+    const projectRoot = this.#projectRoots.get(observation.projectId);
+    if (projectRoot === undefined) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_WORKTREE_NOT_FOUND",
+        "Worktrunk remove requires the repository root from a previous project listing.",
+        { hint: "Run listWorktrees for the project before removeWorktree." },
+      );
+    }
 
     await this.#run(
       this.#args([
+        "-C",
+        projectRoot,
         "remove",
         ...this.#automationHookArgs(),
         removeTarget(observation),
@@ -326,7 +373,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         "--foreground",
         "--format=json",
       ]),
-      observation.path,
+      undefined,
       {
         code: "WORKTRUNK_COMMAND_FAILED",
         message: "Worktrunk failed to remove a worktree.",
@@ -366,7 +413,10 @@ export class WorktrunkProvider implements WorktreeProvider {
     return [];
   }
 
-  async #automationCapabilityCheck(): Promise<ProviderDoctorCheck> {
+  async #automationCapabilityCheck(options: {
+    signal: AbortSignal;
+    timeoutMs: number;
+  }): Promise<ProviderDoctorCheck> {
     const mode = worktrunkAutomationMode(this.#useLifecycleHooks);
     if (mode.flag === undefined) {
       return {
@@ -382,8 +432,9 @@ export class WorktrunkProvider implements WorktreeProvider {
       missing = await missingWorktrunkAutomationFlagSupport({
         command: this.#command,
         flag: mode.flag,
-        timeoutMs: this.#timeoutMs,
+        timeoutMs: options.timeoutMs,
         runner: this.#runner,
+        signal: options.signal,
       });
     } catch (cause) {
       const fallback = safeErrorFromUnknown(cause, {
@@ -431,6 +482,81 @@ export class WorktrunkProvider implements WorktreeProvider {
     };
   }
 
+  async #staleRegistrationChecks(
+    projects: readonly ProviderProjectConfig[],
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<ProviderDoctorCheck[]> {
+    const enabledProjects = projects.filter((candidate) => candidate.worktrunk.enabled);
+    const checks: Array<ProviderDoctorCheck | undefined> = enabledProjects.map(() => undefined);
+    let completed = 0;
+    for (let offset = 0; offset < enabledProjects.length; offset += 4) {
+      const batch = enabledProjects.slice(offset, offset + 4);
+      await Promise.all(
+        batch.map(async (project, batchIndex) => {
+          if (options.signal.aborted) return;
+          const index = offset + batchIndex;
+          let missing: WorktreeObservation[];
+          try {
+            missing = (
+              await this.#listWorktrees(project, {
+                retries: 0,
+                signal: options.signal,
+                timeoutMs: options.timeoutMs,
+              })
+            ).filter((observation) => observation.state !== "exists");
+            completed += 1;
+          } catch (cause) {
+            if (options.signal.aborted) return;
+            const failure = safeErrorFromUnknown(cause, {
+              tag: "WorktrunkStaleRegistrationDiagnosticError",
+              code: "WORKTRUNK_STALE_REGISTRATION_CHECK_FAILED",
+              message: `Worktrunk could not inspect stale registrations for ${project.label}.`,
+              provider: this.id,
+            });
+            const error: SafeError = {
+              tag: failure.tag,
+              code: failure.code,
+              message: failure.message,
+              projectId: project.id,
+            };
+            if (failure.hint !== undefined) error.hint = failure.hint;
+            if (failure.provider !== undefined) error.provider = failure.provider;
+            checks[index] = {
+              name: `worktrunk-stale-registrations-${project.id}`,
+              status: "warn",
+              message: error.message,
+              error,
+            };
+            return;
+          }
+          if (missing.length === 0) return;
+          const root = shellQuote(project.root);
+          checks[index] = {
+            name: `worktrunk-stale-registrations-${project.id}`,
+            status: "warn",
+            message: `Worktrunk found missing/prunable registrations for ${project.label}: ${missing
+              .map((item) => `${item.branch} (${item.path})`)
+              .join(
+                ", ",
+              )}. Inspect with git -C ${root} worktree prune --dry-run --verbose, then clean with git -C ${root} worktree prune --verbose.`,
+          };
+        }),
+      );
+      if (options.signal.aborted) break;
+    }
+    const completedChecks = checks.filter(
+      (check): check is ProviderDoctorCheck => check !== undefined,
+    );
+    if (options.signal.aborted && completed < enabledProjects.length) {
+      completedChecks.push({
+        name: "worktrunk-stale-registrations-scan",
+        status: "warn",
+        message: `Worktrunk stale-registration diagnostics reached their time budget after checking ${completed} of ${enabledProjects.length} project(s).`,
+      });
+    }
+    return completedChecks;
+  }
+
   async #run(
     args: string[],
     cwd?: string,
@@ -441,7 +567,7 @@ export class WorktrunkProvider implements WorktreeProvider {
       code: "WORKTRUNK_UNAVAILABLE",
       message: "Worktrunk is not available.",
     },
-    policy: { retries?: number } = {},
+    policy: WorktrunkRunPolicy = {},
     env?: Record<string, string>,
   ) {
     const operation = `provider.worktrunk.${worktrunkSubcommand(args)}`;
@@ -449,7 +575,7 @@ export class WorktrunkProvider implements WorktreeProvider {
       {
         operation,
         clock: this.#clock,
-        timeoutMs: this.#timeoutMs,
+        timeoutMs: policy.timeoutMs ?? this.#timeoutMs,
         error: {
           tag:
             fallback.code === "WORKTRUNK_UNAVAILABLE"
@@ -469,7 +595,9 @@ export class WorktrunkProvider implements WorktreeProvider {
           retries: policy.retries ?? 0,
           delayMs: 10,
           shouldRetry: (error) =>
-            error.code !== "WORKTRUNK_TIMEOUT" && error.code !== "WORKTRUNK_CANCELLED",
+            error.code !== "WORKTRUNK_TIMEOUT" &&
+            error.code !== "WORKTRUNK_CANCELLED" &&
+            error.code !== "EXTERNAL_COMMAND_ABORTED",
         },
       },
       ({ signal }) =>
@@ -477,9 +605,10 @@ export class WorktrunkProvider implements WorktreeProvider {
           {
             command: this.#command,
             args,
+            unsetEnv: gitLocalEnvironmentVariables,
             ...(cwd === undefined ? {} : { cwd }),
             ...(env === undefined ? {} : { env }),
-            signal,
+            signal: mergeAbortSignals(signal, policy.signal),
             maxOutputChars: 512 * 1024,
           },
           this.#runner,
@@ -550,6 +679,14 @@ function dependencyDiagnostics(status: WorktrunkDependencyStatus): Record<string
     if (status.rawVersion !== undefined) diagnostics.rawVersion = status.rawVersion;
   }
   return diagnostics;
+}
+
+function doctorWorkBudgetMs(timeoutMs: number): number {
+  return Math.max(1, Math.floor(timeoutMs * 0.8));
+}
+
+function mergeAbortSignals(primary: AbortSignal, secondary: AbortSignal | undefined): AbortSignal {
+  return secondary === undefined ? primary : AbortSignal.any([primary, secondary]);
 }
 
 function worktrunkCommandDiagnostics(input: {
@@ -717,7 +854,7 @@ function worktrunkSubcommand(args: readonly string[]): string {
     if (arg === undefined) {
       continue;
     }
-    if (arg === "--config") {
+    if (arg === "--config" || arg === "-C") {
       index += 1;
       continue;
     }
@@ -835,7 +972,12 @@ function isMissingBinary(error: unknown): boolean {
     return false;
   }
   const cause = error as { code?: unknown; cause?: unknown };
+  if (cause.code === "EXTERNAL_COMMAND_CWD_NOT_FOUND") return false;
   return cause.code === "ENOENT" || isMissingBinary(cause.cause);
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function stringFieldDeep(

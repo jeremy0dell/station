@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
 import {
   type ExternalCommandRunner,
+  gitLocalEnvironmentVariables,
   type ResolveExecutablePathOptions,
   resolveExecutablePath,
   runExternalCommand,
@@ -80,6 +81,7 @@ export async function checkWorktrunkDependency(
       {
         command: probeCommand,
         args: ["--version"],
+        unsetEnv: gitLocalEnvironmentVariables,
         ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
         maxOutputChars: 4096,
       },

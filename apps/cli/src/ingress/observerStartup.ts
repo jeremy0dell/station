@@ -5,6 +5,7 @@ import type { ObserverPaths } from "@station/config";
 import type { ObserverHealth, SafeError } from "@station/contracts";
 import { createObserverClient, isSocketStale, removeStaleSocket } from "@station/protocol";
 import {
+  environmentWithoutGitLocals,
   type RuntimeClock,
   runRuntimeBoundaryWithRetryAndTimeout,
   runRuntimeBoundaryWithTimeout,
@@ -203,6 +204,7 @@ function defaultSpawnObserver(input: SpawnProviderHookObserverInput): ChildProce
   ];
   return spawn(command, args, {
     detached: true,
+    env: environmentWithoutGitLocals(),
     stdio: "ignore",
   });
 }

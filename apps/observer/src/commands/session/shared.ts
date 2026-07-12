@@ -199,6 +199,21 @@ export async function lookupWorktree(input: {
       message: "The requested worktree is not visible to the worktree provider.",
     });
   }
+  if (worktree.projectId !== input.projectId) {
+    throw commandValidationError({
+      code: "WORKTREE_PROJECT_MISMATCH",
+      message: "The requested worktree belongs to a different configured project.",
+      projectId: input.projectId,
+      worktreeId: input.worktreeId,
+    });
+  }
+  if (worktree.state !== "exists") {
+    throw worktreeMissingError({
+      projectId: input.projectId,
+      worktreeId: input.worktreeId,
+      message: "The requested worktree no longer has a working directory.",
+    });
+  }
   return worktree;
 }
 

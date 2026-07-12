@@ -1,4 +1,8 @@
-import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
+import {
+  type ExternalCommandRunner,
+  gitLocalEnvironmentVariables,
+  runExternalCommand,
+} from "@station/runtime";
 
 export type GitCommandContext = {
   cwd: string;
@@ -23,6 +27,7 @@ export async function runGitCommand(
     cwd: command.cwd,
     timeoutMs: command.timeoutMs,
     maxOutputChars: options.maxOutputChars,
+    unsetEnv: gitLocalEnvironmentVariables,
   };
   if (command.signal !== undefined) input.signal = command.signal;
   const result = await runExternalCommand(input, command.runner);

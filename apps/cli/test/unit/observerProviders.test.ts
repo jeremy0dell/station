@@ -354,7 +354,7 @@ describe("observer providers", () => {
       await expect(readFile(logPath, "utf8")).resolves.toBe(
         [
           "switch --no-hooks --create feature --base main --no-cd --format=json",
-          "remove --no-hooks feature --foreground --format=json",
+          `-C ${projectRoot} remove --no-hooks feature --foreground --format=json`,
           "",
         ].join("\n"),
       );

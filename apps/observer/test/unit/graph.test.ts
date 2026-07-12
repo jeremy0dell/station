@@ -180,6 +180,30 @@ describe("observer graph derivation", () => {
     expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 
+  it("keeps missing and orphaned worktree evidence out of actionable sessions", () => {
+    const existing = worktree("wt_web_exists", "web", "exists");
+    const missing = worktree("wt_web_missing", "web", "missing");
+    missing.state = "missing";
+    const orphaned = worktree("wt_web_orphaned", "web", "orphaned");
+    orphaned.state = "orphaned";
+    const staleTerminal = terminal("term_missing", missing.id, "run_missing");
+    const staleRun = harness("run_missing", missing.id, "working");
+
+    const snapshot = build({
+      worktrees: [existing, missing, orphaned],
+      terminals: [staleTerminal],
+      harnessRuns: [staleRun],
+    });
+
+    expect(snapshot.rows.map((row) => row.id)).toEqual([existing.id]);
+    expect(snapshot.sessions).toEqual([]);
+    expect(snapshot.counts.worktrees).toBe(1);
+    expect(snapshot.orphans?.map((orphan) => orphan.kind).sort()).toEqual([
+      "harness_run",
+      "terminal_target",
+    ]);
+  });
+
   it("honors target-level focus and close overrides", () => {
     const target = terminal("term_idle", "wt_web_idle", "run_idle");
     target.focusable = false;
