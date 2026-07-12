@@ -8,6 +8,7 @@ import {
   loadConfig,
   type StationConfig,
 } from "@station/config";
+import type { ObserverApi, ObserverProcessIdentity, ObserverStopReceipt } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import { stationBuildInfo, systemClock, toIsoTimestamp } from "@station/runtime";
 import { createCommandQueue } from "../commands/queue.js";
@@ -26,9 +27,15 @@ import { createObserverApi } from "./api.js";
 import { createObserverEventBus } from "./eventBus.js";
 import { runShutdownWithBackstop } from "./gracefulExit.js";
 import { createObserverLogger } from "./logging.js";
+import {
+  createObserverProcessIdentity,
+  publishObserverProcessIdentity,
+  removeObserverProcessIdentity,
+} from "./observerPidfile.js";
 import { type ObserverServer, startObserverServer } from "./server.js";
 import {
   readSocketIdentity,
+  type SocketIdentity,
   type SocketOwnershipWatch,
   watchSocketOwnership,
 } from "./socketOwnership.js";
@@ -55,10 +62,8 @@ export type RunObserverMainDeps = {
  * COMPOSITION ROOT
  *
  * Builds the process-lifetime Observer runtime around provider adapters
- * supplied by awaited CLI composition.
- *
- * Shutdown owns the command queue, event hook, server, and SQLite lifecycles
- * created here.
+ * supplied by awaited CLI composition, including socket identity publication,
+ * health readiness, and shutdown of the services created here.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -96,6 +101,7 @@ export async function runObserverMain(
   const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
+  const buildVersion = stationBuildInfo().version;
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
@@ -113,7 +119,7 @@ export async function runObserverMain(
     clock: systemClock,
     logger,
     featureFlags,
-    version: stationBuildInfo().version,
+    version: buildVersion,
   });
   registerObserverCommandHandlers({
     queue: commandQueue,
@@ -132,30 +138,86 @@ export async function runObserverMain(
 
   let server: ObserverServer | undefined;
   let ownership: SocketOwnershipWatch | undefined;
+  let ownsSocket = false;
+  let boundSocketIdentity: SocketIdentity | undefined;
+  let processIdentity: ObserverProcessIdentity | undefined;
+  const startupGate = createObserverStartupGate();
   let stopResolve: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
     stopResolve = resolve;
   });
   let stopping: Promise<void> | undefined;
-  const stopObserver = async () => {
+  let stopReceipt: Promise<ObserverStopReceipt> | undefined;
+  let observerApi: ObserverApi;
+  let shutdownExitCode = 0;
+  const stopObserver = async (exitCode = 0) => {
+    shutdownExitCode = Math.max(shutdownExitCode, exitCode);
     stopping ??= runShutdownWithBackstop(
       async () => {
+        let shutdownError: unknown;
+        stopReceipt ??= (async () => {
+          // Publication must settle before cleanup so a pre-ready stop cannot leave a late pidfile behind.
+          await startupGate.waitUntilSettled();
+          return observerApi.stop();
+        })();
+        try {
+          await stopReceipt;
+        } catch (error) {
+          shutdownError = error;
+        }
+        try {
+          await commandQueue.shutdown();
+        } catch (error) {
+          shutdownError ??= error;
+        }
+        try {
+          await eventHooks?.shutdown();
+        } catch (error) {
+          shutdownError ??= error;
+        }
+        // Cleanup is ownership-checked so a displaced Observer cannot delete its successor's pidfile.
+        const currentSocketIdentity = await readSocketIdentity(socketPath);
+        const stillOwnsSocket =
+          ownsSocket &&
+          boundSocketIdentity !== undefined &&
+          currentSocketIdentity?.ino === boundSocketIdentity.ino &&
+          currentSocketIdentity.birthtimeNs === boundSocketIdentity.birthtimeNs;
+        ownsSocket = stillOwnsSocket;
+        if (stillOwnsSocket && processIdentity !== undefined) {
+          try {
+            await removeObserverProcessIdentity(processIdentity);
+          } catch (error) {
+            await logger
+              .warn("Observer process identity could not be removed during shutdown.", {
+                socketPath,
+                pid: processIdentity.pid,
+                error,
+              })
+              .catch(() => undefined);
+          }
+        }
         ownership?.stop();
-        await commandQueue.shutdown();
-        await eventHooks?.shutdown();
-        await server?.close();
+        try {
+          await server?.close();
+        } catch (error) {
+          shutdownError ??= error;
+        }
+        ownsSocket = false;
         stopResolve();
+        if (shutdownError !== undefined) {
+          throw shutdownError;
+        }
       },
       STOP_BACKSTOP_MS,
       {
-        exit: (code) => process.exit(code),
+        exit: () => process.exit(shutdownExitCode),
         setTimer: (fn, ms) => setTimeout(fn, ms),
         clearTimer: (timer) => clearTimeout(timer as NodeJS.Timeout),
       },
     );
     await stopping;
   };
-  const api = createObserverApi({
+  observerApi = createObserverApi({
     core,
     providers,
     persistence,
@@ -172,60 +234,94 @@ export async function runObserverMain(
     configDiagnostics: loadedConfig.diagnostics,
     clock: systemClock,
     logger,
-    onStop: () => {
-      setTimeout(() => {
-        void stopObserver();
-      }, 0);
-    },
   });
+  const api: ObserverApi = {
+    ...observerApi,
+    health: () => startupGate.runHealth(observerApi.health),
+    stop: async () => {
+      startupGate.requestStop();
+      const shutdown = stopObserver();
+      void shutdown.catch((error) =>
+        logger.error("Observer shutdown failed.", { socketPath, error }).catch(() => undefined),
+      );
+      if (stopReceipt === undefined) {
+        throw new Error("Observer shutdown did not initialize.");
+      }
+      return stopReceipt;
+    },
+  };
 
+  let shouldReconcile = false;
   try {
-    // Bind only; the startup reconcile runs below, after the ownership watch is
-    // armed, so a takeover during that ~1s scan is detected rather than missed.
+    // Only the successful socket binder may publish identity, and publication must finish before health responds.
     server = await startObserverServer({
       socketPath,
       api,
       clock: systemClock,
       drainOnStart: false,
     });
+    ownsSocket = true;
+    const boundIdentity = await readSocketIdentity(socketPath);
+    if (boundIdentity === undefined) {
+      throw new Error(`Could not capture the bound Observer socket identity at ${socketPath}.`);
+    }
+    boundSocketIdentity = boundIdentity;
+    processIdentity = createObserverProcessIdentity({
+      pid: process.pid,
+      version: buildVersion,
+      socketPath,
+    });
+    await publishObserverProcessIdentity(processIdentity);
+    // Seed the watcher with the just-bound socket identity so it never adopts a
+    // rival's socket as its baseline (the failure that let displaced observers linger).
+    ownership = watchSocketOwnership({
+      socketPath,
+      expectedIdentity: boundIdentity,
+      onLost: () => {
+        ownsSocket = false;
+        void logger.warn("Observer socket was taken over by another process; shutting down.", {
+          socketPath,
+          pid: process.pid,
+        });
+        // A displaced observer must not linger: its loops would keep draining
+        // spool events and firing hooks for a state dir it no longer serves.
+        // stopObserver's backstop guarantees the exit even if the drain hangs.
+        void api.stop();
+      },
+    });
+    shouldReconcile = startupGate.settleReady();
   } catch (error) {
-    await logger.error("Observer server could not start; shutting down runtime services.", {
+    startupGate.settleFailed();
+    shutdownExitCode = 1;
+    await logger.error("Observer startup failed; shutting down runtime services.", {
       socketPath,
       error,
     });
-    // Services started before the bind (command queue, event hooks) hold live
-    // timers; without teardown + forced exit a failed-bind observer lingers as
-    // a spool-stealing zombie that never owned the socket.
-    await stopObserver();
-    sqlite.close();
+    try {
+      await stopObserver(1);
+    } catch (shutdownError) {
+      await logger
+        .warn("Observer startup cleanup could not close every runtime service.", {
+          socketPath,
+          error: shutdownError,
+        })
+        .catch(() => undefined);
+    } finally {
+      sqlite.close();
+    }
     setTimeout(() => process.exit(1), 2000).unref();
     return 1;
   }
-  // Seed the watcher with the just-bound socket identity so it never adopts a
-  // rival's socket as its baseline (the failure that let displaced observers linger).
-  const boundIdentity = await readSocketIdentity(socketPath);
-  ownership = watchSocketOwnership({
-    socketPath,
-    ...(boundIdentity === undefined ? {} : { expectedIdentity: boundIdentity }),
-    onLost: () => {
-      void logger.warn("Observer socket was taken over by another process; shutting down.", {
-        socketPath,
-        pid: process.pid,
-      });
-      // A displaced observer must not linger: its loops would keep draining
-      // spool events and firing hooks for a state dir it no longer serves.
-      // stopObserver's backstop guarantees the exit even if the drain hangs.
+  if (shouldReconcile) {
+    const stopFromSignal = () => {
       void api.stop();
-    },
-  });
-  const stopFromSignal = () => {
-    void api.stop();
-  };
-  process.once("SIGINT", stopFromSignal);
-  process.once("SIGTERM", stopFromSignal);
+    };
+    process.once("SIGINT", stopFromSignal);
+    process.once("SIGTERM", stopFromSignal);
 
-  // Startup reconcile now that the ownership watch is live.
-  await api.reconcile("observer.startup");
+    // Startup reconcile now that the ownership watch is live.
+    await api.reconcile("observer.startup");
+  }
 
   await stopped;
   sqlite.close();
@@ -302,4 +398,59 @@ function resolvePath(input: string, homeDir: string): string {
   const expanded =
     input === "~" ? homeDir : input.startsWith("~/") ? join(homeDir, input.slice(2)) : input;
   return isAbsolute(expanded) ? resolve(expanded) : resolve(process.cwd(), expanded);
+}
+
+type ObserverStartupGate = {
+  requestStop(): void;
+  settleReady(): boolean;
+  settleFailed(): void;
+  waitUntilSettled(): Promise<void>;
+  runHealth<T>(operation: () => Promise<T>): Promise<T>;
+};
+
+export function createObserverStartupGate(): ObserverStartupGate {
+  let state: "starting" | "ready" | "stopping" | "failed" = "starting";
+  let release: () => void = () => undefined;
+  let ready = pending();
+  let settleStartup: () => void = () => undefined;
+  const startupSettled = new Promise<void>((resolve) => {
+    settleStartup = resolve;
+  });
+
+  function pending(): Promise<void> {
+    return new Promise((resolve) => {
+      release = resolve;
+    });
+  }
+
+  return {
+    requestStop: () => {
+      if (state === "stopping" || state === "failed") return;
+      if (state === "ready") ready = pending();
+      state = "stopping";
+    },
+    settleReady: () => {
+      if (state !== "starting") {
+        settleStartup();
+        return false;
+      }
+      state = "ready";
+      release();
+      settleStartup();
+      return true;
+    },
+    settleFailed: () => {
+      if (state === "starting") state = "failed";
+      settleStartup();
+    },
+    waitUntilSettled: () => startupSettled,
+    runHealth: async <T>(operation: () => Promise<T>): Promise<T> => {
+      for (;;) {
+        await ready;
+        if (state !== "ready") continue;
+        const result = await operation();
+        if (state === "ready") return result;
+      }
+    },
+  };
 }

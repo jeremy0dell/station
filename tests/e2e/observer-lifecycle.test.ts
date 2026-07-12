@@ -1,7 +1,8 @@
-import { access, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { startObserver } from "@station/cli";
 import { emptyConfig } from "@station/config";
+import { ObserverProcessIdentitySchema } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 import { waitForSocketClosed } from "../support/sockets";
@@ -22,6 +23,7 @@ describe("observer lifecycle e2e", () => {
       },
     };
     const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    const pidfilePath = `${fixture.socketPath}.pid`;
     let started = false;
 
     try {
@@ -30,12 +32,29 @@ describe("observer lifecycle e2e", () => {
         status: "running",
         paths: { socketPath: fixture.socketPath },
       });
+      if (status.status !== "running") {
+        throw new Error(`Observer failed to start: ${status.status}`);
+      }
       started = true;
 
-      await expect(client.health()).resolves.toMatchObject({
+      expect(status.health).toMatchObject({
         status: "healthy",
         socketPath: fixture.socketPath,
         stateDir: fixture.stateDir,
+      });
+      const identity = ObserverProcessIdentitySchema.parse(
+        JSON.parse(await readFile(pidfilePath, "utf8")),
+      );
+      expect(Object.keys(identity).sort()).toEqual(["osStartTime", "pid", "socketPath", "version"]);
+      expect(identity).toMatchObject({
+        pid: status.health.pid,
+        version: status.health.version,
+        socketPath: status.health.socketPath,
+      });
+      expect(identity.osStartTime).toBe(identity.osStartTime.trim());
+      expect((await stat(pidfilePath)).mode & 0o777).toBe(0o600);
+      await expect(access(join(fixture.stateDir, "observer.sock.pid"))).rejects.toMatchObject({
+        code: "ENOENT",
       });
       await expect(client.getSnapshot()).resolves.toMatchObject({
         schemaVersion: "0.7.0",
@@ -65,6 +84,8 @@ describe("observer lifecycle e2e", () => {
         await waitForSocketClosed(fixture.socketPath);
       }
     }
+
+    await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("converges concurrent cold starts on one healthy observer", async () => {
@@ -77,6 +98,7 @@ describe("observer lifecycle e2e", () => {
       },
     };
     const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    const pidfilePath = `${fixture.socketPath}.pid`;
     let started = false;
 
     try {
@@ -91,12 +113,160 @@ describe("observer lifecycle e2e", () => {
       );
       expect(new Set(pids).size).toBe(1);
       expect(pids[0]).toBeTypeOf("number");
+      const identity = ObserverProcessIdentitySchema.parse(
+        JSON.parse(await readFile(pidfilePath, "utf8")),
+      );
+      expect(identity).toMatchObject({
+        pid: pids[0],
+        version: statuses[0]?.status === "running" ? statuses[0].health.version : undefined,
+        socketPath: fixture.socketPath,
+      });
     } finally {
       if (started) {
         await client.stop();
         await waitForSocketClosed(fixture.socketPath);
       }
     }
+
+    await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps identities distinct for sockets sharing one directory", async () => {
+    const first = await createTempState();
+    const second = await createTempState();
+    const socketDir = join(first.root, "shared-run");
+    const firstSocketPath = join(socketDir, "first.sock");
+    const secondSocketPath = join(socketDir, "second.sock");
+    const firstClient = createObserverClient({ socketPath: firstSocketPath, timeoutMs: 1000 });
+    const secondClient = createObserverClient({ socketPath: secondSocketPath, timeoutMs: 1000 });
+    let firstStarted = false;
+    let secondStarted = false;
+
+    try {
+      const [firstStatus, secondStatus] = await Promise.all([
+        startObserver({
+          config: {
+            ...emptyConfig(),
+            observer: { stateDir: first.stateDir, socketPath: firstSocketPath },
+          },
+          timeoutMs: 30_000,
+        }),
+        startObserver({
+          config: {
+            ...emptyConfig(),
+            observer: { stateDir: second.stateDir, socketPath: secondSocketPath },
+          },
+          timeoutMs: 30_000,
+        }),
+      ]);
+      firstStarted = firstStatus.status === "running";
+      secondStarted = secondStatus.status === "running";
+      expect(firstStatus.status).toBe("running");
+      expect(secondStatus.status).toBe("running");
+
+      expect(
+        ObserverProcessIdentitySchema.parse(
+          JSON.parse(await readFile(`${firstSocketPath}.pid`, "utf8")),
+        ).socketPath,
+      ).toBe(firstSocketPath);
+      expect(
+        ObserverProcessIdentitySchema.parse(
+          JSON.parse(await readFile(`${secondSocketPath}.pid`, "utf8")),
+        ).socketPath,
+      ).toBe(secondSocketPath);
+
+      await secondClient.stop();
+      await waitForSocketClosed(secondSocketPath);
+      secondStarted = false;
+      await expect(firstClient.health()).resolves.toMatchObject({ socketPath: firstSocketPath });
+      await expect(access(`${firstSocketPath}.pid`)).resolves.toBeUndefined();
+    } finally {
+      if (secondStarted) {
+        await secondClient.stop().catch(() => undefined);
+        await waitForSocketClosed(secondSocketPath).catch(() => undefined);
+      }
+      if (firstStarted) {
+        await firstClient.stop().catch(() => undefined);
+        await waitForSocketClosed(firstSocketPath).catch(() => undefined);
+      }
+    }
+
+    await expect(access(`${firstSocketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(`${secondSocketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("publishes identity beside an XDG runtime socket", async () => {
+    const fixture = await createTempState();
+    const runtimeDir = await mkdtemp("/tmp/stn-xdg-");
+    const socketPath = join(runtimeDir, "station", "observer.sock");
+    const pidfilePath = `${socketPath}.pid`;
+    const config = {
+      ...emptyConfig(),
+      observer: { stateDir: fixture.stateDir },
+    };
+    const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+    process.env.XDG_RUNTIME_DIR = runtimeDir;
+    const client = createObserverClient({ socketPath, timeoutMs: 1000 });
+    let started = false;
+
+    try {
+      const status = await startObserver({ config, timeoutMs: 30_000 });
+      expect(status).toMatchObject({
+        status: "running",
+        paths: { socketPath },
+        health: { socketPath },
+      });
+      if (status.status !== "running") {
+        throw new Error(`Observer failed to start: ${status.status}`);
+      }
+      started = true;
+
+      expect(
+        ObserverProcessIdentitySchema.parse(JSON.parse(await readFile(pidfilePath, "utf8"))),
+      ).toMatchObject({
+        pid: status.health.pid,
+        version: status.health.version,
+        socketPath,
+      });
+      await expect(access(join(fixture.stateDir, "observer.sock.pid"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      if (started) {
+        await client.stop();
+        await waitForSocketClosed(socketPath);
+        await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+      }
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+      await rm(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("exits nonzero without serving health when identity publication fails", async () => {
+    const fixture = await createTempState();
+    const pidfilePath = `${fixture.socketPath}.pid`;
+    await mkdir(pidfilePath, { recursive: true });
+    const config = {
+      ...emptyConfig(),
+      observer: {
+        stateDir: fixture.stateDir,
+        socketPath: fixture.socketPath,
+      },
+    };
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 250 });
+
+    const status = await startObserver({ config, timeoutMs: 30_000 });
+
+    expect(status).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_EXITED_ON_START",
+        message: expect.stringContaining("exit code 1"),
+      },
+    });
+    await expect(client.health()).rejects.toBeDefined();
+    await expect(access(fixture.socketPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("reports a malformed-config child exit without waiting for the startup timeout", async () => {

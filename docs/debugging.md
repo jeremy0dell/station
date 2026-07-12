@@ -131,6 +131,12 @@ The default observer state directory is:
 
 It can be changed through config or observer startup options. The resolver also uses `$XDG_RUNTIME_DIR/station/observer.sock` for the socket when that environment variable is present.
 
+The Observer process-identity file follows the resolved socket rather than the
+state directory. Its path is always `<resolved socketPath>.pid`, including XDG
+and explicit-socket layouts where the socket directory is outside the configured
+state directory. Including the socket filename keeps identities distinct when
+multiple configured sockets share one directory.
+
 Important files and directories:
 
 ```text
@@ -147,6 +153,25 @@ diagnostics/*/logs/observer.jsonl
 diagnostics/panes/
 spool/hooks/
 ```
+
+`observer.sock.pid` is mode `0600` for the default socket and contains exactly:
+
+```json
+{
+  "pid": 12345,
+  "osStartTime": "Sat Jul 11 10:42:03 2026",
+  "version": "0.7.0",
+  "socketPath": "/resolved/socket/directory/observer.sock"
+}
+```
+
+Use this file only to corroborate the identity of the process associated with
+the socket. `lsof -t <resolved-socket-path>` remains the primary process-
+ownership evidence, and a connect or health probe establishes liveness. A
+crash or cleanup failure can leave a stale identity file, so do not signal a
+process or unlink a socket from this file alone. Clean shutdown removes the
+file only when the Observer still owns the socket and every identity field
+matches its published value.
 
 ## Reading Evidence
 

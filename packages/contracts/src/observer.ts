@@ -34,6 +34,17 @@ import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
 export const ObserverHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
 
+export const ObserverProcessIdentitySchema = z
+  .object({
+    pid: z.number().int().positive(),
+    osStartTime: nonEmptyStringSchema,
+    version: nonEmptyStringSchema,
+    socketPath: nonEmptyStringSchema,
+  })
+  .strict();
+
+export type ObserverProcessIdentity = z.infer<typeof ObserverProcessIdentitySchema>;
+
 export const ObserverSqliteHealthSummarySchema = z
   .object({
     path: nonEmptyStringSchema,

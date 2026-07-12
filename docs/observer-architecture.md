@@ -235,6 +235,7 @@ No single layer owns all truth.
 | Provider-owned identity | Worktree, target, harness-run, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
+| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
@@ -268,10 +269,21 @@ Current startup proceeds in this order:
    awaited provider registry.
 5. The API constructs ingress queues, reconcile scheduling, metadata refresh,
    diagnostics dependencies, and spool draining.
-6. The protocol server binds the socket before startup reconcile. A
-   socket-ownership watch is armed so a displaced observer shuts itself down.
-7. Startup reconcile establishes the first provider-backed snapshot. Provider
-   health and harness-version probes fill caches in the background.
+6. The runtime constructs a private startup-and-health gate, then the protocol
+   server binds the resolved socket before startup reconcile. Only the
+   successful socket binder may publish process identity.
+7. The runtime captures the bound-socket identity, atomically publishes and
+   fsyncs `<socketPath>.pid`, then arms the socket-ownership
+   watcher from the captured identity. Identity publication or OS-start-token
+   failure is fatal: health stays gated while the runtime logs the startup
+   failure, tears down its services, socket, and SQLite handle, and exits
+   nonzero.
+8. Health responses are enabled only after pidfile publication and watcher
+   setup complete. Startup reconcile then establishes the first provider-backed
+   snapshot; provider health and harness-version probes fill caches in the
+   background. A stop requested before readiness is terminal: shutdown waits
+   for publication to settle, health remains gated, and startup reconcile is
+   skipped.
 
 Composition must make lifecycle ownership obvious. Anything that owns a timer,
 fiber, watcher, queue, socket, child process, or durable handle must have a
@@ -280,11 +292,19 @@ defined startup failure path and shutdown owner.
 ### Shutdown
 
 The current API stop path drains harness ingress and metadata watchers, then
-schedules process shutdown. Command-queue shutdown rejects new commands,
-aborts running handlers cooperatively, and waits for their per-scope chains;
-configured event hooks and the protocol server then close before SQLite. A
-bounded process backstop prevents a handler that ignores cancellation from
-keeping a displaced or stopped observer alive indefinitely.
+schedules process shutdown. Process shutdown disables health responses first.
+If the process still owns the socket, it conditionally removes only an exact
+matching process identity and syncs the socket directory before the protocol
+server releases the socket. A displaced process marks ownership lost before
+shutdown and leaves a successor's pidfile untouched. Pidfile cleanup failure is
+warned and shutdown continues because a stale corroborating file is safer than
+deleting another process's identity or hanging shutdown.
+
+Command-queue shutdown rejects new commands, aborts running handlers
+cooperatively, and waits for their per-scope chains; configured event hooks and
+the protocol server then close before SQLite. A bounded process backstop
+prevents a handler that ignores cancellation from keeping a displaced or
+stopped observer alive indefinitely.
 
 ## Main Flows
 

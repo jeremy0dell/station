@@ -27,6 +27,8 @@ import {
   ObserverEventHookConfigSchema,
   ObserverEventHookInvocationSchema,
   ObserverHealthSchema,
+  type ObserverProcessIdentity,
+  ObserverProcessIdentitySchema,
   ObserverStopReceiptSchema,
   type ProjectId,
   ProjectIdSchema,
@@ -100,6 +102,33 @@ describe("contract schemas", () => {
     for (const [name, snapshot] of Object.entries(snapshots)) {
       expect(snapshot.schemaVersion, name).toBe(STATION_SCHEMA_VERSION);
     }
+  });
+
+  it("requires a strict observer process identity", () => {
+    const identity: ObserverProcessIdentity = {
+      pid: 1234,
+      osStartTime: "Sat Jul 11 12:34:56 2026",
+      version: "0.1.1-dev",
+      socketPath: "/tmp/station/observer.sock",
+    };
+
+    expect(ObserverProcessIdentitySchema.parse(identity)).toEqual(identity);
+
+    for (const field of ["pid", "osStartTime", "version", "socketPath"] as const) {
+      const incompleteIdentity: Partial<ObserverProcessIdentity> = { ...identity };
+      delete incompleteIdentity[field];
+      expectFails(
+        ObserverProcessIdentitySchema,
+        incompleteIdentity,
+        `observer process identity without ${field}`,
+      );
+    }
+
+    expectFails(
+      ObserverProcessIdentitySchema,
+      { ...identity, stateDir: "/tmp/station/state" },
+      "observer process identity with unknown field",
+    );
   });
 
   it("owns the observer application port and external-launch contracts", () => {
