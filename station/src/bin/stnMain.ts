@@ -1,5 +1,6 @@
 import { dispatchSelfExec, type SelfExecRunners } from "@station/cli/self-exec";
 import cttyHelperAsset from "../../dist/ctty-helper" with { type: "file" };
+import openTuiAsset from "../../dist/openTuiAsset.mjs";
 import piExtensionAsset from "../../dist/piExtension.mjs" with { type: "file" };
 import {
   preparePackagedPiExtension,
@@ -7,7 +8,7 @@ import {
 } from "./packagedAssets.js";
 
 const prepareCompiledPtyRuntime = (stateDir: string) =>
-  preparePackagedPtyRuntime(stateDir, cttyHelperAsset);
+  preparePackagedPtyRuntime(stateDir, cttyHelperAsset, {}, openTuiAsset);
 
 const prepareCompiledPiExtension = (stateDir: string) =>
   preparePackagedPiExtension(stateDir, piExtensionAsset);

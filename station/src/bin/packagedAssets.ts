@@ -32,7 +32,7 @@ const LOCK_WAIT_MS = 25;
 const LOCK_TIMEOUT_MS = 5_000;
 const OWNER_PREFIX = "owner-";
 
-type AssetKind = "ctty" | "pi";
+type AssetKind = "ctty" | "opentui" | "pi";
 
 type AssetSpec = {
   kind: AssetKind;
@@ -62,7 +62,22 @@ export async function preparePackagedPtyRuntime(
   stateDir: string,
   cttyHelperAssetPath: string,
   deps: PackagedAssetDeps = {},
+  openTuiAssetPath?: string,
 ): Promise<PreparedPtyRuntime> {
+  if (openTuiAssetPath !== undefined) {
+    const libraryPath = await materializeAsset(
+      stateDir,
+      {
+        kind: "opentui",
+        bytes: await readEmbeddedAsset(openTuiAssetPath),
+        fileName: process.platform === "darwin" ? "libopentui.dylib" : "libopentui.so",
+        mode: PI_MODE,
+      },
+      deps,
+    );
+    const { setRenderLibPath } = await import("@opentui/core");
+    setRenderLibPath(libraryPath);
+  }
   const implementation = resolvePtyImplementation(process.env.STATION_PTY_IMPL, "bun");
   if (implementation === "bridge") {
     throw new Error(

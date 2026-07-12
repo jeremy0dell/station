@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -92,7 +93,27 @@ try {
     const piExtensionPath = await findFile(join(stateDir, "run", "assets", "pi"), (name) =>
       name.endsWith(".mjs"),
     );
-    await import(`${pathToFileURL(piExtensionPath).href}?smoke=${Date.now()}`);
+    const piExtension = await import(`${pathToFileURL(piExtensionPath).href}?smoke=${Date.now()}`);
+    assertEqual(typeof piExtension.default, "function", "minified Pi default export");
+    assertEqual(
+      typeof piExtension.registerStationPiExtension,
+      "function",
+      "minified Pi named export",
+    );
+    const piHandlers = new Map();
+    const deliveredEvents = [];
+    piExtension.registerStationPiExtension(
+      { on: (eventType, handler) => piHandlers.set(eventType, handler) },
+      {
+        env: { STATION_WORKTREE_PATH: root },
+        sendReport: async (input) => deliveredEvents.push(input),
+      },
+    );
+    assertEqual(piHandlers.size > 0, true, "minified Pi handler registration");
+    await piHandlers.get("session_start")?.({ reason: "startup" }, { cwd: root });
+    assertEqual(deliveredEvents.length, 1, "minified Pi injected event delivery");
+
+    await smokeTuiInPty(binaryPath, configPath, childEnv, root);
 
     await observerClient.stop();
     observerClient = undefined;
@@ -279,6 +300,54 @@ function collectOutput(child) {
   child.stdout?.on("data", (chunk) => (stdout += chunk));
   child.stderr?.on("data", (chunk) => (stderr += chunk));
   return () => ({ stdout, stderr });
+}
+
+async function smokeTuiInPty(command, config, env, cwd) {
+  const require = createRequire(import.meta.url);
+  await chmod(
+    resolve(
+      "station/node_modules/node-pty/prebuilds",
+      `${process.platform}-${process.arch}`,
+      "spawn-helper",
+    ),
+    0o755,
+  );
+  const pty = require(resolve("station/node_modules/node-pty"));
+  const terminal = pty.spawn(command, ["--config", config], {
+    cols: 100,
+    rows: 30,
+    cwd,
+    env,
+    name: "xterm-256color",
+  });
+  let output = "";
+  const exit = new Promise((resolveExit) => terminal.onExit(resolveExit));
+  const welcome = new Promise((resolveWelcome, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`compiled TUI welcome frame timed out\n${output}`)),
+      30_000,
+    );
+    terminal.onData((data) => {
+      output += data;
+      if (output.includes("Welcome to")) {
+        clearTimeout(timeout);
+        resolveWelcome();
+      }
+    });
+  });
+  try {
+    await welcome;
+    terminal.write("\x11");
+    const result = await Promise.race([
+      exit,
+      delay(10_000).then(() => {
+        throw new Error("compiled TUI did not exit after Ctrl-Q");
+      }),
+    ]);
+    assertEqual(result.exitCode, 0, "compiled TUI Ctrl-Q shutdown");
+  } finally {
+    terminal.kill();
+  }
 }
 
 async function waitForHost(client, diagnostics) {
