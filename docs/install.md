@@ -1,6 +1,16 @@
 # Install
 
-This setup path is for a local development checkout. station remains a private workspace package for this milestone; there is no public npm package or publish flow yet.
+The source setup path is for a local development checkout. Station remains private and is not published to npm.
+
+## Authenticated Binary Install
+
+Private releases publish native macOS and Linux archives. With an authenticated GitHub CLI session, install the latest release to `~/.local/bin` with:
+
+```bash
+./scripts/install.sh
+```
+
+Use `--version vX.Y.Z` for an immutable install or rollback, and `--install-dir PATH` for a different launcher directory. The installer prefers xz when available, falls back to gzip, and verifies the published checksum and complete archive manifest before replacing an existing installation. The source bootstrap and source-based Homebrew formula remain supported and unchanged.
 
 ## Quick start (macOS)
 
