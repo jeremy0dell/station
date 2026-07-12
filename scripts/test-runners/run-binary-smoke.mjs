@@ -188,7 +188,7 @@ try {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.1.0-dev";
+    return "0.7.0";
   }
   if (
     normalized.length === 2 &&

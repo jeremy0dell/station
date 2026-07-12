@@ -1,0 +1,149 @@
+name: promote-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful release workflow run containing the accepted candidate artifact
+        required: true
+        type: string
+      tag:
+        description: Draft release tag to verify and publish
+        required: true
+        type: string
+      manual_acceptance:
+        description: Confirm the documented real-terminal acceptance gate passed
+        required: true
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: promote-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: inputs.manual_acceptance
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify accepted candidate and publish its draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_RUN_ID" =~ ^[0-9]+$ ]]
+          node -e '
+            const tag = process.argv[1];
+            const semver = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+            if (!semver.test(tag)) throw new Error(`Invalid release tag: ${tag}`);
+          ' "$TAG"
+          version="${TAG#v}"
+
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID")"
+          test "$(jq -r .name <<<"$run_json")" = release
+          test "$(jq -r .event <<<"$run_json")" = push
+          test "$(jq -r .conclusion <<<"$run_json")" = success
+          workflow_id="$(jq -er .workflow_id <<<"$run_json")"
+          [[ "$workflow_id" =~ ^[0-9]+$ ]]
+          test "$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id" --jq .path
+          )" = .github/workflows/release.yml
+          run_attempt="$(jq -r .run_attempt <<<"$run_json")"
+          [[ "$run_attempt" =~ ^[0-9]+$ ]]
+
+          artifact="accepted-release-candidate-$version-attempt-$run_attempt"
+          mkdir candidate
+          gh run download "$RELEASE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "$artifact" \
+            --dir candidate
+
+          commit="$(jq -er .commit candidate/manifest.json)"
+          release_id="$(jq -er .releaseId candidate/manifest.json)"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$release_id" =~ ^[0-9]+$ ]]
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg tag "$TAG" \
+            --arg commit "$commit" \
+            --argjson workflowRunId "$RELEASE_RUN_ID" \
+            --argjson workflowRunAttempt "$run_attempt" \
+            --argjson releaseId "$release_id" \
+            '.repository == $repository and
+             .tag == $tag and
+             .commit == $commit and
+             .workflowRunId == $workflowRunId and
+             .workflowRunAttempt == $workflowRunAttempt and
+             .releaseId == $releaseId and
+             (.checksumFileSha256 | test("^[0-9a-f]{64}$"))' \
+            candidate/manifest.json >/dev/null
+          test "$(jq -r .head_sha <<<"$run_json")" = "$commit"
+          comparison_status="$(
+            gh api "repos/$GITHUB_REPOSITORY/compare/$commit...main" --jq .status
+          )"
+          case "$comparison_status" in
+            ahead|identical) ;;
+            *) echo "Release commit $commit is no longer on main." >&2; exit 1 ;;
+          esac
+          test "$(sha256sum candidate/SHA256SUMS | awk '{print $1}')" = \
+            "$(jq -r .checksumFileSha256 candidate/manifest.json)"
+
+          remote_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          test "$remote_commit" = "$commit"
+          release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id")"
+          test "$(jq -r .draft <<<"$release_json")" = true
+          test "$(jq -r .tag_name <<<"$release_json")" = "$TAG"
+          expected_prerelease=false
+          case "$version" in *-*) expected_prerelease=true ;; esac
+          test "$(jq -r .prerelease <<<"$release_json")" = "$expected_prerelease"
+
+          expected=(
+            SHA256SUMS
+            "stn-v$version-darwin-arm64.tar.gz"
+            "stn-v$version-darwin-x64.tar.gz"
+            "stn-v$version-linux-arm64.tar.gz"
+            "stn-v$version-linux-x64.tar.gz"
+          )
+          mapfile -t actual < <(jq -r '.assets[].name' <<<"$release_json" | sort)
+          mapfile -t wanted < <(printf '%s\n' "${expected[@]}" | sort)
+          test "${actual[*]}" = "${wanted[*]}"
+
+          current_ids="$(
+            jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$release_json"
+          )"
+          test "$current_ids" = "$(cat candidate/asset-ids.txt)"
+          mkdir downloaded
+          for name in "${expected[@]}"; do
+            asset_id="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' <<<"$release_json")"
+            gh api -H 'Accept: application/octet-stream' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "downloaded/$name"
+          done
+          cmp candidate/SHA256SUMS downloaded/SHA256SUMS
+          (cd downloaded && sha256sum -c SHA256SUMS)
+
+          final_release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id")"
+          final_ids="$(
+            jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$final_release_json"
+          )"
+          test "$(jq -r .draft <<<"$final_release_json")" = true
+          test "$(jq -r .prerelease <<<"$final_release_json")" = "$expected_prerelease"
+          test "$final_ids" = "$current_ids"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"
+
+          gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F tag_name="$TAG" \
+            -F prerelease="$expected_prerelease" \
+            -F draft=false >/dev/null
+          published_release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id")"
+          test "$(jq -r .draft <<<"$published_release_json")" = false
+          test "$(jq -r .tag_name <<<"$published_release_json")" = "$TAG"
+          test "$(jq -r .prerelease <<<"$published_release_json")" = "$expected_prerelease"
+          test "$(
+            jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$published_release_json"
+          )" = "$current_ids"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"

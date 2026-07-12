@@ -46,6 +46,118 @@ describe("release readiness docs", () => {
     expect(JSON.parse(await read("package.json")).engines.node).toBe(">=24.2 <25");
   });
 
+  it("documents the authenticated private binary release contract", async () => {
+    const [readme, install, development, singleBinary, homebrew, release, promote] =
+      await Promise.all(
+        [
+          "README.md",
+          "docs/install.md",
+          "docs/development.md",
+          "docs/single-binary.md",
+          "docs/homebrew.md",
+          ".github/workflows/release.yml",
+          ".github/workflows/promote-release.yml",
+        ].map(read),
+      );
+    const packageJson = JSON.parse(await read("package.json"));
+
+    expect(readme).toContain("authenticated private binary");
+    expect(readme).toContain("without Node.js, pnpm, Bun");
+    expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
+    expect(install).toContain("tag=v0.7.0");
+    expect(install).toContain('-f ref="$tag"');
+    expect(install).toContain('sh "$installer" --version "$tag"');
+    expect(readme).toContain('-f ref="$tag"');
+    expect(readme.replace(/\s+/g, " ")).toContain("installer code and artifacts");
+    expect(install).toContain("SHA256SUMS");
+    expect(install).toContain("stn-tmux-popup");
+    for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
+      expect(singleBinary).toContain(target);
+    }
+    expect(singleBinary).toContain("**Status: implemented.**");
+    expect(singleBinary).toContain("release **draft**");
+    expect(singleBinary).toContain("GitHub immutable");
+    expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
+    expect(singleBinary).toContain("without `+` build metadata");
+    expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
+    expect(development).toContain("accepted-release-candidate-0.7.0");
+    expect(release).toContain('-f ref="$COMMIT"');
+    expect(release).toContain("persist-credentials: false");
+    expect(release).toContain("accepted-release-candidate-");
+    const installDraft = release.slice(
+      release.indexOf("  install-draft:"),
+      release.indexOf("  record-accepted-candidate:"),
+    );
+    const recordCandidate = release.slice(release.indexOf("  record-accepted-candidate:"));
+    for (const job of [installDraft, recordCandidate]) {
+      expect(job).toContain("contents: read");
+      expect(job).not.toContain("contents: write");
+    }
+    expect(promote).toContain("workflow_dispatch");
+    expect(promote).toContain("manual_acceptance");
+    expect(promote).toContain("asset-ids.txt");
+    expect(promote).toContain("actions/workflows/$workflow_id");
+    expect(promote).toContain("compare/$commit...main");
+    expect(promote).toContain('prerelease="$expected_prerelease"');
+    expect(packageJson.version).toBe("0.7.0");
+    expect(development).toContain("HOST_UPGRADE_BLOCKED");
+    expect(homebrew).toContain("`workflow_dispatch` only");
+    expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
+    expect(packageJson.scripts["smoke:install"]).toBe(
+      "node scripts/test-runners/run-install-smoke.mjs",
+    );
+    expect(packageJson.scripts["test:all"]).toContain("pnpm smoke:install");
+  });
+
+  it("keeps installer continuity and interrupted-upgrade recovery documented", async () => {
+    const documents = await Promise.all(
+      ["docs/install.md", "docs/development.md", "docs/single-binary.md"].map(
+        async (path) => [path, await read(path)] as const,
+      ),
+    );
+
+    for (const [path, document] of documents) {
+      const normalized = document.replace(/\s+/g, " ");
+      expect(document, path).toContain("<install-dir>/.station-install.lock");
+      expect(document, path).toContain("<install-dir>/.station-install.lock/owner-*");
+      expect(document, path).toContain("<data-home>/station/.station-install.lock");
+      expect(document, path).toContain("<data-home>/station/.station-install.lock/owner-*");
+      expect(normalized, path).toContain("requested tag or `latest`");
+      expect(document, path).toContain("token");
+      expect(document, path).toMatch(/10(?:-second| seconds)/);
+      expect(document, path).toMatch(/existing\s+Station\s+installation\s+was\s+unchanged/);
+      expect(document, path).toContain("sole runtime commit point");
+      expect(document, path).toMatch(/129, 130, (?:and|or) 143/);
+      expect(document, path).toContain("4096");
+      expect(document, path).toContain("124");
+      expect(document, path).toContain("125");
+      expect(document, path).toContain("SIGKILL");
+      expect(document, path).toMatch(/power\s+loss/i);
+      expect(normalized, path).toMatch(/no post-power-loss durability guarantee/);
+      expect(document, path).toContain("fsync");
+      expect(document, path).toContain("manually");
+      expect(document, path).toContain("alive");
+    }
+
+    const development = await read("docs/development.md");
+    const normalizedDevelopment = development.replace(/\s+/g, " ");
+    for (const acceptance of [
+      "terminal A",
+      "terminal B",
+      "accepted-release-candidate",
+      "command-not-found",
+      "Ctrl-C",
+      "Ctrl-Z",
+      "stn-tmux-popup",
+      "stn-ingress",
+      "HOST_UPGRADE_BLOCKED",
+      "same Observer socket",
+      "second binary release",
+    ]) {
+      expect(normalizedDevelopment).toContain(acceptance);
+    }
+  });
+
   it("does not advertise removed Crush harness surfaces", async () => {
     const files = ["README.md", "AGENTS.md", ...(await markdownFiles("docs"))];
 

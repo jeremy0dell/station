@@ -1,10 +1,140 @@
 # Install
 
-This setup path is for a local development checkout. station remains a private workspace package for this milestone; there is no public npm package or publish flow yet.
+Station is distributed internally as authenticated private GitHub release assets. There is no public package or public download channel.
 
-## Quick start (macOS)
+## Private Binary
 
-From a fresh clone, one script installs the system dependencies via Homebrew, builds the workspace, and links all three checkout launchers onto `PATH`:
+Authenticate `gh` for `jeremy0dell/station`, then run the installer directly from the private repository:
+
+```bash
+gh auth login --hostname github.com
+(
+  set -e
+  tag=v0.7.0
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  GH_HOST=github.com gh api --method GET \
+    repos/jeremy0dell/station/contents/scripts/install.sh \
+    -H "Accept: application/vnd.github.raw+json" \
+    -f ref="$tag" > "$installer"
+  test -s "$installer"
+  sh "$installer" --version "$tag"
+)
+```
+
+Only after that block succeeds:
+
+```bash
+stn setup
+stn
+```
+
+`v0.7.0` is the first supported private-binary baseline. Resolve the latest
+stable tag first, then fetch and invoke that tag's installer:
+
+```bash
+(
+  set -e
+  tag="$(
+    GH_HOST=github.com gh api --method GET \
+      repos/jeremy0dell/station/releases/latest --jq '.tag_name'
+  )"
+  test -n "$tag"
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  GH_HOST=github.com gh api --method GET \
+    repos/jeremy0dell/station/contents/scripts/install.sh \
+    -H "Accept: application/vnd.github.raw+json" \
+    -f ref="$tag" > "$installer"
+  test -s "$installer"
+  sh "$installer" --version "$tag"
+)
+```
+
+Use the explicit form with the desired `tag` for every exact install. Both
+forms pair installer code and artifacts from one immutable tag; they never
+fall back to `main`. Because `v0.7.0` is the first binary release, immutable
+rollback to a prior binary becomes available only after the next binary release.
+
+Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface.
+
+The installer:
+
+- accepts only `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64`;
+- downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` through authenticated `gh api` calls (`{version}` excludes the tag's leading `v`);
+- verifies the matching SHA-256 before extraction and rejects an unexpected archive manifest;
+- stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
+- keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
+- removes `com.apple.quarantine` from the verified binary defensively on macOS; and
+- resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints a safely quoted current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and also prints the absolute installed `stn` path. It never edits a shell profile.
+
+### Concurrent and interrupted installs
+
+Every install serializes both mutated resources with these locks:
+
+- `<install-dir>/.station-install.lock` (by default
+  `~/.local/bin/.station-install.lock`) for the commands; and
+- `<data-home>/station/.station-install.lock` (by default
+  `~/.local/share/station/.station-install.lock`) for `LICENSE`.
+
+Each lock's sole `owner-*` file records the installer PID, requested tag or
+`latest`, and the unique ownership token embedded in its filename. Cleanup
+removes only that token-specific file and revalidates the lock inode, so an
+earlier installer cannot remove a replacement lock. The installer acquires
+the command lock first and the license lock second, skips the second acquisition
+if both paths coincide, and releases them in reverse order. A refusal happens
+before release lookup or download, names
+the lock and readable owner PID, states that the existing Station installation
+was unchanged, and tells the user to wait and retry. A license-lock refusal
+releases the command lock and performs no release API request.
+
+The installer never guesses that either lock is stale. For an abandoned lock,
+read its sole `<install-dir>/.station-install.lock/owner-*` or
+`<data-home>/station/.station-install.lock/owner-*` file and confirm that no
+installer process with the recorded PID is alive. Only then remove that lock
+directory manually and retry the same install. Do not remove a lock while its
+owner may still be running. Legacy locks with a single `owner` file remain
+readable for safe refusal and manual recovery.
+
+The staged `stn --version` probe has a 10-second supervised deadline and a
+bounded output file. Timeout status 124 means the watchdog terminated, killed
+if necessary, and reaped the probe; status 125 means the timer machinery
+failed. Common GitHub and Actions token variables are removed from the probe's
+environment. A loader or compatibility failure prints no more than 4096 sanitized
+bytes of probe stderr. HUP, INT, and TERM forward to the active child, run the
+same TERM/KILL/reap and rollback path, and exit with status 129, 130, and 143
+respectively, so Ctrl-C does not return to an interrupted install.
+
+Immediately before commit, the installer revalidates both aliases as exact
+symlinks to `stn` and the accepted binary and license destination types. Before
+the final rename, a caught failure restores the prior license and removes only
+an alias that this attempt successfully created and that still matches it. If
+a failed final `mv` leaves the staged `stn` present, rollback restores the
+previous state and the installer reports it unchanged. If the staged `stn`
+disappeared, activation may have committed: the installer preserves the new
+license and aliases, exits nonzero, and prints an absolute
+`<install-dir>/stn --version` inspection command. It does not claim that the previous installation
+was unchanged in that ambiguous case. Post-commit cleanup failures are warnings.
+
+SIGKILL cannot run shell cleanup, so it can leave a stale lock or staging path;
+recover a lock only with the inspection-and-manual-removal procedure above.
+Atomic rename gives coherent process-level visibility—continuous readers see a
+complete old or new runtime—but this installer does not fsync the files or
+containing directories. It therefore makes no post-power-loss durability
+guarantee, and power loss can also leave old/new cross-filesystem `LICENSE`
+metadata. Inspect the absolute installed `stn --version` and both locks before
+retrying after a machine loss.
+
+The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, diffnav and git-delta for diff automation, and a supported agent CLI for agent sessions.
+
+After a second binary version exists, rollback is the same authenticated
+explicit-version install. Published tags and assets are immutable; do not
+delete, move, or overwrite them. If `v0.7.0` itself is bad, publish a higher
+version containing the revert or fix because there is no earlier binary tag.
+
+## Development Checkout
+
+The source checkout remains the development path. On macOS, one script installs the development dependencies via Homebrew, builds the workspace, and links the source `stn` command:
 
 ```bash
 ./scripts/setup/bootstrap.sh
@@ -12,16 +142,16 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. A single prebuilt binary is the post-alpha goal — the design and phased roadmap live in [Single-binary Station](single-binary.md); until then, the draft Homebrew tap path is documented in [Homebrew packaging](homebrew.md).
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. The compiled release design and phased roadmap live in [Single-binary Station](single-binary.md); the separate source-package path is documented in [Homebrew packaging](homebrew.md).
 
-## Requirements
+## Development Requirements
 
-`stn setup check` blocks (exit 1) until these required tools are present:
+For a complete source-development workflow, `stn setup check` exits 1 until these tools are present. A compiled binary can still launch when a feature-gated tool is missing:
 
 - Git, run from inside the git repository you want to manage (macOS: the Command Line Tools)
 - Worktrunk `wt` for core worktree setup
 - tmux for the reference terminal provider and popup path
-- Bun — bare `stn` renders the TUI through `bun run` (not required when `STATION_DASHBOARD_COMMAND` overrides the renderer)
+- Bun — source-checkout `stn` renders the TUI through `bun run`; compiled `stn` embeds the renderer
 - diffnav and git-delta for the "See diff (split right)" automation
 - One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
 
@@ -29,7 +159,7 @@ stn
 
 Node.js 24.2+ (and below 25) and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node). The repo selects the current Node 24 release with `.node-version` and `.nvmrc` (`24`), so fnm/nvm use the supported release in the checkout instead of falling back to your global default (asdf reads these only with `legacy_version_file = yes` in `~/.asdfrc`).
 
-## Fresh Checkout
+## Fresh Development Checkout
 
 From the repository root:
 
@@ -39,6 +169,7 @@ pnpm build
 cd station && bun install && cd ..   # Bun UI lane (separate workspace; pnpm does not install it)
 pnpm stn setup
 pnpm smoke:release
+pnpm smoke:install
 ```
 
 `cd station && bun install` is required for the terminal UI: bare `stn` renders it by shelling into `bun run` against `station/`, so without the install `stn` refuses to launch and prints the install hint (historically a raw "@opentui not found" error) even though the Bun binary is healthy. `stn doctor` reports this lane explicitly (a `renderer-runtime` warning with code `STATION_UI_NOT_INSTALLED`).
@@ -56,6 +187,14 @@ Optional integrations can be added later.
 ```
 
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
+
+`pnpm smoke:install` exercises latest, explicit, and draft selection; strict
+authenticated API arguments; all four platform mappings; default-home and PATH
+shadow behavior; checksum/archive/probe failures; dual-lock concurrency and
+stale recovery; rollback and ambiguous commit points; continuous readers;
+HUP/INT/TERM/SIGKILL; and runner self-interruption against local fake release
+assets. Every child and the overall runner have deadlines. It does not contact
+GitHub or modify the real home directory.
 
 Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. When bare `stn` launchers are not on `PATH`, setup uses launcher paths from the current checkout for generated tmux and hook commands and offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 

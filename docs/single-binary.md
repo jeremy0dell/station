@@ -337,28 +337,162 @@ reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
 
-`.github/workflows/release.yml` on `v*` tags, native-runner matrix
-(labels resolved at build time per the platform table — not `macos-13`).
-Requirements v1 omitted:
+**Status: implemented.** `.github/workflows/release.yml` runs on `v*` tags.
+It requires release SemVer without `+` build metadata, exact agreement between
+the tag and root package version, ancestry from `origin/main`, and a tag with no
+existing GitHub release. An administrator must enable GitHub immutable releases
+before tagging; `GITHUB_TOKEN` cannot read that administration setting, so the
+workflow cannot enforce the precondition itself. It then reuses the callable
+`standard-ci` gate, runs
+`pnpm smoke:release`, and builds natively on the four dated runner labels
+checked on 2026-07-11: `ubuntu-24.04`, `ubuntu-24.04-arm`,
+`macos-15-intel`, and `macos-15`.
 
-- **Reuse the existing gate**: tag builds must run the same deterministic
-  checks as hosted `standard-ci` + `pnpm smoke:release`, not bypass them.
-- **Checksums**: emit `SHA256SUMS`, sign or at least publish it; the
-  install script verifies each artifact against it before extraction.
-- **License**: include `LICENSE` in every archive (F9 / LICENSE:67).
-- **Homebrew (F10)**: a release created with the default `GITHUB_TOKEN`
-  **does not** trigger the existing `release: published` bump workflow
-  (`homebrew-bump.yml`). Either fold the tap update into `release.yml` (with
-  a PAT / `COMMITTER_TOKEN`) or dispatch it explicitly. **Until a tested
-  private-asset download strategy exists, defer the binary formula** and
-  ship only the authenticated install script.
-- **Rollback**: deleting a published tag is **not** rollback. Define
-  immutable rollback = publish a superseding patch release pointing the
-  install script / `latest` at the prior good version; never mutate or
-  delete a published artifact.
-- `scripts/install.sh`: authenticated `gh api` download → checksum verify →
-  `xattr -d com.apple.quarantine` (defensive; gh/curl set none per S3) →
-  install to `~/.local/bin` with the `stn-ingress` symlink → PATH hint.
+Each native job runs the full binary smoke and uploads one archive:
+
+- `stn-v{version}-linux-x64.tar.gz`
+- `stn-v{version}-linux-arm64.tar.gz`
+- `stn-v{version}-darwin-x64.tar.gz`
+- `stn-v{version}-darwin-arm64.tar.gz`
+
+Here `{version}` is the package version without the tag's leading `v`, for
+example `stn-v0.7.0-darwin-arm64.tar.gz`.
+
+Every archive contains exactly `stn`, the `stn-ingress` and
+`stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
+duplicate targets, emits a stably sorted `SHA256SUMS`, and creates a GitHub
+release **draft** without clobbering an existing release. A second native
+matrix revalidates the tag, fetches the installer by the validated commit SHA
+through the authenticated Contents API, invokes it with the explicit tag against
+that real draft, and verifies the binary version, both argv0 aliases, license,
+and launch without Node or Bun on the runtime PATH. The PR matrix and release
+matrix use one
+archive-packaging helper, so their manifests cannot drift. Publication remains
+a manual decision after the real-TTY acceptance below. GitHub's tag endpoint
+exposes published releases only, so the workflow captures the new draft's
+numeric release ID from the authenticated release list and passes it only to
+these acceptance jobs; normal installs keep using the latest/published-tag
+endpoints.
+
+After all native acceptance jobs pass, the release workflow re-downloads the
+five draft assets, checks them against the build-generated `SHA256SUMS`, and
+uploads an immutable `accepted-release-candidate-*` Actions artifact containing
+the validated commit, workflow run/attempt, release ID, asset IDs, and checksums.
+The manually dispatched `promote-release.yml` downloads that exact artifact,
+rechecks the successful run, tag commit, draft identity, asset IDs, and hashes,
+then publishes the unchanged draft. Draft assets cannot drift between acceptance
+and promotion without failing that workflow.
+
+`SHA256SUMS` is unsigned in A5 because no signing-key infrastructure exists;
+the trust chain is authenticated GitHub access plus immutable release assets.
+The pipeline pins inputs, gates, targets, names, and manifest, but does not
+claim bit-for-bit reproducible Bun executables or archives.
+
+`scripts/install.sh` supports latest stable, explicit `--version`, and
+`--install-dir` (default `~/.local/bin`). The supported binary-install baseline
+starts at `v0.7.0`. Explicit installs set a tag, fetch
+`scripts/install.sh` from that tag through the authenticated Contents API, and
+invoke it with `--version` set to the same tag. Latest install first resolves
+the latest stable tag, then performs the same tagged fetch and explicit invoke.
+There is no silent `main` fallback, so installer code and release artifacts are
+always paired. Immutable rollback becomes available with the second binary
+release because `v0.7.0` has no earlier binary artifact.
+
+The installer uses authenticated `gh api` release endpoints, accepts only the
+four supported targets, verifies the one matching `SHA256SUMS` entry and exact
+archive manifest before touching an existing install, and stages replacement
+on each destination filesystem. Every potentially blocking `gh` operation is a
+tracked file-backed child rather than a command substitution.
+
+The staged binary's `--version` probe has a 10-second supervised deadline and
+a POSIX file-size limit on stdout/stderr. Watchdog exit 124 reports timeout;
+125 reports timer machinery failure. Cleanup sends TERM, waits one second,
+sends KILL if needed, and reaps the probe without depending on a marker file.
+Compatibility failures show at most 4096 sanitized bytes of stderr. Common
+GitHub and Actions token variables are removed from the probe environment, and
+the existing Station installation was unchanged before activation.
+
+The command lock is `<install-dir>/.station-install.lock`; the license lock is
+`<data-home>/station/.station-install.lock`. Their sole owner files—
+`<install-dir>/.station-install.lock/owner-*` and
+`<data-home>/station/.station-install.lock/owner-*`—record the PID, requested
+tag or `latest`, and the token embedded in each filename. Cleanup removes only
+its token-specific owner file and revalidates the lock-directory inode so it
+cannot remove a replacement owner's lock. The installer acquires the
+command lock first and the license lock second, skips a duplicate path, and
+releases in reverse order. An existing
+lock causes a fail-fast refusal before release requests; a license-lock refusal
+releases the command lock and performs no release API request. The message
+names the lock and readable owner PID, states that the existing Station
+installation was unchanged, and tells the user to wait before retrying. The
+installer never auto-reclaims a possibly active lock. An operator may remove
+either abandoned lock manually only after reading its sole owner file and
+confirming that no installer process with the recorded PID is alive, then
+retry. A legacy lock with one `owner` file remains readable for refusal.
+
+Existing exact `stn-ingress` and `stn-tmux-popup` symlinks remain stable; a
+missing alias is considered created only after `ln` succeeds and cleanup
+removes it only while it still exactly matches this attempt. Immediately before
+commit, both aliases are revalidated as symlinks to `stn` and binary/license
+destinations are revalidated against their accepted types. The previous license
+is backed up, the new `LICENSE` is installed, and the verified staged `stn` is
+atomically renamed last as the sole runtime commit point.
+
+A caught HUP, INT, or TERM forwards to the active child, runs bounded
+TERM/KILL/reap cleanup, and exits 129, 130, or 143. If a failed final rename
+leaves staged `stn`, pre-commit rollback restores the license and matching new
+aliases and reports the install unchanged. If staged `stn` disappeared,
+activation may be committed: preserve the new license and aliases, exit
+nonzero, print an absolute `stn --version` inspection command, and do not claim
+the previous installation was unchanged. After commit, cleanup failures are
+warnings.
+
+SIGKILL cannot run cleanup and may leave either lock or a stage. Atomic rename
+still gives coherent process-level visibility to continuous readers. Power loss
+is not equivalent: the installer does not fsync files or containing directories
+and therefore makes no post-power-loss durability guarantee; old/new
+cross-filesystem `LICENSE` metadata may also remain. The deterministic
+`smoke:install` suite exercises this boundary with fake authenticated release
+assets and is part of `test:all`.
+
+After success, all three bare launchers are resolved physically. If every one
+points into the new install directory, the installer prints
+`Next: run stn setup`. Otherwise it names every missing or shadowed launcher,
+prints a safely shell-quoted current-shell block that prepends the directory,
+runs `hash -r`, and invokes `stn setup`, plus the absolute installed `stn`
+fallback. It never edits a shell profile.
+
+The first binary release is immutable `v0.7.0` and promotes only after all four
+native targets pass automated and manual acceptance. Published tags and assets
+are never deleted, moved, or overwritten. Cross-version rollback is intentionally
+deferred until a second binary version exists; a bad `v0.7.0` rolls forward to a
+higher version containing the revert or fix.
+
+Drafts are still mutable. Release notes record the workflow commit, while the
+accepted-candidate artifact immutably records that commit plus the draft release
+and asset identities. The manual promotion workflow re-fetches every asset,
+compares its ID and digest to the accepted artifact, and publishes only that
+unchanged draft; GitHub release immutability begins at publication.
+An unpublished draft left by a transient workflow failure may be deleted and
+the unchanged tag workflow rerun; a source fix uses a new prerelease tag, while
+published releases are never deleted or mutated.
+
+The source-based Homebrew formula remains separate and manually dispatched.
+The default release `GITHUB_TOKEN` cannot trigger another workflow, and the tap
+`COMMITTER_TOKEN` is intentionally not configured for A5; no binary Homebrew
+formula is claimed until private asset authentication is proven there.
+
+Implementation sources: the target and manifest policy above; the existing
+[`build:binary` staging](../scripts/build-binary.mjs),
+[`standard-ci` gates](../.github/workflows/standard-ci.yml), and
+[`smoke:release`](../scripts/test-runners/run-release-smoke.mjs); the
+redistribution requirement in [`LICENSE`](../LICENSE); B-host's shipped live
+PTY refusal policy; and GitHub's official documentation for
+[hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-private-repositories),
+[reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),
+[`GITHUB_TOKEN` permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token),
+[release API draft visibility](https://docs.github.com/en/rest/releases/releases#list-releases),
+and [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
 
 ### A6 — cleanup (after one release on the ctty PTY path)
 
@@ -506,20 +640,39 @@ COMMAND=true` and `HOME=$(mktemp -d)` do **not** count — and note
 must scrub `XDG_RUNTIME_DIR`/`XDG_STATE_HOME` too. The manual/automated
 flow:
 
-1. Launch bare `stn` outside tmux in a sanitized, isolated env → real
+1. Install in a clean default home with the directory missing from `PATH`,
+   then with an older `stn` and one sibling launcher shadowing it → every
+   mismatch is named, the current-shell recovery block works, and no profile is
+   edited. With all three physical resolutions correct, the short setup next
+   step is printed.
+2. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
-2. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
-3. Run `stn setup` adding a project → the observer restarts on the **same
+3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
+4. Run `stn setup` adding a project → the observer restarts on the **same
    socket** and reflects the new project immediately (B-config); an open TUI
    reconnects without a manual restart.
-4. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
-5. `stn-ingress` symlink delivers a provider hook event end to end.
-6. Upgrade the binary while **live host PTYs** exist → the new build reports
+5. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
+6. `stn-ingress` symlink delivers a provider hook event end to end.
+7. Use local `0.7.0-host-a` and `0.7.0-host-b` builds while **live host PTYs**
+   exist → the new build reports
    `HOST_UPGRADE_BLOCKED`; the old host and sessions remain reattachable with
    the old build. After every hosted terminal closes, retry → the idle host is
    stopped; open a hosted terminal → the replacement health reports the new
    build (B-host).
-7. Rollback → install script returns to the prior good version (immutable).
+8. Manual promotion selects the successful run's immutable
+   `accepted-release-candidate-*` artifact, rechecks the exact tag, release,
+   asset IDs, and hashes, then publishes only that draft.
+9. With terminal A continuously running installed `stn --version`, terminal B
+   repeatedly installs the draft → only complete `0.7.0` output appears, never
+   command-not-found or malformed output; both aliases remain links to `stn`,
+   so entrypoints never mix. Repeat with two immutable versions when preparing
+   the second binary release and first rollback gate.
+10. Abandoned command and license `.station-install.lock` directories each
+    refuse the install until their recorded PID is confirmed dead, the lock is
+    manually removed, and the same install is retried successfully.
+11. Ctrl-C during a real authenticated upgrade exits 130, preserves the prior
+    launchable TUI, cleans its owned stages and both locks, and permits a
+    successful retry.
 
 ## Audit findings (all confirmed)
 
@@ -549,7 +702,8 @@ Against `e0d4307`, reproduced this session (bun 1.3.14, darwin-arm64):
 8. **Artifact inventory incomplete** — `stn-tmux-popup`, Pi extension file,
    LICENSE. New manifest + extraction policy.
 9. **Release not shippable** — runner label, OS/CPU/glibc floors, gate
-   bypass, checksums, license, real rollback. Fixed in A5 + platform table.
+   bypass, checksums, license, and recovery policy. Fixed in A5 + platform table;
+   immutable rollback starts with the second binary release.
    (Sub-claim "`macos-13` retired": consistent with GitHub's Intel-macOS
    deprecation; **not independently verified from this environment** — pin
    available labels at implementation time rather than trust the name.)

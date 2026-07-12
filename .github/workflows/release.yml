@@ -1,0 +1,577 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Validate release tag
+        id: release
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          tag="$GITHUB_REF_NAME"
+
+          node -e '
+            const version = process.argv[1];
+            const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+            if (!semver.test(version)) {
+              throw new Error(`Release version must be SemVer without build metadata: ${version}`);
+            }
+          ' "$version"
+
+          if [[ "$tag" != "v$version" ]]; then
+            echo "Release tag $tag must exactly match package.json version v$version." >&2
+            exit 1
+          fi
+
+          tag_commit="$(git rev-parse "$tag^{commit}")"
+          if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+            echo "Release tag $tag resolves to $tag_commit, not workflow commit $GITHUB_SHA." >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release commit $GITHUB_SHA is not on origin/main." >&2
+            exit 1
+          fi
+
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  standard-ci:
+    needs: validate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/standard-ci.yml
+
+  release-smoke:
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Enable pnpm 11
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Release smoke
+        run: pnpm smoke:release
+
+  # Checked 2026-07-11: these hosted labels cover the four supported native targets.
+  build-native:
+    name: build (${{ matrix.target }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Enable pnpm 11
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.0 --activate
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - name: Install (pnpm)
+        run: pnpm install --frozen-lockfile
+      - name: Install (bun)
+        run: bun install --frozen-lockfile
+        working-directory: station
+      - name: Build compiled binary
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: pnpm build:binary -- --version "$VERSION"
+      - name: Test compiled binary
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: pnpm smoke:binary -- --expected-version "$VERSION"
+      - name: Package release archive
+        env:
+          RUNNER_LABEL: ${{ matrix.runner }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          bin_dir="station/dist/bin"
+          scripts/release/package-archive.sh "$VERSION" "$TARGET"
+
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            floor="$(getconf GNU_LIBC_VERSION)"
+          else
+            minos="$(otool -l "$bin_dir/stn" | awk '/cmd LC_BUILD_VERSION/{found=1; next} found && $1 == "minos" {print $2; exit}')"
+            test -n "$minos"
+            floor="macOS $minos"
+          fi
+
+          {
+            echo "target=$TARGET"
+            echo "runner=$RUNNER_LABEL"
+            echo "floor=$floor"
+          } > "platform-metadata-$TARGET.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: |
+            stn-v${{ needs.validate.outputs.version }}-${{ matrix.target }}.tar.gz
+            platform-metadata-${{ matrix.target }}.txt
+          if-no-files-found: error
+
+  create-draft:
+    needs:
+      - validate
+      - standard-ci
+      - release-smoke
+      - build-native
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: release
+          merge-multiple: true
+      - name: Verify assets and checksums
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        working-directory: release
+        run: |
+          expected=(
+            "stn-v$VERSION-darwin-arm64.tar.gz"
+            "stn-v$VERSION-darwin-x64.tar.gz"
+            "stn-v$VERSION-linux-arm64.tar.gz"
+            "stn-v$VERSION-linux-x64.tar.gz"
+          )
+          mapfile -t actual < <(find . -maxdepth 1 -type f -name 'stn-v*.tar.gz' -printf '%f\n' | sort)
+          if [[ "${actual[*]}" != "${expected[*]}" ]]; then
+            printf 'Expected archives: %s\n' "${expected[*]}" >&2
+            printf 'Actual archives: %s\n' "${actual[*]}" >&2
+            exit 1
+          fi
+
+          : > SHA256SUMS
+          for archive in "${expected[@]}"; do
+            sha256sum "$archive" >> SHA256SUMS
+          done
+
+          mapfile -t metadata < <(find . -maxdepth 1 -type f -name 'platform-metadata-*.txt' -printf '%f\n' | sort)
+          if [[ "${#metadata[@]}" -ne 4 ]]; then
+            echo "Expected four platform metadata records; found ${#metadata[@]}." >&2
+            exit 1
+          fi
+      - name: Write release notes
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        working-directory: release
+        run: |
+          {
+            echo "Station $TAG native binaries."
+            printf 'Build commit: `%s`.\n' "$GITHUB_SHA"
+            echo
+            echo "Install through the authenticated installer documented in the repository."
+            echo
+            echo "## Native platform floors"
+            echo
+            echo '```text'
+            for metadata in platform-metadata-*.txt; do
+              cat "$metadata"
+              echo
+            done
+            echo '```'
+            echo
+            echo "The x64 builds use Bun's baseline CPU targets. Linux artifacts require glibc."
+          } > release-notes.md
+      - name: Create draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        working-directory: release
+        run: |
+          remote_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          if [[ "$remote_commit" != "$COMMIT" ]]; then
+            echo "Release tag $TAG moved from validated commit $COMMIT to $remote_commit." >&2
+            exit 1
+          fi
+
+          assets=(
+            "stn-v$VERSION-darwin-arm64.tar.gz"
+            "stn-v$VERSION-darwin-x64.tar.gz"
+            "stn-v$VERSION-linux-arm64.tar.gz"
+            "stn-v$VERSION-linux-x64.tar.gz"
+            SHA256SUMS
+          )
+          args=(
+            "$TAG"
+            "${assets[@]}"
+            --draft
+            --generate-notes
+            --notes-file release-notes.md
+            --title "Station $TAG"
+            --verify-tag
+          )
+          if [[ "$PRERELEASE" == true ]]; then
+            args+=(--prerelease)
+          fi
+          # Installer acceptance runs against this draft before a human may publish it.
+          gh release create "${args[@]}"
+
+          # GitHub's tag endpoint excludes drafts, so acceptance uses the captured release id.
+          release_ids="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.draft == true and .tag_name == \"$TAG\") | .id"
+          )"
+          if [[ ! "$release_ids" =~ ^[0-9]+$ ]]; then
+            echo "Expected exactly one draft release for $TAG." >&2
+            exit 1
+          fi
+          echo "release_id=$release_ids" >> "$GITHUB_OUTPUT"
+
+          mkdir candidate
+          cp SHA256SUMS candidate/SHA256SUMS
+          checksum_file_sha="$(sha256sum SHA256SUMS | awk '{print $1}')"
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT" \
+            --arg checksumFileSha256 "$checksum_file_sha" \
+            --argjson workflowRunId "$GITHUB_RUN_ID" \
+            --argjson workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson releaseId "$release_ids" \
+            '{
+              repository: $repository,
+              workflowRunId: $workflowRunId,
+              workflowRunAttempt: $workflowRunAttempt,
+              commit: $commit,
+              tag: $tag,
+              releaseId: $releaseId,
+              checksumFileSha256: $checksumFileSha256
+            }' > candidate/manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
+          path: release/candidate
+          if-no-files-found: error
+          retention-days: 90
+
+  install-draft:
+    name: install draft (${{ matrix.target }})
+    needs:
+      - validate
+      - create-draft
+    permissions:
+      # Draft list/get and asset downloads require only read permission.
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.commit }}
+      - name: Fetch tagged installer
+        env:
+          GH_HOST: github.com
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          remote_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          if [[ "$remote_commit" != "$COMMIT" ]]; then
+            echo "Release tag $TAG moved from validated commit $COMMIT to $remote_commit." >&2
+            exit 1
+          fi
+          installer="$RUNNER_TEMP/station-install.sh"
+          gh api --method GET \
+            -f ref="$COMMIT" \
+            -H "Accept: application/vnd.github.raw+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$GITHUB_REPOSITORY/contents/scripts/install.sh" > "$installer"
+          test -s "$installer"
+          /bin/sh -n "$installer"
+          chmod 0700 "$installer"
+      - name: Seed existing installation
+        run: |
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          license_dir="$data_home/station"
+          mkdir -p "$bin_dir" "$license_dir"
+
+          cat > "$bin_dir/stn" <<'EOF'
+          #!/bin/sh
+          printf '%s\n' 0.0.0-old-fixture
+          EOF
+          chmod 0755 "$bin_dir/stn"
+          ln -s stn "$bin_dir/stn-ingress"
+          ln -s stn "$bin_dir/stn-tmux-popup"
+          printf '%s\n' 'old Station license fixture' > "$license_dir/LICENSE"
+          chmod 0644 "$license_dir/LICENSE"
+          cp "$bin_dir/stn" "$RUNNER_TEMP/old-stn-fixture"
+
+          test "$("$bin_dir/stn" --version)" = 0.0.0-old-fixture
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+      - name: Install from draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATION_INSTALL_RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          umask 0777
+          HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            /bin/sh "$RUNNER_TEMP/station-install.sh" --version "$TAG" --install-dir "$bin_dir"
+      - name: Verify installed artifact
+        env:
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          license_path="$data_home/station/LICENSE"
+          runtime_path="$RUNNER_TEMP/runtime-path"
+          mkdir -p "$runtime_path"
+
+          mode() {
+            if [[ "$RUNNER_OS" == Linux ]]; then
+              stat -c '%a' "$1"
+            else
+              stat -f '%Lp' "$1"
+            fi
+          }
+
+          test -x "$bin_dir/stn"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          test -f "$license_path"
+          test ! -L "$license_path"
+          test "$(mode "$bin_dir/stn")" = 755
+          test "$(mode "$license_path")" = 644
+          ! cmp -s "$RUNNER_TEMP/old-stn-fixture" "$bin_dir/stn"
+          cmp -s LICENSE "$license_path"
+
+          actual="$(env -i \
+            HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            PATH="$bin_dir:$runtime_path" \
+            stn --version)"
+          test "$actual" = "$EXPECTED_VERSION"
+      - name: Verify lock refusal and same-version retry
+        env:
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          STATION_INSTALL_RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          install_home="$RUNNER_TEMP/install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          license_path="$data_home/station/LICENSE"
+          lock_dir="$bin_dir/.station-install.lock"
+          lock_stderr="$RUNNER_TEMP/locked-install.stderr"
+
+          mkdir "$lock_dir"
+          chmod 0700 "$lock_dir"
+          (
+            umask 077
+            {
+              printf 'pid=%s\n' "$$"
+              printf 'requested=%s\n' "$TAG"
+            } > "$lock_dir/owner"
+          )
+
+          before_binary="$(cksum < "$bin_dir/stn")"
+          before_license="$(cksum < "$license_path")"
+          before_entries="$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$license_path")"
+          if (
+            umask 0777
+            HOME="$install_home" \
+              XDG_DATA_HOME="$data_home" \
+              /bin/sh "$RUNNER_TEMP/station-install.sh" --version "$TAG" --install-dir "$bin_dir"
+          ) > "$RUNNER_TEMP/locked-install.stdout" 2> "$lock_stderr"; then
+            echo "Installer unexpectedly succeeded while $lock_dir was owned." >&2
+            exit 1
+          fi
+
+          grep -F "$lock_dir" "$lock_stderr"
+          grep -F "$$" "$lock_stderr"
+          grep -Eiq 'existing Station( installation)? was unchanged' "$lock_stderr"
+          grep -Eiq 'wait' "$lock_stderr"
+          test -d "$lock_dir"
+          test "$(cksum < "$bin_dir/stn")" = "$before_binary"
+          test "$(cksum < "$license_path")" = "$before_license"
+          test "$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$license_path")" = "$before_entries"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+
+          rm -rf "$lock_dir"
+          (
+            umask 0777
+            HOME="$install_home" \
+              XDG_DATA_HOME="$data_home" \
+              /bin/sh "$RUNNER_TEMP/station-install.sh" --version "$TAG" --install-dir "$bin_dir"
+          )
+
+          test ! -e "$lock_dir"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          actual="$(env -i \
+            HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            PATH="$bin_dir:$RUNNER_TEMP/runtime-path" \
+            stn --version)"
+          test "$actual" = "$EXPECTED_VERSION"
+
+  record-accepted-candidate:
+    needs:
+      - validate
+      - create-draft
+      - install-draft
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
+          path: candidate
+      - name: Bind accepted draft assets to the workflow run
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          expected=(
+            SHA256SUMS
+            "stn-v$VERSION-darwin-arm64.tar.gz"
+            "stn-v$VERSION-darwin-x64.tar.gz"
+            "stn-v$VERSION-linux-arm64.tar.gz"
+            "stn-v$VERSION-linux-x64.tar.gz"
+          )
+
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT" \
+            --argjson workflowRunId "$GITHUB_RUN_ID" \
+            --argjson workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson releaseId "$RELEASE_ID" \
+            '.repository == $repository and
+             .tag == $tag and
+             .commit == $commit and
+             .workflowRunId == $workflowRunId and
+             .workflowRunAttempt == $workflowRunAttempt and
+             .releaseId == $releaseId and
+             (.checksumFileSha256 | test("^[0-9a-f]{64}$"))' \
+            candidate/manifest.json >/dev/null
+          test "$(sha256sum candidate/SHA256SUMS | awk '{print $1}')" = \
+            "$(jq -r .checksumFileSha256 candidate/manifest.json)"
+
+          release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
+          test "$(jq -r .draft <<<"$release_json")" = true
+          test "$(jq -r .tag_name <<<"$release_json")" = "$TAG"
+          remote_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          test "$remote_commit" = "$COMMIT"
+
+          mapfile -t actual < <(jq -r '.assets[].name' <<<"$release_json" | sort)
+          mapfile -t wanted < <(printf '%s\n' "${expected[@]}" | sort)
+          if [[ "${actual[*]}" != "${wanted[*]}" ]]; then
+            printf 'Expected draft assets: %s\n' "${wanted[*]}" >&2
+            printf 'Actual draft assets: %s\n' "${actual[*]}" >&2
+            exit 1
+          fi
+
+          mkdir downloaded
+          : > candidate/asset-ids.txt
+          for name in "${expected[@]}"; do
+            asset_id="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' <<<"$release_json")"
+            [[ "$asset_id" =~ ^[0-9]+$ ]]
+            printf '%s=%s\n' "$name" "$asset_id" >> candidate/asset-ids.txt
+            gh api -H 'Accept: application/octet-stream' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "downloaded/$name"
+          done
+          cmp candidate/SHA256SUMS downloaded/SHA256SUMS
+          (cd downloaded && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: accepted-release-candidate-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
+          path: candidate
+          if-no-files-found: error
+          retention-days: 90

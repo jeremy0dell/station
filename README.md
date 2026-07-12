@@ -42,11 +42,61 @@ station keeps track of everything that's running and makes it visible:
 
 ## Getting started
 
-**Requirements:** Node.js 24.2+ (and below 25), pnpm 11, and Bun (Bun renders the terminal UI). A `.node-version` / `.nvmrc` selects the current Node 24 release for fnm/nvm (asdf needs `legacy_version_file = yes`). External tools (Worktrunk `wt`, tmux, agent CLIs) are optional and checked by `stn doctor`.
+The authenticated private binary is the user install path. Authenticate the GitHub CLI for the private repository, fetch the installer, then run setup:
 
-### macOS: one command
+```sh
+gh auth login --hostname github.com
+(
+  set -e
+  tag=v0.7.0
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  GH_HOST=github.com gh api --method GET \
+    repos/jeremy0dell/station/contents/scripts/install.sh \
+    -H "Accept: application/vnd.github.raw+json" \
+    -f ref="$tag" > "$installer"
+  test -s "$installer"
+  sh "$installer" --version "$tag"
+)
+```
 
-From a fresh clone, one script installs the system dependencies via Homebrew, builds **both** lanes (the pnpm/Node CLI + observer *and* the Bun terminal UI), and links all three checkout launchers:
+After the checked installer exits successfully:
+
+```sh
+stn setup
+stn
+```
+
+The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. Git, Worktrunk (`wt`), tmux, diffnav/git-delta, GitHub integration, and agent CLIs remain feature-gated external tools; `stn setup` and `stn doctor` say which workflow capabilities are ready.
+
+`v0.7.0` is the first supported private-binary baseline. The installer code
+and artifacts always come from the same immutable tag. The latest-install
+recipe resolves the current stable tag before fetching and invoking its
+installer. Immutable rollback begins with the second binary release because
+`v0.7.0` has no earlier binary artifact. See [Install](docs/install.md) for the
+recipe, version pinning, PATH recovery, custom install directories, and the
+supported-platform contract.
+
+Installs serialize commands and license data with
+`<install-dir>/.station-install.lock` and
+`<data-home>/station/.station-install.lock`; each owner records a PID, request,
+and unique token so cleanup cannot remove a replacement lock. Inspect the
+lock's sole `owner-*` file (or legacy `owner`), confirm its PID is not alive,
+and remove it manually only for abandoned work.
+Compatibility diagnostics are sanitized and bounded to 4096 bytes. If final
+activation is ambiguous, follow the printed absolute `stn --version` inspection
+command rather than assuming the previous install is unchanged. After success,
+the installer checks all three bare launchers and prints a current-shell PATH
+block for anything missing or shadowed without editing a profile. SIGKILL can
+leave recoverable locks/stages; atomic rename gives coherent process-level
+visibility, but without file/directory fsync there is no post-power-loss
+durability guarantee.
+
+### Development checkout
+
+Source development still requires Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14. A `.node-version` / `.nvmrc` selects the current Node 24 release for fnm/nvm (asdf needs `legacy_version_file = yes`).
+
+On macOS, a fresh checkout can install the development dependencies, build both source lanes, and link `stn`:
 
 ```sh
 ./scripts/setup/bootstrap.sh
@@ -54,7 +104,7 @@ stn setup     # required tools, an agent CLI, and your first project
 stn           # launch the workspace
 ```
 
-### Manual / non-macOS
+For manual or non-macOS development, install and verify both source lanes:
 
 station has two lanes and both must be installed: the **CLI + observer** on pnpm/Node, and the **terminal UI** on Bun (a separate workspace, *not* a pnpm-workspace member, so `pnpm install` does not touch it).
 
@@ -157,7 +207,8 @@ pnpm test:contracts     # contract tests
 pnpm test:integration   # integration tests
 pnpm test:diagnostics   # diagnostics tests
 pnpm test:agent:scripted  # scripted-agent lane (no real harness needed)
-pnpm test:all           # full gate: build + typecheck + lint + all test suites
+pnpm smoke:install      # isolated authenticated-installer contract
+pnpm test:all           # full gate: build + typecheck + lint + tests + installer smoke
 ```
 
 ---
@@ -173,8 +224,8 @@ station is under active development. The current build supports local setup, dia
 | Doc | What it covers |
 |-----|---------------|
 | [Overview](docs/overview.md) | What station is, why it exists, and the mental model behind it |
-| [Install](docs/install.md) | Full checkout setup, smoke options, local CLI linking |
-| [Homebrew packaging](docs/homebrew.md) | Draft tap formula path and release checklist |
+| [Install](docs/install.md) | Private binary install, rollback, and development checkout setup |
+| [Homebrew packaging](docs/homebrew.md) | Separate source formula and manual tap workflow |
 | [Architecture](docs/architecture.md) | Repository-wide system and boundary map |
 | [Observer architecture](docs/observer-architecture.md) | Canonical Observer boundaries, flows, state lifetimes, and active deviations |
 | [Architecture documentation](docs/architecture-documentation.md) | Controlled JSDoc roles for Observer architectural seams |

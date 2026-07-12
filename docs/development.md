@@ -74,7 +74,19 @@ pnpm test:sqlite:bun
 pnpm test:diagnostics
 pnpm test:agent:scripted
 pnpm smoke:release
+pnpm smoke:install
 ```
+
+`pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
+authenticated GitHub responses and temporary homes, so it is deterministic and
+does not download a real release. CI runs it once in a dedicated
+`ubuntu-24.04`/`macos-15` matrix; the heavier Ubuntu gate does not duplicate it.
+On a heavily contended local host, run
+`STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
+harness deadlines; the default and hosted gate remain strict.
+The four-target native PTY matrix also packages the local binary through the
+release helper and installs it with real platform utilities and no Node or Bun
+on the runtime `PATH`.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
@@ -136,7 +148,7 @@ The isolated or configured `logs/station-host.jsonl` should record
 `ptyImplementation` as `bun`.
 
 To verify binary host upgrades, build two copies with distinct prerelease
-versions (for example `0.1.0-host-a` and `0.1.0-host-b`) and use an isolated
+versions (for example `0.7.0-host-a` and `0.7.0-host-b`) and use an isolated
 config with `station_persistent_agents = true`. Start A, open a hosted terminal,
 print a recognizable marker, leave a long command running, and exit the UI so
 the host survives. Because Observer version eviction is separate B3 work,
@@ -150,6 +162,138 @@ replaced on demand. The next `host.start` record in `logs/station-host.jsonl`
 must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
+
+## Private Binary Release
+
+Before tagging, an administrator must enable GitHub immutable releases; the
+workflow token cannot read that administration setting. The workflow validates
+that release tags use supported release SemVer without `+` build metadata,
+exactly equal `v${package.json.version}`, come from a commit on `origin/main`,
+and have no existing GitHub release. Pushing a `v*` tag runs the callable
+standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
+for all four supported targets, archive/checksum assembly, and an authenticated
+installer smoke against the resulting GitHub release draft. PR and release
+jobs use the same archive-packaging helper. Draft acceptance revalidates the tag
+but fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
+with `--version`; a moved tag cannot substitute different installer code. After
+all four native installs pass, the workflow re-downloads the five draft assets,
+verifies them against the build checksum, and uploads an immutable
+`accepted-release-candidate-*` Actions artifact containing the commit, release
+ID, asset IDs, and checksums. Draft install and candidate-recording jobs have
+read-only contents permission; only draft creation and manual promotion can
+write releases. The tag workflow never publishes the draft automatically.
+
+The initial immutable binary baseline is `v0.7.0`:
+
+1. Enable GitHub immutable releases, merge A5 with `package.json` and source
+   runtime reporting at `0.7.0`, then create and push `v0.7.0`.
+2. Confirm every release job passed and the successful run contains exactly one
+   `accepted-release-candidate-0.7.0-attempt-*` artifact.
+3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
+   `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
+4. Dispatch `promote-release.yml` with the successful release run ID, tag
+   `v0.7.0`, and the manual-acceptance confirmation. It rechecks the successful
+   run SHA, immutable candidate manifest, tag commit, release ID, asset IDs, and
+   all archive hashes immediately before publishing that exact draft.
+5. Treat cross-version immutable rollback as a gate for the second binary
+   release. `v0.7.0` has no prior binary artifact to reinstall.
+
+Published tags and assets are immutable. Once two binary releases exist,
+recovery may explicitly reinstall the prior version, but the release line moves
+forward with a superseding patch; it never deletes, retags, or overwrites a
+published release. The source Homebrew formula is a separate manually
+dispatched workflow and is not part of this binary release gate.
+
+If a transient workflow failure leaves an unpublished draft, delete only that
+draft and rerun the unchanged tag workflow. If the source needs a fix, leave
+the pushed tag alone and use the next prerelease tag. Never delete or mutate a
+published release.
+
+Installer acceptance uses both `<install-dir>/.station-install.lock` and
+`<data-home>/station/.station-install.lock`. Their sole corresponding
+`<install-dir>/.station-install.lock/owner-*` and
+`<data-home>/station/.station-install.lock/owner-*` files record the PID,
+requested tag or `latest`, and the token embedded in each filename. The command
+lock is acquired first and the license lock second, with the duplicate path
+skipped, and they are released in reverse order. Cleanup removes only its
+token-specific owner file and revalidates the directory inode so it cannot
+remove a replacement owner's lock. Either refusal must name the lock and
+readable owner PID, state that the existing
+Station installation was unchanged, and tell the user to wait and retry; a
+license-lock refusal also releases the command lock without making a release
+API request. The installer never auto-removes an uncertain lock. Only after
+confirming that no installer with the recorded PID is alive may an operator
+remove the affected lock directory manually and retry.
+
+The staged binary's `--version` probe must finish within 10 seconds. Its
+watchdog returns 124 for timeout and 125 for timer failure, bounds output at the
+filesystem level, TERM/KILLs and reaps the probe, removes common GitHub and
+Actions token variables from the child environment, and shows at most 4096
+sanitized bytes of compatibility stderr. Every potentially blocking `gh`
+operation is a tracked file-backed child; HUP, INT, and TERM forward to that
+child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
+
+The verified `stn` rename is the sole runtime commit point. Immediately before
+it, both aliases must still be exact symlinks to `stn` and binary/license
+destinations must retain accepted types. A failure with the staged `stn` still
+present restores the old license and removes only aliases this attempt created.
+If the staged `stn` disappeared, activation is ambiguous: preserve the new
+license and aliases, exit nonzero, and print the absolute `stn --version`
+inspection command without claiming the previous installation was unchanged.
+
+SIGKILL cannot clean up and may leave either lock or a stage behind. Atomic
+rename makes process-level readers observe a coherent complete old or new
+binary. Power loss is different: because the installer does not fsync the file
+or containing directories, it makes no post-power-loss durability guarantee;
+old/new cross-filesystem `LICENSE` metadata may also remain.
+
+For each target, install through the authenticated script into a clean home and
+manually verify the actual user experience, not a dashboard override:
+
+1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
+   directory absent from `PATH`. Confirm all three missing launchers are named,
+   the printed current-shell block prepends the safely quoted directory and
+   runs `hash -r` plus `stn setup`, and the absolute `stn` fallback works.
+2. Repeat with an older `stn` shadowing the install and then with one shadowed
+   sibling launcher. Confirm each mismatch is named and no shell profile is
+   edited. With all three launchers resolving physically to the install
+   directory, confirm the short `Next: run stn setup` success message.
+3. With the installed binary's runtime `PATH` containing neither Node nor Bun,
+   run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
+   and connects to a healthy Observer.
+4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
+5. Run `stn setup` to add a project. Confirm the open TUI reconnects and shows
+   it after activation on the same Observer socket.
+6. Run bare `stn` inside tmux and confirm `stn-tmux-popup` opens the popup.
+7. Deliver a provider event through `stn-ingress` and confirm it appears in
+   Station.
+8. Complete the local `0.7.0-host-a` → `0.7.0-host-b` procedure above with a
+   live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
+   scrollback before the idle host is replaced.
+9. In terminal A, continuously run the installed `stn --version`. In terminal
+   B, repeatedly reinstall the draft. Terminal A may print only `0.7.0`: never
+   command-not-found or malformed output. After each transition, confirm
+   `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
+   has mixed entrypoints. Repeat this with two versions when preparing the
+   second binary release.
+10. In an isolated home, test abandoned locks separately at
+    `<install-dir>/.station-install.lock` and
+    `<data-home>/station/.station-install.lock` with representative owner
+    metadata. Follow each printed inspection, dead-PID confirmation, manual
+    removal, and retry instruction exactly; never remove a lock while its owner
+    may be alive.
+11. Interrupt a real authenticated upgrade with Ctrl-C. Confirm the prior TUI
+   still opens, the installer exits with status 130 and leaves no owned lock or
+   stage, then retry successfully.
+12. Run `promote-release.yml` only after steps 1-11 pass. Confirm it selects the
+    successful release run's `accepted-release-candidate-*` artifact, verifies
+    the exact draft asset IDs and hashes, and publishes that draft without
+    replacing any asset.
+
+Record the oldest supported macOS version or built-against glibc version in the
+release notes. Signing and notarization are not part of A5; integrity is the
+authenticated GitHub asset plus `SHA256SUMS` verification and immutable
+publication.
 
 For CI install parity, use:
 
