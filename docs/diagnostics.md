@@ -109,6 +109,20 @@ expected; explicitly disabled hooks are reported as the skip-hooks automation
 mode instead. Provider command failures from `wt` are recorded through provider
 health, command records, logs, debug traces, and debug bundle evidence.
 
+Doctor also reports Worktrunk registrations whose working directories are
+missing or prunable. `stn doctor --project <id>` limits this scan to one project;
+the unscoped command scans configured projects with bounded concurrency and
+reports if its time budget permits only partial coverage. Inspect the exact
+prune operation before changing Git metadata, then run it without `--dry-run`:
+
+```bash
+git -C '<project-root>' worktree prune --dry-run --verbose
+git -C '<project-root>' worktree prune --verbose
+```
+
+Pruning removes administrative records for worktree directories that are
+already gone; it does not delete a live worktree directory.
+
 ## Manual Smoke
 
 After building, the diagnostic surface can be checked with a throwaway fake-provider config:

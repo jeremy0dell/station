@@ -1,4 +1,8 @@
-import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
+import {
+  type ExternalCommandRunner,
+  gitLocalEnvironmentVariables,
+  runExternalCommand,
+} from "@station/runtime";
 
 export type WorktrunkAutomationFlag = "--no-hooks" | "--yes";
 export type WorktrunkAutomationModeName = "skip-hooks" | "preapprove-hooks" | "worktrunk-default";
@@ -37,6 +41,7 @@ export async function missingWorktrunkAutomationFlagSupport(input: {
   flag: WorktrunkAutomationFlag;
   timeoutMs: number;
   runner?: ExternalCommandRunner | undefined;
+  signal?: AbortSignal | undefined;
 }): Promise<string[]> {
   const subcommands = ["switch", "remove"] as const;
   const missing: string[] = [];
@@ -45,8 +50,10 @@ export async function missingWorktrunkAutomationFlagSupport(input: {
       {
         command: input.command,
         args: [subcommand, "--help"],
+        unsetEnv: gitLocalEnvironmentVariables,
         timeoutMs: input.timeoutMs,
         maxOutputChars: 64 * 1024,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
       input.runner,
     );

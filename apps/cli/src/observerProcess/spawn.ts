@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type FileHandle, mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { environmentWithoutGitLocals } from "@station/runtime";
 import { selfExecArgv } from "../selfExec.js";
 import type { ChildExitResult, ChildProcessLike, SpawnObserverInput } from "./types.js";
 
@@ -24,6 +25,7 @@ export async function defaultSpawnObserver(input: SpawnObserverInput): Promise<C
     const [command, ...args] = argv;
     child = spawn(command, args, {
       detached: true,
+      env: environmentWithoutGitLocals(),
       stdio: ["ignore", bootLog.fd, bootLog.fd],
     });
     const startedChild = Object.assign(

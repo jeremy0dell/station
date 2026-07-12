@@ -36,6 +36,7 @@ export type ExternalCommandInput = {
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
+  unsetEnv?: readonly string[];
   timeoutMs?: number;
   maxOutputChars?: number;
   stdin?: string;
@@ -78,7 +79,11 @@ export async function runExternalCommand(
         if (allowedResult !== undefined) {
           return allowedResult;
         }
-        throw externalCommandErrorFromUnknown(error, input);
+        throw externalCommandErrorFromUnknown(
+          error,
+          input,
+          await missingWorkingDirectory(error, input.cwd),
+        );
       }
     } finally {
       linked.cleanup();
@@ -126,7 +131,7 @@ export async function nodeExternalCommandRunner(
   const args = input.args ?? [];
   const result = await execFileAsync(input.command, args, {
     cwd: input.cwd,
-    env: input.env === undefined ? process.env : { ...process.env, ...input.env },
+    env: externalCommandEnvironment(input),
     maxBuffer: input.maxOutputChars ?? 64 * 1024,
     signal: input.signal,
   });
@@ -149,7 +154,7 @@ async function nodeExternalCommandRunnerWithInheritedStdio(
   return new Promise((resolve, reject) => {
     const child = spawn(input.command, args, {
       cwd: input.cwd,
-      env: input.env === undefined ? process.env : { ...process.env, ...input.env },
+      env: externalCommandEnvironment(input),
       signal: input.signal,
       stdio: "inherit",
     });
@@ -212,7 +217,7 @@ async function nodeExternalCommandRunnerWithStdin(
       ],
       {
         cwd: input.cwd,
-        env: input.env === undefined ? process.env : { ...process.env, ...input.env },
+        env: externalCommandEnvironment(input),
         maxBuffer: input.maxOutputChars ?? 64 * 1024,
         signal: input.signal,
       },
@@ -262,13 +267,16 @@ export async function resolveExecutablePath(
 export function externalCommandErrorFromUnknown(
   error: unknown,
   input: Pick<ExternalCommandInput, "command" | "args" | "cwd">,
+  cwdMissing = false,
 ): ExternalCommandError {
   const fallback = externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed.");
   const safeError = safeErrorFromUnknown(error, fallback);
   const cause = externalCommandErrorLike(error);
   const normalized: ExternalCommandError = {
     tag: "ExternalCommandError",
-    code: externalCommandCode(error, cause, safeError),
+    code: cwdMissing
+      ? "EXTERNAL_COMMAND_CWD_NOT_FOUND"
+      : externalCommandCode(error, cause, safeError),
     message: externalCommandMessage(error, safeError),
     command: formatCommandForError(input),
   };
@@ -302,6 +310,30 @@ export function externalCommandErrorFromUnknown(
   normalized.diagnosticDetails = [externalCommandDiagnosticDetail(normalized)];
 
   return normalized;
+}
+
+function externalCommandEnvironment(input: Pick<ExternalCommandInput, "env" | "unsetEnv">) {
+  const env = { ...process.env };
+  for (const key of input.unsetEnv ?? []) {
+    delete env[key];
+  }
+  Object.assign(env, input.env);
+  return env;
+}
+
+async function missingWorkingDirectory(error: unknown, cwd: string | undefined): Promise<boolean> {
+  if (
+    cwd === undefined ||
+    externalCommandStringValue(externalCommandErrorLike(error), "code") !== "ENOENT"
+  ) {
+    return false;
+  }
+  try {
+    await defaultAccess(cwd);
+    return false;
+  } catch (cause) {
+    return externalCommandStringValue(externalCommandErrorLike(cause), "code") === "ENOENT";
+  }
 }
 
 function externalCommandFallback(code: string, message: string): RuntimeSafeErrorFallback {

@@ -401,8 +401,11 @@ health, persistence health, durable Observer records, config diagnostics,
 provider checks, and local runtime evidence. They receive
 `PersistenceHealthSource` separately from the command and event journals, so
 neither use case needs a concrete SQLite handle. Collection must remain
-read-only with respect to product state. OBS-HEX-012 tracks separation of
-filesystem, log, and spool traversal from the diagnostic use case.
+read-only with respect to product state. Provider doctor calls receive an
+Observer-owned total timeout and cancellation signal; adapters that fan out
+checks must bound concurrency and return completed evidence before that budget
+expires. OBS-HEX-012 tracks separation of filesystem, log, and spool traversal
+from the diagnostic use case.
 
 ## Concurrency, Failure, And Backpressure
 

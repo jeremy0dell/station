@@ -837,7 +837,7 @@ describe("checkSetupGit", () => {
   it("distinguishes a missing git binary from a missing repository", async () => {
     const absent = await checkSetupGit({
       env: { PATH: "/fake/bin" },
-      cwd: "/tmp/not-a-repo",
+      cwd: tmpdir(),
       runner: fakeRunner([], {}),
     });
     expect(absent).toMatchObject({ status: "missing", reason: "git-absent" });
@@ -846,7 +846,7 @@ describe("checkSetupGit", () => {
 
     const notARepo = await checkSetupGit({
       env: { PATH: "/fake/bin" },
-      cwd: "/tmp/not-a-repo",
+      cwd: tmpdir(),
       // git resolves but rev-parse fails with a non-ENOENT exit code.
       runner: async () => {
         throw Object.assign(new Error("not a git repository"), { code: 128 });

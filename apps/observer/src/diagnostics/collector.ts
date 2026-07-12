@@ -149,7 +149,7 @@ export async function collectDiagnosticSnapshot(
 
 export async function runDoctor(
   deps: ObserverDiagnosticsDeps,
-  _options: DoctorOptions = {},
+  options: DoctorOptions = {},
 ): Promise<DoctorReport> {
   const clock = deps.clock ?? systemClock;
   const snapshot = await collectDiagnosticSnapshot(deps, {
@@ -162,7 +162,7 @@ export async function runDoctor(
     ...doctorSnapshot.providerHealth,
     ...providerHealth,
   };
-  const providerChecks = await collectProviderDoctorChecks(deps);
+  const providerChecks = await collectProviderDoctorChecks(deps, options);
   const sqliteCheck: DoctorCheck = {
     name: "sqlite",
     status: doctorSnapshot.observerHealth.sqlite?.status === "healthy" ? "ok" : "warn",
@@ -437,13 +437,19 @@ function missingDoctorStateError(field: string): SafeError {
 
 async function collectProviderDoctorChecks(
   deps: ObserverDiagnosticsDeps,
+  options: DoctorOptions,
 ): Promise<ProviderDoctorCheck[]> {
   if (deps.providers === undefined) {
     return [];
   }
 
   const checks: ProviderDoctorCheck[] = [];
-  const context: ProviderDoctorContext = {};
+  const context: ProviderDoctorContext = {
+    projects:
+      options?.projectId === undefined
+        ? deps.config.projects
+        : deps.config.projects.filter((project) => project.id === options.projectId),
+  };
   if (deps.configPath !== undefined) {
     context.stationConfigPath = deps.configPath;
   }
@@ -453,11 +459,12 @@ async function collectProviderDoctorChecks(
     if (provider.doctorChecks === undefined) {
       continue;
     }
+    const timeoutMs = deps.providerDoctorTimeoutMs ?? 5000;
     const result = await runRuntimeBoundaryWithTimeout(
       {
         operation: `observer.doctor.providerChecks.${provider.id}`,
         clock: deps.clock,
-        timeoutMs: deps.providerDoctorTimeoutMs ?? 5000,
+        timeoutMs,
         error: {
           tag: "ProviderDiagnosticError",
           code: "PROVIDER_DOCTOR_CHECK_FAILED",
@@ -471,7 +478,12 @@ async function collectProviderDoctorChecks(
           provider: provider.id,
         },
       },
-      async () => provider.doctorChecks?.(context) ?? [],
+      async ({ signal }) =>
+        provider.doctorChecks?.({
+          ...context,
+          signal,
+          timeoutMs,
+        }) ?? [],
     );
 
     if (result.ok) {

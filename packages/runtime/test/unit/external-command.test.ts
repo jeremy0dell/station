@@ -32,6 +32,39 @@ describe("runtime external command boundary", () => {
     });
   });
 
+  it("removes requested inherited environment keys without dropping unrelated values", async () => {
+    process.env.DROP_ME = "drop";
+    try {
+      const result = await runExternalCommand({
+        command: process.execPath,
+        args: [
+          "-e",
+          "process.stdout.write(JSON.stringify({drop:process.env.DROP_ME,keep:process.env.KEEP_ME}))",
+        ],
+        env: { KEEP_ME: "keep" },
+        unsetEnv: ["DROP_ME"],
+      });
+
+      expect(JSON.parse(result.stdout)).toEqual({ keep: "keep" });
+    } finally {
+      delete process.env.DROP_ME;
+    }
+  });
+
+  it("distinguishes a missing working directory from a missing executable", async () => {
+    const missingCwd = join(tmpdir(), `station-missing-cwd-${Date.now()}`);
+    await expect(
+      runExternalCommand({ command: process.execPath, cwd: missingCwd }),
+    ).rejects.toMatchObject({
+      code: "EXTERNAL_COMMAND_CWD_NOT_FOUND",
+      cwd: missingCwd,
+      command: process.execPath,
+    });
+    await expect(
+      runExternalCommand({ command: `station-missing-command-${Date.now()}`, cwd: tmpdir() }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("redacts command output in typed failures", () => {
     const error = externalCommandErrorFromUnknown(
       {

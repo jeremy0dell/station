@@ -96,4 +96,4 @@ mkdir -p ~/.config/station
 cp examples/local-real-config.toml ~/.config/station/config.toml
 ```
 
-Run `stn doctor` after editing the config. Doctor should report config diagnostics, Worktrunk availability, effective Worktrunk automation mode, hook setup status when hooks are expected, SQLite health, provider health, local-state retention, and debug-bundle availability.
+Run `stn doctor` after editing the config. Doctor should report config diagnostics, Worktrunk availability and stale registrations, effective Worktrunk automation mode, hook setup status when hooks are expected, SQLite health, provider health, local-state retention, and debug-bundle availability.

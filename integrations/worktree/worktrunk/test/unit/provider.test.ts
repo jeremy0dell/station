@@ -1,13 +1,14 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { nodeExternalCommandRunner } from "@station/runtime";
+import { gitLocalEnvironmentVariables, nodeExternalCommandRunner } from "@station/runtime";
 import { WorktrunkProvider } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
 const now = "2026-05-21T12:00:00.000Z";
-const project = {
+const project: ProviderProjectConfig = {
   id: "web",
   label: "web",
   root: "/tmp/station/web",
@@ -290,7 +291,16 @@ describe("WorktrunkProvider", () => {
     expect(removed).toEqual({ worktreeId: created.id, removed: true });
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["remove", "feature", "--force", "--force-delete", "--foreground", "--format=json"],
+      [
+        "-C",
+        project.root,
+        "remove",
+        "feature",
+        "--force",
+        "--force-delete",
+        "--foreground",
+        "--format=json",
+      ],
     ]);
   });
 
@@ -299,20 +309,37 @@ describe("WorktrunkProvider", () => {
     const srcPath = join(root, "source");
     const tgtPath = join(root, "feature");
     const git = (cwd: string, ...args: string[]) =>
-      nodeExternalCommandRunner({ command: "git", args, cwd });
+      nodeExternalCommandRunner({
+        command: "git",
+        args,
+        cwd,
+        unsetEnv: gitLocalEnvironmentVariables,
+      });
 
     // Real source repo: a base commit, then a dirty working tree spanning every state
     // the seed must carry (unstaged mod, staged mod, tracked deletion, untracked + nested).
     await mkdir(srcPath, { recursive: true });
     await git(srcPath, "init", "-q");
-    await git(srcPath, "config", "user.email", "t@example.com");
-    await git(srcPath, "config", "user.name", "t");
-    await git(srcPath, "config", "commit.gpgsign", "false");
+    const commonDir = (
+      await git(srcPath, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    ).stdout.trim();
+    expect(commonDir.replace(/^\/private(?=\/var\/)/, "").startsWith(root)).toBe(true);
     await writeFile(join(srcPath, "tracked.txt"), "base\n");
     await writeFile(join(srcPath, "staged.txt"), "base\n");
     await writeFile(join(srcPath, "deleteme.txt"), "bye\n");
     await git(srcPath, "add", ".");
-    await git(srcPath, "commit", "-qm", "init");
+    await git(
+      srcPath,
+      "-c",
+      "user.email=t@example.com",
+      "-c",
+      "user.name=t",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-qm",
+      "init",
+    );
     await writeFile(join(srcPath, "tracked.txt"), "base\nunstaged\n");
     await writeFile(join(srcPath, "staged.txt"), "base\nstaged\n");
     await git(srcPath, "add", "staged.txt");
@@ -387,6 +414,7 @@ describe("WorktrunkProvider", () => {
       const switchCall = calls.find((c) => c.command === "wt" && c.args?.[0] === "switch");
       expect(switchCall?.args).toContain("source-branch");
     } finally {
+      await git(srcPath, "worktree", "remove", "--force", tgtPath).catch(() => undefined);
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -417,7 +445,7 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["remove", "--no-hooks", "feature", "--foreground", "--format=json"],
+      ["-C", project.root, "remove", "--no-hooks", "feature", "--foreground", "--format=json"],
     ]);
   });
 
@@ -447,7 +475,7 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["remove", "--yes", "feature", "--foreground", "--format=json"],
+      ["-C", project.root, "remove", "--yes", "feature", "--foreground", "--format=json"],
     ]);
   });
 
@@ -589,6 +617,145 @@ describe("WorktrunkProvider", () => {
       ["switch", "--help"],
       ["remove", "--help"],
     ]);
+  });
+
+  it("warns about missing registrations with safe prune commands", async () => {
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) =>
+        result(
+          input,
+          input.args?.includes("list")
+            ? JSON.stringify([
+                {
+                  path: "/tmp/station/web/missing feature",
+                  branch: "missing-feature",
+                  state: "prunable",
+                },
+              ])
+            : "--no-hooks",
+        ),
+    });
+
+    const checks = await provider.doctorChecks({ projects: [project] });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "worktrunk-stale-registrations-web",
+          status: "warn",
+          message: expect.stringContaining(
+            "git -C '/tmp/station/web' worktree prune --dry-run --verbose",
+          ),
+        }),
+      ]),
+    );
+  });
+
+  it("returns completed stale warnings and aborts slow scans before the provider deadline", async () => {
+    const slowProject: ProviderProjectConfig = {
+      ...project,
+      id: "api",
+      label: "api",
+      root: "/tmp/station/api",
+    };
+    let slowScanAborted = false;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.args?.includes("list") && input.cwd === slowProject.root) {
+          return new Promise((_, reject) => {
+            const abort = () => {
+              slowScanAborted = true;
+              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+            };
+            if (input.signal?.aborted === true) {
+              abort();
+            } else {
+              input.signal?.addEventListener("abort", abort, { once: true });
+            }
+          });
+        }
+        return result(
+          input,
+          input.args?.includes("list")
+            ? JSON.stringify([
+                {
+                  path: "/tmp/station/web/missing-feature",
+                  branch: "missing-feature",
+                  worktree: { state: "prunable" },
+                },
+              ])
+            : "--no-hooks",
+        );
+      },
+    });
+
+    const checks = await provider.doctorChecks({
+      projects: [project, slowProject],
+      timeoutMs: 50,
+    });
+
+    expect(slowScanAborted).toBe(true);
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "worktrunk-stale-registrations-web",
+          status: "warn",
+        }),
+        expect.objectContaining({
+          name: "worktrunk-stale-registrations-scan",
+          status: "warn",
+          message: expect.stringContaining("1 of 2 project(s)"),
+        }),
+        expect.objectContaining({
+          name: "worktrunk-hooks",
+          status: "ok",
+        }),
+      ]),
+    );
+  });
+
+  it("bounds concurrent stale-registration scans", async () => {
+    const projects: ProviderProjectConfig[] = Array.from({ length: 6 }, (_, index) => ({
+      ...project,
+      id: `project-${index}`,
+      label: `project-${index}`,
+      root: `/tmp/station/project-${index}`,
+    }));
+    let activeScans = 0;
+    let maxActiveScans = 0;
+    let completedScans = 0;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.args?.includes("list")) {
+          activeScans += 1;
+          maxActiveScans = Math.max(maxActiveScans, activeScans);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          activeScans -= 1;
+          completedScans += 1;
+          return result(input, "[]");
+        }
+        return result(input, "--no-hooks");
+      },
+    });
+
+    const checks = await provider.doctorChecks({ projects, timeoutMs: 500 });
+
+    expect(completedScans).toBe(projects.length);
+    expect(maxActiveScans).toBe(4);
+    expect(checks).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "worktrunk-stale-registrations-scan" }),
+      ]),
+    );
   });
 
   it("reports unsupported configured Worktrunk automation flags in doctor checks", async () => {

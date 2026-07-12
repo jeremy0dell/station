@@ -33,6 +33,11 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
 
 ## Deterministic Gates
 
+Git-backed fixtures and child processes must clear Git's repository-local environment variables;
+`cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`
+are inherited. Remove linked worktrees and other Git-created resources through Git before deleting
+their directories.
+
 The deterministic local gate is:
 
 ```bash

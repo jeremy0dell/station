@@ -80,8 +80,8 @@ const confidenceRank = {
 
 export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
-  const configuredWorktrees = input.worktrees.filter((worktree) =>
-    projectsById.has(worktree.projectId),
+  const configuredWorktrees = input.worktrees.filter(
+    (worktree) => projectsById.has(worktree.projectId) && worktree.state === "exists",
   );
   const worktreesById = new Map(configuredWorktrees.map((worktree) => [worktree.id, worktree]));
   const harnessRuns = input.harnessRuns;
