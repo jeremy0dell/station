@@ -34,6 +34,7 @@
     "station:devbox": "node scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
     "smoke:binary": "node scripts/test-runners/run-binary-smoke.mjs",
+    "smoke:binary-archives": "scripts/test-runners/verify-binary-archives.sh",
     "typecheck": "turbo run typecheck",
     "lint": "biome check . && node tools/lint/check-source-order.mjs && node tools/lint/check-no-raw-hex.mjs && node tools/lint/check-no-parser-renderables.mjs",
     "format": "biome format --write .",
