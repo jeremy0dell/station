@@ -134,7 +134,7 @@ stn (bun build --compile, per platform, no ambient env)
   fire.)
 - **Runtime-mode seam** `packages/runtime/src/buildInfo.ts`: build-time
   defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` behind `typeof`
-  guards; dev tsc reports `{ version: "0.0.0-dev", compiled: false }`.
+  guards; dev tsc reports `{ version: "0.7.0", compiled: false }`.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -243,11 +243,11 @@ through a **ctty helper** (S2, F6): `setsid()`,
 `ioctl(STDIN_FILENO, TIOCSCTTY)`, `execvp(payload)`.
 
 A2a checks in one portable POSIX C source. `bun run build:ctty-helper` uses the
-target's native `cc` to write the ignored development/CI executable at
+target's native `cc` to write the ignored development executable at
 `station/dist/ctty-helper`; no built helper is committed. Platform headers
 supply `TIOCSCTTY`, so TypeScript contains no platform ioctl constants. The
-four-target `station-pty` CI matrix compiles that same source natively on
-linux-x64, linux-arm64, darwin-x64, and darwin-arm64.
+pre-push gate compiles and tests that source natively on the developer's current
+platform, while hosted CI covers Linux and macOS across x64 and arm64.
 The helper stays C because it is a small direct wrapper over POSIX `setsid`,
 `ioctl`, and `execvp`; Zig or Rust would add a build toolchain without improving
 that boundary.
@@ -325,14 +325,14 @@ A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
   may reload its extension path. Pi pruning waits for provider-process lifetime
   ownership rather than risking a live session.
 
-CI `binary-smoke` (ubuntu): `--version`, `--help`, popup argv0 routing,
+Local pre-push and hosted `binary-smoke` checks: `--version`, `--help`, popup argv0 routing,
 `setup check --json`
 (asserting the `launchReady`/`workflowReady` split), an **observer round
 trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
-**detached self-spawn** check (folds in S5). The four-target PTY matrix also
-builds the native binary and proves the unset compiled selector launches a
-payload through the extracted helper. `observerReap.ts` and the same-TTY UI
+**detached self-spawn** check (folds in S5). The native PTY test also proves the
+unset compiled selector launches a payload through the extracted helper on the
+current platform. `observerReap.ts` and the same-TTY UI
 reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
@@ -342,7 +342,7 @@ reaper recognize the exact compiled process shapes.
 Requirements v1 omitted:
 
 - **Reuse the existing gate**: tag builds must run the same deterministic
-  checks as `standard-ci` + `pnpm smoke:release`, not bypass them.
+  checks as hosted `standard-ci` + `pnpm smoke:release`, not bypass them.
 - **Checksums**: emit `SHA256SUMS`, sign or at least publish it; the
   install script verifies each artifact against it before extraction.
 - **License**: include `LICENSE` in every archive (F9 / LICENSE:67).

@@ -30,8 +30,8 @@ profile { name, state: { platform, xcodeClt, git, insideRepo, brew, worktrunk,
 `apps/cli/test/integration/setup-profiles.test.ts` compiles each profile into the
 real `SetupCommandDeps` seam and runs `runCli([... "setup","check","--json"])`,
 asserting exit code + `requiredOk` + per-check status. Runs in the existing
-`pnpm test:integration` lane (so it is already in `standard-ci.yml` and
-`pnpm test:all`). This is the backbone and the canonical contract; it covers every
+`pnpm test:integration` lane (so it is already in `pnpm test:all`, the
+pre-push gate, and hosted CI). This is the backbone and the canonical contract; it covers every
 profile, including the darwin `no-xcode-clt` case via an injected `platform`.
 
 ```bash
