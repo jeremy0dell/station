@@ -251,6 +251,12 @@ and reloads after later gaps or events that cannot be reduced safely.
 
 ### Startup
 
+Normal CLI and provider-hook startup currently probe and may remove a stale
+socket pathname before spawning. Each spawned Observer later uses bind-first
+stale reclamation in the protocol server. Those ownership mutations are not
+serialized across processes; `OBS-HEX-013` tracks the resulting cached-stale
+race.
+
 Current startup proceeds in this order:
 
 1. CLI composition supplies the concrete, optionally asynchronous provider
@@ -411,6 +417,7 @@ from the diagnostic use case.
 
 | Concern | Current contract |
 | --- | --- |
+| Observer boot ownership | The resolved socket defines singleton identity, but client-side stale deletion and server-side stale reclamation are not yet serialized. Different sockets remain independent owners even when their paths share a state or runtime directory (OBS-HEX-013). |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Reconcile ordering | Core reconciles form a non-poisoning promise chain. Scheduled requests coalesce; queued work after a run receives a later flush. |
@@ -633,6 +640,7 @@ and exit condition here.
 | `OBS-HEX-010` | Use cases depend on concrete `JsonlLogger` and project commands receive config paths for filesystem mutation. Local representations cross inward. | Exit when `StationLogger` exposes only `info`/`warn`/`error`, `ProjectConfigWriter` exposes only the three project mutations returning updated config, and their adapters alone own log/config/home paths. | Logging and project-config edge inversion. |
 | `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Read evidence and long-lived watcher lifecycle are mixed into the use case. | Exit when `WorktreeChangeSource` owns typed Git reads, `WorktreeMetadataInvalidationSource` separately owns watched-worktree replacement and shutdown, and use cases receive neither Git runners nor filesystem paths. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only. Exit when a `DiagnosticEvidenceSource` adapter owns only local-state, recent-log, and hook-spool traversal, captures its paths, and the use case runs against a fake without absorbing persistence, providers, core, or SQLite. | Diagnostic evidence isolation. |
+| `OBS-HEX-013` | Normal CLI and provider-hook startup may delete a socket pathname after separate stale probes, while `bindWithStaleReclaim` also probes and unlinks without a cross-process critical section. Two contenders can cache the same stale result, unlink a newly bound successor, and leave duplicate live processes for one resolved socket. | The seeded ownership watcher and `stn observer reap` contain displacement but do not prevent the race. Exit when the Observer child serializes probe, stale reclaim, bind, pidfile publication, watcher setup, and ready-state commitment with an OS-backed SQLite transaction at `dirname(resolvedSocket)/observer.claim.sqlite`; clients no longer mutate the socket; and process-level Node/Bun plus CLI/hook races prove one healthy owner. Different sockets in one directory may share the startup claim while retaining separate singleton identities. | [#135](https://github.com/jeremy0dell/station/issues/135) boot serialization. |
 
 The managed-terminal lifecycle leak formerly tracked as `OBS-HEX-001` is
 resolved: application code receives `ManagedTerminalLifecycle` from composition,

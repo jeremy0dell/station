@@ -37,7 +37,7 @@ Non-goals:
 - **Any observer replacement / eviction in this roadmap.** Coordinated
   single-observer behavior is owned entirely by
   [observer-singleton](observer-singleton.md). This plan *depends on* that
-  roadmap's 3c/3d/3e + version-order phases; it does not add a second,
+  roadmap's 3c/3d-a/3d-b/3e phases; it does not add a second,
   uncoordinated eviction path (v1 did — removed, see F3).
 - **Replacing the dev workflow.** Dev mode (tsc dist under Node +
   `bun --hot` TUI from source) stays byte-identical; compiled mode is new
@@ -527,14 +527,17 @@ health wait is 10 seconds; only TUI and popup launches show delayed progress.
 
 **Removed from v1:** the client-side unhealthy-incumbent SIGTERM eviction.
 It conflicts with [observer-singleton](observer-singleton.md), which is
-explicitly consolidating to **one** socket-relative `observer.claim.lock`
-with process-identity revalidation, total version ordering, and spool
-safety (3d/3e + Phase 4). Adding a second, uncoordinated client killer is
-exactly what that roadmap removes. **Dependency, not duplication:** the
-version-aware upgrade behavior this plan needs (B3) is delivered by the
-singleton roadmap's version-order phase. If that lands, B3 consumes it; if
-not, B3 ships **only** the same-version restart in B-config below and the
-schema-mismatch UX — never an out-of-band kill.
+split between 3d-a's narrow boot serialization and 3d-b's deferred
+version-aware replacement. Today, CLI and provider-hook clients can delete a
+socket after their own stale probe while the server independently performs
+bind-first stale reclamation; those mutations are not serialized
+(`OBS-HEX-013`). 3d-a ([#135](https://github.com/jeremy0dell/station/issues/135))
+moves mutation into the child under
+`dirname(resolvedSocket)/observer.claim.sqlite`, without version comparison,
+signals, or eviction. **Dependency, not duplication:** the version-aware
+upgrade behavior this plan needs (B3) belongs to 3d-b. If that lands, B3
+consumes it; if not, B3 ships **only** the same-version restart in B-config
+below and the schema-mismatch UX — never an out-of-band kill.
 
 ### B-config — config activation (F4 — v1 was wrong)
 
@@ -558,7 +561,7 @@ untouched.
 Same-version config activation via B-config. Renderer exit code 86 =
 "restart observer" on a `halted` + `PROTOCOL_SCHEMA_MISMATCH` state → the
 CLI parent restarts once and respawns the renderer. Older-binary-version
-auto-restart is **deferred to the singleton version-order phase**; this
+auto-restart is **deferred to singleton phase 3d-b**; this
 plan does not implement its own version eviction.
 
 ### B-host — station-host upgrade behavior (F7 — was undefined)
@@ -605,7 +608,7 @@ A1 ─────────────┬─► A2a ─► A3 ─► A4 + co
  (buildInfo,     │
   sqlite,        │
   real version)  │
-                 └─► B3 (schema/version UX) ◄── observer-singleton version-order phase
+                 └─► B3 (schema/version UX) ◄── observer-singleton 3d-b
 B1 ─► B2 ─► B-config ─► B3
               (config activation — headline UX)
 B-host  (independent; needed before upgrade is advertised safe)
@@ -614,7 +617,9 @@ A2a: opt-in PTY + native helper gate    A3: raw dispatch
 A4: packaged assets + compiled default   A2b: folded into A4
 A5: release                              A6: cleanup
 
-External dependency: observer-singleton 3c/3d/3e + version order
+External dependency: observer-singleton 3d-a
+  → required for serialized concurrent stale-socket startup.
+External dependency: observer-singleton 3d-b
   → required before any older-version observer handoff is claimed safe.
 ```
 

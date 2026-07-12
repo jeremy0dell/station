@@ -3,20 +3,21 @@
 Status: shipped-history and remaining singleton roadmap. For the current Observer runtime
 ownership and lifecycle contract, see [Observer Architecture](observer-architecture.md).
 
-How STATION keeps exactly one observer per state dir, why the old design let
+How STATION keeps exactly one observer per resolved socket, why the old design let
 duplicates accumulate, what has shipped, and the remaining work. Pick up the
 unfinished phases from the "Remaining work" section — each is independently
 landable.
 
 ## Problem
 
-An observer is auto-spawned by any `stn` invocation for its state dir, but the
-default socket (`~/.local/state/station/observer.sock`) is shared across all
-worktrees. The intended model is one observer; losers of the race were meant to
-notice and exit. They didn't: displaced observers baselined ownership from their
-own first probe and never detected a takeover, so they lingered at 0% CPU
-forever — 30 processes sharing one socket, 29 of them zombies, each still
-draining spool events and firing hooks with stale logic.
+An observer is auto-spawned by any `stn` invocation for its resolved socket. With
+the default state directory and `XDG_RUNTIME_DIR` unset, that socket is
+`~/.local/state/station/run/observer.sock`; worktrees using those defaults share
+it. The intended model is one observer per resolved socket; losers of the race
+were meant to notice and exit. They didn't: displaced observers baselined
+ownership from their own first probe and never detected a takeover, so they
+lingered at 0% CPU forever — 30 processes sharing one socket, 29 of them zombies,
+each still draining spool events and firing hooks with stale logic.
 
 The fix is herdr's lesson (see `github.com/ogulcancelik/herdr`,
 `src/server/autodetect.rs` + `handoff.rs`): don't rely on passive detection —
@@ -71,7 +72,7 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 | #81 | WAL + `synchronous=NORMAL` sqlite; `stn observer reap` (socket-keyed candidacy, `lsof` keeper + health tiebreak, refuse-on-ambiguity, re-verify argv+start-token before every signal, SIGTERM→SIGKILL). `resolveObserverSocketForProcessArgs` in `@station/config`. |
 | #82 | Seeded socket-ownership watcher (`readSocketIdentity` + `expectedIdentity`); boot reorder — bind (`drainOnStart:false`) → arm seeded watcher → `observer.startup` reconcile, so a takeover during the scan is caught. |
 | #83 | `runShutdownWithBackstop`: `stopObserver` force-exits at a 5s ceiling so a wedged drain can't hang shutdown. Self-stop is now terminal (prerequisite for eviction). |
-| #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a remaining concurrent stale-reclaimer ABA, so this helper is safe only once boot attempts are serialized by `C`. |
+| #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a remaining concurrent stale-reclaimer ABA, so this helper is safe only once boot attempts are serialized by 3d-a. |
 | 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
 
 Together these **stop the bleeding**: `reap` clears duplicates on demand, the
@@ -79,84 +80,92 @@ seeded watcher self-heals future displacements, and stop is terminal. Phase 3c
 also gives later handoff and reaping work a durable, socket-relative
 corroborating identity without changing current attach-or-spawn or
 duplicate-reaping behavior. Concurrent reclamation of one already-stale socket
-remains open until 3d serializes boot.
+remains open until 3d-a serializes boot.
 
 ## Remaining work
 
-### 3d — explicit step-down negotiation (HIGHEST RISK)
+### 3d-a — serialize stale-socket boot ownership ([#135](https://github.com/jeremy0dell/station/issues/135))
 
 Spike result: **NO-GO for both stale-path deletion designs (directory rename and
 AF_UNIX unlink/rebind); GO for a dedicated SQLite transaction claim backed by a
 permanent cross-runtime adversarial test.** The current stale-socket race is
-tracked in #135.
+tracked as `OBS-HEX-013` and in #135.
 
-Move singleton negotiation into the observer boot (`main.ts`) under **one**
-OS-lock-backed, socket-relative claim database
-`C = dirname(socketPath)/observer.claim.sqlite`. Hold one `BEGIN IMMEDIATE`
-transaction for the whole negotiation. Clients (`observerProcess.ts`) shrink
-to attach-or-spawn.
+Move startup ownership mutation into the observer boot (`main.ts`) under the
+OS-lock-backed claim database
+`C = dirname(resolvedSocket)/observer.claim.sqlite`. Hold one `BEGIN IMMEDIATE`
+transaction from the socket probe through ready-state commitment. Clients
+shrink to attach-or-spawn and never delete the socket path themselves.
+
+The singleton identity remains the **resolved socket**, not the state directory
+or claim path. Two different sockets in one directory intentionally share `C`
+and serialize startup, but retain distinct listeners and `<socketPath>.pid`
+files.
 
 Boot sequence while holding `C`:
 1. **Acquire `C`** by opening the dedicated database with private permissions
    and starting `BEGIN IMMEDIATE` with a bounded busy timeout. `SQLITE_BUSY`
-   means another boot is negotiating, so do not enter. Process death releases
+   means another boot is in progress, so do not enter. Process death releases
    the OS transaction lock; the database file persists and needs no stale-owner
    deletion. Do not revive either rejected stale-path deletion scheme.
-2. **Probe** with connect-based `isSocketStale`: no observer listener → free;
-   connect ok + incumbent version compatible-and->=mine → roll back and close
-   `C`, exit 0 (attach); connect ok + older-incompatible, or connect ok but
-   unhealthy → evict.
-3. **Resolve incumbent identity**: `lsof -t P` is primary binder evidence;
-   pidfile `F`, health PID, and `ps` argv + OS start token corroborate it. Capture
-   the exact resolved socket and refuse on missing or conflicting evidence. If
-   bound-but-unhealthy has no attributable pid, leave it to `reap --force`.
-4. **Evict + confirm by observation** (never trust the receipt — `buildStop`
-   returns before the process exits): send `observer.stop`, then poll ~25ms
-   requiring `connect(P)` fails AND `liveness(pid)==false`, where liveness =
-   `processExists(pid) AND osStartTime(pid)==token`. Budget is **adaptive**:
-   while the pid is alive but connect already fails (drain in progress), keep
-   waiting to a larger cap; escalate only on no-progress past a wedge threshold.
-   Escalate: re-verify identity → SIGTERM → poll → re-verify → SIGKILL → confirm
-   `ESRCH`. Revalidate pidfile, argv, start token, and socket ownership before
-   every signal. A token mismatch means the captured process identity is gone,
-   so do not signal it; it does **not** prove the socket is free.
-5. **Reclaim socket** via `bindWithStaleReclaim` (#84 — bind-first).
-6. **Write pidfile** `F` (3c).
-7. **Arm the seeded watcher** (#82) and reconcile.
-8. **Commit or roll back the claim transaction and close `C`.** The database
-   file remains for the next negotiation.
+2. **Probe** the resolved socket as `absent`, `stale`, or `listening`. A
+   listening socket means release `C` and exit 0; the parent's existing health
+   loop attaches or reports incompatibility. 3d-a never compares versions or
+   evicts an incumbent.
+3. For `absent` or `stale`, **bind or reclaim** through the existing claimed
+   bind path, capture socket identity, publish and fsync the socket-specific
+   pidfile, arm the seeded ownership watcher, and commit readiness.
+4. **Release `C` synchronously before health waiters are unblocked.** Startup
+   reconcile follows outside the claim. A pre-ready stop or startup failure
+   retains the claim through socket and pidfile cleanup, then releases it from
+   the outer lifecycle cleanup path.
 
 Supporting:
-- Client attach-or-spawn: spawn on `unhealthy` too; concurrent spawns are safe
-  because booted observers serialize on `C`.
-- `restartObserver` threads the held claim (no re-entrant acquire).
-- DI seams: `killProcess` / `processExists` / `osStartTime`.
-- Automatic SIGKILL is not shippable until spool consumption is idempotent by
-  event ID or atomically claimed by rename. Until then a wedged incumbent must
-  refuse or escalate only through an explicit operator path. After that
-  prerequisite, `stn observer stop` may use the same guarded SIGTERM→SIGKILL
-  escalation instead of returning with the wedged owner still alive.
+- Normal CLI and provider-hook children receive the caller's bounded startup
+  budget so SQLite contention cannot outlive the parent's health wait.
+- Claim acquisition uses the low-level cross-runtime SQLite driver, not the
+  Observer persistence database, migrations, or WAL configuration.
+- File existence is never ownership. The claim database and SQLite sidecars are
+  persistent private files and are never stale-reclaimed, renamed, or replaced.
 
 Implementation starts red with deterministic two-process regressions for both
 rejected cached-stale ABA schedules. Then preserve the 50-round Node-vs-Bun
-transaction race, killed-owner recovery, process-level eviction, and CLI/hook
-path-parity cases from the spikes as permanent coverage.
+transaction race, killed-owner recovery, production stale-socket races, and
+CLI/hook path-parity cases from the spikes as permanent coverage.
 
-### 3e — unify hook auto-start onto `C`
+### 3d-b — version-aware incumbent replacement (deferred)
 
-Route `apps/cli/src/ingress/observerStartup.ts` + `deliveryPolicy.ts` hook
-auto-start through the same spawn/claim and **retire `hook-autostart.lock`**.
-Two lock namespaces never mutually exclude under config-override/XDG divergence.
-
-### Phase 4 — version order + guarded self-heal (deferrable, needs 3d)
+Build coordinated handoff only after 3d-a establishes exclusive boot ownership.
+This phase owns version comparison, incumbent attribution, graceful stop,
+signal escalation, spool-safety prerequisites, and replacement confirmation;
+none belongs to #135.
 
 - Refine the version gate into a **total antisymmetric order** with a
-  deterministic `(version, startedAt, pid)` tiebreak so no pair both-evicts
-  (mutual-eviction livelock under crash-respawn / hook-restart).
-- Treat `undefined` health.version as UNKNOWN → conservative attach-if-
-  compatible-else-refuse, never force-replace. (The `.optional()` health fields
-  `pid`/`version`/`socketPath` may be absent on an old incumbent — the policy
-  must not depend on any being present.)
+  deterministic `(version, startedAt, pid)` tiebreak so no pair both-evicts.
+  Treat missing health version or identity fields conservatively: attach when
+  compatible, otherwise refuse rather than guessing.
+- Resolve incumbent identity with `lsof` as primary socket-owner evidence and
+  corroborate it with the pidfile, health identity, argv, and OS start token.
+  Refuse on missing or conflicting evidence and revalidate before every signal.
+- Request graceful `observer.stop`, then confirm both socket closure and exact
+  process death before binding. A stop receipt alone is not completion.
+- Do not make SIGKILL a routine terminator until spool consumption is
+  idempotent by event ID or atomically claimed. Until then a wedged incumbent
+  requires a safe refusal or an explicit operator path.
+- Preserve the process-level graceful and wedged replacement spikes as
+  permanent acceptance coverage. PTY continuity is not part of Observer
+  handoff; `station-host` owns live PTYs independently.
+
+### 3e — isolate hook auto-start rate limiting
+
+3d-a will route CLI and provider-hook children through the same child-owned
+claim. Keep `hook-autostart.lock` authoritative only for hook rate limiting,
+never Observer ownership. Its state-directory location may diverge from the
+resolved socket under config and XDG overrides without weakening the 3d-a
+claim.
+
+### Phase 4 — guarded self-heal (deferrable, needs 3d-b)
+
 - Guarded self-heal: only after own-pid is the confirmed keeper AND it owns zero
   socket fds; stays OFF until `reap --force` is field-proven.
 
@@ -174,7 +183,7 @@ Two lock namespaces never mutually exclude under config-override/XDG divergence.
 - `apps/observer/src/runtime/socketOwnership.ts` — seeded watcher (#82).
 - `apps/observer/src/runtime/gracefulExit.ts` — force-exit backstop (#83).
 - `packages/protocol/src/transport.ts` — `bindWithStaleReclaim` (#84).
-- `apps/cli/src/observerProcess.ts` — attach-or-spawn, restart lock threading.
+- `apps/cli/src/observerProcess.ts` — normal CLI attach-or-spawn.
 - `apps/cli/src/observerReap.ts` — reaper (#81).
-- `apps/cli/src/ingress/observerStartup.ts`, `deliveryPolicy.ts` — hook auto-start (3e).
+- `apps/cli/src/ingress/observerStartup.ts`, `deliveryPolicy.ts` — hook attach-or-spawn and rate limiting (3d-a/3e).
 - `packages/config/src/observerProcessArgs.ts` — socket resolution from argv (#81).
