@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { TerminalFocusOrigin } from "./commands.js";
 import type { SafeError } from "./errors.js";
 import { SafeErrorSchema } from "./errors.js";
+import type { HarnessReadinessFacts, HarnessReadinessProbeContext } from "./harnessReadiness.js";
 import type {
   HarnessRunId,
   ProjectId,
@@ -438,24 +439,11 @@ export interface ManagedTerminalLifecycle extends TerminalProvider {
   releaseTarget(targetId: TerminalTargetId): Promise<boolean>;
 }
 
-/** Best-effort version probe result; omit fields (or the method) when unknown. */
-export type HarnessVersionInfo = {
-  installedVersion?: string;
-  latestVersion?: string;
-};
-
 export interface HarnessProvider {
   id: ProviderId;
   capabilities(): HarnessCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
-  /**
-   * Best-effort, offline-safe version probe: installed from the local CLI,
-   * latest from a cached registry lookup. The observer calls this once in the
-   * background and caches the result — it must never gate reconciliation, and
-   * failures should resolve to an empty object rather than throw.
-   */
-  versionInfo?(): Promise<HarnessVersionInfo>;
   /**
    * Report whether this harness's status hooks are installed. Optional: a
    * harness that cannot determine hook installation omits it, and callers
@@ -473,6 +461,17 @@ export interface HarnessProvider {
     context: HarnessEventContext,
   ): Promise<HarnessEventObservation[]>;
   stop?(request: HarnessStopRequest): Promise<HarnessStopResult>;
+}
+
+/**
+ * DRIVEN PORT
+ *
+ * Supplies provider-owned CLI, authentication, launchability, and tracking-setup
+ * facts without activating discovery, launch, or setup mutation.
+ */
+export interface HarnessReadinessProvider {
+  readonly id: ProviderId;
+  probe(context?: HarnessReadinessProbeContext): Promise<HarnessReadinessFacts>;
 }
 
 /**

@@ -1,6 +1,7 @@
 import type {
   ClientFeatureFlags,
   HarnessCapabilities,
+  HarnessCatalogEntry,
   HarnessProvider,
   HarnessRunObservation,
   HarnessStatusObservation,
@@ -31,6 +32,7 @@ import type {
   WorktreeMetadataStore,
 } from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
+import type { HarnessReadinessService } from "../providers/readinessService.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
 import type { ReconcileTiming } from "./core.js";
@@ -69,6 +71,7 @@ export type ReconcileOnceInput = {
     EventJournal;
   providerObservationRetentionDays?: number;
   featureFlags?: ClientFeatureFlags;
+  readiness?: HarnessReadinessService;
 };
 
 export type ReconcileOnceResult = {
@@ -87,6 +90,7 @@ export function buildInitialSnapshot(input: {
   projects: ProviderProjectConfig[];
   worktreeProviderId: ProviderId;
   harnesses?: SnapshotHarness[];
+  harnessCatalog?: HarnessCatalogEntry[];
   featureFlags?: ClientFeatureFlags;
 }): StationSnapshot {
   return buildStationSnapshot({
@@ -99,6 +103,7 @@ export function buildInitialSnapshot(input: {
     worktreeProviderId: input.worktreeProviderId,
     providerHealth: {},
     ...(input.harnesses === undefined ? {} : { harnesses: input.harnesses }),
+    ...(input.harnessCatalog === undefined ? {} : { harnessCatalog: input.harnessCatalog }),
     worktrees: [],
     terminalTargets: [],
     harnessRuns: [],
@@ -209,7 +214,8 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     projects: input.projects,
     worktreeProviderId: input.providers.worktree.id,
     providerHealth,
-    harnesses: harnessesFromRegistry(input.providers),
+    harnesses: harnessesFromRegistry(input.providers, input.readiness),
+    ...(input.readiness === undefined ? {} : { harnessCatalog: input.readiness.catalogEntries() }),
     harnessCapabilities: harnessResult.harnessCapabilities,
     worktrees: worktreesForSnapshot,
     terminalTargets,
@@ -248,15 +254,21 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   };
 }
 
-export function harnessesFromRegistry(providers: ProviderRegistry): SnapshotHarness[] {
+export function harnessesFromRegistry(
+  providers: ProviderRegistry,
+  readiness?: HarnessReadinessService,
+): SnapshotHarness[] {
   return Array.from(providers.harnesses.values()).map((provider) => {
     const harness: SnapshotHarness = { id: provider.id, label: provider.id };
-    const version = providers.harnessVersions.get(provider.id);
-    if (version?.installedVersion !== undefined) {
-      harness.installedVersion = version.installedVersion;
+    const providerReadiness = readiness?.peek(provider.id);
+    if (
+      providerReadiness?.cli === "available" &&
+      providerReadiness.installedVersion !== undefined
+    ) {
+      harness.installedVersion = providerReadiness.installedVersion;
     }
-    if (version?.latestVersion !== undefined) {
-      harness.latestVersion = version.latestVersion;
+    if (providerReadiness?.latestVersion !== undefined) {
+      harness.latestVersion = providerReadiness.latestVersion;
     }
     if (harness.installedVersion !== undefined && harness.latestVersion !== undefined) {
       harness.updateAvailable = harness.installedVersion !== harness.latestVersion;

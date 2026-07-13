@@ -1,5 +1,7 @@
 import type {
   CommandReceipt,
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
   StationCommand,
   StationEvent,
   StationSnapshot,
@@ -10,6 +12,7 @@ export class FakeTuiObserverService implements TuiObserverService {
   readonly dispatched: StationCommand[] = [];
   readonly events: StationEvent[] = [];
   readonly reconcileReasons: Array<string | undefined> = [];
+  readonly readinessQueries: HarnessReadinessQueryParams[] = [];
   readonly waitedForCommandIds: string[] = [];
   cleanupCount = 0;
   loadCount = 0;
@@ -82,6 +85,13 @@ export class FakeTuiObserverService implements TuiObserverService {
     return this.snapshot;
   }
 
+  async getHarnessReadiness(
+    params: HarnessReadinessQueryParams,
+  ): Promise<HarnessReadinessQueryResult> {
+    this.readinessQueries.push(params);
+    return fakeHarnessReadiness(params.provider);
+  }
+
   emit(event: StationEvent): void {
     this.events.push(event);
     for (const subscriber of this.subscribers) {
@@ -114,6 +124,28 @@ export class FakeTuiObserverService implements TuiObserverService {
       rejectSubscriber(subscriber, error);
     }
   }
+}
+
+function fakeHarnessReadiness(provider: string): HarnessReadinessQueryResult {
+  return {
+    readiness: {
+      provider,
+      label: provider,
+      kind: "built_in",
+      configuration: "configured",
+      cli: "available",
+      authentication: "ready",
+      launchability: "ready",
+      trackingSetup: "prepared",
+      tracking: "prepared_unverified",
+      freshness: "fresh",
+      decision: "launch_ready",
+      revision: "fake-readiness-revision",
+      explanation: `${provider} is prepared for Station.`,
+      actions: ["use", "technical_details"],
+      technicalDetails: [],
+    },
+  };
 }
 
 type Subscriber = {

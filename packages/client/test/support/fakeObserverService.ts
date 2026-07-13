@@ -1,4 +1,9 @@
-import type { ObserverService, StationClientCommandCompletion } from "@station/client";
+import type {
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
+  ObserverService,
+  StationClientCommandCompletion,
+} from "@station/client";
 import type {
   CommandReceipt,
   StationCommand,
@@ -10,6 +15,7 @@ export class FakeObserverService implements ObserverService {
   readonly dispatched: StationCommand[] = [];
   readonly events: StationEvent[] = [];
   readonly reconcileReasons: Array<string | undefined> = [];
+  readonly readinessQueries: HarnessReadinessQueryParams[] = [];
   readonly subscribeTimes: number[] = [];
   readonly waitedForCommandIds: string[] = [];
   cleanupCount = 0;
@@ -72,6 +78,13 @@ export class FakeObserverService implements ObserverService {
     return this.snapshot;
   }
 
+  async getHarnessReadiness(
+    params: HarnessReadinessQueryParams,
+  ): Promise<HarnessReadinessQueryResult> {
+    this.readinessQueries.push(params);
+    return fakeHarnessReadiness(params.provider);
+  }
+
   // Subclasses that replace subscribeEvents call this so reconnect-timing
   // tests can read subscribeTimes regardless of the subscription's fate.
   protected recordSubscribe(): void {
@@ -122,6 +135,28 @@ export class FakeObserverService implements ObserverService {
       rejectSubscriber(subscriber, error);
     }
   }
+}
+
+function fakeHarnessReadiness(provider: string): HarnessReadinessQueryResult {
+  return {
+    readiness: {
+      provider,
+      label: provider,
+      kind: "built_in",
+      configuration: "configured",
+      cli: "available",
+      authentication: "ready",
+      launchability: "ready",
+      trackingSetup: "prepared",
+      tracking: "prepared_unverified",
+      freshness: "fresh",
+      decision: "launch_ready",
+      revision: "fake-readiness-revision",
+      explanation: `${provider} is prepared for Station.`,
+      actions: ["use", "technical_details"],
+      technicalDetails: [],
+    },
+  };
 }
 
 export class DeferredLoadService extends FakeObserverService {

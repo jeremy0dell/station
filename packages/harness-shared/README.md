@@ -8,6 +8,7 @@ package supplies the uniform machinery so the adapters stay short and read top-t
 
 | Module          | Responsibility                                                            |
 | --------------- | ------------------------------------------------------------------------- |
+| `catalog.ts`    | canonical built-in IDs, labels, command environment keys, and defaults    |
 | `provider.ts`   | `createTerminalBoundHarnessProvider(spec, options)` → `HarnessProvider`   |
 | `events.ts`     | correlate a raw harness event's identity to terminal/worktree truth       |
 | `launch.ts`     | shared launch env + provider-data builders                                |

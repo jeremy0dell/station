@@ -9,6 +9,10 @@ import type {
 import { SafeErrorSchema } from "./errors.js";
 import type { EventFilter, StationEvent } from "./events.js";
 import type {
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
+} from "./harnessReadiness.js";
+import type {
   HarnessEventReport,
   HarnessEventReportReceipt,
   ProviderHookEvent,
@@ -200,6 +204,8 @@ export type ObserverApi = {
   health(): Promise<ObserverHealth>;
   stop(): Promise<ObserverStopReceipt>;
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
+  /** Returns cached readiness unless `refresh` requests and awaits one provider probe. */
+  getHarnessReadiness(params: HarnessReadinessQueryParams): Promise<HarnessReadinessQueryResult>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;

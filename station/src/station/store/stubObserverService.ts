@@ -45,6 +45,30 @@ export function createStationStubObserverService(
     reconcile: async () => {
       throw stubError("observer.reconcile");
     },
+    getHarnessReadiness: async (params) => ({
+      readiness: {
+        provider: params.provider,
+        label: params.provider,
+        kind: "built_in",
+        configuration: "unknown",
+        cli: "unknown",
+        authentication: "unknown",
+        launchability: "unknown",
+        trackingSetup: "unknown",
+        tracking: "unknown",
+        freshness: "failed",
+        decision: "unknown",
+        revision: "station-stub-readiness",
+        explanation: "Harness readiness is unavailable in mock mode.",
+        actions: ["technical_details"],
+        technicalDetails: [
+          {
+            code: "STATION_MOCK_OBSERVER",
+            message: "Harness readiness is unavailable without an observer connection.",
+          },
+        ],
+      },
+    }),
     prepareExternalLaunch: async () => {
       throw stubError("agent.prepareExternalLaunch");
     },

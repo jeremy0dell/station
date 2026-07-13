@@ -4,11 +4,15 @@ import type {
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
   CommandId,
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
   ObserverApi,
+  SafeError,
   StationCommand,
   StationEvent,
   StationSnapshot,
 } from "@station/contracts";
+import { SafeErrorSchema } from "@station/contracts";
 import { createObserverClient, type ObserverClient } from "@station/protocol";
 import {
   type RuntimeBoundaryTask,
@@ -23,6 +27,7 @@ import type { ObserverService, StationClientCommandCompletion } from "./types.js
 export type CreateObserverServiceOptions = {
   socketPath?: string;
   timeoutMs?: number;
+  readinessTimeoutMs?: number;
   reconcileTimeoutMs?: number;
   commandWaitTimeoutMs?: number;
   clientLabel?: string;
@@ -31,15 +36,18 @@ export type CreateObserverServiceOptions = {
 };
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
+const DEFAULT_READINESS_TIMEOUT_MS = 30_000;
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000;
 const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 35_000;
 
 export function createObserverService(options: CreateObserverServiceOptions): ObserverService {
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const readinessTimeoutMs = options.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS;
   const reconcileTimeoutMs =
     options.reconcileTimeoutMs ?? options.timeoutMs ?? DEFAULT_RECONCILE_TIMEOUT_MS;
   const commandWaitTimeoutMs = options.commandWaitTimeoutMs ?? DEFAULT_COMMAND_WAIT_TIMEOUT_MS;
   const client = options.client ?? createClient(options, timeoutMs);
+  const readinessClient = options.client ?? createClient(options, readinessTimeoutMs);
   const reconcileClient = options.client ?? createClient(options, reconcileTimeoutMs);
   const copy = createObserverServiceCopy(options.clientLabel);
 
@@ -51,6 +59,8 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
       waitForCommandCompletion(client, commandId, commandWaitTimeoutMs, copy),
     reconcile: (reason?: string) =>
       requestReconcile(reconcileClient, reason, reconcileTimeoutMs, copy),
+    getHarnessReadiness: (params: HarnessReadinessQueryParams) =>
+      getHarnessReadiness(readinessClient, params, readinessTimeoutMs, copy),
     prepareExternalLaunch: (params: AgentPrepareExternalLaunchParams) =>
       prepareExternalLaunch(client, params, timeoutMs, copy),
     reportExternalExit: (params: AgentReportExternalExitParams) =>
@@ -67,6 +77,8 @@ type ObserverServiceCopy = {
   commandWaitTimeout: string;
   reconcileFailed: string;
   reconcileTimeout: string;
+  harnessReadinessFailed: string;
+  harnessReadinessTimeout: string;
   prepareExternalLaunchFailed: string;
   prepareExternalLaunchTimeout: string;
   reportExternalExitFailed: string;
@@ -85,6 +97,8 @@ function createObserverServiceCopy(clientLabel: string | undefined): ObserverSer
     commandWaitTimeout: `${subject} timed out while waiting for command completion.`,
     reconcileFailed: `${subject} could not request observer reconciliation.`,
     reconcileTimeout: `${subject} timed out while reconciling observer state.`,
+    harnessReadinessFailed: `${subject} could not get harness readiness.`,
+    harnessReadinessTimeout: `${subject} timed out while checking harness readiness.`,
     prepareExternalLaunchFailed: `${subject} could not prepare the external agent launch.`,
     prepareExternalLaunchTimeout: `${subject} timed out while preparing the external agent launch.`,
     reportExternalExitFailed: `${subject} could not report the external agent exit.`,
@@ -188,6 +202,56 @@ async function prepareExternalLaunch(
     },
     () => client.prepareExternalLaunch(params),
   );
+}
+
+async function getHarnessReadiness(
+  client: ObserverApi,
+  params: HarnessReadinessQueryParams,
+  timeoutMs: number,
+  copy: ObserverServiceCopy,
+): Promise<HarnessReadinessQueryResult> {
+  try {
+    return await runClientRequest(
+      {
+        operation: "client.observer.harness.readiness.get",
+        timeoutMs,
+        error: observerErrorFallback(
+          "CLIENT_HARNESS_READINESS_FAILED",
+          copy.harnessReadinessFailed,
+        ),
+        timeoutError: timeoutErrorFallback(
+          "CLIENT_HARNESS_READINESS_TIMEOUT",
+          copy.harnessReadinessTimeout,
+        ),
+      },
+      () => client.getHarnessReadiness(params),
+    );
+  } catch (error) {
+    throw mapHarnessReadinessError(error, copy);
+  }
+}
+
+function mapHarnessReadinessError(error: unknown, copy: ObserverServiceCopy): SafeError {
+  const parsed = SafeErrorSchema.safeParse(error);
+  const isTimeout = parsed.success && parsed.data.tag === "TimeoutError";
+  const mapped: SafeError = {
+    tag: isTimeout ? "TimeoutError" : "ClientObserverError",
+    code: isTimeout ? "CLIENT_HARNESS_READINESS_TIMEOUT" : "CLIENT_HARNESS_READINESS_FAILED",
+    message: isTimeout ? copy.harnessReadinessTimeout : copy.harnessReadinessFailed,
+  };
+  if (!parsed.success) {
+    return mapped;
+  }
+  const source = parsed.data;
+  if (source.hint !== undefined) mapped.hint = source.hint;
+  if (source.commandId !== undefined) mapped.commandId = source.commandId;
+  if (source.projectId !== undefined) mapped.projectId = source.projectId;
+  if (source.worktreeId !== undefined) mapped.worktreeId = source.worktreeId;
+  if (source.sessionId !== undefined) mapped.sessionId = source.sessionId;
+  if (source.provider !== undefined) mapped.provider = source.provider;
+  if (source.traceId !== undefined) mapped.traceId = source.traceId;
+  if (source.diagnosticId !== undefined) mapped.diagnosticId = source.diagnosticId;
+  return mapped;
 }
 
 async function reportExternalExit(

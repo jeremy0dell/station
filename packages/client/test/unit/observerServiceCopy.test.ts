@@ -136,6 +136,39 @@ describe("observer service user-facing copy", () => {
       message: "The Station timed out while reconciling observer state.",
     });
   });
+
+  it("labels harness readiness failures", async () => {
+    const service = createObserverService({
+      clientLabel: "Station",
+      client: fakeClient({
+        getHarnessReadiness: async () => {
+          throw new Error("raw readiness failure");
+        },
+      }),
+    });
+
+    await expect(service.getHarnessReadiness({ provider: "codex" })).rejects.toMatchObject({
+      code: "CLIENT_HARNESS_READINESS_FAILED",
+      message: "The Station could not get harness readiness.",
+    });
+  });
+
+  it("labels harness readiness timeouts", async () => {
+    const service = createObserverService({
+      clientLabel: "Station",
+      readinessTimeoutMs: 1,
+      client: fakeClient({
+        getHarnessReadiness: async () => never(),
+      }),
+    });
+
+    await expect(
+      service.getHarnessReadiness({ provider: "codex", refresh: true }),
+    ).rejects.toMatchObject({
+      code: "CLIENT_HARNESS_READINESS_TIMEOUT",
+      message: "The Station timed out while checking harness readiness.",
+    });
+  });
 });
 
 function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {

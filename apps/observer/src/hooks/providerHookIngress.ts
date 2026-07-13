@@ -40,6 +40,7 @@ export type IngestProviderHookEventOptions = {
   clock?: RuntimeClock;
   timeoutMs?: number;
   retention?: ObservabilityRetentionConfig;
+  markTrackingObserved?: (provider: string) => void;
 };
 
 type ObservationRecord = RecordProviderObservationInput & {
@@ -113,6 +114,12 @@ export async function ingestProviderHookEvent(
     },
     createdAt: options.event.receivedAt,
   });
+  if (
+    !processing.deduped &&
+    result.value.some((observation) => observation.entityKind === "harness_event")
+  ) {
+    options.markTrackingObserved?.(options.event.provider);
+  }
 
   return {
     observations: observations.length,

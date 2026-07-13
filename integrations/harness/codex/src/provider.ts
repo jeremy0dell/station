@@ -9,7 +9,6 @@ import type {
   ProviderDoctorContext,
 } from "@station/contracts";
 import {
-  type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHealth,
@@ -23,20 +22,16 @@ import { codexProviderErrorFromUnknown } from "./errors.js";
 import { normalizeCodexRawEvent } from "./events.js";
 import { doctorCodexHooks } from "./hooks.js";
 import { buildCodexLaunchPlan, type CodexLaunchOptions } from "./launch.js";
+import type { CodexHarnessReadinessProviderOptions } from "./readiness.js";
 
 const CODEX_STATION_PROFILE = "station";
 
-export type CodexHarnessProviderOptions = CommonHarnessProviderOptions & {
+export type CodexHarnessProviderOptions = CodexHarnessReadinessProviderOptions & {
   profile?: string;
   permissionMode?: HarnessPermissionMode;
   approvalPolicy?: string;
   sandboxMode?: string;
   noAltScreen?: boolean;
-  installHooks?: boolean;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
   resume?: boolean;
 };
 
@@ -82,7 +77,6 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   },
   doctorChecks,
   hooksStatus,
-  version: { latestPackage: "@openai/codex" },
 };
 
 function command(options: CodexHarnessProviderOptions): string {

@@ -135,9 +135,9 @@ to make the API look uniform.
 
 The observer's driving actors are CLI commands, the Station client runtime and
 TUI, provider hook senders, harness integrations, protocol clients, and tests.
-Its driven actors include worktree, terminal, harness, and repository systems;
-SQLite; local Git and filesystem evidence; configured commands; the clock; and
-logging sinks.
+Its driven actors include worktree, terminal, harness operation, harness
+readiness, and repository systems; SQLite; local Git and filesystem evidence;
+configured commands; the clock; and logging sinks.
 
 ```text
 CLI / TUI / hooks / tests
@@ -155,7 +155,8 @@ Observer API -> use cases and policies -> application-owned ports
 Composition is intentionally split:
 
 1. `apps/cli/src/observerProviders.ts` constructs concrete integrations,
-   assigns provider roles, and supplies a `ProviderRegistry` factory.
+   assigns separate active harness and read-only readiness-catalog roles, and
+   supplies a `ProviderRegistry` factory.
 2. `apps/observer/src/runtime/main.ts` loads config and constructs Observer-
    private infrastructure: SQLite, persistence, logging and project-config adapters, event bus, command
    queue, core, handlers, ingress queues, schedulers, API, and protocol server.
@@ -183,6 +184,7 @@ ownership even where current ownership is still a deviation.
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Station owns host attachment resolution. |
 | Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing. |
+| Harness readiness facts | Driven | `HarnessReadinessProvider` | Read-only Claude, Codex, Cursor, OpenCode, Pi, configured-custom, and test adapters | Separate from active harness operations: catalog membership permits probing only and never activates launch, discovery, health, event routing, or setup mutation. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
@@ -212,7 +214,7 @@ areas contain the following responsibilities:
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
 | `runtime/logging.ts`, `runtime/projectConfigWriter.ts` | Redacted JSONL writes and `@station/config` project mutation translation | Outbound adapters retaining log, config, and home paths at composition. |
-| `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
+| `providers/` | provider aggregation, health cache, harness-readiness cache/use case, and readiness policy | Provider aggregation plus provider-neutral readiness orchestration; provider modules must not import commands or concrete integrations, and the readiness policy remains IO-free. |
 | `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases select adapters through provider-neutral policy and depend on local-metadata ports (OBS-HEX-011). |
 | `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
 | `persistence/sqliteAdapter.ts`, SQLite implementation modules, `migrations/`, `sqlite.ts` | SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Production outbound adapter edge selected and lifecycle-managed by runtime composition. |
@@ -236,13 +238,14 @@ No single layer owns all truth.
 | --- | --- |
 | Loaded config | Authoritative for managed projects, defaults, provider choices, feature policy, and configured hooks. Durable in TOML; loaded into process memory at startup and updated through explicit config operations. |
 | Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. |
+| Harness readiness cache | Process-lifetime normalized truth derived from config, read-only provider facts, cache freshness, and persisted `harness_event` evidence loaded once at startup. It is never persisted as a readiness record; expired or failed facts become unknown rather than retaining a launch-ready decision. |
 | Provider-owned identity | Worktree, target, harness-run, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
-| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
+| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, metadata caches, and recovery handles. Persisted harness-event observations can inform readiness, but normalized readiness itself is not stored. It is not an external provider's source of truth. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
-| `StationSnapshot` | Current normalized graph held in memory. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
+| `StationSnapshot` | Current normalized graph held in memory. Reconcile replaces its base projection; accepted harness reports can project agent status and turn readiness between reconciles, while harness-catalog summaries are overlaid from the current readiness cache. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
@@ -286,8 +289,11 @@ Current startup proceeds in this order:
    distributes the composition bundle into narrow application views.
 6. The runtime creates the event bus, `StationLogger` JSONL adapter,
    `ProjectConfigWriter` configuration adapter, command queue, feature evaluator,
-   Observer core, command handlers, and configured event hooks around the awaited
-   provider registry. Only the two application ports pass inward.
+   harness-readiness service, Observer core, command handlers, and configured event
+   hooks around the awaited provider registry. Only the logging and configuration
+   application ports pass inward. Readiness receives the separate catalog role
+   rather than the active harness map; its background initialization begins here,
+   after persistence is available.
 7. The API constructs ingress queues, reconcile scheduling, metadata refresh,
    diagnostics dependencies, and spool draining.
 8. The runtime constructs a private startup-and-health gate, then the protocol
@@ -302,7 +308,9 @@ Current startup proceeds in this order:
 10. The startup gate marks the runtime ready, synchronously rolls back and closes
     the boot claim, then unblocks health responses. Startup reconcile follows
     outside the claim and establishes the first provider-backed snapshot;
-    provider health and harness-version probes fill caches in the background. A
+    provider health and harness-readiness probes fill caches in the background.
+    Readiness initialization loads current persisted harness-event evidence once,
+    then probes catalog providers concurrently without blocking startup. A
     stop requested before readiness is terminal: health remains gated, socket
     and pidfile cleanup finish while the claim is held, and the outer lifecycle
     `finally` releases it before exit.
@@ -420,6 +428,24 @@ replay guarantee requires sequence identity, retention semantics, bounded
 subscriber behavior, and a protocol contract rather than an adapter-local
 patch.
 
+### Harness Readiness
+
+`harness.readiness.get` is a direct query, not a recorded command. With no
+refresh request it returns synchronous process-cache truth and performs no IO;
+`refresh: true` single-flights and awaits only the named catalog provider. The
+query emits no readiness event. Unknown catalog ids fail with
+`HARNESS_READINESS_PROVIDER_NOT_FOUND`.
+
+Provider adapters report strict CLI, authentication, launchability, and
+tracking-setup facts without installing, repairing, or rewriting anything.
+The Observer policy combines those facts with configuration, cache freshness,
+and accepted harness-event evidence. A 15-second provider deadline bounds each
+probe, fresh results expire after 30 seconds, and stale or failed refreshes
+project an unknown decision. Reconcile and `getSnapshot` synchronously overlay
+compact summaries for the complete catalog while `snapshot.harnesses` remains
+the active launch/discovery subset. Catalog-only entries never participate in
+health, discovery, launch building, or hook routing.
+
 ### External Launch
 
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
@@ -458,7 +484,7 @@ from the diagnostic use case.
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
-| Background refresh | Provider probes and metadata refresh are best-effort and must report failure without blocking the primary reconcile result. |
+| Background refresh | Provider health, harness readiness, and metadata refresh are best-effort and must report failure without blocking the primary reconcile result. Harness readiness probes are concurrent across providers and single-flight per provider. |
 
 Retry belongs at an adapter or runtime boundary whose owner can state why the
 operation is safe to repeat. Do not retry a mutation without an idempotency key,

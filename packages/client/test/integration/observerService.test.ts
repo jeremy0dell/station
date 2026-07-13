@@ -6,6 +6,7 @@ import type {
   DoctorReport,
   HarnessEventReport,
   HarnessEventReportReceipt,
+  HarnessReadinessQueryResult,
   ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
@@ -112,6 +113,91 @@ describe("observer client service", () => {
     await server.close();
   });
 
+  it("queries harness readiness through the protocol with its own timeout budget", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const queries: Array<{ provider: string; refresh?: boolean }> = [];
+    const server = await startProtocolServer({
+      socketPath,
+      api: fakeApi({
+        getHarnessReadiness: async (params) => {
+          queries.push(params);
+          await delay(25);
+          return fakeHarnessReadiness(params.provider);
+        },
+      }),
+    });
+    const service = createObserverService({
+      socketPath,
+      timeoutMs: 10,
+      requestId: ids("readiness"),
+    });
+
+    try {
+      await expect(
+        service.getHarnessReadiness({ provider: "codex", refresh: true }),
+      ).resolves.toMatchObject({
+        readiness: { provider: "codex", decision: "launch_ready" },
+      });
+      expect(queries).toEqual([{ provider: "codex", refresh: true }]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("normalizes unknown harness readiness failures", async () => {
+    const service = createObserverService({
+      client: fakeClient({
+        getHarnessReadiness: async () => {
+          throw new Error("raw readiness failure");
+        },
+      }),
+    });
+
+    await expect(service.getHarnessReadiness({ provider: "codex" })).rejects.toMatchObject({
+      code: "CLIENT_HARNESS_READINESS_FAILED",
+    });
+  });
+
+  it("normalizes harness readiness SafeErrors without dropping diagnostic IDs", async () => {
+    const service = createObserverService({
+      client: fakeClient({
+        getHarnessReadiness: async () => {
+          throw {
+            tag: "HarnessReadinessError",
+            code: "HARNESS_READINESS_PROVIDER_NOT_FOUND",
+            message: "The requested harness is absent from the catalog.",
+            provider: "missing",
+            diagnosticId: "diag_readiness_missing",
+            traceId: "trc_readiness_missing",
+          };
+        },
+      }),
+    });
+
+    await expect(service.getHarnessReadiness({ provider: "missing" })).rejects.toMatchObject({
+      code: "CLIENT_HARNESS_READINESS_FAILED",
+      provider: "missing",
+      diagnosticId: "diag_readiness_missing",
+      traceId: "trc_readiness_missing",
+    });
+  });
+
+  it("times out harness readiness with the readiness-specific client error", async () => {
+    const service = createObserverService({
+      readinessTimeoutMs: 1,
+      client: fakeClient({
+        getHarnessReadiness: async () => new Promise(() => undefined),
+      }),
+    });
+
+    await expect(
+      service.getHarnessReadiness({ provider: "codex", refresh: true }),
+    ).rejects.toMatchObject({
+      tag: "TimeoutError",
+      code: "CLIENT_HARNESS_READINESS_TIMEOUT",
+    });
+  });
+
   it("maps protocol SafeErrors without dropping diagnostic IDs", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await startProtocolServer({
@@ -206,6 +292,7 @@ describe("observer client service", () => {
           at: fixtureNow,
         }),
         getSnapshot: async () => createCommandSnapshot("idle"),
+        getHarnessReadiness: async (params) => fakeHarnessReadiness(params.provider),
         dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
         getCommand: async () => undefined,
         waitForCommand: async () => commandRecord("cmd_1", "succeeded") as TerminalCommandRecord,
@@ -382,6 +469,8 @@ function fakeApi(
         at: fixtureNow,
       })),
     getSnapshot: overrides.getSnapshot ?? (async () => snapshot),
+    getHarnessReadiness:
+      overrides.getHarnessReadiness ?? (async (params) => fakeHarnessReadiness(params.provider)),
     subscribe: overrides.subscribe ?? (() => stream([])),
     dispatch:
       overrides.dispatch ??
@@ -471,6 +560,7 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
     health: async () => fakeHealth(),
     stop: async () => ({ schemaVersion: STATION_SCHEMA_VERSION, stopped: true, at: fixtureNow }),
     getSnapshot: async () => createCommandSnapshot("idle"),
+    getHarnessReadiness: async (params) => fakeHarnessReadiness(params.provider),
     dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
     getCommand: async () => undefined,
     waitForCommand: async (commandId) =>
@@ -506,6 +596,28 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
     collectDiagnostics: async () => fakeDiagnostics(),
     subscribe: () => stream([]),
     ...overrides,
+  };
+}
+
+function fakeHarnessReadiness(provider = "codex"): HarnessReadinessQueryResult {
+  return {
+    readiness: {
+      provider,
+      label: provider === "codex" ? "Codex" : provider,
+      kind: "built_in",
+      configuration: "configured",
+      cli: "available",
+      authentication: "ready",
+      launchability: "ready",
+      trackingSetup: "prepared",
+      tracking: "prepared_unverified",
+      freshness: "fresh",
+      decision: "launch_ready",
+      revision: "readiness-revision-1",
+      explanation: `${provider} is prepared for Station.`,
+      actions: ["use", "technical_details"],
+      technicalDetails: [],
+    },
   };
 }
 

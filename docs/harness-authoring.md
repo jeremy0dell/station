@@ -59,7 +59,34 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
   check that `stn` and `stn-ingress` on PATH resolve to the same checkout.
 - Add the harness to setup checks if it needs system dependencies.
 
-## 6. Verify live
+## 6. Add read-only readiness
+
+Implement `HarnessReadinessProvider` separately from the active
+`HarnessProvider`. Its `probe` reports strict provider-owned CLI,
+authentication, launchability, and tracking-setup facts; it must not call an
+installer, rewrite provider files, repair hooks, activate discovery, or build a
+launch. Catalog-only providers implement only this read-only role.
+
+- Run version and auth commands through the shared external-command boundary.
+  Only executable-not-found/`ENOENT` proves a missing CLI; timeouts,
+  permissions, malformed output, and other failures are unknown.
+- Parse provider output once with a provider-local strict Zod schema. Preserve
+  independently proven facts when another check fails, and expose only safe
+  `{ code, message }` technical details.
+- Classify tracking as prepared only when the exact requested artifact and
+  generated content are present. Whole absence needs preparation; partial,
+  stale, corrupt, or conflicting artifacts need repair; inspection failures
+  are unknown. Existing artifacts do not count when `install_hooks` is not
+  enabled.
+- Keep latest-version lookup optional and non-decision-bearing. Configured
+  custom harnesses do not invent a command or path and perform no external
+  probe.
+- Unit tests inject command runners and temporary homes, cover available,
+  missing, and indeterminate facts plus exact/absent/drifted/failed tracking,
+  and compare filesystem trees before and after every probe to prove zero
+  writes.
+
+## 7. Verify live
 
 One end-to-end pass per attention scenario: trigger it in the real harness,
 confirm the row flips and holds until resolved, and confirm the census log

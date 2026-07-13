@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   ProtocolEventEnvelopeSchema,
+  ProtocolParamSchemas,
   ProtocolRequestSchema,
   ProtocolResponseSchema,
 } from "@station/protocol";
@@ -22,12 +23,28 @@ describe("protocol message envelopes", () => {
     expect(ProtocolEventEnvelopeSchema.safeParse(messages.eventEnvelope).success).toBe(true);
     expect(ProtocolRequestSchema.safeParse(messages.doctorRequest).success).toBe(true);
     expect(ProtocolRequestSchema.safeParse(messages.diagnosticsRequest).success).toBe(true);
+    expect(ProtocolRequestSchema.safeParse(messages.readinessRequest).success).toBe(true);
+  });
+
+  it("strictly validates harness readiness query params", () => {
+    expect(
+      ProtocolParamSchemas["harness.readiness.get"].safeParse({
+        provider: "codex",
+        refresh: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      ProtocolParamSchemas["harness.readiness.get"].safeParse({
+        provider: "codex",
+        providerData: { raw: true },
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects unknown protocol methods", () => {
     expect(
       ProtocolRequestSchema.safeParse({
-        schemaVersion: "0.7.0",
+        schemaVersion: "0.8.0",
         jsonrpc: "2.0",
         id: "req_bad",
         method: "provider.rawCall",

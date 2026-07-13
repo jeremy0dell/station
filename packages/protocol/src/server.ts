@@ -4,6 +4,7 @@ import {
   AgentReportExternalExitParamsSchema,
   DiagnosticCollectionOptionsSchema,
   DoctorOptionsSchema,
+  HarnessReadinessQueryParamsSchema,
   SafeErrorSchema,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
@@ -29,6 +30,7 @@ import { listenUnixSocket, type NdjsonConnection, type UnixSocketServer } from "
 
 const defaultRequestTimeoutMs = 5000;
 const diagnosticRequestTimeoutMs = 30_000;
+const readinessRequestTimeoutMs = 30_000;
 
 export type ProtocolServerOptions = {
   socketPath: string;
@@ -120,6 +122,8 @@ function protocolHandlerTimeoutMs(method: ProtocolMethod, requestTimeoutMs: numb
     case "doctor.run":
     case "diagnostics.collect":
       return Math.max(requestTimeoutMs, diagnosticRequestTimeoutMs);
+    case "harness.readiness.get":
+      return Math.max(requestTimeoutMs, readinessRequestTimeoutMs);
     default:
       return requestTimeoutMs;
   }
@@ -162,6 +166,10 @@ async function routeSingleResponseRequest(
       case "observer.harnessEvent.report": {
         const params = HarnessEventReportParamsSchema.parse(request.params);
         return await api.reportHarnessEvent(params.report);
+      }
+      case "harness.readiness.get": {
+        const params = HarnessReadinessQueryParamsSchema.parse(request.params);
+        return await api.getHarnessReadiness(params);
       }
       case "agent.prepareExternalLaunch": {
         const params = AgentPrepareExternalLaunchParamsSchema.parse(request.params);

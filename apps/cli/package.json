@@ -48,6 +48,7 @@
     "@station/codex": "workspace:*",
     "@station/cursor": "workspace:*",
     "@station/github-repository": "workspace:*",
+    "@station/harness-shared": "workspace:*",
     "@station/opencode": "workspace:*",
     "@station/observability": "workspace:*",
     "@station/observer": "workspace:*",

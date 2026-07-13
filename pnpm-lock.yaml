@@ -59,6 +59,9 @@ importers:
       '@station/github-repository':
         specifier: workspace:*
         version: link:../../integrations/repository/github
+      '@station/harness-shared':
+        specifier: workspace:*
+        version: link:../../packages/harness-shared
       '@station/observability':
         specifier: workspace:*
         version: link:../../packages/observability

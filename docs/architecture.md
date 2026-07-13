@@ -17,8 +17,8 @@ The main runtime model is:
 
 ```text
 config declares managed projects and defaults
-providers observe external systems
-observer correlates provider truth into snapshots and commands
+providers observe external systems and report read-only readiness facts
+observer correlates provider truth into snapshots, readiness queries, and commands
 protocol exposes observer APIs over NDJSON transport
 CLI starts, controls, and debugs the system
 TUI renders snapshots/events and submits typed commands
@@ -26,10 +26,10 @@ TUI renders snapshots/events and submits typed commands
 
 The repo is organized around these boundaries:
 
-- `apps/observer` owns runtime correlation, reconciliation, command routing, provider health, persistence, hook ingestion, harness ingress queuing, diagnostics, and snapshot publication.
+- `apps/observer` owns runtime correlation, reconciliation, command routing, provider health, the process-lifetime harness-readiness cache and policy, persistence, hook ingestion, harness ingress queuing, diagnostics, and snapshot publication.
 - `apps/cli` owns the `stn` command surface: observer lifecycle, setup/doctor, reconcile/snapshot, hooks, debug trace, debug bundles, and terminal UI entrypoints.
 - `station/` owns the terminal UI (the OpenTUI renderer, package `@station/workspace`). It consumes observer snapshots/events through `@station/protocol` and must not call providers directly.
-- `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, commands, events, snapshots, observations, provider ports, hooks, diagnostics, and safe errors.
+- `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, harness readiness, commands, events, snapshots, observations, provider ports, hooks, diagnostics, and safe errors.
 - `packages/protocol` owns the observer NDJSON transport: envelopes, method mapping, validation execution, and client/server mechanics.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, typed error conversion, and atomic text replacement.
 - `packages/client` owns the framework-neutral rich-client observer runtime: snapshot loading, the event subscription/reconnect loop, event-to-snapshot reduction, and command dispatch/completion-wait wrappers consumed by the Station UI.
@@ -45,7 +45,7 @@ No single layer owns all truth.
 - Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
 - Worktree providers are authoritative for external worktree existence and worktree metadata they can prove.
 - Terminal providers are authoritative for terminal topology and provider-owned target identity.
-- Harness providers are authoritative for agent launch, discovery, event ingestion, and status signals they can prove.
+- Active harness providers are authoritative for agent launch, discovery, event ingestion, and status signals they can prove; readiness providers separately own the read-only readiness facts they can prove.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
 - Observer SQLite is durable observer memory for commands, events, correlations, provider observations, and current metadata cache rows.
 - Observer snapshots are the normalized current graph exposed to clients.
@@ -56,6 +56,7 @@ When these disagree, reconcile from config, providers, and current observer stat
 ## Boundary Rules
 
 - Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces.
+- Harness readiness uses a separate read-only provider role and catalog. Catalog membership must not activate launch, discovery, health probing, or setup mutation; readiness probes report facts while Observer policy owns the normalized decision.
 - Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward opaque managed-terminal attachments returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or expose Station Host PTY and socket mechanics.
 - Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; it must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.

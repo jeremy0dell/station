@@ -209,6 +209,83 @@ describe("observer providers", () => {
     expect([...registry.harnesses.keys()]).toEqual(["codex", "opencode", "pi", "scripted"]);
   });
 
+  it("keeps the five built-in readiness adapters separate from active harnesses", () => {
+    const registry = createProviderRegistry(config);
+
+    expect([...registry.harnesses.keys()]).toEqual(["codex"]);
+    expect([...registry.harnessCatalog.keys()]).toEqual([
+      "codex",
+      "cursor",
+      "opencode",
+      "pi",
+      "claude",
+    ]);
+    expect(
+      [...registry.harnessCatalog.values()].map(({ provider, label, configuration }) => ({
+        id: provider.id,
+        label,
+        configuration,
+      })),
+    ).toEqual([
+      { id: "codex", label: "Codex", configuration: "configured" },
+      { id: "cursor", label: "Cursor Agent", configuration: "not_configured" },
+      { id: "opencode", label: "OpenCode", configuration: "not_configured" },
+      { id: "pi", label: "Pi", configuration: "not_configured" },
+      { id: "claude", label: "Claude Code", configuration: "not_configured" },
+    ]);
+  });
+
+  it("appends configured custom readiness adapters in deterministic config order", async () => {
+    const registry = createProviderRegistry({
+      ...config,
+      defaults: { ...config.defaults, harness: "custom-global" },
+      projects: [
+        {
+          ...firstProject(),
+          defaults: { ...firstProject().defaults, harness: "custom-project" },
+        },
+        {
+          ...firstProject(),
+          id: "api",
+          defaults: { ...firstProject().defaults, harness: "codex" },
+        },
+      ],
+      harness: {
+        claude: {},
+        "custom-table": {},
+        "custom-global": {},
+      },
+    });
+
+    expect([...registry.harnessCatalog.keys()]).toEqual([
+      "codex",
+      "cursor",
+      "opencode",
+      "pi",
+      "claude",
+      "custom-global",
+      "custom-project",
+      "custom-table",
+    ]);
+    await expect(registry.harnessCatalog.get("custom-table")?.provider.probe()).resolves.toEqual({
+      cli: "unknown",
+      authentication: "unknown",
+      launchability: "unknown",
+      trackingSetup: "unsupported",
+      technicalDetails: [],
+    });
+  });
+
+  it("reports disabled readiness configuration without changing active-provider selection", () => {
+    const registry = createProviderRegistry({
+      ...config,
+      harness: { codex: { enabled: false } },
+    });
+
+    expect([...registry.harnesses.keys()]).toEqual(["codex"]);
+    expect(registry.harnessCatalog.get("codex")?.configuration).toBe("disabled");
+  });
+
   it("keeps the observer terminal intent runner out of contracts exports", () => {
     expect("TerminalIntentRunner" in contracts).toBe(false);
     expect("DefaultTerminalIntentRunner" in contracts).toBe(false);

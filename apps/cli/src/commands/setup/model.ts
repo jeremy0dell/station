@@ -1,3 +1,4 @@
+import { builtInHarnessIds } from "@station/harness-shared";
 import { z } from "zod";
 
 export const setupTiers = ["required", "recommended", "optional"] as const;
@@ -12,7 +13,7 @@ export const setupActionKinds = [
   "noop",
 ] as const;
 export const setupActionStatuses = ["pending", "completed", "failed", "skipped"] as const;
-export const supportedHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
+export const supportedHarnessIds = builtInHarnessIds;
 
 export const SetupTierSchema = z.enum(setupTiers);
 export const SetupStatusSchema = z.enum(setupStatuses);

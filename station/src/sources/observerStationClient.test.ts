@@ -83,6 +83,16 @@ describe("createObserverStationClient", () => {
     expect(client.state.getState().snapshot).toBe(refreshed);
   });
 
+  it("passes harness readiness queries through without refreshing runtime state", async () => {
+    const fake = createFakeObserverService(mockObserverSnapshot);
+    const client = track(createObserverStationClient({ service: fake.service }));
+
+    await expect(
+      client.service.getHarnessReadiness({ provider: "codex", refresh: true }),
+    ).resolves.toMatchObject({ readiness: { provider: "codex", decision: "launch_ready" } });
+    expect(fake.readinessQueries).toEqual([{ provider: "codex", refresh: true }]);
+  });
+
   it("keeps the last good snapshot with a calm display-only status when the observer goes away", async () => {
     const fake = createFakeObserverService(mockObserverSnapshot);
     const client = track(createObserverStationClient({ service: fake.service }));
@@ -207,6 +217,7 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
   const dispatchedTypes: string[] = [];
   const waitedForCommandIds: string[] = [];
   const reconcileReasons: Array<string | undefined> = [];
+  const readinessQueries: Array<{ provider: string; refresh?: boolean }> = [];
 
   const service: ObserverService = {
     loadSnapshot: async () => snapshot,
@@ -243,6 +254,28 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
       reconcileReasons.push(reason);
       return snapshot;
     },
+    getHarnessReadiness: async (params) => {
+      readinessQueries.push(params);
+      return {
+        readiness: {
+          provider: params.provider,
+          label: params.provider,
+          kind: "built_in",
+          configuration: "configured",
+          cli: "available",
+          authentication: "ready",
+          launchability: "ready",
+          trackingSetup: "prepared",
+          tracking: "prepared_unverified",
+          freshness: "fresh",
+          decision: "launch_ready",
+          revision: "fake-readiness-revision",
+          explanation: `${params.provider} is prepared for Station.`,
+          actions: ["use", "technical_details"],
+          technicalDetails: [],
+        },
+      };
+    },
     prepareExternalLaunch: async (params) => ({
       kind: "existing-session",
       sessionId: `ses_${params.worktreeId}`,
@@ -259,6 +292,7 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
     dispatchedTypes,
     waitedForCommandIds,
     reconcileReasons,
+    readinessQueries,
     setSnapshot: (next: StationSnapshot) => {
       snapshot = next;
     },

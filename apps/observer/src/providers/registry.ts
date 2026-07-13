@@ -1,6 +1,8 @@
 import type {
+  HarnessCatalogKind,
+  HarnessConfiguration,
   HarnessProvider,
-  HarnessVersionInfo,
+  HarnessReadinessProvider,
   ManagedTerminalLifecycle,
   ProviderHealth,
   ProviderHookAdapter,
@@ -9,7 +11,6 @@ import type {
   TerminalProvider,
   WorktreeProvider,
 } from "@station/contracts";
-import { withTimeout } from "@station/runtime";
 import {
   ProviderHealthCache,
   type ProviderHealthCacheTuning,
@@ -39,9 +40,24 @@ export type ProviderRegistryInput = {
    */
   terminals?: Iterable<TerminalProvider> | undefined;
   harnesses: Iterable<HarnessProvider> | Map<string, HarnessProvider>;
+  harnessCatalog?:
+    | Iterable<HarnessReadinessRegistration>
+    | Map<string, HarnessReadinessRegistration>
+    | undefined;
   repositories?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
   hookAdapters?: Iterable<ProviderHookAdapter> | undefined;
   healthCache?: ProviderHealthCacheTuning | undefined;
+};
+
+export type HarnessReadinessRegistration = {
+  provider: HarnessReadinessProvider;
+  label: string;
+  kind: HarnessCatalogKind;
+  configuration: HarnessConfiguration;
+  preparation: {
+    prepare: boolean;
+    repair: boolean;
+  };
 };
 
 export class ProviderRegistry {
@@ -52,6 +68,7 @@ export class ProviderRegistry {
   readonly defaultTerminalId: ProviderId;
   readonly managedTerminal: ManagedTerminalLifecycle | undefined;
   readonly harnesses: Map<string, HarnessProvider>;
+  readonly harnessCatalog: Map<string, HarnessReadinessRegistration>;
   readonly repositories: Map<string, RepositoryProvider>;
   readonly hookAdapters: Map<string, ProviderHookAdapter>;
   readonly healthCache: ProviderHealthCache;
@@ -79,6 +96,19 @@ export class ProviderRegistry {
           throw new Error(`Duplicate harness provider id: ${provider.id}`);
         }
         this.harnesses.set(provider.id, provider);
+      }
+    }
+
+    if (input.harnessCatalog instanceof Map) {
+      this.harnessCatalog = new Map(input.harnessCatalog);
+    } else {
+      this.harnessCatalog = new Map();
+      for (const registration of input.harnessCatalog ?? []) {
+        const id = registration.provider.id;
+        if (this.harnessCatalog.has(id)) {
+          throw new Error(`Duplicate harness readiness provider id: ${id}`);
+        }
+        this.harnessCatalog.set(id, registration);
       }
     }
 
@@ -115,48 +145,6 @@ export class ProviderRegistry {
       throw new Error(`Default terminal provider is not registered: ${this.defaultTerminalId}`);
     }
     return provider;
-  }
-
-  /** Version probe results; snapshots read this synchronously and omit absentees. */
-  readonly harnessVersions = new Map<string, HarnessVersionInfo>();
-
-  /**
-   * Best-effort background probe (D17): fire-and-forget at boot. Each probe is
-   * timeboxed and a failure simply leaves the harness out of the cache, so
-   * reconciliation never waits on a CLI or the network.
-   */
-  async refreshHarnessVersions(options?: { timeoutMs?: number }): Promise<void> {
-    const timeoutMs = options?.timeoutMs ?? 15_000;
-    await Promise.all(
-      Array.from(this.harnesses.values()).map(async (provider) => {
-        const versionInfo = provider.versionInfo;
-        if (versionInfo === undefined) {
-          return;
-        }
-        try {
-          const info = await withTimeout(() => versionInfo(), {
-            timeoutMs,
-            error: {
-              tag: "RuntimeError",
-              code: "HARNESS_VERSION_PROBE_FAILED",
-              message: "Harness version probe failed.",
-              provider: provider.id,
-            },
-            timeoutError: {
-              tag: "TimeoutError",
-              code: "HARNESS_VERSION_PROBE_TIMEOUT",
-              message: "Harness version probe timed out.",
-              provider: provider.id,
-            },
-          });
-          if (info.installedVersion !== undefined || info.latestVersion !== undefined) {
-            this.harnessVersions.set(provider.id, info);
-          }
-        } catch {
-          // Unknown stays unknown; consumers omit the badge.
-        }
-      }),
-    );
   }
 }
 

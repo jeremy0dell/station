@@ -7,7 +7,6 @@ import type {
   ProviderDoctorContext,
 } from "@station/contracts";
 import {
-  type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHookDoctorOptions,
@@ -19,14 +18,9 @@ import { cursorProviderErrorFromUnknown } from "./errors.js";
 import { normalizeCursorRawEvent } from "./events.js";
 import { doctorCursorHooks } from "./hooks.js";
 import { buildCursorLaunchPlan, type CursorLaunchOptions } from "./launch.js";
+import type { CursorHarnessReadinessProviderOptions } from "./readiness.js";
 
-export type CursorHarnessProviderOptions = CommonHarnessProviderOptions & {
-  installHooks?: boolean;
-  configPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
+export type CursorHarnessProviderOptions = CursorHarnessReadinessProviderOptions & {
   resume?: boolean;
 };
 

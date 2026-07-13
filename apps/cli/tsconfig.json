@@ -11,6 +11,7 @@
       "@station/contracts": ["../../packages/contracts/dist/index.d.ts"],
       "@station/cursor": ["../../integrations/harness/cursor/dist/index.d.ts"],
       "@station/github-repository": ["../../integrations/repository/github/dist/index.d.ts"],
+      "@station/harness-shared": ["../../packages/harness-shared/dist/index.d.ts"],
       "@station/observer": ["../observer/dist/index.d.ts"],
       "@station/opencode": ["../../integrations/harness/opencode/dist/index.d.ts"],
       "@station/observability": ["../../packages/observability/dist/index.d.ts"],

@@ -8,8 +8,12 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
-import { createObserverCore, ProviderRegistry } from "../../src/internal";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createHarnessReadinessService,
+  createObserverCore,
+  ProviderRegistry,
+} from "../../src/internal";
 import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -66,6 +70,75 @@ const config: StationConfig = {
 };
 
 describe("observer reconcile with fake providers", () => {
+  it("projects the full readiness catalog without activating catalog-only providers", async () => {
+    const catalogIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
+    const catalogProviders = catalogIds.map((id) => ({
+      id,
+      probe: vi.fn(async () => ({
+        cli: "available" as const,
+        authentication: id === "pi" ? ("not_applicable" as const) : ("ready" as const),
+        launchability: "ready" as const,
+        trackingSetup: "prepared" as const,
+        installedVersion: "1.0.0",
+        latestVersion: "1.1.0",
+        technicalDetails: [],
+      })),
+      discoverRuns: vi.fn(),
+      buildLaunch: vi.fn(),
+    }));
+    const active = new FakeHarnessProvider({ id: "codex", now });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [active],
+      harnessCatalog: catalogProviders.map((provider) => ({
+        provider,
+        label: provider.id,
+        kind: "built_in",
+        configuration: provider.id === "codex" ? "configured" : "not_configured",
+        preparation: { prepare: provider.id !== "pi", repair: provider.id !== "pi" },
+      })),
+    });
+    const readiness = createHarnessReadinessService({
+      catalog: providers.harnessCatalog,
+      clock: { now: () => new Date(now) },
+    });
+    await readiness.refreshAll();
+    const core = createObserverCore({
+      config: {
+        ...config,
+        defaults: { ...config.defaults, harness: "codex" },
+        projects: config.projects.map((project) => ({
+          ...project,
+          defaults: { ...project.defaults, harness: "codex" },
+        })),
+      },
+      providers,
+      readiness,
+      clock: { now: () => new Date(now) },
+    });
+
+    const snapshot = await core.reconcile("readiness-catalog");
+
+    expect(snapshot.harnesses).toEqual([
+      {
+        id: "codex",
+        label: "codex",
+        installedVersion: "1.0.0",
+        latestVersion: "1.1.0",
+        updateAvailable: true,
+      },
+    ]);
+    expect(snapshot.harnessCatalog?.map((harness) => harness.id)).toEqual(catalogIds);
+    expect(snapshot.harnessCatalog?.[0]?.readiness.status).toBe("prepared");
+    readiness.markTrackingObserved("codex");
+    expect(core.getSnapshot().harnessCatalog?.[0]?.readiness.status).toBe("ready");
+    for (const provider of catalogProviders) {
+      expect(provider.discoverRuns).not.toHaveBeenCalled();
+      expect(provider.buildLaunch).not.toHaveBeenCalled();
+    }
+  });
+
   it("correlates configured projects, fake observations, provider health, and timing", async () => {
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({

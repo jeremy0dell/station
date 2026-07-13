@@ -1,4 +1,4 @@
-import { harnessDefinitions } from "./checks/harnesses.js";
+import { builtInHarnessCatalogById } from "@station/harness-shared";
 import type { SetupAction, SetupFacts, SetupHarnessFact, SetupPlan } from "./model.js";
 
 type HarnessInstallDefinition = {
@@ -44,7 +44,7 @@ export function missingHarnessInstallActions(
   const actions: SetupAction[] = [];
   for (const definition of harnessInstallDefinitions) {
     if (!missing.has(definition.id)) continue;
-    const harness = harnessDefinitions.find((candidate) => candidate.id === definition.id);
+    const harness = builtInHarnessCatalogById.get(definition.id);
     if (harness === undefined) continue;
     actions.push({
       id: `install-harness-${definition.id}`,

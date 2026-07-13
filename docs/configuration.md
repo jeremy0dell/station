@@ -120,20 +120,38 @@ accepted by config validation but become unavailable providers at runtime.
 
 The only loosely-typed provider table: `[harness.claude]` is known, and any other id
 (`codex`, `opencode`, …) is accepted via a catchall — so a **misspelled harness id
-is silently accepted** as an unused harness.
+is silently accepted** as a configured custom id rather than rejected.
+
+The Observer's read-only readiness catalog always contains the five built-ins
+in this order: Codex, Cursor Agent, OpenCode, Pi, Claude Code. Configured custom
+ids follow in first-reference order: the global default, project defaults in
+config order, then `[harness.*]` table order, with duplicates and built-ins
+removed. A built-in is `configured` when referenced by one of those locations,
+`not_configured` otherwise, and `disabled` when its table sets
+`enabled = false`. A configured custom id is cataloged but has unknown
+CLI/auth/launch facts and unsupported tracking because Station does not invent
+a command or filesystem path for it.
+
+Catalog readiness is informational and read-only. It does not broaden the
+active launch/discovery provider set, and `enabled = false` is not yet enforced
+as a launch gate. Readiness probes may run version/auth commands and inspect
+provider setup, but never install or repair it.
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `enabled` | bool | |
+| `enabled` | bool | `false` reports this catalog entry as disabled; active-provider compatibility behavior is unchanged. |
 | `command` | string | e.g. `"claude"`, `"codex"`. Overrides provider-specific `STATION_*_BIN` fallbacks. |
 | `profile` | string | Named profile passed to the harness. |
 | `permission_mode` | `standard` \| `yolo` | **`auto` is accepted only under `[harness.claude]`.** |
 | `sandbox_mode` | string | Free-form, e.g. codex `"workspace-write"`. |
 | `approval_policy` | string | Free-form, e.g. codex `"on-request"`. |
-| `install_hooks` | bool | Whether STATION installs provider hooks for this harness. |
+| `install_hooks` | bool | Whether STATION installs provider hooks for this harness. Readiness does not count existing hook/plugin artifacts as prepared unless this is `true`. |
 | `resume` | bool | Whether to resume sessions. |
 
 Harness command fallback env vars:
+
+Launch and read-only readiness probes use the same command resolution; there is
+no separate readiness command setting.
 
 | Harness | Env var | Default command |
 | --- | --- | --- |

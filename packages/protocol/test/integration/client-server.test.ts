@@ -1,6 +1,7 @@
 import type {
   CommandRecord,
   HarnessEventReport,
+  HarnessReadinessQueryParams,
   ProviderHookEvent,
   StationCommand,
 } from "@station/contracts";
@@ -13,7 +14,13 @@ import {
 } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 import { createTempSocketPath } from "../../../../tests/support/sockets";
-import { createFakeObserverApi, emptySnapshot, ids, protocolTestNow } from "../support/fixtures.js";
+import {
+  createFakeObserverApi,
+  emptySnapshot,
+  harnessReadinessResult,
+  ids,
+  protocolTestNow,
+} from "../support/fixtures.js";
 
 describe("protocol client/server", () => {
   it("routes health, snapshot, dispatch, get, reconcile, and hook ingestion over a socket", async () => {
@@ -104,6 +111,166 @@ describe("protocol client/server", () => {
     });
 
     await server.close();
+  });
+
+  it("round-trips cached and targeted harness readiness queries", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const queries: HarnessReadinessQueryParams[] = [];
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        getHarnessReadiness: async (params) => {
+          queries.push(params);
+          return harnessReadinessResult(params.provider);
+        },
+      }),
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("readiness") });
+
+    try {
+      await expect(client.getHarnessReadiness({ provider: "codex" })).resolves.toMatchObject({
+        readiness: { provider: "codex", decision: "launch_ready" },
+      });
+      await expect(
+        client.getHarnessReadiness({ provider: "cursor", refresh: true }),
+      ).resolves.toMatchObject({
+        readiness: { provider: "cursor", decision: "launch_ready" },
+      });
+      expect(queries).toEqual([{ provider: "codex" }, { provider: "cursor", refresh: true }]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects unknown harness readiness params before calling the API", async () => {
+    const { socketPath } = await createTempSocketPath();
+    let queryCount = 0;
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        getHarnessReadiness: async (params) => {
+          queryCount += 1;
+          return harnessReadinessResult(params.provider);
+        },
+      }),
+    });
+
+    try {
+      const response = await sendRawRequest(socketPath, {
+        schemaVersion: STATION_SCHEMA_VERSION,
+        jsonrpc: "2.0",
+        id: "readiness_unknown_params",
+        method: "harness.readiness.get",
+        params: { provider: "codex", providerData: { raw: true } },
+      });
+      expect(response).toMatchObject({
+        id: "readiness_unknown_params",
+        error: { code: "PROTOCOL_VALIDATION_FAILED" },
+      });
+      expect(queryCount).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects provider-specific fields in harness readiness results", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const request = await iterator.next();
+        const requestId =
+          typeof request.value === "object" &&
+          request.value !== null &&
+          "id" in request.value &&
+          typeof request.value.id === "string"
+            ? request.value.id
+            : "unknown";
+        const result = harnessReadinessResult();
+        connection.send({
+          schemaVersion: STATION_SCHEMA_VERSION,
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            readiness: {
+              ...result.readiness,
+              providerData: { rawDoctorOutput: "secret" },
+            },
+          },
+        });
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      timeoutMs: 500,
+      requestId: ids("readiness-result"),
+    });
+
+    try {
+      await expect(client.getHarnessReadiness({ provider: "codex" })).rejects.toMatchObject({
+        code: "PROTOCOL_RESPONSE_VALIDATION_FAILED",
+        message: "Observer protocol response failed validation for harness.readiness.get.",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("preserves SafeError diagnostic IDs from harness readiness queries", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        getHarnessReadiness: async () => {
+          throw {
+            tag: "HarnessReadinessError",
+            code: "HARNESS_READINESS_PROVIDER_NOT_FOUND",
+            message: "The requested harness is absent from the catalog.",
+            diagnosticId: "diag_readiness_missing",
+            traceId: "trc_readiness_missing",
+          };
+        },
+      }),
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("readiness-error") });
+
+    try {
+      await expect(client.getHarnessReadiness({ provider: "missing" })).rejects.toMatchObject({
+        code: "HARNESS_READINESS_PROVIDER_NOT_FOUND",
+        diagnosticId: "diag_readiness_missing",
+        traceId: "trc_readiness_missing",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses the extended server budget for harness readiness queries", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const server = await startProtocolServer({
+      socketPath,
+      requestTimeoutMs: 10,
+      api: createFakeObserverApi({
+        getHarnessReadiness: async (params) => {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return harnessReadinessResult(params.provider);
+        },
+      }),
+    });
+    const client = createObserverClient({
+      socketPath,
+      timeoutMs: 500,
+      requestId: ids("readiness-timeout"),
+    });
+
+    try {
+      await expect(
+        client.getHarnessReadiness({ provider: "codex", refresh: true }),
+      ).resolves.toMatchObject({ readiness: { provider: "codex" } });
+    } finally {
+      await server.close();
+    }
   });
 
   it("round-trips agent.prepareExternalLaunch and agent.reportExternalExit", async () => {
@@ -284,7 +451,7 @@ describe("protocol client/server", () => {
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
         message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.7.0.",
+          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.8.0.",
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

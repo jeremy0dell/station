@@ -22,6 +22,8 @@ export * from "./metadata/repositoryGit.js";
 export * from "./migrations/index.js";
 export * from "./persistence/index.js";
 export * from "./providers/healthCache.js";
+export * from "./providers/readinessPolicy.js";
+export * from "./providers/readinessService.js";
 export * from "./providers/registry.js";
 export * from "./reconcile/core.js";
 export * from "./reconcile/graph.js";

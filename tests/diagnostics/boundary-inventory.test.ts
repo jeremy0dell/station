@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const roots = ["apps", "packages", "integrations"];
 const providerNeutralSourceRoots = [
   "packages/contracts/src",
+  "packages/harness-shared/src",
   "packages/observability/src",
   "packages/protocol/src",
   "packages/runtime/src",
@@ -22,6 +23,31 @@ const observerConcreteProviderImports = [
   "@station/scripted-harness",
   "@station/terminal",
   "@station/github-repository",
+];
+
+const harnessReadinessApplicationFiles = [
+  "apps/observer/src/providers/readinessPolicy.ts",
+  "apps/observer/src/providers/readinessService.ts",
+];
+
+const harnessReadinessActiveProviderMarkers = [
+  /\bHarnessProvider\b/,
+  /\.harnesses\b/,
+  /\bdiscoverRuns\b/,
+  /\bbuildLaunch\b/,
+  /\bprepareExternalLaunch\b/,
+];
+
+const readinessPolicyForbiddenRuntimeImports = [
+  "@station/config",
+  "@station/protocol",
+  "@station/runtime",
+  "node:child_process",
+  "node:fs",
+  "node:fs/promises",
+  "node:net",
+  "node:sqlite",
+  "node:timers/promises",
 ];
 
 const observerPersistenceBundleAllowlist = new Set([
@@ -168,6 +194,34 @@ describe("boundary inventory guard", () => {
       for (const providerImport of observerConcreteProviderImports) {
         if (source.includes(providerImport)) {
           violations.push(`${path}: concrete provider import ${providerImport}`);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps harness readiness policy and orchestration outside active provider roles", async () => {
+    const violations: string[] = [];
+
+    for (const path of harnessReadinessApplicationFiles) {
+      const file = join(process.cwd(), path);
+      const source = await readFile(file, "utf8");
+      for (const marker of harnessReadinessActiveProviderMarkers) {
+        if (marker.test(source)) {
+          violations.push(`${path}: active harness marker ${marker.source}`);
+        }
+      }
+      if (path.endsWith("readinessPolicy.ts")) {
+        for (const imported of sourceImports(source, file)) {
+          if (
+            imported.runtime &&
+            (readinessPolicyForbiddenRuntimeImports.includes(imported.specifier) ||
+              imported.specifier.includes("/persistence/") ||
+              imported.specifier.includes("/runtime/"))
+          ) {
+            violations.push(`${path}: policy runtime import ${imported.specifier}`);
+          }
         }
       }
     }
