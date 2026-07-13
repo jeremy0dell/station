@@ -1,10 +1,10 @@
 import type { ProviderProjectConfig } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
@@ -37,7 +37,7 @@ export type CreateSessionStartAgentHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
-  logger?: JsonlLogger | undefined;
+  logger?: StationLogger | undefined;
   commandTimeoutMs?: number | undefined;
 };
 

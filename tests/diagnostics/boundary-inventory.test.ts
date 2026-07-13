@@ -194,6 +194,41 @@ describe("boundary inventory guard", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps Observer logging and project configuration representations at runtime adapters", async () => {
+    const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
+      isProductionSourceFile,
+    );
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      const path = relative(process.cwd(), file);
+      if (
+        /\b(?:JsonlLogger|createJsonlLogger)\b/.test(source) &&
+        path !== "apps/observer/src/runtime/logging.ts"
+      ) {
+        violations.push(`${path}: concrete JSONL logger`);
+      }
+      if (
+        /\b(?:addProjectToConfig|removeProjectFromConfig|setProjectDefaultHarnessInConfig)\b/.test(
+          source,
+        ) &&
+        path !== "apps/observer/src/runtime/projectConfigWriter.ts"
+      ) {
+        violations.push(`${path}: concrete project config mutation`);
+      }
+      if (
+        (path === "apps/observer/src/commands/project.ts" ||
+          path === "apps/observer/src/commands/router.ts") &&
+        /\b(?:configPath|homeDir)\b/.test(source)
+      ) {
+        violations.push(`${path}: configuration path plumbing`);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   it("keeps command orchestration out of observer provider modules", async () => {
     const commandsRoot = join(process.cwd(), "apps/observer/src/commands");
     const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src/providers"))).filter(

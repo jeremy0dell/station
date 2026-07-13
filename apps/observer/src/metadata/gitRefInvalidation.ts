@@ -1,7 +1,7 @@
 import { existsSync, type FSWatcher, lstatSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { StationSnapshot, WorktreeRow } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
+import type { StationLogger } from "../stationLogger.js";
 
 // A Git ref move invalidates all metadata keyed to HEAD: local diff, PR identity, and checks.
 // This trigger only requests reconcile; observer runtime remains the only UI event publisher.
@@ -13,7 +13,7 @@ export type WorktreeGitRefInvalidationService = {
 export type CreateWorktreeGitRefInvalidationServiceOptions = {
   requestReconcile(reason: string): void;
   debounceMs?: number;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   watchDirectory?: WatchDirectory;
 };
 

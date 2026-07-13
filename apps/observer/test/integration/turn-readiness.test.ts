@@ -19,6 +19,7 @@ import {
   ProviderRegistry,
   registerObserverCommandHandlers,
 } from "../../src/internal";
+import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
 const now = "2026-06-17T12:00:00.000Z";
 const completedAt = "2026-06-17T12:00:01.000Z";
@@ -243,6 +244,7 @@ function fixtureCore() {
   });
   const core = createObserverCore({ config, providers, persistence, clock });
   registerObserverCommandHandlers({
+    projectConfigWriter: createUnexpectedProjectConfigWriter(),
     queue,
     core,
     providers,

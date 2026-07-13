@@ -19,7 +19,6 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";
@@ -50,6 +49,7 @@ import {
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
+import type { StationLogger } from "../stationLogger.js";
 import type { ObserverEventBus } from "./eventBus.js";
 import {
   type ExternalLaunchDeps,
@@ -82,7 +82,7 @@ export type CreateObserverApiOptions = {
   stateDir?: string;
   diagnosticsDir?: string;
   logPaths?: string[];
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   config?: StationConfig;
   configPath?: string;
   configDiagnostics?: ConfigDiagnostic[];
@@ -236,7 +236,7 @@ function reconcileAfterExternalLaunch(
   deps: ReconcileExecutorDeps,
   guard: { reconciling: boolean },
   reason: string,
-  logger?: JsonlLogger,
+  logger?: StationLogger,
 ): void {
   void runReconcile(deps, guard, reason).catch(async (error) => {
     await logger?.error("Post-external-launch reconcile failed.", { reason, error });

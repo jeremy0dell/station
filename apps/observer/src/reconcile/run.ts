@@ -13,7 +13,6 @@ import type {
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import {
   durationMs,
   forEachConcurrent,
@@ -33,6 +32,7 @@ import type {
 } from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
+import type { StationLogger } from "../stationLogger.js";
 import type { ReconcileTiming } from "./core.js";
 import { buildStationSnapshot, safeErrorToProviderHealth } from "./graph.js";
 import {
@@ -46,7 +46,7 @@ export type ProviderReadOptions = {
   clock: RuntimeClock;
   timeoutMs: number;
   retries: number;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
 };
 
 // Caps concurrent provider subprocesses (wt list / listTargets) per reconcile.
@@ -868,7 +868,7 @@ async function recordProviderReadFailure(input: {
   capabilities: Record<string, boolean>;
   providerHealth: Record<string, ProviderHealth>;
   errors: SafeError[];
-  logger: JsonlLogger | undefined;
+  logger: StationLogger | undefined;
 }): Promise<void> {
   input.errors.push(input.error);
   await input.logger?.error(input.message, {

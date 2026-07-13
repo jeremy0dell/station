@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
-import { writeDebugBundle } from "@station/observability";
+import { componentLogPath, writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
@@ -21,6 +21,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 
 const now = "2026-05-21T12:00:00.000Z";
 
@@ -59,6 +60,7 @@ describe("session.create debug bundle diagnostics", () => {
     const config = configFor(root, stateDir);
     const core = createObserverCore({ config, providers, persistence, clock, logger });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,
@@ -92,7 +94,7 @@ describe("session.create debug bundle diagnostics", () => {
         paths: {
           stateDir,
           diagnosticsDir,
-          logPaths: [logger.path],
+          logPaths: [componentLogPath(stateDir, "observer")],
         },
         clock,
       },
@@ -144,6 +146,7 @@ describe("session.create debug bundle diagnostics", () => {
     const config = configFor(root, stateDir);
     const core = createObserverCore({ config, providers, persistence, clock, logger });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,
@@ -177,7 +180,7 @@ describe("session.create debug bundle diagnostics", () => {
         paths: {
           stateDir,
           diagnosticsDir,
-          logPaths: [logger.path],
+          logPaths: [componentLogPath(stateDir, "observer")],
         },
         clock,
       },

@@ -43,6 +43,7 @@ import {
   removeObserverProcessIdentity,
 } from "./observerPidfile.js";
 import { createLocalObserverProcessEvidence } from "./observerProcessEvidence.js";
+import { createProjectConfigWriter } from "./projectConfigWriter.js";
 import {
   createObserverLifecycleClient,
   type ObserverServer,
@@ -89,8 +90,9 @@ export type RunObserverMainDeps = {
  * COMPOSITION ROOT
  *
  * Claims boot ownership before negotiating an incumbent or constructing
- * adapters, owns socket and pidfile publication, and releases the claim before
- * publishing health for the process lifetime it composes.
+ * adapters, then constructs logging and project-config adapters once and passes
+ * only their application ports inward. It owns socket and pidfile publication
+ * and releases the boot claim before publishing health.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -170,6 +172,7 @@ export async function runObserverMain(
       stateDir,
       socketPath,
       buildVersion,
+      homeDir,
       claim: claimResult,
       deps,
     });
@@ -184,10 +187,11 @@ async function runClaimedObserverRuntime(input: {
   stateDir: string;
   socketPath: string;
   buildVersion: string;
+  homeDir: string;
   claim: AcquiredObserverBootClaim;
   deps: RunObserverMainDeps;
 }): Promise<number> {
-  const { options, loadedConfig, stateDir, socketPath, buildVersion, claim, deps } = input;
+  const { options, loadedConfig, stateDir, socketPath, buildVersion, homeDir, claim, deps } = input;
   const config = loadedConfig.config;
   const spoolDir = providerIngressSpoolDir(stateDir);
   const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir };
@@ -203,6 +207,10 @@ async function runClaimedObserverRuntime(input: {
   const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
+  const projectConfigWriter = createProjectConfigWriter({
+    homeDir,
+    ...(options.configPath === undefined ? {} : { configPath: loadedConfig.configPath }),
+  });
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
@@ -233,7 +241,7 @@ async function runClaimedObserverRuntime(input: {
     eventBus,
     clock: systemClock,
     logger,
-    ...(options.configPath === undefined ? {} : { configPath: loadedConfig.configPath }),
+    projectConfigWriter,
   });
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
 
@@ -330,7 +338,7 @@ async function runClaimedObserverRuntime(input: {
     socketPath,
     stateDir,
     diagnosticsDir: join(stateDir, "diagnostics"),
-    logPaths: [logger.path, componentLogPath(stateDir, "hook")],
+    logPaths: [componentLogPath(stateDir, "observer"), componentLogPath(stateDir, "hook")],
     config,
     ...(options.configPath === undefined ? {} : { configPath: loadedConfig.configPath }),
     configDiagnostics: loadedConfig.diagnostics,

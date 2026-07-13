@@ -26,6 +26,7 @@ import {
 } from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../../apps/observer/test/support/projectConfigWriter.js";
 
 const execFileAsync = promisify(execFile);
 const realCursorEnabled = process.env.STATION_REAL_CURSOR === "1";
@@ -115,6 +116,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       providerTimeoutMs: 20_000,
     });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

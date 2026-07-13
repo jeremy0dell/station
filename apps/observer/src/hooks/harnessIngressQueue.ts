@@ -9,7 +9,6 @@ import {
   HarnessEventReportSchema,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import {
   Deferred,
   Effect,
@@ -21,6 +20,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import type { StationLogger } from "../stationLogger.js";
 
 export type HarnessIngressProcessResult = {
   receipt: HarnessEventReportReceipt;
@@ -39,7 +39,7 @@ export type CreateHarnessIngressQueueOptions = {
   processReport(report: HarnessEventReport): Promise<HarnessIngressProcessResult>;
   requestReconcile?: (reason: string) => void;
   clock?: RuntimeClock;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   maxPendingReports?: number;
 };
 

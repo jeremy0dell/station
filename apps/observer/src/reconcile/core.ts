@@ -9,7 +9,6 @@ import type {
   WorktreeRow,
 } from "@station/contracts";
 import { ProviderProjectConfigSchema } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../features/evaluator.js";
 import type {
@@ -22,6 +21,7 @@ import type {
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
+import type { StationLogger } from "../stationLogger.js";
 import {
   buildInitialSnapshot,
   harnessesFromRegistry,
@@ -72,7 +72,7 @@ export type CreateObserverCoreInput = {
     SessionStore &
     WorktreeMetadataStore &
     EventJournal;
-  logger?: JsonlLogger;
+  logger?: StationLogger;
   pid?: number;
   version?: string;
   providerTimeoutMs?: number;

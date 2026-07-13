@@ -1,4 +1,4 @@
-import type { JsonlLogger } from "@station/observability";
+import type { StationLogger } from "../stationLogger.js";
 import type { ReconcileSchedulerFlushProfile } from "./reconcileScheduler.js";
 
 export type ReconcileProfile = {
@@ -20,7 +20,7 @@ export function elapsedMs(startedAt: number): number {
 }
 
 export async function logReconcileSchedulerProfile(
-  logger: JsonlLogger | undefined,
+  logger: StationLogger | undefined,
   profile: ReconcileSchedulerFlushProfile,
 ): Promise<void> {
   if (
@@ -34,7 +34,7 @@ export async function logReconcileSchedulerProfile(
 }
 
 export async function logReconcileProfile(
-  logger: JsonlLogger | undefined,
+  logger: StationLogger | undefined,
   profile: ReconcileProfile,
 ): Promise<void> {
   if (profile.totalMs < profileSlowReconcileMs) {

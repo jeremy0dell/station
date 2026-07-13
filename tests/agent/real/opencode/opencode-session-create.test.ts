@@ -19,6 +19,7 @@ import { createOpenCodeHarnessProvider, installOpenCodePlugin } from "@station/o
 import { FakeWorktreeProvider } from "@station/testing";
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import { createUnexpectedProjectConfigWriter } from "../../../../apps/observer/test/support/projectConfigWriter.js";
 import { requireRealE2eEnvironment, requireToolPath } from "../../../support/real-station/env";
 
 const execFileAsync = promisify(execFile);
@@ -128,6 +129,7 @@ describeRealOpenCode("real OpenCode session.create", () => {
       providerTimeoutMs: 20_000,
     });
     registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
       queue,
       core,
       providers,

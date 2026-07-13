@@ -19,6 +19,7 @@ import {
   registerObserverCommandHandlers,
   type TerminalIntentRunner,
 } from "../../src/internal";
+import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
 const now = "2026-05-21T12:00:00.000Z";
 
@@ -434,6 +435,7 @@ function createFixture(input: {
   });
   const core = createObserverCore({ config, providers, persistence, clock });
   registerObserverCommandHandlers({
+    projectConfigWriter: createUnexpectedProjectConfigWriter(),
     queue,
     core,
     providers,

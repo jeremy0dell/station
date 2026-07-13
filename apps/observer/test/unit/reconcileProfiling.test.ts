@@ -1,9 +1,9 @@
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import type { JsonlLogger } from "@station/observability";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import type { StationLogger } from "../../src/stationLogger";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { emptyStationSnapshot, fakeObserverCommandQueue } from "../support/testObserver";
 
@@ -93,7 +93,7 @@ describe("observer reconcile profiling", () => {
 });
 
 function createProfilingApi(input: {
-  logger: JsonlLogger & { records: LogRecord[] };
+  logger: StationLogger & { records: LogRecord[] };
   reconcileDelayMs: number;
   hookReconcileDebounceMs?: number;
 }) {
@@ -153,54 +153,23 @@ type LogRecord = {
   attributes?: Record<string, unknown>;
 };
 
-function fakeLogger(): JsonlLogger & { records: LogRecord[] } {
+function fakeLogger(): StationLogger & { records: LogRecord[] } {
   const records: LogRecord[] = [];
-  return {
-    path: "memory://observer.jsonl",
-    records,
-    log: async (record) => {
-      records.push({
-        level: record.level,
-        message: record.message,
-        attributes: record.attributes,
-      });
-      return {
-        timestamp: now,
-        component: "observer",
-        level: record.level,
-        message: record.message,
-        ...(record.attributes === undefined ? {} : { attributes: record.attributes }),
-      };
-    },
-    debug: async (message, attributes) => {
-      records.push({ level: "debug", message, attributes });
-      return logReturn("debug", message, attributes);
-    },
-    info: async (message, attributes) => {
-      records.push({ level: "info", message, attributes });
-      return logReturn("info", message, attributes);
-    },
-    warn: async (message, attributes) => {
-      records.push({ level: "warn", message, attributes });
-      return logReturn("warn", message, attributes);
-    },
-    error: async (message, attributes) => {
-      records.push({ level: "error", message, attributes });
-      return logReturn("error", message, attributes);
-    },
+  const record = async (
+    level: LogRecord["level"],
+    message: string,
+    attributes?: Record<string, unknown>,
+  ): Promise<void> => {
+    records.push({
+      level,
+      message,
+      ...(attributes === undefined ? {} : { attributes }),
+    });
   };
-}
-
-function logReturn(
-  level: "debug" | "info" | "warn" | "error",
-  message: string,
-  attributes?: Record<string, unknown>,
-) {
   return {
-    timestamp: now,
-    component: "observer" as const,
-    level,
-    message,
-    ...(attributes === undefined ? {} : { attributes }),
+    records,
+    info: (message, attributes) => record("info", message, attributes),
+    warn: (message, attributes) => record("warn", message, attributes),
+    error: (message, attributes) => record("error", message, attributes),
   };
 }

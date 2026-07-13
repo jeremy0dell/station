@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
-import { writeDebugBundle } from "@station/observability";
+import { componentLogPath, writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
@@ -83,7 +83,7 @@ describe("operational debug bundle", () => {
         paths: {
           stateDir,
           diagnosticsDir,
-          logPaths: [logger.path],
+          logPaths: [componentLogPath(stateDir, "observer")],
         },
         clock,
       },
