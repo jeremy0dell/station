@@ -201,8 +201,9 @@ write releases. The tag workflow never publishes the draft automatically.
 
 The initial immutable binary baseline is `v0.7.0`:
 
-1. Enable GitHub immutable releases, merge A5 with `package.json` and source
-   runtime reporting at `0.7.0`, then create and push `v0.7.0`.
+1. Enable GitHub immutable releases, confirm the release commit is on `main`
+   with `package.json` and runtime reporting at `0.7.0`, then create and push
+   `v0.7.0`.
 2. Confirm every release job passed and the successful run contains exactly one
    `accepted-release-candidate-0.7.0-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
@@ -263,6 +264,83 @@ binary. Power loss is different: because the installer does not fsync the file
 or containing directories, it makes no post-power-loss durability guarantee;
 old/new cross-filesystem `LICENSE` metadata may also remain.
 
+Install the accepted candidate from a successful release workflow run on each
+clean test machine. Set `release_run_id` to that run's numeric ID; the recipe
+downloads its candidate manifest and uses the exact draft ID and commit that
+promotion will verify:
+
+```sh
+cd /path/to/your/git-project
+(
+  set -eu
+  umask 077
+  export GH_HOST=github.com
+  tag=v0.7.0
+  version=${tag#v}
+  release_run_id=123456789
+  case "$release_run_id" in
+    ''|*[!0-9]*) echo "release_run_id must be numeric" >&2; exit 1 ;;
+  esac
+  test "$(
+    gh run view "$release_run_id" --repo jeremy0dell/station \
+      --json conclusion --jq '.conclusion'
+  )" = success
+  test "$(
+    gh run view "$release_run_id" --repo jeremy0dell/station \
+      --json workflowName --jq '.workflowName'
+  )" = release
+  run_attempt="$(
+    gh run view "$release_run_id" --repo jeremy0dell/station \
+      --json attempt --jq '.attempt'
+  )"
+  case "$run_attempt" in
+    ''|*[!0-9]*) echo "release run attempt must be numeric" >&2; exit 1 ;;
+  esac
+  candidate_dir="$(mktemp -d)"
+  installer="$(mktemp)"
+  trap 'rm -rf "$candidate_dir"; rm -f "$installer"' EXIT
+  gh run download "$release_run_id" \
+    --repo jeremy0dell/station \
+    --name "accepted-release-candidate-$version-attempt-$run_attempt" \
+    --dir "$candidate_dir"
+  manifest="$candidate_dir/manifest.json"
+  test -f "$manifest"
+  manifest_field() {
+    node -e '
+      const { readFileSync } = require("node:fs");
+      const value = JSON.parse(readFileSync(process.argv[1], "utf8"))[process.argv[2]];
+      if (typeof value !== "string" && typeof value !== "number") process.exit(1);
+      process.stdout.write(String(value));
+    ' "$manifest" "$1"
+  }
+  manifest_tag="$(manifest_field tag)"
+  manifest_repository="$(manifest_field repository)"
+  manifest_run_id="$(manifest_field workflowRunId)"
+  manifest_run_attempt="$(manifest_field workflowRunAttempt)"
+  commit="$(manifest_field commit)"
+  release_id="$(manifest_field releaseId)"
+  test "$manifest_tag" = "$tag"
+  test "$manifest_repository" = jeremy0dell/station
+  test "$manifest_run_id" = "$release_run_id"
+  test "$manifest_run_attempt" = "$run_attempt"
+  printf '%s\n' "$commit" | grep -Eq '^[0-9a-f]{40}$'
+  case "$release_id" in
+    ''|*[!0-9]*) echo "candidate release ID must be numeric" >&2; exit 1 ;;
+  esac
+  test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq '.sha')" = "$commit"
+  gh api --method GET \
+    -H 'Accept: application/vnd.github.raw+json' \
+    -f ref="$commit" \
+    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
+  test -s "$installer"
+  sh -n "$installer"
+  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer" --version "$tag"
+)
+```
+
+This draft-only environment variable is for release acceptance; normal installs
+use the published-release recipe in [Install](install.md).
+
 For each target, install through the authenticated script into a clean home and
 manually verify the actual user experience, not a dashboard override:
 
@@ -307,9 +385,9 @@ manually verify the actual user experience, not a dashboard override:
     replacing any asset.
 
 Record the oldest supported macOS version or built-against glibc version in the
-release notes. Signing and notarization are not part of A5; integrity is the
-authenticated GitHub asset plus `SHA256SUMS` verification and immutable
-publication.
+release notes. Signing and notarization are not part of the initial private
+binary release; integrity is the authenticated GitHub asset plus `SHA256SUMS`
+verification and immutable publication.
 
 For CI install parity, use:
 

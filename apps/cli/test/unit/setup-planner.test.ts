@@ -159,7 +159,7 @@ describe("setup planner", () => {
       kind: "brew-install",
       tier: "required",
       selected: true,
-      command: ["brew", "install", "dlvhdr/formulae/diffnav"],
+      command: ["brew", "install", "diffnav"],
     });
     expect(plan.actions.find((action) => action.id === "install-git-delta")).toMatchObject({
       kind: "brew-install",

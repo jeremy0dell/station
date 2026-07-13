@@ -7,7 +7,7 @@ export const defaultDiffnavCommand = "diffnav";
 
 export function diffnavInstallHint(command = defaultDiffnavCommand): string {
   return [
-    "Install diffnav with brew install dlvhdr/formulae/diffnav for the STATION 'See diff' automation.",
+    "Install diffnav with brew install diffnav for the STATION 'See diff' automation.",
     `stn tried ${command}.`,
   ].join(" ");
 }

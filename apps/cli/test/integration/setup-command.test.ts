@@ -403,7 +403,7 @@ describe("CLI setup command", () => {
             available.add("/fake/bin/bun");
             return commandResult(input, "");
           }
-          if (key === "brew install dlvhdr/formulae/diffnav") {
+          if (key === "brew install diffnav") {
             available.add("/fake/bin/diffnav");
             return commandResult(input, "");
           }

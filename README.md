@@ -42,41 +42,31 @@ station keeps track of everything that's running and makes it visible:
 
 ## Getting started
 
-The authenticated private binary is the user install path. Start in the Git repository you want Station to manage, authenticate the GitHub CLI for the private repository, use `curl` to fetch the version-pinned installer, then run setup:
+The authenticated private binary is the user install path. On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to the private repository, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
+
+Start in the Git repository you want Station to manage, authenticate `gh`, fetch the installer for the binary baseline, and run it:
 
 ```sh
 cd /path/to/your/git-project
 gh auth login --hostname github.com
 (
-  set -e
+  set -eu
   umask 077
+  export GH_HOST=github.com
   tag=v0.7.0
-  token="$(gh auth token --hostname github.com)"
-  test -n "$token"
-  headers="$(mktemp)"
   installer="$(mktemp)"
-  trap 'rm -f "$headers" "$installer"' EXIT
-  printf 'Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\nX-GitHub-Api-Version: 2022-11-28\n' \
-    "$token" > "$headers"
-  unset token
-  curl --disable \
-    --proto '=https' \
-    --tlsv1.2 \
-    --fail \
-    --silent \
-    --show-error \
-    --max-redirs 0 \
-    --header "@$headers" \
-    --output "$installer" \
-    "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag"
-  rm -f "$headers"
+  trap 'rm -f "$installer"' EXIT
+  gh api --method GET \
+    -H 'Accept: application/vnd.github.raw+json' \
+    -f ref="$tag" \
+    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
   test -s "$installer"
   sh -n "$installer"
   sh "$installer" --version "$tag"
 )
 ```
 
-The curl block only installs the Station binaries; it does not configure the current project or edit your shell profile. From the same project shell, make the default install available, run guided setup, verify it, and launch the full workspace:
+The installer block only installs the Station binaries; it does not configure the current project or edit your shell profile. From the same project shell, make the default install available, run guided setup, verify it, and launch the full workspace:
 
 ```sh
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -103,22 +93,7 @@ recipe resolves the current stable tag before fetching and invoking its
 installer. Immutable rollback begins with the second binary release because
 `v0.7.0` has no earlier binary artifact. See [Install](docs/install.md) for the
 recipe, version pinning, PATH recovery, custom install directories, and the
-supported-platform contract.
-
-Installs serialize commands and license data with
-`<install-dir>/.station-install.lock` and
-`<data-home>/station/.station-install.lock`; each owner records a PID, request,
-and unique token so cleanup cannot remove a replacement lock. Inspect the
-lock's sole `owner-*` file (or legacy `owner`), confirm its PID is not alive,
-and remove it manually only for abandoned work.
-Compatibility diagnostics are sanitized and bounded to 4096 bytes. If final
-activation is ambiguous, follow the printed absolute `stn --version` inspection
-command rather than assuming the previous install is unchanged. After success,
-the installer checks all three bare launchers and prints a current-shell PATH
-block for anything missing or shadowed without editing a profile. SIGKILL can
-leave recoverable locks/stages; atomic rename gives coherent process-level
-visibility, but without file/directory fsync there is no post-power-loss
-durability guarantee.
+supported-platform and recovery contracts.
 
 ### Development checkout
 

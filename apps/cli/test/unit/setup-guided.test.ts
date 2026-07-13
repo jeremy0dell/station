@@ -792,7 +792,7 @@ describe("guided setup command", () => {
       worktrunk: "wt",
       tmux: "tmux",
       bun: "bun",
-      "dlvhdr/formulae/diffnav": "diffnav",
+      diffnav: "diffnav",
       "git-delta": "delta",
     };
     const hasBrewPrefix = (input: ExternalCommandInput) =>
@@ -896,9 +896,7 @@ describe("guided setup command", () => {
       calls
         .filter((call) => call.command === "brew" && call.args?.[0] === "install")
         .map((call) => call.args?.[1]),
-    ).toEqual(
-      expect.arrayContaining(["worktrunk", "tmux", "bun", "dlvhdr/formulae/diffnav", "git-delta"]),
-    );
+    ).toEqual(expect.arrayContaining(["worktrunk", "tmux", "bun", "diffnav", "git-delta"]));
     expect(fs.files[configPath]).toContain("[[projects]]");
   });
 
@@ -921,7 +919,7 @@ describe("guided setup command", () => {
       worktrunk: "wt",
       tmux: "tmux",
       bun: "bun",
-      "dlvhdr/formulae/diffnav": "diffnav",
+      diffnav: "diffnav",
       "git-delta": "delta",
     };
     const hasBrewPrefix = (input: ExternalCommandInput) =>
