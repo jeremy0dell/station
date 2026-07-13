@@ -1,5 +1,16 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
@@ -753,14 +764,53 @@ async function expectSingleObserver(
   await waitFor(async () => (await observerProcessesForSocket(socketPath)).length === 1, 3000);
   expect(await observerProcessesForSocket(socketPath)).toEqual([pid]);
 
+  expect(await socketHolders(socketPath)).toEqual([pid]);
+}
+
+async function socketHolders(socketPath: string): Promise<number[]> {
+  if (process.platform === "linux") return linuxSocketHolders(socketPath);
+
   const { stdout } = await execFileAsync("lsof", ["-t", socketPath]);
-  const holders = new Set(
-    stdout
-      .split(/\s+/)
-      .filter((value) => value.length > 0)
-      .map(Number),
-  );
-  expect([...holders]).toEqual([pid]);
+  return [
+    ...new Set(
+      stdout
+        .split(/\s+/)
+        .filter((value) => value.length > 0)
+        .map(Number),
+    ),
+  ].sort((left, right) => left - right);
+}
+
+async function linuxSocketHolders(socketPath: string): Promise<number[]> {
+  // Linux lsof cannot reliably match Unix socket paths with whitespace, so correlate /proc inodes.
+  const socketLine = (await readFile("/proc/net/unix", "utf8"))
+    .split(/\r?\n/)
+    .find((line) => line.endsWith(` ${socketPath}`));
+  const inode = socketLine?.trim().split(/\s+/, 8)[6];
+  if (inode === undefined || !/^\d+$/.test(inode)) return [];
+
+  const expectedLink = `socket:[${inode}]`;
+  const holders = new Set<number>();
+  for (const processEntry of await readdir("/proc", { withFileTypes: true })) {
+    if (!processEntry.isDirectory() || !/^[1-9]\d*$/.test(processEntry.name)) continue;
+    const fdDir = join("/proc", processEntry.name, "fd");
+    let fileDescriptors: string[];
+    try {
+      fileDescriptors = await readdir(fdDir);
+    } catch {
+      continue;
+    }
+    for (const fileDescriptor of fileDescriptors) {
+      try {
+        if ((await readlink(join(fdDir, fileDescriptor))) !== expectedLink) continue;
+        holders.add(Number(processEntry.name));
+        break;
+      } catch {
+        // Processes and descriptors may disappear while /proc is scanned.
+      }
+    }
+  }
+  return [...holders].sort((left, right) => left - right);
 }
 
 async function observerProcessesForSocket(socketPath: string): Promise<number[]> {

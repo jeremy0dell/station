@@ -720,6 +720,8 @@ fi
 
 probe_output=$temp_dir/probe.stdout
 probe_error=$temp_dir/probe.stderr
+watchdog_ready=$temp_dir/watchdog.ready
+watchdog_failed=$temp_dir/watchdog.failed
 child_starting=1
 (
   if ! ulimit -f 8; then
@@ -758,10 +760,21 @@ child_starting=1
     kill -KILL "$probe_pid" 2>/dev/null || true
     exit "$watchdog_result"
   }
-  trap stop_watchdog HUP INT TERM
+
+  report_watchdog_setup_failure() {
+    [ -e "$watchdog_ready" ] || : > "$watchdog_failed"
+  }
+  trap report_watchdog_setup_failure EXIT
+  trap '' HUP INT TERM
 
   sleep 10 &
   watchdog_timer=$!
+  trap stop_watchdog HUP INT TERM
+  if ! : > "$watchdog_ready"; then
+    watchdog_result=125
+    stop_watchdog
+  fi
+  trap - EXIT
   if wait "$watchdog_timer"; then
     watchdog_timer=""
     if kill -0 "$probe_pid" 2>/dev/null; then
@@ -781,8 +794,17 @@ child_starting=1
   exit 0
 ) &
 watchdog_pid=$!
+# Do not cancel a fast probe's watchdog until its timer and cleanup trap are coherent.
+while [ ! -e "$watchdog_ready" ] && [ ! -e "$watchdog_failed" ] && [ "$pending_signal_status" -eq 0 ]; do
+  sleep 0.01 2>/dev/null || true
+done
 child_starting=0
 finish_pending_signal
+if [ ! -e "$watchdog_ready" ]; then
+  wait "$watchdog_pid" 2>/dev/null || true
+  watchdog_pid=""
+  fail "the compatibility probe supervisor failed; the existing Station installation was unchanged."
+fi
 
 probe_status=0
 if wait "$probe_pid"; then
@@ -791,20 +813,13 @@ else
   probe_status=$?
 fi
 probe_pid=""
-watchdog_cancelled=0
-if kill -TERM "$watchdog_pid" 2>/dev/null; then
-  watchdog_cancelled=1
-fi
+kill -TERM "$watchdog_pid" 2>/dev/null || true
 if wait "$watchdog_pid"; then
   watchdog_status=0
 else
   watchdog_status=$?
 fi
 watchdog_pid=""
-if [ "$watchdog_cancelled" -eq 1 ] && [ "$watchdog_status" -eq 143 ]; then
-  # A fast probe can finish before the watchdog installs its TERM cleanup trap.
-  watchdog_status=0
-fi
 
 print_probe_diagnostics() {
   [ -s "$probe_error" ] || return 0

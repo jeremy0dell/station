@@ -69,6 +69,7 @@ describe("setup core flow e2e", () => {
         "bun",
         'if [ "$1" = "--version" ]; then echo "1.2.0"; exit 0; fi\nexit 0\n',
       );
+      await writeShim(bin, "npm", "echo 0.1.0\n");
       await writeShim(
         bin,
         "wt",
