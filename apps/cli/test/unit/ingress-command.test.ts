@@ -115,7 +115,7 @@ describe("provider hook ingress command", () => {
     });
   });
 
-  it("passes the exact startup timeout to the production observer child", async () => {
+  it("passes the remaining startup budget to the production observer child", async () => {
     const fixture = await createTempState();
     const observerEntry = join(fixture.root, "record-observer-argv.cjs");
     const argvPath = join(fixture.root, "observer-argv.json");
@@ -169,16 +169,17 @@ describe("provider hook ingress command", () => {
     );
 
     expect(receipt.status).toBe("ingested");
-    await expect(readFile(argvPath, "utf8")).resolves.toBe(
-      JSON.stringify([
-        "--socket",
-        fixture.socketPath,
-        "--state-dir",
-        fixture.stateDir,
-        "--startup-timeout-ms",
-        "2000",
-      ]),
-    );
+    const childArgv = JSON.parse(await readFile(argvPath, "utf8")) as string[];
+    expect(childArgv.slice(0, -1)).toEqual([
+      "--socket",
+      fixture.socketPath,
+      "--state-dir",
+      fixture.stateDir,
+      "--startup-timeout-ms",
+    ]);
+    const childTimeoutMs = Number(childArgv.at(-1));
+    expect(childTimeoutMs).toBeGreaterThan(0);
+    expect(childTimeoutMs).toBeLessThanOrEqual(2000);
   });
 
   it("delivers Worktrunk lifecycle hooks through observer.ingestProviderHookEvent", async () => {

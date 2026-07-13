@@ -14,6 +14,7 @@ function readOsStartTime(pid: number): string {
   const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
   const osStartTime = execFileSync(psPath, ["-ww", "-p", String(pid), "-o", "lstart="], {
     encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
   }).trim();
   if (osStartTime.length === 0) {
     throw new Error(`Could not determine the OS start time for process ${pid}.`);

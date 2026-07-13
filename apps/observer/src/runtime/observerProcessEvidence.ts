@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { resolveObserverSocketForProcessArgs } from "@station/config";
 import { z } from "zod";
 import type {
@@ -54,7 +55,7 @@ export function parseObserverProcessList(output: string): ObserverProcessEntry[]
     const command = match[3];
     if (!pid.success || startToken === undefined || command === undefined) continue;
     const argv = command.split(/\s+/u).filter((token) => token.length > 0);
-    if (!isObserverArgv(argv)) continue;
+    if (!isObserverArgv(argv) && !isSpacedCompiledObserverCommand(command)) continue;
     // ps flattens argv boundaries, so recover an explicit socket from the raw
     // command before whitespace splitting can corrupt paths containing spaces.
     const explicitSocketPath = rawObserverFlagValue(command, "socket");
@@ -67,6 +68,26 @@ export function parseObserverProcessList(output: string): ObserverProcessEntry[]
     entries.push(entry);
   }
   return entries;
+}
+
+function isSpacedCompiledObserverCommand(command: string): boolean {
+  // The exact executable path check preserves shell-wrapper exclusion after ps flattens argv boundaries.
+  const marker = " __observer";
+  let markerIndex = command.indexOf(marker);
+  while (markerIndex !== -1) {
+    const tokenEnd = markerIndex + marker.length;
+    const executable = command.slice(0, markerIndex).trim();
+    if (
+      /\s/u.test(executable) &&
+      executable.endsWith("/stn") &&
+      (command[tokenEnd] === undefined || /\s/u.test(command[tokenEnd])) &&
+      existsSync(executable)
+    ) {
+      return true;
+    }
+    markerIndex = command.indexOf(marker, markerIndex + marker.length);
+  }
+  return false;
 }
 
 function processListArgs(): string[] {
@@ -143,6 +164,7 @@ function signalProcess(
 function defaultExecFile(file: string, args: readonly string[]): string {
   return execFileSync(file, [...args], {
     encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
     maxBuffer: processListingMaxBufferBytes,
   });
 }

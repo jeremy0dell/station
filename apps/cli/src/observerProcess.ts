@@ -182,7 +182,29 @@ export async function restartObserver(
 ): Promise<ObserverStatus> {
   const status = await getObserverStatus(options, deps);
   if (status.status === "running") {
-    await stopObserver({ ...options, paths: status.paths }, deps);
+    const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
+    const classification = classifyObserverHealth(status.health, buildVersion);
+    if (classification.action === "attach" && classification.reason === "incumbent-wins") {
+      return {
+        status: "unhealthy",
+        paths: status.paths,
+        error: observerHandoffRefusedError(
+          status.health,
+          buildVersion,
+          "A lower-build caller cannot restart a newer Observer or activate configuration in it.",
+        ),
+      };
+    }
+    if (classification.action === "refuse") {
+      return {
+        status: "unhealthy",
+        paths: status.paths,
+        error: observerHandoffRefusedError(status.health, buildVersion, classification.reason),
+      };
+    }
+    if (classification.reason === "exact-build") {
+      await stopObserver({ ...options, paths: status.paths }, deps);
+    }
   }
   return startObserver({ ...options, paths: status.paths }, deps);
 }

@@ -61,6 +61,7 @@ import type {
   ProviderObservationKind,
   ProviderObservationType,
   RecordProviderObservationInput,
+  SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
 } from "../../src/persistence/types.js";
@@ -261,6 +262,9 @@ export function createInMemoryObserverPersistence(
             observedAt: observation.observedAt ?? now(),
           }),
         );
+        for (const mutation of input.turnReadiness ?? []) {
+          applySessionTurnReadinessMutation(draft, mutation, now());
+        }
         return { deduped: false, observations };
       }),
 
@@ -386,31 +390,12 @@ export function createInMemoryObserverPersistence(
       ),
 
     upsertSessionTurnReadiness: (input) =>
-      transaction((draft) => {
-        const createdAt = input.createdAt ?? now();
-        const readiness: PersistedSessionTurnReadiness = {
-          sessionId: input.sessionId,
-          projectId: input.projectId,
-          worktreeId: input.worktreeId,
-          token: input.token,
-          completedAt: input.completedAt,
-          createdAt,
-          updatedAt: input.updatedAt ?? createdAt,
-        };
-        const existing = draft.turnReadiness.get(input.sessionId);
-        if (existing === undefined) {
-          draft.turnReadiness.set(input.sessionId, readiness);
-          return readiness;
-        }
-        if (existing.completedAt < readiness.completedAt) {
-          existing.projectId = readiness.projectId;
-          existing.worktreeId = readiness.worktreeId;
-          existing.token = readiness.token;
-          existing.completedAt = readiness.completedAt;
-          existing.updatedAt = readiness.updatedAt;
-        }
-        return existing;
-      }),
+      transaction((draft) =>
+        upsertSessionTurnReadiness(draft, {
+          ...input,
+          createdAt: input.createdAt ?? now(),
+        }),
+      ),
 
     listSessionTurnReadiness: () =>
       transaction((draft) =>
@@ -422,14 +407,7 @@ export function createInMemoryObserverPersistence(
       ),
 
     deleteSessionTurnReadiness: (input) =>
-      transaction((draft) => {
-        const current = draft.turnReadiness.get(input.sessionId);
-        if (current === undefined || (input.token !== undefined && input.token !== current.token)) {
-          return 0;
-        }
-        draft.turnReadiness.delete(input.sessionId);
-        return 1;
-      }),
+      transaction((draft) => deleteSessionTurnReadiness(draft, input)),
 
     upsertWorktreeMetadataCurrent: (input) =>
       transaction((draft) => {
@@ -1024,6 +1002,66 @@ function matchesRecoveryHandleOptions(
     (options.worktreeId !== undefined && handle.worktreeId !== options.worktreeId) ||
     (options.provider !== undefined && handle.provider !== options.provider)
   );
+}
+
+function applySessionTurnReadinessMutation(
+  state: InMemoryObserverPersistenceState,
+  mutation: SessionTurnReadinessMutation,
+  createdAt: string,
+): void {
+  if (mutation.action === "upsert") {
+    upsertSessionTurnReadiness(state, { ...mutation.value, createdAt });
+    return;
+  }
+  deleteSessionTurnReadiness(state, { sessionId: mutation.sessionId });
+}
+
+function upsertSessionTurnReadiness(
+  state: InMemoryObserverPersistenceState,
+  input: {
+    sessionId: string;
+    projectId: string;
+    worktreeId: string;
+    token: string;
+    completedAt: string;
+    createdAt: string;
+    updatedAt?: string;
+  },
+): PersistedSessionTurnReadiness {
+  const readiness: PersistedSessionTurnReadiness = {
+    sessionId: input.sessionId,
+    projectId: input.projectId,
+    worktreeId: input.worktreeId,
+    token: input.token,
+    completedAt: input.completedAt,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt ?? input.createdAt,
+  };
+  const existing = state.turnReadiness.get(input.sessionId);
+  if (existing === undefined) {
+    state.turnReadiness.set(input.sessionId, readiness);
+    return readiness;
+  }
+  if (existing.completedAt < readiness.completedAt) {
+    existing.projectId = readiness.projectId;
+    existing.worktreeId = readiness.worktreeId;
+    existing.token = readiness.token;
+    existing.completedAt = readiness.completedAt;
+    existing.updatedAt = readiness.updatedAt;
+  }
+  return existing;
+}
+
+function deleteSessionTurnReadiness(
+  state: InMemoryObserverPersistenceState,
+  input: { sessionId: string; token?: string },
+): number {
+  const current = state.turnReadiness.get(input.sessionId);
+  if (current === undefined || (input.token !== undefined && input.token !== current.token)) {
+    return 0;
+  }
+  state.turnReadiness.delete(input.sessionId);
+  return 1;
 }
 
 function recoveryHandleId(handle: SessionRecoveryHandle): string {

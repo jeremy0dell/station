@@ -16,6 +16,7 @@ import {
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
+  createProviderHookIngress,
   createSqliteObserverPersistence,
   openObserverSqlite,
   ProviderRegistry,
@@ -419,6 +420,53 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
+  it("keeps duplicate hook readiness aligned with the originally committed normalization", async () => {
+    const clock = { now: () => new Date(now) };
+    const harness = new ContextChangingReadinessHarnessProvider({ now });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [harness],
+    });
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const ingress = createProviderHookIngress({ persistence, providers, clock });
+    const event = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_context_retry",
+      provider: "fake-harness",
+      kind: "harness" as const,
+      event: "turn.completed",
+      receivedAt: now,
+    };
+
+    await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
+      deduped: false,
+    });
+    harness.sessionId = "ses_fresh_context";
+    harness.worktreeId = "wt_fresh_context";
+    await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
+      deduped: true,
+    });
+
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: "ses_original",
+        worktreeId: "wt_original",
+        token: "hook_context_retry",
+      }),
+    ]);
+    await expect(persistence.listProviderObservations()).resolves.toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          sessionId: "ses_original",
+          worktreeId: "wt_original",
+        }),
+      }),
+    ]);
+    sqlite.close();
+  });
+
   it("repairs recovery and readiness after primary harness report persistence was already committed", async () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ clock });
@@ -759,5 +807,30 @@ class ContextRecordingHarnessProvider extends FakeHarnessProvider {
   ) {
     this.lastContext = context;
     return super.ingestEvent(event, context);
+  }
+}
+
+class ContextChangingReadinessHarnessProvider extends FakeHarnessProvider {
+  sessionId = "ses_original";
+  worktreeId = "wt_original";
+
+  override async ingestEvent() {
+    return [
+      {
+        provider: this.id,
+        projectId: "web",
+        worktreeId: this.worktreeId,
+        sessionId: this.sessionId,
+        turn: { kind: "turn_completed" as const },
+        status: {
+          value: "idle" as const,
+          confidence: "high" as const,
+          reason: "Fake harness hook completed its turn.",
+          source: "harness_event" as const,
+          updatedAt: now,
+        },
+        observedAt: now,
+      },
+    ];
   }
 }

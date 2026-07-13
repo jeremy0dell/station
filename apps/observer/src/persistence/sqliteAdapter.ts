@@ -174,6 +174,18 @@ export function createSqliteObserverPersistence(
             observedAt: observation.observedAt ?? now(),
           }),
         );
+        for (const mutation of input.turnReadiness ?? []) {
+          if (mutation.action === "upsert") {
+            sessionTurnReadinessStore.upsertSessionTurnReadiness(database, {
+              ...mutation.value,
+              createdAt: now(),
+            });
+          } else {
+            sessionTurnReadinessStore.deleteSessionTurnReadiness(database, {
+              sessionId: mutation.sessionId,
+            });
+          }
+        }
         return { deduped: false, observations };
       }),
 

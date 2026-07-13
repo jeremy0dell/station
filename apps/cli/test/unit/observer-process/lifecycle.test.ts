@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getObserverStatus, startObserver } from "@station/cli";
+import { getObserverStatus, restartObserver, startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it } from "vitest";
@@ -267,6 +267,127 @@ describe("CLI observer process lifecycle", () => {
       expect(result).toMatchObject({ status: "running", health: { version, pid: 1234 } });
     }
     expect(spawned).toBe(false);
+  });
+
+  it("refuses to restart a newer incumbent from a lower build", async () => {
+    const fixture = await createTempState();
+    let stops = 0;
+    let spawns = 0;
+    const result = await restartObserver(
+      { config: fixture.config },
+      {
+        buildVersion: "1.0.0",
+        spawnObserver: async () => {
+          spawns += 1;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.7.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: "2.0.0",
+              socketPath: fixture.socketPath,
+            }),
+            stop: async () => {
+              stops += 1;
+              return { schemaVersion: "0.7.0", stopped: true, at: now };
+            },
+          }) as never,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_HANDOFF_REFUSED",
+        hint: expect.stringContaining("cannot restart a newer Observer"),
+      },
+    });
+    expect(stops).toBe(0);
+    expect(spawns).toBe(0);
+  });
+
+  it("restarts an exact build through the explicit stop path", async () => {
+    const fixture = await createTempState();
+    let running = true;
+    let stops = 0;
+    let spawns = 0;
+    const result = await restartObserver(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        buildVersion: "1.0.0",
+        spawnObserver: async () => {
+          spawns += 1;
+          running = true;
+          return { pid: 1234, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.7.0",
+                status: "healthy",
+                pid: 1234,
+                startedAt: now,
+                version: "1.0.0",
+                socketPath: fixture.socketPath,
+              };
+            },
+            stop: async () => {
+              stops += 1;
+              running = false;
+              return { schemaVersion: "0.7.0", stopped: true, at: now };
+            },
+          }) as never,
+      },
+    );
+
+    expect(result).toMatchObject({ status: "running", health: { version: "1.0.0" } });
+    expect(stops).toBe(1);
+    expect(spawns).toBe(1);
+  });
+
+  it("routes a higher-build restart through child handoff without a parent stop", async () => {
+    const fixture = await createTempState();
+    let version = "1.0.0";
+    let pid = 1234;
+    let stops = 0;
+    let spawns = 0;
+    const result = await restartObserver(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        buildVersion: "2.0.0",
+        spawnObserver: async () => {
+          spawns += 1;
+          version = "2.0.0";
+          pid = 5678;
+          return { pid, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.7.0",
+              status: "healthy",
+              pid,
+              startedAt: now,
+              version,
+              socketPath: fixture.socketPath,
+            }),
+            stop: async () => {
+              stops += 1;
+              return { schemaVersion: "0.7.0", stopped: true, at: now };
+            },
+          }) as never,
+      },
+    );
+
+    expect(result).toMatchObject({ status: "running", health: { pid: 5678, version: "2.0.0" } });
+    expect(stops).toBe(0);
+    expect(spawns).toBe(1);
   });
 
   it("spawns a higher build and ignores the lower incumbent until its child is healthy", async () => {
