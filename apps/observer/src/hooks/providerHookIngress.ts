@@ -24,7 +24,7 @@ import {
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import { persistTurnReadinessFromHarnessObservation } from "./turnReadiness.js";
+import { sessionTurnReadinessMutationFromHarnessObservation } from "./turnReadiness.js";
 
 export type ProviderHookIngestResult = {
   observations: number;
@@ -89,8 +89,22 @@ export async function ingestProviderHookEvent(
     ...observation,
     expiresAt: providerObservationExpiresAt(observation.observedAt, retentionDays),
   }));
+  const updatedAt = toIsoTimestamp(clock.now());
+  const turnReadiness = observations.flatMap((observation) => {
+    const harnessEvent = harnessEventObservationFromRecord(observation);
+    if (harnessEvent === undefined) {
+      return [];
+    }
+    const mutation = sessionTurnReadinessMutationFromHarnessObservation({
+      observation: harnessEvent,
+      updatedAt,
+    });
+    return mutation === undefined ? [] : [mutation];
+  });
+  // Readiness shares the processing claim transaction so retries cannot apply a new correlation context.
   const processing = await options.persistence.recordProviderObservationsWithIngressDedupe({
     observations,
+    turnReadiness,
     dedupe: {
       kind: "hook_processing",
       id:
@@ -99,18 +113,6 @@ export async function ingestProviderHookEvent(
     },
     createdAt: options.event.receivedAt,
   });
-
-  // Completion dedupe never suppresses idempotent readiness repair after a partial prior attempt.
-  for (const observation of observations) {
-    const harnessEvent = harnessEventObservationFromRecord(observation);
-    if (harnessEvent !== undefined) {
-      await persistTurnReadinessFromHarnessObservation({
-        persistence: options.persistence,
-        observation: harnessEvent,
-        updatedAt: toIsoTimestamp(clock.now()),
-      });
-    }
-  }
 
   return {
     observations: observations.length,

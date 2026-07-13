@@ -1,6 +1,10 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
-import { observerCommandSummary, runObserverCommand } from "../observer.js";
+import {
+  observerCommandSummary,
+  parseObserverCommandAction,
+  runObserverCommand,
+} from "../observer.js";
 
 export const observerCliCommand: CliCommandNode = {
   name: "observer",
@@ -57,7 +61,7 @@ async function runObserverCliCommand(context: CliCommandRunContext) {
     loadedCommandOptions(context),
     context.options.observerDeps,
   );
-  const action = context.args[0] ?? "status";
+  const action = parseObserverCommandAction(context.args);
   const failedStart =
     (action === "start" || action === "restart") &&
     "status" in result &&

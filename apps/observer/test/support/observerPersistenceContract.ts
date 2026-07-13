@@ -536,6 +536,63 @@ export function observerPersistenceContract(
         });
       });
 
+      it("does not apply readiness derived from a duplicate hook normalization", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          const dedupe = { kind: "hook_processing" as const, id: "hook_context_retry" };
+          const first = await persistence.recordProviderObservationsWithIngressDedupe({
+            observations: [healthObservation("healthy")],
+            turnReadiness: [
+              {
+                action: "upsert",
+                value: {
+                  sessionId: "ses_original",
+                  projectId: "web",
+                  worktreeId: "wt_original",
+                  token: "hook_context_retry",
+                  completedAt: earlier,
+                  updatedAt: now,
+                },
+              },
+            ],
+            dedupe,
+            createdAt: now,
+          });
+          const duplicate = await persistence.recordProviderObservationsWithIngressDedupe({
+            observations: [
+              { ...healthObservation("degraded"), entityKey: "fresh-context-observation" },
+            ],
+            turnReadiness: [
+              {
+                action: "upsert",
+                value: {
+                  sessionId: "ses_fresh_context",
+                  projectId: "web",
+                  worktreeId: "wt_fresh_context",
+                  token: "hook_context_retry",
+                  completedAt: later,
+                  updatedAt: latest,
+                },
+              },
+            ],
+            dedupe,
+            createdAt: later,
+          });
+
+          expect(first).toMatchObject({ deduped: false });
+          expect(duplicate).toEqual({ deduped: true });
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+            expect.objectContaining({
+              sessionId: "ses_original",
+              worktreeId: "wt_original",
+              token: "hook_context_retry",
+            }),
+          ]);
+          await expect(
+            persistence.listProviderObservations({ includeExpired: true, now: latest }),
+          ).resolves.toEqual([expect.objectContaining({ entityKey: "fake-harness" })]);
+        });
+      });
+
       it("rolls back a downstream processing claim when any observation is invalid", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const invalid = {

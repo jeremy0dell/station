@@ -34,9 +34,9 @@ describe("observer pidfile", () => {
   it("builds identity with the trimmed OS start-time token", () => {
     const socketPath = "/tmp/station/observer.sock";
     const expectedStartTime = execFileSync(
-      "ps",
+      process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps",
       ["-ww", "-p", String(process.pid), "-o", "lstart="],
-      { encoding: "utf8" },
+      { encoding: "utf8", env: { ...process.env, LC_ALL: "C" } },
     ).trim();
 
     expect(

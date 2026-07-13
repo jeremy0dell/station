@@ -144,6 +144,32 @@ describe("observer hook spool drain", () => {
     fixture.sqlite.close();
   });
 
+  it("removes spool records that are terminally ignored", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-state-"));
+    const spoolDir = providerIngressSpoolDir(stateDir);
+    const spoolPath = await writeHookSpoolRecordFixture({
+      spoolDir,
+      spoolId: "spool_ignored",
+    });
+
+    await expect(
+      drainProviderIngressSpool({
+        store: createFilesystemProviderIngressSpoolStore(spoolDir),
+        clock: { now: () => new Date(now) },
+        ingest: async (event) => ({
+          schemaVersion: STATION_SCHEMA_VERSION,
+          hookId: event.hookId ?? "spool_ignored",
+          provider: event.provider,
+          event: event.event,
+          accepted: false,
+          status: "ignored",
+          receivedAt: event.receivedAt,
+        }),
+      }),
+    ).resolves.toEqual({ scanned: 1, drained: 1, failed: 0 });
+    await expect(fileExists(spoolPath)).resolves.toBe(false);
+  });
+
   it("retries downstream processing after primary hook dedupe and unlinks only after completion", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-state-"));
     const spoolDir = providerIngressSpoolDir(stateDir);

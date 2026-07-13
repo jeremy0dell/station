@@ -87,12 +87,12 @@ corroborating identity without changing current attach-or-spawn or
 duplicate-reaping behavior. Phase 3d-a now serializes stale-socket reclamation
 before either the socket path or pidfile can be mutated.
 
-### 3d-a boot contract
+### 3d-a/3d-b boot contract
 
 Spike result: **NO-GO for both stale-path deletion designs (directory rename and
 AF_UNIX unlink/rebind); GO for a dedicated SQLite transaction claim backed by a
 permanent cross-runtime adversarial test.** #135 shipped that narrow result;
-version-aware replacement remains separate below.
+#137 extends its claimed listening-socket branch with version-aware replacement.
 
 Startup ownership mutation lives in observer boot (`main.ts`) under the
 OS-lock-backed claim database
@@ -111,10 +111,13 @@ Boot sequence while holding `C`:
    means another boot is in progress, so do not enter. Process death releases
    the OS transaction lock; the database file persists and needs no stale-owner
    deletion. Do not revive either rejected stale-path deletion scheme.
-2. **Probe** the resolved socket as `absent`, `stale`, or `listening`. A
-   listening socket means release `C` and exit 0; the parent's existing health
-   loop attaches or reports incompatibility. 3d-a never compares versions or
-   evicts an incumbent.
+2. **Probe and negotiate** the resolved socket as `absent`, `stale`, or
+   `listening`. For a listening socket, compare strict SemVer health while still
+   holding `C`: exact or higher incumbents attach and the child exits 0; a
+   winning higher candidate replaces a lower incumbent only through verified
+   graceful handoff; incomplete, conflicting, or wedged evidence refuses. The
+   original 3d-a contract stopped at attach, while 3d-b extends this branch
+   without adding client-side ownership mutation.
 3. For `absent` or `stale`, **bind or reclaim** through the existing claimed
    bind path, capture socket identity, publish and fsync the socket-specific
    pidfile, arm the seeded ownership watcher, and commit readiness.

@@ -98,5 +98,6 @@ function readOsStartTime(pid) {
   const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
   return execFileSync(psPath, ["-ww", "-p", String(pid), "-o", "lstart="], {
     encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
   }).trim();
 }

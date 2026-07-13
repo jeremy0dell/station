@@ -52,7 +52,8 @@ export async function deliverProviderHookWithSpooling(input: {
   spoolReceipt: (error: SafeError | undefined) => Promise<ProviderHookReceipt>;
   recordReceipt?: ReceiptRecorder;
 }): Promise<ProviderHookReceipt> {
-  const readiness = await prepareObserverForDelivery(input);
+  const startupDeadlineMs = Date.now() + input.startupTimeoutMs;
+  const readiness = await prepareObserverForDelivery(input, startupDeadlineMs);
   if (!readiness.ok) {
     return recordReceipt(input, await input.spoolReceipt(readiness.error));
   }
@@ -65,7 +66,7 @@ export async function deliverProviderHookWithSpooling(input: {
   if (input.autoStart) {
     const startupInput: Parameters<typeof maybeStartObserver>[0] = {
       paths: input.paths,
-      timeoutMs: input.startupTimeoutMs,
+      startupDeadlineMs,
       rateLimitMs: input.rateLimitMs,
       deps: input.deps,
     };
@@ -89,18 +90,23 @@ export async function deliverProviderHookWithSpooling(input: {
   return recordReceipt(input, await input.spoolReceipt(firstDelivery.error));
 }
 
-async function prepareObserverForDelivery(input: {
-  paths: ObserverPaths;
-  autoStart: boolean;
-  startupTimeoutMs: number;
-  rateLimitMs: number;
-  configPath?: string;
-  observerCommand?: ProviderHookObserverCommand;
-  deps: ProviderHookObserverStartupDeps;
-}): Promise<{ ok: true } | { ok: false; error: SafeError }> {
+async function prepareObserverForDelivery(
+  input: {
+    paths: ObserverPaths;
+    autoStart: boolean;
+    startupTimeoutMs: number;
+    rateLimitMs: number;
+    configPath?: string;
+    observerCommand?: ProviderHookObserverCommand;
+    deps: ProviderHookObserverStartupDeps;
+  },
+  startupDeadlineMs: number,
+): Promise<{ ok: true } | { ok: false; error: SafeError }> {
+  const statusTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
+  if (statusTimeoutMs === undefined) return providerHookStartupTimedOut();
   const statusOptions: Parameters<typeof getProviderHookObserverStatus>[0] = {
     paths: input.paths,
-    timeoutMs: input.startupTimeoutMs,
+    timeoutMs: statusTimeoutMs,
   };
   if (input.configPath !== undefined) statusOptions.configPath = input.configPath;
   if (input.observerCommand !== undefined) {
@@ -140,7 +146,7 @@ async function prepareObserverForDelivery(input: {
 
   const startupInput: Parameters<typeof maybeStartObserver>[0] = {
     paths: input.paths,
-    timeoutMs: input.startupTimeoutMs,
+    startupDeadlineMs,
     rateLimitMs: input.rateLimitMs,
     deps: input.deps,
   };
@@ -175,20 +181,24 @@ async function maybeStartObserver(input: {
   paths: ObserverPaths;
   configPath?: string;
   observerCommand?: ProviderHookObserverCommand;
-  timeoutMs: number;
+  startupDeadlineMs: number;
   rateLimitMs: number;
   deps: ProviderHookObserverStartupDeps;
 }) {
+  const timeoutMs = remainingStartupBudgetMs(input.startupDeadlineMs);
+  if (timeoutMs === undefined) return providerHookStartupTimedOut();
   const lock = await acquireAutoStartLock({
     paths: input.paths,
-    staleMs: Math.max(input.rateLimitMs, input.timeoutMs, minimumAutoStartLockStaleMs),
+    staleMs: Math.max(input.rateLimitMs, timeoutMs, minimumAutoStartLockStaleMs),
     deps: input.deps,
   });
 
   if (lock.status === "contended") {
+    const contendedTimeoutMs = remainingStartupBudgetMs(input.startupDeadlineMs);
+    if (contendedTimeoutMs === undefined) return providerHookStartupTimedOut();
     return waitForContendedAutoStart({
       paths: input.paths,
-      timeoutMs: input.timeoutMs,
+      timeoutMs: contendedTimeoutMs,
       deps: input.deps,
     });
   }
@@ -197,9 +207,12 @@ async function maybeStartObserver(input: {
   }
 
   try {
+    const startupTimeoutMs = remainingStartupBudgetMs(input.startupDeadlineMs);
+    if (startupTimeoutMs === undefined) return providerHookStartupTimedOut();
     const startupOptions: Parameters<typeof startProviderHookObserver>[0] = {
       paths: input.paths,
-      timeoutMs: input.timeoutMs,
+      timeoutMs: startupTimeoutMs,
+      startupDeadlineMs: input.startupDeadlineMs,
     };
     if (input.configPath !== undefined) {
       startupOptions.configPath = input.configPath;
@@ -224,6 +237,22 @@ async function maybeStartObserver(input: {
   } finally {
     await lock.release();
   }
+}
+
+function remainingStartupBudgetMs(deadlineMs: number): number | undefined {
+  const remainingMs = Math.floor(deadlineMs - Date.now());
+  return remainingMs > 0 ? remainingMs : undefined;
+}
+
+function providerHookStartupTimedOut(): { ok: false; error: SafeError } {
+  return {
+    ok: false,
+    error: {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_START_FAILED",
+      message: "Observer did not become healthy before the startup timeout.",
+    },
+  };
 }
 
 type AutoStartLock =

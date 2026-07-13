@@ -139,7 +139,8 @@ async function drainSpoolRecord(
       hookId: record.event.hookId ?? record.spoolId,
     });
     const receipt = await options.ingest(event);
-    return receipt.status === "ingested" && receipt.error === undefined
+    return (receipt.status === "ingested" || receipt.status === "ignored") &&
+      receipt.error === undefined
       ? { status: "drained" }
       : { status: "failed", error: receipt.error };
   }

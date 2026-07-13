@@ -491,8 +491,9 @@ when it changes several tables:
 - `CommandJournal` owns command acceptance, transitions, lookup, history, and
   command errors.
 - `EventJournal` owns ordinary event recording and queries.
-- `IngressJournal` owns atomic dedupe plus event, and atomic dedupe plus event
-  plus observation.
+- `IngressJournal` owns atomic dedupe plus event, atomic dedupe plus event plus
+  observation, and atomic hook-processing completion across observations and
+  turn readiness.
 - `ObservationStore` owns typed provider observations, current-observation
   queries, and expiry.
 - `ReconcileStore` owns the complete atomic `persistReconcileResult` operation.

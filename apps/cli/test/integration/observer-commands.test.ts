@@ -158,6 +158,18 @@ describe("CLI observer commands", () => {
     });
 
     await expect(
+      runCli(["--config", configPath, "observer", "--timeout-ms", "100", "start"], {
+        observerDeps,
+      }),
+    ).resolves.toMatchObject({
+      code: 1,
+      output: {
+        status: "unhealthy",
+        error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      },
+    });
+
+    await expect(
       runCli(["--config", configPath, "observer", "status"], { observerDeps }),
     ).resolves.toMatchObject({ code: 0, output: { status: "running" } });
   });

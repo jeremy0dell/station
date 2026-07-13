@@ -26,6 +26,7 @@ import type {
   ProviderObservationKind,
   ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
+  SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
 } from "./types.js";
@@ -72,7 +73,7 @@ export interface EventJournal {
 /**
  * DRIVEN PORT
  *
- * Atomically records primary ingress acceptance and downstream observation completion under separate dedupe keys.
+ * Atomically records primary ingress acceptance and downstream observation and readiness completion under separate dedupe keys.
  */
 export interface IngressJournal {
   recordEventWithIngressDedupe(
@@ -89,6 +90,7 @@ export interface IngressJournal {
   }): Promise<EventAndObservationIngressDedupeResult>;
   recordProviderObservationsWithIngressDedupe(input: {
     observations: RecordProviderObservationInput[];
+    turnReadiness?: SessionTurnReadinessMutation[];
     dedupe: IngressDedupeKey;
     createdAt?: string;
   }): Promise<ProviderObservationsIngressDedupeResult>;

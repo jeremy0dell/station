@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   createLocalObserverProcessEvidence,
@@ -22,6 +25,28 @@ describe("local Observer process evidence", () => {
         socketPath: "/tmp/socket with spaces/observer.sock",
       }),
     ]);
+  });
+
+  it("recognizes a compiled Observer executable path containing spaces", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "Station App", "stn");
+    await mkdir(dirname(executable), { recursive: true });
+    await writeFile(executable, "");
+    try {
+      const output = [
+        ` 4006 Sat Jul  4 17:45:37 2026 ${executable} __observer --socket /tmp/observer.sock`,
+        ` 4007 Sat Jul  4 17:45:38 2026 /bin/sh -c ${executable} __observer --socket /tmp/observer.sock`,
+      ].join("\n");
+
+      expect(parseObserverProcessList(output)).toEqual([
+        expect.objectContaining({
+          pid: 4006,
+          socketPath: "/tmp/observer.sock",
+        }),
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("normalizes lsof, start-token, absence, and refusal results", () => {

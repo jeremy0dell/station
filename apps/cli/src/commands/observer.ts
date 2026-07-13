@@ -74,6 +74,10 @@ export async function runObserverCommand(
   }
 }
 
+export function parseObserverCommandAction(args: string[]): string {
+  return parseObserverArgs(args, undefined).action;
+}
+
 function parseObserverArgs(
   args: string[],
   timeoutMs: number | undefined,

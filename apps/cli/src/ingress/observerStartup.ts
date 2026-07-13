@@ -72,6 +72,8 @@ export type ProviderHookObserverStartupOptions = {
   observerCommand?: ProviderHookObserverCommand;
   paths: ObserverPaths;
   timeoutMs?: number;
+  /** Absolute startup deadline shared across provider-hook readiness phases. */
+  startupDeadlineMs?: number;
 };
 
 export async function getProviderHookObserverStatus(
@@ -121,9 +123,15 @@ export async function startProviderHookObserver(
 ): Promise<ProviderHookObserverStatus> {
   const paths = options.paths;
   const timeoutMs = options.timeoutMs ?? 30_000;
+  const startupDeadlineMs = options.startupDeadlineMs ?? Date.now() + timeoutMs;
   const clock = deps.clock ?? systemClock;
   const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
-  const existing = await getProviderHookObserverStatus({ ...options, paths }, deps);
+  const statusTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
+  if (statusTimeoutMs === undefined) return startupTimedOutStatus(paths);
+  const existing = await getProviderHookObserverStatus(
+    { ...options, paths, timeoutMs: statusTimeoutMs },
+    deps,
+  );
   if (existing.status === "running") {
     const classification = classifyObserverHealth(existing.health, buildVersion);
     if (classification.action === "attach") {
@@ -139,12 +147,14 @@ export async function startProviderHookObserver(
   } else if (existing.error?.code === "PROTOCOL_SCHEMA_MISMATCH") {
     return { status: "unhealthy", paths, error: existing.error };
   }
+  const startTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
+  if (startTimeoutMs === undefined) return startupTimedOutStatus(paths);
   let child: ChildProcessLike | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: "providerHooks.observer.start",
       clock,
-      timeoutMs,
+      timeoutMs: startTimeoutMs,
       error: {
         tag: "ObserverStartupError",
         code: "OBSERVER_START_FAILED",
@@ -166,12 +176,23 @@ export async function startProviderHookObserver(
       if (options.configPath !== undefined) {
         spawnInput.configPath = options.configPath;
       }
+      const childStartupTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
+      if (childStartupTimeoutMs === undefined) throw providerHookStartupTimeoutError();
       child =
         deps.spawnObserver === undefined
-          ? defaultSpawnObserver(spawnInput, timeoutMs)
+          ? defaultSpawnObserver(spawnInput, childStartupTimeoutMs)
           : await deps.spawnObserver(spawnInput);
+      if (signal.aborted) {
+        child.kill?.();
+        throw observerHealthWaitCancelledError();
+      }
       child.unref?.();
-      return waitForProviderHookObserverHealth({ paths, timeoutMs, buildVersion, signal }, deps);
+      const healthTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
+      if (healthTimeoutMs === undefined) throw providerHookStartupTimeoutError();
+      return waitForProviderHookObserverHealth(
+        { paths, timeoutMs: healthTimeoutMs, buildVersion, signal },
+        deps,
+      );
     },
   );
 
@@ -288,6 +309,23 @@ function defaultClientFactory(socketPath: string, options?: { timeoutMs: number 
     socketPath,
     timeoutMs: options?.timeoutMs ?? defaultProviderHookClientTimeoutMs,
   });
+}
+
+function remainingStartupBudgetMs(deadlineMs: number): number | undefined {
+  const remainingMs = Math.floor(deadlineMs - Date.now());
+  return remainingMs > 0 ? remainingMs : undefined;
+}
+
+function providerHookStartupTimeoutError(): SafeError {
+  return {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_START_FAILED",
+    message: "Observer did not become healthy before the startup timeout.",
+  };
+}
+
+function startupTimedOutStatus(paths: ObserverPaths): ProviderHookObserverStatus {
+  return { status: "unhealthy", paths, error: providerHookStartupTimeoutError() };
 }
 
 function defaultSpawnObserver(

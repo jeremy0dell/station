@@ -222,16 +222,21 @@ describe("provider hook delivery policy", () => {
     expect(state.spooled).toBe(1);
   });
 
-  it("stops health retries after the total startup deadline", async () => {
+  it("shares one startup deadline across preflight, repeated status, and convergence", async () => {
     const fixture = await createTempState();
     const state = { running: false, spawnCount: 0, spooled: 0 };
     let healthCalls = 0;
+    const requestTimeouts: number[] = [];
+    const startupTimeoutMs = 80;
     const deps = {
       buildVersion,
-      clientFactory: () =>
+      clientFactory: (_socketPath: string, options?: { timeoutMs: number }) =>
         ({
           health: async () => {
             healthCalls += 1;
+            const requestTimeoutMs = options?.timeoutMs ?? startupTimeoutMs;
+            requestTimeouts.push(requestTimeoutMs);
+            await new Promise((resolve) => setTimeout(resolve, Math.min(50, requestTimeoutMs)));
             throw new Error("observer offline");
           },
         }) as never,
@@ -241,14 +246,20 @@ describe("provider hook delivery policy", () => {
       },
     };
 
+    const startedAt = Date.now();
     await expect(
       deliverProviderHookWithSpooling(
-        deliveryInput(fixture, "hook_total_deadline", state, deps, { startupTimeoutMs: 50 }),
+        deliveryInput(fixture, "hook_total_deadline", state, deps, { startupTimeoutMs }),
       ),
     ).resolves.toMatchObject({ status: "spooled" });
+    const elapsedMs = Date.now() - startedAt;
     const callsAtTimeout = healthCalls;
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(healthCalls).toBe(callsAtTimeout);
+    expect(healthCalls).toBe(2);
+    expect(requestTimeouts[1]).toBeLessThan(requestTimeouts[0] ?? 0);
+    expect(state.spawnCount).toBe(0);
+    expect(elapsedMs).toBeLessThan(startupTimeoutMs * 2);
   });
 
   it("does not deliver to a lower build until its replacement is healthy", async () => {

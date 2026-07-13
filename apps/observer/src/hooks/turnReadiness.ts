@@ -1,14 +1,18 @@
 import type { HarnessEventObservation } from "@station/contracts";
-import type { SessionStore } from "../persistence/index.js";
+import type { SessionStore, SessionTurnReadinessMutation } from "../persistence/index.js";
 
-export async function persistTurnReadinessFromHarnessObservation(input: {
-  persistence: SessionStore;
+/**
+ * POLICY
+ *
+ * Converts normalized harness status into the durable readiness mutation owned by ingress completion.
+ */
+export function sessionTurnReadinessMutationFromHarnessObservation(input: {
   observation: HarnessEventObservation;
   updatedAt: string;
-}): Promise<boolean> {
+}): SessionTurnReadinessMutation | undefined {
   const { observation } = input;
   if (observation.sessionId === undefined) {
-    return false;
+    return undefined;
   }
 
   if (observation.turn?.kind === "turn_completed" && observation.status?.value === "idle") {
@@ -17,16 +21,39 @@ export async function persistTurnReadinessFromHarnessObservation(input: {
       observation.projectId === undefined ||
       observation.worktreeId === undefined
     ) {
-      return false;
+      return undefined;
     }
-    await input.persistence.upsertSessionTurnReadiness({
-      sessionId: observation.sessionId,
-      projectId: observation.projectId,
-      worktreeId: observation.worktreeId,
-      token: observation.reportId,
-      completedAt: observation.status.updatedAt,
-      updatedAt: input.updatedAt,
-    });
+    return {
+      action: "upsert",
+      value: {
+        sessionId: observation.sessionId,
+        projectId: observation.projectId,
+        worktreeId: observation.worktreeId,
+        token: observation.reportId,
+        completedAt: observation.status.updatedAt,
+        updatedAt: input.updatedAt,
+      },
+    };
+  }
+
+  const status = observation.status?.value;
+  if (status === "working" || status === "starting" || status === "needs_attention") {
+    return { action: "delete", sessionId: observation.sessionId };
+  }
+  return undefined;
+}
+
+export async function persistTurnReadinessFromHarnessObservation(input: {
+  persistence: SessionStore;
+  observation: HarnessEventObservation;
+  updatedAt: string;
+}): Promise<boolean> {
+  const mutation = sessionTurnReadinessMutationFromHarnessObservation(input);
+  if (mutation === undefined) {
+    return false;
+  }
+  if (mutation.action === "upsert") {
+    await input.persistence.upsertSessionTurnReadiness(mutation.value);
     return true;
   }
 
@@ -34,9 +61,6 @@ export async function persistTurnReadinessFromHarnessObservation(input: {
   // request for the user mid-turn) makes ready_to_read stale. Without this
   // closing edge the badge survives on a working agent, and it cannot be
   // acknowledged because snapshots only expose readiness on idle agents.
-  const status = observation.status?.value;
-  if (status === "working" || status === "starting" || status === "needs_attention") {
-    await input.persistence.deleteSessionTurnReadiness({ sessionId: observation.sessionId });
-  }
+  await input.persistence.deleteSessionTurnReadiness({ sessionId: mutation.sessionId });
   return false;
 }

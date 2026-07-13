@@ -143,6 +143,23 @@ export type ProviderObservationsIngressDedupeResult = {
   observations?: PersistedProviderObservation[];
 };
 
+export type SessionTurnReadinessMutation =
+  | {
+      action: "upsert";
+      value: {
+        sessionId: string;
+        projectId: string;
+        worktreeId: string;
+        token: string;
+        completedAt: string;
+        updatedAt: string;
+      };
+    }
+  | {
+      action: "delete";
+      sessionId: string;
+    };
+
 export type PersistedWorktreeMetadataCurrent<
   TKind extends WorktreeMetadataCurrentKind = WorktreeMetadataCurrentKind,
 > = {
