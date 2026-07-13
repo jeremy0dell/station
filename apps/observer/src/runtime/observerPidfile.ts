@@ -30,7 +30,7 @@ async function syncDirectory(path: string): Promise<void> {
   }
 }
 
-function identitiesMatch(
+export function observerProcessIdentitiesMatch(
   actual: ObserverProcessIdentity,
   expected: ObserverProcessIdentity,
 ): boolean {
@@ -146,7 +146,7 @@ export async function removeObserverProcessIdentity(
     throw error;
   }
 
-  if (!identitiesMatch(currentIdentity, expectedIdentity)) {
+  if (!observerProcessIdentitiesMatch(currentIdentity, expectedIdentity)) {
     await restoreClaimedIdentity(claimedPath, path);
     return false;
   }

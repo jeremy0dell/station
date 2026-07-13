@@ -10,7 +10,11 @@ import {
   runRuntimeBoundaryWithTimeout,
   withTimeout,
 } from "@station/runtime";
-import { observerHealthWaitCancelledError, waitForObserverHealth } from "./health.js";
+import {
+  observerHandoffRefusedError,
+  observerHealthWaitCancelledError,
+  waitForObserverHealth,
+} from "./health.js";
 import { defaultSpawnObserver, observerBootLogPath, readObserverBootLogTail } from "./spawn.js";
 import type {
   ChildExitResult,
@@ -26,6 +30,7 @@ export async function startObserverProcess(
   input: {
     paths: SpawnObserverInput["paths"];
     timeoutMs: number;
+    buildVersion: string;
     trace: RuntimeTraceContext;
     clock: RuntimeClock;
     configPath?: string;
@@ -77,6 +82,7 @@ export async function startObserverProcess(
           child,
           paths: input.paths,
           timeoutMs: input.timeoutMs,
+          buildVersion: input.buildVersion,
           trace: input.trace,
           signal,
         },
@@ -86,12 +92,7 @@ export async function startObserverProcess(
   ).finally(() => clearObserverStartupProgress(progressTimers));
 
   // A child queued on the boot claim must not outlive the incumbent this caller attached to.
-  if (
-    result.ok &&
-    child?.pid !== undefined &&
-    result.value.pid !== undefined &&
-    child.pid !== result.value.pid
-  ) {
+  if (result.ok && child?.pid !== undefined && child.pid !== result.value.pid) {
     child.kill?.();
   }
   if (!result.ok && result.error.code !== "OBSERVER_EXITED_ON_START") {
@@ -106,20 +107,28 @@ async function waitForStartedObserver(
     child: ChildProcessLike;
     paths: SpawnObserverInput["paths"];
     timeoutMs: number;
+    buildVersion: string;
     trace: RuntimeTraceContext;
     signal: AbortSignal;
   },
   deps: ObserverProcessDeps,
 ): Promise<ObserverHealth> {
   const healthController = new AbortController();
+  let replaceableIncumbent: ObserverHealth | undefined;
   const cancelHealth = () => healthController.abort();
   input.signal.addEventListener("abort", cancelHealth, { once: true });
   const healthPromise = waitForObserverHealth(
     {
       paths: input.paths,
       timeoutMs: input.timeoutMs,
+      buildVersion: input.buildVersion,
       trace: input.trace,
       signal: healthController.signal,
+      onBuildClassification: (classification, health) => {
+        if (classification.action === "replace") {
+          replaceableIncumbent = health;
+        }
+      },
     },
     deps,
   );
@@ -167,6 +176,13 @@ async function waitForStartedObserver(
       if (input.signal.aborted) {
         throw observerHealthWaitCancelledError();
       }
+    }
+    if (replaceableIncumbent !== undefined) {
+      throw observerHandoffRefusedError(
+        replaceableIncumbent,
+        input.buildVersion,
+        "The replacement process exited before publishing compatible health.",
+      );
     }
     throw await observerExitedOnStartError(input.paths, input.child, outcome.exit, input.trace);
   } finally {

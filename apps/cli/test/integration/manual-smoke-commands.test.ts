@@ -282,6 +282,7 @@ function runningObserverDeps(options: {
   reconcile?: (reason?: string) => Promise<ReconcileReceipt>;
 }) {
   return {
+    buildVersion: "0.0.0",
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
@@ -289,7 +290,7 @@ function runningObserverDeps(options: {
           status: "healthy",
           pid: 1234,
           startedAt: now,
-          version: "0.0.0",
+          version: "0.7.0",
           socketPath,
         }),
         getSnapshot: async () => options.snapshot ?? snapshotFixture(),
@@ -310,7 +311,7 @@ function snapshotFixture(): StationSnapshot {
   return {
     schemaVersion: "0.7.0",
     generatedAt: now,
-    observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
+    observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
     providerHealth: {},
     projects: [],
     rows: [],

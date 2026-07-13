@@ -11,10 +11,12 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createStaleSocketFile, createTempSocketPath } from "../../../../tests/support/sockets";
 import {
+  acquireObserverBootClaim,
   createCommandQueue,
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
+  createObserverLifecycleClient,
   createSqliteObserverPersistence,
   openObserverSqlite,
   type PersistenceHealthSource,
@@ -62,10 +64,19 @@ describe("observer protocol server", () => {
       const providerRegistryFactory = vi.fn(() => {
         throw new Error("providers must not be constructed for a listening socket");
       });
+      const incumbentLifecycle = {
+        health: async () => {
+          const contender = await acquireObserverBootClaim({ socketPath, timeoutMs: 25 });
+          expect(contender).toMatchObject({ status: "contended" });
+          return fixture.api.health();
+        },
+        stop: fixture.api.stop,
+        socketListening: async () => true,
+      };
       await expect(
         runObserverMain(
           ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "100"],
-          { providerRegistryFactory },
+          { providerRegistryFactory, buildVersion: "0.0.0", incumbentLifecycle },
         ),
       ).resolves.toBe(0);
       expect(providerRegistryFactory).not.toHaveBeenCalled();
@@ -89,7 +100,13 @@ describe("observer protocol server", () => {
       drainOnStart: false,
     });
     const client = createObserverClient({ socketPath, requestId: ids("req") });
+    const lifecycle = createObserverLifecycleClient({ timeoutMs: 1000 });
 
+    await expect(lifecycle.socketListening(socketPath, { timeoutMs: 1000 })).resolves.toBe(true);
+    await expect(lifecycle.health(socketPath, { timeoutMs: 1000 })).resolves.toMatchObject({
+      status: "healthy",
+      socketPath,
+    });
     await expect(client.health()).resolves.toMatchObject({
       status: "healthy",
       socketPath,
@@ -134,6 +151,9 @@ describe("observer protocol server", () => {
     await expect(client.getCommand(receipt.commandId)).resolves.toMatchObject({
       id: "cmd_1",
       status: "succeeded",
+    });
+    await expect(lifecycle.stop(socketPath, { timeoutMs: 1000 })).resolves.toMatchObject({
+      stopped: true,
     });
 
     await server.close();

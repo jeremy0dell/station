@@ -2,18 +2,19 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
+import { stationBuildInfo } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
 
-const healthyObserver = (pid = 1234) =>
+const healthyObserver = (pid = 1234, version = stationBuildInfo().version) =>
   ({
     schemaVersion: "0.7.0",
     status: "healthy",
     pid,
     startedAt: now,
-    version: "0.0.0",
+    version,
   }) as const;
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -200,6 +201,96 @@ describe("CLI observer process startup", () => {
     expect(healthCalls).toBe(4);
     expect(kills).toBe(1);
     expect(exitWaitDisposals).toBe(1);
+  });
+
+  it("cancels its spawned child when compatible incumbent health omits pid", async () => {
+    const fixture = await createTempState();
+    let spawned = false;
+    let kills = 0;
+    const { pid: _pid, ...healthWithoutPid } = healthyObserver();
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 5_000 },
+      {
+        spawnObserver: async () => {
+          spawned = true;
+          return fakeChild({
+            pid: 5678,
+            kill: () => {
+              kills += 1;
+              return true;
+            },
+          });
+        },
+        clientFactory: fakeClientFactory(async () => {
+          if (!spawned) throw new Error("observer offline");
+          return healthWithoutPid;
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "running",
+      health: { version: stationBuildInfo().version },
+    });
+    expect(result.health?.pid).toBeUndefined();
+    expect(kills).toBe(1);
+  });
+
+  it("keeps waiting through lower-build health until the spawned build owns the socket", async () => {
+    const fixture = await createTempState();
+    let healthCalls = 0;
+    let kills = 0;
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 5_000 },
+      {
+        buildVersion: "2.0.0",
+        spawnObserver: async () =>
+          fakeChild({
+            pid: 5678,
+            kill: () => {
+              kills += 1;
+              return true;
+            },
+          }),
+        clientFactory: fakeClientFactory(async () => {
+          healthCalls += 1;
+          return healthCalls < 3 ? healthyObserver(1234, "1.0.0") : healthyObserver(5678, "2.0.0");
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({ status: "running", health: { pid: 5678, version: "2.0.0" } });
+    expect(healthCalls).toBe(3);
+    expect(kills).toBe(0);
+  });
+
+  it("maps a child exit with only lower-build health remaining to handoff refusal", async () => {
+    const fixture = await createTempState();
+    let healthCalls = 0;
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 2_000 },
+      {
+        buildVersion: "2.0.0",
+        spawnObserver: async () =>
+          fakeChild({
+            pid: 5678,
+            exited: Promise.resolve({ type: "exit", code: 1, signal: null }),
+          }),
+        clientFactory: fakeClientFactory(async () => {
+          healthCalls += 1;
+          return healthyObserver(1234, "1.0.0");
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: { code: "OBSERVER_HANDOFF_REFUSED" },
+    });
+    expect(healthCalls).toBeGreaterThan(1);
   });
 
   it("lets the outer startup timeout preempt incumbent convergence", async () => {

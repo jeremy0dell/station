@@ -7,9 +7,14 @@ import {
   type RuntimeTraceContext,
   runRuntimeBoundaryWithRetryAndTimeout,
   safeErrorFromUnknown,
+  stationBuildInfo,
   systemClock,
 } from "@station/runtime";
-import { defaultClientFactory } from "./observerProcess/health.js";
+import {
+  classifyObserverHealth,
+  defaultClientFactory,
+  observerHandoffRefusedError,
+} from "./observerProcess/health.js";
 import { startObserverProcess } from "./observerProcess/startup.js";
 import type {
   ObserverProcessDeps,
@@ -63,8 +68,9 @@ export async function getObserverStatus(
 /**
  * USE CASE
  *
- * Attaches to a healthy Observer or starts a child while leaving socket
- * ownership mutation to the child's serialized boot lifecycle.
+ * Attaches to an exact or winning incumbent build, starts a child to negotiate
+ * replacement of an older build, and refuses incomplete ownership evidence.
+ * Socket ownership mutation remains inside the child's serialized boot lifecycle.
  */
 export async function startObserver(
   options: ObserverProcessOptions = {},
@@ -73,10 +79,21 @@ export async function startObserver(
   const paths = options.paths ?? resolveObserverPaths(options.config);
   const timeoutMs = options.timeoutMs ?? 10_000;
   const clock = deps.clock ?? systemClock;
+  const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
   const trace = createTraceContext({ operation: "cli.observer.start" });
   const existing = await getObserverStatus({ ...options, paths }, deps);
   if (existing.status === "running") {
-    return existing;
+    const classification = classifyObserverHealth(existing.health, buildVersion);
+    if (classification.action === "attach") {
+      return existing;
+    }
+    if (classification.action === "refuse") {
+      return {
+        status: "unhealthy",
+        paths,
+        error: observerHandoffRefusedError(existing.health, buildVersion, classification.reason),
+      };
+    }
   }
   if (existing.status === "unhealthy") {
     return existing;
@@ -88,6 +105,7 @@ export async function startObserver(
       timeoutMs,
       trace,
       clock,
+      buildVersion,
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.onStartupProgress === undefined
         ? {}

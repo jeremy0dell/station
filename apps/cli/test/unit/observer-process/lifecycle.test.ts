@@ -39,6 +39,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 200,
       },
       {
+        buildVersion: "0.0.0",
         clock: { now: () => new Date(now) },
         spawnObserver: async (input): Promise<ChildProcessLike> => {
           spawnInput = input;
@@ -89,6 +90,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 200,
       },
       {
+        buildVersion: "0.0.0",
         clock: { now: () => new Date(now) },
         spawnObserver: async (): Promise<ChildProcessLike> => {
           staleSocketPresentAtSpawn = await fileExists(fixture.socketPath);
@@ -131,6 +133,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 20,
       },
       {
+        buildVersion: "0.0.0",
         clock: { now: () => new Date(now) },
         spawnObserver: async (): Promise<ChildProcessLike> => {
           spawned = true;
@@ -232,6 +235,120 @@ describe("CLI observer process lifecycle", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("attaches to an exact or newer healthy incumbent without spawning", async () => {
+    const fixture = await createTempState();
+    let spawned = false;
+
+    for (const version of ["1.2.3", "2.0.0"]) {
+      const result = await startObserver(
+        { config: fixture.config },
+        {
+          buildVersion: "1.2.3",
+          spawnObserver: async () => {
+            spawned = true;
+            return { pid: 5678, unref: () => undefined };
+          },
+          clientFactory: () =>
+            ({
+              health: async () => ({
+                schemaVersion: "0.7.0",
+                status: "healthy",
+                pid: 1234,
+                startedAt: now,
+                version,
+                socketPath: fixture.socketPath,
+              }),
+            }) as never,
+        },
+      );
+
+      expect(result).toMatchObject({ status: "running", health: { version, pid: 1234 } });
+    }
+    expect(spawned).toBe(false);
+  });
+
+  it("spawns a higher build and ignores the lower incumbent until its child is healthy", async () => {
+    const fixture = await createTempState();
+    let spawned = false;
+    let healthAttempts = 0;
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        buildVersion: "2.0.0",
+        spawnObserver: async () => {
+          spawned = true;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => {
+              healthAttempts += 1;
+              if (!spawned || healthAttempts < 3) {
+                return {
+                  schemaVersion: "0.7.0",
+                  status: "healthy",
+                  pid: 1234,
+                  startedAt: now,
+                  version: "1.0.0",
+                  socketPath: fixture.socketPath,
+                };
+              }
+              return {
+                schemaVersion: "0.7.0",
+                status: "healthy",
+                pid: 5678,
+                startedAt: now,
+                version: "2.0.0",
+                socketPath: fixture.socketPath,
+              };
+            },
+          }) as never,
+      },
+    );
+
+    expect(spawned).toBe(true);
+    expect(healthAttempts).toBeGreaterThanOrEqual(3);
+    expect(result).toMatchObject({ status: "running", health: { version: "2.0.0", pid: 5678 } });
+  });
+
+  it.each([
+    ["missing version", { pid: 1234, startedAt: now, socketPath: "/tmp/observer.sock" }],
+    ["missing pid", { version: "1.0.0", startedAt: now, socketPath: "/tmp/observer.sock" }],
+    ["missing start time", { version: "1.0.0", pid: 1234, socketPath: "/tmp/observer.sock" }],
+    [
+      "invalid version",
+      { version: "not-semver", pid: 1234, startedAt: now, socketPath: "/tmp/observer.sock" },
+    ],
+  ])("refuses legacy incumbent health with %s without spawning", async (_label, identity) => {
+    const fixture = await createTempState();
+    let spawned = false;
+    const result = await startObserver(
+      { config: fixture.config },
+      {
+        buildVersion: "2.0.0",
+        spawnObserver: async () => {
+          spawned = true;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.7.0",
+              status: "healthy",
+              ...identity,
+            }),
+          }) as never,
+      },
+    );
+
+    expect(spawned).toBe(false);
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: { code: "OBSERVER_HANDOFF_REFUSED" },
+    });
   });
 
   it("does not spawn over a present observer socket when health times out", async () => {

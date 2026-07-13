@@ -10,6 +10,7 @@ describe("CLI observer commands", () => {
     const fixture = await createTempState();
     let running = false;
     const deps = {
+      buildVersion: "0.0.0",
       spawnObserver: async () => {
         running = true;
         return { pid: 1234, unref: () => undefined };
@@ -55,6 +56,7 @@ describe("CLI observer commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     let running = false;
     const deps = {
+      buildVersion: "0.0.0",
       spawnObserver: async () => {
         running = true;
         return { pid: 1234, unref: () => undefined };
@@ -124,5 +126,39 @@ describe("CLI observer commands", () => {
         },
       ),
     ).rejects.toThrow("--timeout-ms must be a positive integer.");
+  });
+
+  it("returns a failing CLI result when a legacy incumbent cannot be handed off safely", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const observerDeps = {
+      buildVersion: "1.2.3",
+      clientFactory: () =>
+        ({
+          health: async () => ({
+            schemaVersion: "0.7.0",
+            status: "healthy",
+          }),
+        }) as never,
+    };
+
+    await expect(
+      runCli(["--config", configPath, "observer", "start"], {
+        observerDeps,
+      }),
+    ).resolves.toMatchObject({
+      code: 1,
+      output: {
+        status: "unhealthy",
+        error: {
+          code: "OBSERVER_HANDOFF_REFUSED",
+          hint: expect.stringContaining("Requested build: 1.2.3"),
+        },
+      },
+    });
+
+    await expect(
+      runCli(["--config", configPath, "observer", "status"], { observerDeps }),
+    ).resolves.toMatchObject({ code: 0, output: { status: "running" } });
   });
 });

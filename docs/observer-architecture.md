@@ -189,6 +189,8 @@ ownership even where current ownership is still a deviation.
 | Logging and config mutation | Driven | target `StationLogger` and `ProjectConfigWriter` | JSONL logger and project-config adapters | Logger methods expose no path or JSONL result; project commands expose no config or home path (OBS-HEX-010). |
 | Worktree metadata evidence | Driven | target `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | One role reads typed change evidence; the other owns watcher replacement and shutdown (OBS-HEX-011). |
 | Diagnostic evidence | Driven | target `DiagnosticEvidenceSource` | local state, log, and hook-spool adapter | Only typed local evidence traversal crosses the port; command/event persistence, providers, core, and SQLite remain separate inputs (OBS-HEX-012). |
+| Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
+| Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, argv, and OS start token must corroborate before replacement or signaling. |
 
 `packages/contracts` owns shared Station schemas, application values, and
 provider port contracts. Observer-private ports remain in `apps/observer`.
@@ -267,9 +269,11 @@ Current startup proceeds in this order:
    and prepares private state and socket directories.
 3. Before provider construction or main-database access, the child opens the
    low-level claim database beside the resolved socket and acquires `BEGIN
-   IMMEDIATE` with that startup budget. A listening probe releases the claim and
-   exits successfully so the parent attaches. An absent or stale probe keeps the
-   claim for owned startup; hard contention or claim I/O failure is fatal.
+   IMMEDIATE` with that startup budget. An absent or stale probe keeps the claim
+   for owned startup. A listening probe reads incumbent health and applies the
+   strict SemVer policy: exact or higher incumbents attach; a higher candidate
+   may replace a lower incumbent only after complete process attribution. Hard
+   contention, invalid ownership evidence, or claim I/O failure is fatal.
 4. CLI composition receives the resolved state directory and constructs the
    providers. Compiled composition materializes the Pi extension here; Observer
    code remains provider-neutral.
@@ -299,6 +303,14 @@ Current startup proceeds in this order:
     stop requested before readiness is terminal: health remains gated, socket
     and pidfile cleanup finish while the claim is held, and the outer lifecycle
     `finally` releases it before exit.
+
+Version-aware replacement remains inside step 3 while the claim is held. The
+handoff use case revalidates `lsof`, pidfile, argv, and OS start token before
+controlled stop and before its single permitted SIGTERM. A stop receipt is not
+exit proof: successor startup requires both socket closure and exact incumbent
+death. Missing, invalid, conflicting, or wedged evidence returns
+`OBSERVER_HANDOFF_REFUSED`; automatic handoff never sends SIGKILL. Station Host
+is outside this lifecycle and continues to own live PTYs independently.
 
 Composition must make lifecycle ownership obvious. Anything that owns a timer,
 fiber, watcher, queue, socket, child process, or durable handle must have a
@@ -433,7 +445,8 @@ from the diagnostic use case.
 
 | Concern | Current contract |
 | --- | --- |
-| Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes all child-side ownership mutation; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
+| Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
+| Observer build ordering | Exact builds attach. For different valid SemVer builds, higher precedence wins; at equal precedence the lexicographically greater exact build string wins so the CLI parent and Observer child agree despite having different process identities. Missing or invalid versions refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Reconcile ordering | Core reconciles form a non-poisoning promise chain. Scheduled requests coalesce; queued work after a run receives a later flush. |

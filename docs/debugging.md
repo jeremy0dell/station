@@ -182,6 +182,14 @@ process or unlink a socket from this file alone. Clean shutdown removes the
 file only when the Observer still owns the socket and every identity field
 matches its published value.
 
+`OBSERVER_HANDOFF_REFUSED` means automatic cross-version replacement could not
+prove or stop the incumbent safely. Read the running/requested versions in the
+error, inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
+strict pidfile and `ps -ww -p <pid> -o lstart=,command=`, then retry only after
+resolving missing or conflicting evidence. Automatic handoff never uses
+SIGKILL; `stn observer reap --force` remains the explicit operator path for
+confirmed duplicates, not a generic response to a live wedged owner.
+
 ## Reading Evidence
 
 - `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.

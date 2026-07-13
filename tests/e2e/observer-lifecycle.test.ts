@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -137,6 +137,111 @@ describe("observer lifecycle e2e", () => {
     }
 
     await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("replaces a lower build only after its process and socket have closed", async () => {
+    const fixture = await createTempState();
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: "0.6.0",
+      stopDelayMs: 400,
+    });
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const successorClient = createObserverClient({
+      socketPath: fixture.socketPath,
+      timeoutMs: 1000,
+    });
+    let successorStarted = false;
+
+    try {
+      const startedAt = Date.now();
+      const status = await startObserver({ config, timeoutMs: 10_000 }, { buildVersion: "0.7.0" });
+      expect(status).toMatchObject({
+        status: "running",
+        health: { version: "0.7.0", socketPath: fixture.socketPath },
+      });
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(300);
+      if (status.status !== "running") throw new Error("Successor Observer did not start.");
+      successorStarted = true;
+      expect(status.health.pid).not.toBe(incumbent.child.pid);
+      await expectProcessExit(incumbent.child.pid);
+      expect(
+        ObserverProcessIdentitySchema.parse(
+          JSON.parse(await readFile(`${fixture.socketPath}.pid`, "utf8")),
+        ),
+      ).toMatchObject({
+        pid: status.health.pid,
+        version: "0.7.0",
+        socketPath: fixture.socketPath,
+      });
+    } finally {
+      if (successorStarted) {
+        await successorClient.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+      await terminateFixture(incumbent.child);
+    }
+  });
+
+  it("refuses a wedged lower build without automatic SIGKILL", async () => {
+    const fixture = await createTempState();
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: "0.6.0",
+      mode: "wedged",
+    });
+
+    try {
+      const status = await startObserver(
+        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 4000 },
+        { buildVersion: "0.7.0" },
+      );
+      expect(status).toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      });
+      expect(processIsAlive(incumbent.child.pid)).toBe(true);
+      await expect(incumbent.client.health()).resolves.toMatchObject({
+        pid: incumbent.child.pid,
+        version: "0.6.0",
+      });
+      expect(
+        ObserverProcessIdentitySchema.parse(
+          JSON.parse(await readFile(`${fixture.socketPath}.pid`, "utf8")),
+        ),
+      ).toMatchObject({ pid: incumbent.child.pid, version: "0.6.0" });
+    } finally {
+      await terminateFixture(incumbent.child);
+      await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+    }
+  });
+
+  it("refuses conflicting pidfile evidence before stopping the incumbent", async () => {
+    const fixture = await createTempState();
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: "0.6.0",
+      pidfileVersion: "0.5.0",
+    });
+
+    try {
+      const status = await startObserver(
+        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 4000 },
+        { buildVersion: "0.7.0" },
+      );
+      expect(status).toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      });
+      expect(processIsAlive(incumbent.child.pid)).toBe(true);
+      await expect(incumbent.client.health()).resolves.toMatchObject({ pid: incumbent.child.pid });
+    } finally {
+      await terminateFixture(incumbent.child);
+      await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+    }
   });
 
   it("derives the default socket and persistent claim from state when XDG is unset", async () => {
@@ -534,6 +639,83 @@ function observerConfig(stateDir: string, socketPath: string) {
     ...emptyConfig(),
     observer: { stateDir, socketPath },
   };
+}
+
+async function startIncumbentFixture(input: {
+  stateDir: string;
+  socketPath: string;
+  version: string;
+  pidfileVersion?: string;
+  mode?: "graceful" | "wedged";
+  stopDelayMs?: number;
+}): Promise<{
+  child: ChildProcess;
+  client: ReturnType<typeof createObserverClient>;
+}> {
+  const args = [
+    join(process.cwd(), "tests", "support", "observerMain.js"),
+    "--socket",
+    input.socketPath,
+    "--state-dir",
+    input.stateDir,
+    "--version",
+    input.version,
+    "--mode",
+    input.mode ?? "graceful",
+    "--stop-delay-ms",
+    String(input.stopDelayMs ?? 100),
+  ];
+  if (input.pidfileVersion !== undefined) {
+    args.push("--pidfile-version", input.pidfileVersion);
+  }
+  const child = spawn(process.execPath, args, {
+    cwd: process.cwd(),
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const client = createObserverClient({ socketPath: input.socketPath, timeoutMs: 500 });
+  try {
+    await waitFor(async () => {
+      try {
+        await client.health();
+        return true;
+      } catch {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          throw new Error(`Incumbent fixture exited before health.\n${stderr}`);
+        }
+        return false;
+      }
+    }, 5000);
+    return { child, client };
+  } catch (error) {
+    await terminateFixture(child);
+    throw error;
+  }
+}
+
+async function terminateFixture(child: ChildProcess): Promise<void> {
+  if (child.pid === undefined || !processIsAlive(child.pid)) return;
+  child.kill("SIGKILL");
+  await expectProcessExit(child.pid).catch(() => undefined);
+}
+
+async function expectProcessExit(pid: number | undefined, timeoutMs = 5000): Promise<void> {
+  if (pid === undefined) throw new Error("Process did not report a PID.");
+  await waitFor(async () => !processIsAlive(pid), timeoutMs);
+}
+
+function processIsAlive(pid: number | undefined): boolean {
+  if (pid === undefined) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 async function expectClaimDatabase(path: string): Promise<void> {
