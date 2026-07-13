@@ -13,29 +13,22 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { type GitCommandContext, runGitCommand, runOptionalGitCommand } from "./gitCommand.js";
+import type {
+  WorktreeChangeEvidence,
+  WorktreeChangeReadInput,
+  WorktreeChangeSource,
+} from "./ports.js";
 
-export type LocalGitWorktree = {
-  id: string;
-  projectId: string;
-  path: string;
-  branch: string;
-  state?: string;
-  pr?: WorktreePullRequest;
-};
-
-export type LocalGitChangeSummaryInput = {
-  project: ProviderProjectConfig;
-  worktree: LocalGitWorktree;
-  cachedPullRequest?: WorktreePullRequest;
+type LocalGitChangeSummaryInput = WorktreeChangeReadInput & {
   timeoutMs?: number;
   clock?: RuntimeClock;
   runner?: ExternalCommandRunner;
-  signal?: AbortSignal;
 };
 
-export type LocalGitChangeSummaryResult = {
-  summary: WorktreeChangeSummary;
-  cacheKey: string;
+export type CreateLocalGitWorktreeChangeSourceOptions = {
+  clock?: RuntimeClock;
+  runner?: ExternalCommandRunner;
+  timeoutMs?: number;
 };
 
 export type ParsedGitNumstat = {
@@ -52,13 +45,28 @@ type ResolvedBase = {
 
 const defaultGitTimeoutMs = 200;
 
-export async function readLocalGitChangeSummary(
-  input: LocalGitChangeSummaryInput,
-): Promise<LocalGitChangeSummaryResult | undefined> {
-  if (input.worktree.state !== undefined && input.worktree.state !== "exists") {
-    return undefined;
-  }
+/**
+ * ADAPTER
+ *
+ * Reads worktree change evidence through local Git while retaining command, timeout, and parsing mechanics.
+ */
+export function createLocalGitWorktreeChangeSource(
+  options: CreateLocalGitWorktreeChangeSourceOptions = {},
+): WorktreeChangeSource {
+  return {
+    read: (input) =>
+      readLocalGitChangeSummary({
+        ...input,
+        ...(options.clock === undefined ? {} : { clock: options.clock }),
+        ...(options.runner === undefined ? {} : { runner: options.runner }),
+        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      }),
+  };
+}
 
+async function readLocalGitChangeSummary(
+  input: LocalGitChangeSummaryInput,
+): Promise<WorktreeChangeEvidence | undefined> {
   const clock = input.clock ?? systemClock;
   const checkedAt = toIsoTimestamp(clock.now());
   const command: GitCommandContext = {
@@ -66,14 +74,14 @@ export async function readLocalGitChangeSummary(
     timeoutMs: input.timeoutMs ?? defaultGitTimeoutMs,
   };
   if (input.runner !== undefined) command.runner = input.runner;
-  if (input.signal !== undefined) command.signal = input.signal;
+  command.signal = input.signal;
 
   const headSha = await resolveRequiredRef(command, "HEAD", "HEAD");
   const remotes = await listRemotes(command);
   const baseInput: {
     command: GitCommandContext;
     project: ProviderProjectConfig;
-    worktree: LocalGitWorktree;
+    worktree: WorktreeChangeReadInput["worktree"];
     cachedPullRequest?: WorktreePullRequest;
     remotes: string[];
   } = {
@@ -204,12 +212,12 @@ export function changeSummaryCacheKey(input: {
 async function resolveBase(input: {
   command: GitCommandContext;
   project: ProviderProjectConfig;
-  worktree: LocalGitWorktree;
+  worktree: WorktreeChangeReadInput["worktree"];
   cachedPullRequest?: WorktreePullRequest;
   remotes: string[];
 }): Promise<ResolvedBase | undefined> {
   const configuredBases = [
-    input.cachedPullRequest?.baseRef ?? input.worktree.pr?.baseRef,
+    input.cachedPullRequest?.baseRef ?? input.worktree.pullRequest?.baseRef,
     input.project.defaultBranch,
     input.project.worktrunk.base,
   ];

@@ -1,10 +1,9 @@
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { createFakeExternalCommandRunner } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import type { LocalGitChangeSummaryInput } from "../../src/metadata/localGitChangeSummary";
 import {
+  createLocalGitWorktreeChangeSource,
   parseGitNumstat,
-  readLocalGitChangeSummary,
 } from "../../src/metadata/localGitChangeSummary";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -13,7 +12,7 @@ const baseSha = "1111111111111111111111111111111111111111";
 const mergeBaseSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const oldLocalMainSha = "3333333333333333333333333333333333333333";
 
-const baseInput: Omit<LocalGitChangeSummaryInput, "runner"> = {
+const baseInput = {
   project: {
     id: "web",
     label: "web",
@@ -78,13 +77,12 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "5\t1\tsrc/a.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
       project: {
         ...baseInput.project,
         defaultBranch: "main",
       },
-      runner,
     });
 
     expect(result?.summary).toMatchObject({
@@ -115,13 +113,12 @@ describe("local git change summary", () => {
       [`diff --numstat ${oldLocalMainSha}..HEAD`]: "51\t15\tsrc/stale.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
       project: {
         ...baseInput.project,
         defaultBranch: "main",
       },
-      runner,
     });
 
     expect(result?.summary).toMatchObject({
@@ -146,13 +143,12 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "6\t4\tsrc/a.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
       project: {
         ...baseInput.project,
         defaultBranch: "origin/main",
       },
-      runner,
     });
 
     expect(result?.summary).toMatchObject({
@@ -179,13 +175,12 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t2\tsrc/a.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
       project: {
         ...baseInput.project,
         defaultBranch: "origin/main",
       },
-      runner,
     });
 
     expect(result?.summary).toMatchObject({
@@ -209,7 +204,7 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "2\t3\tsrc/a.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
       project: {
         ...baseInput.project,
@@ -218,7 +213,6 @@ describe("local git change summary", () => {
           base: "develop",
         },
       },
-      runner,
     });
 
     expect(result?.summary).toMatchObject({
@@ -242,9 +236,8 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t1\tsrc/a.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
-      runner,
     });
 
     expect(result?.summary.baseRef).toBe("origin/trunk");
@@ -261,9 +254,8 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
-      runner,
     });
 
     expect(result?.summary).toMatchObject({
@@ -285,7 +277,7 @@ describe("local git change summary", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
     });
 
-    const result = await readLocalGitChangeSummary({
+    const result = await createLocalGitWorktreeChangeSource({ runner }).read({
       ...baseInput,
       project: {
         ...baseInput.project,
@@ -296,7 +288,6 @@ describe("local git change summary", () => {
         baseRef: "release",
         checkedAt: now,
       },
-      runner,
     });
 
     expect(result?.summary.baseRef).toBe("origin/release");
@@ -311,9 +302,8 @@ describe("local git change summary", () => {
     });
 
     await expect(
-      readLocalGitChangeSummary({
+      createLocalGitWorktreeChangeSource({ runner }).read({
         ...baseInput,
-        runner,
       }),
     ).resolves.toBeUndefined();
   });
@@ -329,9 +319,8 @@ describe("local git change summary", () => {
     });
 
     await expect(
-      readLocalGitChangeSummary({
+      createLocalGitWorktreeChangeSource({ runner }).read({
         ...baseInput,
-        runner,
       }),
     ).rejects.toMatchObject({
       tag: "LocalGitMetadataError",

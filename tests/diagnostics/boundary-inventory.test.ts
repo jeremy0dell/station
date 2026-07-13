@@ -175,6 +175,23 @@ describe("boundary inventory guard", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps local Git and ref invalidation mechanics out of metadata refresh", async () => {
+    const path = "apps/observer/src/metadata/refresh.ts";
+    const source = await readFile(join(process.cwd(), path), "utf8");
+    const forbidden = [
+      "./gitCommand.js",
+      "./localGitChangeSummary.js",
+      "./gitRefInvalidation.js",
+      "node:fs",
+      "FSWatcher",
+      "ExternalCommandRunner",
+      "watchGitRefs",
+      "gitTimeoutMs",
+    ];
+
+    expect(forbidden.filter((marker) => source.includes(marker))).toEqual([]);
+  });
+
   it("keeps protocol imports at the observer runtime server adapter", async () => {
     const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
       isProductionSourceFile,

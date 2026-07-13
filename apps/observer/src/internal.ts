@@ -17,6 +17,7 @@ export * from "./hooks/providerHookIngress.js";
 export * from "./hooks/spool.js";
 export * from "./metadata/gitRefInvalidation.js";
 export * from "./metadata/localGitChangeSummary.js";
+export * from "./metadata/ports.js";
 export * from "./metadata/refresh.js";
 export * from "./metadata/repositoryGit.js";
 export * from "./migrations/index.js";
