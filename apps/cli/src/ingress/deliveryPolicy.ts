@@ -7,8 +7,10 @@ import type {
   ProviderHookReceipt,
   SafeError,
 } from "@station/contracts";
-import { safeErrorFromUnknown, systemClock } from "@station/runtime";
+import { safeErrorFromUnknown, stationBuildInfo, systemClock } from "@station/runtime";
+import { classifyObserverHealth, observerHandoffRefusedError } from "../observerProcess/health.js";
 import {
+  getProviderHookObserverStatus,
   type ProviderHookObserverCommand,
   type ProviderHookObserverStartupDeps,
   startProviderHookObserver,
@@ -30,6 +32,12 @@ type ReceiptRecorder = (input: {
 const autoStartLockName = "hook-autostart.lock";
 const minimumAutoStartLockStaleMs = 5000;
 
+/**
+ * USE CASE
+ *
+ * Gates provider-hook delivery on Observer build compatibility, negotiates an
+ * allowed replacement before retrying, and spools whenever safe delivery cannot be proven.
+ */
 export async function deliverProviderHookWithSpooling(input: {
   paths: ObserverPaths;
   event: ProviderHookEvent;
@@ -44,6 +52,11 @@ export async function deliverProviderHookWithSpooling(input: {
   spoolReceipt: (error: SafeError | undefined) => Promise<ProviderHookReceipt>;
   recordReceipt?: ReceiptRecorder;
 }): Promise<ProviderHookReceipt> {
+  const readiness = await prepareObserverForDelivery(input);
+  if (!readiness.ok) {
+    return recordReceipt(input, await input.spoolReceipt(readiness.error));
+  }
+
   const firstDelivery = await input.deliver();
   if (firstDelivery.receipt !== undefined) {
     return recordReceipt(input, firstDelivery.receipt);
@@ -74,6 +87,68 @@ export async function deliverProviderHookWithSpooling(input: {
   }
 
   return recordReceipt(input, await input.spoolReceipt(firstDelivery.error));
+}
+
+async function prepareObserverForDelivery(input: {
+  paths: ObserverPaths;
+  autoStart: boolean;
+  startupTimeoutMs: number;
+  rateLimitMs: number;
+  configPath?: string;
+  observerCommand?: ProviderHookObserverCommand;
+  deps: ProviderHookObserverStartupDeps;
+}): Promise<{ ok: true } | { ok: false; error: SafeError }> {
+  const statusOptions: Parameters<typeof getProviderHookObserverStatus>[0] = {
+    paths: input.paths,
+    timeoutMs: input.startupTimeoutMs,
+  };
+  if (input.configPath !== undefined) statusOptions.configPath = input.configPath;
+  if (input.observerCommand !== undefined) {
+    statusOptions.observerCommand = input.observerCommand;
+  }
+  const status = await getProviderHookObserverStatus(statusOptions, input.deps);
+  if (status.status === "running") {
+    const buildVersion = input.deps.buildVersion ?? stationBuildInfo().version;
+    const classification = classifyObserverHealth(status.health, buildVersion);
+    if (classification.action === "attach") {
+      return { ok: true };
+    }
+    if (classification.action === "refuse" || !input.autoStart) {
+      return {
+        ok: false,
+        error: observerHandoffRefusedError(
+          status.health,
+          buildVersion,
+          classification.action === "refuse"
+            ? classification.reason
+            : "The running Observer is older and provider-hook auto-start is disabled.",
+        ),
+      };
+    }
+  } else if (status.error?.code === "PROTOCOL_SCHEMA_MISMATCH" || !input.autoStart) {
+    return {
+      ok: false,
+      error:
+        status.error ??
+        safeErrorFromUnknown(undefined, {
+          tag: "ObserverConnectionError",
+          code: "OBSERVER_NOT_RUNNING",
+          message: "Observer is not running.",
+        }),
+    };
+  }
+
+  const startupInput: Parameters<typeof maybeStartObserver>[0] = {
+    paths: input.paths,
+    timeoutMs: input.startupTimeoutMs,
+    rateLimitMs: input.rateLimitMs,
+    deps: input.deps,
+  };
+  if (input.configPath !== undefined) startupInput.configPath = input.configPath;
+  if (input.observerCommand !== undefined) {
+    startupInput.observerCommand = input.observerCommand;
+  }
+  return maybeStartObserver(startupInput);
 }
 
 async function recordReceipt(

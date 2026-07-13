@@ -1,7 +1,16 @@
 import { lstat } from "node:fs/promises";
 import type { ObserverApi } from "@station/contracts";
-import { connectUnixSocket, startProtocolServer, type UnixSocketServer } from "@station/protocol";
+import {
+  connectUnixSocket,
+  createObserverClient,
+  startProtocolServer,
+  type UnixSocketServer,
+} from "@station/protocol";
 import { type RuntimeClock, runRuntimeBoundary, systemClock } from "@station/runtime";
+import type { ObserverIncumbentLifecycle } from "./observerHandoff.js";
+
+const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
+const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
 
 export type ObserverServer = {
   readonly socketPath: string;
@@ -23,7 +32,10 @@ export type ObserverSocketProbe = "absent" | "stale" | "listening";
  * Translates local Unix-socket transport evidence into the boot states used by
  * Observer composition without exposing connection mechanics there.
  */
-export async function probeObserverSocket(socketPath: string): Promise<ObserverSocketProbe> {
+export async function probeObserverSocket(
+  socketPath: string,
+  options: { timeoutMs?: number } = {},
+): Promise<ObserverSocketProbe> {
   const initial = await socketMetadata(socketPath);
   if (initial === undefined) {
     return "absent";
@@ -33,12 +45,49 @@ export async function probeObserverSocket(socketPath: string): Promise<ObserverS
   }
 
   try {
-    const connection = await connectUnixSocket(socketPath, { timeoutMs: 1000 });
+    const connection = await connectUnixSocket(socketPath, {
+      timeoutMs: Math.max(
+        MIN_SOCKET_PROBE_TIMEOUT_MS,
+        Math.min(
+          options.timeoutMs ?? DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
+          DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
+        ),
+      ),
+    });
     connection.close();
     return "listening";
   } catch {
     return (await socketMetadata(socketPath)) === undefined ? "absent" : "stale";
   }
+}
+
+/**
+ * ADAPTER
+ *
+ * Translates version-aware incumbent lifecycle requests into validated local
+ * protocol calls and socket probes.
+ */
+export function createObserverLifecycleClient(options: {
+  timeoutMs: number;
+}): ObserverIncumbentLifecycle {
+  const requestTimeout = (requestedTimeoutMs: number) =>
+    Math.max(MIN_SOCKET_PROBE_TIMEOUT_MS, Math.min(options.timeoutMs, requestedTimeoutMs));
+  return {
+    health: (socketPath, request) =>
+      createObserverClient({
+        socketPath,
+        timeoutMs: requestTimeout(request.timeoutMs),
+      }).health(),
+    stop: (socketPath, request) =>
+      createObserverClient({
+        socketPath,
+        timeoutMs: requestTimeout(request.timeoutMs),
+      }).stop(),
+    socketListening: async (socketPath, request) =>
+      (await probeObserverSocket(socketPath, {
+        timeoutMs: requestTimeout(request.timeoutMs),
+      })) === "listening",
+  };
 }
 
 export async function startObserverServer(

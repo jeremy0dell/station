@@ -33,11 +33,22 @@ import {
   type ObserverBootClaimReleaseResult,
 } from "./observerBootClaim.js";
 import {
+  negotiateObserverIncumbent,
+  type ObserverIncumbentLifecycle,
+  type ObserverProcessEvidenceSource,
+} from "./observerHandoff.js";
+import {
   createObserverProcessIdentity,
   publishObserverProcessIdentity,
   removeObserverProcessIdentity,
 } from "./observerPidfile.js";
-import { type ObserverServer, probeObserverSocket, startObserverServer } from "./server.js";
+import { createLocalObserverProcessEvidence } from "./observerProcessEvidence.js";
+import {
+  createObserverLifecycleClient,
+  type ObserverServer,
+  probeObserverSocket,
+  startObserverServer,
+} from "./server.js";
 import {
   readSocketIdentity,
   type SocketIdentity,
@@ -49,6 +60,10 @@ import {
 // force-exits at this point instead of keeping the observer alive forever.
 const STOP_BACKSTOP_MS = 5000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 10_000;
+const MIN_STARTUP_BUDGET_MS = 1;
+const HANDOFF_PARENT_RESERVE_RATIO = 0.3;
+const HANDOFF_PARENT_RESERVE_MIN_MS = 1500;
+const HANDOFF_PARENT_RESERVE_MAX_MS = 3000;
 
 export type ObserverProviderRegistryFactoryOptions = {
   stateDir: string;
@@ -62,14 +77,20 @@ export type ObserverProviderRegistryFactory = (
 
 export type RunObserverMainDeps = {
   providerRegistryFactory: ObserverProviderRegistryFactory;
+  /** Candidate build used for deterministic handoff tests; defaults to the running executable. */
+  buildVersion?: string;
+  incumbentLifecycle?: ObserverIncumbentLifecycle;
+  processEvidence?: ObserverProcessEvidenceSource;
+  handoffNow?: () => number;
+  handoffSleep?: (ms: number) => Promise<void>;
 };
 
 /**
  * COMPOSITION ROOT
  *
- * Claims boot ownership before constructing provider or persistence adapters,
- * owns socket and pidfile publication, and releases the claim before publishing
- * health for the process lifetime it composes.
+ * Claims boot ownership before negotiating an incumbent or constructing
+ * adapters, owns socket and pidfile publication, and releases the claim before
+ * publishing health for the process lifetime it composes.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -92,10 +113,13 @@ export async function runObserverMain(
     homeDir,
   );
   const socketPath = resolveObserverSocketPath(options.socketPath, config, stateDir, homeDir);
+  const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
+  const handoffNow = deps.handoffNow ?? Date.now;
+  const startupDeadline = handoffNow() + options.startupTimeoutMs;
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const claimResult = await acquireObserverBootClaim({
     socketPath,
-    timeoutMs: options.startupTimeoutMs,
+    timeoutMs: Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow()),
   });
   if (claimResult.status !== "acquired") {
     throw claimResult.error;
@@ -105,13 +129,47 @@ export async function runObserverMain(
   // pidfile cleanup; the ready gate performs the normal early release.
   try {
     if ((await probeObserverSocket(socketPath)) === "listening") {
-      return 0;
+      const remainingStartupMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
+      const parentReserveMs = Math.min(
+        HANDOFF_PARENT_RESERVE_MAX_MS,
+        Math.max(
+          HANDOFF_PARENT_RESERVE_MIN_MS,
+          Math.floor(remainingStartupMs * HANDOFF_PARENT_RESERVE_RATIO),
+        ),
+        Math.max(0, remainingStartupMs - MIN_STARTUP_BUDGET_MS),
+      );
+      const handoffTimeoutMs = Math.max(
+        MIN_STARTUP_BUDGET_MS,
+        remainingStartupMs - parentReserveMs,
+      );
+      const result = await negotiateObserverIncumbent(
+        {
+          socketPath,
+          candidate: {
+            version: buildVersion,
+            startedAt: toIsoTimestamp(systemClock.now()),
+            pid: process.pid,
+          },
+          // Reserve parent-budget time for successor bind, publication, and health convergence.
+          timeoutMs: handoffTimeoutMs,
+        },
+        {
+          lifecycle:
+            deps.incumbentLifecycle ??
+            createObserverLifecycleClient({ timeoutMs: handoffTimeoutMs }),
+          evidence: deps.processEvidence ?? createLocalObserverProcessEvidence(),
+          now: handoffNow,
+          ...(deps.handoffSleep === undefined ? {} : { sleep: deps.handoffSleep }),
+        },
+      );
+      if (result.action === "attach") return 0;
     }
     return await runClaimedObserverRuntime({
       options,
       loadedConfig,
       stateDir,
       socketPath,
+      buildVersion,
       claim: claimResult,
       deps,
     });
@@ -125,10 +183,11 @@ async function runClaimedObserverRuntime(input: {
   loadedConfig: LoadedStationConfig;
   stateDir: string;
   socketPath: string;
+  buildVersion: string;
   claim: AcquiredObserverBootClaim;
   deps: RunObserverMainDeps;
 }): Promise<number> {
-  const { options, loadedConfig, stateDir, socketPath, claim, deps } = input;
+  const { options, loadedConfig, stateDir, socketPath, buildVersion, claim, deps } = input;
   const config = loadedConfig.config;
   const spoolDir = providerIngressSpoolDir(stateDir);
   const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir };
@@ -144,7 +203,6 @@ async function runClaimedObserverRuntime(input: {
   const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
-  const buildVersion = stationBuildInfo().version;
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });

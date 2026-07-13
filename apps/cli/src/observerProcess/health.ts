@@ -1,33 +1,104 @@
 import type { ObserverHealth, SafeError } from "@station/contracts";
+import { classifyObserverIncumbent } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
-import { type RuntimeTraceContext, runRuntimeBoundaryWithRetryAndTimeout } from "@station/runtime";
+import {
+  type RuntimeTraceContext,
+  runRuntimeBoundaryWithRetryAndTimeout,
+  stationBuildInfo,
+} from "@station/runtime";
 import type { ObserverProcessDeps, SpawnObserverInput } from "./types.js";
 
+const millisecondsPerSecond = 1000;
+const defaultObserverHealthTimeoutMs = 2000;
+const observerHealthRetryIntervalMs = 25;
+const defaultObserverClientTimeoutMs = 500;
+const processStartedAt = new Date(
+  Date.now() - process.uptime() * millisecondsPerSecond,
+).toISOString();
+
+export type ObserverBuildClassification = ReturnType<typeof classifyObserverIncumbent>;
+
 export function defaultClientFactory(socketPath: string) {
-  return createObserverClient({ socketPath, timeoutMs: 500 });
+  return createObserverClient({ socketPath, timeoutMs: defaultObserverClientTimeoutMs });
 }
 
 export async function waitForObserverHealth(
   options: {
     paths: SpawnObserverInput["paths"];
     timeoutMs?: number;
+    buildVersion?: string;
     trace?: RuntimeTraceContext;
     signal?: AbortSignal;
+    onBuildClassification?: (
+      classification: ObserverBuildClassification,
+      health: ObserverHealth,
+    ) => void;
   },
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverHealth> {
-  const timeoutMs = options.timeoutMs ?? 2000;
-  const retries = Math.max(1, Math.ceil(timeoutMs / 25));
+  const timeoutMs = options.timeoutMs ?? defaultObserverHealthTimeoutMs;
+  const buildVersion = options.buildVersion ?? deps.buildVersion ?? stationBuildInfo().version;
+  const retries = Math.max(1, Math.ceil(timeoutMs / observerHealthRetryIntervalMs));
   const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath);
   const result = await runRuntimeBoundaryWithRetryAndTimeout(
     observerHealthBoundaryOptions(timeoutMs, retries, options.trace),
-    ({ signal }) => requestObserverHealth(() => client.health(), [signal, options.signal]),
+    async ({ signal }) => {
+      const health = await requestObserverHealth(() => client.health(), [signal, options.signal]);
+      const classification = classifyObserverHealth(health, buildVersion);
+      options.onBuildClassification?.(classification, health);
+      if (classification.action === "attach") {
+        return health;
+      }
+      if (classification.action === "refuse") {
+        throw observerHandoffRefusedError(health, buildVersion, classification.reason);
+      }
+      throw observerHandoffPendingError(health, buildVersion);
+    },
   );
 
   if (!result.ok) {
     throw result.error;
   }
   return result.value;
+}
+
+/** Classifies one health response against the stable identity of this CLI process. */
+export function classifyObserverHealth(
+  health: ObserverHealth,
+  buildVersion: string,
+): ObserverBuildClassification {
+  return classifyObserverIncumbent({
+    candidate: {
+      version: buildVersion,
+      startedAt: processStartedAt,
+      pid: process.pid,
+    },
+    incumbent: health,
+  });
+}
+
+export function observerHandoffRefusedError(
+  health: ObserverHealth,
+  requestedVersion: string,
+  reason: string,
+): SafeError {
+  return {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_HANDOFF_REFUSED",
+    message: "Observer build handoff was refused because ownership could not be changed safely.",
+    hint: `Running build: ${health.version ?? "unknown"}. Requested build: ${requestedVersion}. ${reason} Use an isolated observer socket/state directory or stop the incumbent explicitly.`,
+  };
+}
+
+export function observerHandoffPendingError(
+  health: ObserverHealth,
+  requestedVersion: string,
+): SafeError {
+  return {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_HANDOFF_PENDING",
+    message: `Observer build ${requestedVersion} is waiting to replace build ${health.version ?? "unknown"}.`,
+  };
 }
 
 function abortableObserverHealth(
@@ -106,9 +177,11 @@ function observerHealthBoundaryOptions(
     },
     retry: {
       retries,
-      delayMs: 25,
+      delayMs: observerHealthRetryIntervalMs,
       shouldRetry: (error, attempt) =>
-        error.code !== "OBSERVER_HEALTH_WAIT_CANCELLED" && attempt < retries,
+        error.code !== "OBSERVER_HEALTH_WAIT_CANCELLED" &&
+        error.code !== "OBSERVER_HANDOFF_REFUSED" &&
+        attempt < retries,
     },
     trace,
   };

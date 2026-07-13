@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
+import type { ObserverHealth, ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { createStaleSocketFile } from "../../../../tests/support/sockets";
 import {
@@ -79,7 +79,7 @@ describe("provider hook ingress command", () => {
           ({
             health: async () => {
               if (!running) throw new Error("offline");
-              return { schemaVersion: "0.7.0", status: "healthy" };
+              return healthyObserver(fixture);
             },
             ingestProviderHookEvent: async (event: ProviderHookEvent) => {
               if (!running) throw new Error("offline");
@@ -149,7 +149,7 @@ describe("provider hook ingress command", () => {
           ({
             health: async () => {
               if (!(await fileExists(argvPath))) throw new Error("offline");
-              return { schemaVersion: "0.7.0", status: "healthy" };
+              return healthyObserver(fixture);
             },
             ingestProviderHookEvent: async (event: ProviderHookEvent) => {
               if (!(await fileExists(argvPath))) throw new Error("offline");
@@ -210,6 +210,7 @@ describe("provider hook ingress command", () => {
             };
           };
           return {
+            health: async () => healthyObserver(fixture),
             ingestProviderHookEvent: ingest,
           } as never;
         },
@@ -246,6 +247,7 @@ describe("provider hook ingress command", () => {
             throw new Error("offline");
           };
           return {
+            health: async () => healthyObserver(fixture),
             ingestProviderHookEvent: ingest,
           } as never;
         },
@@ -327,6 +329,7 @@ describe("provider hook ingress command", () => {
             };
           };
           return {
+            health: async () => healthyObserver(fixture),
             ingestProviderHookEvent: ingest,
             ingestHookEvent: ingest,
           } as never;
@@ -390,6 +393,7 @@ describe("provider hook ingress command", () => {
             };
           };
           return {
+            health: async () => healthyObserver(fixture),
             ingestProviderHookEvent: ingest,
             ingestHookEvent: ingest,
           } as never;
@@ -559,6 +563,7 @@ describe("provider hook ingress command", () => {
             };
           };
           return {
+            health: async () => healthyObserver(fixture),
             ingestProviderHookEvent: ingest,
             ingestHookEvent: ingest,
           } as never;
@@ -617,6 +622,7 @@ describe("provider hook ingress command", () => {
             reconciled: false,
           });
           return {
+            health: async () => healthyObserver(fixture),
             ingestProviderHookEvent: ingest,
             ingestHookEvent: ingest,
           } as never;
@@ -755,5 +761,17 @@ function stationEnv(): Record<string, string> {
     STATION_SESSION_ID: "ses_web_task",
     STATION_TERMINAL_PROVIDER: "tmux",
     STATION_TERMINAL_TARGET_ID: "tmux:station:@1:%2",
+  };
+}
+
+function healthyObserver(paths: { socketPath: string; stateDir: string }): ObserverHealth {
+  return {
+    schemaVersion: "0.7.0",
+    status: "healthy",
+    pid: 12345,
+    startedAt: now,
+    version: "0.7.0",
+    socketPath: paths.socketPath,
+    stateDir: paths.stateDir,
   };
 }

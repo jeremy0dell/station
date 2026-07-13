@@ -77,6 +77,7 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 | 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
 | 3d-a / #135 | The Observer child holds `BEGIN IMMEDIATE` on `dirname(resolvedSocket)/observer.claim.sqlite` across probe, stale reclaim, bind, pidfile publication, seeded watcher setup, and ready commitment. CLI and provider-hook clients only attach or spawn; health opens after synchronous claim release. |
 | 3d-b prerequisite | Hook spool replay uses stable ingress identity, completes derived observations and report recovery state idempotently after primary dedupe, and unlinks records only after direct durable processing. Automatic handoff may now request graceful shutdown without turning process-memory queue acceptance into data loss. |
+| 3d-b / #137 | Startup compares strict SemVer build identity under the child-held claim. Exact or higher incumbents attach; at equal precedence the lexicographically greater exact build string wins so parent and child agree; a winning candidate replaces an incumbent only after `lsof`, health, pidfile, argv, and OS-start-token evidence agree, graceful stop plus at most one revalidated SIGTERM completes, and both socket closure and exact process death are observed. Missing, invalid, conflicting, or wedged ownership refuses without SIGKILL. |
 | 3e | `hook-autostart.lock` remains a state-directory rate limiter for provider-hook spawn attempts only. Every spawned child still enters the socket-relative 3d-a claim, so lock-path divergence under XDG or explicit socket configuration cannot create a second ownership authority. |
 
 Together these **stop the bleeding**: `reap` clears duplicates on demand, the
@@ -137,30 +138,7 @@ and non-mutation cases. It proves mutual exclusion, not fairness.
 
 ## Remaining work
 
-### 3d-b — version-aware incumbent replacement (deferred)
-
-Build coordinated handoff only after 3d-a establishes exclusive boot ownership.
-This phase owns version comparison, incumbent attribution, graceful stop,
-bounded signal escalation, and replacement confirmation; its replay-safe spool
-prerequisite is shipped above, and none of the handoff policy belongs to #135.
-
-- Refine the version gate into a **total antisymmetric order** with a
-  deterministic `(version, startedAt, pid)` tiebreak so no pair both-evicts.
-  Treat missing health version or identity fields conservatively: attach when
-  compatible, otherwise refuse rather than guessing.
-- Resolve incumbent identity with `lsof` as primary socket-owner evidence and
-  corroborate it with the pidfile, health identity, argv, and OS start token.
-  Refuse on missing or conflicting evidence and revalidate before every signal.
-- Request graceful `observer.stop`, then confirm both socket closure and exact
-  process death before binding. A stop receipt alone is not completion.
-- Automatic handoff must never use SIGKILL. A wedged incumbent that survives
-  graceful stop and the bounded, identity-revalidated signal path requires a
-  safe refusal; forced termination remains an explicit operator action.
-- Preserve the process-level graceful and wedged replacement spikes as
-  permanent acceptance coverage. PTY continuity is not part of Observer
-  handoff; `station-host` owns live PTYs independently.
-
-### Phase 4 — guarded self-heal (deferrable, needs 3d-b)
+### Phase 4 — guarded self-heal (deferrable)
 
 - Guarded self-heal: only after own-pid is the confirmed keeper AND it owns zero
   socket fds; stays OFF until `reap --force` is field-proven.
@@ -171,11 +149,14 @@ prerequisite is shipped above, and none of the handoff policy belongs to #135.
   disposable sqlite snapshot.
 - No launchd/systemd supervisor — negotiation is in-process at start time.
 - No Windows named-pipe path — observer is AF_UNIX only.
-- No thin-client/proxy for older CLIs — version policy is attach-or-refuse.
+- No thin-client/proxy for older CLIs — version policy is attach, verified
+  replacement, or refusal.
 
 ## Key files
 
 - `apps/observer/src/runtime/main.ts` — boot negotiation, pidfile, stop.
+- `apps/observer/src/runtime/observerHandoff.ts` — SemVer policy and coordinated handoff.
+- `apps/observer/src/runtime/observerProcessEvidence.ts` — local process attribution and signaling adapter.
 - `apps/observer/src/runtime/socketOwnership.ts` — seeded watcher (#82).
 - `apps/observer/src/runtime/gracefulExit.ts` — force-exit backstop (#83).
 - `packages/protocol/src/transport.ts` — `bindWithStaleReclaim` (#84).

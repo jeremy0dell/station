@@ -215,6 +215,7 @@ function runningObserverDeps(options: {
   waitForCommand?: (commandId: string) => Promise<TerminalCommandRecord>;
 }) {
   return {
+    buildVersion: "0.0.0",
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
@@ -222,7 +223,7 @@ function runningObserverDeps(options: {
           status: "healthy",
           pid: 1234,
           startedAt: now,
-          version: "0.0.0",
+          version: "0.7.0",
           socketPath,
         }),
         dispatch: options.dispatch ?? (async () => receipt("cmd_default")),

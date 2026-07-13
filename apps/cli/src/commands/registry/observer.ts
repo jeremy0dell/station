@@ -57,5 +57,10 @@ async function runObserverCliCommand(context: CliCommandRunContext) {
     loadedCommandOptions(context),
     context.options.observerDeps,
   );
-  return { code: 0, output: observerCommandSummary(result) };
+  const action = context.args[0] ?? "status";
+  const failedStart =
+    (action === "start" || action === "restart") &&
+    "status" in result &&
+    result.status !== "running";
+  return { code: failedStart ? 1 : 0, output: observerCommandSummary(result) };
 }

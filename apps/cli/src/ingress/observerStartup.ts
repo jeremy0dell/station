@@ -7,12 +7,24 @@ import { createObserverClient, isSocketStale } from "@station/protocol";
 import {
   environmentWithoutGitLocals,
   type RuntimeClock,
-  runRuntimeBoundaryWithRetryAndTimeout,
+  runRuntimeBoundaryWithRetry,
   runRuntimeBoundaryWithTimeout,
   safeErrorFromUnknown,
+  stationBuildInfo,
   systemClock,
 } from "@station/runtime";
+import {
+  classifyObserverHealth,
+  observerHandoffPendingError,
+  observerHandoffRefusedError,
+  observerHealthWaitCancelledError,
+} from "../observerProcess/health.js";
 import type { ExecutableArgv } from "../selfExec.js";
+
+const defaultProviderHookHealthTimeoutMs = 2000;
+const maximumProviderHookHealthRequestTimeoutMs = 5000;
+const defaultProviderHookClientTimeoutMs = 500;
+const providerHookHealthRetryIntervalMs = 25;
 
 /**
  * An executable and fixed observer entry prefix forwarded unchanged until
@@ -33,12 +45,16 @@ export type ProviderHookObserverStatus =
     };
 
 export type ProviderHookObserverStartupDeps = {
-  clientFactory?: (socketPath: string) => ReturnType<typeof createObserverClient>;
+  /** Requested Station build; production defaults to the current ingress executable build. */
+  buildVersion?: string;
+  clientFactory?: (
+    socketPath: string,
+    options?: { timeoutMs: number },
+  ) => ReturnType<typeof createObserverClient>;
   spawnObserver?: (
     input: SpawnProviderHookObserverInput,
   ) => ChildProcessLike | Promise<ChildProcessLike>;
   clock?: RuntimeClock;
-  sleep?: (ms: number) => Promise<void>;
 };
 
 export type SpawnProviderHookObserverInput = {
@@ -67,7 +83,12 @@ export async function getProviderHookObserverStatus(
     return { status: "stale", paths };
   }
 
-  const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath);
+  const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath, {
+    timeoutMs: Math.min(
+      options.timeoutMs ?? defaultProviderHookHealthTimeoutMs,
+      maximumProviderHookHealthRequestTimeoutMs,
+    ),
+  });
   try {
     return {
       status: "running",
@@ -90,8 +111,9 @@ export async function getProviderHookObserverStatus(
 /**
  * USE CASE
  *
- * Attaches provider-hook delivery to a healthy Observer or starts a child while
- * leaving socket ownership mutation to the child's serialized boot lifecycle.
+ * Attaches provider-hook delivery to a compatible incumbent, starts a child to
+ * negotiate replacement of an older build, and refuses incomplete ownership
+ * evidence while leaving mutation to the child's serialized boot lifecycle.
  */
 export async function startProviderHookObserver(
   options: ProviderHookObserverStartupOptions,
@@ -100,9 +122,22 @@ export async function startProviderHookObserver(
   const paths = options.paths;
   const timeoutMs = options.timeoutMs ?? 30_000;
   const clock = deps.clock ?? systemClock;
+  const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
   const existing = await getProviderHookObserverStatus({ ...options, paths }, deps);
   if (existing.status === "running") {
-    return existing;
+    const classification = classifyObserverHealth(existing.health, buildVersion);
+    if (classification.action === "attach") {
+      return existing;
+    }
+    if (classification.action === "refuse") {
+      return {
+        status: "unhealthy",
+        paths,
+        error: observerHandoffRefusedError(existing.health, buildVersion, classification.reason),
+      };
+    }
+  } else if (existing.error?.code === "PROTOCOL_SCHEMA_MISMATCH") {
+    return { status: "unhealthy", paths, error: existing.error };
   }
   let child: ChildProcessLike | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
@@ -121,7 +156,7 @@ export async function startProviderHookObserver(
         message: "Observer did not become healthy before the startup timeout.",
       },
     },
-    async () => {
+    async ({ signal }) => {
       await mkdir(paths.stateDir, { recursive: true, mode: 0o700 });
       await mkdir(dirname(paths.socketPath), { recursive: true, mode: 0o700 });
       const spawnInput: SpawnProviderHookObserverInput = { paths };
@@ -136,17 +171,13 @@ export async function startProviderHookObserver(
           ? defaultSpawnObserver(spawnInput, timeoutMs)
           : await deps.spawnObserver(spawnInput);
       child.unref?.();
-      return waitForProviderHookObserverHealth({ paths, timeoutMs }, deps);
+      return waitForProviderHookObserverHealth({ paths, timeoutMs, buildVersion, signal }, deps);
     },
   );
 
   if (result.ok) {
     // A child queued on the boot claim must not outlive the incumbent this hook attached to.
-    if (
-      child?.pid !== undefined &&
-      result.value.pid !== undefined &&
-      child.pid !== result.value.pid
-    ) {
+    if (child?.pid !== undefined && child.pid !== result.value.pid) {
       child.kill?.();
     }
     return {
@@ -165,12 +196,22 @@ export async function startProviderHookObserver(
 }
 
 export async function waitForProviderHookObserverHealth(
-  options: { paths: ObserverPaths; timeoutMs?: number },
+  options: {
+    paths: ObserverPaths;
+    timeoutMs?: number;
+    buildVersion?: string;
+    signal?: AbortSignal;
+  },
   deps: ProviderHookObserverStartupDeps = {},
 ): Promise<ObserverHealth> {
-  const timeoutMs = options.timeoutMs ?? 2000;
-  const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath);
-  const result = await runRuntimeBoundaryWithRetryAndTimeout(
+  const timeoutMs = options.timeoutMs ?? defaultProviderHookHealthTimeoutMs;
+  const buildVersion = options.buildVersion ?? deps.buildVersion ?? stationBuildInfo().version;
+  const retries = Math.max(1, Math.ceil(timeoutMs / providerHookHealthRetryIntervalMs));
+  const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath, {
+    timeoutMs: Math.min(timeoutMs, maximumProviderHookHealthRequestTimeoutMs),
+  });
+  let replaceableIncumbent: ObserverHealth | undefined;
+  const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: "providerHooks.observer.waitForHealth",
       timeoutMs,
@@ -184,22 +225,69 @@ export async function waitForProviderHookObserverHealth(
         code: "OBSERVER_HEALTH_TIMEOUT",
         message: "Observer did not report healthy before the timeout.",
       },
-      retry: {
-        retries: Math.max(1, Math.ceil(timeoutMs / 25)),
-        delayMs: 25,
-      },
     },
-    async () => client.health(),
+    async ({ signal }) => {
+      const throwIfCancelled = () => {
+        if (signal.aborted || options.signal?.aborted) {
+          throw observerHealthWaitCancelledError();
+        }
+      };
+      const retryResult = await runRuntimeBoundaryWithRetry(
+        {
+          operation: "providerHooks.observer.retryHealth",
+          error: {
+            tag: "ObserverStartupError",
+            code: "OBSERVER_HEALTH_FAILED",
+            message: "Observer health check failed.",
+          },
+          retry: {
+            retries,
+            delayMs: providerHookHealthRetryIntervalMs,
+            shouldRetry: (error, attempt) =>
+              !signal.aborted &&
+              !options.signal?.aborted &&
+              error.code !== "OBSERVER_HANDOFF_REFUSED" &&
+              attempt < retries,
+          },
+        },
+        async () => {
+          throwIfCancelled();
+          const health = await client.health();
+          throwIfCancelled();
+          const classification = classifyObserverHealth(health, buildVersion);
+          if (classification.action === "attach") {
+            return health;
+          }
+          if (classification.action === "refuse") {
+            throw observerHandoffRefusedError(health, buildVersion, classification.reason);
+          }
+          replaceableIncumbent = health;
+          throw observerHandoffPendingError(health, buildVersion);
+        },
+      );
+      if (!retryResult.ok) throw retryResult.error;
+      return retryResult.value;
+    },
   );
 
   if (!result.ok) {
+    if (replaceableIncumbent !== undefined) {
+      throw observerHandoffRefusedError(
+        replaceableIncumbent,
+        buildVersion,
+        "The replacement process did not publish compatible health.",
+      );
+    }
     throw result.error;
   }
   return result.value;
 }
 
-function defaultClientFactory(socketPath: string) {
-  return createObserverClient({ socketPath, timeoutMs: 500 });
+function defaultClientFactory(socketPath: string, options?: { timeoutMs: number }) {
+  return createObserverClient({
+    socketPath,
+    timeoutMs: options?.timeoutMs ?? defaultProviderHookClientTimeoutMs,
+  });
 }
 
 function defaultSpawnObserver(

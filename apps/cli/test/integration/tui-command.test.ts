@@ -33,7 +33,7 @@ function emptySnapshot(reason: string) {
     snapshot: {
       schemaVersion: "0.7.0",
       generatedAt: now,
-      observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
+      observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
       providerHealth: {},
       projects: [],
       rows: [],
@@ -61,6 +61,7 @@ function runningObserverDeps(
 ) {
   let running = false;
   return {
+    buildVersion: "0.0.0",
     spawnObserver: async (input: SpawnObserverInput) => {
       options.spawns?.push(input);
       running = true;
@@ -75,7 +76,7 @@ function runningObserverDeps(
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.0.0",
+            version: "0.7.0",
           };
         },
         reconcile: (reason: string) => {
@@ -215,7 +216,7 @@ describe("CLI tui command", () => {
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
-                    version: "0.0.0",
+                    version: "0.7.0",
                   };
                 },
                 reconcile: async () => emptySnapshot("tui-startup"),
@@ -280,7 +281,7 @@ describe("CLI tui command", () => {
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
-                    version: "0.0.0",
+                    version: "0.7.0",
                   }),
                   reconcile: async () => emptySnapshot("tui-startup"),
                 }) as never,

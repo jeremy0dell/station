@@ -8,6 +8,7 @@ import { createObserverClient } from "../../packages/protocol/dist/index.js";
 import { createStationHostClient } from "../../packages/station-host/dist/index.js";
 
 const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
+const sourceCliPath = resolve("apps/cli/dist/main.js");
 const expectedVersion = parseExpectedVersion(process.argv.slice(2));
 const ptyOnly = process.env.STATION_BINARY_SMOKE_PTY_ONLY === "1";
 const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-"));
@@ -18,6 +19,7 @@ const hostileDir = join(root, "hostile");
 const socketPath = join(runtimeDir, "observer.sock");
 const configPath = join(root, "config.toml");
 const markerPath = join(root, "ambient-config-pwned");
+const ptyReleasePath = join(root, "release-host-pty");
 const childEnv = isolatedBinaryEnv({ homeDir, runtimeDir });
 
 let observerClient;
@@ -65,6 +67,10 @@ try {
     const health = await observerClient.health();
     observerPid = health.pid;
     assertEqual(health.status, "healthy", "compiled observer health");
+    await run(binaryPath, ["--config", configPath, "observer", "start", "--timeout-ms", "30000"], {
+      env: childEnv,
+    });
+    assertEqual((await observerClient.health()).pid, observerPid, "same-build observer reuse");
     const snapshot = await observerClient.getSnapshot();
     assertEqual(snapshot.observer.healthy, true, "compiled observer snapshot");
 
@@ -111,10 +117,6 @@ try {
     assertEqual(piHandlers.size > 0, true, "packaged Pi handler registration");
     await piHandlers.get("session_start")?.({ reason: "startup" }, { cwd: root });
     assertEqual(deliveredEvents.length, 1, "packaged Pi injected event delivery");
-
-    await observerClient.stop();
-    observerClient = undefined;
-    await waitForMissing(socketPath);
   }
 
   const hostSocketPath = join(runtimeDir, "station-host.sock");
@@ -149,12 +151,83 @@ try {
     worktreePath: root,
     harnessProvider: "scripted",
     command: "/bin/sh",
-    args: ["-c", "printf STATION_BINARY_PTY_OK; sleep 1; exit 7"],
+    args: [
+      "-c",
+      'printf STATION_BINARY_PTY_OK; while [ ! -f "$1" ]; do sleep 1; done; exit 7',
+      "station-binary-pty",
+      ptyReleasePath,
+    ],
     cwd: root,
     cols: 80,
     rows: 24,
   });
   const attachment = await hostClient.attach(spawned.ptyId);
+  if (!ptyOnly) {
+    const sourceVersion = (
+      await run(process.execPath, [sourceCliPath, "--version"], { env: childEnv })
+    ).stdout.trim();
+    if (expectedVersion.startsWith("0.0.0-") && sourceVersion !== expectedVersion) {
+      const previousObserverPid = observerPid;
+      await run(
+        process.execPath,
+        [sourceCliPath, "--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+        { env: childEnv },
+      );
+      const successorHealth = await observerClient.health();
+      observerPid = successorHealth.pid;
+      assertEqual(successorHealth.version, sourceVersion, "higher source observer handoff");
+      assertEqual(
+        observerPid === previousObserverPid,
+        false,
+        "higher source observer replaces lower compiled observer",
+      );
+      if (previousObserverPid !== undefined) {
+        assertEqual(
+          await waitForProcessExit(previousObserverPid, 10_000),
+          true,
+          "replaced observer exact process exit",
+        );
+      }
+
+      await run(
+        binaryPath,
+        ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+        { env: childEnv },
+      );
+      assertEqual(
+        (await observerClient.health()).pid,
+        observerPid,
+        "lower compiled build reuses higher observer",
+      );
+      await run(
+        join(dirname(binaryPath), "stn-ingress"),
+        ["--socket", socketPath, "--state-dir", stateDir, "worktrunk", "post-create"],
+        {
+          env: childEnv,
+          input: JSON.stringify({ branch: "station/binary-smoke-after-handoff" }),
+        },
+      );
+      assertEqual(
+        await directoryFileCount(join(stateDir, "spool", "hooks")),
+        0,
+        "lower-build ingress reuses the higher observer",
+      );
+      assertEqual(processIsAlive(hostProcess.pid), true, "station-host survives observer handoff");
+      assertEqual(
+        (await hostClient.health()).buildVersion,
+        expectedVersion,
+        "station-host build remains unchanged across observer handoff",
+      );
+    }
+  }
+  const livePty = (await hostClient.list()).find((entry) => entry.ptyId === spawned.ptyId);
+  assertEqual(
+    livePty?.ptyId,
+    spawned.ptyId,
+    "same host PTY remains listed across observer handoff",
+  );
+  assertEqual(livePty?.alive, true, "same host PTY remains live across observer handoff");
+  await writeFile(ptyReleasePath, "", { mode: 0o600 });
   const terminalResult = await collectTerminalResult(attachment, 10_000);
   assertIncludes(terminalResult.output, "STATION_BINARY_PTY_OK", "compiled host PTY output");
   assertEqual(terminalResult.exitCode, 7, "compiled host PTY exit code");

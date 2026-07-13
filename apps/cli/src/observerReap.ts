@@ -1,15 +1,11 @@
-import { execFileSync } from "node:child_process";
-import { resolveObserverSocketForProcessArgs } from "@station/config";
+import {
+  createLocalObserverProcessEvidence,
+  parseObserverProcessList,
+  type ObserverProcessEntry as SharedObserverProcessEntry,
+} from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
 
-export type ObserverProcessEntry = {
-  pid: number;
-  argv: string[];
-  /** OS start-time token (ps lstart), compared verbatim to guard against PID reuse. */
-  startToken: string;
-  /** Socket the process would bind, resolved from its argv; undefined if unresolvable. */
-  socketPath?: string;
-};
+export type ObserverProcessEntry = SharedObserverProcessEntry;
 
 export type ReapTarget = { pid: number; startToken: string };
 
@@ -98,10 +94,13 @@ export async function runObserverReap(
   options: { force: boolean; graceMs?: number } = { force: false },
   deps: ObserverReapDeps = {},
 ): Promise<ReapOutcome> {
-  const list = deps.listObserverProcesses ?? defaultListObserverProcesses;
-  const holdersOf = deps.socketHolders ?? defaultSocketHolders;
-  const tokenOf = deps.processStartToken ?? defaultProcessStartToken;
-  const kill = deps.signal ?? defaultSignal;
+  const localEvidence = createLocalObserverProcessEvidence();
+  const list = deps.listObserverProcesses ?? localEvidence.listObserverProcesses;
+  const holdersOf = deps.socketHolders ?? localEvidence.socketHolders;
+  const tokenOf = deps.processStartToken ?? localEvidence.processStartToken;
+  const kill =
+    deps.signal ??
+    ((pid: number, signal: NodeJS.Signals | 0) => localEvidence.signal(pid, signal) !== "absent");
   const sleep = deps.sleep ?? defaultSleep;
   const graceMs = options.graceMs ?? SIGTERM_GRACE_MS;
 
@@ -151,65 +150,8 @@ export async function runObserverReap(
   return { plan, applied: true, killed, survived };
 }
 
-// --- default seams (macOS/Linux; ps/lsof/kill) ---
-
-const LSTART_RE = /^\s*(\d+)\s+([A-Z][a-z]{2} [A-Z][a-z]{2}\s+\d+ \d\d:\d\d:\d\d \d{4})\s+(.+)$/;
-
 export function parseObserverPsOutput(output: string): ObserverProcessEntry[] {
-  const entries: ObserverProcessEntry[] = [];
-  for (const line of output.split("\n")) {
-    const match = LSTART_RE.exec(line);
-    if (match === null) continue;
-    const [, pidStr, tokenStr, command] = match;
-    if (pidStr === undefined || tokenStr === undefined || command === undefined) continue;
-    const pid = Number(pidStr);
-    const startToken = tokenStr.trim();
-    const argv = command.split(/\s+/).filter((token) => token.length > 0);
-    // Accept only the source Node entry or the exact compiled self-exec token;
-    // shell wrappers remain excluded so ps/grep tooling never matches itself.
-    const exe = argv[0] ?? "";
-    const isNode = exe === "node" || exe.endsWith("/node");
-    const runsSourceObserver = isNode && argv[1]?.endsWith("observerMain.js") === true;
-    const isStationBinary = exe === "stn" || exe.endsWith("/stn");
-    const runsCompiledObserver = isStationBinary && argv[1] === "__observer";
-    if (!Number.isInteger(pid) || (!runsSourceObserver && !runsCompiledObserver)) continue;
-    const socketPath = resolveObserverSocketForProcessArgs(argv);
-    entries.push(
-      socketPath === undefined ? { pid, argv, startToken } : { pid, argv, startToken, socketPath },
-    );
-  }
-  return entries;
-}
-
-function defaultListObserverProcesses(): ObserverProcessEntry[] {
-  const output = execFileSync("ps", ["-axww", "-o", "pid=,lstart=,command="], {
-    encoding: "utf8",
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  return parseObserverPsOutput(output);
-}
-
-function defaultSocketHolders(socketPath: string): number[] {
-  try {
-    const out = execFileSync("lsof", ["-t", socketPath], { encoding: "utf8" });
-    return out
-      .split("\n")
-      .map((line) => Number(line.trim()))
-      .filter((pid) => Number.isInteger(pid) && pid > 0);
-  } catch {
-    return []; // lsof exits non-zero when nobody holds the socket
-  }
-}
-
-function defaultProcessStartToken(pid: number): string | undefined {
-  try {
-    const out = execFileSync("ps", ["-ww", "-p", String(pid), "-o", "lstart="], {
-      encoding: "utf8",
-    }).trim();
-    return out.length > 0 ? out : undefined;
-  } catch {
-    return undefined;
-  }
+  return parseObserverProcessList(output);
 }
 
 async function defaultHealthPid(socketPath: string): Promise<number | undefined> {
@@ -219,16 +161,6 @@ async function defaultHealthPid(socketPath: string): Promise<number | undefined>
     return typeof health.pid === "number" ? health.pid : undefined;
   } catch {
     return undefined;
-  }
-}
-
-function defaultSignal(pid: number, sig: NodeJS.Signals | 0): boolean {
-  try {
-    process.kill(pid, sig);
-    return true;
-  } catch (error) {
-    // ESRCH: gone. EPERM: exists but not ours — treat as present, never as reaped.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 

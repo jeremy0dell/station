@@ -31,6 +31,8 @@ export * from "./runtime/eventBus.js";
 export * from "./runtime/logging.js";
 export * from "./runtime/main.js";
 export * from "./runtime/observerBootClaim.js";
+export * from "./runtime/observerHandoff.js";
+export * from "./runtime/observerProcessEvidence.js";
 export * from "./runtime/reconcileScheduler.js";
 export * from "./runtime/server.js";
 export type { SqlDatabase, SqlParam, SqlRunResult, SqlStatement } from "./sqlite/driver.js";

@@ -36,8 +36,8 @@ Non-goals:
 - **Windows targets.**
 - **Any observer replacement / eviction in this roadmap.** Coordinated
   single-observer behavior is owned entirely by
-  [observer-singleton](observer-singleton.md). This plan uses shipped 3c/3d-a/3e
-  and defers remaining ownership policy to 3d-b; it does not add a second,
+  [observer-singleton](observer-singleton.md). This plan uses shipped
+  3c/3d-a/3d-b/3e; it does not add a second,
   uncoordinated eviction path (v1 did — removed, see F3).
 - **Replacing the dev workflow.** Dev mode (tsc dist under Node +
   `bun --hot` TUI from source) stays byte-identical; compiled mode is new
@@ -525,18 +525,13 @@ child stdout/stderr, and races health readiness against child exit. It reports
 redacted log tail unless a concurrent observer became healthy. The default
 health wait is 10 seconds; only TUI and popup launches show delayed progress.
 
-**Removed from v1:** the client-side unhealthy-incumbent SIGTERM eviction.
-It conflicts with [observer-singleton](observer-singleton.md), which is
-split between 3d-a's narrow boot serialization and 3d-b's deferred
-version-aware replacement. 3d-a ([#135](https://github.com/jeremy0dell/station/issues/135))
-is implemented: CLI and provider-hook clients only attach or spawn, while the
-child serializes socket probe, stale reclamation, bind, pidfile publication,
-and ready commitment under
-`dirname(resolvedSocket)/observer.claim.sqlite`, without version comparison,
-signals, or eviction. **Dependency, not duplication:** the version-aware
-upgrade behavior this plan needs (B3) belongs to 3d-b. If that lands, B3
-consumes it; if not, B3 ships **only** the same-version restart in B-config
-below and the schema-mismatch UX — never an out-of-band kill.
+**Removed from v1:** client-side unhealthy-incumbent eviction. Singleton 3d-a
+([#135](https://github.com/jeremy0dell/station/issues/135)) serializes child-side
+ownership under `dirname(resolvedSocket)/observer.claim.sqlite`; 3d-b
+([#137](https://github.com/jeremy0dell/station/issues/137)) now performs the
+version-aware half of B3 inside that claim. CLI and provider-hook clients only
+attach or spawn. They never signal an incumbent or mutate socket ownership
+out-of-band.
 
 ### B-config — config activation (F4 — v1 was wrong)
 
@@ -557,11 +552,11 @@ untouched.
 
 ### B3 — version + schema UX (scoped down)
 
-Same-version config activation via B-config. Renderer exit code 86 =
+**Status: implemented.** Same-version config activation uses B-config. Renderer exit code 86 =
 "restart observer" on a `halted` + `PROTOCOL_SCHEMA_MISMATCH` state → the
-CLI parent restarts once and respawns the renderer. Older-binary-version
-auto-restart is **deferred to singleton phase 3d-b**; this
-plan does not implement its own version eviction.
+CLI parent restarts once and respawns the renderer. Singleton 3d-b supplies
+cross-version Observer ordering: higher valid SemVer replaces lower only after
+verified graceful handoff, while lower callers reuse the higher incumbent.
 
 ### B-host — station-host upgrade behavior (F7 — was undefined)
 
@@ -618,12 +613,12 @@ A5: release                              A6: cleanup
 
 Satisfied dependency: observer-singleton 3d-a
   → required for serialized concurrent stale-socket startup.
-External dependency: observer-singleton 3d-b
-  → required before any older-version observer handoff is claimed safe.
+Satisfied dependency: observer-singleton 3d-b
+  → supplies verified older-version observer handoff.
 ```
 
 Suggested merge order: A1 → B1 → B2 → B-config → A2a → A3 → A4/A2b →
-B-host → A5 → A6, with B3's version half gated on the singleton roadmap.
+B-host → A5 → A6. B3's version half is supplied by the singleton roadmap.
 
 ## Verification (F11 — prove the headline UX, not a proxy)
 

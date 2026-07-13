@@ -101,9 +101,11 @@ gate and the mandatory hosted `station-bun` job run these checks.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
-claim-held no-side-effect behavior, pidfile publication, and clean restart while
-the persistent claim remains. Run it after `pnpm build` when changing startup,
-socket ownership, pidfiles, or claim lifecycle behavior.
+claim-held no-side-effect behavior, pidfile publication, version-aware graceful
+handoff and refusal, and clean restart while the persistent claim remains. The
+compiled binary smoke also proves source/compiled ordering and Station Host PTY
+continuity across Observer replacement. Run both after `pnpm build` when
+changing startup, socket ownership, pidfiles, or claim lifecycle behavior.
 
 For focused Station PTY work, run both implementations explicitly:
 
@@ -136,8 +138,8 @@ binary smoke:
 ```bash
 bun install
 cd ..
-pnpm build:binary -- --version 0.7.0
-pnpm smoke:binary -- --expected-version 0.7.0
+pnpm build:binary -- --version 0.0.0-local
+pnpm smoke:binary -- --expected-version 0.0.0-local
 ```
 
 The staged artifact is `station/dist/bin/stn`, with `stn-ingress` and
@@ -148,6 +150,8 @@ baseline target for older CPU compatibility. The smoke runs the binary with a
 child `PATH` that contains neither Node nor Bun and covers Observer self-spawn,
 ingress and popup argv0 dispatch, packaged assets, hostile working-directory
 configuration, and a real host-backed Bun PTY.
+The `0.0.0-local` build identity also exercises cross-version Observer handoff
+and verifies that the same live Host PTY survives it.
 
 To inspect the UX manually after the smoke:
 
