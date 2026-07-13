@@ -325,8 +325,8 @@ A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
   may reload its extension path. Pi pruning waits for provider-process lifetime
   ownership rather than risking a live session.
 
-Local pre-push and hosted `binary-smoke` checks: `--version`, `--help`, popup argv0 routing,
-`setup check --json`
+Local pre-push and hosted `standard-ci` binary smoke checks: `--version`,
+`--help`, popup argv0 routing, `setup check --json`
 (asserting the `launchReady`/`workflowReady` split), an **observer round
 trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
@@ -365,10 +365,10 @@ release **draft** without clobbering an existing release. A second native
 matrix revalidates the tag, fetches the installer by the validated commit SHA
 through the authenticated Contents API, invokes it with the explicit tag against
 that real draft, and verifies the binary version, both argv0 aliases, license,
-and launch without Node or Bun on the runtime PATH. The PR matrix and release
-matrix use one
-archive-packaging helper, so their manifests cannot drift. Publication remains
-a manual decision after the real-TTY acceptance below. GitHub's tag endpoint
+and launch without Node or Bun on the runtime PATH. The four native builds use
+one archive-packaging helper, and the draft-install matrix consumes those exact
+uploaded archives. Publication remains a manual decision after the real-TTY
+acceptance below. GitHub's tag endpoint
 exposes published releases only, so the workflow captures the new draft's
 numeric release ID from the authenticated release list and passes it only to
 these acceptance jobs; normal installs keep using the latest/published-tag
@@ -622,12 +622,12 @@ B-host → A5 → A6. B3's version half is supplied by the singleton roadmap.
 
 ## Verification (F11 — prove the headline UX, not a proxy)
 
-Unit/integration (every PR): vitest fake-seam tests; bun-lane driver + PTY
-tests; the cross-runtime SQLite test (A1).
+CI (every PR and `main`): the full pre-push gate on `ubuntu-24.04`, including
+vitest, the Bun renderer, cross-runtime SQLite, real PTY, installer, and compiled
+binary smoke coverage.
 
-A2a PTY CI (every PR): Bun 1.3.14 plus a native helper build and focused
-real-PTY tests on `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15-intel`, and
-`macos-15`. A4 extends those jobs with a native compiled-default/helper smoke.
+Native release CI: build, smoke, and draft-install the compiled binary on
+`ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15-intel`, and `macos-15`.
 
 CI smoke (A4): the binary end-to-end minus TTY, **including** the
 hostile-directory RCE gate and detached self-spawn.

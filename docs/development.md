@@ -58,9 +58,9 @@ pnpm test:pre-push
 In addition to `test:all`, it checks cross-runtime SQLite compatibility, the
 Station renderer, the native PTY implementation, and the compiled binary on
 the developer's current platform. Install both the root pnpm dependencies and
-the `station/` Bun dependencies before pushing. GitHub-hosted CI remains the
-required PR and `main` gate, including cross-platform PTY coverage; the local
-gate is supplementary and can be bypassed with `git push --no-verify`.
+the `station/` Bun dependencies before pushing. GitHub-hosted CI runs this same
+gate once on `ubuntu-24.04` for pull requests and `main`; release tags add the
+four native build and draft-install targets.
 
 Useful focused commands:
 
@@ -82,14 +82,12 @@ pnpm smoke:install
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
 authenticated GitHub responses and temporary homes, so it is deterministic and
-does not download a real release. CI runs it once in a dedicated
-`ubuntu-24.04`/`macos-15` matrix; the heavier Ubuntu gate does not duplicate it.
-On a heavily contended local host, run
+does not download a real release. The single Ubuntu CI gate runs it once. On a
+heavily contended local host, run
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
-The four-target native PTY matrix also packages the local binary through the
-release helper and installs it with real platform utilities and no Node or Bun
-on the runtime `PATH`.
+The release workflow builds and smokes the compiled binary on all four native
+targets, then installs each actual draft asset with real platform utilities.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
@@ -97,7 +95,7 @@ the other runtime to verify the shared SQLite contract and migrations. It also
 runs the permanent boot-claim race: 50 alternating Node/Bun two-process rounds,
 three-contender rounds, and killed-owner recovery with stable inode and
 `integrity_check=ok`; this gate makes no fairness claim. Both the local pre-push
-gate and the mandatory hosted `station-bun` job run these checks.
+gate and the hosted `standard-ci` job run these checks.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
@@ -188,9 +186,10 @@ exactly equal `v${package.json.version}`, come from a commit on `origin/main`,
 and have no existing GitHub release. Pushing a `v*` tag runs the callable
 standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
 for all four supported targets, archive/checksum assembly, and an authenticated
-installer smoke against the resulting GitHub release draft. PR and release
-jobs use the same archive-packaging helper. Draft acceptance revalidates the tag
-but fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
+installer smoke against the resulting GitHub release draft. The four native
+release builds use one archive-packaging helper, and the draft-install jobs
+consume those exact uploaded archives. Draft acceptance revalidates the tag but
+fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
 with `--version`; a moved tag cannot substitute different installer code. After
 all four native installs pass, the workflow re-downloads the five draft assets,
 verifies them against the build checksum, and uploads an immutable

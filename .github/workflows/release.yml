@@ -168,6 +168,7 @@ jobs:
             stn-v${{ needs.validate.outputs.version }}-${{ matrix.target }}.tar.gz
             platform-metadata-${{ matrix.target }}.txt
           if-no-files-found: error
+          retention-days: 3
 
   create-draft:
     needs:
@@ -311,7 +312,7 @@ jobs:
           name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: release/candidate
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 3
 
   install-draft:
     name: install draft (${{ matrix.target }})
