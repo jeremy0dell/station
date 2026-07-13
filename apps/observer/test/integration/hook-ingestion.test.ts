@@ -355,7 +355,7 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
-  it("deduplicates hook ids before provider dispatch and persistence", async () => {
+  it("deduplicates hook persistence without skipping retryable provider processing", async () => {
     const clock = { now: () => new Date(now) };
     const harness = new RecordingHarnessProvider({ now });
     const providers = new ProviderRegistry({
@@ -384,7 +384,7 @@ describe("observer provider hook ingress", () => {
       value: { type: "observer.reconciled" },
     });
     await reconciled.close();
-    expect(harness.ingestCalls).toBe(1);
+    expect(harness.ingestCalls).toBe(2);
     expect(
       (await persistence.listEvents({ type: "providerHook.ingested" })).map((event) => event.event),
     ).toHaveLength(1);
@@ -416,6 +416,65 @@ describe("observer provider hook ingress", () => {
       (await persistence.listEvents({ type: "harness.eventReported" })).map((event) => event.event),
     ).toHaveLength(1);
     await expect(persistence.listProviderObservations()).resolves.toHaveLength(1);
+    sqlite.close();
+  });
+
+  it("repairs recovery and readiness after primary harness report persistence was already committed", async () => {
+    const clock = { now: () => new Date(now) };
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    let rejectRecoveryOnce = true;
+    const retryingPersistence = {
+      ...persistence,
+      upsertSessionRecoveryHandle: async (
+        input: Parameters<typeof persistence.upsertSessionRecoveryHandle>[0],
+      ) => {
+        if (rejectRecoveryOnce) {
+          rejectRecoveryOnce = false;
+          throw new Error("forced recovery failure");
+        }
+        return persistence.upsertSessionRecoveryHandle(input);
+      },
+    };
+    const ingestion = createHarnessEventReportIngestion({
+      persistence: retryingPersistence,
+      clock,
+    });
+    const report = {
+      ...harnessReport("report_repair_1"),
+      status: {
+        value: "idle" as const,
+        confidence: "high" as const,
+        reason: "Codex completed its turn.",
+        source: "harness_event" as const,
+        updatedAt: now,
+      },
+      turn: { kind: "turn_completed" as const },
+      correlation: {
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        sessionId: "ses_web_task",
+        nativeSessionId: "native_codex_1",
+      },
+    };
+
+    await expect(ingestion.ingest(report, { triggerReconcile: false })).resolves.toMatchObject({
+      accepted: false,
+      status: "rejected",
+    });
+    await expect(ingestion.ingest(report, { triggerReconcile: false })).resolves.toMatchObject({
+      accepted: true,
+      deduped: true,
+    });
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toHaveLength(1);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: "ses_web_task",
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        token: "report_repair_1",
+      }),
+    ]);
     sqlite.close();
   });
 

@@ -507,6 +507,62 @@ export function observerPersistenceContract(
           ).resolves.toEqual({ deduped: true });
         });
       });
+
+      it("atomically records every downstream observation before claiming processing complete", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          const observations = [
+            healthObservation("healthy"),
+            { ...healthObservation("degraded"), entityKey: "fake-harness-secondary" },
+          ];
+          const first = await persistence.recordProviderObservationsWithIngressDedupe({
+            observations,
+            dedupe: { kind: "hook_processing", id: "hook_batch" },
+            createdAt: now,
+          });
+          const duplicate = await persistence.recordProviderObservationsWithIngressDedupe({
+            observations,
+            dedupe: { kind: "hook_processing", id: "hook_batch" },
+            createdAt: now,
+          });
+
+          expect(first).toMatchObject({
+            deduped: false,
+            observations: [{ id: "contract_obs_1" }, { id: "contract_obs_2" }],
+          });
+          expect(duplicate).toEqual({ deduped: true });
+          await expect(
+            persistence.listProviderObservations({ includeExpired: true, now }),
+          ).resolves.toHaveLength(2);
+        });
+      });
+
+      it("rolls back a downstream processing claim when any observation is invalid", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          const invalid = {
+            ...healthObservation("degraded"),
+            payload: { status: "degraded" },
+          } as unknown as RecordProviderObservationInput;
+          const dedupe = { kind: "hook_processing" as const, id: "hook_batch_retry" };
+
+          await expectPersistenceFailure(
+            persistence.recordProviderObservationsWithIngressDedupe({
+              observations: [healthObservation("healthy"), invalid],
+              dedupe,
+              createdAt: now,
+            }),
+          );
+          await expect(
+            persistence.listProviderObservations({ includeExpired: true, now }),
+          ).resolves.toEqual([]);
+          await expect(
+            persistence.recordProviderObservationsWithIngressDedupe({
+              observations: [healthObservation("healthy")],
+              dedupe,
+              createdAt: now,
+            }),
+          ).resolves.toMatchObject({ deduped: false, observations: [{ id: "contract_obs_3" }] });
+        });
+      });
     });
 
     describe("ObservationStore", () => {

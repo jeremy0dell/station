@@ -1,4 +1,3 @@
-import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   HarnessEventReport,
@@ -9,10 +8,7 @@ import type {
   ProviderHookSpoolRecord,
   StationEvent,
 } from "@station/contracts";
-import {
-  HarnessEventReportSpoolRecordSchema,
-  ProviderHookSpoolRecordSchema,
-} from "@station/contracts";
+import { ProviderHookEventSchema } from "@station/contracts";
 import {
   type RuntimeClock,
   safeErrorFromUnknown,
@@ -21,6 +17,18 @@ import {
 } from "@station/runtime";
 import type { EventJournal } from "../persistence/index.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
+import {
+  createFilesystemProviderIngressSpoolStore,
+  type ParsedProviderIngressSpoolRecord,
+  type ProviderIngressSpoolEntry,
+  type ProviderIngressSpoolStore,
+} from "./spoolStore.js";
+
+export {
+  createFilesystemProviderIngressSpoolStore,
+  type ProviderIngressSpoolStore,
+  providerIngressSpoolDir,
+} from "./spoolStore.js";
 
 export type ProviderIngressSpoolDrainResult = {
   scanned: number;
@@ -29,7 +37,7 @@ export type ProviderIngressSpoolDrainResult = {
 };
 
 export type DrainProviderIngressSpoolOptions = {
-  spoolDir: string;
+  store: ProviderIngressSpoolStore;
   ingest(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
   report?(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
   persistence?: EventJournal;
@@ -37,101 +45,52 @@ export type DrainProviderIngressSpoolOptions = {
   clock?: RuntimeClock;
 };
 
-type ParsedSpoolRecord =
-  | {
-      kind: "hook";
-      record: ProviderHookSpoolRecord;
-    }
-  | {
-      kind: "report";
-      record: HarnessEventReportSpoolRecord;
-    };
-
-export function providerIngressSpoolDir(stateDir: string): string {
-  return join(stateDir, "spool", "hooks");
-}
-
 export async function listProviderIngressSpoolRecords(spoolDir: string): Promise<
   Array<{
     path: string;
     record: ProviderHookSpoolRecord | HarnessEventReportSpoolRecord;
   }>
 > {
-  let entries: string[];
-  try {
-    entries = await readdir(spoolDir);
-  } catch {
-    return [];
-  }
-
-  const records: Array<{
-    path: string;
-    record: ProviderHookSpoolRecord | HarnessEventReportSpoolRecord;
-  }> = [];
-  for (const entry of entries.filter((name) => name.endsWith(".json")).sort()) {
-    const path = join(spoolDir, entry);
-    try {
-      const raw = JSON.parse(await readFile(path, "utf8"));
-      const parsed = parseSpoolRecord(raw);
-      records.push({
-        path,
-        record: parsed.record,
-      });
-    } catch {
-      // Invalid spool files are left in place for later diagnostics.
-    }
-  }
-  return records;
+  const entries = await createFilesystemProviderIngressSpoolStore(spoolDir).list();
+  return entries.flatMap((entry) =>
+    entry.parsed === undefined
+      ? []
+      : [{ path: join(spoolDir, entry.id), record: entry.parsed.record }],
+  );
 }
 
-export async function providerIngressSpoolDepth(spoolDir: string): Promise<number> {
-  try {
-    return (await readdir(spoolDir)).filter((name) => name.endsWith(".json")).length;
-  } catch {
-    return 0;
-  }
+export function providerIngressSpoolDepth(spoolDir: string): Promise<number> {
+  return createFilesystemProviderIngressSpoolStore(spoolDir).depth();
 }
 
 export async function drainProviderIngressSpool(
   options: DrainProviderIngressSpoolOptions,
 ): Promise<ProviderIngressSpoolDrainResult> {
   const clock = options.clock ?? systemClock;
-  let entries: string[];
-  try {
-    entries = await readdir(options.spoolDir);
-  } catch {
-    entries = [];
-  }
-  const paths = entries
-    .filter((name) => name.endsWith(".json"))
-    .sort()
-    .map((entry) => join(options.spoolDir, entry));
+  const entries = await options.store.list();
   let drained = 0;
   let failed = 0;
 
-  for (const path of paths) {
-    let parsed: ParsedSpoolRecord;
-    try {
-      const raw = JSON.parse(await readFile(path, "utf8"));
-      parsed = parseSpoolRecord(raw);
-    } catch {
+  for (const entry of entries) {
+    const parsed = entry.parsed;
+    if (parsed === undefined) {
       failed += 1;
       continue;
     }
-
+    const validEntry = { ...entry, parsed };
     try {
-      const receipt = await drainSpoolRecord(parsed, options);
+      const receipt = await drainSpoolRecord(validEntry, options);
       if (receipt.status === "drained") {
-        await unlink(path);
+        // Removal is the durable acknowledgement that every direct processing step completed.
+        await options.store.remove(entry.id);
         drained += 1;
       } else {
-        await updateFailedSpoolRecord(path, parsed, receipt.error);
+        await options.store.recordFailure(validEntry, receipt.error);
         failed += 1;
       }
     } catch (error) {
-      await updateFailedSpoolRecord(
-        path,
-        parsed,
+      await options.store.recordFailure(
+        validEntry,
         safeErrorFromUnknown(error, {
           tag: "HookIngestionError",
           code: "HOOK_SPOOL_DRAIN_FAILED",
@@ -143,7 +102,7 @@ export async function drainProviderIngressSpool(
     }
   }
 
-  if (paths.length > 0) {
+  if (entries.length > 0) {
     const event: StationEvent = {
       type: "providerHook.spoolDrained",
       at: toIsoTimestamp(clock.now()),
@@ -157,20 +116,14 @@ export async function drainProviderIngressSpool(
     options.eventBus?.publish(event);
   }
 
-  return {
-    scanned: paths.length,
-    drained,
-    failed,
-  };
+  return { scanned: entries.length, drained, failed };
 }
 
 async function drainSpoolRecord(
-  parsed: ParsedSpoolRecord,
+  entry: ProviderIngressSpoolEntry & { parsed: ParsedProviderIngressSpoolRecord },
   options: DrainProviderIngressSpoolOptions,
 ): Promise<
-  | {
-      status: "drained";
-    }
+  | { status: "drained" }
   | {
       status: "failed";
       error:
@@ -179,9 +132,14 @@ async function drainSpoolRecord(
         | undefined;
     }
 > {
-  if (parsed.kind === "hook") {
-    const receipt = await options.ingest(parsed.record.event);
-    return receipt.status === "ingested"
+  if (entry.parsed.kind === "hook") {
+    const record = entry.parsed.record;
+    const event = ProviderHookEventSchema.parse({
+      ...record.event,
+      hookId: record.event.hookId ?? record.spoolId,
+    });
+    const receipt = await options.ingest(event);
+    return receipt.status === "ingested" && receipt.error === undefined
       ? { status: "drained" }
       : { status: "failed", error: receipt.error };
   }
@@ -193,47 +151,17 @@ async function drainSpoolRecord(
         tag: "HookIngestionError",
         code: "HOOK_REPORT_SPOOL_UNSUPPORTED",
         message: "Harness event report spool records are not supported by this drain path.",
-        provider: parsed.record.report.provider,
+        provider: entry.parsed.record.report.provider,
       }),
     };
   }
 
-  const receipt = await options.report(parsed.record.report);
-  return receipt.status === "accepted"
+  const receipt = await options.report(entry.parsed.record.report);
+  return receipt.status === "accepted" && receipt.error === undefined
     ? { status: "drained" }
     : { status: "failed", error: receipt.error };
 }
 
-function parseSpoolRecord(input: unknown): ParsedSpoolRecord {
-  const hook = ProviderHookSpoolRecordSchema.safeParse(input);
-  if (hook.success) {
-    return { kind: "hook", record: hook.data };
-  }
-  return { kind: "report", record: HarnessEventReportSpoolRecordSchema.parse(input) };
-}
-
-async function updateFailedSpoolRecord(
-  path: string,
-  parsed: ParsedSpoolRecord,
-  error:
-    | ProviderHookSpoolRecord["lastError"]
-    | HarnessEventReportSpoolRecord["lastError"]
-    | undefined,
-): Promise<void> {
-  const updated = {
-    ...parsed.record,
-    attempts: parsed.record.attempts + 1,
-  };
-  if (error !== undefined) {
-    updated.lastError = error;
-  }
-  const schema =
-    parsed.kind === "hook" ? ProviderHookSpoolRecordSchema : HarnessEventReportSpoolRecordSchema;
-  await writeFile(path, JSON.stringify(schema.parse(updated), null, 2), {
-    mode: 0o600,
-  });
-}
-
-function spoolRecordProvider(parsed: ParsedSpoolRecord): string {
+function spoolRecordProvider(parsed: ParsedProviderIngressSpoolRecord): string {
   return parsed.kind === "hook" ? parsed.record.event.provider : parsed.record.report.provider;
 }

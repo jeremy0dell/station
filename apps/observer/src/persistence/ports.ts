@@ -24,6 +24,7 @@ import type {
   PersistedWorktreeMetadataCurrent,
   PersistReconcileResultInput,
   ProviderObservationKind,
+  ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
@@ -71,7 +72,7 @@ export interface EventJournal {
 /**
  * DRIVEN PORT
  *
- * Atomically deduplicates accepted ingress with its durable event and observation evidence.
+ * Atomically records primary ingress acceptance and downstream observation completion under separate dedupe keys.
  */
 export interface IngressJournal {
   recordEventWithIngressDedupe(
@@ -86,6 +87,11 @@ export interface IngressJournal {
     observation: RecordProviderObservationInput;
     dedupe: IngressDedupeKey;
   }): Promise<EventAndObservationIngressDedupeResult>;
+  recordProviderObservationsWithIngressDedupe(input: {
+    observations: RecordProviderObservationInput[];
+    dedupe: IngressDedupeKey;
+    createdAt?: string;
+  }): Promise<ProviderObservationsIngressDedupeResult>;
 }
 
 /**

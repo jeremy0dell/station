@@ -14,6 +14,7 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import type {
+  IngressJournal,
   ObservationStore,
   RecordProviderObservationInput,
   SessionStore,
@@ -27,6 +28,7 @@ import { persistTurnReadinessFromHarnessObservation } from "./turnReadiness.js";
 
 export type ProviderHookIngestResult = {
   observations: number;
+  deduped: boolean;
   error?: SafeError;
 };
 
@@ -34,7 +36,7 @@ export type IngestProviderHookEventOptions = {
   event: ProviderHookEvent;
   providers: ProviderRegistry;
   projects: ProviderProjectConfig[];
-  persistence: ObservationStore & SessionStore;
+  persistence: IngressJournal & ObservationStore & SessionStore;
   clock?: RuntimeClock;
   timeoutMs?: number;
   retention?: ObservabilityRetentionConfig;
@@ -44,6 +46,11 @@ type ObservationRecord = RecordProviderObservationInput & {
   observedAt: string;
 };
 
+/**
+ * USE CASE
+ *
+ * Normalizes provider hook evidence and atomically records all derived observations before marking that hook processing complete.
+ */
 export async function ingestProviderHookEvent(
   options: IngestProviderHookEventOptions,
 ): Promise<ProviderHookIngestResult> {
@@ -72,16 +79,29 @@ export async function ingestProviderHookEvent(
   if (!result.ok) {
     return {
       observations: 0,
+      deduped: false,
       error: result.error,
     };
   }
 
   const retentionDays = providerObservationRetentionDays(options.retention);
-  for (const observation of result.value) {
-    await options.persistence.recordProviderObservation({
-      ...observation,
-      expiresAt: providerObservationExpiresAt(observation.observedAt, retentionDays),
-    });
+  const observations = result.value.map((observation) => ({
+    ...observation,
+    expiresAt: providerObservationExpiresAt(observation.observedAt, retentionDays),
+  }));
+  const processing = await options.persistence.recordProviderObservationsWithIngressDedupe({
+    observations,
+    dedupe: {
+      kind: "hook_processing",
+      id:
+        options.event.hookId ??
+        `${options.event.provider}:${options.event.receivedAt}:${options.event.event}`,
+    },
+    createdAt: options.event.receivedAt,
+  });
+
+  // Completion dedupe never suppresses idempotent readiness repair after a partial prior attempt.
+  for (const observation of observations) {
     const harnessEvent = harnessEventObservationFromRecord(observation);
     if (harnessEvent !== undefined) {
       await persistTurnReadinessFromHarnessObservation({
@@ -93,7 +113,8 @@ export async function ingestProviderHookEvent(
   }
 
   return {
-    observations: result.value.length,
+    observations: observations.length,
+    deduped: processing.deduped,
   };
 }
 

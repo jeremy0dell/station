@@ -19,6 +19,11 @@ export type ReconcileExecutorDeps = {
   drainSpoolAndQueue: () => Promise<void>;
 };
 
+/**
+ * USE CASE
+ *
+ * Replays pending ingress before scanning providers and then publishes the resulting Observer projection.
+ */
 export async function runReconcile(
   deps: ReconcileExecutorDeps,
   guard: ReconcileGuard,
@@ -30,19 +35,14 @@ export async function runReconcile(
   let publishMs = 0;
   let metadataRefreshScheduled = false;
   if (!guard.reconciling) {
-    if (reason === "observer.startup") {
-      void deps.drainSpoolAndQueue().catch(async (error: unknown) => {
-        await deps.logger?.error("Startup hook spool drain failed.", { error });
-      });
-    } else {
-      guard.reconciling = true;
-      const drainStartedAt = Date.now();
-      try {
-        await deps.drainSpoolAndQueue();
-      } finally {
-        drainMs = elapsedMs(drainStartedAt);
-        guard.reconciling = false;
-      }
+    guard.reconciling = true;
+    const drainStartedAt = Date.now();
+    try {
+      // The provider scan must observe every durable replay completed by this reconcile.
+      await deps.drainSpoolAndQueue();
+    } finally {
+      drainMs = elapsedMs(drainStartedAt);
+      guard.reconciling = false;
     }
   }
 

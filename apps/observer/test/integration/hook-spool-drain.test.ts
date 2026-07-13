@@ -18,15 +18,18 @@ import {
 } from "../../../../tests/support/spool";
 import {
   createCommandQueue,
+  createFilesystemProviderIngressSpoolStore,
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
+  createProviderHookIngress,
   createSqliteObserverPersistence,
   drainProviderIngressSpool,
   type HarnessEventReportIngestion,
   openObserverSqlite,
   type ProviderHookIngress,
   ProviderRegistry,
+  probeObserverSocket,
   providerIngressSpoolDir,
   startObserverServer,
 } from "../../src/internal";
@@ -43,11 +46,13 @@ describe("observer hook spool drain", () => {
     await fixture.api.reconcile("manual");
 
     await expect(stat(join(spoolDir, "spool_1.json"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect((await fixture.persistence.listEvents()).map((event) => event.type)).toEqual([
+    const events = await fixture.persistence.listEvents();
+    expect(events.map((event) => event.type)).toEqual([
       "providerHook.ingested",
       "providerHook.spoolDrained",
       "observer.reconciled",
     ]);
+    expect(events[0]?.event).toMatchObject({ hookId: "spool_1" });
     fixture.sqlite.close();
   });
 
@@ -93,7 +98,7 @@ describe("observer hook spool drain", () => {
     const nextDrainEvent = drainEvents.next();
 
     const result = await drainProviderIngressSpool({
-      spoolDir,
+      store: createFilesystemProviderIngressSpoolStore(spoolDir),
       persistence: fixture.persistence,
       eventBus: fixture.eventBus,
       clock: fixture.clock,
@@ -139,7 +144,70 @@ describe("observer hook spool drain", () => {
     fixture.sqlite.close();
   });
 
-  it("starts the observer server without waiting for spool drain work to finish", async () => {
+  it("retries downstream processing after primary hook dedupe and unlinks only after completion", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-state-"));
+    const spoolDir = providerIngressSpoolDir(stateDir);
+    const spoolPath = await writeHookSpoolRecordFixture({
+      spoolDir,
+      spoolId: "spool_retry_processing",
+      event: {
+        provider: "fake-harness",
+        kind: "harness",
+        event: "run.updated",
+        payload: { state: "idle" },
+      },
+    });
+    const clock = { now: () => new Date(now) };
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    let failProcessingOnce = true;
+    const retryingPersistence = {
+      ...persistence,
+      recordProviderObservationsWithIngressDedupe: async (
+        input: Parameters<typeof persistence.recordProviderObservationsWithIngressDedupe>[0],
+      ) => {
+        if (failProcessingOnce) {
+          failProcessingOnce = false;
+          throw new Error("forced downstream processing failure");
+        }
+        return persistence.recordProviderObservationsWithIngressDedupe(input);
+      },
+    };
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new ReplayHarnessProvider({ now })],
+    });
+    const ingress = createProviderHookIngress({
+      persistence: retryingPersistence,
+      providers,
+      clock,
+    });
+    const store = createFilesystemProviderIngressSpoolStore(spoolDir);
+
+    await expect(
+      drainProviderIngressSpool({ store, ingest: (event) => ingress.ingest(event), clock }),
+    ).resolves.toEqual({ scanned: 1, drained: 0, failed: 1 });
+    await expect(fileExists(spoolPath)).resolves.toBe(true);
+    await expect(persistence.listEvents({ type: "providerHook.ingested" })).resolves.toHaveLength(
+      1,
+    );
+    await expect(persistence.listProviderObservations()).resolves.toEqual([]);
+
+    await expect(
+      drainProviderIngressSpool({ store, ingest: (event) => ingress.ingest(event), clock }),
+    ).resolves.toEqual({ scanned: 1, drained: 1, failed: 0 });
+    await expect(fileExists(spoolPath)).resolves.toBe(false);
+    await expect(persistence.listEvents({ type: "providerHook.ingested" })).resolves.toHaveLength(
+      1,
+    );
+    await expect(persistence.listProviderObservations()).resolves.toEqual([
+      expect.objectContaining({ entityKey: "run_spool_retry" }),
+    ]);
+    sqlite.close();
+  });
+
+  it("opens health while making startup completion wait for spool and queue work", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-state-"));
     const spoolDir = providerIngressSpoolDir(stateDir);
     const spoolPath = await writeHookSpoolRecordFixture({ spoolDir, spoolId: "spool_startup" });
@@ -163,15 +231,17 @@ describe("observer hook spool drain", () => {
     });
     const { socketPath } = await createTempSocketPath();
 
-    const server = await startObserverServer({
+    const serverPromise = startObserverServer({
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
     });
 
+    await waitFor(async () => (await probeObserverSocket(socketPath)) === "listening");
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
-    await waitFor(async () => !(await fileExists(spoolPath)));
+    const server = await serverPromise;
+    await expect(fileExists(spoolPath)).resolves.toBe(false);
     await server.close();
     fixture.sqlite.close();
   });
@@ -198,7 +268,7 @@ describe("observer hook spool drain", () => {
     });
     const { socketPath } = await createTempSocketPath();
 
-    const server = await startObserverServer({
+    const serverPromise = startObserverServer({
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
@@ -207,7 +277,8 @@ describe("observer hook spool drain", () => {
     await waitFor(async () => processingStarted);
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
-    await waitFor(async () => !(await fileExists(spoolPath)));
+    const server = await serverPromise;
+    await expect(fileExists(spoolPath)).resolves.toBe(false);
     await server.close();
     fixture.sqlite.close();
   });
@@ -458,4 +529,25 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 1000): Pro
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("Timed out waiting for condition.");
+}
+
+class ReplayHarnessProvider extends FakeHarnessProvider {
+  override async ingestEvent() {
+    return [
+      {
+        provider: this.id,
+        harnessRunId: "run_spool_retry",
+        worktreeId: "wt_spool_retry",
+        sessionId: "ses_spool_retry",
+        status: {
+          value: "idle" as const,
+          confidence: "high" as const,
+          reason: "Replay harness reported idle.",
+          source: "harness_event" as const,
+          updatedAt: now,
+        },
+        observedAt: now,
+      },
+    ];
+  }
 }

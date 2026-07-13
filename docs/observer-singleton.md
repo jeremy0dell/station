@@ -62,8 +62,9 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
   database with WAL plus `integrity_check=ok`.
 - CLI and provider-hook starts resolved byte-identical proposed claim paths from
   the effective socket with XDG unset, XDG set, and an explicit config socket
-  containing a space. The current `hook-autostart.lock` still keys off
-  `<stateDir>/run` and therefore diverges under XDG/config overrides until 3e.
+  containing a space. `hook-autostart.lock` still keys off `<stateDir>/run`, but
+  it throttles hook spawns only; socket ownership remains exclusively governed
+  by the child-held claim beside the resolved socket.
 
 ## Shipped
 
@@ -75,6 +76,8 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 | #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a concurrent stale-reclaimer ABA; 3d-a now supplies the serialization required before this helper may reclaim. |
 | 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
 | 3d-a / #135 | The Observer child holds `BEGIN IMMEDIATE` on `dirname(resolvedSocket)/observer.claim.sqlite` across probe, stale reclaim, bind, pidfile publication, seeded watcher setup, and ready commitment. CLI and provider-hook clients only attach or spawn; health opens after synchronous claim release. |
+| 3d-b prerequisite | Hook spool replay uses stable ingress identity, completes derived observations and report recovery state idempotently after primary dedupe, and unlinks records only after direct durable processing. Automatic handoff may now request graceful shutdown without turning process-memory queue acceptance into data loss. |
+| 3e | `hook-autostart.lock` remains a state-directory rate limiter for provider-hook spawn attempts only. Every spawned child still enters the socket-relative 3d-a claim, so lock-path divergence under XDG or explicit socket configuration cannot create a second ownership authority. |
 
 Together these **stop the bleeding**: `reap` clears duplicates on demand, the
 seeded watcher self-heals future displacements, and stop is terminal. Phase 3c
@@ -138,8 +141,8 @@ and non-mutation cases. It proves mutual exclusion, not fairness.
 
 Build coordinated handoff only after 3d-a establishes exclusive boot ownership.
 This phase owns version comparison, incumbent attribution, graceful stop,
-signal escalation, spool-safety prerequisites, and replacement confirmation;
-none belongs to #135.
+bounded signal escalation, and replacement confirmation; its replay-safe spool
+prerequisite is shipped above, and none of the handoff policy belongs to #135.
 
 - Refine the version gate into a **total antisymmetric order** with a
   deterministic `(version, startedAt, pid)` tiebreak so no pair both-evicts.
@@ -150,20 +153,12 @@ none belongs to #135.
   Refuse on missing or conflicting evidence and revalidate before every signal.
 - Request graceful `observer.stop`, then confirm both socket closure and exact
   process death before binding. A stop receipt alone is not completion.
-- Do not make SIGKILL a routine terminator until spool consumption is
-  idempotent by event ID or atomically claimed. Until then a wedged incumbent
-  requires a safe refusal or an explicit operator path.
+- Automatic handoff must never use SIGKILL. A wedged incumbent that survives
+  graceful stop and the bounded, identity-revalidated signal path requires a
+  safe refusal; forced termination remains an explicit operator action.
 - Preserve the process-level graceful and wedged replacement spikes as
   permanent acceptance coverage. PTY continuity is not part of Observer
   handoff; `station-host` owns live PTYs independently.
-
-### 3e — isolate hook auto-start rate limiting
-
-3d-a routes CLI and provider-hook children through the same child-owned
-claim. Keep `hook-autostart.lock` authoritative only for hook rate limiting,
-never Observer ownership. Its state-directory location may diverge from the
-resolved socket under config and XDG overrides without weakening the 3d-a
-claim.
 
 ### Phase 4 — guarded self-heal (deferrable, needs 3d-b)
 

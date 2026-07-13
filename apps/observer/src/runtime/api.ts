@@ -39,7 +39,10 @@ import {
   type HarnessEventReportIngestion,
   type ProviderHookIngress,
 } from "../hooks/ingestion.js";
-import { providerIngressSpoolDepth } from "../hooks/spool.js";
+import {
+  createFilesystemProviderIngressSpoolStore,
+  providerIngressSpoolDepth,
+} from "../hooks/spool.js";
 import {
   createWorktreeMetadataRefreshService,
   type WorktreeMetadataRefreshService,
@@ -88,6 +91,11 @@ export type CreateObserverApiOptions = {
   hookReconcileDebounceMs?: number;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Wires Observer use cases, durable adapters, ingress workers, scheduling, and lifecycle operations behind the application API.
+ */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
   const reconciling = { reconciling: false };
@@ -156,7 +164,9 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     harnessIngressQueue,
     harnessReportDeps,
     reconcileScheduler,
-    ...(options.hookSpoolDir === undefined ? {} : { hookSpoolDir: options.hookSpoolDir }),
+    ...(options.hookSpoolDir === undefined
+      ? {}
+      : { spoolStore: createFilesystemProviderIngressSpoolStore(options.hookSpoolDir) }),
   };
   const { drainConfiguredSpoolAndQueue } = createSpoolDrainer(spoolDrainDeps);
 

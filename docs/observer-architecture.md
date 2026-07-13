@@ -241,7 +241,7 @@ No single layer owns all truth.
 | `StationSnapshot` | Current normalized graph held in memory. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
-| Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. |
+| Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
 | JSONL logs and debug bundles | Diagnostic evidence. They never outrank config, provider reads, current observer state, or command records. |
 
 Clients must treat a subscription gap as possible event loss. The Station client
@@ -372,13 +372,20 @@ Observer-side through injected provider hook adapters. Integrations that
 already own a typed report path, including Pi, normalize once in that adapter
 and submit a `HarnessEventReport`; the Observer does not normalize it again.
 
-The harness queue acknowledges accepted work before durable processing or
-reconcile. Queue acceptance is process-memory acceptance, not a durability
+The harness queue acknowledges accepted online work before durable processing
+or reconcile. Queue acceptance is process-memory acceptance, not a durability
 guarantee. It remembers recent report IDs in memory, coalesces replaceable
 pending reports by correlation key, rejects new keys when its bounded pending
 capacity is full, and exposes health counters. The worker applies durable
-dedupe while persisting a report. Spool draining is single-flight; invalid or
-failed records stay available for later diagnosis or retry.
+dedupe while persisting a report.
+
+Spool replay bypasses queue acceptance and invokes direct durable hook/report
+processing. A primary ingress dedupe hit suppresses duplicate event publication
+but does not skip idempotent derived-observation, recovery-handle, or readiness
+completion. The filesystem spool adapter removes a record only after that work
+succeeds; invalid and failed records retain attempt/error evidence for later
+diagnosis or retry. Startup reconcile waits for the single-flight spool and
+queue drain before its provider scan.
 
 Provider hooks are delivery hints. They may update durable observations and
 immediate projections, but scheduled reconcile remains the path to fresh
@@ -432,7 +439,8 @@ from the diagnostic use case.
 | Reconcile ordering | Core reconciles form a non-poisoning promise chain. Scheduled requests coalesce; queued work after a run receives a later flush. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | One worker processes a bounded pending map. New reports can replace pending work for the same key; a full map rejects unrelated work with a backpressure error. |
-| Spool drain | One configured drain runs at a time and processes stable filename order. Failed records remain on disk with attempt/error evidence. |
+| Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
+| Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
 | Background refresh | Provider probes and metadata refresh are best-effort and must report failure without blocking the primary reconcile result. |
 
