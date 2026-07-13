@@ -29,7 +29,7 @@ export async function runSetupSystemCommand(
       actions.push(systemInstallAction("bun", "bun"));
     }
     if (initial.diffnav.status === "missing")
-      actions.push(systemInstallAction("diffnav", "dlvhdr/formulae/diffnav"));
+      actions.push(systemInstallAction("diffnav", "diffnav"));
     if (initial.gitDelta.status === "missing")
       actions.push(systemInstallAction("git-delta", "git-delta"));
     const result = await applySetupPlan(

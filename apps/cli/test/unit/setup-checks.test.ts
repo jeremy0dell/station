@@ -735,7 +735,7 @@ describe("checkSetupDiffnav", () => {
       access: fakeAccess([]),
     });
     expect(fact.status).toBe("missing");
-    expect(fact.message).toContain("diffnav");
+    expect(fact.message).toContain("brew install diffnav");
   });
 
   it("probes the literal diffnav the automation runs, ignoring any binary override", async () => {

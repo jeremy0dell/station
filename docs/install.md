@@ -4,88 +4,41 @@ Station is distributed internally as authenticated private GitHub release assets
 
 ## Private Binary
 
-Start in the Git repository you want Station to manage, authenticate `gh` for `jeremy0dell/station`, then use `curl` to fetch the version-pinned installer from the private repository:
+On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to `jeremy0dell/station`, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
+
+Start in the Git repository you want Station to manage, authenticate `gh`, then fetch and run the installer for the first binary baseline:
 
 ```bash
 cd /path/to/your/git-project
 gh auth login --hostname github.com
 (
-  set -e
+  set -eu
   umask 077
+  export GH_HOST=github.com
   tag=v0.7.0
-  token="$(gh auth token --hostname github.com)"
-  test -n "$token"
-  headers="$(mktemp)"
   installer="$(mktemp)"
-  trap 'rm -f "$headers" "$installer"' EXIT
-  printf 'Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\nX-GitHub-Api-Version: 2022-11-28\n' \
-    "$token" > "$headers"
-  unset token
-  curl --disable \
-    --proto '=https' \
-    --tlsv1.2 \
-    --fail \
-    --silent \
-    --show-error \
-    --max-redirs 0 \
-    --header "@$headers" \
-    --output "$installer" \
-    "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag"
-  rm -f "$headers"
+  trap 'rm -f "$installer"' EXIT
+  gh api --method GET \
+    -H 'Accept: application/vnd.github.raw+json' \
+    -f ref="$tag" \
+    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
   test -s "$installer"
   sh -n "$installer"
   sh "$installer" --version "$tag"
 )
 ```
 
-`v0.7.0` is the first supported private-binary baseline. Resolve the latest
-stable tag first, then fetch and invoke that tag's installer:
+Keep `tag=v0.7.0` for an exact install. After `v0.7.0` is published, replace that assignment with the following to resolve the latest stable tag while still fetching installer code and artifacts from that same tag:
 
 ```bash
-cd /path/to/your/git-project
-(
-  set -e
-  umask 077
-  tag="$(
-    GH_HOST=github.com gh api --method GET \
-      repos/jeremy0dell/station/releases/latest --jq '.tag_name'
-  )"
-  test -n "$tag"
-  token="$(gh auth token --hostname github.com)"
-  test -n "$token"
-  headers="$(mktemp)"
-  installer="$(mktemp)"
-  trap 'rm -f "$headers" "$installer"' EXIT
-  printf 'Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\nX-GitHub-Api-Version: 2022-11-28\n' \
-    "$token" > "$headers"
-  unset token
-  curl --disable \
-    --proto '=https' \
-    --tlsv1.2 \
-    --fail \
-    --silent \
-    --show-error \
-    --max-redirs 0 \
-    --header "@$headers" \
-    --output "$installer" \
-    "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag"
-  rm -f "$headers"
-  test -s "$installer"
-  sh -n "$installer"
-  sh "$installer" --version "$tag"
-)
+tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
 ```
 
-Use the explicit form with the desired `tag` for every exact install. Both
-forms pair installer code and artifacts from one immutable tag; they never
-fall back to `main`. `curl` only bootstraps that checked installer; the
-installer continues to use authenticated `gh` for private release discovery
-and asset downloads. Because `v0.7.0` is the first binary release, immutable
-rollback to a prior binary becomes available only after the next binary release.
+The recipe never falls back to `main`. `gh` handles private-repository authentication for both the bootstrap and the installer's release discovery and asset downloads. Because `v0.7.0` is the first binary release, immutable rollback to a prior binary becomes available only after the next binary release.
 
 ### Complete first-run setup
 
-The curl block only installs the Station binaries; it does not configure the current project or edit your shell profile. Both recipes begin by changing into the Git repository that `stn setup` will use as the first Station project. For the default install location, the remaining handoff is:
+The installer block only installs the Station binaries; it does not configure the current project or edit your shell profile. The recipe begins by changing into the Git repository that `stn setup` will use as the first Station project. For the default install location, the remaining handoff is:
 
 ```bash
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"

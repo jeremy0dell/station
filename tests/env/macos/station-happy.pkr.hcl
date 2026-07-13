@@ -45,7 +45,7 @@ build {
       "set -euo pipefail",
       "brew update",
       "brew install node@24 bun tmux git-delta",
-      "brew install dlvhdr/formulae/diffnav",
+      "brew install diffnav",
       "brew install worktrunk",
     ]
   }

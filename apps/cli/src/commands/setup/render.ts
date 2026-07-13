@@ -101,7 +101,7 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
   if (missing?.id === "diffnav") {
     return missingResult(
       "diffnav is still missing.",
-      "Install it (brew install dlvhdr/formulae/diffnav), then run:",
+      "Install it (brew install diffnav), then run:",
       theme,
     );
   }

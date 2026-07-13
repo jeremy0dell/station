@@ -70,62 +70,46 @@ describe("release readiness docs", () => {
       ["docs/install.md", install],
     ] as const) {
       expect(document, path).not.toContain("ref=main");
-      const expectedRecipeCount = path === "README.md" ? 1 : 2;
-      const curlCommands = shellBlocks(document)
-        .flatMap(continuedShellCommands)
-        .filter((command) => command.startsWith("curl "));
-      expect(curlCommands, path).toHaveLength(expectedRecipeCount);
-      for (const command of curlCommands) {
-        expect(command, path).toMatch(/^curl\s+--disable(?:\s|$)/);
-        expect(command, path).not.toMatch(/\b(?:Authorization|Bearer|token)\b/i);
-        expect(command, path).not.toMatch(/(?:^|\s)(?:-L|--location)(?:\s|$)/);
-        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
-      }
-      const contentsFetches = curlCommands.filter((command) =>
-        command.includes("contents/scripts/install.sh"),
-      );
-      expect(contentsFetches, path).toHaveLength(expectedRecipeCount);
+      expect(document, path).not.toContain("gh auth token");
+      expect(document, path).not.toContain("Authorization: Bearer");
+      expect(document, path).not.toContain("curl");
       const recipes = shellBlocks(document).filter((block) =>
-        block.includes(
-          "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag",
-        ),
+        block.includes("repos/jeremy0dell/station/contents/scripts/install.sh"),
       );
-      expect(recipes, path).toHaveLength(expectedRecipeCount);
+      expect(recipes, path).toHaveLength(1);
       for (const recipe of recipes) {
         expect(recipe, path).toContain("cd /path/to/your/git-project");
         expect(recipe.indexOf("cd /path/to/your/git-project"), path).toBeLessThan(
-          recipe.indexOf("curl --disable"),
+          recipe.indexOf("gh api --method GET"),
         );
         expect(recipe, path).toContain("umask 077");
-        expect(recipe, path).toContain('token="$(gh auth token --hostname github.com)"');
-        expect(recipe, path).toContain('headers="$(mktemp)"');
+        expect(recipe, path).toContain("export GH_HOST=github.com");
+        expect(recipe.indexOf("export GH_HOST=github.com"), path).toBeLessThan(
+          recipe.indexOf("gh api --method GET"),
+        );
         expect(recipe, path).toContain('installer="$(mktemp)"');
-        expect(recipe, path).toContain('trap \'rm -f "$headers" "$installer"\' EXIT');
-        expect(recipe, path).toContain("Authorization: Bearer %s");
-        expect(recipe, path).toContain("Accept: application/vnd.github.raw+json");
-        expect(recipe, path).toContain("unset token");
+        expect(recipe, path).toContain("trap 'rm -f \"$installer\"' EXIT");
         expect(recipe, path).toContain('test -s "$installer"');
         expect(recipe, path).toContain('sh -n "$installer"');
         expect(recipe, path).toContain('sh "$installer" --version "$tag"');
 
         const installerFetches = continuedShellCommands(recipe).filter((command) =>
-          command.includes("contents/scripts/install.sh?ref=$tag"),
+          command.includes("contents/scripts/install.sh"),
         );
         expect(installerFetches, path).toHaveLength(1);
         const command = installerFetches[0] ?? "";
-        expect(command, path).toContain("--proto '=https'");
-        expect(command, path).toContain("--tlsv1.2");
-        expect(command, path).toContain("--fail");
-        expect(command, path).toContain("--silent");
-        expect(command, path).toContain("--show-error");
-        expect(command, path).toContain("--max-redirs 0");
-        expect(command, path).toContain('--header "@$headers"');
-        expect(command, path).toContain('--output "$installer"');
+        expect(command, path).toContain("gh api --method GET");
+        expect(command, path).toContain("Accept: application/vnd.github.raw+json");
+        expect(command, path).toContain('-f ref="$tag"');
         expect(command, path).toContain(
-          "https://api.github.com/repos/jeremy0dell/station/contents/scripts/install.sh?ref=$tag",
+          'repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"',
         );
+        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
       }
     }
+    expect(install).toContain(
+      'tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest',
+    );
     expect(readme.replace(/\s+/g, " ")).toContain("installer code and artifacts");
     expect(install).toContain("SHA256SUMS");
     expect(install).toContain("stn-tmux-popup");
@@ -139,6 +123,26 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("without `+` build metadata");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
     expect(development).toContain("accepted-release-candidate-0.7.0");
+    const acceptanceRecipes = shellBlocks(development).filter((block) =>
+      block.includes('STATION_INSTALL_RELEASE_ID="$release_id"'),
+    );
+    expect(acceptanceRecipes).toHaveLength(1);
+    const acceptanceRecipe = acceptanceRecipes[0] ?? "";
+    expect(acceptanceRecipe).toContain("export GH_HOST=github.com");
+    expect(acceptanceRecipe).toContain("release_run_id=123456789");
+    expect(acceptanceRecipe).toContain("--json workflowName --jq '.workflowName'");
+    expect(acceptanceRecipe).toContain("accepted-release-candidate-$version-attempt-$run_attempt");
+    expect(acceptanceRecipe).toContain("manifest_field workflowRunId");
+    expect(acceptanceRecipe).toContain("manifest_field workflowRunAttempt");
+    expect(acceptanceRecipe).toContain('commit="$(manifest_field commit)"');
+    expect(acceptanceRecipe).toContain('release_id="$(manifest_field releaseId)"');
+    expect(acceptanceRecipe).toContain(
+      'test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq \'.sha\')" = "$commit"',
+    );
+    expect(acceptanceRecipe).toContain('-f ref="$commit"');
+    expect(acceptanceRecipe).not.toContain(
+      'commit="$(gh api "repos/jeremy0dell/station/commits/$tag"',
+    );
     expect(release).toContain('-f ref="$COMMIT"');
     expect(release).toContain("persist-credentials: false");
     expect(release).toContain("accepted-release-candidate-");

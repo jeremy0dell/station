@@ -617,9 +617,7 @@ function setupActions(
     actions.push(installAction("install-bun", "Bun", "bun", facts.brew));
   }
   if (facts.diffnav.status === "missing") {
-    actions.push(
-      installAction("install-diffnav", "diffnav", "dlvhdr/formulae/diffnav", facts.brew),
-    );
+    actions.push(installAction("install-diffnav", "diffnav", "diffnav", facts.brew));
   }
   // delta is diffnav's renderer, not standalone-useful here; install it alongside
   // so a required diffnav never yields a diffnav that errors for a missing delta.
@@ -869,7 +867,7 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   }
   if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {
     return [
-      "Install diffnav and git-delta (brew install dlvhdr/formulae/diffnav git-delta), then run: stn setup check",
+      "Install diffnav and git-delta (brew install diffnav git-delta), then run: stn setup check",
     ];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
