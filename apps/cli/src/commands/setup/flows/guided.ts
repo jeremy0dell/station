@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { applySetupPlan } from "../apply.js";
 import { checkSetupTmuxBinding } from "../checks/tmuxBinding.js";
 import { planSetupConfigWrite } from "../configWriter.js";
@@ -170,10 +172,7 @@ async function runGuidedSetupWithPrompt(
   if (shellIntegration !== undefined) {
     const accepted = await prompt.confirm("Install Worktrunk shell integration?");
     if (accepted) {
-      await applySetupPlan(
-        { ...plan, actions: [{ ...shellIntegration, selected: true }] },
-        applyOptions(deps, { announceActions: true, showCommandOutput: true }),
-      );
+      await installWorktrunkShellIntegration(shellIntegration, plan, facts, options, deps);
     }
   }
 
@@ -237,6 +236,66 @@ async function runGuidedSetupWithPrompt(
     ),
   );
   return { code: 0 };
+}
+
+async function installWorktrunkShellIntegration(
+  action: SetupAction,
+  plan: SetupPlan,
+  facts: SetupFacts,
+  options: SetupCommandOptions,
+  deps: SetupCommandDeps,
+): Promise<void> {
+  const baseCommand = action.command;
+  if (baseCommand === undefined) return;
+
+  const shellRc = activeShellRc(facts.homeDir, (deps.env ?? options.env ?? process.env).SHELL);
+  const command = shellRc === undefined ? baseCommand : [...baseCommand, shellRc.shell];
+  if (shellRc !== undefined && !(await pathExists(shellRc.path, deps))) {
+    await write(
+      deps,
+      [
+        "Optional Worktrunk shell integration was not installed; core setup is complete.",
+        `Active ${shellRc.shell} rc file not found: ${shellRc.path}`,
+        `Run: ${formatCommand(["touch", shellRc.path])} && ${formatCommand(command)}`,
+        "",
+      ].join("\n"),
+    );
+    return;
+  }
+
+  const shellApplyOptions =
+    applyOptions(deps, { announceActions: true, showCommandOutput: true }) ?? {};
+  shellApplyOptions.onActionFailed = () => undefined;
+  const result = await applySetupPlan(
+    { ...plan, actions: [{ ...action, command, selected: true }] },
+    shellApplyOptions,
+  );
+  if (result.failedAction !== undefined) {
+    await write(
+      deps,
+      `Optional Worktrunk shell integration was not installed; core setup is complete.\nRun: ${formatCommand(command)}\n`,
+    );
+  }
+}
+
+function activeShellRc(
+  homeDir: string,
+  shellCommand: string | undefined,
+): { shell: "bash" | "zsh"; path: string } | undefined {
+  const shell = basename(shellCommand ?? "");
+  if (shell !== "bash" && shell !== "zsh") return undefined;
+  return { shell, path: join(homeDir, shell === "bash" ? ".bashrc" : ".zshrc") };
+}
+
+async function pathExists(path: string, deps: SetupCommandDeps): Promise<boolean> {
+  try {
+    await (deps.fs?.access ?? access)(path);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+    // Let Worktrunk surface other rc errors through the optional action-failure path.
+    return true;
+  }
 }
 
 function renderTmuxPopupFeedback(
