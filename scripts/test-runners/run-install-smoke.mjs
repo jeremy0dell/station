@@ -370,11 +370,6 @@ function scenarioAuthenticatedReleaseValidation() {
       },
     },
     {
-      label: "duplicate draft release",
-      expected: "no single draft matched",
-      options: { version: stableTag, releaseId: "42", duplicateDraftRelease: true },
-    },
-    {
       label: "draft tag mismatch",
       expected: "no single draft matched",
       options: { version: stableTag, releaseId: "42", releaseIdTag: rollbackTag },
@@ -429,6 +424,7 @@ function scenarioGhFailuresAndRetries() {
   const failures = [
     ["latest", {}, "latest release API failure"],
     ["release", { version: stableTag }, "release asset API failure"],
+    ["release", { version: stableTag, releaseId: "42" }, "draft release API failure"],
     ["archive-download", { version: stableTag }, "archive download failure"],
     ["checksums-download", { version: stableTag }, "checksum download failure"],
     ["partial-archive", { version: stableTag }, "partial archive download"],
@@ -2220,16 +2216,16 @@ function writeFakeCommands() {
       "      exit 2",
       "    fi",
       "    ;;",
-      '  "repos/jeremy0dell/station/releases?per_page=100")',
-      '    [ "$paginate" -eq 1 ] && [ -z "$accept_header" ]',
+      '  "repos/jeremy0dell/station/releases/$FAKE_RELEASE_ID")',
+      '    [ "$paginate" -eq 0 ]',
+      '    [ "$accept_header" = "X-GitHub-Api-Version: 2022-11-28" ]',
       `    [ "\${FAKE_GH_FAIL_PHASE:-}" != release ] || exit 74`,
       `    [ "\${FAKE_RELEASE_DRAFT:-1}" = 1 ] || exit 0`,
       '    [ "$FAKE_RELEASE_ID_TAG" = "$FAKE_TAG" ] || exit 0',
-      '    draft_match=".[] | select(.draft == true and .id == $FAKE_RELEASE_ID and .tag_name == \\"$FAKE_TAG\\")"',
+      '    draft_match="select(.draft == true and .id == $FAKE_RELEASE_ID and .tag_name == \\"$FAKE_TAG\\")"',
       '    if [ "$jq_filter" = "$draft_match | .id" ]; then',
       "        block_phase draft-release",
       "        printf '%s\\n' \"$FAKE_RELEASE_ID\"",
-      `        if [ "\${FAKE_DUPLICATE_RELEASE:-0}" = 1 ]; then printf '%s\\n' "$FAKE_RELEASE_ID"; fi`,
       '    elif [ "$jq_filter" = "$draft_match | .assets[] | select(.name == \\"$FAKE_ARCHIVE\\") | .id" ]; then',
       "      block_phase draft-archive-asset",
       `      count=\${FAKE_ARCHIVE_ASSET_COUNT:-1}`,
@@ -2276,7 +2272,6 @@ function runInstaller({
   version,
   auth = true,
   duplicateArchiveAsset = false,
-  duplicateDraftRelease = false,
   includeInstallDirOnPath = false,
   releaseId,
   releaseDraft = true,
@@ -2316,7 +2311,6 @@ function runInstaller({
       XDG_DATA_HOME: unsetXdgDataHome ? undefined : dataHome,
       FAKE_ARCHIVE: archive,
       FAKE_DUPLICATE_ARCHIVE: duplicateArchiveAsset ? "1" : "0",
-      FAKE_DUPLICATE_RELEASE: duplicateDraftRelease ? "1" : "0",
       FAKE_GH_AUTH: auth ? "1" : "0",
       FAKE_GH_ARGV_LOG: ghArgvLog,
       FAKE_GH_LOG: ghLog,
@@ -2997,23 +2991,12 @@ function assertStrictGhFlow(result, { draftId, latest = false, tag, target }) {
     expected.push(["api", tagEndpoint, "--jq", archiveFilter]);
     expected.push(["api", tagEndpoint, "--jq", checksumFilter]);
   } else {
-    const endpoint = `${repository}/releases?per_page=100`;
-    const match = `.[] | select(.draft == true and .id == ${draftId} and .tag_name == "${tag}")`;
-    expected.push(["api", "--paginate", endpoint, "--jq", `${match} | .id`]);
-    expected.push([
-      "api",
-      "--paginate",
-      endpoint,
-      "--jq",
-      `${match} | .assets[] | select(.name == "${archiveName}") | .id`,
-    ]);
-    expected.push([
-      "api",
-      "--paginate",
-      endpoint,
-      "--jq",
-      `${match} | .assets[] | select(.name == "SHA256SUMS") | .id`,
-    ]);
+    const endpoint = `${repository}/releases/${draftId}`;
+    const match = `select(.draft == true and .id == ${draftId} and .tag_name == "${tag}")`;
+    const prefix = ["api", "-H", "X-GitHub-Api-Version: 2022-11-28", endpoint, "--jq"];
+    expected.push([...prefix, `${match} | .id`]);
+    expected.push([...prefix, `${match} | .assets[] | select(.name == "${archiveName}") | .id`]);
+    expected.push([...prefix, `${match} | .assets[] | select(.name == "SHA256SUMS") | .id`]);
   }
   expected.push([
     "api",

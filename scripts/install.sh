@@ -576,11 +576,11 @@ if [ -n "$release_id" ]; then
   tag=$requested_version
   version=${tag#v}
   archive_name="stn-v${version}-${target}.tar.gz"
-  # GitHub tag endpoints exclude drafts; the authenticated release list is draft-visible.
-  draft_endpoint="repos/$repository/releases?per_page=100"
-  draft_match=".[] | select(.draft == true and .id == $release_id and .tag_name == \"$tag\")"
-  if ! run_gh "$temp_dir/draft-release.stdout" "$temp_dir/draft-release.stderr" api --paginate "$draft_endpoint" --jq "$draft_match | .id"; then
-    fail "could not list draft releases; check your authentication and repository access."
+  # Draft release lists can lag creation, so acceptance addresses the captured release ID directly.
+  draft_endpoint="repos/$repository/releases/$release_id"
+  draft_match="select(.draft == true and .id == $release_id and .tag_name == \"$tag\")"
+  if ! run_gh "$temp_dir/draft-release.stdout" "$temp_dir/draft-release.stderr" api -H "X-GitHub-Api-Version: 2022-11-28" "$draft_endpoint" --jq "$draft_match | .id"; then
+    fail "could not read draft release $release_id; check your authentication and repository access."
   fi
   read_numeric_result "$temp_dir/draft-release.stdout" "no single draft matched ID $release_id and requested version '$tag'."
 
@@ -588,7 +588,7 @@ if [ -n "$release_id" ]; then
     asset_name=$1
     asset_slug=$2
     filter="$draft_match | .assets[] | select(.name == \"$asset_name\") | .id"
-    if ! run_gh "$temp_dir/$asset_slug.stdout" "$temp_dir/$asset_slug.stderr" api --paginate "$draft_endpoint" --jq "$filter"; then
+    if ! run_gh "$temp_dir/$asset_slug.stdout" "$temp_dir/$asset_slug.stderr" api -H "X-GitHub-Api-Version: 2022-11-28" "$draft_endpoint" --jq "$filter"; then
       fail "could not read assets for draft release $tag."
     fi
     read_numeric_result "$temp_dir/$asset_slug.stdout" "release $tag must contain exactly one '$asset_name' asset."
