@@ -143,6 +143,7 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
   await writeShim(bin, "diffnav", "exit 0\n");
   await writeShim(bin, "delta", "exit 0\n");
   await writeShim(bin, "bun", "exit 0\n");
+  await writeShim(bin, "npm", "echo 0.1.0\n");
   if (input.harness === "codex") {
     await writeCodexShim(bin);
   }
