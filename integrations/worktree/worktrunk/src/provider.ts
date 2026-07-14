@@ -88,7 +88,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
   readonly #observations = new Map<string, WorktreeObservation>();
-  readonly #projectRoots = new Map<string, string>();
+  readonly #projects = new Map<string, ProviderProjectConfig>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -206,22 +206,9 @@ export class WorktrunkProvider implements WorktreeProvider {
     if (!project.worktrunk.enabled) {
       return [];
     }
-    this.#projectRoots.set(project.id, project.root);
+    this.#projects.set(project.id, project);
 
-    const output = await this.#run(
-      this.#args(["list", "--format=json"]),
-      project.root,
-      {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to list worktrees.",
-      },
-      policy,
-    );
-    const observations = parseWorktrunkListJson(output.stdout, {
-      project,
-      providerId: this.id,
-      observedAt: toIsoTimestamp(this.#clock.now()),
-    });
+    const observations = await this.#readWorktrees(project, policy);
     const managedObservations = observations.filter((observation) =>
       isManagedWorktreeObservation(project, observation),
     );
@@ -236,8 +223,28 @@ export class WorktrunkProvider implements WorktreeProvider {
     return withBreadcrumbs;
   }
 
+  async #readWorktrees(
+    project: ProviderProjectConfig,
+    policy: WorktrunkRunPolicy,
+  ): Promise<WorktreeObservation[]> {
+    const output = await this.#run(
+      this.#args(["list", "--format=json"]),
+      project.root,
+      {
+        code: "WORKTRUNK_COMMAND_FAILED",
+        message: "Worktrunk failed to list worktrees.",
+      },
+      policy,
+    );
+    return parseWorktrunkListJson(output.stdout, {
+      project,
+      providerId: this.id,
+      observedAt: toIsoTimestamp(this.#clock.now()),
+    });
+  }
+
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
-    this.#projectRoots.set(request.project.id, request.project.root);
+    this.#projects.set(request.project.id, request.project);
     const base = request.base ?? request.project.worktrunk.base;
     const output = await this.#run(
       this.#args([
@@ -352,8 +359,8 @@ export class WorktrunkProvider implements WorktreeProvider {
         { hint: "Run listWorktrees before removeWorktree so the provider can resolve the target." },
       );
     }
-    const projectRoot = this.#projectRoots.get(observation.projectId);
-    if (projectRoot === undefined) {
+    const project = this.#projects.get(observation.projectId);
+    if (project === undefined) {
       throw new WorktrunkProviderError(
         "WORKTRUNK_WORKTREE_NOT_FOUND",
         "Worktrunk remove requires the repository root from a previous project listing.",
@@ -361,15 +368,41 @@ export class WorktrunkProvider implements WorktreeProvider {
       );
     }
 
+    const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
+    const selected = currentWorktrees.find((worktree) => samePath(worktree.path, observation.path));
+    if (selected?.state !== "exists") {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_WORKTREE_NOT_FOUND",
+        "Worktrunk remove could not confirm that the selected worktree still exists.",
+        { hint: "Run listWorktrees again before retrying removal." },
+      );
+    }
+    const branchIsShared =
+      !selected.branch.startsWith("detached:") &&
+      currentWorktrees.some(
+        (worktree) =>
+          worktree.state === "exists" &&
+          worktree.branch === selected.branch &&
+          !samePath(worktree.path, selected.path),
+      );
+    const removalFlags: string[] = [];
+    if (request.force === true) {
+      removalFlags.push("--force");
+    }
+    if (branchIsShared) {
+      removalFlags.push("--no-delete-branch");
+    } else if (request.force === true) {
+      removalFlags.push("--force-delete");
+    }
+
+    // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
     await this.#run(
       this.#args([
         "-C",
-        projectRoot,
+        selected.path,
         "remove",
         ...this.#automationHookArgs(),
-        removeTarget(observation),
-        ...(request.force === true ? ["--force"] : []),
-        ...(request.force === true ? ["--force-delete"] : []),
+        ...removalFlags,
         "--foreground",
         "--format=json",
       ]),
@@ -890,10 +923,6 @@ function parseCommandObservation(
       );
     }
   }
-}
-
-function removeTarget(observation: WorktreeObservation): string {
-  return observation.branch.startsWith("detached:") ? observation.path : observation.branch;
 }
 
 function isManagedWorktreeObservation(

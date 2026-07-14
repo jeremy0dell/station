@@ -302,6 +302,12 @@ describe("observer providers", () => {
           )}`,
           "  exit 0",
           "fi",
+          'if [ "$1" = "list" ]; then',
+          `  printf '%s' ${JSON.stringify(
+            JSON.stringify([{ path: createdWorktreePath, branch: "feature" }]),
+          )}`,
+          "  exit 0",
+          "fi",
           'if [ "$1" = "remove" ]; then',
           "  printf '{}'",
           "  exit 0",
@@ -354,7 +360,8 @@ describe("observer providers", () => {
       await expect(readFile(logPath, "utf8")).resolves.toBe(
         [
           "switch --no-hooks --create feature --base main --no-cd --format=json",
-          `-C ${projectRoot} remove --no-hooks feature --foreground --format=json`,
+          "list --format=json",
+          `-C ${createdWorktreePath} remove --no-hooks --foreground --format=json`,
           "",
         ].join("\n"),
       );
