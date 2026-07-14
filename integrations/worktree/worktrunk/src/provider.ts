@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import type {
   CreateWorktreeRequest,
   DiagnosticDetail,
@@ -260,6 +261,7 @@ export class WorktrunkProvider implements WorktreeProvider {
       {
         code: "WORKTRUNK_COMMAND_FAILED",
         message: "Worktrunk failed to create a worktree.",
+        ...(base === undefined ? {} : { unresolvedBase: base }),
       },
       {},
       worktreePathEnv(request.project, request.branch, request.path),
@@ -596,6 +598,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     fallback: {
       code: "WORKTRUNK_COMMAND_FAILED" | "WORKTRUNK_UNAVAILABLE";
       message: string;
+      unresolvedBase?: string;
     } = {
       code: "WORKTRUNK_UNAVAILABLE",
       message: "Worktrunk is not available.",
@@ -689,14 +692,9 @@ export class WorktrunkProvider implements WorktreeProvider {
           },
         );
       }
-      throw providerErrorFromUnknown(
-        cause,
-        classifyWorktrunkFailure(cause, {
-          code: fallback.code,
-          message: fallback.message,
-        }),
-        { diagnosticDetails },
-      );
+      throw providerErrorFromUnknown(cause, classifyWorktrunkFailure(cause, fallback), {
+        diagnosticDetails,
+      });
     }
   }
 }
@@ -761,13 +759,15 @@ function classifyWorktrunkFailure(
   fallback: {
     code: "WORKTRUNK_COMMAND_FAILED" | "WORKTRUNK_UNAVAILABLE";
     message: string;
+    unresolvedBase?: string;
   },
 ): { code: WorktrunkProviderErrorCode; message: string; hint?: string } {
   if (fallback.code !== "WORKTRUNK_COMMAND_FAILED") {
     return fallback;
   }
 
-  const text = diagnosticText(error).toLowerCase();
+  const diagnostic = stripVTControlCharacters(diagnosticText(error));
+  const text = diagnostic.toLowerCase();
   if (isUnsupportedFlagText(text)) {
     return {
       code: "WORKTRUNK_UNSUPPORTED_FLAG",
@@ -798,6 +798,17 @@ function classifyWorktrunkFailure(
       code: "WORKTRUNK_WORKTREE_EXISTS",
       message: "Worktrunk could not create the worktree because the worktree path already exists.",
       hint: "Choose a different branch/path or remove the stale worktree path.",
+    };
+  }
+
+  if (
+    fallback.unresolvedBase !== undefined &&
+    unresolvedNamedReference(diagnostic) === fallback.unresolvedBase
+  ) {
+    return {
+      code: "WORKTRUNK_BASE_MISSING",
+      message: `Base \`${fallback.unresolvedBase}\` does not resolve to a commit.`,
+      hint: "Create its first commit or choose another base.",
     };
   }
 
@@ -847,6 +858,10 @@ function isDuplicateWorktreeText(text: string): boolean {
     /\bpath\b.*\balready exists/.test(text) ||
     /\bdestination\b.*\balready exists/.test(text)
   );
+}
+
+function unresolvedNamedReference(text: string): string | undefined {
+  return /no branch, tag, or commit named ['"]?([^'"\s]+)['"]?/i.exec(text)?.[1];
 }
 
 function isMissingBaseText(text: string): boolean {

@@ -663,6 +663,119 @@ describe("WorktrunkProvider", () => {
     });
   });
 
+  it("explains an unborn main without affecting a healthy project", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wt-unborn-"));
+    const unbornRoot = join(root, "unborn");
+    const healthyRoot = join(root, "healthy");
+    const healthyWorktreePath = join(healthyRoot, "feature");
+    const git = (cwd: string, ...args: string[]) =>
+      nodeExternalCommandRunner({
+        command: "git",
+        args,
+        cwd,
+        unsetEnv: gitLocalEnvironmentVariables,
+      });
+    await mkdir(unbornRoot, { recursive: true });
+    await mkdir(healthyRoot, { recursive: true });
+    await git(unbornRoot, "init", "-q", "-b", "main");
+    await git(healthyRoot, "init", "-q", "-b", "main");
+    await git(
+      healthyRoot,
+      "-c",
+      "user.email=t@example.com",
+      "-c",
+      "user.name=t",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "initial",
+    );
+    const unbornProject: ProviderProjectConfig = {
+      ...project,
+      id: "unborn",
+      label: "unborn",
+      root: unbornRoot,
+    };
+    const healthyProject: ProviderProjectConfig = {
+      ...project,
+      id: "healthy",
+      label: "healthy",
+      root: healthyRoot,
+    };
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.cwd === unbornProject.root) {
+          throw Object.assign(new Error("wt failed"), {
+            code: 1,
+            stderr: input.args?.includes("feature-color")
+              ? "\u001b[31m✗ No branch, tag, or commit named \u001b[1mmain\u001b[22m\u001b[0m"
+              : "✗ No branch, tag, or commit named main",
+          });
+        }
+        return result(
+          input,
+          JSON.stringify([{ path: healthyWorktreePath, branch: "feature", commit: "9dd15ba" }]),
+        );
+      },
+    });
+
+    try {
+      await expect(git(unbornRoot, "rev-parse", "--verify", "HEAD^{commit}")).rejects.toThrow();
+      await expect(
+        git(healthyRoot, "rev-parse", "--verify", "HEAD^{commit}"),
+      ).resolves.toMatchObject({ stdout: expect.stringMatching(/^[0-9a-f]+\n$/) });
+      await expect(git(healthyRoot, "config", "--local", "--list")).resolves.toMatchObject({
+        stdout: expect.not.stringContaining("user."),
+      });
+
+      await expect(
+        provider.createWorktree({ project: unbornProject, branch: "feature" }),
+      ).rejects.toMatchObject({
+        tag: "WorktreeProviderError",
+        code: "WORKTRUNK_BASE_MISSING",
+        message: "Base `main` does not resolve to a commit.",
+        hint: "Create its first commit or choose another base.",
+        diagnosticDetails: [
+          expect.objectContaining({
+            operation: "provider.worktrunk.switch",
+            cwd: unbornProject.root,
+            exitCode: 1,
+            stderrSnippet: "✗ No branch, tag, or commit named main",
+          }),
+        ],
+      });
+      await expect(
+        provider.createWorktree({ project: unbornProject, branch: "feature-color" }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_BASE_MISSING",
+        message: "Base `main` does not resolve to a commit.",
+      });
+      await expect(
+        provider.createWorktree({
+          project: unbornProject,
+          branch: "feature-release",
+          base: "release",
+        }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_COMMAND_FAILED",
+        message: "Worktrunk failed to create a worktree.",
+      });
+      await expect(
+        provider.createWorktree({ project: healthyProject, branch: "feature" }),
+      ).resolves.toMatchObject({
+        projectId: healthyProject.id,
+        branch: "feature",
+        path: healthyWorktreePath,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("classifies missing base failures", async () => {
     const provider = new WorktrunkProvider({
       command: "wt",
