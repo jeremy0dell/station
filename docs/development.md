@@ -194,9 +194,11 @@ with `--version`; a moved tag cannot substitute different installer code. After
 all four native installs pass, the workflow re-downloads the five draft assets,
 verifies them against the build checksum, and uploads an immutable
 `accepted-release-candidate-*` Actions artifact containing the commit, release
-ID, asset IDs, and checksums. Draft install and candidate-recording jobs have
-read-only contents permission; only draft creation and manual promotion can
-write releases. The tag workflow never publishes the draft automatically.
+ID, asset IDs, and checksums. Draft install and candidate-recording jobs use
+contents write permission because GitHub exposes draft releases only to
+identities with push access, but their steps only read release metadata and
+assets. Only draft creation and manual promotion mutate releases. The tag
+workflow never publishes the draft automatically.
 
 The initial immutable binary baseline is `v0.7.0`:
 

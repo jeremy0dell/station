@@ -171,8 +171,8 @@ describe("release readiness docs", () => {
     );
     const recordCandidate = release.slice(release.indexOf("  record-accepted-candidate:"));
     for (const job of [installDraft, recordCandidate]) {
-      expect(job).toContain("contents: read");
-      expect(job).not.toContain("contents: write");
+      expect(job).toContain("contents: write");
+      expect(job).not.toContain("contents: read");
     }
     expect(promote).toContain("workflow_dispatch");
     expect(promote).toContain("manual_acceptance");
