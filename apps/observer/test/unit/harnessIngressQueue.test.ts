@@ -84,6 +84,33 @@ describe("harness ingress queue", () => {
     });
   });
 
+  it("does not coalesce reports from different native sessions sharing Station identity", async () => {
+    const started = deferred();
+    const release = deferred();
+    const processed: string[] = [];
+    const queue = createHarnessIngressQueue({
+      clock,
+      processReport: async (report) => {
+        if (report.reportId === "report_blocker") {
+          started.resolve();
+          await release.promise;
+        }
+        processed.push(report.reportId);
+        return { receipt: acceptedReceipt(report) };
+      },
+    });
+
+    queue.enqueue(harnessReport("report_blocker", "session_blocker"));
+    await started.promise;
+    queue.enqueue(harnessReport("report_native_a", "session_shared", "native_a"));
+    queue.enqueue(harnessReport("report_native_b", "session_shared", "native_b"));
+    release.resolve();
+    await queue.drain();
+
+    expect(processed).toEqual(["report_blocker", "report_native_a", "report_native_b"]);
+    expect(queue.health()).toMatchObject({ coalesced: 0, processed: 3 });
+  });
+
   it("waits for active work during shutdown and rejects later enqueue", async () => {
     const started = deferred();
     const release = deferred();
@@ -123,7 +150,11 @@ describe("harness ingress queue", () => {
   });
 });
 
-function harnessReport(reportId: string, sessionId = "session_1"): HarnessEventReport {
+function harnessReport(
+  reportId: string,
+  sessionId = "session_1",
+  nativeSessionId?: string,
+): HarnessEventReport {
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     reportId,
@@ -140,6 +171,7 @@ function harnessReport(reportId: string, sessionId = "session_1"): HarnessEventR
     },
     correlation: {
       sessionId,
+      ...(nativeSessionId === undefined ? {} : { nativeSessionId }),
     },
     coalesceKey: "turn:turn_1:tool:Bash",
   };

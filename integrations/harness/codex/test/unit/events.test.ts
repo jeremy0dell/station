@@ -558,7 +558,7 @@ describe("Codex hook event parsing", () => {
     );
   });
 
-  it("keeps Stop status idle but does not complete the turn when stop_hook_active is true", () => {
+  it("keeps Codex working and does not complete the turn when stop_hook_active is true", () => {
     const observations = normalizeCodexRawEvent(
       {
         provider: "codex",
@@ -581,8 +581,8 @@ describe("Codex hook event parsing", () => {
     expect(observations[0]).toMatchObject({
       rawEventType: "Stop",
       status: {
-        value: "idle",
-        confidence: "high",
+        value: "working",
+        confidence: "medium",
       },
     });
     // A Stop hook forcing continuation must not mark the turn complete (no ready marker).
@@ -630,6 +630,7 @@ describe("Codex hook event parsing", () => {
       expect(report.provider).toBe("codex");
       expect(report.kind).toBe("harness");
       expect(report.status?.source).toBe("harness_event");
+      expect(report.correlation?.nativeSessionId).toBe("codex_session_123");
       expect(report.diagnostics).toMatchObject({
         rawEventType: report.eventType,
       });

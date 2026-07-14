@@ -26,6 +26,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { sessionHarnessExecutionEvidenceFromReport } from "../harnessExecutionIdentity.js";
 import type { IngressJournal, ObservationStore, SessionStore } from "../persistence/index.js";
 import {
   providerObservationExpiresAt,
@@ -34,7 +35,7 @@ import {
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { ingestProviderHookEvent } from "./providerHookIngress.js";
-import { persistTurnReadinessFromHarnessObservation } from "./turnReadiness.js";
+import { sessionTurnReadinessMutationFromHarnessObservation } from "./turnReadiness.js";
 
 export type ProviderHookIngress = {
   ingest(
@@ -72,7 +73,7 @@ export type CreateProviderHookIngressOptions = {
 };
 
 export type CreateHarnessEventReportIngestionOptions = {
-  persistence: IngressJournal & SessionStore;
+  persistence: IngressJournal;
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
   requestReconcile?: (reason: string) => void;
@@ -150,7 +151,25 @@ export function createProviderHookIngress(
       const adapter =
         event.kind === "harness" ? options.providers?.hookAdapters.get(event.provider) : undefined;
       const reportHarnessEvent = ingestOptions.reportHarnessEvent ?? options.reportHarnessEvent;
-      if (adapter?.toHarnessEventReport !== undefined && reportHarnessEvent !== undefined) {
+      if (adapter?.toHarnessEventReport !== undefined) {
+        // Adapter-normalized harness hooks must pass the native-execution gate on the report path.
+        if (reportHarnessEvent === undefined) {
+          return ProviderHookReceiptSchema.parse({
+            schemaVersion: STATION_SCHEMA_VERSION,
+            hookId: id,
+            provider: event.provider,
+            event: event.event,
+            accepted: false,
+            status: "rejected",
+            receivedAt: event.receivedAt,
+            error: {
+              tag: "HookIngestionError",
+              code: "HARNESS_REPORT_INGRESS_UNAVAILABLE",
+              message: "Harness hook normalization requires the report ingress handoff.",
+              provider: event.provider,
+            },
+          });
+        }
         return ingestViaHookAdapter({
           event,
           adapter,
@@ -295,7 +314,7 @@ async function ingestViaHookAdapter(
 /**
  * USE CASE
  *
- * Persists a normalized harness report once and repairs its recovery and readiness projections on every retry.
+ * Persists normalized harness evidence and its accepted native-execution effects atomically.
  */
 export function createHarnessEventReportIngestion(
   options: CreateHarnessEventReportIngestionOptions,
@@ -329,6 +348,16 @@ export function createHarnessEventReportIngestion(
           },
         },
         async () => {
+          const recoveryHandle = sessionRecoveryHandleFromReport(report);
+          const turnReadiness = sessionTurnReadinessMutationFromHarnessObservation({
+            observation,
+            updatedAt: receivedAt,
+          });
+          const harnessExecution = {
+            evidence: sessionHarnessExecutionEvidenceFromReport(report),
+            ...(recoveryHandle === undefined ? {} : { recoveryHandle }),
+            ...(turnReadiness === undefined ? {} : { turnReadiness }),
+          };
           const result =
             await options.persistence.recordEventAndProviderObservationWithIngressDedupe({
               event: reportedEvent,
@@ -346,17 +375,8 @@ export function createHarnessEventReportIngestion(
                 observedAt: report.observedAt,
                 expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
               },
+              harnessExecution,
             });
-          // Primary dedupe is acceptance evidence, not proof that later idempotent repairs finished.
-          const recoveryHandle = sessionRecoveryHandleFromReport(report);
-          if (recoveryHandle !== undefined) {
-            await options.persistence.upsertSessionRecoveryHandle(recoveryHandle);
-          }
-          await persistTurnReadinessFromHarnessObservation({
-            persistence: options.persistence,
-            observation,
-            updatedAt: receivedAt,
-          });
           if (!result.deduped) {
             options.eventBus?.publish(reportedEvent);
           }

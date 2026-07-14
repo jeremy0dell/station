@@ -4,7 +4,7 @@ import type {
   HarnessEventReport,
   ObservedStatus,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { harnessRunIdForTerminalTarget, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -15,6 +15,7 @@ import { buildStationSnapshot } from "../../src/reconcile/graph";
 import { observerHarnessRunFromRun } from "../../src/reconcile/harnessEventStatus";
 import {
   projectHarnessEventReportOntoSnapshot,
+  withSessionCorrelationFromSnapshot,
   withWorktreeCorrelationFromCwd,
 } from "../../src/reconcile/statusProjection";
 
@@ -292,6 +293,62 @@ describe("live harness status projection", () => {
 });
 
 describe("cwd correlation resolution", () => {
+  it("adds the unique Station session only for exact Station run or terminal evidence", () => {
+    const snapshot = snapshotFor();
+    const byRun = withSessionCorrelationFromSnapshot(
+      report({
+        status: status("working", "medium", "Codex is working."),
+        correlation: {
+          worktreeId: "wt_web_task",
+          harnessRunId: "run_web_task",
+          nativeSessionId: "native_a",
+        },
+      }),
+      snapshot,
+    );
+    expect(byRun.correlation).toMatchObject({ sessionId: "ses_web_task" });
+
+    const terminalTargetId = "tmux:station:@1:%2";
+    const terminalSnapshot = {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.agent === undefined
+          ? row
+          : {
+              ...row,
+              agent: {
+                ...row.agent,
+                runId: harnessRunIdForTerminalTarget("codex", terminalTargetId),
+              },
+            },
+      ),
+    };
+    const byTerminal = withSessionCorrelationFromSnapshot(
+      report({
+        status: status("working", "medium", "Codex is working."),
+        correlation: { worktreeId: "wt_web_task", terminalTargetId, nativeSessionId: "native_a" },
+      }),
+      terminalSnapshot,
+    );
+    expect(byTerminal.correlation).toMatchObject({ sessionId: "ses_web_task" });
+
+    const staleTerminal = report({
+      status: status("working", "medium", "Codex is working."),
+      correlation: {
+        worktreeId: "wt_web_task",
+        terminalTargetId: "tmux:station:@old:%9",
+        nativeSessionId: "native_old",
+      },
+    });
+    expect(withSessionCorrelationFromSnapshot(staleTerminal, terminalSnapshot)).toBe(staleTerminal);
+
+    const external = report({
+      status: status("working", "medium", "Codex is working."),
+      correlation: { worktreeId: "wt_web_task", nativeSessionId: "native_external" },
+    });
+    expect(withSessionCorrelationFromSnapshot(external, snapshot)).toBe(external);
+  });
+
   it("resolves a cwd-only report to the containing worktree and projects it", () => {
     const snapshot = snapshotFor();
     const enriched = withWorktreeCorrelationFromCwd(
@@ -402,20 +459,7 @@ function snapshotFor(input: { state?: AgentState; confidence?: Confidence; now?:
       now,
     }),
   ];
-  const harnessRuns = [
-    observerHarnessRunFromRun(
-      createFakeHarnessRun({
-        id: "run_web_task",
-        provider: "codex",
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        state: input.state ?? "unknown",
-        confidence: input.confidence ?? "low",
-        now: input.now ?? now,
-      }),
-    ),
-  ];
+  const harnessRuns = harnessRunsFor(input);
   return buildStationSnapshot({
     generatedAt: now,
     observer: {
@@ -484,6 +528,23 @@ function externalSnapshotFor(state: AgentState) {
       ),
     ],
   });
+}
+
+function harnessRunsFor(input: { state?: AgentState; confidence?: Confidence; now?: string } = {}) {
+  return [
+    observerHarnessRunFromRun(
+      createFakeHarnessRun({
+        id: "run_web_task",
+        provider: "codex",
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        sessionId: "ses_web_task",
+        state: input.state ?? "unknown",
+        confidence: input.confidence ?? "low",
+        now: input.now ?? now,
+      }),
+    ),
+  ];
 }
 
 function snapshotWithTurnReadiness(snapshot: ReturnType<typeof snapshotFor>) {

@@ -11,6 +11,10 @@ import type {
 import { ProviderProjectConfigSchema } from "@station/contracts";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../features/evaluator.js";
+import {
+  decideSessionHarnessExecution,
+  sessionHarnessExecutionEvidenceFromReport,
+} from "../harnessExecutionIdentity.js";
 import type {
   EventJournal,
   ObservationStore,
@@ -140,10 +144,31 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       return execution;
     },
     projectHarnessEventStatus: async (report) => {
+      const projectedAt = toIsoTimestamp(clock.now());
+      const sessionId = report.correlation?.sessionId;
+      if (
+        report.correlation?.nativeSessionId !== undefined &&
+        (input.persistence === undefined || sessionId === undefined)
+      ) {
+        return { projected: false, snapshot, events: [] };
+      }
+      if (input.persistence !== undefined && sessionId !== undefined) {
+        const binding = await input.persistence.getSessionHarnessExecution({
+          provider: report.provider,
+          sessionId,
+        });
+        const decision = decideSessionHarnessExecution({
+          current: binding,
+          evidence: sessionHarnessExecutionEvidenceFromReport(report),
+        });
+        if (!decision.mayDeriveState) {
+          return { projected: false, snapshot, events: [] };
+        }
+      }
       const result = projectHarnessEventReportOntoSnapshot({
         snapshot,
         report,
-        projectedAt: toIsoTimestamp(clock.now()),
+        projectedAt,
       });
       if (!result.projected) {
         return result;
@@ -235,8 +260,8 @@ async function persistTurnReadinessForReport(input: {
   // for the user mid-turn) makes ready_to_read stale. Without this closing
   // edge the badge survives on a working agent and cannot be acknowledged,
   // because snapshots only expose readiness on idle agents. Status drives the
-  // clear regardless of turn.kind so this writer agrees with
-  // persistTurnReadinessFromHarnessObservation for identical input.
+  // clear regardless of turn.kind so this writer agrees with the ingress
+  // readiness policy for identical input.
   const status = input.report.status?.value;
   if (status === "working" || status === "starting" || status === "needs_attention") {
     if (input.result.sessionId !== undefined) {

@@ -1,5 +1,7 @@
 import type {
+  AgentState,
   ErrorEnvelope,
+  HarnessEventObservation,
   ProviderProjectConfig,
   SafeError,
   SessionRecoveryHandle,
@@ -15,6 +17,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { ObserverPersistenceBundle } from "../../src/persistence/ports";
 import type {
+  HarnessExecutionIngress,
   ObserverIdFactory,
   RecordProviderObservationInput,
 } from "../../src/persistence/types";
@@ -1452,6 +1455,75 @@ export function observerPersistenceContract(
         });
       });
 
+      it("keeps native execution binding and derived state atomic with report dedupe", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.recordEventAndProviderObservationWithIngressDedupe(
+            harnessIngressInput({
+              reportId: "report_a_active",
+              nativeSessionId: "native_a",
+              state: "working",
+              observedAt: now,
+            }),
+          );
+          await persistence.recordEventAndProviderObservationWithIngressDedupe(
+            harnessIngressInput({
+              reportId: "report_b_active",
+              nativeSessionId: "native_b",
+              state: "working",
+              observedAt: later,
+            }),
+          );
+
+          await expect(
+            persistence.getSessionHarnessExecution({
+              provider: "codex",
+              sessionId: "ses_execution",
+            }),
+          ).resolves.toMatchObject({
+            nativeSessionId: "native_a",
+            state: "working",
+          });
+          await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+            expect.objectContaining({ target: { kind: "native-session", id: "native_a" } }),
+          ]);
+
+          await persistence.recordEventAndProviderObservationWithIngressDedupe(
+            harnessIngressInput({
+              reportId: "report_a_stop",
+              nativeSessionId: "native_a",
+              state: "idle",
+              observedAt: latest,
+            }),
+          );
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+            expect.objectContaining({
+              sessionId: "ses_execution",
+              token: "report_a_stop",
+            }),
+          ]);
+
+          await expect(
+            persistence.recordEventAndProviderObservationWithIngressDedupe(
+              harnessIngressInput({
+                reportId: "report_b_active",
+                nativeSessionId: "native_b",
+                state: "working",
+                observedAt: later,
+              }),
+            ),
+          ).resolves.toEqual({ deduped: true });
+          await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+            expect.objectContaining({
+              provider: "codex",
+              sessionId: "ses_execution",
+              nativeSessionId: "native_a",
+              state: "idle",
+            }),
+          ]);
+          await expect(persistence.listSessionTurnReadiness()).resolves.toHaveLength(1);
+        });
+      });
+
       it("orders sessions by ID and preserves seeded and renamed titles", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.seedSessionTitle({
@@ -2385,6 +2457,87 @@ function healthObservation(status: "healthy" | "degraded"): RecordProviderObserv
       lastCheckedAt: now,
     },
     observedAt: now,
+  };
+}
+
+function harnessIngressInput(input: {
+  reportId: string;
+  nativeSessionId: string;
+  state: AgentState;
+  observedAt: string;
+}): Parameters<ObserverPersistenceBundle["recordEventAndProviderObservationWithIngressDedupe"]>[0] {
+  const eventType = input.state === "idle" ? "Stop" : "PreToolUse";
+  const payload: HarnessEventObservation = {
+    provider: "codex",
+    reportId: input.reportId,
+    eventType,
+    projectId: "web",
+    worktreeId: "wt_execution",
+    sessionId: "ses_execution",
+    nativeSessionId: input.nativeSessionId,
+    status: {
+      value: input.state,
+      confidence: "high",
+      reason: input.state,
+      source: "harness_event",
+      updatedAt: input.observedAt,
+    },
+    observedAt: input.observedAt,
+  };
+  if (input.state === "idle") payload.turn = { kind: "turn_completed" };
+
+  const recoveryHandle: SessionRecoveryHandle = {
+    id: input.reportId,
+    provider: "codex",
+    projectId: "web",
+    worktreeId: "wt_execution",
+    sessionId: "ses_execution",
+    target: { kind: "native-session", id: input.nativeSessionId },
+    observedAt: input.observedAt,
+    lastSeenAt: input.observedAt,
+  };
+  const harnessExecution: HarnessExecutionIngress = {
+    evidence: {
+      provider: "codex",
+      sessionId: "ses_execution",
+      nativeSessionId: input.nativeSessionId,
+      status: payload.status,
+    },
+    recoveryHandle,
+    turnReadiness:
+      input.state === "idle"
+        ? {
+            action: "upsert",
+            value: {
+              sessionId: "ses_execution",
+              projectId: "web",
+              worktreeId: "wt_execution",
+              token: input.reportId,
+              completedAt: input.observedAt,
+              updatedAt: input.observedAt,
+            },
+          }
+        : { action: "delete", sessionId: "ses_execution" },
+  };
+  return {
+    event: {
+      type: "harness.eventReported",
+      at: input.observedAt,
+      reportId: input.reportId,
+      provider: "codex",
+      eventType,
+    },
+    eventOptions: { source: "hook", createdAt: input.observedAt },
+    observation: {
+      provider: "codex",
+      providerType: "harness",
+      entityKind: "harness_event",
+      entityKey: input.nativeSessionId,
+      payload,
+      observedAt: input.observedAt,
+    },
+    harnessExecution,
+    dedupe: { kind: "harness_report", id: input.reportId },
   };
 }
 

@@ -22,6 +22,7 @@ import {
   safeErrorFromUnknown,
   toIsoTimestamp,
 } from "@station/runtime";
+import { bindHarnessRunsToSessionExecutions } from "../harnessExecutionIdentity.js";
 import { staleChangeSummary, staleChecks, stalePullRequest } from "../metadata/stalePayloads.js";
 import type {
   EventJournal,
@@ -106,6 +107,11 @@ export function buildInitialSnapshot(input: {
   });
 }
 
+/**
+ * USE CASE
+ *
+ * Rebuilds the Observer graph and retains provider-native harness identity for live ingress correlation.
+ */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
   const retentionDays =
@@ -154,7 +160,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 
   const finishedAt = toIsoTimestamp(input.read.clock.now());
   const harnessStatusInput: {
-    persistence?: ObservationStore;
+    persistence?: ObservationStore & SessionStore;
     harnessRuns: ObserverHarnessRun[];
     now: string;
   } = {
@@ -686,7 +692,7 @@ async function classifyHarnessRuns(input: {
 }
 
 async function harnessRunsWithPersistedEventStatus(input: {
-  persistence?: ObservationStore;
+  persistence?: ObservationStore & SessionStore;
   harnessRuns: ObserverHarnessRun[];
   now: string;
 }): Promise<ObserverHarnessRun[]> {
@@ -694,12 +700,23 @@ async function harnessRunsWithPersistedEventStatus(input: {
     return input.harnessRuns;
   }
 
-  const observations = await input.persistence.listProviderObservations({
-    entityKind: "harness_event",
-    now: input.now,
+  const [observations, bindings] = await Promise.all([
+    input.persistence.listProviderObservations({
+      entityKind: "harness_event",
+      now: input.now,
+    }),
+    input.persistence.listSessionHarnessExecutions(),
+  ]);
+  const boundRuns = bindHarnessRunsToSessionExecutions({
+    runs: input.harnessRuns.map((run) => run.run),
+    bindings,
   });
+  const runsWithBindings = input.harnessRuns.map((run, index) => ({
+    ...run,
+    run: boundRuns[index] ?? run.run,
+  }));
   return applyHarnessEventStatusOverlays({
-    runs: synthesizeExternalHarnessRuns({ runs: input.harnessRuns, observations }),
+    runs: synthesizeExternalHarnessRuns({ runs: runsWithBindings, observations }),
     observations,
   });
 }
@@ -933,6 +950,7 @@ function runWithStatus(
   if (projectId !== undefined) nextRun.projectId = projectId;
   if (worktreeId !== undefined) nextRun.worktreeId = worktreeId;
   if (sessionId !== undefined) nextRun.sessionId = sessionId;
+  if (run.nativeSessionId !== undefined) nextRun.nativeSessionId = run.nativeSessionId;
   if (run.pid !== undefined) nextRun.pid = run.pid;
   if (run.cwd !== undefined) nextRun.cwd = run.cwd;
   if (providerData !== undefined) nextRun.providerData = providerData;

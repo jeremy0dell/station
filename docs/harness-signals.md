@@ -41,9 +41,11 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
   blocking input). This is the only field core/TUI may use to classify
   attention.
 - `correlation` — identity for projection, strongest first:
-  `harnessRunId` → `sessionId` → `worktreeId` → `cwd`. Providers must attach
-  the strongest identity they have; `cwd` alone is a last resort and drops the
-  event when ambiguous.
+  `harnessRunId` → bound `nativeSessionId` → `sessionId` → `worktreeId` →
+  `cwd`. Providers must attach the strongest identity they have; `cwd` alone
+  is a last resort and drops the event when ambiguous. Station session and
+  worktree IDs route evidence to a run but do not identify the provider-native
+  execution within that run.
 - `reportId` / `coalesceKey` — dedup identity. Two transports reporting the
   same fact must derive the same identity from harness-native ids (e.g. a tool
   `call_id`) so they coalesce instead of racing.
@@ -82,6 +84,13 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    15 minutes to `unknown` (low confidence, source `reconcile`) instead of
    trusting it forever. Attention and idle states never decay, and the next
    real event restores live status.
+8. **Native completion fails closed.** Active evidence may bind an unbound
+   provider plus Station session to one native execution; a replacement may
+   bind only after explicit `idle` or `exited` evidence. While an execution is
+   active, evidence from another native execution is diagnostic-only: it cannot
+   derive recovery, readiness, projected state changes, or completion
+   notifications. Worktree-only external sessions remain independently keyed
+   by native identity, and idle/completion evidence never establishes a binding.
 
 ## Target Taxonomy (HarnessSignal)
 

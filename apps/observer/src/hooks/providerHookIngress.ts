@@ -13,6 +13,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { sessionHarnessExecutionEvidenceFromObservation } from "../harnessExecutionIdentity.js";
 import type {
   IngressJournal,
   ObservationStore,
@@ -90,7 +91,7 @@ export async function ingestProviderHookEvent(
     expiresAt: providerObservationExpiresAt(observation.observedAt, retentionDays),
   }));
   const updatedAt = toIsoTimestamp(clock.now());
-  const turnReadiness = observations.flatMap((observation) => {
+  const harnessExecutions = observations.flatMap((observation) => {
     const harnessEvent = harnessEventObservationFromRecord(observation);
     if (harnessEvent === undefined) {
       return [];
@@ -99,12 +100,17 @@ export async function ingestProviderHookEvent(
       observation: harnessEvent,
       updatedAt,
     });
-    return mutation === undefined ? [] : [mutation];
+    return [
+      {
+        evidence: sessionHarnessExecutionEvidenceFromObservation(harnessEvent),
+        ...(mutation === undefined ? {} : { turnReadiness: mutation }),
+      },
+    ];
   });
   // Readiness shares the processing claim transaction so retries cannot apply a new correlation context.
   const processing = await options.persistence.recordProviderObservationsWithIngressDedupe({
     observations,
-    turnReadiness,
+    harnessExecutions,
     dedupe: {
       kind: "hook_processing",
       id:

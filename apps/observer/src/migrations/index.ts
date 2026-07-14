@@ -10,6 +10,7 @@ import { sessionTitleMigration } from "./009_session_title.js";
 import { sessionRecoveryHandlesMigration } from "./010_session_recovery_handles.js";
 import { sessionTurnReadinessMigration } from "./011_session_turn_readiness.js";
 import { sessionLifecycleMigration } from "./012_session_lifecycle.js";
+import { sessionHarnessExecutionsMigration } from "./013_session_harness_executions.js";
 
 export type ObserverSqliteMigration = {
   version: number;
@@ -30,6 +31,7 @@ export const migrations = [
   sessionRecoveryHandlesMigration,
   sessionTurnReadinessMigration,
   sessionLifecycleMigration,
+  sessionHarnessExecutionsMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

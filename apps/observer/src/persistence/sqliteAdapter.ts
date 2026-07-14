@@ -15,9 +15,14 @@ import {
 } from "./observations.js";
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "./ports.js";
 import { providerObservationRetentionDays } from "./retention.js";
+import * as sessionHarnessExecutionStore from "./sessionHarnessExecutions.js";
 import * as sessionRecoveryHandleStore from "./sessionRecoveryHandles.js";
 import * as sessionTurnReadinessStore from "./sessionTurnReadiness.js";
-import type { ObserverIdFactory } from "./types.js";
+import type {
+  HarnessExecutionIngress,
+  ObserverIdFactory,
+  SessionTurnReadinessMutation,
+} from "./types.js";
 import * as worktreeMetadataCurrentStore from "./worktreeMetadataCurrent.js";
 
 export type CreateSqliteObserverPersistenceOptions = {
@@ -149,6 +154,10 @@ export function createSqliteObserverPersistence(
           id: idFactory.observationId(),
           observedAt: input.observation.observedAt ?? now(),
         });
+        const harnessExecution = input.harnessExecution;
+        if (harnessExecution !== undefined) {
+          applyHarnessExecutionIngress(database, harnessExecution, now());
+        }
         return {
           deduped: false,
           event,
@@ -174,17 +183,11 @@ export function createSqliteObserverPersistence(
             observedAt: observation.observedAt ?? now(),
           }),
         );
+        for (const harnessExecution of input.harnessExecutions ?? []) {
+          applyHarnessExecutionIngress(database, harnessExecution, now());
+        }
         for (const mutation of input.turnReadiness ?? []) {
-          if (mutation.action === "upsert") {
-            sessionTurnReadinessStore.upsertSessionTurnReadiness(database, {
-              ...mutation.value,
-              createdAt: now(),
-            });
-          } else {
-            sessionTurnReadinessStore.deleteSessionTurnReadiness(database, {
-              sessionId: mutation.sessionId,
-            });
-          }
+          applySessionTurnReadinessMutation(database, mutation, now());
         }
         return { deduped: false, observations };
       }),
@@ -267,6 +270,14 @@ export function createSqliteObserverPersistence(
 
     listSessions: () => transaction(correlationStore.listSessions),
 
+    getSessionHarnessExecution: (input) =>
+      transaction((database) =>
+        sessionHarnessExecutionStore.getSessionHarnessExecution(database, input),
+      ),
+
+    listSessionHarnessExecutions: () =>
+      transaction(sessionHarnessExecutionStore.listSessionHarnessExecutions),
+
     findRememberedHarnessProviderForWorktree: (input) =>
       transaction((database) =>
         correlationStore.findRememberedHarnessProviderForWorktree(database, input),
@@ -320,4 +331,45 @@ export function createSqliteObserverPersistence(
         sessionTurnReadinessStore.deleteSessionTurnReadiness(database, input),
       ),
   };
+}
+
+function applyHarnessExecutionIngress(
+  database: SqlDatabase,
+  harnessExecution: HarnessExecutionIngress,
+  createdAt: string,
+): void {
+  if (
+    !sessionHarnessExecutionStore.applySessionHarnessExecutionEvidence(
+      database,
+      harnessExecution.evidence,
+    )
+  ) {
+    return;
+  }
+  if (harnessExecution.recoveryHandle !== undefined) {
+    sessionRecoveryHandleStore.upsertSessionRecoveryHandle(
+      database,
+      harnessExecution.recoveryHandle,
+    );
+  }
+  if (harnessExecution.turnReadiness !== undefined) {
+    applySessionTurnReadinessMutation(database, harnessExecution.turnReadiness, createdAt);
+  }
+}
+
+function applySessionTurnReadinessMutation(
+  database: SqlDatabase,
+  mutation: SessionTurnReadinessMutation,
+  createdAt: string,
+): void {
+  if (mutation.action === "upsert") {
+    sessionTurnReadinessStore.upsertSessionTurnReadiness(database, {
+      ...mutation.value,
+      createdAt,
+    });
+    return;
+  }
+  sessionTurnReadinessStore.deleteSessionTurnReadiness(database, {
+    sessionId: mutation.sessionId,
+  });
 }

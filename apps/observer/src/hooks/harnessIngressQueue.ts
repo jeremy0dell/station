@@ -490,6 +490,7 @@ function rejectedReceipt(
 function coalesceKey(report: HarnessEventReport): string {
   const correlation = report.correlation;
   const stableAgentKey =
+    correlation?.nativeSessionId ??
     correlation?.harnessRunId ??
     correlation?.sessionId ??
     correlation?.worktreeId ??

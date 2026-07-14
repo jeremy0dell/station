@@ -1,5 +1,5 @@
 import type { HarnessEventObservation } from "@station/contracts";
-import type { SessionStore, SessionTurnReadinessMutation } from "../persistence/index.js";
+import type { SessionTurnReadinessMutation } from "../persistence/index.js";
 
 /**
  * POLICY
@@ -41,26 +41,4 @@ export function sessionTurnReadinessMutationFromHarnessObservation(input: {
     return { action: "delete", sessionId: observation.sessionId };
   }
   return undefined;
-}
-
-export async function persistTurnReadinessFromHarnessObservation(input: {
-  persistence: SessionStore;
-  observation: HarnessEventObservation;
-  updatedAt: string;
-}): Promise<boolean> {
-  const mutation = sessionTurnReadinessMutationFromHarnessObservation(input);
-  if (mutation === undefined) {
-    return false;
-  }
-  if (mutation.action === "upsert") {
-    await input.persistence.upsertSessionTurnReadiness(mutation.value);
-    return true;
-  }
-
-  // Readiness is an interval: a session that is active again (new turn, or a
-  // request for the user mid-turn) makes ready_to_read stale. Without this
-  // closing edge the badge survives on a working agent, and it cannot be
-  // acknowledged because snapshots only expose readiness on idle agents.
-  await input.persistence.deleteSessionTurnReadiness({ sessionId: mutation.sessionId });
-  return false;
 }

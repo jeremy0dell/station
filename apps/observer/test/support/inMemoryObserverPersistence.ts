@@ -32,6 +32,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { decideSessionHarnessExecution } from "../../src/harnessExecutionIdentity.js";
 import { defaultIdFactory } from "../../src/persistence/idFactory.js";
 import { parseJson, stringifyJson } from "../../src/persistence/json.js";
 import {
@@ -47,6 +48,7 @@ import { stripTerminalProviderData } from "../../src/persistence/terminalObserva
 import type {
   CurrentProviderObservationKind,
   EventRecordOptions,
+  HarnessExecutionIngress,
   IngressDedupeKey,
   ListSessionRecoveryHandlesOptions,
   ObserverIdFactory,
@@ -55,12 +57,14 @@ import type {
   PersistedEvent,
   PersistedProviderObservation,
   PersistedSession,
+  PersistedSessionHarnessExecution,
   PersistedSessionTurnReadiness,
   PersistedWorktreeMetadataCurrent,
   PersistReconcileResultInput,
   ProviderObservationKind,
   ProviderObservationType,
   RecordProviderObservationInput,
+  SessionHarnessExecutionEvidence,
   SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
@@ -93,6 +97,7 @@ type InMemoryObserverPersistenceState = {
   terminalTargets: Map<string, TerminalTargetObservation>;
   harnessRuns: Map<string, HarnessRunObservation>;
   sessions: Map<string, PersistedSession>;
+  sessionHarnessExecutions: Map<string, PersistedSessionHarnessExecution>;
   recoveryHandles: Map<string, SessionRecoveryHandle>;
   turnReadiness: Map<string, PersistedSessionTurnReadiness>;
   worktreeMetadata: Map<string, PersistedWorktreeMetadataCurrent>;
@@ -251,6 +256,10 @@ export function createInMemoryObserverPersistence(
           id: idFactory.observationId(),
           observedAt: input.observation.observedAt ?? now(),
         });
+        const harnessExecution = input.harnessExecution;
+        if (harnessExecution !== undefined) {
+          applyHarnessExecutionIngress(draft, harnessExecution, now());
+        }
         return { deduped: false, event, observation };
       }),
 
@@ -266,6 +275,9 @@ export function createInMemoryObserverPersistence(
             observedAt: observation.observedAt ?? now(),
           }),
         );
+        for (const harnessExecution of input.harnessExecutions ?? []) {
+          applyHarnessExecutionIngress(draft, harnessExecution, now());
+        }
         for (const mutation of input.turnReadiness ?? []) {
           applySessionTurnReadinessMutation(draft, mutation, now());
         }
@@ -339,6 +351,18 @@ export function createInMemoryObserverPersistence(
     listSessions: () =>
       transaction((draft) =>
         [...draft.sessions.values()].sort((left, right) => compareAsc(left.id, right.id)),
+      ),
+
+    getSessionHarnessExecution: (input) =>
+      transaction((draft) => draft.sessionHarnessExecutions.get(sessionHarnessExecutionKey(input))),
+
+    listSessionHarnessExecutions: () =>
+      transaction((draft) =>
+        [...draft.sessionHarnessExecutions.values()].sort(
+          (left, right) =>
+            compareAsc(left.provider, right.provider) ||
+            compareAsc(left.sessionId, right.sessionId),
+        ),
       ),
 
     findRememberedHarnessProviderForWorktree: (input) =>
@@ -499,10 +523,43 @@ function emptyState(): InMemoryObserverPersistenceState {
     terminalTargets: new Map(),
     harnessRuns: new Map(),
     sessions: new Map(),
+    sessionHarnessExecutions: new Map(),
     recoveryHandles: new Map(),
     turnReadiness: new Map(),
     worktreeMetadata: new Map(),
   };
+}
+
+function applySessionHarnessExecutionEvidence(
+  state: InMemoryObserverPersistenceState,
+  evidence: SessionHarnessExecutionEvidence,
+): boolean {
+  const key = sessionHarnessExecutionKey(evidence);
+  const current =
+    evidence.sessionId === undefined ? undefined : state.sessionHarnessExecutions.get(key);
+  const decision = decideSessionHarnessExecution({ current, evidence });
+  if (decision.binding !== undefined) {
+    state.sessionHarnessExecutions.set(key, decision.binding);
+  }
+  return decision.mayDeriveState;
+}
+
+function applyHarnessExecutionIngress(
+  state: InMemoryObserverPersistenceState,
+  harnessExecution: HarnessExecutionIngress,
+  createdAt: string,
+): void {
+  if (!applySessionHarnessExecutionEvidence(state, harnessExecution.evidence)) return;
+  if (harnessExecution.recoveryHandle !== undefined) {
+    upsertSessionRecoveryHandle(state, harnessExecution.recoveryHandle);
+  }
+  if (harnessExecution.turnReadiness !== undefined) {
+    applySessionTurnReadinessMutation(state, harnessExecution.turnReadiness, createdAt);
+  }
+}
+
+function sessionHarnessExecutionKey(input: { provider: string; sessionId?: string }): string {
+  return `${input.provider}\u0000${input.sessionId ?? ""}`;
 }
 
 function requireCommand(

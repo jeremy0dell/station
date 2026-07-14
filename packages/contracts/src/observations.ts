@@ -221,6 +221,7 @@ export const HarnessRunObservationSchema = z
     projectId: ProjectIdSchema.optional(),
     worktreeId: WorktreeIdSchema.optional(),
     sessionId: SessionIdSchema.optional(),
+    nativeSessionId: nonEmptyStringSchema.optional(),
     pid: z.number().int().positive().optional(),
     cwd: nonEmptyStringSchema.optional(),
     state: AgentStateSchema,
