@@ -6,6 +6,10 @@ import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 import { waitForSocketClosed } from "../support/sockets";
 
+const shellIntegrationMarker = "# Worktrunk shell integration";
+const supportedShells = ["zsh", "bash"] as const;
+type SupportedShell = (typeof supportedShells)[number];
+
 describe("setup guided feedback e2e", () => {
   it("exits instead of hanging when every agent install choice is declined", async () => {
     const fixture = await createFixture({ harness: "missing" });
@@ -47,6 +51,89 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  for (const shell of supportedShells) {
+    it(`gives one optional recovery command when the active ${shell} rc file is missing`, async () => {
+      const fixture = await createFixture({ harness: "codex", shell });
+      const rcPath = shellRcPath(fixture.home, shell);
+      try {
+        const result = await runStation(["--config", fixture.configPath, "setup"], {
+          cwd: fixture.repo,
+          env: fixture.env,
+          answers: ["n", "n", "n", "y", "y", "n"],
+        });
+
+        expect(result.timedOut).toBe(false);
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(
+          "Optional Worktrunk shell integration was not installed; core setup is complete.",
+        );
+        expect(result.stdout).toContain(`Active ${shell} rc file not found: ${rcPath}`);
+        expect(result.stdout).toContain(
+          `Run: touch ${rcPath} && wt -y config shell install ${shell}`,
+        );
+        expect(result.stdout).not.toContain("Failed: Install Worktrunk shell integration");
+        expect(result.stdout).not.toContain("fake shell integration installed");
+        expect(result.stdout).toContain("Core setup complete.");
+        await expect(readFile(rcPath, "utf8")).rejects.toThrow();
+        await expect(readFile(otherShellRcPath(fixture.home, shell), "utf8")).rejects.toThrow();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it(`preserves an existing ${shell} rc file and does not duplicate integration`, async () => {
+      const fixture = await createFixture({ harness: "codex", shell });
+      const rcPath = shellRcPath(fixture.home, shell);
+      const original = "# user shell config\nexport USER_SETTING=preserved\n";
+      await writeFile(rcPath, original, "utf8");
+      try {
+        const first = await runStation(["--config", fixture.configPath, "setup"], {
+          cwd: fixture.repo,
+          env: fixture.env,
+          answers: ["n", "n", "n", "y", "y", "n"],
+        });
+        const second = await runStation(["--config", fixture.configPath, "setup"], {
+          cwd: fixture.repo,
+          env: fixture.env,
+          answers: ["n", "y", "n"],
+        });
+
+        expect(first.exitCode).toBe(0);
+        expect(second.exitCode).toBe(0);
+        expect(first.stdout).toContain(`Running: wt -y config shell install ${shell}`);
+        expect(second.stdout).toContain(`Running: wt -y config shell install ${shell}`);
+        const contents = await readFile(rcPath, "utf8");
+        expect(contents.startsWith(original)).toBe(true);
+        expect(contents.split(shellIntegrationMarker)).toHaveLength(2);
+        await expect(readFile(otherShellRcPath(fixture.home, shell), "utf8")).rejects.toThrow();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  }
+
+  it("does not create or modify shell files when integration is declined", async () => {
+    const fixture = await createFixture({ harness: "codex", shell: "zsh" });
+    const bashrc = shellRcPath(fixture.home, "bash");
+    const existingBashrc = "# unrelated bash config\n";
+    await writeFile(bashrc, existingBashrc, "utf8");
+    try {
+      const result = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["n", "n", "n", "y", "n", "n"],
+      });
+
+      expect(result.exitCode).toBe(0);
+      await expect(readFile(shellRcPath(fixture.home, "zsh"), "utf8")).rejects.toThrow();
+      await expect(readFile(bashrc, "utf8")).resolves.toBe(existingBashrc);
+      expect(result.stdout).not.toContain("fake shell integration installed");
+      expect(result.stdout).not.toContain("Optional Worktrunk shell integration was not installed");
     } finally {
       await fixture.cleanup();
     }
@@ -156,6 +243,7 @@ type Fixture = {
 async function createFixture(input: {
   harness: HarnessMode;
   launchers?: "complex";
+  shell?: SupportedShell;
 }): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), "station-setup-guided-feedback-"));
   const runtimeDir = await mkdtemp(join(tmpdir(), "stn-setup-run-"));
@@ -192,6 +280,16 @@ async function createFixture(input: {
     [
       'if [ "$1" = "--version" ]; then echo "worktrunk 1.2.3"; exit 0; fi',
       'if [ "$1 $2 $3 $4" = "-y config shell install" ]; then',
+      '  if [ "$#" -ge 5 ]; then',
+      '    case "$5" in',
+      '      zsh) rc="$HOME/.zshrc" ;;',
+      '      bash) rc="$HOME/.bashrc" ;;',
+      '      *) echo "unexpected shell $5" >&2; exit 2 ;;',
+      "    esac",
+      '    if [ ! -f "$rc" ]; then echo "No shell config file found" >&2; exit 1; fi',
+      `    marker=${shellQuote(shellIntegrationMarker)}`,
+      '    grep -F -x "$marker" "$rc" >/dev/null 2>&1 || printf "\\n%s\\n" "$marker" >> "$rc"',
+      "  fi",
       '  echo "fake shell integration installed"',
       "  exit 0",
       "fi",
@@ -269,6 +367,7 @@ async function createFixture(input: {
     STATION_PI_BIN: "/missing/pi",
     STATION_CLAUDE_BIN: "/missing/claude",
   };
+  if (input.shell !== undefined) env.SHELL = `/bin/${input.shell}`;
 
   return {
     root,
@@ -292,6 +391,14 @@ async function createFixture(input: {
       }
     },
   };
+}
+
+function shellRcPath(home: string, shell: SupportedShell): string {
+  return join(home, shell === "zsh" ? ".zshrc" : ".bashrc");
+}
+
+function otherShellRcPath(home: string, shell: SupportedShell): string {
+  return shellRcPath(home, shell === "zsh" ? "bash" : "zsh");
 }
 
 async function stopObservers(socketPaths: readonly string[]): Promise<void> {
