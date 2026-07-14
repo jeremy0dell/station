@@ -280,16 +280,21 @@ jobs:
           # Installer acceptance runs against this draft before a human may publish it.
           gh release create "${args[@]}"
 
-          # GitHub's tag endpoint excludes drafts, so acceptance uses the captured release id.
-          release_ids="$(
-            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq ".[] | select(.draft == true and .tag_name == \"$TAG\") | .id"
-          )"
-          if [[ ! "$release_ids" =~ ^[0-9]+$ ]]; then
-            echo "Expected exactly one draft release for $TAG." >&2
+          # Draft visibility can lag creation; gh release view uses GitHub's draft-aware tag lookup.
+          release_id=""
+          for _ in {1..12}; do
+            release_id="$(
+              gh release view "$TAG" --json databaseId,isDraft \
+                --jq 'select(.isDraft == true) | .databaseId' 2>/dev/null || true
+            )"
+            [[ "$release_id" =~ ^[0-9]+$ ]] && break
+            sleep 5
+          done
+          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+            echo "Expected the draft release for $TAG to become readable." >&2
             exit 1
           fi
-          echo "release_id=$release_ids" >> "$GITHUB_OUTPUT"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
           mkdir candidate
           cp SHA256SUMS candidate/SHA256SUMS
@@ -301,7 +306,7 @@ jobs:
             --arg checksumFileSha256 "$checksum_file_sha" \
             --argjson workflowRunId "$GITHUB_RUN_ID" \
             --argjson workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
-            --argjson releaseId "$release_ids" \
+            --argjson releaseId "$release_id" \
             '{
               repository: $repository,
               workflowRunId: $workflowRunId,

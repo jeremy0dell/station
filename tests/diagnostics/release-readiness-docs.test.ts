@@ -153,6 +153,17 @@ describe("release readiness docs", () => {
     expect(validateRelease).toContain("compare/$GITHUB_SHA...main");
     expect(validateRelease).toContain("ahead|identical");
     expect(validateRelease).not.toContain("git fetch --no-tags origin");
+    const createDraftStart = release.indexOf("      - name: Create draft release");
+    const createDraft = release.slice(
+      createDraftStart,
+      release.indexOf("      - uses: actions/upload-artifact@v4", createDraftStart),
+    );
+    expect(createDraft).toContain("for _ in {1..12}");
+    expect(createDraft).toContain('gh release view "$TAG" --json databaseId,isDraft');
+    expect(createDraft).toContain("'select(.isDraft == true) | .databaseId'");
+    expect(createDraft).toContain('[[ "$release_id" =~ ^[0-9]+$ ]] && break');
+    expect(createDraft).not.toContain("releases?per_page=100");
+    expect(createDraft).toContain('--argjson releaseId "$release_id"');
     expect(release).toContain("accepted-release-candidate-");
     const installDraft = release.slice(
       release.indexOf("  install-draft:"),
