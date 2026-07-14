@@ -244,8 +244,89 @@ describe("setup planner", () => {
       path: "/tmp/home/.tmux.conf",
       data: {
         marker: "# >>> station popup binding >>>",
+        appendedText: expect.stringContaining("'/tmp/bin/stn-tmux-popup'"),
       },
     });
+    expect(plan.actions.find((action) => action.id === "worktrunk-hooks")?.command).toEqual([
+      "/tmp/bin/stn",
+      "--config",
+      "/tmp/config.toml",
+      "hooks",
+      "install",
+      "worktrunk",
+      "--yes",
+      "--hook-bin",
+      "/tmp/bin/stn-ingress",
+    ]);
+    expect(plan.actions.find((action) => action.id === "codex-hooks")?.command).toEqual([
+      "/tmp/bin/stn",
+      "--config",
+      "/tmp/config.toml",
+      "hooks",
+      "install",
+      "codex",
+      "--yes",
+      "--hook-bin",
+      "/tmp/bin/stn-ingress",
+    ]);
+  });
+
+  it("plans the absolute popup command for a reachable tmux server", () => {
+    const plan = buildSetupPlan(
+      facts({
+        tmuxBinding: {
+          status: "ok",
+          path: "/tmp/home/.tmux.conf",
+          marker: "# >>> station popup binding >>>",
+          launcherCommand: "/tmp/bin/stn-tmux-popup",
+          runShellCommand:
+            "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
+          insideTmux: true,
+          liveStatus: "missing",
+        },
+      }),
+    );
+
+    expect(plan.actions.find((action) => action.id === "tmux-live-popup-binding")).toMatchObject({
+      command: [
+        "tmux",
+        "bind-key",
+        "Space",
+        "run-shell",
+        "-b",
+        "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
+      ],
+    });
+    expect(plan.actions.some((action) => action.id === "tmux-popup-binding")).toBe(false);
+    expect(plan.checks.find((check) => check.id === "tmux-popup-binding")).toMatchObject({
+      status: "warning",
+      message: expect.stringContaining("persisted"),
+    });
+  });
+
+  it("does not plan popup bindings until the launcher is usable", () => {
+    const base = facts();
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...base.launchers,
+          tmuxPopup: {
+            status: "missing",
+            source: "missing",
+            command: "stn-tmux-popup",
+            checkoutPath: "/tmp/station/integrations/terminal/tmux/bin/stn-popup",
+            message: "missing",
+          },
+        },
+        tmuxBinding: { ...base.tmuxBinding, insideTmux: true, liveStatus: "missing" },
+      }),
+    );
+
+    expect(
+      plan.actions.some(
+        (action) => action.id === "tmux-popup-binding" || action.id === "tmux-live-popup-binding",
+      ),
+    ).toBe(false);
   });
 
   it("plans Worktrunk shell integration with Worktrunk's approval prompt disabled", () => {
@@ -267,19 +348,22 @@ describe("setup planner", () => {
         launchers: {
           ...base.launchers,
           station: {
-            ...base.launchers.station,
+            status: "ok",
             source: "checkout",
             command: base.launchers.station.checkoutPath,
+            checkoutPath: base.launchers.station.checkoutPath,
           },
           ingress: {
-            ...base.launchers.ingress,
+            status: "ok",
             source: "checkout",
             command: base.launchers.ingress.checkoutPath,
+            checkoutPath: base.launchers.ingress.checkoutPath,
           },
           tmuxPopup: {
-            ...base.launchers.tmuxPopup,
+            status: "ok",
             source: "checkout",
             command: base.launchers.tmuxPopup.checkoutPath,
+            checkoutPath: base.launchers.tmuxPopup.checkoutPath,
           },
         },
       }),
@@ -500,9 +584,9 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       status: "missing",
       path: "/tmp/home/.tmux.conf",
       marker: "# >>> station popup binding >>>",
-      launcherCommand: "stn-tmux-popup",
+      launcherCommand: "/tmp/bin/stn-tmux-popup",
       runShellCommand:
-        "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} 'stn-tmux-popup'",
+        "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
       insideTmux: false,
       liveStatus: "unknown",
       message: "Optional tmux popup binding is not installed.",

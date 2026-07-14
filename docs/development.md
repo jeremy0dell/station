@@ -81,9 +81,10 @@ pnpm smoke:install
 ```
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
-authenticated GitHub responses and temporary homes, so it is deterministic and
-does not download a real release. The single Ubuntu CI gate runs it once. On a
-heavily contended local host, run
+authenticated GitHub responses and temporary homes, including isolated zsh
+login-profile and minimal-PATH fresh-shell coverage, so it is deterministic and
+does not download a real release or modify the real profile. The single Ubuntu
+CI gate runs it once. On a heavily contended local host, run
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
@@ -347,19 +348,28 @@ manually verify the actual user experience, not a dashboard override:
 
 1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
    directory absent from `PATH`. Confirm all three missing launchers are named,
-   the printed current-shell block prepends the safely quoted directory and
-   runs `hash -r` plus `stn setup`, and the absolute `stn` fallback works.
-2. Repeat with an older `stn` shadowing the install and then with one shadowed
-   sibling launcher. Confirm each mismatch is named and no shell profile is
-   edited. With all three launchers resolving physically to the install
-   directory, confirm the short `Next: run stn setup` success message.
+   the profile is unchanged without `--persist-path`, the printed exact opt-in
+   command is idempotent, the current-shell block prepends the safely quoted
+   directory and runs `hash -r` plus `stn setup`, and the absolute `stn`
+   fallback works.
+2. Repeat with `--persist-path`, an existing zsh `.zprofile` containing only
+   Homebrew setup, and an older launcher shadowing the install. Confirm the
+   profile content and mode are preserved, one entry prepends the exact install
+   directory, a new login shell resolves all three launchers there, and a
+   second install adds no duplicate entry. With all three launchers already
+   resolving physically to the install directory, confirm the short
+   `Next: run stn setup` success message.
 3. With the installed binary's runtime `PATH` containing neither Node nor Bun,
    run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
    and connects to a healthy Observer.
 4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 5. Run `stn setup` to add a project. Confirm the open TUI reconnects and shows
    it after activation on the same Observer socket.
-6. Run bare `stn` inside tmux and confirm `stn-tmux-popup` opens the popup.
+6. Expose `stn-tmux-popup` only to the shell running `stn setup`, accept the
+   popup binding, and confirm `~/.tmux.conf` contains its safely quoted absolute
+   path. Start a fresh tmux server with `PATH=/usr/bin:/bin`; `Ctrl-b Space`
+   must open the popup without a restart or tmux PATH mutation. Also confirm
+   `stn popup` remains the direct fallback.
 7. Deliver a provider event through `stn-ingress` and confirm it appears in
    Station.
 8. Complete the local `0.7.0-host-a` → `0.7.0-host-b` procedure above with a

@@ -1,4 +1,5 @@
 import { stationUiInstallHint } from "../../stationWorkspace.js";
+import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
 import { selectSetupHarness } from "./harnessSelection.js";
 import type {
@@ -96,24 +97,7 @@ function setupChecks(
           ? "Recommended after core setup: wt config shell install."
           : "Skipped until Worktrunk is available.",
     },
-    {
-      id: "tmux-popup-binding",
-      tier: "recommended",
-      status:
-        facts.tmux.status === "ok"
-          ? facts.tmuxBinding.status === "ok"
-            ? "ok"
-            : "warning"
-          : "skipped",
-      label: "tmux popup binding",
-      message:
-        facts.tmux.status === "ok"
-          ? facts.tmuxBinding.status === "ok"
-            ? "tmux popup binding is installed."
-            : "Recommended: add Ctrl-b Space binding for the STATION popup dashboard."
-          : "Skipped until tmux is available.",
-      details: { path: facts.tmuxBinding.path },
-    },
+    tmuxPopupBindingCheck(facts),
     worktrunkHooksCheck(facts),
     harnessHooksCheck(facts, selectedHarness),
     diffnavCheck(facts),
@@ -126,6 +110,56 @@ function setupChecks(
       message: "Run stn doctor after setup to validate the observer runtime.",
     },
   ];
+}
+
+function tmuxPopupBindingCheck(facts: SetupFacts): SetupCheck {
+  const base = {
+    id: "tmux-popup-binding",
+    tier: "recommended",
+    label: "tmux popup binding",
+    details: {
+      path: facts.tmuxBinding.path,
+      launcherCommand: facts.tmuxBinding.launcherCommand,
+      liveStatus: facts.tmuxBinding.liveStatus,
+    },
+  } as const;
+  if (facts.tmux.status !== "ok") {
+    return {
+      ...base,
+      status: "skipped",
+      message: "Skipped until tmux is available.",
+    };
+  }
+  if (facts.launchers.tmuxPopup.status !== "ok") {
+    return {
+      ...base,
+      status: "warning",
+      message: "Resolve the stn-tmux-popup launcher, then rerun stn setup to install the binding.",
+    };
+  }
+  if (facts.tmuxBinding.status === "missing") {
+    return {
+      ...base,
+      status: "warning",
+      message: facts.tmuxBinding.message,
+    };
+  }
+  if (facts.tmuxBinding.insideTmux && facts.tmuxBinding.liveStatus !== "loaded") {
+    const liveMessage =
+      facts.tmuxBinding.liveStatus === "missing"
+        ? "is not loaded with that executable launcher"
+        : "could not be verified in the current tmux server";
+    return {
+      ...base,
+      status: "warning",
+      message: `tmux popup binding is persisted but ${liveMessage}; rerun stn setup to repair it.`,
+    };
+  }
+  return {
+    ...base,
+    status: "ok",
+    message: "tmux popup binding is installed.",
+  };
 }
 
 function stateDirCheck(facts: SetupFacts): SetupCheck {
@@ -147,9 +181,9 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
   const missing = launchers.filter((launcher) => launcher.status === "missing");
   const checkout = launchers.filter((launcher) => launcher.source === "checkout");
   const details = {
-    station: facts.launchers.station.command,
-    ingress: facts.launchers.ingress.command,
-    tmuxPopup: facts.launchers.tmuxPopup.command,
+    station: setupLauncherExecutable(facts.launchers.station),
+    ingress: setupLauncherExecutable(facts.launchers.ingress),
+    tmuxPopup: setupLauncherExecutable(facts.launchers.tmuxPopup),
   };
   if (missing.length > 0) {
     return {
@@ -644,7 +678,11 @@ function setupActions(
     message: "Run wt config shell install after core setup if you want Worktrunk shell helpers.",
     command: [facts.worktrunk.command, "-y", "config", "shell", "install"],
   });
-  if (facts.tmux.status === "ok" && facts.tmuxBinding.status === "missing") {
+  if (
+    facts.tmux.status === "ok" &&
+    facts.launchers.tmuxPopup.status === "ok" &&
+    facts.tmuxBinding.status === "missing"
+  ) {
     actions.push({
       id: "tmux-popup-binding",
       kind: "append-file",
@@ -662,6 +700,7 @@ function setupActions(
   }
   if (
     facts.tmux.status === "ok" &&
+    facts.launchers.tmuxPopup.status === "ok" &&
     facts.tmuxBinding.insideTmux &&
     facts.tmuxBinding.liveStatus !== "loaded"
   ) {
@@ -714,7 +753,7 @@ function hookSetupActions(
       label: "Install Worktrunk hooks",
       message: "Install Worktrunk lifecycle hooks that report worktree changes to STATION.",
       command: [
-        facts.launchers.station.command,
+        setupLauncherExecutable(facts.launchers.station),
         "--config",
         facts.configPath,
         "hooks",
@@ -722,7 +761,7 @@ function hookSetupActions(
         "worktrunk",
         "--yes",
         "--hook-bin",
-        facts.launchers.ingress.command,
+        setupLauncherExecutable(facts.launchers.ingress),
       ],
       data: { setupRole: "hook" },
     });
@@ -744,7 +783,7 @@ function hookSetupActions(
 
 function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessId): string[] {
   const command = [
-    facts.launchers.station.command,
+    setupLauncherExecutable(facts.launchers.station),
     "--config",
     facts.configPath,
     "hooks",
@@ -753,7 +792,7 @@ function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessI
     "--yes",
   ];
   if (harness === "claude" || harness === "codex" || harness === "cursor") {
-    command.push("--hook-bin", facts.launchers.ingress.command);
+    command.push("--hook-bin", setupLauncherExecutable(facts.launchers.ingress));
   }
   return command;
 }

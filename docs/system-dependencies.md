@@ -81,7 +81,7 @@ The tmux provider shells out to `tmux` for the workbench and popup local-use pat
 recommended popup binding step. Inside tmux, setup can also load that binding into the current
 tmux server so a restart or manual `tmux source-file ~/.tmux.conf` is not required.
 
-The generated binding uses a resolved `stn-tmux-popup` launcher. In a development checkout this
+The generated binding uses the resolved absolute `stn-tmux-popup` launcher. In a development checkout this
 may be the checkout's `integrations/terminal/tmux/bin/stn-popup` path rather than a bare command.
 Run `pnpm station:link` only when you want bare `stn`, `stn-ingress`, and `stn-tmux-popup` commands
 available globally.

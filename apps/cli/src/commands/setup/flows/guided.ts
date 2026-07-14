@@ -1,4 +1,5 @@
 import { applySetupPlan } from "../apply.js";
+import { checkSetupTmuxBinding } from "../checks/tmuxBinding.js";
 import { planSetupConfigWrite } from "../configWriter.js";
 import {
   activateCompletedConfigWrite,
@@ -177,17 +178,55 @@ async function runGuidedSetupWithPrompt(
   }
 
   const tmuxPopupBindingActions = plan.actions.filter(isTmuxPopupBindingAction);
+  const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
+  let tmuxPopupFeedback =
+    facts.tmuxBinding.status === "ok"
+      ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded", popupCommand)
+      : undefined;
   if (tmuxPopupBindingActions.length > 0) {
     const accepted = await prompt.confirm("Install or load tmux popup binding?");
     if (accepted) {
-      await applySetupPlan(
+      const bindingResult = await applySetupPlan(
         {
           ...plan,
           actions: tmuxPopupBindingActions.map((action) => ({ ...action, selected: true })),
         },
         applyOptions(deps, { announceActions: true, showCommandOutput: true }),
       );
+      const completed = new Set(
+        bindingResult.plan.actions
+          .filter((action) => action.status === "completed")
+          .map((action) => action.id),
+      );
+      let liveLoaded = facts.tmuxBinding.liveStatus === "loaded";
+      if (completed.has("tmux-live-popup-binding")) {
+        const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
+          homeDir: facts.homeDir,
+          launcherCommand: facts.tmuxBinding.launcherCommand,
+          tmuxCommand: facts.tmux.command,
+        };
+        const env = deps.env ?? options.env;
+        if (env !== undefined) recheckOptions.env = env;
+        if (deps.fs !== undefined) recheckOptions.fs = deps.fs;
+        if (deps.runner !== undefined) recheckOptions.runner = deps.runner;
+        liveLoaded = (await checkSetupTmuxBinding(recheckOptions)).liveStatus === "loaded";
+      }
+      tmuxPopupFeedback = renderTmuxPopupFeedback(
+        facts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
+        liveLoaded,
+        popupCommand,
+        bindingResult.failedAction !== undefined,
+      );
+    } else {
+      tmuxPopupFeedback =
+        facts.tmuxBinding.status === "ok"
+          ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded", popupCommand)
+          : `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;
     }
+  }
+
+  if (tmuxPopupFeedback !== undefined) {
+    await write(deps, tmuxPopupFeedback);
   }
 
   await write(
@@ -198,6 +237,28 @@ async function runGuidedSetupWithPrompt(
     ),
   );
   return { code: 0 };
+}
+
+function renderTmuxPopupFeedback(
+  persisted: boolean,
+  liveLoaded: boolean,
+  popupCommand: string,
+  repairIncomplete = false,
+): string {
+  const lines = persisted
+    ? [
+        `Tmux popup binding: Ctrl-b Space is ${
+          liveLoaded
+            ? "persisted and loaded in the current tmux server"
+            : "persisted for future tmux servers; no current server was live-loaded"
+        }.`,
+      ]
+    : ["Tmux popup binding was not persisted. Run stn setup to retry."];
+  if (repairIncomplete) {
+    lines.push("Tmux popup binding repair was incomplete; run stn setup to retry.");
+  }
+  lines.push(`Direct fallback: ${popupCommand}`);
+  return `${lines.join("\n")}\n`;
 }
 
 type HookPreferences = {

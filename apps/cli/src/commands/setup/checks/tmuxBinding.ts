@@ -29,10 +29,12 @@ export async function checkSetupTmuxBinding(
   const fs = options.fs ?? nodeFsReader();
   const launcherCommand = options.launcherCommand ?? "stn-tmux-popup";
   const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+  const bindingBlock = tmuxPopupBindingBlock(launcherCommand).trimEnd();
   const insideTmux = (options.env ?? process.env).TMUX !== undefined;
   const liveInput: Parameters<typeof checkLiveTmuxBinding>[0] = {
     insideTmux,
     launcherCommand,
+    runShellCommand,
   };
   if (options.env !== undefined) liveInput.env = options.env;
   if (options.runner !== undefined) liveInput.runner = options.runner;
@@ -41,25 +43,14 @@ export async function checkSetupTmuxBinding(
   try {
     const source = await fs.readFile(path);
     if (source.includes(tmuxPopupBindingMarker) || source.includes("stn-tmux-popup")) {
-      if (!source.includes(launcherCommand)) {
+      if (!source.includes(bindingBlock)) {
         return missingTmuxBinding({
           path,
           launcherCommand,
           runShellCommand,
           insideTmux,
           liveStatus,
-          message: "tmux popup binding is installed but uses an outdated STATION launcher command.",
-        });
-      }
-      if (insideTmux && liveStatus === "missing") {
-        return missingTmuxBinding({
-          path,
-          launcherCommand,
-          runShellCommand,
-          insideTmux,
-          liveStatus,
-          message:
-            "tmux popup binding is installed in ~/.tmux.conf but is not loaded in the current tmux server.",
+          message: `tmux popup binding uses a different launcher; rerun stn setup to replace it with ${launcherCommand}.`,
         });
       }
       return {
@@ -92,7 +83,7 @@ export function tmuxPopupBindingLine(launcherCommand = "stn-tmux-popup"): string
 }
 
 export function tmuxPopupRunShellCommand(launcherCommand = "stn-tmux-popup"): string {
-  return `env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} ${quoteShellValue(launcherCommand)}`;
+  return `env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} ${quoteShellValue(escapeTmuxFormat(launcherCommand))}`;
 }
 
 function missingTmuxBinding(input: {
@@ -119,6 +110,7 @@ async function checkLiveTmuxBinding(input: {
   env?: NodeJS.ProcessEnv;
   insideTmux: boolean;
   launcherCommand: string;
+  runShellCommand: string;
   runner?: ExternalCommandRunner;
   tmuxCommand?: string;
 }): Promise<"loaded" | "missing" | "unknown"> {
@@ -126,20 +118,56 @@ async function checkLiveTmuxBinding(input: {
     return "unknown";
   }
   try {
-    const result = await runExternalCommand(
+    const listed = await runExternalCommand(
       {
         command: input.tmuxCommand ?? "tmux",
-        args: ["list-keys", "-T", "prefix", "Space"],
+        args: ["list-keys", "-T", "prefix"],
+        timeoutMs: setupProbeTimeoutMs,
+        maxOutputChars: 32_768,
+        ...(input.env === undefined ? {} : { env: envForExternalCommand(input.env) }),
+      },
+      input.runner,
+    );
+    if (!hasLiveTmuxBinding(listed.stdout, input.runShellCommand)) {
+      return "missing";
+    }
+    const startup = await runExternalCommand(
+      {
+        command: input.tmuxCommand ?? "tmux",
+        args: [
+          "run-shell",
+          `env STATION_SETUP_LAUNCHER_PROBE=1 ${quoteShellValue(escapeTmuxFormat(input.launcherCommand))} --help >/dev/null 2>&1`,
+        ],
+        allowedExitCodes: [0, 1, 126, 127],
         timeoutMs: setupProbeTimeoutMs,
         maxOutputChars: 4096,
         ...(input.env === undefined ? {} : { env: envForExternalCommand(input.env) }),
       },
       input.runner,
     );
-    return result.stdout.includes(input.launcherCommand) ? "loaded" : "missing";
+    return startup.exitCode === 0 ? "loaded" : "missing";
   } catch {
     return "unknown";
   }
+}
+
+function hasLiveTmuxBinding(source: string, runShellCommand: string): boolean {
+  // tmux serializes a run-shell argument inside double quotes and escapes shell expansion.
+  const serialized = runShellCommand
+    .replaceAll("\\", "\\\\")
+    .replaceAll("$", "\\$")
+    .replaceAll('"', '\\"');
+  return source
+    .split(/\r?\n/)
+    .some(
+      (line) =>
+        /(?:^|\s)-T\s+prefix\s+Space\s+run-shell\s+-b\s+/.test(line) &&
+        line.endsWith(`"${serialized}"`),
+    );
+}
+
+function escapeTmuxFormat(value: string): string {
+  return value.replaceAll("#", "##");
 }
 
 function quoteShellValue(value: string): string {

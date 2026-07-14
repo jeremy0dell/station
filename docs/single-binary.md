@@ -460,7 +460,9 @@ points into the new install directory, the installer prints
 `Next: run stn setup`. Otherwise it names every missing or shadowed launcher,
 prints a safely shell-quoted current-shell block that prepends the directory,
 runs `hash -r`, and invokes `stn setup`, plus the absolute installed `stn`
-fallback. It never edits a shell profile.
+fallback. Profile persistence is explicit: `--persist-path` appends one
+idempotent login-profile entry, while an install without the flag leaves the
+profile unchanged and prints an exact opt-in command.
 
 The first binary release is immutable `v0.7.0` and promotes only after all four
 native targets pass automated and manual acceptance. Published tags and assets
@@ -641,16 +643,20 @@ flow:
 
 1. Install in a clean default home with the directory missing from `PATH`,
    then with an older `stn` and one sibling launcher shadowing it → every
-   mismatch is named, the current-shell recovery block works, and no profile is
-   edited. With all three physical resolutions correct, the short setup next
-   step is printed.
+   mismatch is named, the current-shell recovery block works, and an install
+   without `--persist-path` leaves the profile unchanged. Repeat with explicit
+   persistence into a Homebrew-only `.zprofile`; a fresh shell must resolve all
+   three launchers, and a second install must not duplicate the entry. With all
+   three physical resolutions correct, the short setup next step is printed.
 2. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
 3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
 4. Run `stn setup` adding a project → the observer restarts on the **same
    socket** and reflects the new project immediately (B-config); an open TUI
    reconnects without a manual restart.
-5. Bare `stn` inside tmux → popup path via `stn-tmux-popup`.
+5. Run setup with `stn-tmux-popup` visible only on its temporary `PATH` → the
+   persisted binding contains the absolute launcher, and `Ctrl-b Space` works
+   in a fresh tmux server started with `PATH=/usr/bin:/bin`.
 6. `stn-ingress` symlink delivers a provider hook event end to end.
 7. Use local `0.7.0-host-a` and `0.7.0-host-b` builds while **live host PTYs**
    exist → the new build reports

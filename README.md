@@ -62,11 +62,11 @@ gh auth login --hostname github.com
     repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  sh "$installer" --version "$tag"
+  sh "$installer" --version "$tag" --persist-path
 )
 ```
 
-The installer block only installs the Station binaries; it does not configure the current project or edit your shell profile. From the same project shell, make the default install available, run guided setup, verify it, and launch the full workspace:
+The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to your login-shell profile. It does not configure the current project. From the same project shell, make the default install available immediately, run guided setup, verify it, and launch the full workspace:
 
 ```sh
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -79,7 +79,7 @@ stn doctor
 stn tui
 ```
 
-`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, writes `~/.config/station/config.toml` for the current Git repository, and can add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file for future terminals. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
+`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, writes `~/.config/station/config.toml` for the current Git repository, and can add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; `--persist-path` makes the same directory available to future login shells. Omit that flag to leave profiles unchanged and receive an exact opt-in command instead. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
 
 On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
 

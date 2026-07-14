@@ -1,6 +1,6 @@
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
@@ -8,11 +8,13 @@ import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.j
 import { checkSetupDiffnav } from "../../src/commands/setup/checks/diffnav.js";
 import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
 import { checkSetupGitDelta } from "../../src/commands/setup/checks/gitDelta.js";
+import { checkSetupLaunchers } from "../../src/commands/setup/checks/launchers.js";
 import { checkSetupStateDir } from "../../src/commands/setup/checks/stateDir.js";
 import { collectSetupFacts } from "../../src/commands/setup/checks/system.js";
 import {
   checkSetupTmuxBinding,
   tmuxPopupBindingBlock,
+  tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
 import { checkSetupXcode } from "../../src/commands/setup/checks/xcode.js";
 import { buildSetupPlan } from "../../src/commands/setup/planner.js";
@@ -698,6 +700,301 @@ scroll_on_output = "teleport"
     }
   });
 
+  it("escapes tmux formats in absolute launcher paths", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/station-#{session_name}/stn-tmux-popup";
+    const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+    const serialized = runShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+    const calls: ExternalCommandInput[] = [];
+
+    expect(runShellCommand).toBe(
+      "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/station-##{session_name}/stn-tmux-popup'",
+    );
+    expect(tmuxPopupBindingBlock(launcherCommand)).toContain(
+      "STATION_FOCUS_CLIENT_ID=#{q:client_name}",
+    );
+
+    await checkSetupTmuxBinding({
+      homeDir,
+      env: { TMUX: "/tmp/tmux.sock,1,0" },
+      launcherCommand,
+      runner: async (input) => {
+        calls.push(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout:
+            input.args?.[0] === "list-keys"
+              ? `bind-key -T prefix Space run-shell -b "${serialized}"\n`
+              : "",
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+      fs: readOnlyFs({
+        [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+      }),
+    });
+
+    expect(calls.at(1)?.args).toEqual([
+      "run-shell",
+      "env STATION_SETUP_LAUNCHER_PROBE=1 '/tmp/station-##{session_name}/stn-tmux-popup' --help >/dev/null 2>&1",
+    ]);
+  });
+
+  it("requires executable launchers and resolves PATH entries to absolute paths", async () => {
+    const root = await tempRoot(tempRoots);
+    const binDir = join(root, "launcher bin");
+    await mkdir(binDir, { recursive: true });
+    await Promise.all(
+      ["stn", "stn-ingress", "stn-tmux-popup"].map((command) =>
+        writeFile(join(binDir, command), "#!/bin/sh\n"),
+      ),
+    );
+    await chmod(join(binDir, "stn"), 0o755);
+    await chmod(join(binDir, "stn-ingress"), 0o644);
+    await chmod(join(binDir, "stn-tmux-popup"), 0o755);
+
+    const launchers = await checkSetupLaunchers({
+      env: { PATH: binDir },
+      packageRoot: join(root, "empty-checkout"),
+    });
+
+    expect(launchers.station).toMatchObject({
+      status: "ok",
+      source: "path",
+      resolvedPath: join(binDir, "stn"),
+    });
+    expect(launchers.ingress).toMatchObject({ status: "missing" });
+    expect(launchers.tmuxPopup).toMatchObject({
+      status: "ok",
+      source: "path",
+      resolvedPath: join(binDir, "stn-tmux-popup"),
+    });
+  });
+
+  it("skips executable directories that shadow launcher names on PATH", async () => {
+    const root = await tempRoot(tempRoots);
+    const shadowDir = join(root, "shadow");
+    const binDir = join(root, "bin");
+    const commands = ["stn", "stn-ingress", "stn-tmux-popup"];
+    await Promise.all(
+      commands.map((command) => mkdir(join(shadowDir, command), { recursive: true })),
+    );
+    await mkdir(binDir, { recursive: true });
+    await Promise.all(
+      commands.map(async (command) => {
+        const path = join(binDir, command);
+        await writeFile(path, "#!/bin/sh\n");
+        await chmod(path, 0o755);
+      }),
+    );
+
+    const launchers = await checkSetupLaunchers({
+      env: { PATH: `${shadowDir}${delimiter}${binDir}` },
+      packageRoot: join(root, "empty-checkout"),
+    });
+
+    expect(launchers.station.resolvedPath).toBe(join(binDir, "stn"));
+    expect(launchers.ingress.resolvedPath).toBe(join(binDir, "stn-ingress"));
+    expect(launchers.tmuxPopup.resolvedPath).toBe(join(binDir, "stn-tmux-popup"));
+  });
+
+  it("recognizes an exact absolute tmux binding with quoted path characters", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/station install's/bin/stn-tmux-popup";
+
+    await expect(
+      checkSetupTmuxBinding({
+        homeDir,
+        launcherCommand,
+        fs: readOnlyFs({
+          [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      launcherCommand,
+      liveStatus: "unknown",
+    });
+  });
+
+  it("checks the exact live binding and launcher startup in the tmux server", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/station install's/bin/stn-tmux-popup";
+    const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+    const serialized = runShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+    const calls: ExternalCommandInput[] = [];
+    const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
+      calls.push(input);
+      const listKeys = input.args?.[0] === "list-keys";
+      return {
+        command: input.command,
+        args: input.args ?? [],
+        stdout: listKeys ? `bind-key -T prefix Space run-shell -b "${serialized}"\n` : "",
+        stderr: "",
+        exitCode: 0,
+      };
+    };
+
+    await expect(
+      checkSetupTmuxBinding({
+        homeDir,
+        env: { TMUX: "/tmp/tmux.sock,1,0" },
+        launcherCommand,
+        runner,
+        fs: readOnlyFs({
+          [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+        }),
+      }),
+    ).resolves.toMatchObject({ status: "ok", liveStatus: "loaded" });
+    expect(calls).toEqual([
+      expect.objectContaining({ args: ["list-keys", "-T", "prefix"] }),
+      expect.objectContaining({
+        args: [
+          "run-shell",
+          "env STATION_SETUP_LAUNCHER_PROBE=1 '/tmp/station install'\\''s/bin/stn-tmux-popup' --help >/dev/null 2>&1",
+        ],
+      }),
+    ]);
+  });
+
+  it("probes whether the live launcher can start instead of only checking its mode", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/bin/stn-tmux-popup";
+    const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+    const serialized = runShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+    const calls: ExternalCommandInput[] = [];
+
+    const binding = await checkSetupTmuxBinding({
+      homeDir,
+      env: { TMUX: "/tmp/tmux.sock,1,0" },
+      launcherCommand,
+      runner: async (input) => {
+        calls.push(input);
+        const listKeys = input.args?.[0] === "list-keys";
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: listKeys ? `bind-key -T prefix Space run-shell -b "${serialized}"\n` : "",
+          stderr: "",
+          exitCode: listKeys || input.args?.[1]?.startsWith("test -x ") === true ? 0 : 1,
+        };
+      },
+      fs: readOnlyFs({
+        [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+      }),
+    });
+
+    expect(binding).toMatchObject({ status: "ok", liveStatus: "missing" });
+    expect(calls.at(1)?.args).toEqual([
+      "run-shell",
+      "env STATION_SETUP_LAUNCHER_PROBE=1 '/tmp/bin/stn-tmux-popup' --help >/dev/null 2>&1",
+    ]);
+  });
+
+  it("recognizes tmux's serialized dollar escaping in launcher paths", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/station $checkout/bin/stn-tmux-popup";
+    const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+    const serialized = runShellCommand
+      .replaceAll("\\", "\\\\")
+      .replaceAll("$", "\\$")
+      .replaceAll('"', '\\"');
+
+    const binding = await checkSetupTmuxBinding({
+      homeDir,
+      env: { TMUX: "/tmp/tmux.sock,1,0" },
+      launcherCommand,
+      runner: async (input) => ({
+        command: input.command,
+        args: input.args ?? [],
+        stdout:
+          input.args?.[0] === "list-keys"
+            ? `bind-key -T prefix Space run-shell -b "${serialized}"\n`
+            : "",
+        stderr: "",
+        exitCode: 0,
+      }),
+      fs: readOnlyFs({
+        [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+      }),
+    });
+
+    expect(binding).toMatchObject({ status: "ok", liveStatus: "loaded" });
+  });
+
+  it("does not accept live bindings whose startup probe fails or exits 127", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/bin/stn-tmux-popup";
+    const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+    const serialized = runShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+
+    for (const exitCode of [1, 127]) {
+      const binding = await checkSetupTmuxBinding({
+        homeDir,
+        env: { TMUX: "/tmp/tmux.sock,1,0" },
+        launcherCommand,
+        runner: async (input) => ({
+          command: input.command,
+          args: input.args ?? [],
+          stdout:
+            input.args?.[0] === "list-keys"
+              ? `bind-key -T prefix Space run-shell -b "${serialized}"\n`
+              : "",
+          stderr: "",
+          exitCode: input.args?.[0] === "run-shell" ? exitCode : 0,
+        }),
+        fs: readOnlyFs({
+          [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+        }),
+      });
+
+      expect(binding).toMatchObject({
+        status: "ok",
+        liveStatus: "missing",
+        launcherCommand,
+      });
+    }
+  });
+
+  it("treats a legacy live bare binding that would exit 127 as not loaded", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const launcherCommand = "/tmp/bin/stn-tmux-popup";
+    const bareRunShellCommand = tmuxPopupRunShellCommand("stn-tmux-popup");
+    const serialized = bareRunShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+    const calls: ExternalCommandInput[] = [];
+
+    const binding = await checkSetupTmuxBinding({
+      homeDir,
+      env: { TMUX: "/tmp/tmux.sock,1,0" },
+      launcherCommand,
+      runner: async (input) => {
+        calls.push(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: `bind-key -T prefix Space run-shell -b "${serialized}"\n`,
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+      fs: readOnlyFs({
+        [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+      }),
+    });
+
+    expect(binding).toMatchObject({ status: "ok", liveStatus: "missing" });
+    expect(calls).toHaveLength(1);
+  });
+
   it("reports old tmux popup bindings as missing when setup resolved a checkout launcher", async () => {
     const root = await tempRoot(tempRoots);
     const homeDir = join(root, "home");
@@ -705,13 +1002,18 @@ scroll_on_output = "teleport"
       homeDir,
       launcherCommand: "/tmp/station/integrations/terminal/tmux/bin/stn-popup",
       fs: readOnlyFs({
-        [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(),
+        [join(homeDir, ".tmux.conf")]: `${tmuxPopupBindingBlock()}\n${tmuxPopupBindingBlock(
+          "/tmp/station/integrations/terminal/tmux/bin/stn-popup",
+        )
+          .split("\n")
+          .at(1)}\n`,
       }),
     });
 
     expect(binding).toMatchObject({
       status: "missing",
-      message: "tmux popup binding is installed but uses an outdated STATION launcher command.",
+      message:
+        "tmux popup binding uses a different launcher; rerun stn setup to replace it with /tmp/station/integrations/terminal/tmux/bin/stn-popup.",
     });
   });
 });

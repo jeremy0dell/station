@@ -24,7 +24,7 @@ gh auth login --hostname github.com
     repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  sh "$installer" --version "$tag"
+  sh "$installer" --version "$tag" --persist-path
 )
 ```
 
@@ -38,7 +38,7 @@ The recipe never falls back to `main`. `gh` handles private-repository authentic
 
 ### Complete first-run setup
 
-The installer block only installs the Station binaries; it does not configure the current project or edit your shell profile. The recipe begins by changing into the Git repository that `stn setup` will use as the first Station project. For the default install location, the remaining handoff is:
+The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to the supported login-shell profile. It does not configure the current project. The recipe begins by changing into the Git repository that `stn setup` will use as the first Station project. Because profile changes apply to future login shells, the remaining handoff for the current shell is:
 
 ```bash
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -55,11 +55,11 @@ If the installer reported a PATH mismatch, its printed current-shell block is th
 
 Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes `~/.config/station/config.toml` for the current repository; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
 
-The PATH assignment above affects only the current shell. Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if future terminals do not already include that directory. The installer never edits a profile. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
+The PATH assignment above affects only the current shell. `--persist-path` adds an idempotent entry to the login-shell profile selected from `SHELL` (`.zprofile` for zsh, the first existing bash login profile, or `.profile` for POSIX shells) while preserving existing content such as Homebrew setup. Omit the flag to leave profiles unchanged; unless the exact entry is already present, the installer prints the idempotent command you can run instead, even when its own shell temporarily resolves the launchers. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
 
 On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
 
-Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface.
+Pass `--install-dir PATH` to override the default `~/.local/bin`, and combine it with `--persist-path` to persist that exact custom directory; run `scripts/install.sh --help` from a checkout for the complete command surface.
 
 The installer:
 
@@ -69,7 +69,7 @@ The installer:
 - stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
 - keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
 - removes `com.apple.quarantine` from the verified binary defensively on macOS; and
-- resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints a safely quoted current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and also prints the absolute installed `stn` path. It never edits a shell profile.
+- resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints a safely quoted current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and also prints the absolute installed `stn` path. Profile persistence occurs only with `--persist-path`; otherwise it prints an exact opt-in command and leaves the profile unchanged.
 
 ### Concurrent and interrupted installs
 
@@ -192,14 +192,15 @@ Optional integrations can be added later.
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
 `pnpm smoke:install` exercises latest, explicit, and draft selection; strict
-authenticated API arguments; all four platform mappings; default-home and PATH
-shadow behavior; checksum/archive/probe failures; dual-lock concurrency and
-stale recovery; rollback and ambiguous commit points; continuous readers;
-HUP/INT/TERM/SIGKILL; and runner self-interruption against local fake release
-assets. Every child and the overall runner have deadlines. It does not contact
-GitHub or modify the real home directory.
+authenticated API arguments; all four platform mappings; isolated-home login
+profile persistence, minimal-PATH fresh shells, PATH shadow behavior;
+checksum/archive/probe failures; dual-lock concurrency and stale recovery;
+rollback and ambiguous commit points; continuous readers; HUP/INT/TERM/SIGKILL;
+and runner self-interruption against local fake release assets. Every child and
+the overall runner have deadlines. It does not contact GitHub or modify the real
+home directory.
 
-Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. When bare `stn` launchers are not on `PATH`, setup uses launcher paths from the current checkout for generated tmux and hook commands and offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
+Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 
 Useful smoke options:
 

@@ -17,7 +17,7 @@ import { setupEnv } from "./env.js";
 import { type CheckGitOptions, checkSetupGit } from "./git.js";
 import { checkSetupGitDelta } from "./gitDelta.js";
 import { type CheckHarnessesOptions, checkSetupHarnesses } from "./harnesses.js";
-import { checkSetupLaunchers } from "./launchers.js";
+import { checkSetupLaunchers, setupLauncherExecutable } from "./launchers.js";
 import { checkSetupStateDir, type SetupStateDirFileSystem } from "./stateDir.js";
 import { checkSetupTmux } from "./tmux.js";
 import { checkSetupTmuxBinding } from "./tmuxBinding.js";
@@ -119,7 +119,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     homeDir,
     env,
     ...(options.fs === undefined ? {} : { fs: options.fs }),
-    launcherCommand: launchers.tmuxPopup.command,
+    launcherCommand: setupLauncherExecutable(launchers.tmuxPopup),
     ...(options.runner === undefined ? {} : { runner: options.runner }),
     tmuxCommand: tmux.command,
   });
