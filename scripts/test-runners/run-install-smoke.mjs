@@ -296,6 +296,7 @@ function scenarioDefaultHomeAndPathResolution() {
 
 function scenarioFutureShellPathPersistence() {
   const installDir = join(root, "Station's custom bin");
+  const zsh = join(fakeBinDir, "zsh");
   const shadowDir = join(root, "future-shell-shadow-bin");
   const currentPath = [shadowDir, fakeBinDir, "/usr/bin", "/bin"];
   const homebrewProfile = [
@@ -320,7 +321,7 @@ function scenarioFutureShellPathPersistence() {
     home: consentHome,
     pathEntries: currentPath,
     extraArguments: ["--persist-path"],
-    environment: { SHELL: "/bin/zsh" },
+    environment: { SHELL: zsh },
   });
   assertSuccess(consent, "explicit future-shell PATH persistence");
   assertIncludes(
@@ -355,7 +356,7 @@ function scenarioFutureShellPathPersistence() {
     home: consentHome,
     pathEntries: currentPath,
     extraArguments: ["--persist-path"],
-    environment: { SHELL: "/bin/zsh" },
+    environment: { SHELL: zsh },
   });
   assertSuccess(idempotent, "idempotent future-shell PATH persistence");
   assertIncludes(
@@ -378,7 +379,7 @@ function scenarioFutureShellPathPersistence() {
     platform: linuxX64(),
     home: noConsentHome,
     pathEntries: currentPath,
-    environment: { SHELL: "/bin/zsh" },
+    environment: { SHELL: zsh },
   });
   assertSuccess(noConsent, "future-shell PATH without consent");
   assertEqual(
@@ -414,7 +415,7 @@ function scenarioFutureShellPathPersistence() {
     platform: linuxX64(),
     home: missingProfileHome,
     extraArguments: ["--persist-path"],
-    environment: { SHELL: "/bin/zsh" },
+    environment: { SHELL: zsh },
   });
   assertSuccess(created, "future-shell PATH creates a missing zprofile");
   assertEqual(
@@ -423,6 +424,128 @@ function scenarioFutureShellPathPersistence() {
     "new zprofile contains only the exact PATH entry",
   );
   assertMode(missingProfile, 0o600, "new zprofile mode");
+
+  const partialAppendShell = join(root, "partial-profile-append-shell");
+  writeExecutable(
+    partialAppendShell,
+    `#!/bin/sh
+printf() {
+  if [ "\${FAKE_PROFILE_APPEND_MODE:-}" != '' ] && [ "\${2-}" = "$FAKE_PROFILE_ENTRY" ]; then
+    command printf '\\n%.20s' "$2"
+    if [ "$FAKE_PROFILE_APPEND_MODE" = signal ]; then
+      kill -TERM "$$"
+      return 0
+    fi
+    return 1
+  fi
+  command printf "$@"
+}
+installer=$1
+shift
+. "$installer"
+`,
+  );
+  for (const [mode, expectedStatus] of [
+    ["failure", 1],
+    ["signal", 143],
+  ]) {
+    const partialHome = join(root, `future-shell-partial-${mode}-home`);
+    const partialProfile = join(partialHome, ".zprofile");
+    const originalProfile = `# profile before ${mode}\n`;
+    makeDirectory(partialHome);
+    writeText(partialProfile, originalProfile, 0o640);
+    const partial = runInstaller({
+      installDir,
+      platform: linuxX64(),
+      home: partialHome,
+      childShell: partialAppendShell,
+      extraArguments: ["--persist-path"],
+      environment: {
+        FAKE_PROFILE_APPEND_MODE: mode,
+        FAKE_PROFILE_ENTRY: expectedEntry,
+        SHELL: zsh,
+      },
+    });
+    assertExactStatus(partial, expectedStatus, `partial profile ${mode}`);
+    assertEqual(
+      readFileSync(partialProfile, "utf8"),
+      originalProfile,
+      `partial profile ${mode} restores the original bytes`,
+    );
+  }
+
+  const customZdotHome = join(root, "future-shell-custom-zdot-home");
+  const customZdotDir = join(customZdotHome, "custom-zdotdir");
+  const customZdotProfile = join(customZdotDir, ".zprofile");
+  makeDirectory(customZdotDir);
+  writeText(
+    join(customZdotHome, ".zshenv"),
+    `[ "\${FAKE_ZSH_LOGIN:-}" != 1 ] || ZDOTDIR="$HOME/custom-zdotdir"\n`,
+    0o600,
+  );
+  writeText(customZdotProfile, "# custom zprofile\n", 0o600);
+  const customZdot = runInstaller({
+    installDir,
+    platform: linuxX64(),
+    home: customZdotHome,
+    extraArguments: ["--persist-path"],
+    environment: { SHELL: zsh },
+  });
+  assertFailure(customZdot, "non-exported ZDOTDIR", "non-exported zsh ZDOTDIR");
+  assertEqual(ghCalls(customZdot), [], "non-exported zsh ZDOTDIR makes no gh calls");
+  assert(
+    !existsSync(join(customZdotHome, ".zprofile")),
+    "non-exported ZDOTDIR leaves HOME profile absent",
+  );
+  assertEqual(
+    readFileSync(customZdotProfile, "utf8"),
+    "# custom zprofile\n",
+    "non-exported ZDOTDIR leaves the effective profile unchanged",
+  );
+
+  const colonHome = join(root, "future-shell-colon-home");
+  const colonProfile = join(colonHome, ".zprofile");
+  const colonProfileBefore = "# colon profile\n";
+  makeDirectory(colonHome);
+  writeText(colonProfile, colonProfileBefore, 0o600);
+  const colon = runInstaller({
+    installDir: join(root, "future-shell:colon-bin"),
+    platform: linuxX64(),
+    home: colonHome,
+    extraArguments: ["--persist-path"],
+    environment: { SHELL: zsh },
+  });
+  assertFailure(colon, "without colons or line breaks", "colon in persisted install directory");
+  assertEqual(ghCalls(colon), [], "colon in persisted install directory makes no gh calls");
+  assertEqual(
+    readFileSync(colonProfile, "utf8"),
+    colonProfileBefore,
+    "colon in persisted install directory leaves the profile unchanged",
+  );
+
+  const legacyHome = join(root, "future-shell-legacy-home");
+  const legacyProfile = join(legacyHome, ".zprofile");
+  const legacyEntry = 'export PATH="$HOME/.local/bin:$PATH"\n';
+  makeDirectory(legacyHome);
+  writeText(legacyProfile, legacyEntry, 0o600);
+  const legacy = runInstaller({
+    platform: linuxX64(),
+    home: legacyHome,
+    omitInstallDir: true,
+    extraArguments: ["--persist-path"],
+    environment: { SHELL: zsh },
+  });
+  assertSuccess(legacy, "legacy documented PATH persistence");
+  assertIncludes(
+    legacy.stdout,
+    "Future-shell PATH is already configured",
+    "legacy documented PATH recognition",
+  );
+  assertEqual(
+    readFileSync(legacyProfile, "utf8"),
+    legacyEntry,
+    "legacy documented PATH entry remains byte-identical",
+  );
 }
 
 function shellWord(value) {
@@ -2324,6 +2447,19 @@ fi
 }
 
 function writeFakeCommands() {
+  writeExecutable(
+    join(fakeBinDir, "zsh"),
+    `#!/bin/sh
+set -eu
+[ "\${1:-}" = -l ] || exit 2
+FAKE_ZSH_LOGIN=1
+shift
+[ "\${1:-}" = -c ] || exit 2
+[ ! -f "$HOME/.zshenv" ] || . "$HOME/.zshenv"
+shift
+eval "$1"
+`,
+  );
   writeExecutable(
     join(fakeBinDir, "uname"),
     [

@@ -12,6 +12,7 @@ install_dir=""
 persist_path=0
 path_profile=""
 path_profile_entry=""
+path_profile_error=""
 release_id=${STATION_INSTALL_RELEASE_ID:-}
 temp_dir=""
 install_stage=""
@@ -43,11 +44,13 @@ activation_ambiguity_reported=0
 activation_failed_precommit=0
 rollback_failed=0
 profile_update_failed=0
+profile_updating=0
 created_ingress=0
 created_popup=0
 created_ingress_inode=""
 created_popup_inode=""
 preserve_install_stage=0
+preserve_temp_dir=0
 line_feed='
 '
 tab='	'
@@ -96,11 +99,25 @@ print_shell_word() {
 
 select_path_profile() {
   path_profile=""
+  path_profile_error=""
   path_profile_shell=${SHELL:-}
   path_profile_shell=${path_profile_shell##*/}
   [ -n "${HOME:-}" ] || return 1
   case "$path_profile_shell" in
     zsh)
+      if [ "${ZDOTDIR+x}" != x ]; then
+        if "$SHELL" -l -c 'if [ "${ZDOTDIR+x}" = x ]; then exit 42; fi; exit 0' </dev/null >/dev/null 2>&1; then
+          :
+        else
+          zsh_probe_status=$?
+          if [ "$zsh_probe_status" -eq 42 ]; then
+            path_profile_error="zsh has a non-exported ZDOTDIR; export ZDOTDIR before using --persist-path."
+          else
+            path_profile_error="could not determine zsh's profile directory; export ZDOTDIR before using --persist-path."
+          fi
+          return 1
+        fi
+      fi
       path_profile=${ZDOTDIR:-$HOME}/.zprofile
       path_profile_shell=zsh
       ;;
@@ -124,7 +141,7 @@ select_path_profile() {
 prepare_path_profile() {
   select_path_profile || return 1
   case "$install_dir" in
-    *"$line_feed"*|*"$carriage_return"*) return 1 ;;
+    *:*|*"$line_feed"*|*"$carriage_return"*) return 1 ;;
   esac
   path_profile_entry=$(
     printf 'export PATH='
@@ -145,7 +162,11 @@ validate_path_profile() {
 
 path_profile_entry_present() {
   [ -f "$path_profile" ] || return 1
-  grep -F -x -q "$path_profile_entry" "$path_profile" 2>/dev/null
+  if grep -F -x -q "$path_profile_entry" "$path_profile" 2>/dev/null; then
+    return 0
+  fi
+  [ "$install_dir" = "$HOME/.local/bin" ] || return 1
+  grep -F -x -q 'export PATH="$HOME/.local/bin:$PATH"' "$path_profile" 2>/dev/null
 }
 
 print_path_persistence_command() {
@@ -177,12 +198,36 @@ persist_path_profile() {
     printf '.\n'
     return 0
   fi
+  profile_existed=0
+  profile_backup=$temp_dir/path-profile.previous
+  if [ -e "$path_profile" ] || [ -L "$path_profile" ]; then
+    cp "$path_profile" "$profile_backup" || return 1
+    profile_existed=1
+  fi
+  # Defer caught signals until a failed in-place append can restore the original profile bytes.
+  profile_updating=1
+  profile_append_status=0
   # Append in place so an existing profile keeps its ownership, mode, and symlink target.
   if [ -s "$path_profile" ]; then
-    printf '\n%s\n' "$path_profile_entry" >> "$path_profile" || return 1
+    printf '\n%s\n' "$path_profile_entry" >> "$path_profile" || profile_append_status=$?
   else
-    printf '%s\n' "$path_profile_entry" >> "$path_profile" || return 1
+    printf '%s\n' "$path_profile_entry" >> "$path_profile" || profile_append_status=$?
   fi
+  if [ "$profile_append_status" -ne 0 ] || [ "$pending_signal_status" -ne 0 ]; then
+    if [ "$profile_existed" -eq 1 ]; then
+      if ! cat "$profile_backup" > "$path_profile"; then
+        preserve_temp_dir=1
+        warn "could not restore '$path_profile'; its original bytes remain at '$profile_backup'."
+      fi
+    elif ! rm -f "$path_profile"; then
+      warn "could not remove the partial profile '$path_profile'."
+    fi
+    profile_updating=0
+    finish_pending_signal
+    return 1
+  fi
+  profile_updating=0
+  finish_pending_signal
   printf 'Added Station to future %s login shells in ' "$path_profile_shell"
   print_shell_word "$path_profile"
   printf '.\n'
@@ -358,7 +403,9 @@ cleanup() {
     fi
   fi
 
-  remove_tree "$temp_dir"
+  if [ "$preserve_temp_dir" -eq 0 ]; then
+    remove_tree "$temp_dir"
+  fi
   if [ "$preserve_install_stage" -eq 0 ]; then
     remove_tree "$install_stage"
   fi
@@ -377,7 +424,7 @@ cleanup() {
 on_signal() {
   signal=$1
   status=$2
-  if [ "$lock_acquiring" -eq 1 ] || [ "$child_starting" -eq 1 ]; then
+  if [ "$lock_acquiring" -eq 1 ] || [ "$child_starting" -eq 1 ] || [ "$profile_updating" -eq 1 ]; then
     if [ "$pending_signal_status" -eq 0 ]; then
       pending_signal_name=$signal
       pending_signal_status=$status
@@ -596,7 +643,10 @@ fi
 absolute_path "$install_dir"
 install_dir=$absolute_result
 if [ "$persist_path" -eq 1 ]; then
-  prepare_path_profile || fail "--persist-path requires a supported login shell (zsh, bash, sh, dash, or ksh) and an install directory without line breaks."
+  if ! prepare_path_profile; then
+    [ -z "$path_profile_error" ] || fail "$path_profile_error"
+    fail "--persist-path requires a supported login shell (zsh, bash, sh, dash, or ksh) and an install directory without colons or line breaks."
+  fi
   validate_path_profile
 fi
 
