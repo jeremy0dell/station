@@ -129,8 +129,8 @@ describe("demo staging e2e", () => {
           "  printf 'cursor=%s\\n' \"$STATION_CURSOR_HOME\"",
           "  printf 'opencode=%s\\n' \"$OPENCODE_CONFIG_DIR\"",
           '} >> "$log"',
-          'if [ "$STATION_DEMO_FAIL_WORKTRUNK" = "1" ]; then',
-          '  case "$*" in *"hooks install worktrunk"*) exit 42 ;; esac',
+          `if [ -n "\${STATION_DEMO_FAIL_HOOK_TARGET:-}" ]; then`,
+          '  case "$*" in *"hooks doctor $STATION_DEMO_FAIL_HOOK_TARGET"*) exit 42 ;; esac',
           "fi",
           "exit 0",
           "",
@@ -265,9 +265,16 @@ describe("demo staging e2e", () => {
         `args=--config ${configPath} hooks install worktrunk --yes --hook-bin ${fakeIngress} --worktrunk-config ${join(demoRoot, "worktrunk", "config.toml")}`,
       );
       expect(stnCalls).toContain(
-        `args=--config ${configPath} hooks doctor worktrunk --hook-bin ${fakeIngress} --worktrunk-config ${join(demoRoot, "worktrunk", "config.toml")}`,
+        `args=--config ${configPath} hooks doctor worktrunk --worktrunk-config ${join(demoRoot, "worktrunk", "config.toml")}`,
       );
+      expect(stnCalls).toContain(
+        `args=--config ${configPath} hooks install codex --yes --hook-bin ${fakeIngress}`,
+      );
+      expect(stnCalls).toContain(`args=--config ${configPath} hooks doctor codex\n`);
       expect(stnCalls).toContain(`args=--config ${configPath} hooks install opencode --yes\n`);
+      await expect(readFile(join(demoRoot, "hooks.txt"), "utf8")).resolves.toContain(
+        "codex: installed and runtime-verified",
+      );
 
       const ownerReady = join(root, "owner.ready");
       const ownerExited = join(root, "owner.exited");
@@ -355,15 +362,15 @@ describe("demo staging e2e", () => {
       expect(refusedUnsafeToml.status).not.toBe(0);
       await expect(access(unsafeTomlRoot)).rejects.toThrow();
 
-      const failedHookRoot = join(root, "failed-worktrunk-hook");
-      const failedHookLog = join(root, "failed-worktrunk-hook.log");
+      const failedHookRoot = join(root, "failed-provider-hook");
+      const failedHookLog = join(root, "failed-provider-hook.log");
       const failedHookStage = run(join(repoRoot, "scripts/demo/stage.sh"), [], {
         cwd: repoRoot,
         env: {
           ...env,
           STATION_DEMO_ROOT: failedHookRoot,
           STATION_DEMO_STN_LOG: failedHookLog,
-          STATION_DEMO_FAIL_WORKTRUNK: "1",
+          STATION_DEMO_FAIL_HOOK_TARGET: "codex",
         },
         allowFailure: true,
       });

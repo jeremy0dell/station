@@ -54,6 +54,10 @@ export type WorktrunkProviderOptions = {
   command?: string;
   configPath?: string;
   useLifecycleHooks?: boolean;
+  observerSocketPath?: string;
+  stateDir?: string;
+  hookSpoolDir?: string;
+  autoStartFromHooks?: boolean;
   timeoutMs?: number;
   runner?: ExternalCommandRunner;
   clock?: RuntimeClock;
@@ -85,6 +89,10 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #command: string;
   readonly #configPath: string | undefined;
   readonly #useLifecycleHooks: boolean | undefined;
+  readonly #observerSocketPath: string | undefined;
+  readonly #stateDir: string | undefined;
+  readonly #hookSpoolDir: string | undefined;
+  readonly #autoStartFromHooks: boolean | undefined;
   readonly #timeoutMs: number;
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
@@ -95,6 +103,10 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
     this.#configPath = options.configPath;
     this.#useLifecycleHooks = options.useLifecycleHooks;
+    this.#observerSocketPath = options.observerSocketPath;
+    this.#stateDir = options.stateDir;
+    this.#hookSpoolDir = options.hookSpoolDir;
+    this.#autoStartFromHooks = options.autoStartFromHooks;
     this.#timeoutMs = options.timeoutMs ?? 5000;
     this.#runner = options.runner;
     this.#clock = options.clock ?? systemClock;
@@ -154,6 +166,14 @@ export class WorktrunkProvider implements WorktreeProvider {
     try {
       const result = await doctorWorktrunkHooks({
         ...(this.#configPath === undefined ? {} : { worktrunkConfigPath: this.#configPath }),
+        ...(this.#observerSocketPath === undefined
+          ? {}
+          : { observerSocketPath: this.#observerSocketPath }),
+        ...(this.#stateDir === undefined ? {} : { stateDir: this.#stateDir }),
+        ...(this.#hookSpoolDir === undefined ? {} : { hookSpoolDir: this.#hookSpoolDir }),
+        ...(this.#autoStartFromHooks === undefined
+          ? {}
+          : { autoStartFromHooks: this.#autoStartFromHooks }),
         ...(context.stationConfigPath === undefined
           ? {}
           : { stationConfigPath: context.stationConfigPath }),

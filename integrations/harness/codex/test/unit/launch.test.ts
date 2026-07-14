@@ -142,7 +142,7 @@ describe("buildCodexLaunchPlan", () => {
     expect(plan.args).not.toContain("--ask-for-approval");
   });
 
-  it("uses the station profile with the current Codex profile flag", () => {
+  it("uses the station profile and enables hooks for the launch", () => {
     const plan = buildCodexLaunchPlan(request(), {
       defaultProfile: "team-default",
       defaultHookProfile: "station",
@@ -153,6 +153,8 @@ describe("buildCodexLaunchPlan", () => {
       "/tmp/station/web/task",
       "--profile",
       "station",
+      "--enable",
+      "hooks",
       "Review the task.",
     ]);
     expect(plan.providerData).toMatchObject({
@@ -287,6 +289,8 @@ describe("buildCodexLaunchPlan", () => {
       "/tmp/station/web/task",
       "--profile",
       "station",
+      "--enable",
+      "hooks",
       "codex_session_123",
       "Review the task.",
     ]);

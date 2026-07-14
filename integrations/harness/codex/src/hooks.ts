@@ -8,6 +8,7 @@ import {
   installConfigScriptHook,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
+  providerHookInvocationMatchesIgnoringBin,
   providerHookScriptOptions,
   uninstallConfigScriptHook,
 } from "@station/runtime";
@@ -279,7 +280,13 @@ export async function doctorCodexHooks(
     };
   }
 
-  const installed = plan.missing.length === 0 && !plan.scriptChanged;
+  const scriptBefore = await fileOps.readOptionalFile(plan.hookScriptPath);
+  const scriptInstalled = providerHookInvocationMatchesIgnoringBin(
+    scriptBefore,
+    expectedCodexHookScript(providerHookScriptOptions(plan.hookScriptPath, options)),
+    "codex",
+  );
+  const installed = plan.missing.length === 0 && scriptInstalled;
   return {
     provider: "codex",
     configPath: plan.configPath,
@@ -292,7 +299,11 @@ export async function doctorCodexHooks(
     missing: plan.missing,
     commands: plan.commands,
     generatedGlobalCleanup: plan.generatedGlobalCleanup,
-    message: doctorMessage({ installed, generatedGlobalInstalled, plan }),
+    message: doctorMessage({
+      installed,
+      generatedGlobalInstalled,
+      plan: { ...plan, scriptChanged: !scriptInstalled },
+    }),
   };
 }
 

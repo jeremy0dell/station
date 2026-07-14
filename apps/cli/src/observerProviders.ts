@@ -122,6 +122,11 @@ function resolveStationHostCommand() {
 function createWorktreeProvider(config: StationConfig): WorktreeProvider {
   if (config.defaults.worktreeProvider === "worktrunk") {
     const options: ConstructorParameters<typeof WorktrunkProvider>[0] = {};
+    const observerPaths = resolveObserverPaths(config);
+    options.observerSocketPath = observerPaths.socketPath;
+    options.stateDir = observerPaths.stateDir;
+    options.hookSpoolDir = observerPaths.hookSpoolDir;
+    options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
     if (config.worktree?.worktrunk?.command !== undefined) {
       options.command = config.worktree.worktrunk.command;
     }

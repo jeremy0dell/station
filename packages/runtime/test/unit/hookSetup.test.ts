@@ -12,6 +12,7 @@ import {
   planConfigScriptHook,
   providerHookCommandArgs,
   providerHookCommandLine,
+  providerHookInvocationMatchesIgnoringBin,
   providerHookScriptOptions,
   providerHookScriptRoutesByStationEnv,
   shellQuote,
@@ -195,6 +196,45 @@ describe("runtime hookSetup", () => {
         providerHookScriptRoutesByStationEnv(
           script.replaceAll("STATION_CONFIG_PATH", "STATION_OLD_CONFIG_PATH"),
           "cursor",
+        ),
+      ).toBe(false);
+    });
+
+    it("matches checkout-local and PATH hook binaries without hiding other drift", () => {
+      const expectedScript = expectedProviderHookScript({
+        provider: "codex",
+        options: { stationConfigPath: "/tmp/station/config.toml" },
+      });
+      const checkoutScript = expectedProviderHookScript({
+        provider: "codex",
+        options: {
+          stationConfigPath: "/tmp/station/config.toml",
+          hookBin: "/tmp/checkout with space/bin/stn-ingress",
+        },
+      });
+
+      expect(
+        providerHookInvocationMatchesIgnoringBin(checkoutScript, expectedScript, "codex"),
+      ).toBe(true);
+      expect(
+        providerHookInvocationMatchesIgnoringBin(
+          checkoutScript,
+          expectedScript.replace("/tmp/station/config.toml", "/tmp/other/config.toml"),
+          "codex",
+        ),
+      ).toBe(false);
+      expect(
+        providerHookInvocationMatchesIgnoringBin(
+          "/tmp/checkout/bin/stn-ingress --config /tmp/station/config.toml worktrunk post-create",
+          "stn-ingress --config /tmp/station/config.toml worktrunk post-create",
+          "worktrunk",
+        ),
+      ).toBe(true);
+      expect(
+        providerHookInvocationMatchesIgnoringBin(
+          "malicious --config /tmp/station/config.toml worktrunk post-create",
+          "stn-ingress --config /tmp/station/config.toml worktrunk post-create",
+          "worktrunk",
         ),
       ).toBe(false);
     });

@@ -68,7 +68,9 @@ Staging does not silently start 17 agents or terminal processes. Rows initially 
 
 Current config supports a default per project, not a declarative default per branch. The historical mixed T3 branch assignments therefore become one supported project default, Cursor. Select a different harness in **New Session** when demonstrating a mixed T3 fleet.
 
-Hooks are installed only for CLIs found on the machine. Missing harness CLIs do not prevent staging, but their assigned rows cannot launch until those CLIs are installed and signed in. Hook install and doctor output is recorded in `~/.station-demo/hooks.txt`.
+Hooks are installed only for CLIs found on the machine. Every installed hook is then checked the same way the observer checks it at launch; staging stops instead of claiming success when that runtime check fails. Missing harness CLIs do not prevent staging, but their assigned rows cannot launch until those CLIs are installed and signed in. Hook install and doctor output is recorded in `~/.station-demo/hooks.txt`.
+
+Codex launches explicitly enable the Station hook profile even when the copied base Codex config disables hooks. Codex still requires the normal one-time review for non-managed hooks: open `/hooks` in the first isolated Codex session and trust the generated Station hooks before expecting live status events.
 
 ### Isolation and reset
 

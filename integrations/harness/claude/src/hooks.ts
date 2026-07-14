@@ -6,6 +6,7 @@ import {
   expectedProviderHookScript,
   installConfigScriptHook,
   type ProviderHookScriptOptions,
+  providerHookInvocationMatchesIgnoringBin,
   providerHookScriptOptions,
 } from "@station/runtime";
 import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
@@ -351,7 +352,13 @@ export async function doctorClaudeHooks(
     };
   }
 
-  const installed = !plan.settingsChanged && !plan.scriptChanged && !plan.artifactInvalid;
+  const scriptBefore = await fileOps.readOptionalFile(plan.hookScriptPath);
+  const scriptInstalled = providerHookInvocationMatchesIgnoringBin(
+    scriptBefore,
+    expectedClaudeHookScript(providerHookScriptOptions(plan.hookScriptPath, options)),
+    "claude",
+  );
+  const installed = !plan.settingsChanged && scriptInstalled && !plan.artifactInvalid;
   return {
     provider: "claude",
     settingsPath: plan.settingsPath,
@@ -367,7 +374,7 @@ export async function doctorClaudeHooks(
       artifactInvalid: plan.artifactInvalid,
       staleUserEntries,
       missing: plan.missing,
-      scriptChanged: plan.scriptChanged,
+      scriptChanged: !scriptInstalled,
     }),
   };
 }

@@ -47,6 +47,7 @@ export function buildCodexLaunchPlan(
   const args = mode === "exec" ? execArgs(request) : interactiveArgs(request);
   appendCodexOptions(args, {
     profile,
+    enableHooks: hookProfile !== undefined,
     permissionMode: providerPermissionMode,
     approvalPolicy: yolo || mode === "exec" ? undefined : approvalPolicy,
     sandboxMode: yolo ? undefined : sandboxMode,
@@ -118,7 +119,7 @@ function buildCodexResumeLaunchPlan(
   const hookProfile = options.defaultHookProfile;
   const profile = hookProfile ?? configuredProfile;
   const args = ["resume", "--cd", request.worktree.path];
-  appendCodexOptions(args, { profile });
+  appendCodexOptions(args, { profile, enableHooks: hookProfile !== undefined });
   args.push(request.resume.target.id);
   if (request.initialPrompt !== undefined) {
     args.push(request.initialPrompt);
@@ -159,6 +160,7 @@ function appendCodexOptions(
   args: string[],
   options: {
     profile?: string | undefined;
+    enableHooks?: boolean | undefined;
     permissionMode?: HarnessPermissionMode | undefined;
     approvalPolicy?: string | undefined;
     sandboxMode?: string | undefined;
@@ -167,6 +169,10 @@ function appendCodexOptions(
 ): void {
   if (options.profile !== undefined) {
     args.push("--profile", options.profile);
+  }
+  if (options.enableHooks === true) {
+    // A base Codex config may disable hooks even when Station's hook profile is selected.
+    args.push("--enable", "hooks");
   }
   if (options.permissionMode === "yolo") {
     args.push(CODEX_YOLO_FLAG);

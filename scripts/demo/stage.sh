@@ -374,23 +374,30 @@ chmod +x "$RUNNER"
 
 install_hook() {
   local target="$1" command="$2"
-  shift 2
   if ! have_tool "$command"; then
     printf '%s: skipped (%s not found)\n' "$target" "$command" >>"$HOOKS_REPORT"
     return 0
   fi
-  if stn_demo hooks install "$target" --yes "$@" >>"$HOOKS_REPORT" 2>&1; then
-    stn_demo hooks doctor "$target" "$@" >>"$HOOKS_REPORT" 2>&1 || true
-    printf '%s: installed\n' "$target" >>"$HOOKS_REPORT"
-  else
-    printf '%s: install failed; see output above\n' "$target" >>"$HOOKS_REPORT"
+  if [ "$target" = "opencode" ]; then
+    stn_demo hooks install "$target" --yes >>"$HOOKS_REPORT" 2>&1 || {
+      echo "$target hook installation failed; see $HOOKS_REPORT." >&2
+      return 1
+    }
+  elif ! stn_demo hooks install "$target" --yes --hook-bin "$HOOK_BIN" >>"$HOOKS_REPORT" 2>&1; then
+    echo "$target hook installation failed; see $HOOKS_REPORT." >&2
+    return 1
   fi
+  if ! stn_demo hooks doctor "$target" >>"$HOOKS_REPORT" 2>&1; then
+    echo "$target hook doctor failed; see $HOOKS_REPORT." >&2
+    return 1
+  fi
+  printf '%s: installed and runtime-verified\n' "$target" >>"$HOOKS_REPORT"
 }
 
 install_required_hook() {
   local target="$1"
   shift
-  if ! stn_demo hooks install "$target" --yes "$@" >>"$HOOKS_REPORT" 2>&1; then
+  if ! stn_demo hooks install "$target" --yes --hook-bin "$HOOK_BIN" "$@" >>"$HOOKS_REPORT" 2>&1; then
     echo "Required $target hook installation failed; see $HOOKS_REPORT." >&2
     return 1
   fi
@@ -403,10 +410,10 @@ install_required_hook() {
 
 step "Installing isolated provider hooks"
 : >"$HOOKS_REPORT"
-install_required_hook worktrunk --hook-bin "$HOOK_BIN" --worktrunk-config "$WORKTRUNK_CONFIG"
-install_hook claude "$CLAUDE_CMD" --hook-bin "$HOOK_BIN"
-install_hook codex "$CODEX_CMD" --hook-bin "$HOOK_BIN"
-install_hook cursor "$CURSOR_CMD" --hook-bin "$HOOK_BIN"
+install_required_hook worktrunk --worktrunk-config "$WORKTRUNK_CONFIG"
+install_hook claude "$CLAUDE_CMD"
+install_hook codex "$CODEX_CMD"
+install_hook cursor "$CURSOR_CMD"
 # OpenCode generates a plugin and does not accept --hook-bin; Pi has no hooks CLI target.
 install_hook opencode "$OPENCODE_CMD"
 sed 's/^/  /' "$HOOKS_REPORT"

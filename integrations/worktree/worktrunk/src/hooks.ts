@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { createHookSetupFileOps, providerHookCommandLine } from "@station/runtime";
+import {
+  createHookSetupFileOps,
+  providerHookCommandLine,
+  providerHookInvocationMatchesIgnoringBin,
+} from "@station/runtime";
 import { parse, stringify } from "smol-toml";
 
 export const WORKTRUNK_HOOK_NAMES = [
@@ -197,17 +201,24 @@ export async function doctorWorktrunkHooks(
     };
   }
 
-  const installed = plan.missing.length === 0;
+  const document = parseTomlDocument(plan.before);
+  const missing = WORKTRUNK_HOOK_NAMES.filter(
+    (hookName) =>
+      !hookContainsCommand(document, hookName, plan.commands[hookName], (actual, expected) =>
+        providerHookInvocationMatchesIgnoringBin(actual, expected, "worktrunk"),
+      ),
+  );
+  const installed = missing.length === 0;
   return {
     provider: "worktrunk",
     configPath: plan.configPath,
     status: installed ? "ok" : "warn",
     installed,
-    missing: plan.missing,
+    missing,
     commands: plan.commands,
     message: installed
       ? "Worktrunk lifecycle hooks are installed."
-      : `Worktrunk lifecycle hooks are missing: ${plan.missing.join(", ")}.`,
+      : `Worktrunk lifecycle hooks are missing: ${missing.join(", ")}.`,
   };
 }
 
@@ -320,25 +331,31 @@ function hookContainsCommand(
   document: Record<string, unknown>,
   hookName: WorktrunkHookName,
   command: string,
+  matches: (actual: string, expected: string) => boolean = (actual, expected) =>
+    actual === expected,
 ): boolean {
   const value = document[hookName];
   if (typeof value === "string") {
-    return value === command;
+    return matches(value, command);
   }
   if (Array.isArray(value)) {
-    return value.some((entry) => commandInHookValue(entry, command));
+    return value.some((entry) => commandInHookValue(entry, command, matches));
   }
-  return commandInHookValue(value, command);
+  return commandInHookValue(value, command, matches);
 }
 
-function commandInHookValue(value: unknown, command: string): boolean {
+function commandInHookValue(
+  value: unknown,
+  command: string,
+  matches: (actual: string, expected: string) => boolean,
+): boolean {
   if (typeof value === "string") {
-    return value === command;
+    return matches(value, command);
   }
   if (!isRecord(value)) {
     return false;
   }
-  return Object.values(value).some((child) => child === command);
+  return Object.values(value).some((child) => typeof child === "string" && matches(child, command));
 }
 
 function parseTomlDocument(source: string): Record<string, unknown> {
