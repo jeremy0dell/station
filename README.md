@@ -214,6 +214,17 @@ pnpm smoke:install      # isolated authenticated-installer contract
 pnpm test:all           # full gate: build + typecheck + lint + tests + installer smoke
 ```
 
+### Demo workspace
+
+To explore the full TUI without exposing normal projects, stage the isolated demo and launch its generated runner:
+
+```sh
+scripts/demo/stage.sh
+~/.station-demo/run.sh
+```
+
+It creates five projects and 17 real branch worktrees, including shallow Linux, Ghostty, Svelte, and is-even clones materialized through two directory levels. See the [demo runbook](scripts/demo/RUNBOOK.md) for prerequisites, harness assignments, capture flows, and safe reset.
+
 ---
 
 ## Status
@@ -233,6 +244,7 @@ station is under active development. The current build supports local setup, dia
 | [Observer architecture](docs/observer-architecture.md) | Canonical Observer boundaries, flows, state lifetimes, and active deviations |
 | [Architecture documentation](docs/architecture-documentation.md) | Controlled JSDoc roles for Observer architectural seams |
 | [Development](docs/development.md) | Environment, test gates, data-shape conventions |
+| [Demo runbook](scripts/demo/RUNBOOK.md) | Static showcase and isolated five-project live workspace |
 | [TUI](docs/tui.md) | OpenTUI/React Station UI coding, terminal layout, test expectations |
 | [Debugging](docs/debugging.md) | Trace IDs, command IDs, no-action debugging, evidence lookup |
 | [Diagnostics](docs/diagnostics.md) | `stn doctor`, debug bundles, log retention, hook setup |

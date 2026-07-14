@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     ...commonTestConfig,
     include: [
+      "tests/e2e/demo-stage.test.ts",
       "tests/e2e/observer-sqlite-smoke.test.ts",
       "tests/e2e/setup-core-flow.test.ts",
       "tests/e2e/setup-guided-feedback.test.ts",
