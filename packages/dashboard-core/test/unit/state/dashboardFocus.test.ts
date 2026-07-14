@@ -3,12 +3,14 @@ import type { TuiState } from "@station/dashboard-core";
 import {
   clearDashboardFocus,
   createInitialTuiState,
+  createTuiStore,
   focusDashboardSession,
   handleTuiKey,
   selectDashboardItems,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 const DOWN = { input: "", downArrow: true } as const;
 const UP = { input: "", upArrow: true } as const;
@@ -29,15 +31,15 @@ describe("dashboard focus cursor", () => {
         ? { ...row, agent: { ...row.agent, sessionId: "ses_stale_row_metadata" } }
         : row,
     );
-    const initial = {
-      ...createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 12, scrollOffset: 0 }),
-      storeAction: () => "preserved",
-    };
+    const initial = createInitialTuiState({
+      initialSnapshot: snapshot,
+      terminalRows: 12,
+      scrollOffset: 0,
+    });
     const focused = focusDashboardSession(initial, "ses_wt_api_working");
 
     expect(focused.focusedRowId).toBe("wt_api_working");
     expect(focused.scrollOffset).toBe(6);
-    expect(focused.storeAction()).toBe("preserved");
   });
 
   it.each([
@@ -85,23 +87,31 @@ describe("dashboard focus cursor", () => {
     expect(focused.scrollOffset).toBe(2);
   });
 
-  it("removes transient focus while preserving extended store actions", () => {
-    const initial = {
-      ...state({ focusedRowId: "wt_web_attention", scrollOffset: 2 }),
-      storeAction: () => "preserved",
-    };
+  it("removes transient focus without changing the viewport", () => {
+    const initial = state({ focusedRowId: "wt_web_attention", scrollOffset: 2 });
     const cleared = clearDashboardFocus(initial);
 
     expect("focusedRowId" in cleared).toBe(false);
     expect(cleared.scrollOffset).toBe(2);
-    expect(cleared.storeAction()).toBe("preserved");
   });
 
-  it("continues arrow navigation from synchronized focus", () => {
-    const focused = focusDashboardSession(state({ terminalRows: 12 }), "ses_wt_web_attention");
-    const moved = handleTuiKey(focused, DOWN).state;
+  it("preserves store actions while synchronizing and clearing focus", () => {
+    const snapshot = createDashboardSnapshot();
+    const store = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      initialState: { terminalRows: 12 },
+    });
 
-    expect(moved.focusedRowId).toBe("wt_web_exited");
+    store.getState().focusDashboardSession("ses_wt_web_attention");
+    store.getState().handleKey(DOWN);
+
+    expect(store.getState().focusedRowId).toBe("wt_web_exited");
+
+    store.getState().clearDashboardFocus();
+
+    expect("focusedRowId" in store.getState()).toBe(false);
+    expect(typeof store.getState().handleKey).toBe("function");
   });
 
   it("enters on the first visible session row and walks rows, skipping headers", () => {

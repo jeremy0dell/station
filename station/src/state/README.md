@@ -24,17 +24,19 @@ registries (`terminal/`), never here.
   `selectActivePaneTree`, `paneTreeIds`). Read-surface for both the view and
   the store; stays at the root because `terminal/PaneGrid.tsx` imports it.
 
-## reconcilers/ — source → store/registry bridges
+## reconcilers/ — state/source coordination bridges
 
-Subscribed by `createStation.ts`; each watches a source and drives effects.
+Subscribed by `createStation.ts`; each watches a source or store and drives effects
+through the state/registry boundary that owns the mutation.
 
 - **`reconcilePanes.ts`** — store workspace → `PtyRegistry`: ensure a live PTY
   for every pane record, dispose entries whose pane is gone.
 - **`sessionReaper.ts`** — observer snapshot → store: when a session leaves the
   snapshot, kill and close its on-screen panes.
-- **`overlayRowFocus.ts`** — pane/overlay store → dashboard store: on each
-  STATION open, focus the visible row for the active pane tree's canonical
-  session identity once; clear transient row focus on close or no match.
+- **`overlayRowFocus.ts`** — pane/overlay store → dashboard-store actions:
+  resolve the active pane tree's explicit primary-agent session identity on
+  each STATION open, defer only until the first snapshot, and request
+  focus/clear without owning dashboard mutation.
 
 ## layout/ — persist + restore plumbing
 

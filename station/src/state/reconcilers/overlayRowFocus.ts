@@ -1,8 +1,4 @@
-import {
-  clearDashboardFocus,
-  focusDashboardSession,
-  type TuiStore,
-} from "@station/dashboard-core";
+import type { TuiStore } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
 import { paneTreeIds } from "../paneTree.js";
 import type { StationStore } from "../store.js";
@@ -17,11 +13,8 @@ export function createOverlayRowFocusReconciler(
   let pendingSessionId: string | undefined;
   let disposed = false;
 
-  const replaceDashboardState = (state: TuiStore): void => {
-    stationViewStore.setState(state, true);
-  };
   const clearFocus = (): void => {
-    replaceDashboardState(clearDashboardFocus(stationViewStore.getState()));
+    stationViewStore.getState().clearDashboardFocus();
   };
   const synchronize = (sessionId: string): void => {
     const state = stationViewStore.getState();
@@ -31,7 +24,7 @@ export function createOverlayRowFocusReconciler(
       return;
     }
     pendingSessionId = undefined;
-    replaceDashboardState(focusDashboardSession(state, sessionId));
+    state.focusDashboardSession(sessionId);
   };
 
   const detachStationStore = store.subscribe(() => {
@@ -60,11 +53,11 @@ export function createOverlayRowFocusReconciler(
     if (pendingSessionId === undefined || state.snapshot === undefined) {
       return;
     }
-    // Clear before replacing state so the replacement notification cannot
-    // resynchronize subsequent cursor or scroll changes.
+    // Clear before the dashboard action notifies subscribers so subsequent
+    // cursor or scroll changes cannot resynchronize.
     const sessionId = pendingSessionId;
     pendingSessionId = undefined;
-    replaceDashboardState(focusDashboardSession(state, sessionId));
+    state.focusDashboardSession(sessionId);
   });
 
   return () => {

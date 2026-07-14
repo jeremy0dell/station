@@ -12,10 +12,7 @@ import type { TuiState } from "./types.js";
 type WorktreeItem = Extract<DashboardViewportItem, { type: "worktree" }>;
 
 /** Focuses the visible dashboard row for a canonical session identity. */
-export function focusDashboardSession<TState extends TuiState>(
-  state: TState,
-  sessionId: SessionId,
-): TState {
+export function focusDashboardSession(state: TuiState, sessionId: SessionId): TuiState {
   if (state.snapshot === undefined) {
     return clearDashboardFocus(state);
   }
@@ -32,7 +29,7 @@ export function focusDashboardSession<TState extends TuiState>(
 }
 
 /** Removes transient dashboard row focus without disturbing other view state. */
-export function clearDashboardFocus<TState extends TuiState>(state: TState): TState {
+export function clearDashboardFocus(state: TuiState): TuiState {
   const cleared = { ...state };
   delete cleared.focusedRowId;
   return cleared;
@@ -137,11 +134,11 @@ function enterFocusIndex(
   return entered ?? fallback ?? 0;
 }
 
-function focusItem<TState extends TuiState>(
-  state: TState,
+function focusItem(
+  state: TuiState,
   items: readonly DashboardViewportItem[],
   index: number,
-): TState {
+): TuiState {
   const item = items[index];
   if (item === undefined || item.type !== "worktree") {
     return { ...state };
