@@ -385,6 +385,15 @@ export class WorktrunkProvider implements WorktreeProvider {
           worktree.branch === selected.branch &&
           !samePath(worktree.path, selected.path),
       );
+    const removalFlags: string[] = [];
+    if (request.force === true) {
+      removalFlags.push("--force");
+    }
+    if (branchIsShared) {
+      removalFlags.push("--no-delete-branch");
+    } else if (request.force === true) {
+      removalFlags.push("--force-delete");
+    }
 
     // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
     await this.#run(
@@ -393,12 +402,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         selected.path,
         "remove",
         ...this.#automationHookArgs(),
-        ...(request.force === true ? ["--force"] : []),
-        ...(branchIsShared
-          ? ["--no-delete-branch"]
-          : request.force === true
-            ? ["--force-delete"]
-            : []),
+        ...removalFlags,
         "--foreground",
         "--format=json",
       ]),
