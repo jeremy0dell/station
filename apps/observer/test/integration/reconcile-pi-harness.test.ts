@@ -69,6 +69,7 @@ describe("observer reconcile with Pi harness", () => {
           event_type: "tool_execution_start",
           cwd: "/tmp/station/web/task",
           pi_session_id: "pi_session_123",
+          pi_session_file: "/tmp/station/pi/session.jsonl",
           tool_call_id: "toolu_1",
           tool_name: "bash",
           station_project_id: "web",
@@ -120,6 +121,7 @@ describe("observer reconcile with Pi harness", () => {
             event_type: "agent_end",
             cwd: "/tmp/station/web/task",
             pi_session_id: "pi_session_123",
+            pi_session_file: "/tmp/station/pi/session.jsonl",
             station_project_id: "web",
             station_worktree_id: "wt_web_task",
             station_session_id: "ses_web_task",
@@ -151,6 +153,7 @@ describe("observer reconcile with Pi harness", () => {
       token: "report_pi_done",
       completedAt: "2026-05-27T12:00:02.000Z",
     });
+    await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([]);
     sqlite.close();
   });
 });

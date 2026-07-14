@@ -366,16 +366,13 @@ describe("observer reconcile with Codex harness", () => {
       await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
       expect(notificationCalls).toHaveLength(0);
 
-      await reportAndReconcile(
-        api,
-        eventBus,
-        codexLifecycleReport({
-          reportId: "report_native_a_stop",
-          nativeSessionId: "native_a",
-          event: "Stop",
-          observedAt: "2026-05-21T12:00:04.000Z",
-        }),
-      );
+      const legitimateStop = codexLifecycleReport({
+        reportId: "report_native_a_stop",
+        nativeSessionId: "native_a",
+        event: "Stop",
+        observedAt: "2026-05-21T12:00:04.000Z",
+      });
+      await reportAndReconcile(api, eventBus, legitimateStop);
       await waitFor(() => reconcileProbeCalls.length === 4);
       await waitFor(() => notificationCalls.length === 1);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
@@ -386,6 +383,19 @@ describe("observer reconcile with Codex harness", () => {
         },
       });
       expect(parseNotificationReportId(notificationCalls[0]?.stdin)).toBe("report_native_a_stop");
+
+      await expect(api.reportHarnessEvent(legitimateStop)).resolves.toMatchObject({
+        accepted: true,
+        deduped: true,
+        projected: false,
+        scheduledReconcile: false,
+      });
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_native_a_stop" }),
+      ]);
+      expect(notificationCalls.map((call) => parseNotificationReportId(call.stdin))).toEqual([
+        "report_native_a_stop",
+      ]);
 
       await reportAndReconcile(
         api,
@@ -424,6 +434,7 @@ describe("observer reconcile with Codex harness", () => {
         updatedAt: "2026-05-21T12:00:06.000Z",
       });
       expect(core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
       await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
         expect.objectContaining({ nativeSessionId: "native_a", state: "working" }),
       ]);

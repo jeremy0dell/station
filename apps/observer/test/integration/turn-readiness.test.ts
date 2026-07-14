@@ -1,5 +1,5 @@
 import type { StationConfig } from "@station/config";
-import type { HarnessEventReport } from "@station/contracts";
+import type { AgentState, HarnessEventReport } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -15,6 +15,7 @@ import {
   createObserverCore,
   createObserverEventBus,
   createSqliteObserverPersistence,
+  type ObserverPersistenceBundle,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
@@ -164,22 +165,75 @@ describe("observer turn readiness", () => {
     expect(fixture.core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
     fixture.sqlite.close();
   });
+
+  it("drops a completion superseded while its readiness write is in flight", async () => {
+    const upsertStarted = deferred<void>();
+    const continueUpsert = deferred<void>();
+    const fixture = fixtureCore({
+      harnessState: "working",
+      decoratePersistence: (persistence) => ({
+        ...persistence,
+        upsertSessionTurnReadiness: async (input) => {
+          upsertStarted.resolve();
+          await continueUpsert.promise;
+          return persistence.upsertSessionTurnReadiness(input);
+        },
+      }),
+    });
+    let completion: ReturnType<typeof fixture.core.projectHarnessEventStatus> | undefined;
+
+    try {
+      await fixture.core.reconcile("turn-readiness-race-initial");
+      completion = fixture.core.projectHarnessEventStatus(
+        report({ reportId: "report_superseded_stop", turnCompleted: true }),
+      );
+      await upsertStarted.promise;
+
+      const working = await fixture.core.projectHarnessEventStatus(
+        workingReport("report_working_during_stop", "2026-06-17T12:00:02.000Z"),
+      );
+      expect(working.projected).toBe(true);
+      expect(fixture.core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "working" });
+
+      await fixture.basePersistence.upsertSessionTurnReadiness({
+        sessionId: "ses_web_ready",
+        projectId: "web",
+        worktreeId: "wt_web_ready",
+        token: "report_newer_completion",
+        completedAt: "2026-06-17T12:00:03.000Z",
+        createdAt: "2026-06-17T12:00:03.000Z",
+        updatedAt: "2026-06-17T12:00:03.000Z",
+      });
+
+      continueUpsert.resolve();
+      const superseded = await completion;
+      expect(superseded).toMatchObject({ projected: false, events: [] });
+      expect(fixture.core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "working" });
+      await expect(fixture.persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_newer_completion" }),
+      ]);
+    } finally {
+      continueUpsert.resolve();
+      await completion?.catch(() => undefined);
+      fixture.sqlite.close();
+    }
+  });
 });
 
-function workingReport(reportId: string): HarnessEventReport {
+function workingReport(reportId: string, observedAt = completedAt): HarnessEventReport {
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     reportId,
     provider: "fake-harness",
     kind: "harness",
     eventType: "PreToolUse",
-    observedAt: completedAt,
+    observedAt,
     status: {
       value: "working",
       confidence: "medium",
       reason: "Harness is using a tool.",
       source: "harness_event",
-      updatedAt: completedAt,
+      updatedAt: observedAt,
     },
     correlation: {
       harnessRunId: "run_web_ready",
@@ -187,15 +241,21 @@ function workingReport(reportId: string): HarnessEventReport {
   };
 }
 
-function fixtureCore() {
+function fixtureCore(
+  options: {
+    harnessState?: AgentState;
+    decoratePersistence?: (persistence: ObserverPersistenceBundle) => ObserverPersistenceBundle;
+  } = {},
+) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const ids = observerIds();
-  const persistence = createSqliteObserverPersistence({
+  const basePersistence = createSqliteObserverPersistence({
     sqlite,
     clock,
     idFactory: ids,
   });
+  const persistence = options.decoratePersistence?.(basePersistence) ?? basePersistence;
   const eventBus = createObserverEventBus();
   const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
   const providers = new ProviderRegistry({
@@ -235,7 +295,7 @@ function fixtureCore() {
             projectId: "web",
             worktreeId: "wt_web_ready",
             sessionId: "ses_web_ready",
-            state: "idle",
+            state: options.harnessState ?? "idle",
             now,
           }),
         ],
@@ -253,7 +313,15 @@ function fixtureCore() {
     eventBus,
     clock,
   });
-  return { core, persistence, queue, sqlite };
+  return { basePersistence, core, persistence, queue, sqlite };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
 }
 
 function observerIds() {

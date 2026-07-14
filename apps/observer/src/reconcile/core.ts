@@ -194,7 +194,13 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       // upsert await, then apply the readiness marker synchronously.
       const applied = applyTurnReadinessToSnapshot(snapshot, persisted);
       if (applied === undefined) {
-        return result;
+        // The live graph superseded this completion during the write; remove only
+        // its marker and suppress the stale idle events that would notify hooks.
+        await input.persistence.deleteSessionTurnReadiness({
+          sessionId: persisted.sessionId,
+          token: report.reportId,
+        });
+        return { projected: false, snapshot, events: [] };
       }
       snapshot = applied.snapshot;
       return {
