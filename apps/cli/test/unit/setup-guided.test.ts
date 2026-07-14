@@ -184,6 +184,61 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Completed: Install Worktrunk shell integration");
   });
 
+  it("keeps an unreadable shell rc probe inside the optional integration step", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const zshrc = join(homeDir, ".zshrc");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({ [zshrc]: "# existing zsh config\n" });
+    const baseAccess = fs.access.bind(fs);
+    fs.access = async (path) => {
+      if (path === zshrc) throw Object.assign(new Error("symlink loop"), { code: "ELOOP" });
+      await baseAccess(path);
+    };
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin", SHELL: "/bin/zsh" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: prompt({ confirms: [false, false, true, true, false] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(calls.find((call) => call.command === "wt" && call.args?.[0] === "-y")).toMatchObject({
+      args: ["-y", "config", "shell", "install", "zsh"],
+    });
+    expect(fs.files[zshrc]).toBe("# existing zsh config\n");
+    expect(chunks.join("")).toContain(
+      "Optional Worktrunk shell integration was not installed; core setup is complete.",
+    );
+    expect(chunks.join("")).toContain("Run: wt -y config shell install zsh");
+    expect(chunks.join("")).not.toContain("Failed: Install Worktrunk shell integration");
+  });
+
   it("declining config write produces no writes", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

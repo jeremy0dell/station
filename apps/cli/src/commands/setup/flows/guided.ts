@@ -293,7 +293,8 @@ async function pathExists(path: string, deps: SetupCommandDeps): Promise<boolean
     return true;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
-    throw error;
+    // Let Worktrunk surface other rc errors through the optional action-failure path.
+    return true;
   }
 }
 
