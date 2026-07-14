@@ -145,6 +145,14 @@ describe("release readiness docs", () => {
     );
     expect(release).toContain('-f ref="$COMMIT"');
     expect(release).toContain("persist-credentials: false");
+    const validateRelease = release.slice(
+      release.indexOf("      - name: Validate release tag"),
+      release.indexOf("\n  standard-ci:"),
+    );
+    expect(validateRelease).toMatch(/GH_TOKEN: \$\{\{ github\.token \}\}/);
+    expect(validateRelease).toContain("compare/$GITHUB_SHA...main");
+    expect(validateRelease).toContain("ahead|identical");
+    expect(validateRelease).not.toContain("git fetch --no-tags origin");
     expect(release).toContain("accepted-release-candidate-");
     const installDraft = release.slice(
       release.indexOf("  install-draft:"),
