@@ -30,7 +30,7 @@ scripts/demo/stage.sh
 ~/.station-demo/run.sh
 ```
 
-Staging performs network clones. Linux is still a sizable checkout even though it is shallow and sparse, because the demo intentionally materializes code through three directory levels.
+Staging performs network clones. Linux is still a sizable checkout even though it is shallow and sparse, because the demo intentionally materializes code through three directory levels. The clones download all blobs for their single shallow commit so expanding Linux does not depend on a very large promisor fetch; expect the complete demo to use several gigabytes of disk.
 
 The generated `run.sh` forces the full Station workspace even when invoked from tmux. It exports isolated Station and provider paths before launching the TUI.
 

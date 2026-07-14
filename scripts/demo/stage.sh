@@ -91,12 +91,11 @@ printf 'station-demo-v1\n' >"$DEMO_ROOT/.station-demo-root"
 
 clone_showcase_repo() {
   local name="$1" url="$2" branch="$3" dir="$REPOS/$1"
-  git clone --quiet --depth 1 --filter=blob:none --sparse --branch "$branch" "$url" "$dir"
+  git clone --quiet --depth 1 --sparse --branch "$branch" "$url" "$dir"
   # This non-cone boundary keeps a/b/c/file while pruning a/b/c/d/file.
   git -C "$dir" sparse-checkout set --no-cone '/*' '!/*/*/*/*/'
   git -C "$dir" config user.email "demo@station.local"
   git -C "$dir" config user.name "Station Demo"
-  # Keep the partial clone's promisor fetchable if a demo later expands the sparse boundary.
   git -C "$dir" remote set-url origin "$url"
   echo "  $dir (shallow clone through three directory levels, branch $branch)"
 }

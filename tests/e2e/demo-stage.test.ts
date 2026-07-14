@@ -189,6 +189,13 @@ describe("demo staging e2e", () => {
         }).stdout.trim(),
       ).toBe("true");
       expect(
+        run("git", ["config", "--local", "--get", "remote.origin.promisor"], {
+          cwd: join(demoRoot, "repos", "linux"),
+          env,
+          allowFailure: true,
+        }).status,
+      ).not.toBe(0);
+      expect(
         run("git", ["config", "--local", "--get", "remote.origin.url"], {
           cwd: join(demoRoot, "repos", "linux"),
           env,
