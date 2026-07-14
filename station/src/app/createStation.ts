@@ -16,6 +16,7 @@ import {
   writeLayoutSnapshotSync,
   type LayoutWriter,
 } from "../state/layout/layoutPersistence.js";
+import { createOverlayRowFocusReconciler } from "../state/reconcilers/overlayRowFocus.js";
 import { createPaneReconciler } from "../state/reconcilers/reconcilePanes.js";
 import { createSessionReaper } from "../state/reconcilers/sessionReaper.js";
 import { selectPaneRecord } from "../state/selectors.js";
@@ -211,6 +212,7 @@ function createLifecycle(deps: {
     tuiConfigPath,
   } = deps;
   let detachStationSource: (() => void) | undefined;
+  let detachOverlayRowFocus: (() => void) | undefined;
   let detachReconcile: (() => void) | undefined;
   let detachSessionReconcile: (() => void) | undefined;
   let detachLayoutWriter: (() => void) | undefined;
@@ -222,6 +224,8 @@ function createLifecycle(deps: {
       return;
     }
     disposed = true;
+    detachOverlayRowFocus?.();
+    detachOverlayRowFocus = undefined;
     detachStationSource?.();
     detachStationSource = undefined;
     detachReconcile?.();
@@ -272,6 +276,9 @@ function createLifecycle(deps: {
         detachWidgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
       }
       detachStationSource = stationViewStore.getState().start();
+      // The overlay bridge may synchronize immediately, so its dashboard source
+      // subscription must already be active before the bridge starts.
+      detachOverlayRowFocus = createOverlayRowFocusReconciler(store, stationViewStore);
       stationClient.start();
     },
     disposeForShutdown: (): void => disposeInternal(true),

@@ -1,4 +1,4 @@
-import type { WorktreeRow } from "@station/contracts";
+import type { SessionId, WorktreeRow } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import {
   type DashboardViewportItem,
@@ -10,6 +10,33 @@ import type { TuiTransition } from "./transition.js";
 import type { TuiState } from "./types.js";
 
 type WorktreeItem = Extract<DashboardViewportItem, { type: "worktree" }>;
+
+/** Focuses the visible dashboard row for a canonical session identity. */
+export function focusDashboardSession<TState extends TuiState>(
+  state: TState,
+  sessionId: SessionId,
+): TState {
+  if (state.snapshot === undefined) {
+    return clearDashboardFocus(state);
+  }
+  // Match only canonical session identity; worktree and row ids are not session ids.
+  const session = state.snapshot.sessions.find((candidate) => candidate.id === sessionId);
+  if (session === undefined) {
+    return clearDashboardFocus(state);
+  }
+  const items = selectDashboardItems(state.snapshot, state);
+  const index = items.findIndex(
+    (item) => item.type === "worktree" && item.row.id === session.worktreeId,
+  );
+  return index === -1 ? clearDashboardFocus(state) : focusItem(state, items, index);
+}
+
+/** Removes transient dashboard row focus without disturbing other view state. */
+export function clearDashboardFocus<TState extends TuiState>(state: TState): TState {
+  const cleared = { ...state };
+  delete cleared.focusedRowId;
+  return cleared;
+}
 
 // Cursor rule (D9): the cursor is where you are — ↑↓/⇥ move it and the viewport
 // follows; jump keys and mouse clicks still teleport-and-activate directly.
@@ -110,11 +137,11 @@ function enterFocusIndex(
   return entered ?? fallback ?? 0;
 }
 
-function focusItem(
-  state: TuiState,
+function focusItem<TState extends TuiState>(
+  state: TState,
   items: readonly DashboardViewportItem[],
   index: number,
-): TuiState {
+): TState {
   const item = items[index];
   if (item === undefined || item.type !== "worktree") {
     return { ...state };

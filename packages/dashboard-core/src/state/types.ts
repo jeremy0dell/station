@@ -29,7 +29,7 @@ export type TuiViewState = {
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
-  /** Persistent list cursor; a stale id (row gone) is harmless and simply unfocused. */
+  /** List cursor; native overlays synchronize it once per open and clear it on close. */
   focusedRowId?: WorktreeId;
   /** Per-list cursor for screens migrated onto the shared selection engine. */
   selection: TuiSelectionState;

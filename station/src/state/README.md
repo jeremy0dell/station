@@ -32,6 +32,9 @@ Subscribed by `createStation.ts`; each watches a source and drives effects.
   for every pane record, dispose entries whose pane is gone.
 - **`sessionReaper.ts`** — observer snapshot → store: when a session leaves the
   snapshot, kill and close its on-screen panes.
+- **`overlayRowFocus.ts`** — pane/overlay store → dashboard store: on each
+  STATION open, focus the visible row for the active pane tree's canonical
+  session identity once; clear transient row focus on close or no match.
 
 ## layout/ — persist + restore plumbing
 
