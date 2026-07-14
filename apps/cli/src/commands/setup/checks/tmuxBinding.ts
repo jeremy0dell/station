@@ -83,7 +83,7 @@ export function tmuxPopupBindingLine(launcherCommand = "stn-tmux-popup"): string
 }
 
 export function tmuxPopupRunShellCommand(launcherCommand = "stn-tmux-popup"): string {
-  return `env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} ${quoteShellValue(launcherCommand)}`;
+  return `env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} ${quoteShellValue(escapeTmuxFormat(launcherCommand))}`;
 }
 
 function missingTmuxBinding(input: {
@@ -131,26 +131,32 @@ async function checkLiveTmuxBinding(input: {
     if (!hasLiveTmuxBinding(listed.stdout, input.runShellCommand)) {
       return "missing";
     }
-    const executable = await runExternalCommand(
+    const startup = await runExternalCommand(
       {
         command: input.tmuxCommand ?? "tmux",
-        args: ["run-shell", `test -x ${quoteShellValue(input.launcherCommand)}`],
-        allowedExitCodes: [0, 1],
+        args: [
+          "run-shell",
+          `env STATION_SETUP_LAUNCHER_PROBE=1 ${quoteShellValue(escapeTmuxFormat(input.launcherCommand))} --help >/dev/null 2>&1`,
+        ],
+        allowedExitCodes: [0, 1, 126, 127],
         timeoutMs: setupProbeTimeoutMs,
         maxOutputChars: 4096,
         ...(input.env === undefined ? {} : { env: envForExternalCommand(input.env) }),
       },
       input.runner,
     );
-    return executable.exitCode === 0 ? "loaded" : "missing";
+    return startup.exitCode === 0 ? "loaded" : "missing";
   } catch {
     return "unknown";
   }
 }
 
 function hasLiveTmuxBinding(source: string, runShellCommand: string): boolean {
-  // tmux serializes a run-shell argument inside double quotes and doubles its backslashes.
-  const serialized = runShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  // tmux serializes a run-shell argument inside double quotes and escapes shell expansion.
+  const serialized = runShellCommand
+    .replaceAll("\\", "\\\\")
+    .replaceAll("$", "\\$")
+    .replaceAll('"', '\\"');
   return source
     .split(/\r?\n/)
     .some(
@@ -158,6 +164,10 @@ function hasLiveTmuxBinding(source: string, runShellCommand: string): boolean {
         /(?:^|\s)-T\s+prefix\s+Space\s+run-shell\s+-b\s+/.test(line) &&
         line.endsWith(`"${serialized}"`),
     );
+}
+
+function escapeTmuxFormat(value: string): string {
+  return value.replaceAll("#", "##");
 }
 
 function quoteShellValue(value: string): string {

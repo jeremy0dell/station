@@ -1,5 +1,5 @@
 import { constants as fsConstants } from "node:fs";
-import { access as nodeAccess } from "node:fs/promises";
+import { access as nodeAccess, stat as nodeStat } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CliEnv } from "../../../env.js";
@@ -115,5 +115,8 @@ async function resolveOnPath(
 }
 
 async function executableAccess(path: string): Promise<void> {
+  if (!(await nodeStat(path)).isFile()) {
+    throw new Error(`${path} is not a regular file.`);
+  }
   await nodeAccess(path, fsConstants.X_OK);
 }

@@ -1,4 +1,5 @@
 import { applySetupPlan } from "../apply.js";
+import { checkSetupTmuxBinding } from "../checks/tmuxBinding.js";
 import { planSetupConfigWrite } from "../configWriter.js";
 import {
   activateCompletedConfigWrite,
@@ -177,9 +178,10 @@ async function runGuidedSetupWithPrompt(
   }
 
   const tmuxPopupBindingActions = plan.actions.filter(isTmuxPopupBindingAction);
+  const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
   let tmuxPopupFeedback =
     facts.tmuxBinding.status === "ok"
-      ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded")
+      ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded", popupCommand)
       : undefined;
   if (tmuxPopupBindingActions.length > 0) {
     const accepted = await prompt.confirm("Install or load tmux popup binding?");
@@ -196,16 +198,30 @@ async function runGuidedSetupWithPrompt(
           .filter((action) => action.status === "completed")
           .map((action) => action.id),
       );
+      let liveLoaded = facts.tmuxBinding.liveStatus === "loaded";
+      if (completed.has("tmux-live-popup-binding")) {
+        const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
+          homeDir: facts.homeDir,
+          launcherCommand: facts.tmuxBinding.launcherCommand,
+          tmuxCommand: facts.tmux.command,
+        };
+        const env = deps.env ?? options.env;
+        if (env !== undefined) recheckOptions.env = env;
+        if (deps.fs !== undefined) recheckOptions.fs = deps.fs;
+        if (deps.runner !== undefined) recheckOptions.runner = deps.runner;
+        liveLoaded = (await checkSetupTmuxBinding(recheckOptions)).liveStatus === "loaded";
+      }
       tmuxPopupFeedback = renderTmuxPopupFeedback(
         facts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
-        facts.tmuxBinding.liveStatus === "loaded" || completed.has("tmux-live-popup-binding"),
+        liveLoaded,
+        popupCommand,
         bindingResult.failedAction !== undefined,
       );
     } else {
       tmuxPopupFeedback =
         facts.tmuxBinding.status === "ok"
-          ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded")
-          : "Tmux popup binding was not changed. Direct fallback: stn popup\n";
+          ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded", popupCommand)
+          : `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;
     }
   }
 
@@ -226,6 +242,7 @@ async function runGuidedSetupWithPrompt(
 function renderTmuxPopupFeedback(
   persisted: boolean,
   liveLoaded: boolean,
+  popupCommand: string,
   repairIncomplete = false,
 ): string {
   const lines = persisted
@@ -240,7 +257,7 @@ function renderTmuxPopupFeedback(
   if (repairIncomplete) {
     lines.push("Tmux popup binding repair was incomplete; run stn setup to retry.");
   }
-  lines.push("Direct fallback: stn popup");
+  lines.push(`Direct fallback: ${popupCommand}`);
   return `${lines.join("\n")}\n`;
 }
 

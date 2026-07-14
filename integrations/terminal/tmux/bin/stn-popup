@@ -19,6 +19,12 @@ done
 # pnpm's global shim enters through a symlinked package directory, so resolve the checkout itself.
 root=$(CDPATH= cd -- "$(dirname -- "$script")/../../../.." 2>/dev/null && pwd -P || true)
 
+if [ "${STATION_SETUP_LAUNCHER_PROBE:-}" = 1 ] && [ "$#" -eq 1 ] && [ "$1" = "--help" ]; then
+  entry=$root/apps/cli/dist/main.js
+  [ -f "$entry" ] || exit 1
+  exec node "$entry" popup --help
+fi
+
 clear_popup_client_if_current() {
   tmux_bin=$1
   client_id=$2

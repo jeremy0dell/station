@@ -112,6 +112,24 @@ describe("tmux popup launcher", () => {
     await expect(readLog(fixture.logPath)).resolves.toEqual([]);
   });
 
+  it("routes --help through the checkout Node entrypoint without opening tmux", async () => {
+    const binDir = await mkdtemp(join(tmpdir(), "stn-tmux-popup-help-"));
+    const nodePath = join(binDir, "node");
+    await writeFile(nodePath, "#!/bin/sh\nprintf '%s\\n' \"$*\"\n");
+    await chmod(nodePath, 0o700);
+
+    const result = await runLauncher(["--help"], {
+      PATH: `${binDir}:/usr/bin:/bin`,
+      STATION_SETUP_LAUNCHER_PROBE: "1",
+    });
+
+    expect(result).toMatchObject({
+      code: 0,
+      stdout: expect.stringMatching(/apps\/cli\/dist\/main\.js popup --help\n$/),
+      stderr: "",
+    });
+  });
+
   it("closes the current client popup when toggled from the same client", async () => {
     const fixture = await createFakeTmux();
 

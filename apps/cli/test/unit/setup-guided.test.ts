@@ -4,6 +4,10 @@ import { basename, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it } from "vitest";
 import { setupPackageRoot } from "../../src/commands/setup/checks/launchers.js";
+import {
+  tmuxPopupBindingBlock,
+  tmuxPopupRunShellCommand,
+} from "../../src/commands/setup/checks/tmuxBinding.js";
 import { runSetupCommand, type SetupPromptAdapter } from "../../src/commands/setup/index.js";
 
 describe("guided setup command", () => {
@@ -67,7 +71,7 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Core setup complete.");
   });
 
-  it("continues with all three checkout launchers when global installation fails", async () => {
+  it("continues with checkout launchers and prints a usable popup fallback when linking fails", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -107,7 +111,8 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Link STATION launchers") ||
-              message.includes("Write STATION project config")
+              message.includes("Write STATION project config") ||
+              message.includes("Install or load tmux popup binding")
             );
           },
           async select() {
@@ -126,6 +131,7 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain(
       "STATION launcher link failed. Continuing with checkout launcher paths.",
     );
+    expect(chunks.join("")).toContain(`Direct fallback: ${join(packageRoot, "bin/stn")} popup`);
     expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("[[projects]]");
   });
 
@@ -409,6 +415,79 @@ describe("guided setup command", () => {
       "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers",
     );
     expect(chunks.join("")).toContain("Direct fallback: stn popup");
+  });
+
+  it("does not report a rebound tmux launcher as loaded when startup still fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const launcherCommand = "/fake/bin/stn-tmux-popup";
+    const runShellCommand = tmuxPopupRunShellCommand(launcherCommand);
+    const serialized = runShellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({
+      [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
+    });
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin", TMUX: "/tmp/tmux.sock,1,0" },
+        runner: async (input) => {
+          calls.push(input);
+          const command = basename(input.command);
+          const key = `${command} ${(input.args ?? []).join(" ")}`;
+          if (key === "tmux list-keys -T prefix") {
+            return commandResult(input, `bind-key -T prefix Space run-shell -b "${serialized}"\n`);
+          }
+          if (command === "tmux" && input.args?.[0] === "run-shell") {
+            return { ...commandResult(input, ""), exitCode: 127 };
+          }
+          const outputs: Record<string, string> = {
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "wt --version": "worktrunk 1.2.3\n",
+            "tmux -V": "tmux 3.5a\n",
+            "codex --version": "codex 0.1.0\n",
+          };
+          const stdout = outputs[key] ?? defaultProbeOutput(key);
+          if (stdout !== undefined) return commandResult(input, stdout);
+          if (command === "tmux" && input.args?.[0] === "bind-key") {
+            return commandResult(input, "");
+          }
+          throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+        },
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          launcherCommand,
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: prompt({ confirms: [false, false, true, false, true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(0);
+    expect(output).toContain(
+      "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers; no current server was live-loaded.",
+    );
+    expect(output).not.toContain("persisted and loaded in the current tmux server");
+    expect(
+      calls.filter((call) => basename(call.command) === "tmux" && call.args?.[0] === "run-shell"),
+    ).toHaveLength(2);
   });
 
   it("installs accepted Worktrunk and agent hooks with resolved ingress launcher", async () => {
