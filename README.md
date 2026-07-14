@@ -223,7 +223,7 @@ scripts/demo/stage.sh
 ~/.station-demo/run.sh
 ```
 
-It creates five projects and 17 real branch worktrees, including shallow Linux, Ghostty, Svelte, and is-even clones materialized through two directory levels. See the [demo runbook](scripts/demo/RUNBOOK.md) for prerequisites, harness assignments, capture flows, and safe reset.
+It creates five projects and 17 real branch worktrees, including shallow Linux, Ghostty, Svelte, and is-even clones materialized through three directory levels. See the [demo runbook](scripts/demo/RUNBOOK.md) for prerequisites, harness assignments, capture flows, and safe reset.
 
 ---
 

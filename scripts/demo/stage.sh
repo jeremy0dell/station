@@ -92,13 +92,13 @@ printf 'station-demo-v1\n' >"$DEMO_ROOT/.station-demo-root"
 clone_showcase_repo() {
   local name="$1" url="$2" branch="$3" dir="$REPOS/$1"
   git clone --quiet --depth 1 --filter=blob:none --sparse --branch "$branch" "$url" "$dir"
-  # This non-cone boundary keeps a/b/file while pruning a/b/c/file.
-  git -C "$dir" sparse-checkout set --no-cone '/*' '!/*/*/*/'
+  # This non-cone boundary keeps a/b/c/file while pruning a/b/c/d/file.
+  git -C "$dir" sparse-checkout set --no-cone '/*' '!/*/*/*/*/'
   git -C "$dir" config user.email "demo@station.local"
   git -C "$dir" config user.name "Station Demo"
   # Keep the partial clone's promisor fetchable if a demo later expands the sparse boundary.
   git -C "$dir" remote set-url origin "$url"
-  echo "  $dir (shallow clone through two directory levels, branch $branch)"
+  echo "  $dir (shallow clone through three directory levels, branch $branch)"
 }
 
 add_worktree_from_repo() {
@@ -426,7 +426,7 @@ Launch the full isolated workspace:
 
 What is staged:
   • 5 projects and 17 branch worktrees
-  • linux, ghostty, svelte, and is-even are shallow clones materialized through two directory levels
+  • linux, ghostty, svelte, and is-even are shallow clones materialized through three directory levels
   • project defaults: linux=claude, ghostty=codex, svelte=opencode, is-even=pi, t3-code=cursor
   • rows remain agent-free until you open one; New Session can explicitly choose any configured harness
   • $REPOS/web is intentionally unconfigured for the Add Project flow

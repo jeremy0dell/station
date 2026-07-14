@@ -30,7 +30,7 @@ scripts/demo/stage.sh
 ~/.station-demo/run.sh
 ```
 
-Staging performs network clones. Linux is still a sizable checkout even though it is shallow and sparse, because the demo intentionally materializes code through two directory levels.
+Staging performs network clones. Linux is still a sizable checkout even though it is shallow and sparse, because the demo intentionally materializes code through three directory levels.
 
 The generated `run.sh` forces the full Station workspace even when invoked from tmux. It exports isolated Station and provider paths before launching the TUI.
 
@@ -50,14 +50,14 @@ The public clones retain their real `origin` URLs, while GitHub metadata polling
 
 ### Sparse depth
 
-The four public clones include root files and files nested one or two directories below the repository root. Directories below that boundary remain excluded. Linked worktrees inherit the same sparse definition.
+The four public clones include root files and files nested one, two, or three directories below the repository root. Directories below that boundary remain excluded. Linked worktrees inherit the same sparse definition.
 
 For example:
 
 ```sh
 cd ~/.station-demo/repos/linux
 git sparse-checkout list
-find . -maxdepth 3 -type f | head -80
+find . -maxdepth 4 -type f | head -80
 ```
 
 Inside Station, open a Linux row with `[+sh]` and run the same `find` command to show that the workspace contains meaningful source structure rather than only root-level files.
@@ -110,7 +110,7 @@ Use a fixed terminal size such as 120x34, a clean high-contrast theme, and a Ner
 | Live fleet | Stage the workspace, launch `~/.station-demo/run.sh`, and show all five projects and 17 rows. |
 | Default launch | Open one blank row from each project to show its project harness assignment. |
 | Explicit launch | Press `N`, choose the T3 project and a non-Cursor harness, then create the session. |
-| Browse code | Open a Linux shell and run `find . -maxdepth 3 -type f \| head -80`. |
+| Browse code | Open a Linux shell and run `find . -maxdepth 4 -type f \| head -80`. |
 | Add project | Press `A` and select `~/.station-demo/repos/web`. |
 | Run checks | Open the added `web` project, split with `Ctrl-\`, then run `./check.sh`. |
 | See diff | Focus `web`, then use **See diff (split right)** to render its planted change. |

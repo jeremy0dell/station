@@ -155,7 +155,12 @@ describe("demo staging e2e", () => {
 
       run(join(repoRoot, "scripts/demo/stage.sh"), [], { cwd: repoRoot, env });
 
-      for (const relativePath of ["root.txt", "one/one.txt", "one/two/two.txt"]) {
+      for (const relativePath of [
+        "root.txt",
+        "one/one.txt",
+        "one/two/two.txt",
+        "one/two/three/three.txt",
+      ]) {
         await expect(
           access(join(demoRoot, "repos", "linux", relativePath)),
         ).resolves.toBeUndefined();
@@ -164,11 +169,17 @@ describe("demo staging e2e", () => {
         ).resolves.toBeUndefined();
       }
       await expect(
-        access(join(demoRoot, "repos", "linux", "one/two/three/three.txt")),
+        access(join(demoRoot, "repos", "linux", "one/two/three/four/four.txt")),
       ).rejects.toThrow();
       await expect(
         access(
-          join(demoRoot, "worktrees", "linux", "sched-eevdf-latency", "one/two/three/three.txt"),
+          join(
+            demoRoot,
+            "worktrees",
+            "linux",
+            "sched-eevdf-latency",
+            "one/two/three/four/four.txt",
+          ),
         ),
       ).rejects.toThrow();
       expect(
@@ -379,7 +390,7 @@ async function waitForFile(path: string): Promise<void> {
 
 async function createShowcaseRemote(path: string, branch: string): Promise<void> {
   await Promise.all([
-    mkdir(join(path, "one", "two", "three"), { recursive: true }),
+    mkdir(join(path, "one", "two", "three", "four"), { recursive: true }),
     mkdir(join(path, "other"), { recursive: true }),
   ]);
   await Promise.all([
@@ -389,6 +400,7 @@ async function createShowcaseRemote(path: string, branch: string): Promise<void>
     writeFile(join(path, "one", "one.txt"), "one\n", "utf8"),
     writeFile(join(path, "one", "two", "two.txt"), "two\n", "utf8"),
     writeFile(join(path, "one", "two", "three", "three.txt"), "three\n", "utf8"),
+    writeFile(join(path, "one", "two", "three", "four", "four.txt"), "four\n", "utf8"),
     writeFile(join(path, "other", "other.txt"), "other\n", "utf8"),
   ]);
   run("git", ["init", "-q", "-b", branch], { cwd: path });
