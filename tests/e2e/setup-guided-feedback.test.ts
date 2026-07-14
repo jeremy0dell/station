@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -78,6 +78,66 @@ describe("setup guided feedback e2e", () => {
       await fixture.cleanup();
     }
   });
+
+  it("runs the persisted absolute popup launcher in a fresh minimal-PATH tmux context", async () => {
+    const fixture = await createFixture({ harness: "codex", launchers: "complex" });
+    try {
+      const result = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        // Decline Worktrunk and Codex hooks, write config, decline shell integration,
+        // then accept the popup binding.
+        answers: ["n", "n", "y", "n", "y"],
+      });
+
+      expect(result.timedOut).toBe(false);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers; no current server was live-loaded.",
+      );
+      expect(result.stdout).toContain("Direct fallback: stn popup");
+
+      const tmuxConfigPath = join(fixture.home, ".tmux.conf");
+      const tmuxConfig = await readFile(tmuxConfigPath, "utf8");
+      expect(tmuxConfig).toContain("bind-key Space run-shell -b");
+      expect(tmuxConfig).not.toContain("STATION_FOCUS_CLIENT_ID=#{q:client_name} stn-tmux-popup");
+
+      const freshTmux = spawnSync(
+        "/bin/sh",
+        [
+          "-c",
+          [
+            "set -eu",
+            "bind_key() {",
+            '  [ "$#" -eq 4 ]',
+            '  [ "$1 $2 $3" = "Space run-shell -b" ]',
+            '  PATH=/usr/bin:/bin /bin/sh -c "$4"',
+            "}",
+            "alias bind-key=bind_key",
+            '. "$1"',
+          ].join("\n"),
+          "fresh-tmux",
+          tmuxConfigPath,
+        ],
+        {
+          cwd: fixture.repo,
+          encoding: "utf8",
+          env: {
+            HOME: fixture.home,
+            PATH: "/usr/bin:/bin",
+            STATION_POPUP_TEST_MARKER: fixture.popupMarker,
+          },
+        },
+      );
+
+      expect(freshTmux.status, freshTmux.stderr).toBe(0);
+      expect(await readFile(fixture.popupMarker, "utf8")).toBe(
+        "/usr/bin:/bin\ntmux\n#{q:client_name}\n",
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });
 
 type HarnessMode = "codex" | "installable-codex" | "missing";
@@ -88,20 +148,27 @@ type Fixture = {
   repo: string;
   bin: string;
   configPath: string;
+  popupMarker: string;
   env: NodeJS.ProcessEnv;
   cleanup(): Promise<void>;
 };
 
-async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> {
+async function createFixture(input: {
+  harness: HarnessMode;
+  launchers?: "complex";
+}): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), "station-setup-guided-feedback-"));
   const runtimeDir = await mkdtemp(join(tmpdir(), "stn-setup-run-"));
   const home = join(root, "home");
   const repo = join(root, "repo");
   const bin = join(root, "bin");
+  const launcherBin = input.launchers === "complex" ? join(root, "installed path's bin") : bin;
+  const popupMarker = join(root, "popup-ran.txt");
   const configPath = join(home, ".config", "station", "config.toml");
   await mkdir(home, { recursive: true });
   await mkdir(repo, { recursive: true });
   await mkdir(bin, { recursive: true });
+  await mkdir(launcherBin, { recursive: true });
   await writeShim(
     bin,
     "git",
@@ -147,6 +214,21 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
   if (input.harness === "codex") {
     await writeCodexShim(bin);
   }
+  if (input.launchers === "complex") {
+    await writeShim(launcherBin, "stn", "exit 0\n");
+    await writeShim(launcherBin, "stn-ingress", "exit 0\n");
+    await writeShim(
+      launcherBin,
+      "stn-tmux-popup",
+      [
+        'test -n "$STATION_POPUP_TEST_MARKER"',
+        'printf "%s\\n" "$PATH" > "$STATION_POPUP_TEST_MARKER"',
+        'printf "%s\\n" "$STATION_FOCUS_PROVIDER" >> "$STATION_POPUP_TEST_MARKER"',
+        'printf "%s\\n" "$STATION_FOCUS_CLIENT_ID" >> "$STATION_POPUP_TEST_MARKER"',
+        "",
+      ].join("\n"),
+    );
+  }
   if (input.harness === "installable-codex") {
     await writeShim(bin, "stn", "exit 0\n");
     await writeShim(bin, "stn-ingress", "exit 0\n");
@@ -175,7 +257,7 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
   const env: NodeJS.ProcessEnv = {
     HOME: home,
     XDG_RUNTIME_DIR: runtimeDir,
-    PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+    PATH: `${launcherBin}:${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
     NO_COLOR: "1",
     STATION_WORKTRUNK_BIN: "wt",
     STATION_TMUX_BIN: "tmux",
@@ -194,6 +276,7 @@ async function createFixture(input: { harness: HarnessMode }): Promise<Fixture> 
     repo,
     bin,
     configPath,
+    popupMarker,
     env,
     async cleanup() {
       try {

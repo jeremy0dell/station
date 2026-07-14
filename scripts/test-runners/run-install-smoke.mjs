@@ -82,6 +82,7 @@ try {
     prepareFixtures();
     await scenarioPlatformInstalls();
     await scenarioDefaultHomeAndPathResolution();
+    await scenarioFutureShellPathPersistence();
     await scenarioExplicitRollbackAndDraft();
     await scenarioStrictGhFlows();
     await scenarioAuthenticatedReleaseValidation();
@@ -216,7 +217,7 @@ function scenarioDefaultHomeAndPathResolution() {
     target: "linux-x64",
   });
   assertPathRecovery(defaultInstall, defaultInstallDir, ["stn", "stn-ingress", "stn-tmux-popup"]);
-  for (const profile of [".profile", ".bashrc", ".zshrc"]) {
+  for (const profile of [".profile", ".bashrc", ".zprofile", ".zshrc"]) {
     assert(!existsSync(join(cleanHome, profile)), `installer leaves ${profile} absent`);
   }
 
@@ -264,14 +265,196 @@ function scenarioDefaultHomeAndPathResolution() {
   );
 
   const correctInstallDir = join(root, "correct-path-bin");
+  const correctPathHome = join(root, "correct-path-home");
+  makeDirectory(correctPathHome);
   const correctPath = runInstaller({
     installDir: correctInstallDir,
     platform: linuxX64(),
+    home: correctPathHome,
     pathEntries: [correctInstallDir, fakeBinDir, "/usr/bin", "/bin"],
+    environment: { SHELL: "/bin/zsh" },
   });
   assertSuccess(correctPath, "all launchers on correct PATH");
   assertIncludes(correctPath.stdout, "Next: run stn setup", "correct PATH next step");
   assertNotIncludes(correctPath.stdout, "hash -r", "correct PATH omits recovery block");
+  assertIncludes(
+    correctPath.stdout,
+    "Future-shell PATH was not changed",
+    "temporary correct PATH still receives future-shell guidance",
+  );
+  assert(!existsSync(join(correctPathHome, ".zprofile")), "correct PATH leaves profile absent");
+}
+
+function scenarioFutureShellPathPersistence() {
+  const installDir = join(root, "Station's custom bin");
+  const shadowDir = join(root, "future-shell-shadow-bin");
+  const currentPath = [shadowDir, fakeBinDir, "/usr/bin", "/bin"];
+  const homebrewProfile = [
+    "# Homebrew shell environment",
+    'export HOMEBREW_PREFIX="/opt/homebrew"',
+    "",
+  ].join("\n");
+  const expectedEntry = `export PATH=${shellWord(installDir)}\${PATH:+":$PATH"}`;
+  makeDirectory(shadowDir);
+  for (const launcher of ["stn", "stn-ingress", "stn-tmux-popup"]) {
+    writeExecutable(join(shadowDir, launcher), "#!/bin/sh\nexit 99\n");
+  }
+
+  const consentHome = join(root, "future-shell-consent-home");
+  const consentProfile = join(consentHome, ".zprofile");
+  makeDirectory(consentHome);
+  writeText(consentProfile, homebrewProfile, 0o640);
+  const profileBefore = statSync(consentProfile);
+  const consent = runInstaller({
+    installDir,
+    platform: linuxX64(),
+    home: consentHome,
+    pathEntries: currentPath,
+    extraArguments: ["--persist-path"],
+    environment: { SHELL: "/bin/zsh" },
+  });
+  assertSuccess(consent, "explicit future-shell PATH persistence");
+  assertIncludes(
+    consent.stdout,
+    "Added Station to future zsh login shells",
+    "explicit persistence confirmation",
+  );
+  const persistedProfile = readFileSync(consentProfile, "utf8");
+  assert(persistedProfile.startsWith(homebrewProfile), "persistence preserves Homebrew setup");
+  assertEqual(
+    countExactLines(persistedProfile, expectedEntry),
+    1,
+    "explicit persistence adds one exact PATH entry",
+  );
+  const profileAfter = statSync(consentProfile);
+  assertEqual(profileAfter.ino, profileBefore.ino, "persistence appends to the existing profile");
+  assertEqual(
+    profileAfter.mode & 0o777,
+    profileBefore.mode & 0o777,
+    "persistence preserves profile mode",
+  );
+  assertFutureShellLauncherResolution({
+    home: consentHome,
+    installDir,
+    profile: consentProfile,
+    shadowDir,
+  });
+
+  const idempotent = runInstaller({
+    installDir,
+    platform: linuxX64(),
+    home: consentHome,
+    pathEntries: currentPath,
+    extraArguments: ["--persist-path"],
+    environment: { SHELL: "/bin/zsh" },
+  });
+  assertSuccess(idempotent, "idempotent future-shell PATH persistence");
+  assertIncludes(
+    idempotent.stdout,
+    "Future-shell PATH is already configured",
+    "idempotent persistence confirmation",
+  );
+  assertEqual(
+    readFileSync(consentProfile, "utf8"),
+    persistedProfile,
+    "repeated persistence leaves profile byte-identical",
+  );
+
+  const noConsentHome = join(root, "future-shell-no-consent-home");
+  const noConsentProfile = join(noConsentHome, ".zprofile");
+  makeDirectory(noConsentHome);
+  writeText(noConsentProfile, homebrewProfile, 0o600);
+  const noConsent = runInstaller({
+    installDir,
+    platform: linuxX64(),
+    home: noConsentHome,
+    pathEntries: currentPath,
+    environment: { SHELL: "/bin/zsh" },
+  });
+  assertSuccess(noConsent, "future-shell PATH without consent");
+  assertEqual(
+    readFileSync(noConsentProfile, "utf8"),
+    homebrewProfile,
+    "no-flag install leaves profile unchanged",
+  );
+  const persistenceCommand = extractPathPersistenceCommand(noConsent.stdout);
+  const commandResult = spawnSync(
+    "/bin/sh",
+    ["-c", persistenceCommand],
+    syncOptions({ env: { HOME: noConsentHome, PATH: "/usr/bin:/bin" } }),
+  );
+  assertSuccess(commandResult, "printed future-shell PATH command");
+  assertEqual(
+    countExactLines(readFileSync(noConsentProfile, "utf8"), expectedEntry),
+    1,
+    "printed command adds one exact PATH entry",
+  );
+  assertFutureShellLauncherResolution({
+    home: noConsentHome,
+    installDir,
+    profile: noConsentProfile,
+    shadowDir,
+  });
+
+  const missingProfileHome = join(root, "future-shell-missing-profile-home");
+  const missingProfile = join(missingProfileHome, ".zprofile");
+  const missingProfileInstall = join(root, "future-shell-missing-profile-bin");
+  makeDirectory(missingProfileHome);
+  const created = runInstaller({
+    installDir: missingProfileInstall,
+    platform: linuxX64(),
+    home: missingProfileHome,
+    extraArguments: ["--persist-path"],
+    environment: { SHELL: "/bin/zsh" },
+  });
+  assertSuccess(created, "future-shell PATH creates a missing zprofile");
+  assertEqual(
+    readFileSync(missingProfile, "utf8"),
+    `export PATH=${shellWord(missingProfileInstall)}\${PATH:+":$PATH"}\n`,
+    "new zprofile contains only the exact PATH entry",
+  );
+  assertMode(missingProfile, 0o600, "new zprofile mode");
+}
+
+function shellWord(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function countExactLines(value, expected) {
+  return value.split("\n").filter((line) => line === expected).length;
+}
+
+function extractPathPersistenceCommand(stdout) {
+  const marker = ", run:\n  ";
+  const commandStart = stdout.indexOf(marker);
+  assert(commandStart >= 0, "no-flag install prints a future-shell PATH command");
+  const lineStart = commandStart + marker.length;
+  const lineEnd = stdout.indexOf("\n", lineStart);
+  assert(lineEnd > lineStart, "future-shell PATH command occupies one line");
+  const command = stdout.slice(lineStart, lineEnd);
+  assert(command.startsWith("if ! grep -F -x -q "), "future-shell PATH command is idempotent");
+  return command;
+}
+
+function assertFutureShellLauncherResolution({ home, installDir, profile, shadowDir }) {
+  const result = spawnSync(
+    "/bin/sh",
+    [
+      "-c",
+      '. "$1"; for launcher in stn stn-ingress stn-tmux-popup; do command -v "$launcher" || exit; done',
+      "station-future-shell",
+      profile,
+    ],
+    syncOptions({ env: { HOME: home, PATH: `${shadowDir}:/usr/bin:/bin` } }),
+  );
+  assertSuccess(result, "minimal-PATH future shell launcher resolution");
+  assertEqual(
+    result.stdout,
+    `${["stn", "stn-ingress", "stn-tmux-popup"]
+      .map((launcher) => join(installDir, launcher))
+      .join("\n")}\n`,
+    "future shell prepends installed launchers ahead of shadows",
+  );
 }
 
 function scenarioExplicitRollbackAndDraft() {
@@ -571,6 +754,11 @@ function scenarioCliParsing() {
       ["--install-dir", installDir, "--install-dir", join(root, "other-bin")],
       "--install-dir may be specified only once",
       "duplicate install-dir flag",
+    ],
+    [
+      ["--persist-path", "--persist-path"],
+      "--persist-path may be specified only once",
+      "duplicate persist-path flag",
     ],
     [["--install-dir", ""], "non-empty path", "empty install-dir path"],
     [["--unknown"], "unknown option", "unknown option"],
@@ -1944,6 +2132,7 @@ function scenarioHelp() {
   const help = spawnSync("/bin/sh", [installer, "--help"], syncOptions());
   assertSuccess(help, "installer help");
   assertIncludes(help.stdout, "--install-dir", "installer help options");
+  assertIncludes(help.stdout, "--persist-path", "installer persistence help option");
 }
 
 function linuxX64() {

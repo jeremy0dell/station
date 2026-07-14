@@ -370,6 +370,7 @@ describe("guided setup command", () => {
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
+    const chunks: string[] = [];
 
     const result = await runSetupCommand(
       [],
@@ -391,16 +392,23 @@ describe("guided setup command", () => {
           "/fake/bin/bun",
           "/fake/bin/diffnav",
           "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
         ]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
-        writeStdout: () => undefined,
+        writeStdout: (chunk) => chunks.push(chunk),
       },
     );
 
     expect(result.code).toBe(0);
-    expect(fs.files[join(root, "home/.tmux.conf")]).toContain("stn-tmux-popup");
+    expect(fs.files[join(root, "home/.tmux.conf")]).toContain("'/fake/bin/stn-tmux-popup'");
+    expect(chunks.join("")).toContain(
+      "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers",
+    );
+    expect(chunks.join("")).toContain("Direct fallback: stn popup");
   });
 
   it("installs accepted Worktrunk and agent hooks with resolved ingress launcher", async () => {
@@ -417,8 +425,9 @@ describe("guided setup command", () => {
       "wt --version": "worktrunk 1.2.3\n",
       "tmux -V": "tmux 3.5a\n",
       "codex --version": "codex 0.1.0\n",
-      [`stn --config ${configPath} hooks install worktrunk --yes --hook-bin stn-ingress`]: "",
-      [`stn --config ${configPath} hooks install codex --yes --hook-bin stn-ingress`]: "",
+      [`stn --config ${configPath} hooks install worktrunk --yes --hook-bin /fake/bin/stn-ingress`]:
+        "",
+      [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]: "",
     });
 
     const result = await runSetupCommand(
@@ -430,7 +439,7 @@ describe("guided setup command", () => {
         env: { PATH: "/fake/bin" },
         runner: async (input) => {
           const result = await runner(input);
-          if (input.command === "stn" && input.args?.[2] === "hooks") {
+          if (input.command === "/fake/bin/stn" && input.args?.[2] === "hooks") {
             order.push(`hook:${input.args[4]}`);
           }
           return result;
@@ -461,7 +470,7 @@ describe("guided setup command", () => {
     expect(calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          command: "stn",
+          command: "/fake/bin/stn",
           args: [
             "--config",
             configPath,
@@ -470,12 +479,12 @@ describe("guided setup command", () => {
             "worktrunk",
             "--yes",
             "--hook-bin",
-            "stn-ingress",
+            "/fake/bin/stn-ingress",
           ],
           stdio: "inherit",
         }),
         expect.objectContaining({
-          command: "stn",
+          command: "/fake/bin/stn",
           args: [
             "--config",
             configPath,
@@ -484,7 +493,7 @@ describe("guided setup command", () => {
             "codex",
             "--yes",
             "--hook-bin",
-            "stn-ingress",
+            "/fake/bin/stn-ingress",
           ],
           stdio: "inherit",
         }),

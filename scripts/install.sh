@@ -9,6 +9,9 @@ export GH_HOST=$github_host
 requested_version=""
 requested_version_set=0
 install_dir=""
+persist_path=0
+path_profile=""
+path_profile_entry=""
 release_id=${STATION_INSTALL_RELEASE_ID:-}
 temp_dir=""
 install_stage=""
@@ -39,6 +42,7 @@ runtime_committed=0
 activation_ambiguity_reported=0
 activation_failed_precommit=0
 rollback_failed=0
+profile_update_failed=0
 created_ingress=0
 created_popup=0
 created_ingress_inode=""
@@ -47,16 +51,18 @@ preserve_install_stage=0
 line_feed='
 '
 tab='	'
+carriage_return=$(printf '\r')
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--version vX.Y.Z[-prerelease]] [--install-dir PATH]
+Usage: install.sh [--version vX.Y.Z[-prerelease]] [--install-dir PATH] [--persist-path]
 
 Install the latest stable private Station release, or an explicit version.
 
 Options:
   --version VERSION   Install an immutable v-prefixed release version.
   --install-dir PATH  Install commands here (default: ~/.local/bin).
+  --persist-path      Add the install directory to the login-shell profile.
   -h, --help          Show this help.
 EOF
 }
@@ -86,6 +92,100 @@ print_shell_word() {
         ;;
     esac
   done
+}
+
+select_path_profile() {
+  path_profile=""
+  path_profile_shell=""
+  [ -n "${HOME:-}" ] || return 1
+  case "${SHELL##*/}" in
+    zsh)
+      path_profile=${ZDOTDIR:-$HOME}/.zprofile
+      path_profile_shell=zsh
+      ;;
+    bash)
+      path_profile_shell=bash
+      for profile_candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        if [ -e "$profile_candidate" ] || [ -L "$profile_candidate" ]; then
+          path_profile=$profile_candidate
+          break
+        fi
+      done
+      [ -n "$path_profile" ] || path_profile=$HOME/.bash_profile
+      ;;
+    sh|dash|ksh)
+      path_profile=$HOME/.profile
+      path_profile_shell=${SHELL##*/}
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+prepare_path_profile() {
+  select_path_profile || return 1
+  case "$install_dir" in
+    *"$line_feed"*|*"$carriage_return"*) return 1 ;;
+  esac
+  path_profile_entry=$(
+    printf 'export PATH='
+    print_shell_word "$install_dir"
+    printf '%s' '${PATH:+":$PATH"}'
+  )
+}
+
+validate_path_profile() {
+  path_profile_parent=${path_profile%/*}
+  if [ -e "$path_profile" ] || [ -L "$path_profile" ]; then
+    [ -f "$path_profile" ] || fail "--persist-path requires '$path_profile' to be a regular file."
+    [ -r "$path_profile" ] && [ -w "$path_profile" ] || fail "--persist-path requires '$path_profile' to be readable and writable."
+    return 0
+  fi
+  [ -d "$path_profile_parent" ] && [ -w "$path_profile_parent" ] || fail "--persist-path cannot create '$path_profile'; its parent directory must be writable."
+}
+
+path_profile_entry_present() {
+  [ -f "$path_profile" ] || return 1
+  grep -F -x -q "$path_profile_entry" "$path_profile" 2>/dev/null
+}
+
+print_path_persistence_command() {
+  printf 'Future-shell PATH was not changed. To persist Station for %s login shells in ' "$path_profile_shell"
+  print_shell_word "$path_profile"
+  printf ', run:\n  if ! grep -F -x -q '
+  print_shell_word "$path_profile_entry"
+  printf ' '
+  print_shell_word "$path_profile"
+  printf ' 2>/dev/null; then if [ -s '
+  print_shell_word "$path_profile"
+  printf ' ]; then printf '
+  print_shell_word '\n%s\n'
+  printf ' '
+  print_shell_word "$path_profile_entry"
+  printf '; else printf '
+  print_shell_word '%s\n'
+  printf ' '
+  print_shell_word "$path_profile_entry"
+  printf '; fi >> '
+  print_shell_word "$path_profile"
+  printf '; fi\n'
+}
+
+persist_path_profile() {
+  if path_profile_entry_present; then
+    printf 'Future-shell PATH is already configured in '
+    print_shell_word "$path_profile"
+    printf '.\n'
+    return 0
+  fi
+  # Append in place so an existing profile keeps its ownership, mode, and symlink target.
+  if [ -s "$path_profile" ]; then
+    printf '\n%s\n' "$path_profile_entry" >> "$path_profile" || return 1
+  else
+    printf '%s\n' "$path_profile_entry" >> "$path_profile" || return 1
+  fi
+  printf 'Added Station to future %s login shells in ' "$path_profile_shell"
+  print_shell_word "$path_profile"
+  printf '.\n'
 }
 
 readlink_target() {
@@ -451,6 +551,11 @@ while [ "$#" -gt 0 ]; do
       install_dir=$2
       shift 2
       ;;
+    --persist-path)
+      [ "$persist_path" -eq 0 ] || fail "--persist-path may be specified only once."
+      persist_path=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -490,6 +595,10 @@ if [ -z "$install_dir" ]; then
 fi
 absolute_path "$install_dir"
 install_dir=$absolute_result
+if [ "$persist_path" -eq 1 ]; then
+  prepare_path_profile || fail "--persist-path requires a supported login shell (zsh, bash, sh, dash, or ksh) and an install directory without line breaks."
+  validate_path_profile
+fi
 
 if [ -n "${XDG_DATA_HOME:-}" ]; then
   absolute_path "$XDG_DATA_HOME"
@@ -998,6 +1107,30 @@ check_launcher_resolution stn "$binary_path"
 check_launcher_resolution stn-ingress "$ingress_path"
 check_launcher_resolution stn-tmux-popup "$popup_path"
 
+if [ "$persist_path" -eq 1 ]; then
+  if ! persist_path_profile; then
+    warn "Station was installed, but '$path_profile' could not be updated for future shells."
+    print_path_persistence_command
+    profile_update_failed=1
+  fi
+else
+  if prepare_path_profile; then
+    if path_profile_entry_present; then
+      printf 'Future-shell PATH is already configured in '
+      print_shell_word "$path_profile"
+      printf '.\n'
+    else
+      print_path_persistence_command
+    fi
+  else
+    printf 'Future-shell PATH was not changed. Add '
+    print_shell_word "$install_dir"
+    printf ' ahead of PATH in the startup file for login shell '
+    print_shell_word "${SHELL:-unknown}"
+    printf '.\n'
+  fi
+fi
+
 if [ "$path_mismatch" -eq 0 ]; then
   printf 'Next: run stn setup\n'
 else
@@ -1012,4 +1145,4 @@ else
   print_shell_word "$binary_path"
   printf ' setup\n'
 fi
-exit 0
+exit "$profile_update_failed"

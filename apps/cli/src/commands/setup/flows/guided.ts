@@ -177,17 +177,40 @@ async function runGuidedSetupWithPrompt(
   }
 
   const tmuxPopupBindingActions = plan.actions.filter(isTmuxPopupBindingAction);
+  let tmuxPopupFeedback =
+    facts.tmuxBinding.status === "ok"
+      ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded")
+      : undefined;
   if (tmuxPopupBindingActions.length > 0) {
     const accepted = await prompt.confirm("Install or load tmux popup binding?");
     if (accepted) {
-      await applySetupPlan(
+      const bindingResult = await applySetupPlan(
         {
           ...plan,
           actions: tmuxPopupBindingActions.map((action) => ({ ...action, selected: true })),
         },
         applyOptions(deps, { announceActions: true, showCommandOutput: true }),
       );
+      const completed = new Set(
+        bindingResult.plan.actions
+          .filter((action) => action.status === "completed")
+          .map((action) => action.id),
+      );
+      tmuxPopupFeedback = renderTmuxPopupFeedback(
+        facts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
+        facts.tmuxBinding.liveStatus === "loaded" || completed.has("tmux-live-popup-binding"),
+        bindingResult.failedAction !== undefined,
+      );
+    } else {
+      tmuxPopupFeedback =
+        facts.tmuxBinding.status === "ok"
+          ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded")
+          : "Tmux popup binding was not changed. Direct fallback: stn popup\n";
     }
+  }
+
+  if (tmuxPopupFeedback !== undefined) {
+    await write(deps, tmuxPopupFeedback);
   }
 
   await write(
@@ -198,6 +221,27 @@ async function runGuidedSetupWithPrompt(
     ),
   );
   return { code: 0 };
+}
+
+function renderTmuxPopupFeedback(
+  persisted: boolean,
+  liveLoaded: boolean,
+  repairIncomplete = false,
+): string {
+  const lines = persisted
+    ? [
+        `Tmux popup binding: Ctrl-b Space is ${
+          liveLoaded
+            ? "persisted and loaded in the current tmux server"
+            : "persisted for future tmux servers; no current server was live-loaded"
+        }.`,
+      ]
+    : ["Tmux popup binding was not persisted. Run stn setup to retry."];
+  if (repairIncomplete) {
+    lines.push("Tmux popup binding repair was incomplete; run stn setup to retry.");
+  }
+  lines.push("Direct fallback: stn popup");
+  return `${lines.join("\n")}\n`;
 }
 
 type HookPreferences = {

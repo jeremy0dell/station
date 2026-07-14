@@ -1,3 +1,4 @@
+import { constants as fsConstants } from "node:fs";
 import { access as nodeAccess } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,7 +31,7 @@ export async function checkSetupLaunchers(
 ): Promise<SetupLaunchersFact> {
   const env = options.env ?? process.env;
   const packageRoot = options.packageRoot ?? setupPackageRoot();
-  const access = options.access ?? nodeAccess;
+  const access = options.access ?? executableAccess;
   const [station, ingress, tmuxPopup] = await Promise.all([
     checkLauncher(launcherDefinitions.station, { access, env, packageRoot }),
     checkLauncher(launcherDefinitions.ingress, { access, env, packageRoot }),
@@ -42,6 +43,10 @@ export async function checkSetupLaunchers(
     ingress,
     tmuxPopup,
   };
+}
+
+export function setupLauncherExecutable(launcher: SetupLauncherFact): string {
+  return launcher.resolvedPath ?? launcher.command;
 }
 
 export function setupPackageRoot(): string {
@@ -98,7 +103,7 @@ async function resolveOnPath(
   }
   for (const pathEntry of pathEnv.split(delimiter)) {
     if (pathEntry.length === 0) continue;
-    const candidate = join(pathEntry, command);
+    const candidate = resolve(pathEntry, command);
     try {
       await access(candidate);
       return candidate;
@@ -107,4 +112,8 @@ async function resolveOnPath(
     }
   }
   return undefined;
+}
+
+async function executableAccess(path: string): Promise<void> {
+  await nodeAccess(path, fsConstants.X_OK);
 }

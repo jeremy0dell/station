@@ -187,6 +187,8 @@ function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[
     "ingress",
     "tmuxPopup",
     "resolvedPath",
+    "launcherCommand",
+    "liveStatus",
   ];
   const lines: string[] = [];
   for (const key of orderedKeys) {

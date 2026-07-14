@@ -245,7 +245,9 @@ describe("release readiness docs", () => {
     );
 
     for (const [path, document] of documents) {
-      expect(document, path).toContain("only installs the Station binaries");
+      expect(document, path).toContain("--persist-path");
+      expect(document, path).toContain("explicit");
+      expect(document, path).toContain("login-shell profile");
       expect(document, path).toContain("cd /path/to/your/git-project");
       expect(document, path).toMatch(/PATH="\$HOME\/\.local\/bin\$\{PATH:\+":\$PATH"\}"/);
       expect(document, path).toContain("hash -r");
@@ -253,7 +255,7 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("stn doctor");
       expect(document, path).toContain("stn tui");
       expect(document, path).toContain("~/.config/station/config.toml");
-      expect(document, path).toContain("shell startup file");
+      expect(document, path).toContain("future login shells");
       expect(document, path).toContain("cold-boot welcome screen");
       expect(document, path).toContain("Create Session");
       expect(document, path).toContain("start the agent session");
