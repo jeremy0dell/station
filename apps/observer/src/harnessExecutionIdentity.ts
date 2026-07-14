@@ -130,7 +130,10 @@ export function sessionHarnessExecutionEvidenceFromObservation(
 /**
  * POLICY
  *
- * Advances one Station session's provider-native execution binding from non-stale evidence.
+ * Authorizes state derivation for the bound provider-native execution and advances that binding
+ * only from non-stale lifecycle evidence.
+ *
+ * Completion cannot establish a binding, and a mismatch cannot replace an active binding.
  */
 export function decideSessionHarnessExecution(input: {
   current: PersistedSessionHarnessExecution | undefined;
@@ -202,7 +205,7 @@ export function decideSessionHarnessExecution(input: {
 /**
  * POLICY
  *
- * Applies durable native identity only to the matching provider-owned Station session run.
+ * Applies each durable native binding to the provider run associated with the same Station session.
  */
 export function bindHarnessRunsToSessionExecutions(input: {
   runs: readonly HarnessRunObservation[];

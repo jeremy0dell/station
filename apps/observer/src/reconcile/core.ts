@@ -146,6 +146,8 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     projectHarnessEventStatus: async (report) => {
       const projectedAt = toIsoTimestamp(clock.now());
       const sessionId = report.correlation?.sessionId;
+      // Native reports remain diagnostic-only until a durable Station-session
+      // binding can authorize their projection.
       if (
         report.correlation?.nativeSessionId !== undefined &&
         (input.persistence === undefined || sessionId === undefined)

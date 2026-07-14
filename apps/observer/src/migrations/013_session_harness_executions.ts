@@ -3,8 +3,8 @@ import type { ObserverSqliteMigration } from "./index.js";
 export const sessionHarnessExecutionsMigration: ObserverSqliteMigration = {
   version: 13,
   name: "session_harness_executions",
-  // Hook ingress can bind before reconcile reconstructs the sessions table,
-  // so provider plus Station session is authoritative without a foreign key.
+  // Hook ingress can bind before reconcile reconstructs the session row, so this
+  // table deliberately has no sessions foreign key.
   sql: `
     CREATE TABLE IF NOT EXISTS session_harness_executions (
       provider TEXT NOT NULL,

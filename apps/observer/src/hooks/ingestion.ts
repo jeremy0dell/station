@@ -314,7 +314,8 @@ async function ingestViaHookAdapter(
 /**
  * USE CASE
  *
- * Persists normalized harness evidence and its accepted native-execution effects atomically.
+ * Persists each normalized report and its authorized native binding, recovery, and readiness
+ * effects in one deduplicated transaction.
  */
 export function createHarnessEventReportIngestion(
   options: CreateHarnessEventReportIngestionOptions,

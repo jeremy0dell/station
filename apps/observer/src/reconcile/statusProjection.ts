@@ -117,7 +117,7 @@ function rowIdForCwd(rows: readonly WorktreeRow[], cwd: string): string | undefi
 /**
  * POLICY
  *
- * Projects pre-correlated harness status onto one current row and session.
+ * Projects native-authorized harness status onto one current row and session.
  */
 export function projectHarnessEventReportOntoSnapshot(input: {
   snapshot: StationSnapshot;

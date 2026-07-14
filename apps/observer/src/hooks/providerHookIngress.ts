@@ -50,7 +50,8 @@ type ObservationRecord = RecordProviderObservationInput & {
 /**
  * USE CASE
  *
- * Normalizes provider hook evidence and atomically records all derived observations before marking that hook processing complete.
+ * Normalizes provider hook evidence and atomically records its observations and authorized
+ * native-execution effects before completing hook processing.
  */
 export async function ingestProviderHookEvent(
   options: IngestProviderHookEventOptions,
@@ -107,7 +108,8 @@ export async function ingestProviderHookEvent(
       },
     ];
   });
-  // Readiness shares the processing claim transaction so retries cannot apply a new correlation context.
+  // Native binding and readiness share the processing-claim transaction so retries
+  // cannot apply a new correlation context.
   const processing = await options.persistence.recordProviderObservationsWithIngressDedupe({
     observations,
     harnessExecutions,

@@ -110,7 +110,7 @@ export function buildInitialSnapshot(input: {
 /**
  * USE CASE
  *
- * Rebuilds the Observer graph and retains provider-native harness identity for live ingress correlation.
+ * Rebuilds the Observer graph from provider reads and accepted durable evidence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());

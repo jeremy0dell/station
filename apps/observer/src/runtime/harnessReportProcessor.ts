@@ -43,7 +43,8 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
 /**
  * USE CASE
  *
- * Accepts normalized harness evidence, projects accepted status, and schedules fresh graph truth.
+ * Persists one normalized report, projects authorized live status, publishes derived events, and
+ * returns the required reconcile reason.
  */
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,

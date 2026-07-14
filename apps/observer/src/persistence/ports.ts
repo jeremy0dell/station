@@ -135,7 +135,8 @@ export interface ReconcileStore {
 /**
  * DRIVEN PORT
  *
- * Maintains Observer-owned session lifecycle, native harness executions, titles, remembered harness selection, recovery handles, and turn readiness.
+ * Maintains Observer-owned session lifecycle, provider-native execution bindings, titles,
+ * remembered harness selection, recovery handles, and turn readiness.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
