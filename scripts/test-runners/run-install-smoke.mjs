@@ -188,9 +188,18 @@ function prepareFixtures() {
 }
 
 function scenarioPlatformInstalls() {
-  for (const platform of platforms) {
+  const shellWithoutShell = join(root, "shell-without-shell");
+  writeExecutable(
+    shellWithoutShell,
+    '#!/bin/sh\ninstaller=$1\nshift\nunset SHELL\n. "$installer"\n',
+  );
+  for (const [index, platform] of platforms.entries()) {
     const installDir = join(root, `install-${platform.target}`);
-    const result = runInstaller({ installDir, platform });
+    const result = runInstaller({
+      installDir,
+      platform,
+      childShell: index === 0 ? shellWithoutShell : "/bin/sh",
+    });
     assertSuccess(result, `${platform.target} latest install`);
     assertInstalled({ installDir, tag: stableTag, target: platform.target });
     assertPathRecovery(result, installDir, ["stn", "stn-ingress", "stn-tmux-popup"]);

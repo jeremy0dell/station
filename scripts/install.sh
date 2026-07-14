@@ -96,9 +96,10 @@ print_shell_word() {
 
 select_path_profile() {
   path_profile=""
-  path_profile_shell=""
+  path_profile_shell=${SHELL:-}
+  path_profile_shell=${path_profile_shell##*/}
   [ -n "${HOME:-}" ] || return 1
-  case "${SHELL##*/}" in
+  case "$path_profile_shell" in
     zsh)
       path_profile=${ZDOTDIR:-$HOME}/.zprofile
       path_profile_shell=zsh
@@ -115,7 +116,6 @@ select_path_profile() {
       ;;
     sh|dash|ksh)
       path_profile=$HOME/.profile
-      path_profile_shell=${SHELL##*/}
       ;;
     *) return 1 ;;
   esac
