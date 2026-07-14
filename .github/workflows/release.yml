@@ -329,8 +329,8 @@ jobs:
       - validate
       - create-draft
     permissions:
-      # Draft list/get and asset downloads require only read permission.
-      contents: read
+      # GitHub exposes draft releases only to identities with push access.
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -514,7 +514,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       actions: read
-      contents: read
+      # GitHub exposes draft releases only to identities with push access.
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
