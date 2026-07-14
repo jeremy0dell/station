@@ -415,6 +415,7 @@ Real provider and broader e2e lanes are opt-in:
 pnpm test:e2e
 pnpm test:e2e:real
 pnpm test:e2e:worktrunk:real
+STATION_REAL_TMUX=1 pnpm test:tmux-popup:real
 pnpm test:e2e:claude:real
 pnpm test:e2e:codex:real
 pnpm test:e2e:cursor:real
@@ -423,6 +424,16 @@ pnpm test:e2e:opencode:real
 pnpm test:e2e:real:local
 pnpm test:e2e:real:codex-hooks
 ```
+
+The real tmux popup lane requires the root pnpm dependencies and the `station/`
+Bun dependencies, Bun 1.3.14, Python 3, tmux, and a prior `pnpm build`. Set
+`STATION_TMUX_BIN` when the tmux executable is not available as `tmux`. The lane
+creates a disposable Git project and isolates `HOME`, the XDG directories,
+config, Observer and Host sockets, state, layout, and the Codex, Claude, Cursor,
+and OpenCode homes. It addresses tmux only through a private
+`tmux -L <unique-label> -f /dev/null` server. It aggregates cleanup failures,
+verifies that its recorded processes and temporary root are gone, and remains
+excluded from ordinary PR and `main` CI.
 
 Use `pnpm setup:system:check` before real lanes. Real lanes may require `STATION_REAL_*` flags, installed provider CLIs, credentials, tmux, model access, and isolated temporary projects. They must not become required for ordinary PR or `main` CI.
 

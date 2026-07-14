@@ -53,6 +53,7 @@
     "test:e2e:real:codex-hooks": "node scripts/test-runners/run-real-e2e.mjs tests/e2e/real/real-codex-hooks.test.ts",
     "test:e2e:real:codex-hooks:keep-temp": "node scripts/test-runners/run-real-e2e.mjs --keep-temp tests/e2e/real/real-codex-hooks.test.ts",
     "test:e2e:worktrunk:real": "vitest run --config config/vitest/vitest.worktrunk-real.config.ts",
+    "test:tmux-popup:real": "vitest run --config config/vitest/vitest.integration.config.ts integrations/terminal/tmux/test/integration/popup-real.test.ts",
     "test:e2e:claude:real": "vitest run --config config/vitest/vitest.claude-real.config.ts",
     "test:e2e:codex:real": "vitest run --config config/vitest/vitest.codex-real.config.ts",
     "test:e2e:cursor:real": "vitest run --config config/vitest/vitest.cursor-real.config.ts",
