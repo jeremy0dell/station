@@ -97,6 +97,40 @@ describe("Station app composition", () => {
     expect(station.scripted.helpers.isDisposed()).toBe(true);
   });
 
+  it("focuses the active managed session row on each overlay open and clears it on close", async () => {
+    const station = await renderComposedStation();
+    const firstPaneId = agentWorktreePaneId("wt_station_working");
+    const secondPaneId = agentWorktreePaneId("wt_station_idle");
+
+    station.store.actions.createPane(firstPaneId, { role: "primary-agent" });
+    station.store.actions.setPrimaryAgent(firstPaneId, {
+      sessionId: "ses_wt_station_working",
+      terminalTargetId: "native:wt_station_working",
+    });
+    station.store.actions.createPane(secondPaneId, { role: "primary-agent" });
+    station.store.actions.setPrimaryAgent(secondPaneId, {
+      sessionId: "ses_wt_station_idle",
+      terminalTargetId: "native:wt_station_idle",
+    });
+
+    station.store.actions.focusPane(firstPaneId);
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(
+      () => station.composition.stationViewStore.getState().focusedRowId === "wt_station_working",
+    );
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(
+      () => !("focusedRowId" in station.composition.stationViewStore.getState()),
+    );
+
+    station.store.actions.focusPane(secondPaneId);
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(
+      () => station.composition.stationViewStore.getState().focusedRowId === "wt_station_idle",
+    );
+  });
+
   it("renders configured widgets in the Station overlay header", async () => {
     const station = await renderComposedStation({
       tuiConfig: {

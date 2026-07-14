@@ -1,7 +1,7 @@
 // The STATION view's store: the shared TuiState machine fed by Station's source
-// boundary. main.tsx owns the instance (view state survives overlay toggles
-// because the store outlives the overlay component). The runtime flags pin the
-// popup posture:
+// boundary. createStation.ts owns the instance, so search, collapse, and scroll
+// state survive overlay toggles; overlayRowFocus separately treats row focus as
+// transient. The runtime flags pin the popup posture:
 // in Station the STATION view is always a persistent popup whose dismiss is
 // executed by the router (overlay-close outcome) — the store-level onDismiss
 // is a recorded no-op so canDismissPopup derives true and Q/Esc produce

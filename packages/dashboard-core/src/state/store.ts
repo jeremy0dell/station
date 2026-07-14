@@ -1,6 +1,7 @@
 import { createStationClientRuntime, type StationClientRuntime } from "@station/client";
 import type {
   CommandReceipt,
+  SessionId,
   StationCommand,
   StationSnapshot,
   TerminalFocusOrigin,
@@ -12,6 +13,10 @@ import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { TuiObserverService, TuiToast } from "../services/types.js";
 import { buildFocusCommand } from "./commandBuilders.js";
+import {
+  clearDashboardFocus as clearDashboardFocusState,
+  focusDashboardSession as focusDashboardSessionState,
+} from "./dashboardFocus.js";
 import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
@@ -35,6 +40,10 @@ export type TuiStore = TuiState & {
   start(): () => void;
   handleKey(key: TuiKey): TuiHandleKeyResult;
   setTerminalRows(rows: number): void;
+  /** Synchronize row focus from a canonical observer session identity. */
+  focusDashboardSession(sessionId: SessionId): void;
+  /** Remove transient row focus without changing other dashboard state. */
+  clearDashboardFocus(): void;
   /** Surface a client-side toast (e.g. an unresolved-harness notice). */
   pushToast(toast: TuiToast): void;
   dismissToasts(): void;
@@ -147,6 +156,16 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
     setTerminalRows: (rows): void => {
       set(clampDashboardStateScroll({ ...get(), terminalRows: rows }));
     },
+    focusDashboardSession: (sessionId): void => {
+      set(
+        (current) =>
+          applyDashboardFocusState(current, focusDashboardSessionState(current, sessionId)),
+        true,
+      );
+    },
+    clearDashboardFocus: (): void => {
+      set((current) => applyDashboardFocusState(current, clearDashboardFocusState(current)), true);
+    },
     pushToast: (toast): void => {
       set(addTuiToast(get(), toast));
     },
@@ -162,6 +181,14 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
   }));
 
   return store;
+}
+
+function applyDashboardFocusState(current: TuiStore, next: TuiState): TuiStore {
+  // Full replacement propagates an absent optional cursor; seeding from the
+  // concrete store retains its action methods.
+  const replacement = { ...current };
+  delete replacement.focusedRowId;
+  return { ...replacement, ...next };
 }
 
 type RuntimeOptions = {
