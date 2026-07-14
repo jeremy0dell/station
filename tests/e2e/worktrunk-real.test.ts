@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { sameObservedPath } from "@station/contracts";
+import { environmentWithoutGitLocals } from "@station/runtime";
 import {
   installWorktrunkHooks,
   uninstallWorktrunkHooks,
@@ -95,4 +97,78 @@ describeReal("real Worktrunk provider smoke", () => {
       }).catch(() => undefined);
     }
   });
+
+  it("removes only the selected linked checkout when the root shares its branch", async () => {
+    const wt = process.env.STATION_WORKTRUNK_BIN ?? "wt";
+    await execFileAsync(wt, ["--version"]);
+
+    const root = await mkdtemp(join(tmpdir(), "station-real-wt-duplicate-"));
+    const repo = join(root, "repo");
+    const linked = join(root, "linked");
+    const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+    const git = (...args: string[]) =>
+      execFileAsync("git", args, { cwd: repo, env: environmentWithoutGitLocals() });
+
+    try {
+      await mkdir(repo, { recursive: true });
+      await mkdir(join(root, "worktrunk"), { recursive: true });
+      await writeFile(worktrunkConfigPath, "");
+      await git("init", "-b", "main");
+      await git("config", "user.email", "station@example.invalid");
+      await git("config", "user.name", "station");
+      await git("commit", "--allow-empty", "-m", "initial");
+      await git("branch", "duplicate");
+      await git("worktree", "add", linked, "duplicate");
+      await git("switch", "--ignore-other-worktrees", "duplicate");
+
+      const provider = new WorktrunkProvider({
+        command: wt,
+        configPath: worktrunkConfigPath,
+        useLifecycleHooks: false,
+        timeoutMs: 15000,
+      });
+      const project = {
+        id: "duplicate",
+        label: "duplicate",
+        root: repo,
+        defaults: {
+          harness: "codex" as const,
+          terminal: "tmux" as const,
+          layout: "agent-shell" as const,
+        },
+        worktrunk: {
+          enabled: true,
+          base: "main",
+        },
+      };
+
+      const listed = await provider.listWorktrees(project);
+      const selected = listed.find((worktree) => sameObservedPath(worktree.path, linked));
+      expect(selected).toBeDefined();
+      if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
+
+      await expect(provider.removeWorktree({ worktreeId: selected.id })).resolves.toMatchObject({
+        removed: true,
+      });
+
+      const remaining = await git("worktree", "list", "--porcelain");
+      const remainingPaths = remaining.stdout
+        .split("\n")
+        .filter((line) => line.startsWith("worktree "))
+        .map((line) => line.slice("worktree ".length));
+      expect(remainingPaths).toHaveLength(1);
+      expect(remainingPaths.some((path) => sameObservedPath(path, repo))).toBe(true);
+      expect(remainingPaths.some((path) => sameObservedPath(path, linked))).toBe(false);
+      await expect(access(linked)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(git("branch", "--show-current")).resolves.toMatchObject({
+        stdout: "duplicate\n",
+      });
+      await expect(git("show-ref", "--verify", "refs/heads/duplicate")).resolves.toMatchObject({
+        stdout: expect.stringContaining("refs/heads/duplicate"),
+      });
+    } finally {
+      await git("worktree", "remove", "--force", linked).catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

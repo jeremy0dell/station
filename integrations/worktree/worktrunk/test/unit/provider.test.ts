@@ -291,16 +291,103 @@ describe("WorktrunkProvider", () => {
     expect(removed).toEqual({ worktreeId: created.id, removed: true });
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
+      ["list", "--format=json"],
       [
         "-C",
-        project.root,
+        "/tmp/station/web/feature",
         "remove",
-        "feature",
         "--force",
         "--force-delete",
         "--foreground",
         "--format=json",
       ],
+    ]);
+  });
+
+  it("removes a selected shared-branch worktree without deleting the shared branch", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/duplicate-linked";
+    const sharedProject = {
+      ...project,
+      worktrunk: {
+        ...project.worktrunk,
+        includeMain: false,
+      },
+    };
+    let listCalls = 0;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("list")) {
+          listCalls += 1;
+          return result(
+            input,
+            JSON.stringify([
+              { path: project.root, branch: listCalls === 1 ? "main" : "duplicate" },
+              { path: linkedPath, branch: "duplicate" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    const worktrees = await provider.listWorktrees(sharedProject);
+    const selected = worktrees.find((worktree) => worktree.path === linkedPath);
+    expect(selected).toBeDefined();
+    if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
+
+    await provider.removeWorktree({ worktreeId: selected.id, force: true });
+
+    expect(calls.map((call) => call.args)).toEqual([
+      ["list", "--format=json"],
+      ["list", "--format=json"],
+      [
+        "-C",
+        linkedPath,
+        "remove",
+        "--no-hooks",
+        "--force",
+        "--no-delete-branch",
+        "--foreground",
+        "--format=json",
+      ],
+    ]);
+  });
+
+  it("does not remove a worktree missing from the refreshed list", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    let listCalls = 0;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("list")) {
+          listCalls += 1;
+          return result(
+            input,
+            listCalls === 1 ? JSON.stringify([{ path: linkedPath, branch: "feature" }]) : "[]",
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    const [selected] = await provider.listWorktrees(project);
+    expect(selected).toBeDefined();
+    if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
+
+    await expect(provider.removeWorktree({ worktreeId: selected.id })).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_NOT_FOUND",
+    });
+    expect(calls.map((call) => call.args)).toEqual([
+      ["list", "--format=json"],
+      ["list", "--format=json"],
     ]);
   });
 
@@ -436,7 +523,10 @@ describe("WorktrunkProvider", () => {
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
-        return result(input, "[]");
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+        );
       },
     });
 
@@ -445,7 +535,8 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["-C", project.root, "remove", "--no-hooks", "feature", "--foreground", "--format=json"],
+      ["list", "--format=json"],
+      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--foreground", "--format=json"],
     ]);
   });
 
@@ -466,7 +557,10 @@ describe("WorktrunkProvider", () => {
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
-        return result(input, "[]");
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+        );
       },
     });
 
@@ -475,7 +569,8 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["-C", project.root, "remove", "--yes", "feature", "--foreground", "--format=json"],
+      ["list", "--format=json"],
+      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--foreground", "--format=json"],
     ]);
   });
 
