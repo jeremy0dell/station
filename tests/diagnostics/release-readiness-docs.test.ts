@@ -262,6 +262,26 @@ describe("release readiness docs", () => {
     }
   });
 
+  it("keeps the VirtualBuddy lane aligned with zero-project onboarding", async () => {
+    const development = await read("docs/development.md");
+    const start = development.indexOf("### VirtualBuddy clean-mac preparation");
+    const end = development.indexOf("\nFor each target", start);
+    const virtualBuddy = development.slice(start, end);
+    const normalizedVirtualBuddy = virtualBuddy.replace(/\s+/g, " ");
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(normalizedVirtualBuddy).toContain("zero-project config");
+    expect(virtualBuddy).toContain("**Add your first project**");
+    expect(virtualBuddy.indexOf("**Add your first project**")).toBeLessThan(
+      virtualBuddy.indexOf("press `N`"),
+    );
+    expect(normalizedVirtualBuddy).toContain("exact idempotent future-shell PATH opt-in command");
+    expect(normalizedVirtualBuddy).toContain("`tmux prefix + Space`");
+    expect(normalizedVirtualBuddy).toContain("cold open");
+    expect(normalizedVirtualBuddy).toContain("warm reopen");
+  });
+
   it("does not advertise removed Crush harness surfaces", async () => {
     const files = ["README.md", "AGENTS.md", ...(await markdownFiles("docs"))];
 

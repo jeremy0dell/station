@@ -278,6 +278,55 @@ binary. Power loss is different: because the installer does not fsync the file
 or containing directories, it makes no post-power-loss durability guarantee;
 old/new cross-filesystem `LICENSE` metadata may also remain.
 
+### VirtualBuddy clean-mac preparation
+
+Use a fresh VirtualBuddy guest for the primary macOS first-run lane. The guest
+covers only the native target reported by `uname -m`; it does not replace the
+other release targets. Install macOS updates, Xcode Command Line Tools,
+Homebrew, GitHub CLI, Node.js 24, and Codex or another supported agent CLI, then
+verify the development-ready baseline:
+
+```sh
+sw_vers
+uname -m
+xcode-select -p
+git --version
+brew --version
+gh --version
+node --version
+codex --version
+```
+
+Take a `dev-ready-before-station` snapshot before authenticating. Do not
+preinstall Station, Worktrunk, tmux, diffnav, or git-delta; this lane must prove
+that guided setup identifies and installs the missing Station dependencies.
+Authenticate GitHub and confirm private-repository access:
+
+```sh
+gh auth login --hostname github.com
+gh auth status --hostname github.com
+gh repo view jeremy0dell/station
+```
+
+Start the selected agent CLI once and complete its normal sign-in. Then create
+a disposable Git project for the acceptance run:
+
+```sh
+mkdir -p "$HOME/Developer/station-smoke"
+cd "$HOME/Developer/station-smoke"
+git init -b main
+printf '# Station installation smoke test\n' > README.md
+git add README.md
+git -c user.name='Station Smoke' \
+  -c user.email='station-smoke@example.invalid' \
+  commit -m 'Initial commit'
+```
+
+Before installing, `command -v stn` must print nothing and
+`~/.local/bin/stn` must not exist. Do not use the published-install recipe for
+an unpublished candidate; wait for a successful `release` workflow run and use
+its numeric run ID in the accepted-candidate recipe below.
+
 Install the accepted candidate from a successful release workflow run on each
 clean test machine. Set `release_run_id` to that run's numeric ID; the recipe
 downloads its candidate manifest and uses the exact draft ID and commit that
@@ -353,6 +402,37 @@ promotion will verify:
 
 This draft-only environment variable is for release acceptance; normal installs
 use the published-release recipe in [Install](install.md).
+
+For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
+and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
+Follow the installer's printed current-shell block exactly; on this clean lane
+it must name all three missing launchers and end by running `stn setup`. Allow
+guided setup to install Worktrunk, tmux, diffnav, and git-delta, select the
+authenticated agent, and enable the desired provider hooks and tmux binding.
+Confirm setup writes a zero-project config without adopting the disposable
+repository, then run:
+
+```sh
+stn --version
+stn setup check --json
+stn doctor
+stn tui
+```
+
+On the welcome screen, press `Enter` or `Space`. On the empty dashboard, press
+`Enter` or `A` on **Add your first project** and select the disposable Git
+repository. Then press `N`, create a session with the authenticated agent, and
+ask it to edit the disposable README. Confirm the transcript and diff appear,
+then quit and reopen `stn tui` and confirm the session remains.
+
+If the compiled tmux binding was enabled, use `tmux prefix + Space` for the cold
+open, close the popup with the same chord, and use it again for a warm reopen.
+Confirm both opens are silent in the calling pane and the warm open reuses the
+existing `_station-ui` session. Finally confirm the installer did not edit a
+shell profile, run the exact idempotent future-shell PATH opt-in command it
+printed, open a new login shell, and verify `stn --version` still resolves.
+Preserve the exact command and output at the first failure; for a runtime
+failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
 For each target, install through the authenticated script into a clean home and
 manually verify the actual user experience, not a dashboard override:
