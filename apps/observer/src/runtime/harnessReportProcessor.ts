@@ -3,7 +3,10 @@ import { HarnessEventReportReceiptSchema } from "@station/contracts";
 import { type RuntimeClock, runRuntimeBoundary } from "@station/runtime";
 import type { HarnessEventReportIngestion } from "../hooks/ingestion.js";
 import type { ObserverCore } from "../reconcile/core.js";
-import { withWorktreeCorrelationFromCwd } from "../reconcile/statusProjection.js";
+import {
+  withSessionCorrelationFromSnapshot,
+  withWorktreeCorrelationFromCwd,
+} from "../reconcile/statusProjection.js";
 import type { StationLogger } from "../stationLogger.js";
 import type { ObserverEventBus } from "./eventBus.js";
 
@@ -29,6 +32,7 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
     attention: report.status?.attention,
     correlation: {
       harnessRunId: report.correlation?.harnessRunId,
+      nativeSessionId: report.correlation?.nativeSessionId,
       sessionId: report.correlation?.sessionId,
       worktreeId: report.correlation?.worktreeId,
       cwd: report.correlation?.cwd,
@@ -36,13 +40,23 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
   };
 }
 
+/**
+ * USE CASE
+ *
+ * Persists one normalized report, projects authorized live status, publishes derived events, and
+ * returns the required reconcile reason.
+ */
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,
   rawReport: HarnessEventReport,
 ): Promise<HarnessReportProcessResult> {
   // Resolve cwd-only correlation before ingest so the persisted observation
   // carries the worktreeId too, not just this projection pass.
-  const report = withWorktreeCorrelationFromCwd(rawReport, deps.core.getSnapshot());
+  const snapshot = deps.core.getSnapshot();
+  const report = withSessionCorrelationFromSnapshot(
+    withWorktreeCorrelationFromCwd(rawReport, snapshot),
+    snapshot,
+  );
   const receipt = await deps.harnessEventReportIngestion.ingest(report, {
     triggerReconcile: false,
   });

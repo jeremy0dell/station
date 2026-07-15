@@ -236,9 +236,9 @@ No single layer owns all truth.
 | --- | --- |
 | Loaded config | Authoritative for managed projects, defaults, provider choices, feature policy, and configured hooks. Durable in TOML; loaded into process memory at startup and updated through explicit config operations. |
 | Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. |
-| Provider-owned identity | Worktree, target, harness-run, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
+| Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
-| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
+| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, native-execution bindings, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
@@ -390,11 +390,14 @@ sessions. Terminal attachment requires matching session or run identity. Session
 and activity totals derive from canonical sessions; only worktree totals derive
 from rows.
 
-Observer core serializes full reconciles. The scheduler debounces and coalesces
-reasons while ensuring only one scheduled run is active. Startup-compatible
-requests may join the startup flight; other direct requests retain the rule that
-their scan starts at or after the request. Provider read failures degrade health
-and contribute errors without fabricating successful observations.
+Observer core serializes full reconciles and harness-report authorization plus
+base snapshot projection on one non-poisoning writer chain. Readiness persistence
+and application happen after that base commit and revalidate the live snapshot.
+The scheduler debounces and coalesces reasons while ensuring only one scheduled
+run is active. Startup-compatible requests may join the startup flight; other
+direct requests retain the rule that their scan starts at or after the request.
+Provider read failures degrade health and contribute errors without fabricating
+successful observations.
 
 ### Provider Hook And Harness Report Ingress
 
@@ -424,12 +427,22 @@ capacity is full, and exposes health counters. The worker applies durable
 dedupe while persisting a report.
 
 Spool replay bypasses queue acceptance and invokes direct durable hook/report
-processing. A primary ingress dedupe hit suppresses duplicate event publication
-but does not skip idempotent derived-observation, recovery-handle, or readiness
-completion. The filesystem spool adapter removes a record only after that work
+processing. Report dedupe, diagnostic evidence, native-execution binding,
+recovery, and readiness commit in one transaction; a dedupe hit therefore
+suppresses all duplicate work, while a failed transaction leaves the claim
+retryable. The filesystem spool adapter removes a record only after that work
 succeeds; invalid and failed records retain attempt/error evidence for later
 diagnosis or retry. Startup reconcile waits for the single-flight spool and
 queue drain before its provider scan.
+
+Station-owned harness runs bind provider-native execution identity only from
+active evidence. The provider plus Station session selects the durable binding;
+worktree-only external sessions remain independent. Once a native execution is
+active, a mismatched native report is stored as diagnostic evidence but cannot
+mutate recovery handles, readiness, live or reconciled status, or emit derived
+state-change/completion notifications. A completion report cannot claim an
+unbound session, and a later active execution may bind only after explicit
+`idle` or `exited` evidence from the prior execution.
 
 Provider hooks are delivery hints. They may update durable observations and
 immediate projections, but scheduled reconcile remains the path to fresh
@@ -481,7 +494,7 @@ from the diagnostic use case.
 | Observer build ordering | Exact builds attach. For different valid SemVer builds, higher precedence wins; at equal precedence the lexicographically greater exact build string wins so the CLI parent and Observer child agree despite having different process identities. Missing or invalid versions refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
-| Reconcile ordering | Core reconciles form a non-poisoning promise chain. Scheduled requests coalesce; queued work after a run receives a later flush. |
+| Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | One worker processes a bounded pending map. New reports can replace pending work for the same key; a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
@@ -520,14 +533,15 @@ when it changes several tables:
 - `CommandJournal` owns command acceptance, transitions, lookup, history, and
   command errors.
 - `EventJournal` owns ordinary event recording and queries.
-- `IngressJournal` owns atomic dedupe plus event, atomic dedupe plus event plus
-  observation, and atomic hook-processing completion across observations and
-  turn readiness.
+- `IngressJournal` owns atomic dedupe plus event, atomic report acceptance
+  across diagnostic observation/native binding/recovery/readiness, and atomic
+  hook-processing completion across observations/native bindings/readiness.
 - `ObservationStore` owns typed provider observations, current-observation
   queries, and expiry.
 - `ReconcileStore` owns the complete atomic `persistReconcileResult` operation.
-- `SessionStore` owns explicit session lifecycle, titles, recovery handles, turn
-  readiness, and purpose-specific remembered-harness lookup.
+- `SessionStore` owns explicit session lifecycle, durable provider-native
+  execution bindings, titles, recovery handles, turn readiness, and
+  purpose-specific remembered-harness lookup.
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 

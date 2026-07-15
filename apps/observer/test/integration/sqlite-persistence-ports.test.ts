@@ -29,7 +29,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     const path = join(directory, "observer.sqlite");
     const legacyDatabase = openSqlDatabase(path);
     try {
-      for (const migration of migrations.slice(0, -1)) {
+      for (const migration of migrations.filter(({ version }) => version < 12)) {
         legacyDatabase.exec(migration.sql);
         legacyDatabase
           .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
@@ -173,6 +173,85 @@ describe("SQLite-only Observer persistence behavior", () => {
           expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "open" }),
         ]),
       );
+    } finally {
+      sqlite.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("repairs the pre-merge native binding migration collision without losing bindings", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-native-binding-migration-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.filter(({ version }) => version < 12)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      legacyDatabase.exec(`
+        CREATE TABLE session_harness_executions (
+          provider TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          native_session_id TEXT NOT NULL,
+          state TEXT NOT NULL,
+          status_updated_at TEXT NOT NULL,
+          PRIMARY KEY (provider, session_id)
+        );
+        INSERT INTO sessions
+          (id, project_id, worktree_id, harness, created_at, ended_at, last_seen_at)
+        VALUES
+          ('ses_collision', 'web', 'wt_collision', 'codex',
+           '2026-07-14T00:00:00.000Z', '2026-07-14T01:00:00.000Z',
+           '2026-07-14T01:00:00.000Z');
+        INSERT INTO session_harness_executions
+          (provider, session_id, native_session_id, state, status_updated_at)
+        VALUES
+          ('codex', 'ses_collision', 'native_collision', 'idle',
+           '2026-07-14T01:00:00.000Z');
+        INSERT INTO observer_migrations (version, name, applied_at) VALUES
+          (12, 'session_harness_executions', '2026-07-14T00:00:00.000Z'),
+          (13, 'native_binding_ingress_claims', '2026-07-14T00:01:00.000Z');
+        INSERT OR REPLACE INTO observer_meta (key, value)
+          VALUES ('schema_version', '13');
+      `);
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const sqlite = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({
+        sqlite,
+        clock: { now: () => new Date(now) },
+      });
+      expect(
+        sqlite
+          .health()
+          .migrations.filter(({ version }) => version >= 12)
+          .map(({ version, name }) => [version, name]),
+      ).toEqual([
+        [12, "session_lifecycle"],
+        [13, "session_harness_executions"],
+        [14, "native_binding_ingress_claims"],
+      ]);
+      await expect(persistence.listSessions()).resolves.toEqual([
+        expect.objectContaining({
+          id: "ses_collision",
+          lifecycle: "ended",
+          endedAt: "2026-07-14T01:00:00.000Z",
+        }),
+      ]);
+      await expect(
+        persistence.getSessionHarnessExecution({
+          provider: "codex",
+          sessionId: "ses_collision",
+        }),
+      ).resolves.toMatchObject({
+        nativeSessionId: "native_collision",
+        state: "idle",
+      });
     } finally {
       sqlite.close();
       await rm(directory, { recursive: true, force: true });

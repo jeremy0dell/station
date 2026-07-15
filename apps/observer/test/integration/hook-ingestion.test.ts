@@ -193,7 +193,13 @@ describe("observer provider hook ingress", () => {
       harnesses: [new FakeHarnessProvider({ now })],
       hookAdapters: [adapter],
     });
-    const { sqlite, persistence, api } = createTestObserver({ config, providers, clock });
+    const { sqlite, persistence, eventBus, api } = createTestObserver({
+      config,
+      providers,
+      clock,
+    });
+    const reports = eventBus.subscribe({ type: "harness.eventReported" })[Symbol.asyncIterator]();
+    const persisted = reports.next();
 
     const receipt = await api.ingestProviderHookEvent({
       schemaVersion: STATION_SCHEMA_VERSION,
@@ -205,6 +211,9 @@ describe("observer provider hook ingress", () => {
       payload: { owned: true },
     });
     expect(receipt).toMatchObject({ accepted: true, status: "ingested" });
+    await expect(persisted).resolves.toMatchObject({
+      value: { type: "harness.eventReported", reportId: "fake:hook_adapter_1" },
+    });
 
     await expect(persistence.listProviderObservations()).resolves.toEqual(
       expect.arrayContaining([
@@ -234,6 +243,47 @@ describe("observer provider hook ingress", () => {
     });
     expect(ignored).toMatchObject({ accepted: false, status: "ignored" });
 
+    await reports.return?.();
+    sqlite.close();
+  });
+
+  it("rejects adapter-backed harness hooks when the normalized report handoff is absent", async () => {
+    const clock = { now: () => new Date(now) };
+    const harness = new RecordingHarnessProvider({ now });
+    const adapter: ProviderHookAdapter = {
+      provider: "fake-harness",
+      kind: "harness",
+      toHarnessEventReport: () => {
+        throw new Error("adapter must not run without a report handoff");
+      },
+    };
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [harness],
+      hookAdapters: [adapter],
+    });
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const ingress = createProviderHookIngress({ persistence, providers, clock });
+
+    await expect(
+      ingress.ingest({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: "hook_missing_report_handoff",
+        provider: "fake-harness",
+        kind: "harness",
+        event: "Stop",
+        receivedAt: now,
+      }),
+    ).resolves.toMatchObject({
+      accepted: false,
+      status: "rejected",
+      error: { code: "HARNESS_REPORT_INGRESS_UNAVAILABLE" },
+    });
+    expect(harness.ingestCalls).toBe(0);
+    await expect(persistence.listProviderObservations()).resolves.toEqual([]);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
     sqlite.close();
   });
 
@@ -467,21 +517,78 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
-  it("repairs recovery and readiness after primary harness report persistence was already committed", async () => {
+  it("gates legacy harness readiness by the bound native execution", async () => {
+    const clock = { now: () => new Date(now) };
+    const harness = new NativeExecutionHarnessProvider({ now });
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [harness],
+    });
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const ingress = createProviderHookIngress({ persistence, providers, clock });
+
+    await ingress.ingest(harnessProviderHook("hook_native_a_working", now));
+    harness.nativeSessionId = "native_b";
+    harness.state = "idle";
+    harness.observedAt = "2026-05-20T12:00:01.000Z";
+    await ingress.ingest(harnessProviderHook("hook_native_b_stop", harness.observedAt));
+
+    await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+      expect.objectContaining({ nativeSessionId: "native_a", state: "working" }),
+    ]);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+
+    harness.nativeSessionId = "native_a";
+    harness.observedAt = "2026-05-20T12:00:02.000Z";
+    await ingress.ingest(harnessProviderHook("hook_native_a_stop", harness.observedAt));
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: "ses_native_execution",
+        token: "hook_native_a_stop",
+      }),
+    ]);
+    sqlite.close();
+  });
+
+  it("retries the atomic harness report transaction after persistence rejects it", async () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
-    let rejectRecoveryOnce = true;
+    const bindingIngestion = createHarnessEventReportIngestion({ persistence, clock });
+    await expect(
+      bindingIngestion.ingest(
+        {
+          ...harnessReport("report_binding_1"),
+          status: {
+            value: "working",
+            confidence: "medium",
+            reason: "Codex is active.",
+            source: "harness_event",
+            updatedAt: now,
+          },
+          correlation: {
+            projectId: "web",
+            worktreeId: "wt_web_task",
+            sessionId: "ses_web_task",
+            nativeSessionId: "native_codex_1",
+          },
+        },
+        { triggerReconcile: false },
+      ),
+    ).resolves.toMatchObject({ accepted: true });
+    let rejectReportOnce = true;
     const retryingPersistence = {
       ...persistence,
-      upsertSessionRecoveryHandle: async (
-        input: Parameters<typeof persistence.upsertSessionRecoveryHandle>[0],
+      recordEventAndProviderObservationWithIngressDedupe: async (
+        input: Parameters<typeof persistence.recordEventAndProviderObservationWithIngressDedupe>[0],
       ) => {
-        if (rejectRecoveryOnce) {
-          rejectRecoveryOnce = false;
-          throw new Error("forced recovery failure");
+        if (rejectReportOnce) {
+          rejectReportOnce = false;
+          throw new Error("forced report transaction failure");
         }
-        return persistence.upsertSessionRecoveryHandle(input);
+        return persistence.recordEventAndProviderObservationWithIngressDedupe(input);
       },
     };
     const ingestion = createHarnessEventReportIngestion({
@@ -512,7 +619,7 @@ describe("observer provider hook ingress", () => {
     });
     await expect(ingestion.ingest(report, { triggerReconcile: false })).resolves.toMatchObject({
       accepted: true,
-      deduped: true,
+      deduped: false,
     });
     await expect(persistence.listSessionRecoveryHandles()).resolves.toHaveLength(1);
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
@@ -721,6 +828,17 @@ function harnessReport(reportId: string) {
   };
 }
 
+function harnessProviderHook(hookId: string, receivedAt: string) {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    hookId,
+    provider: "fake-harness",
+    kind: "harness" as const,
+    event: "run.updated",
+    receivedAt,
+  };
+}
+
 function acceptedReportReceipt(
   reportId: string,
   provider: string,
@@ -830,6 +948,34 @@ class ContextChangingReadinessHarnessProvider extends FakeHarnessProvider {
           updatedAt: now,
         },
         observedAt: now,
+      },
+    ];
+  }
+}
+
+class NativeExecutionHarnessProvider extends FakeHarnessProvider {
+  nativeSessionId = "native_a";
+  state: "working" | "idle" = "working";
+  observedAt = now;
+
+  override async ingestEvent() {
+    return [
+      {
+        provider: this.id,
+        projectId: "web",
+        worktreeId: "wt_native_execution",
+        sessionId: "ses_native_execution",
+        nativeSessionId: this.nativeSessionId,
+        rawEventType: this.state === "idle" ? "Stop" : "PreToolUse",
+        ...(this.state === "idle" ? { turn: { kind: "turn_completed" as const } } : {}),
+        status: {
+          value: this.state,
+          confidence: "high" as const,
+          reason: `Native execution is ${this.state}.`,
+          source: "harness_event" as const,
+          updatedAt: this.observedAt,
+        },
+        observedAt: this.observedAt,
       },
     ];
   }

@@ -1,11 +1,12 @@
-import type {
-  HarnessEventReport,
-  ObservedStatus,
-  ProjectView,
-  SessionView,
-  StationEvent,
-  StationSnapshot,
-  WorktreeRow,
+import {
+  type HarnessEventReport,
+  harnessRunIdForTerminalTarget,
+  type ObservedStatus,
+  type ProjectView,
+  type SessionView,
+  type StationEvent,
+  type StationSnapshot,
+  type WorktreeRow,
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
 import { countsForSnapshot, statusPolicy } from "./statusPolicy.js";
@@ -54,6 +55,51 @@ export function withWorktreeCorrelationFromCwd(
   return { ...report, correlation: { ...correlation, worktreeId } };
 }
 
+/**
+ * POLICY
+ *
+ * Resolves Station-owned run or terminal evidence to the unique current Station session.
+ */
+export function withSessionCorrelationFromSnapshot(
+  report: HarnessEventReport,
+  snapshot: StationSnapshot,
+): HarnessEventReport {
+  const correlation = report.correlation;
+  if (
+    correlation === undefined ||
+    correlation.sessionId !== undefined ||
+    (correlation.harnessRunId === undefined && correlation.terminalTargetId === undefined)
+  ) {
+    return report;
+  }
+
+  const harnessRunId =
+    correlation.harnessRunId ??
+    (correlation.terminalTargetId === undefined
+      ? undefined
+      : harnessRunIdForTerminalTarget(report.provider, correlation.terminalTargetId));
+  if (harnessRunId === undefined) return report;
+
+  const matches = snapshot.rows.filter((row) => {
+    if (row.agent?.harness !== report.provider || row.agent.sessionId === undefined) return false;
+    return row.agent.runId === harnessRunId;
+  });
+  const match = matches[0];
+  if (matches.length !== 1 || match?.agent?.sessionId === undefined) return report;
+  const session = snapshot.sessions.find(
+    (candidate) =>
+      candidate.origin === "station" &&
+      candidate.id === match.agent?.sessionId &&
+      candidate.projectId === match.projectId &&
+      candidate.worktreeId === match.id,
+  );
+  if (session === undefined) return report;
+  return {
+    ...report,
+    correlation: { ...correlation, sessionId: session.id },
+  };
+}
+
 // Deepest containing worktree wins; a tie at the same depth is ambiguous and
 // resolves to nothing (mirrors resolveWorktreeByProjectPath in run.ts).
 function rowIdForCwd(rows: readonly WorktreeRow[], cwd: string): string | undefined {
@@ -76,6 +122,11 @@ function rowIdForCwd(rows: readonly WorktreeRow[], cwd: string): string | undefi
   return match.id;
 }
 
+/**
+ * POLICY
+ *
+ * Projects native-authorized harness status onto one current row and session.
+ */
 export function projectHarnessEventReportOntoSnapshot(input: {
   snapshot: StationSnapshot;
   report: HarnessEventReport;

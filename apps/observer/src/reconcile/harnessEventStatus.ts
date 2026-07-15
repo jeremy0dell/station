@@ -3,6 +3,7 @@ import type {
   HarnessRunObservation,
   ObservedStatus,
 } from "@station/contracts";
+import { correlateHarnessExecution } from "../harnessExecutionIdentity.js";
 import type { PersistedProviderObservation } from "../persistence/index.js";
 
 export type ObserverHarnessRun = {
@@ -10,12 +11,8 @@ export type ObserverHarnessRun = {
   status: ObservedStatus;
 };
 
-type CorrelatedBy = "harnessRunId" | "sessionId" | "worktreeId";
-
 type StatusOverlay = {
   status: ObservedStatus;
-  rawEventType?: string;
-  correlatedBy: CorrelatedBy;
   observedAt: string;
   observationId: string;
 };
@@ -119,6 +116,7 @@ export function synthesizeExternalHarnessRuns(input: {
         id,
         provider: event.provider,
         worktreeId,
+        nativeSessionId,
         state: status.value,
         confidence: status.confidence,
         reason: status.reason,
@@ -182,40 +180,33 @@ export function applyHarnessEventStatusOverlays(input: {
     }
 
     const event = observation.payload;
-    if (event.provider !== observation.provider) {
-      continue;
-    }
-    if (event.status === undefined || event.status.value === "unknown") {
-      continue;
-    }
+    if (event.provider !== observation.provider) continue;
+    if (event.status === undefined || event.status.value === "unknown") continue;
 
-    const match = correlateHarnessEvent(event, input.runs);
-    if (match === undefined || shouldPreserveLiveStatus(match.run, event.status)) {
-      continue;
-    }
+    const match = correlateHarnessExecution({
+      evidence: event,
+      runs: input.runs.map((run) => run.run),
+      allowNativeBinding: false,
+    });
+    if (match === undefined) continue;
+
+    const currentRun = input.runs.find((run) => run.run.id === match.run.id);
+    if (currentRun === undefined || shouldPreserveLiveStatus(currentRun, event.status)) continue;
 
     const overlay: StatusOverlay = {
       status: event.status,
-      correlatedBy: match.correlatedBy,
       observedAt: observation.observedAt,
       observationId: observation.id,
     };
-    if (event.rawEventType !== undefined) {
-      overlay.rawEventType = event.rawEventType;
-    }
-
-    const previous = latestByRunId.get(match.run.run.id);
+    const previous = latestByRunId.get(match.run.id);
     if (previous === undefined || compareOverlays(overlay, previous) >= 0) {
-      latestByRunId.set(match.run.run.id, overlay);
+      latestByRunId.set(match.run.id, overlay);
     }
   }
 
   return input.runs.map((run) => {
     const overlay = latestByRunId.get(run.run.id);
-    if (overlay === undefined) {
-      return run;
-    }
-    return applyStatusOverlay(run, overlay);
+    return overlay === undefined ? run : applyStatusOverlay(run, overlay);
   });
 }
 
@@ -226,41 +217,6 @@ function eventOrdinal(event: HarnessEventObservation): number {
   const updated = event.status === undefined ? 0 : Date.parse(event.status.updatedAt);
   const observed = Date.parse(event.observedAt);
   return Math.max(Number.isFinite(updated) ? updated : 0, Number.isFinite(observed) ? observed : 0);
-}
-
-function correlateHarnessEvent(
-  event: HarnessEventObservation,
-  runs: ObserverHarnessRun[],
-): { run: ObserverHarnessRun; correlatedBy: CorrelatedBy } | undefined {
-  const providerRuns = runs.filter((run) => run.run.provider === event.provider);
-
-  if (event.harnessRunId !== undefined) {
-    const matches = providerRuns.filter((run) => run.run.id === event.harnessRunId);
-    return singleCorrelation(matches, "harnessRunId");
-  }
-
-  if (event.sessionId !== undefined) {
-    const matches = providerRuns.filter((run) => run.run.sessionId === event.sessionId);
-    return singleCorrelation(matches, "sessionId");
-  }
-
-  if (event.worktreeId !== undefined) {
-    const matches = providerRuns.filter((run) => run.run.worktreeId === event.worktreeId);
-    return singleCorrelation(matches, "worktreeId");
-  }
-
-  return undefined;
-}
-
-function singleCorrelation(
-  matches: ObserverHarnessRun[],
-  correlatedBy: CorrelatedBy,
-): { run: ObserverHarnessRun; correlatedBy: CorrelatedBy } | undefined {
-  const run = matches[0];
-  if (matches.length !== 1 || run === undefined) {
-    return undefined;
-  }
-  return { run, correlatedBy };
 }
 
 function shouldPreserveLiveStatus(run: ObserverHarnessRun, status: ObservedStatus): boolean {
@@ -293,6 +249,7 @@ function runObservationWithStatus(
   if (run.projectId !== undefined) nextRun.projectId = run.projectId;
   if (run.worktreeId !== undefined) nextRun.worktreeId = run.worktreeId;
   if (run.sessionId !== undefined) nextRun.sessionId = run.sessionId;
+  if (run.nativeSessionId !== undefined) nextRun.nativeSessionId = run.nativeSessionId;
   if (run.pid !== undefined) nextRun.pid = run.pid;
   if (run.cwd !== undefined) nextRun.cwd = run.cwd;
   if (run.providerData !== undefined) nextRun.providerData = run.providerData;

@@ -142,6 +142,15 @@ function applyMigrations(database: SqlDatabase, clock: RuntimeClock): void {
     );
   `);
 
+  // Requeue the two unpublished migration numbers after main assigned version 12 elsewhere.
+  database
+    .prepare(`
+      DELETE FROM observer_migrations
+      WHERE (version = 12 AND name = 'session_harness_executions')
+         OR (version = 13 AND name = 'native_binding_ingress_claims')
+    `)
+    .run();
+
   const appliedVersions = new Set(
     readAppliedMigrations(database).map((migration) => migration.version),
   );

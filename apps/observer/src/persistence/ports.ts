@@ -13,6 +13,7 @@ import type {
   EventAndObservationIngressDedupeResult,
   EventIngressDedupeResult,
   EventRecordOptions,
+  HarnessExecutionIngress,
   IngressDedupeKey,
   ListSessionRecoveryHandlesOptions,
   PersistedCommand,
@@ -20,6 +21,7 @@ import type {
   PersistedEvent,
   PersistedProviderObservation,
   PersistedSession,
+  PersistedSessionHarnessExecution,
   PersistedSessionTurnReadiness,
   PersistedWorktreeMetadataCurrent,
   PersistReconcileResultInput,
@@ -73,7 +75,7 @@ export interface EventJournal {
 /**
  * DRIVEN PORT
  *
- * Atomically records primary ingress acceptance and downstream observation and readiness completion under separate dedupe keys.
+ * Atomically records ingress acceptance, observations, native execution binding, recovery, and readiness under dedupe keys.
  */
 export interface IngressJournal {
   recordEventWithIngressDedupe(
@@ -86,10 +88,12 @@ export interface IngressJournal {
     event: StationEvent;
     eventOptions: EventRecordOptions;
     observation: RecordProviderObservationInput;
+    harnessExecution?: HarnessExecutionIngress;
     dedupe: IngressDedupeKey;
   }): Promise<EventAndObservationIngressDedupeResult>;
   recordProviderObservationsWithIngressDedupe(input: {
     observations: RecordProviderObservationInput[];
+    harnessExecutions?: HarnessExecutionIngress[];
     turnReadiness?: SessionTurnReadinessMutation[];
     dedupe: IngressDedupeKey;
     createdAt?: string;
@@ -131,10 +135,16 @@ export interface ReconcileStore {
 /**
  * DRIVEN PORT
  *
- * Maintains Observer-owned session lifecycle, titles, remembered harness selection, recovery handles, and turn readiness.
+ * Maintains Observer-owned session lifecycle, provider-native execution bindings, titles,
+ * remembered harness selection, recovery handles, and turn readiness.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
+  getSessionHarnessExecution(input: {
+    provider: ProviderId;
+    sessionId: string;
+  }): Promise<PersistedSessionHarnessExecution | undefined>;
+  listSessionHarnessExecutions(): Promise<PersistedSessionHarnessExecution[]>;
   findRememberedHarnessProviderForWorktree(input: {
     projectId: string;
     worktreeId: string;

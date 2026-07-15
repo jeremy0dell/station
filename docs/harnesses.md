@@ -53,7 +53,7 @@ Events (`integrations/harness/codex/src/hooks/hookConstants.ts`): `SessionStart`
 
 Hooks: a dedicated `station` profile (`station.config.toml`) under `~/.codex` calls `station-codex-hook.sh`.
 
-Coverage: full. `PermissionRequest` drives **needs attention** and `Stop` drives **idle**. Codex has no session-end hook, so **exited** is inferred from process state.
+Coverage: full. `PermissionRequest` drives **needs attention**, a completed `Stop` drives **idle**, and `stop_hook_active` keeps **working**. Codex has no session-end hook, so **exited** is inferred from process state.
 
 ### Cursor (Full)
 

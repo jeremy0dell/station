@@ -20,6 +20,110 @@ const runObservedAt = "2026-05-21T12:00:00.000Z";
 const eventObservedAt = "2026-05-21T12:00:01.000Z";
 
 describe("harness event status overlays", () => {
+  it("does not fall back to worktree correlation for a stale terminal target", () => {
+    const result = overlay({
+      runs: [run()],
+      observations: [
+        observation({
+          worktreeId: "wt_1",
+          terminalTargetId: "tmux:station:@old:%9",
+          nativeSessionId: "native_old",
+          status: status("working", "medium", "A stale terminal is working."),
+        }),
+      ],
+    });
+
+    expect(result[0]?.run).toMatchObject({ state: "unknown" });
+  });
+
+  it("keeps a foreign native-session Stop from completing the active Codex execution", () => {
+    const active = overlay({
+      runs: [run({ nativeSessionId: "native_a" })],
+      observations: [
+        observation({
+          sessionId: "ses_1",
+          worktreeId: "wt_1",
+          nativeSessionId: "native_a",
+          rawEventType: "SubagentStop",
+          status: status(
+            "working",
+            "medium",
+            "Codex subagent stopped.",
+            "2026-05-21T12:00:02.000Z",
+          ),
+        }),
+      ],
+    });
+    const foreignStop = overlay({
+      runs: active,
+      observations: [
+        observation({
+          sessionId: "ses_1",
+          worktreeId: "wt_1",
+          nativeSessionId: "native_b",
+          rawEventType: "Stop",
+          status: status(
+            "idle",
+            "high",
+            "A different Codex session completed.",
+            "2026-05-21T12:00:03.000Z",
+          ),
+        }),
+      ],
+    });
+
+    expect(foreignStop[0]?.run).toMatchObject({
+      nativeSessionId: "native_a",
+      state: "working",
+      reason: "Codex subagent stopped.",
+    });
+
+    const continuation = overlay({
+      runs: foreignStop,
+      observations: [
+        observation({
+          sessionId: "ses_1",
+          worktreeId: "wt_1",
+          nativeSessionId: "native_a",
+          rawEventType: "PreToolUse",
+          status: status(
+            "working",
+            "medium",
+            "The active Codex session continued.",
+            "2026-05-21T12:00:04.000Z",
+          ),
+        }),
+      ],
+    });
+    expect(continuation[0]?.run).toMatchObject({
+      nativeSessionId: "native_a",
+      state: "working",
+      reason: "The active Codex session continued.",
+    });
+
+    const completed = overlay({
+      runs: continuation,
+      observations: [
+        observation({
+          sessionId: "ses_1",
+          worktreeId: "wt_1",
+          nativeSessionId: "native_a",
+          rawEventType: "Stop",
+          status: status(
+            "idle",
+            "high",
+            "The active Codex session completed.",
+            "2026-05-21T12:00:05.000Z",
+          ),
+        }),
+      ],
+    });
+    expect(completed[0]?.run).toMatchObject({
+      nativeSessionId: "native_a",
+      state: "idle",
+    });
+  });
+
   it("promotes a correlated Codex activity event over terminal-only unknown status", () => {
     const result = overlay({
       runs: [run()],
@@ -380,6 +484,9 @@ function run(input: Partial<HarnessRunObservation> = {}): ObserverHarnessRun {
   };
   if (input.pid !== undefined) runObservation.pid = input.pid;
   if (input.cwd !== undefined) runObservation.cwd = input.cwd;
+  if (input.nativeSessionId !== undefined) {
+    runObservation.nativeSessionId = input.nativeSessionId;
+  }
   if (input.providerData !== undefined) runObservation.providerData = input.providerData;
   return observerHarnessRunFromRun(runObservation);
 }

@@ -11,6 +11,10 @@ import type {
 import { ProviderProjectConfigSchema } from "@station/contracts";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../features/evaluator.js";
+import {
+  decideSessionHarnessExecution,
+  sessionHarnessExecutionEvidenceFromReport,
+} from "../harnessExecutionIdentity.js";
 import type {
   EventJournal,
   ObservationStore,
@@ -89,7 +93,9 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   const providerReadRetries = input.providerReadRetries ?? 1;
   let config = input.config;
   let projects = providerProjectsFromConfig(config);
-  let reconcileChain: Promise<void> = Promise.resolve();
+  // Binding authorization and base projection share ordering with reconciles so
+  // an awaited authority read cannot commit through a superseding snapshot.
+  let snapshotWriterChain: Promise<void> = Promise.resolve();
   let providerHealth: Record<string, ProviderHealth> = {};
   let lastReconcile: ReconcileTiming | undefined;
   let snapshot = buildInitialSnapshot({
@@ -110,6 +116,11 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     ...(input.logger === undefined ? {} : { logger: input.logger }),
   };
   const observer = { pid, startedAt, version };
+  const enqueueSnapshotWrite = <T>(write: () => Promise<T>): Promise<T> => {
+    const execution = snapshotWriterChain.then(write);
+    snapshotWriterChain = execution.catch(() => undefined).then(() => undefined);
+    return execution;
+  };
 
   return {
     reconcile: async (reason = "manual") => {
@@ -134,23 +145,49 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         return snapshot;
       };
 
-      const previous = reconcileChain;
-      const execution = previous.then(run);
-      reconcileChain = execution.catch(() => undefined).then(() => undefined);
-      return execution;
+      return enqueueSnapshotWrite(run);
     },
     projectHarnessEventStatus: async (report) => {
-      const result = projectHarnessEventReportOntoSnapshot({
-        snapshot,
-        report,
-        projectedAt: toIsoTimestamp(clock.now()),
+      const result = await enqueueSnapshotWrite(async (): Promise<StatusProjectionResult> => {
+        const sessionId = report.correlation?.sessionId;
+        // Native reports remain diagnostic-only until a durable Station-session
+        // binding can authorize their projection.
+        if (
+          report.correlation?.nativeSessionId !== undefined &&
+          (input.persistence === undefined || sessionId === undefined)
+        ) {
+          return { projected: false, snapshot, events: [] };
+        }
+        if (input.persistence !== undefined && sessionId !== undefined) {
+          const binding = await input.persistence.getSessionHarnessExecution({
+            provider: report.provider,
+            sessionId,
+          });
+          const decision = decideSessionHarnessExecution({
+            current: binding,
+            evidence: sessionHarnessExecutionEvidenceFromReport(report),
+          });
+          if (!decision.mayDeriveState) {
+            return { projected: false, snapshot, events: [] };
+          }
+        }
+        const projection = projectHarnessEventReportOntoSnapshot({
+          snapshot,
+          report,
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        // Durable session authorization must match the canonical session selected by projection.
+        if (sessionId !== undefined && projection.sessionId !== sessionId) {
+          return { projected: false, snapshot, events: [] };
+        }
+        if (projection.projected) {
+          snapshot = projection.snapshot;
+        }
+        return projection;
       });
       if (!result.projected) {
         return result;
       }
-      // Commit the base projection synchronously so a concurrent reconcile or
-      // acknowledgeTurn cannot be clobbered by a stale post-await write.
-      snapshot = result.snapshot;
       if (input.persistence === undefined) {
         return result;
       }
@@ -163,11 +200,21 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       if (persisted === undefined) {
         return result;
       }
+      // A newer completion can win the readiness conflict while this write is pending.
+      if (persisted.token !== report.reportId) {
+        return { projected: false, snapshot, events: [] };
+      }
       // Re-resolve against the live snapshot, which may have changed during the
       // upsert await, then apply the readiness marker synchronously.
       const applied = applyTurnReadinessToSnapshot(snapshot, persisted);
       if (applied === undefined) {
-        return result;
+        // The live graph superseded this completion during the write; remove only
+        // its marker and suppress the stale idle events that would notify hooks.
+        await input.persistence.deleteSessionTurnReadiness({
+          sessionId: persisted.sessionId,
+          token: report.reportId,
+        });
+        return { projected: false, snapshot, events: [] };
       }
       snapshot = applied.snapshot;
       return {
@@ -235,8 +282,8 @@ async function persistTurnReadinessForReport(input: {
   // for the user mid-turn) makes ready_to_read stale. Without this closing
   // edge the badge survives on a working agent and cannot be acknowledged,
   // because snapshots only expose readiness on idle agents. Status drives the
-  // clear regardless of turn.kind so this writer agrees with
-  // persistTurnReadinessFromHarnessObservation for identical input.
+  // clear regardless of turn.kind so this writer agrees with the ingress
+  // readiness policy for identical input.
   const status = input.report.status?.value;
   if (status === "working" || status === "starting" || status === "needs_attention") {
     if (input.result.sessionId !== undefined) {

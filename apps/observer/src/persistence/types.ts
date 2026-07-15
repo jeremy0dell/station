@@ -1,13 +1,16 @@
 import type {
+  AgentState,
   CommandId,
   DiagnosticDetail,
   ErrorEnvelope,
   HarnessEventObservation,
   HarnessRunObservation,
+  ObservedStatus,
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
   SafeError,
+  SessionRecoveryHandle,
   StationCommand,
   StationEvent,
   TerminalTargetObservation,
@@ -159,6 +162,27 @@ export type SessionTurnReadinessMutation =
       action: "delete";
       sessionId: string;
     };
+
+export type SessionHarnessExecutionEvidence = {
+  provider: ProviderId;
+  sessionId?: string;
+  nativeSessionId?: string;
+  status?: ObservedStatus;
+};
+
+export type PersistedSessionHarnessExecution = {
+  provider: ProviderId;
+  sessionId: string;
+  nativeSessionId: string;
+  state: AgentState;
+  statusUpdatedAt: string;
+};
+
+export type HarnessExecutionIngress = {
+  evidence: SessionHarnessExecutionEvidence;
+  recoveryHandle?: SessionRecoveryHandle;
+  turnReadiness?: SessionTurnReadinessMutation;
+};
 
 export type PersistedWorktreeMetadataCurrent<
   TKind extends WorktreeMetadataCurrentKind = WorktreeMetadataCurrentKind,

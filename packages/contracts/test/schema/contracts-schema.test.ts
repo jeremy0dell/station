@@ -83,6 +83,21 @@ function expectFails(schema: ZodType, value: unknown, label: string) {
 }
 
 describe("contract schemas", () => {
+  it("keeps provider-native execution identity on harness run observations", () => {
+    expect(
+      HarnessRunObservationSchema.parse({
+        id: "run_codex_1",
+        provider: "codex",
+        sessionId: "ses_station_1",
+        nativeSessionId: "native_codex_1",
+        state: "working",
+        confidence: "high",
+        reason: "Codex is active.",
+        observedAt: "2026-07-14T12:00:00.000Z",
+      }),
+    ).toMatchObject({ nativeSessionId: "native_codex_1" });
+  });
+
   it("keeps id aliases distinct while preserving string wire values", () => {
     const projectId: ProjectId = "project_api";
 

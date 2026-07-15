@@ -278,6 +278,102 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
+  it("reloads native harness execution bindings without a reconstructed session row", async () => {
+    const dbPath = await tempDbPath();
+    const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+      idFactory: ids(),
+    });
+    const status = {
+      value: "working" as const,
+      confidence: "medium" as const,
+      reason: "Codex subagent stopped.",
+      source: "harness_event" as const,
+      updatedAt: now,
+    };
+
+    await persistence.recordEventAndProviderObservationWithIngressDedupe({
+      event: {
+        type: "harness.eventReported",
+        at: now,
+        reportId: "report_native_a",
+        provider: "codex",
+        eventType: "SubagentStop",
+      },
+      eventOptions: { source: "hook", createdAt: now },
+      observation: {
+        provider: "codex",
+        providerType: "harness",
+        entityKind: "harness_event",
+        entityKey: "native_a",
+        payload: {
+          provider: "codex",
+          reportId: "report_native_a",
+          eventType: "SubagentStop",
+          sessionId: "ses_native",
+          nativeSessionId: "native_a",
+          status,
+          observedAt: now,
+        },
+        observedAt: now,
+      },
+      harnessExecution: {
+        evidence: {
+          provider: "codex",
+          sessionId: "ses_native",
+          nativeSessionId: "native_a",
+          status,
+        },
+      },
+      dedupe: { kind: "harness_report", id: "report_native_a" },
+    });
+    sqlite.close();
+
+    const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
+    const reloaded = createSqliteObserverPersistence({
+      sqlite: reopened,
+      clock: { now: () => new Date(later) },
+      idFactory: ids(),
+    });
+    await expect(
+      reloaded.getSessionHarnessExecution({ provider: "codex", sessionId: "ses_native" }),
+    ).resolves.toMatchObject({
+      nativeSessionId: "native_a",
+      state: "working",
+      statusUpdatedAt: now,
+    });
+    await expect(reloaded.listSessions()).resolves.toEqual([]);
+    reopened.close();
+  });
+
+  it("invalidates legacy ingress claims after the native binding schema is applied", async () => {
+    const dbPath = await tempDbPath();
+    const legacy = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
+    const insertClaim = legacy.database.prepare(`
+      INSERT INTO hook_ingress_dedupe (kind, dedupe_id, event_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    insertClaim.run("harness_report", "legacy_report", "evt_legacy_report", now);
+    insertClaim.run("hook_processing", "legacy_processing", "evt_legacy_processing", now);
+    insertClaim.run("hook", "legacy_hook", "evt_legacy_hook", now);
+    legacy.database.exec(`
+      DELETE FROM observer_migrations WHERE version = 14;
+      UPDATE observer_meta SET value = '13' WHERE key = 'schema_version';
+    `);
+    legacy.close();
+
+    const upgraded = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
+
+    expect(
+      upgraded.database
+        .prepare("SELECT kind, dedupe_id FROM hook_ingress_dedupe ORDER BY kind, dedupe_id")
+        .all(),
+    ).toEqual([{ kind: "hook", dedupe_id: "legacy_hook" }]);
+    upgraded.close();
+  });
+
   it("skips retired command rows without requiring a migration", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({

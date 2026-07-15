@@ -286,6 +286,15 @@ export function statusFromCodexHookEvent(
     };
   }
   if (event.hook_event_name === "Stop") {
+    if (event.stop_hook_active) {
+      return {
+        value: "working",
+        confidence: "medium",
+        reason: "A Stop hook kept Codex working.",
+        source: "harness_event",
+        updatedAt: observedAt,
+      };
+    }
     return {
       value: "idle",
       confidence: "high",
