@@ -160,6 +160,7 @@ export function createSessionResumeAgentHandler(
       throw receipt.error;
     }
     throwIfAborted(context.signal);
+    await options.persistence.reopenSession(sessionId);
 
     const nextSnapshot = await reconcileAndPublish({
       core: options.core,

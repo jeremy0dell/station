@@ -104,6 +104,63 @@ describe("live harness status projection", () => {
     });
   });
 
+  it("projects an external run from working to idle with canonical counts", () => {
+    const result = projectHarnessEventReportOntoSnapshot({
+      snapshot: externalSnapshotFor("working"),
+      report: report({
+        status: status("idle", "high", "External Codex turn completed."),
+        correlation: { harnessRunId: "run_web_external" },
+      }),
+      projectedAt: eventAt,
+    });
+
+    expect(result.snapshot.rows[0]?.agent?.state).toBe("idle");
+    expect(result.snapshot.sessions).toEqual([
+      expect.objectContaining({
+        id: "run_web_external",
+        origin: "external",
+        status: expect.objectContaining({ value: "idle" }),
+      }),
+    ]);
+    expect(result.snapshot.counts).toMatchObject({
+      sessions: 1,
+      agents: 1,
+      working: 0,
+      idle: 1,
+    });
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "worktree.agentStateChanged" }),
+        expect.objectContaining({ type: "session.updated", sessionId: "run_web_external" }),
+      ]),
+    );
+  });
+
+  it.each([
+    "exited",
+    "none",
+  ] as const)("removes external membership when a live report becomes %s", (value) => {
+    const result = projectHarnessEventReportOntoSnapshot({
+      snapshot: externalSnapshotFor("working"),
+      report: report({
+        status: status(value, "high", `External Codex run is ${value}.`),
+        correlation: { harnessRunId: "run_web_external" },
+      }),
+      projectedAt: eventAt,
+    });
+
+    expect(result.snapshot.sessions).toEqual([]);
+    expect(result.snapshot.counts).toMatchObject({ sessions: 0, agents: 0, working: 0 });
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "session.removed",
+          sessionId: "run_web_external",
+        }),
+      ]),
+    );
+  });
+
   it("keeps unknown, mismatched, and ambiguous reports diagnostic-only", () => {
     const unknown = projectHarnessEventReportOntoSnapshot({
       snapshot: snapshotFor({ state: "working", confidence: "high" }),
@@ -387,6 +444,45 @@ function snapshotFor(input: { state?: AgentState; confidence?: Confidence; now?:
     worktrees,
     terminalTargets: terminals,
     harnessRuns,
+  });
+}
+
+function externalSnapshotFor(state: AgentState) {
+  const worktree = createFakeWorktree({
+    id: "wt_web_external",
+    projectId: "web",
+    branch: "external",
+    path: "/tmp/station/web/external",
+    now,
+  });
+  return buildStationSnapshot({
+    generatedAt: now,
+    observer: { pid: 4242, startedAt: now, version: "0.0.0", healthy: true },
+    projects: [
+      {
+        id: "web",
+        label: "web",
+        root: "/tmp/station/web",
+        defaults: { harness: "codex", terminal: "tmux", layout: "agent-shell" },
+        worktrunk: { enabled: true },
+      },
+    ],
+    worktreeProviderId: "fake-worktree",
+    providerHealth: {},
+    worktrees: [worktree],
+    terminalTargets: [],
+    harnessRuns: [
+      observerHarnessRunFromRun(
+        createFakeHarnessRun({
+          id: "run_web_external",
+          provider: "codex",
+          projectId: "web",
+          worktreeId: worktree.id,
+          state,
+          now,
+        }),
+      ),
+    ],
   });
 }
 

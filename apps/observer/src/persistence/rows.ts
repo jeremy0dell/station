@@ -69,6 +69,7 @@ export type SqliteSessionRow = {
   state: string | null;
   created_at: string;
   ended_at: string | null;
+  lifecycle: "open" | "ended" | null;
   last_seen_at: string;
 };
 
@@ -139,6 +140,7 @@ export function sessionFromRow(row: SqliteSessionRow): PersistedSession {
     id: row.id,
     projectId: row.project_id,
     worktreeId: row.worktree_id,
+    lifecycle: row.lifecycle ?? "legacy",
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
   };

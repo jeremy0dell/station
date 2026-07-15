@@ -1,9 +1,10 @@
 import type { SafeError, StationSnapshot, TerminalClosePayload } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
-import type { EventJournal } from "../persistence/index.js";
+import type { EventJournal, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
+import { nowIso } from "../utils/time.js";
 import { assertCommandType } from "./assertCommand.js";
 import { throwIfAborted } from "./cancellation.js";
 import { publishRemovedSessionIfAbsent } from "./cleanup/events.js";
@@ -33,7 +34,7 @@ export type CreateTerminalCloseHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
-  persistence?: EventJournal | undefined;
+  persistence?: (EventJournal & SessionStore) | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
@@ -86,6 +87,12 @@ export function createTerminalCloseHandler(
       commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
+    if (resolved.session?.origin === "station" && options.persistence !== undefined) {
+      await options.persistence.markSessionsEnded({
+        subject: { kind: "session", sessionId: resolved.session.id },
+        endedAt: nowIso(options.clock),
+      });
+    }
 
     const nextSnapshot = await reconcileAndPublish({
       core: options.core,
@@ -124,8 +131,15 @@ function resolveTerminalClosePolicySubject(
   const row = resolveWorktreeRowOrThrow(snapshot, payload.worktreeId);
   const session =
     row.agent?.sessionId === undefined
-      ? undefined
-      : snapshot.sessions.find((candidate) => candidate.id === row.agent?.sessionId);
+      ? snapshot.sessions.find(
+          (candidate) =>
+            candidate.origin === "station" &&
+            candidate.worktreeId === row.id &&
+            candidate.terminal !== undefined,
+        )
+      : snapshot.sessions.find(
+          (candidate) => candidate.origin === "station" && candidate.id === row.agent?.sessionId,
+        );
   return { row, session };
 }
 

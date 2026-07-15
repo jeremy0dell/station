@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "0.7.0",
+  "schemaVersion": "0.8.0",
   "generatedAt": "not-a-date",
   "observer": {
     "pid": 0,
@@ -13,6 +13,7 @@
   "sessions": [],
   "counts": {
     "projects": 0,
+    "sessions": 0,
     "worktrees": 0,
     "agents": 0,
     "working": 0,

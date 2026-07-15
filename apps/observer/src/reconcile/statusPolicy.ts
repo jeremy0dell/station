@@ -1,4 +1,4 @@
-import type { AgentState, ProjectView, WorktreeRow } from "@station/contracts";
+import type { AgentState, ProjectView, SessionView, WorktreeRow } from "@station/contracts";
 
 export const statusPolicy: Record<
   AgentState | "no_agent",
@@ -65,21 +65,30 @@ export const statusPolicy: Record<
   },
 };
 
-export function countsForRows(rows: readonly WorktreeRow[]): ProjectView["counts"] {
-  return rows.reduce(
-    (counts, row) => {
-      counts.worktrees += 1;
-      if (row.agent !== undefined) {
+/**
+ * POLICY
+ *
+ * Derives session and activity totals from canonical sessions while retaining worktree inventory.
+ */
+export function countsForSnapshot(
+  rows: readonly WorktreeRow[],
+  sessions: readonly SessionView[],
+): ProjectView["counts"] {
+  return sessions.reduce(
+    (counts, session) => {
+      counts.sessions += 1;
+      if (session.status.value !== "none") {
         counts.agents += 1;
-        if (row.agent.state === "working") counts.working += 1;
-        if (row.agent.state === "idle") counts.idle += 1;
-        if (row.agent.state === "needs_attention") counts.attention += 1;
-        if (row.agent.state === "unknown") counts.unknown += 1;
+        if (session.status.value === "working") counts.working += 1;
+        if (session.status.value === "idle") counts.idle += 1;
+        if (session.status.value === "needs_attention") counts.attention += 1;
+        if (session.status.value === "unknown") counts.unknown += 1;
       }
       return counts;
     },
     {
-      worktrees: 0,
+      sessions: 0,
+      worktrees: rows.length,
       agents: 0,
       working: 0,
       idle: 0,

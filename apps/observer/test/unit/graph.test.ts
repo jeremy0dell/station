@@ -7,7 +7,11 @@ import type {
 } from "@station/contracts";
 import { StationSnapshotSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { buildStationSnapshot, type ObserverTurnReadiness } from "../../src/reconcile/graph";
+import {
+  buildStationSnapshot,
+  type ObserverSessionMetadata,
+  type ObserverTurnReadiness,
+} from "../../src/reconcile/graph";
 import {
   type ObserverHarnessRun,
   observerHarnessRunFromRun,
@@ -145,6 +149,7 @@ function build(overrides: {
   worktrees?: WorktreeObservation[];
   terminals?: TerminalTargetObservation[];
   harnessRuns?: ObserverHarnessRun[];
+  sessionMetadata?: ObserverSessionMetadata[];
   turnReadiness?: ObserverTurnReadiness[];
   providerHealth?: Record<string, ProviderHealth>;
 }) {
@@ -159,11 +164,483 @@ function build(overrides: {
     worktrees: overrides.worktrees ?? [],
     terminalTargets: overrides.terminals ?? [],
     harnessRuns: overrides.harnessRuns ?? [],
+    sessionMetadata: overrides.sessionMetadata ?? [],
     turnReadiness: overrides.turnReadiness ?? [],
   });
 }
 
 describe("observer graph derivation", () => {
+  it("counts one canonical session alongside ten unattached worktrees", () => {
+    const attached = worktree("wt_web_session", "web", "session");
+    const unattached = Array.from({ length: 10 }, (_, index) =>
+      worktree(`wt_web_bare_${index}`, "web", `bare-${index}`),
+    );
+
+    const snapshot = build({
+      projects: projects.slice(0, 1),
+      worktrees: [attached, ...unattached],
+      terminals: [terminal("term_session", attached.id, "run_session")],
+      harnessRuns: [harness("run_session", attached.id, "idle")],
+    });
+
+    expect(snapshot.rows).toHaveLength(11);
+    expect(snapshot.sessions).toHaveLength(1);
+    expect(snapshot.sessions[0]).toMatchObject({
+      id: "ses_wt_web_session",
+      worktreeId: attached.id,
+      origin: "station",
+    });
+    expect(snapshot.projects[0]?.counts).toMatchObject({
+      sessions: 1,
+      worktrees: 11,
+      agents: 1,
+      idle: 1,
+    });
+    expect(snapshot.counts).toMatchObject({
+      sessions: 1,
+      worktrees: 11,
+      agents: 1,
+      idle: 1,
+    });
+  });
+
+  it("retains the newest unended Station session without a live agent", () => {
+    const retainedAt = "2026-05-20T11:58:00.000Z";
+    const retained = worktree("wt_web_retained", "web", "retained");
+    const snapshot = build({
+      projects: projects.slice(0, 1),
+      worktrees: [retained],
+      sessionMetadata: [
+        {
+          id: "ses_older",
+          projectId: "web",
+          worktreeId: retained.id,
+          lifecycle: "open",
+          harness: "fake-harness",
+          createdAt: "2026-05-20T11:45:00.000Z",
+          lastSeenAt: "2026-05-20T11:50:00.000Z",
+        },
+        {
+          id: "ses_retained",
+          projectId: "web",
+          worktreeId: retained.id,
+          lifecycle: "open",
+          title: "retained title",
+          harness: "fake-harness",
+          createdAt: retainedAt,
+          lastSeenAt: retainedAt,
+        },
+      ],
+    });
+
+    expect(snapshot.rows[0]?.agent).toBeUndefined();
+    expect(snapshot.sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_retained",
+        worktreeId: retained.id,
+        origin: "station",
+        title: "retained title",
+        status: expect.objectContaining({ value: "none", source: "reconcile" }),
+      }),
+    ]);
+    expect(snapshot.sessions[0]).not.toHaveProperty("terminal");
+    expect(snapshot.counts.sessions).toBe(1);
+    expect(snapshot.counts.agents).toBe(0);
+  });
+
+  it("does not resurrect a durably ended Station session from terminal or run evidence", () => {
+    const ended = worktree("wt_web_ended", "web", "ended");
+    const endedMetadata: ObserverSessionMetadata = {
+      id: "ses_wt_web_ended",
+      projectId: "web",
+      worktreeId: ended.id,
+      lifecycle: "ended",
+      title: "ended",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:57:00.000Z",
+      endedAt: "2026-05-20T11:59:00.000Z",
+      lastSeenAt: "2026-05-20T11:59:00.000Z",
+    };
+    const observedTerminal = terminal("term_ended", ended.id, "run_ended");
+
+    const terminalOnly = build({
+      projects: projects.slice(0, 1),
+      worktrees: [ended],
+      terminals: [observedTerminal],
+      sessionMetadata: [endedMetadata],
+    });
+    const runPresent = build({
+      projects: projects.slice(0, 1),
+      worktrees: [ended],
+      terminals: [observedTerminal],
+      harnessRuns: [harness("run_ended", ended.id, "working")],
+      sessionMetadata: [endedMetadata],
+    });
+
+    expect(terminalOnly.sessions).toEqual([]);
+    expect(runPresent.sessions).toEqual([]);
+    expect(terminalOnly.counts.sessions).toBe(0);
+    expect(runPresent.counts.sessions).toBe(0);
+  });
+
+  it("retains Station membership independently from qualifying external run evidence", () => {
+    const mixed = worktree("wt_web_mixed", "web", "mixed");
+    const retained: ObserverSessionMetadata = {
+      id: "ses_wt_web_mixed",
+      projectId: "web",
+      worktreeId: mixed.id,
+      lifecycle: "open",
+      title: "retained",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:50:00.000Z",
+      lastSeenAt: "2026-05-20T11:55:00.000Z",
+    };
+    const externalRun = observerHarnessRunFromRun({
+      id: "codex:external:native_mixed",
+      provider: "codex",
+      projectId: "web",
+      worktreeId: mixed.id,
+      state: "working",
+      confidence: "high",
+      reason: "External Codex run is active.",
+      observedAt: generatedAt,
+    });
+    const observedTerminal = terminal("term_mixed", mixed.id, externalRun.run.id);
+
+    const active = build({
+      projects: projects.slice(0, 1),
+      worktrees: [mixed],
+      terminals: [observedTerminal],
+      harnessRuns: [externalRun],
+      sessionMetadata: [retained],
+    });
+    const inactive = build({
+      projects: projects.slice(0, 1),
+      worktrees: [mixed],
+      terminals: [observedTerminal],
+      harnessRuns: [
+        {
+          ...externalRun,
+          run: { ...externalRun.run, state: "exited" },
+          status: { ...externalRun.status, value: "exited" },
+        },
+      ],
+      sessionMetadata: [retained],
+    });
+
+    expect(active.sessions).toEqual([
+      expect.objectContaining({ id: retained.id, origin: "station" }),
+      expect.objectContaining({ id: externalRun.run.id, origin: "external" }),
+    ]);
+    expect(active.sessions.every((session) => session.terminal === undefined)).toBe(true);
+    expect(active.counts).toMatchObject({ sessions: 2, agents: 1, working: 1 });
+    expect(inactive.sessions).toEqual([
+      expect.objectContaining({ id: retained.id, origin: "station" }),
+    ]);
+    expect(inactive.counts).toMatchObject({ sessions: 1, agents: 0, working: 0 });
+  });
+
+  it("does not activate legacy Station membership from a terminal bound to an external run", () => {
+    const legacy = worktree("wt_web_external_conflict", "web", "external-conflict");
+    const externalRun = observerHarnessRunFromRun({
+      id: "codex:external:native_conflict",
+      provider: "codex",
+      projectId: "web",
+      worktreeId: legacy.id,
+      state: "working",
+      confidence: "high",
+      reason: "External Codex run is active.",
+      observedAt: generatedAt,
+    });
+    const observedTerminal = terminal("term_external_conflict", legacy.id, externalRun.run.id);
+
+    const snapshot = build({
+      projects: projects.slice(0, 1),
+      worktrees: [legacy],
+      terminals: [observedTerminal],
+      harnessRuns: [externalRun],
+      sessionMetadata: [
+        {
+          id: observedTerminal.sessionId as string,
+          projectId: "web",
+          worktreeId: legacy.id,
+          lifecycle: "legacy",
+          harness: "fake-harness",
+          createdAt: "2026-05-20T11:50:00.000Z",
+          lastSeenAt: "2026-05-20T11:55:00.000Z",
+        },
+      ],
+    });
+
+    expect(snapshot.sessions).toEqual([
+      expect.objectContaining({ id: externalRun.run.id, origin: "external" }),
+    ]);
+  });
+
+  it("uses current evidence to activate legacy identity without retaining legacy-only rows", () => {
+    const legacy = worktree("wt_web_legacy", "web", "legacy");
+    const metadata: ObserverSessionMetadata = {
+      id: "ses_wt_web_legacy",
+      projectId: "web",
+      worktreeId: legacy.id,
+      lifecycle: "legacy",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:50:00.000Z",
+      lastSeenAt: "2026-05-20T11:55:00.000Z",
+    };
+
+    const withoutEvidence = build({
+      projects: projects.slice(0, 1),
+      worktrees: [legacy],
+      sessionMetadata: [metadata],
+    });
+    const withEvidence = build({
+      projects: projects.slice(0, 1),
+      worktrees: [legacy],
+      harnessRuns: [harness("run_legacy", legacy.id, "working")],
+      sessionMetadata: [metadata],
+    });
+
+    expect(withoutEvidence.sessions).toEqual([]);
+    expect(withEvidence.sessions).toEqual([
+      expect.objectContaining({ id: metadata.id, origin: "station" }),
+    ]);
+  });
+
+  it("requires strong current evidence before activating legacy membership", () => {
+    const legacy = worktree("wt_web_legacy_evidence", "web", "legacy-evidence");
+    const metadata: ObserverSessionMetadata = {
+      id: `ses_${legacy.id}`,
+      projectId: "web",
+      worktreeId: legacy.id,
+      lifecycle: "legacy",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:50:00.000Z",
+      lastSeenAt: "2026-05-20T11:55:00.000Z",
+    };
+
+    for (const state of ["none", "exited", "unknown"] as const) {
+      const snapshot = build({
+        projects: projects.slice(0, 1),
+        worktrees: [legacy],
+        harnessRuns: [harness(`run_legacy_${state}`, legacy.id, state)],
+        sessionMetadata: [metadata],
+      });
+      expect(snapshot.sessions, `${state} run`).toEqual([]);
+    }
+
+    for (const state of ["none", "stale", "unknown"] as const) {
+      const snapshot = build({
+        projects: projects.slice(0, 1),
+        worktrees: [legacy],
+        terminals: [terminal(`term_legacy_${state}`, legacy.id, "run_missing", state)],
+        sessionMetadata: [metadata],
+      });
+      expect(snapshot.sessions, `${state} terminal`).toEqual([]);
+    }
+
+    const staleSessionCorrelatedTerminal = terminal(
+      "term_legacy_bound_stale",
+      legacy.id,
+      "run_legacy_bound_idle",
+      "stale",
+    );
+    delete staleSessionCorrelatedTerminal.harnessRunId;
+    const staleBoundActiveRun = build({
+      projects: projects.slice(0, 1),
+      worktrees: [legacy],
+      terminals: [staleSessionCorrelatedTerminal],
+      harnessRuns: [harness("run_legacy_bound_idle", legacy.id, "idle")],
+      sessionMetadata: [metadata],
+    });
+    expect(staleBoundActiveRun.sessions).toEqual([]);
+
+    const corroboratedUnknown = build({
+      projects: projects.slice(0, 1),
+      worktrees: [legacy],
+      terminals: [terminal("term_legacy_open", legacy.id, "run_legacy_unknown")],
+      harnessRuns: [harness("run_legacy_unknown", legacy.id, "unknown")],
+      sessionMetadata: [metadata],
+    });
+    expect(corroboratedUnknown.sessions).toEqual([
+      expect.objectContaining({
+        id: metadata.id,
+        origin: "station",
+        status: expect.objectContaining({ value: "unknown" }),
+      }),
+    ]);
+
+    const explicitlyOpen = build({
+      projects: projects.slice(0, 1),
+      worktrees: [legacy],
+      harnessRuns: [harness("run_legacy_exited", legacy.id, "exited")],
+      sessionMetadata: [{ ...metadata, lifecycle: "open" }],
+    });
+    expect(explicitlyOpen.sessions).toEqual([
+      expect.objectContaining({
+        id: metadata.id,
+        origin: "station",
+        status: expect.objectContaining({ value: "exited" }),
+      }),
+    ]);
+  });
+
+  it("falls back to the newest open Station session when terminal identity is unknown or ended", () => {
+    const retainedWorktree = worktree("wt_web_terminal_fallback", "web", "fallback");
+    const retained: ObserverSessionMetadata = {
+      id: "ses_retained_fallback",
+      projectId: "web",
+      worktreeId: retainedWorktree.id,
+      lifecycle: "open",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:55:00.000Z",
+      lastSeenAt: "2026-05-20T11:58:00.000Z",
+    };
+    const ended: ObserverSessionMetadata = {
+      id: "ses_ended_fallback",
+      projectId: "web",
+      worktreeId: retainedWorktree.id,
+      lifecycle: "ended",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:56:00.000Z",
+      endedAt: "2026-05-20T11:59:00.000Z",
+      lastSeenAt: "2026-05-20T11:59:00.000Z",
+    };
+    const unknownTerminal = terminal("term_unknown_session", retainedWorktree.id, "run_unknown");
+    unknownTerminal.sessionId = "ses_unknown_fallback";
+    const endedTerminal = terminal("term_ended_session", retainedWorktree.id, "run_ended");
+    endedTerminal.sessionId = ended.id;
+
+    for (const observedTerminal of [unknownTerminal, endedTerminal]) {
+      const snapshot = build({
+        projects: projects.slice(0, 1),
+        worktrees: [retainedWorktree],
+        terminals: [observedTerminal],
+        sessionMetadata: [retained, ended],
+      });
+      expect(snapshot.sessions).toEqual([
+        expect.objectContaining({ id: retained.id, origin: "station" }),
+      ]);
+      expect(snapshot.sessions[0]).not.toHaveProperty("terminal");
+    }
+  });
+
+  it("attaches terminals only through matching session or run identity", () => {
+    const attached = worktree("wt_web_terminal_identity", "web", "terminal-identity");
+    const run = harness("run_terminal_identity", attached.id, "idle");
+    const sessionBound = terminal("term_session_bound", attached.id, run.run.id);
+    delete sessionBound.harnessRunId;
+    const runBound = terminal("term_run_bound", attached.id, run.run.id);
+    delete runBound.sessionId;
+    const unbound = terminal("term_unbound", attached.id, run.run.id);
+    delete unbound.sessionId;
+    delete unbound.harnessRunId;
+
+    const attachment = (observedTerminal: TerminalTargetObservation) =>
+      build({
+        projects: projects.slice(0, 1),
+        worktrees: [attached],
+        terminals: [observedTerminal],
+        harnessRuns: [run],
+      }).sessions[0]?.terminal;
+
+    expect(attachment(sessionBound)).toBeDefined();
+    expect(attachment(runBound)).toBeDefined();
+    expect(attachment(unbound)).toBeUndefined();
+  });
+
+  it("does not attach an unbound terminal to a retained Station session", () => {
+    const retainedWorktree = worktree("wt_web_unbound_terminal", "web", "unbound-terminal");
+    const retained: ObserverSessionMetadata = {
+      id: "ses_unbound_terminal",
+      projectId: "web",
+      worktreeId: retainedWorktree.id,
+      lifecycle: "open",
+      harness: "fake-harness",
+      createdAt: "2026-05-20T11:50:00.000Z",
+      lastSeenAt: "2026-05-20T11:55:00.000Z",
+    };
+    const unbound = terminal("term_unbound_retained", retainedWorktree.id, "run_unbound");
+    delete unbound.sessionId;
+    delete unbound.harnessRunId;
+
+    const snapshot = build({
+      projects: projects.slice(0, 1),
+      worktrees: [retainedWorktree],
+      terminals: [unbound],
+      sessionMetadata: [retained],
+    });
+
+    expect(snapshot.sessions).toEqual([
+      expect.objectContaining({ id: retained.id, origin: "station" }),
+    ]);
+    expect(snapshot.sessions[0]).not.toHaveProperty("terminal");
+  });
+
+  it("surfaces active external run evidence without fabricating terminal or Station identity", () => {
+    const external = worktree("wt_web_external", "web", "external");
+    const externalRun = observerHarnessRunFromRun({
+      id: "codex:external:native_1",
+      provider: "codex",
+      projectId: "web",
+      worktreeId: external.id,
+      state: "working",
+      confidence: "high",
+      reason: "External Codex run is active.",
+      observedAt: generatedAt,
+    });
+
+    const active = build({
+      projects: projects.slice(0, 1),
+      worktrees: [external],
+      harnessRuns: [externalRun],
+    });
+    const runBoundTerminal = terminal("term_external", external.id, externalRun.run.id);
+    delete runBoundTerminal.sessionId;
+    const attached = build({
+      projects: projects.slice(0, 1),
+      worktrees: [external],
+      terminals: [runBoundTerminal],
+      harnessRuns: [externalRun],
+    });
+    const inactiveSnapshots = (["none", "unknown", "exited"] as const).map((state) =>
+      build({
+        projects: projects.slice(0, 1),
+        worktrees: [external],
+        harnessRuns: [
+          {
+            ...externalRun,
+            run: { ...externalRun.run, state },
+            status: { ...externalRun.status, value: state },
+          },
+        ],
+      }),
+    );
+
+    expect(active.sessions).toEqual([
+      expect.objectContaining({
+        id: externalRun.run.id,
+        worktreeId: external.id,
+        origin: "external",
+      }),
+    ]);
+    expect(active.sessions[0]).not.toHaveProperty("terminal");
+    expect(attached.sessions[0]?.terminal).toBeDefined();
+    expect(active.counts.sessions).toBe(1);
+    expect(active.counts).toMatchObject({ agents: 1, working: 1 });
+    expect(
+      inactiveSnapshots.map((snapshot) => ({
+        sessions: snapshot.sessions,
+        sessionCount: snapshot.counts.sessions,
+        agentCount: snapshot.counts.agents,
+      })),
+    ).toEqual([
+      { sessions: [], sessionCount: 0, agentCount: 0 },
+      { sessions: [], sessionCount: 0, agentCount: 0 },
+      { sessions: [], sessionCount: 0, agentCount: 0 },
+    ]);
+  });
+
   it("keeps configured projects visible even when a project has zero worktrees", () => {
     const snapshot = build({
       projects,
@@ -277,20 +754,20 @@ describe("observer graph derivation", () => {
     });
     expect(snapshot.projects.find((project) => project.id === "api")?.counts).toMatchObject({
       worktrees: 3,
-      agents: 3,
+      agents: 1,
       working: 0,
       idle: 0,
       attention: 0,
-      unknown: 1,
+      unknown: 0,
     });
     expect(snapshot.counts).toMatchObject({
       projects: 2,
       worktrees: 7,
-      agents: 6,
+      agents: 4,
       working: 1,
       idle: 1,
       attention: 1,
-      unknown: 1,
+      unknown: 0,
     });
     expect(snapshot.rows.find((row) => row.id === "wt_api_unknown")?.display).toMatchObject({
       statusLabel: "unknown",

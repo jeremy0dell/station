@@ -205,12 +205,19 @@ describe("buildContextMenuItems", () => {
       stationState,
     );
 
-    expect(items.at(-1)).toEqual({
-      id: "station.removeWorktree",
-      label: "Delete Worktree…",
-      danger: true,
-      action: { kind: "removeWorktree", rowId: "wt_station_idle" },
-    });
+    expect(items).toEqual([
+      {
+        id: "station.forkSession",
+        label: "Fork Session",
+        action: { kind: "forkSession", rowId: "wt_station_idle" },
+      },
+      {
+        id: "station.removeWorktree",
+        label: "Delete Worktree…",
+        danger: true,
+        action: { kind: "removeWorktree", rowId: "wt_station_idle" },
+      },
+    ]);
   });
 
   it("hides remove-worktree for project root rows", () => {

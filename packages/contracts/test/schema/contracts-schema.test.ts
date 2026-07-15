@@ -92,7 +92,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.7.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.8.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -296,6 +296,32 @@ describe("contract schemas", () => {
       "snapshot with provider-neutral terminal attachment",
     );
 
+    const externalSessionSnapshot = structuredClone(snapshots.idleAgent) as {
+      sessions: Array<{ id: string; origin?: string; terminal?: unknown }>;
+    };
+    const externalSession = externalSessionSnapshot.sessions[0];
+    if (externalSession === undefined) {
+      throw new Error("idleAgent fixture must include a session.");
+    }
+    externalSession.id = "codex:external:native_1";
+    externalSession.origin = "external";
+    delete externalSession.terminal;
+    expectParses(
+      StationSnapshotSchema,
+      externalSessionSnapshot,
+      "external session without fabricated terminal attachment",
+    );
+
+    const missingOriginSnapshot = structuredClone(snapshots.idleAgent) as {
+      sessions: Array<{ origin?: string }>;
+    };
+    const missingOriginSession = missingOriginSnapshot.sessions[0];
+    if (missingOriginSession === undefined) {
+      throw new Error("idleAgent fixture must include a session.");
+    }
+    delete missingOriginSession.origin;
+    expectFails(StationSnapshotSchema, missingOriginSnapshot, "session without explicit origin");
+
     expectFails(
       StationSnapshotSchema,
       await loadJson("snapshots/invalid-snapshot.json"),
@@ -393,6 +419,7 @@ describe("contract schemas", () => {
         sessions: [],
         counts: {
           projects: 0,
+          sessions: 0,
           worktrees: 0,
           agents: 0,
           working: 0,
@@ -616,6 +643,7 @@ describe("contract schemas", () => {
       sessions: [],
       counts: {
         projects: 0,
+        sessions: 0,
         worktrees: 1,
         agents: 0,
         working: 0,

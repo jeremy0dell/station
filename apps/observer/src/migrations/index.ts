@@ -9,6 +9,7 @@ import { hookIngressDedupeMigration } from "./008_hook_ingress_dedupe.js";
 import { sessionTitleMigration } from "./009_session_title.js";
 import { sessionRecoveryHandlesMigration } from "./010_session_recovery_handles.js";
 import { sessionTurnReadinessMigration } from "./011_session_turn_readiness.js";
+import { sessionLifecycleMigration } from "./012_session_lifecycle.js";
 
 export type ObserverSqliteMigration = {
   version: number;
@@ -28,6 +29,7 @@ export const migrations = [
   sessionTitleMigration,
   sessionRecoveryHandlesMigration,
   sessionTurnReadinessMigration,
+  sessionLifecycleMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

@@ -10,7 +10,7 @@ const now = "2026-05-20T12:00:00.000Z";
 
 const healthyObserver = (pid = 1234, version = stationBuildInfo().version) =>
   ({
-    schemaVersion: "0.7.0",
+    schemaVersion: "0.8.0",
     status: "healthy",
     pid,
     startedAt: now,

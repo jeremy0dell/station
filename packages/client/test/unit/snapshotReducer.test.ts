@@ -81,6 +81,74 @@ describe("client snapshot reducer", () => {
     expect(removed.snapshot.rows.map((candidate) => candidate.id)).not.toContain("wt_web_added");
   });
 
+  it("requests canonical totals after session membership changes", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const existingSession = snapshot.sessions[0];
+    if (existingSession === undefined) {
+      throw new Error("Expected idle fixture snapshot to have a session.");
+    }
+
+    const created = applyStationEvent(snapshot, {
+      type: "session.created",
+      session: {
+        ...existingSession,
+        id: "ses_web_second",
+      },
+    });
+
+    expect(created.snapshot.sessions).toHaveLength(2);
+    expect(created.snapshot.counts.sessions).toBe(1);
+    expect(created.needsSnapshotRefresh).toBe(true);
+
+    const removed = applyStationEvent(created.snapshot, {
+      type: "session.removed",
+      sessionId: "ses_web_second",
+    });
+
+    expect(removed.snapshot.sessions).toHaveLength(1);
+    expect(removed.needsSnapshotRefresh).toBe(true);
+  });
+
+  it("requests canonical totals after session status changes", () => {
+    const idleSnapshot = createCommandSnapshot("idle");
+    const existingSession = idleSnapshot.sessions[0];
+    if (existingSession === undefined) {
+      throw new Error("Expected idle fixture snapshot to have a session.");
+    }
+    const snapshot = {
+      ...idleSnapshot,
+      sessions: [
+        {
+          ...existingSession,
+          status: {
+            ...existingSession.status,
+            value: "working" as const,
+          },
+        },
+      ],
+      counts: {
+        ...idleSnapshot.counts,
+        working: 1,
+        idle: 0,
+      },
+    };
+
+    const updated = applyStationEvent(snapshot, {
+      type: "session.updated",
+      sessionId: existingSession.id,
+      patch: {
+        status: {
+          ...existingSession.status,
+          value: "idle",
+        },
+      },
+    });
+
+    expect(updated.snapshot.sessions[0]?.status.value).toBe("idle");
+    expect(updated.snapshot.counts).toMatchObject({ working: 1, idle: 0 });
+    expect(updated.needsSnapshotRefresh).toBe(true);
+  });
+
   it("updates row display from live agent state events", () => {
     const snapshot = createCommandSnapshot("idle");
     const result = applyStationEvent(snapshot, {

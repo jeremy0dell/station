@@ -197,6 +197,7 @@ function snapshot(rows: StationSnapshot["rows"]): StationSnapshot {
     sessions: [],
     counts: {
       projects: 0,
+      sessions: 0,
       worktrees: rows.length,
       agents: rows.filter((candidate) => candidate.agent !== undefined).length,
       working: rows.filter((candidate) => candidate.agent?.state === "working").length,

@@ -63,6 +63,7 @@
     "type": "session.created",
     "session": {
       "id": "ses_web_feature_auth",
+      "origin": "station",
       "projectId": "web",
       "worktreeId": "wt_web_feature_auth",
       "createdAt": "2026-05-20T11:59:00.000Z",

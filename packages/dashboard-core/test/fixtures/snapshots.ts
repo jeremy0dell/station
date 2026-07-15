@@ -62,12 +62,23 @@ export function createExternalAgentSnapshot(): StationSnapshot {
   if (externalRow?.agent === undefined) {
     throw new Error("Fixture row wt_web_idle must have an agent.");
   }
+  const stationSession = snapshot.sessions.find((session) => session.worktreeId === externalRow.id);
+  if (stationSession === undefined || externalRow.agent.runId === undefined) {
+    throw new Error("Fixture row wt_web_idle must have a Station session and run id.");
+  }
   const rowWithoutStationOwnership: WorktreeRow = {
     ...externalRow,
     agent: { ...externalRow.agent },
   };
   delete rowWithoutStationOwnership.terminal;
   delete rowWithoutStationOwnership.agent?.sessionId;
+  const externalSession: SessionView = {
+    ...stationSession,
+    id: String(externalRow.agent.runId),
+    origin: "external",
+    harness: { ...stationSession.harness, runId: externalRow.agent.runId },
+  };
+  delete externalSession.terminal;
 
   return {
     ...snapshot,
@@ -84,8 +95,8 @@ export function createExternalAgentSnapshot(): StationSnapshot {
     rows: snapshot.rows.map((candidate) =>
       candidate.id === rowWithoutStationOwnership.id ? rowWithoutStationOwnership : candidate,
     ),
-    sessions: snapshot.sessions.filter(
-      (session) => session.worktreeId !== rowWithoutStationOwnership.id,
+    sessions: snapshot.sessions.map((session) =>
+      session.id === stationSession.id ? externalSession : session,
     ),
   };
 }
@@ -114,6 +125,7 @@ export function createNoProjectsSnapshot(): StationSnapshot {
     sessions: [],
     counts: {
       projects: 0,
+      sessions: 0,
       worktrees: 0,
       agents: 0,
       working: 0,
@@ -246,6 +258,7 @@ function sessionForRow(candidate: WorktreeRow): SessionView {
     terminal.observedAt = candidate.terminal.observedAt;
   return {
     id: candidate.agent.sessionId ?? `ses_${candidate.id}`,
+    origin: "station",
     projectId: candidate.projectId,
     worktreeId: candidate.id,
     createdAt: "2026-05-20T11:59:00.000Z",
@@ -325,6 +338,7 @@ function reasonForState(state: NonNullable<WorktreeRow["agent"]>["state"]): stri
 
 function countsForRows(rows: readonly WorktreeRow[]) {
   return {
+    sessions: rows.filter((candidate) => candidate.agent?.sessionId !== undefined).length,
     worktrees: rows.length,
     agents: rows.filter((candidate) => candidate.agent !== undefined).length,
     working: rows.filter((candidate) => candidate.display.statusLabel === "working").length,
@@ -338,6 +352,7 @@ function countsForRows(rows: readonly WorktreeRow[]) {
 function countsForProject(rows: readonly WorktreeRow[]): ProjectView["counts"] {
   const counts = countsForRows(rows);
   return {
+    sessions: counts.sessions,
     worktrees: counts.worktrees,
     agents: counts.agents,
     working: counts.working,

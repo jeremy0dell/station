@@ -20,8 +20,9 @@ import type {
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION, worktreeHasLiveAgent } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
+import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { ObserverHarnessRun } from "./harnessEventStatus.js";
-import { countsForRows, statusPolicy } from "./statusPolicy.js";
+import { countsForSnapshot, statusPolicy } from "./statusPolicy.js";
 
 export type ObserverGraphInput = {
   generatedAt: string;
@@ -48,7 +49,16 @@ export type ObserverGraphInput = {
 
 export type ObserverSessionMetadata = {
   id: string;
+  projectId: string;
+  worktreeId: string;
+  lifecycle: "legacy" | "open" | "ended";
   title?: string;
+  harness?: string;
+  terminalProvider?: string;
+  state?: string;
+  createdAt: string;
+  endedAt?: string;
+  lastSeenAt: string;
 };
 
 export type ObserverTurnReadiness = {
@@ -78,6 +88,11 @@ const confidenceRank = {
   low: 1,
 };
 
+/**
+ * POLICY
+ *
+ * Correlates provider observations and durable session records into canonical snapshot truth.
+ */
 export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
   const configuredWorktrees = input.worktrees.filter(
@@ -89,6 +104,7 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
   const sessionMetadataById = new Map(
     input.sessionMetadata?.map((session) => [session.id, session]),
   );
+  const retainedSessionByWorktree = newestRetainedSessionByWorktree(input.sessionMetadata ?? []);
   const turnReadinessBySessionId = new Map(
     input.turnReadiness?.map((readiness) => [readiness.sessionId, readiness]),
   );
@@ -138,10 +154,13 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
         if (terminalCapabilities !== undefined) {
           sessionInput.terminalCapabilities = terminalCapabilities;
         }
-        const session = buildSession(sessionInput);
-        if (session !== undefined) {
-          sessions.push(session);
+        const retainedSession = retainedSessionByWorktree.get(
+          sessionWorktreeKey(project.id, worktree.id),
+        );
+        if (retainedSession !== undefined) {
+          sessionInput.retainedSession = retainedSession;
         }
+        sessions.push(...buildSessions(sessionInput));
 
         return row;
       })
@@ -152,19 +171,20 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
 
   const projects = input.projects.map((project) => {
     const rows = allRows.filter((row) => row.projectId === project.id);
+    const projectSessions = sessions.filter((session) => session.projectId === project.id);
     return {
       id: project.id,
       label: project.label,
       root: project.root,
       defaults: project.defaults,
       health: input.providerHealth[input.worktreeProviderId] ?? unknownProviderHealth(input),
-      counts: countsForRows(rows),
+      counts: countsForSnapshot(rows, projectSessions),
     };
   });
 
   const counts = {
     projects: input.projects.length,
-    ...countsForRows(allRows),
+    ...countsForSnapshot(allRows, sessions),
   };
 
   const observerHealthy =
@@ -369,52 +389,259 @@ type BuildSessionInput = {
   harnessRun?: ObserverHarnessRun;
   harnessCapabilities: Record<string, HarnessCapabilities>;
   sessionMetadataById: ReadonlyMap<string, ObserverSessionMetadata>;
+  retainedSession?: ObserverSessionMetadata;
   terminalCapabilities?: Record<string, boolean>;
 };
 
-function buildSession(input: BuildSessionInput): SessionView | undefined {
-  if (input.terminal === undefined || input.harnessRun === undefined) {
+function buildSessions(input: BuildSessionInput): SessionView[] {
+  const sessions: SessionView[] = [];
+  const stationSession = buildStationSession(input);
+  if (stationSession !== undefined) sessions.push(stationSession);
+  const externalSession = buildExternalSession(input);
+  if (externalSession !== undefined) sessions.push(externalSession);
+  return sessions;
+}
+
+function buildStationSession(input: BuildSessionInput): SessionView | undefined {
+  const identity = stationSessionIdentity(input);
+  if (identity === undefined) return undefined;
+  const run = identity.harnessRun?.run;
+  const harnessProvider = run?.provider ?? identity.metadata?.harness;
+  if (harnessProvider === undefined) return undefined;
+  const terminal = terminalForStationSession({
+    terminal: input.terminal,
+    sessionId: identity.id,
+    sessionRunId: identity.harnessRun?.run.id,
+    observedOtherRunId: identity.harnessRun === undefined ? input.harnessRun?.run.id : undefined,
+  });
+  const status =
+    identity.harnessRun?.status ??
+    retainedSessionStatus(identity.metadata, input.worktree.observedAt);
+  const createdAt = identity.metadata?.createdAt ?? run?.observedAt ?? terminal?.observedAt;
+  if (createdAt === undefined) return undefined;
+
+  return sessionView({
+    id: identity.id,
+    origin: "station",
+    input,
+    harnessProvider,
+    status,
+    createdAt,
+    title: identity.metadata?.title ?? input.worktree.branch,
+    ...(identity.harnessRun === undefined ? {} : { harnessRun: identity.harnessRun }),
+    ...(terminal === undefined ? {} : { terminal }),
+  });
+}
+
+function buildExternalSession(input: BuildSessionInput): SessionView | undefined {
+  const harnessRun = input.harnessRun;
+  const run = harnessRun?.run;
+  if (
+    harnessRun === undefined ||
+    run === undefined ||
+    run.sessionId !== undefined ||
+    !externalRunRepresentsSession(harnessRun)
+  ) {
     return undefined;
   }
-
-  const run = input.harnessRun.run;
-  const status = input.harnessRun.status;
-  const sessionId = run.sessionId ?? input.terminal.sessionId;
-  if (sessionId === undefined) {
-    return undefined;
-  }
-  const metadata = input.sessionMetadataById.get(sessionId);
-
-  const harness: SessionView["harness"] = {
-    provider: run.provider,
-    mode: "unknown",
-    runId: run.id,
-    capabilities: input.harnessCapabilities[run.provider] ?? emptyHarnessCapabilities,
-  };
-  if (run.pid !== undefined) harness.pid = run.pid;
-
-  const terminal: SessionView["terminal"] = {
-    ...terminalAttachment(input.terminal, input.harnessRun, input.terminalCapabilities),
-  };
-
-  return {
-    id: sessionId,
-    projectId: input.project.id,
-    worktreeId: input.worktree.id,
+  const terminal = terminalForExternalRun(input.terminal, run.id);
+  return sessionView({
+    id: run.id,
+    origin: "external",
+    input,
+    harnessProvider: run.provider,
+    harnessRun,
+    status: harnessRun.status,
     createdAt: run.observedAt,
-    updatedAt: status.updatedAt,
+    title: input.worktree.branch,
+    ...(terminal === undefined ? {} : { terminal }),
+  });
+}
+
+type StationSessionIdentity = {
+  id: string;
+  metadata?: ObserverSessionMetadata;
+  harnessRun?: ObserverHarnessRun;
+};
+
+function stationSessionIdentity(input: BuildSessionInput): StationSessionIdentity | undefined {
+  const harnessRun = input.harnessRun;
+  if (harnessRun?.run.sessionId !== undefined) {
+    const runSessionId = harnessRun.run.sessionId;
+    const metadata = input.sessionMetadataById.get(runSessionId);
+    if (
+      !sessionMetadataIsEnded(metadata) &&
+      (metadata?.lifecycle === "open" ||
+        harnessRunCanActivateSession({
+          run: harnessRun.run,
+          terminals: input.terminal === undefined ? [] : [input.terminal],
+          runs: [harnessRun.run],
+        }))
+    ) {
+      return {
+        id: runSessionId,
+        harnessRun,
+        ...(metadata === undefined ? {} : { metadata }),
+      };
+    }
+  }
+
+  const terminalSessionId = input.terminal?.sessionId;
+  if (
+    terminalSessionId !== undefined &&
+    input.terminal !== undefined &&
+    terminalCanActivateSession({
+      target: input.terminal,
+      runs: input.harnessRun === undefined ? [] : [input.harnessRun.run],
+    })
+  ) {
+    const metadata = input.sessionMetadataById.get(terminalSessionId);
+    if (metadata !== undefined && !sessionMetadataIsEnded(metadata)) {
+      return { id: metadata.id, metadata };
+    }
+  }
+
+  const retained = input.retainedSession;
+  return retained === undefined ? undefined : { id: retained.id, metadata: retained };
+}
+
+function sessionMetadataIsEnded(metadata: ObserverSessionMetadata | undefined): boolean {
+  return metadata?.lifecycle === "ended" || metadata?.endedAt !== undefined;
+}
+
+function terminalForStationSession(input: {
+  terminal: TerminalTargetObservation | undefined;
+  sessionId: string;
+  sessionRunId: string | undefined;
+  observedOtherRunId: string | undefined;
+}): TerminalTargetObservation | undefined {
+  const { terminal } = input;
+  if (terminal === undefined) return undefined;
+  if (terminal.sessionId === undefined) {
+    return input.sessionRunId !== undefined && terminal.harnessRunId === input.sessionRunId
+      ? terminal
+      : undefined;
+  }
+  if (terminal.sessionId !== input.sessionId) return undefined;
+  if (terminal.harnessRunId === undefined) return terminal;
+  if (input.sessionRunId !== undefined) {
+    return terminal.harnessRunId === input.sessionRunId ? terminal : undefined;
+  }
+  return terminal.harnessRunId === input.observedOtherRunId ? undefined : terminal;
+}
+
+function terminalForExternalRun(
+  terminal: TerminalTargetObservation | undefined,
+  runId: string,
+): TerminalTargetObservation | undefined {
+  if (terminal?.sessionId !== undefined) return undefined;
+  return terminal?.harnessRunId === runId ? terminal : undefined;
+}
+
+function sessionView(input: {
+  id: string;
+  origin: SessionView["origin"];
+  input: BuildSessionInput;
+  harnessProvider: string;
+  harnessRun?: ObserverHarnessRun;
+  terminal?: TerminalTargetObservation;
+  status: SessionView["status"];
+  createdAt: string;
+  title: string;
+}): SessionView {
+  const run = input.harnessRun?.run;
+  const harness: SessionView["harness"] = {
+    provider: input.harnessProvider,
+    mode: "unknown",
+    capabilities:
+      input.input.harnessCapabilities[input.harnessProvider] ?? emptyHarnessCapabilities,
+  };
+  if (run !== undefined) harness.runId = run.id;
+  if (run?.pid !== undefined) harness.pid = run.pid;
+
+  const session: SessionView = {
+    id: input.id,
+    origin: input.origin,
+    projectId: input.input.project.id,
+    worktreeId: input.input.worktree.id,
+    createdAt: input.createdAt,
+    updatedAt: input.status.updatedAt,
     harness,
-    terminal,
     status: {
-      value: status.value,
-      confidence: status.confidence,
-      reason: status.reason,
-      source: status.source,
-      updatedAt: status.updatedAt,
+      value: input.status.value,
+      confidence: input.status.confidence,
+      reason: input.status.reason,
+      source: input.status.source,
+      updatedAt: input.status.updatedAt,
     },
-    title: metadata?.title ?? input.worktree.branch,
+    title: input.title,
     tags: [],
   };
+  if (input.status.attention !== undefined) session.status.attention = input.status.attention;
+  if (input.terminal !== undefined) {
+    session.terminal = terminalAttachment(
+      input.terminal,
+      input.harnessRun,
+      input.input.terminalCapabilities,
+    );
+  }
+  return session;
+}
+
+function externalRunRepresentsSession(run: ObserverHarnessRun): boolean {
+  return (
+    run.status.value !== "none" && run.status.value !== "unknown" && run.status.value !== "exited"
+  );
+}
+
+function retainedSessionStatus(
+  metadata: ObserverSessionMetadata | undefined,
+  fallbackUpdatedAt: string,
+): SessionView["status"] {
+  const updatedAt = metadata?.lastSeenAt ?? fallbackUpdatedAt;
+  return {
+    value: "none",
+    confidence: "low",
+    reason: "No harness run is currently observed for this Station session.",
+    source: "reconcile",
+    updatedAt,
+  };
+}
+
+function newestRetainedSessionByWorktree(
+  sessions: readonly ObserverSessionMetadata[],
+): ReadonlyMap<string, ObserverSessionMetadata> {
+  const retained = new Map<string, ObserverSessionMetadata>();
+  for (const session of sessions) {
+    if (
+      session.lifecycle !== "open" ||
+      session.endedAt !== undefined ||
+      session.harness === undefined
+    ) {
+      continue;
+    }
+    const key = sessionWorktreeKey(session.projectId, session.worktreeId);
+    const current = retained.get(key);
+    if (current === undefined || compareSessionRecency(session, current) > 0) {
+      retained.set(key, session);
+    }
+  }
+  return retained;
+}
+
+function sessionWorktreeKey(projectId: string, worktreeId: string): string {
+  return JSON.stringify([projectId, worktreeId]);
+}
+
+function compareSessionRecency(
+  left: ObserverSessionMetadata,
+  right: ObserverSessionMetadata,
+): number {
+  return (
+    Date.parse(left.lastSeenAt) - Date.parse(right.lastSeenAt) ||
+    Date.parse(left.createdAt) - Date.parse(right.createdAt) ||
+    left.id.localeCompare(right.id)
+  );
 }
 
 function isFocusableTerminalState(state: TerminalTargetObservation["state"]): boolean {

@@ -55,7 +55,7 @@ function resolveCurrentRowSession(
     return undefined;
   }
   const session = sessionForWorktreeRow(row, snapshot.sessions);
-  if (session === undefined) {
+  if (session?.origin !== "station") {
     return undefined;
   }
   return { row, session, snapshot };

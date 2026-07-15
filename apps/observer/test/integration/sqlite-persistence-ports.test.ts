@@ -1,6 +1,16 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createFakeHarnessRun,
+  createFakeTerminalTarget,
+  createFakeWorktree,
+} from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { latestSchemaVersion, migrations } from "../../src/migrations";
 import { createSqliteObserverPersistence, type IngressJournal } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
+import { openSqlDatabase } from "../../src/sqlite/driver";
 import { observerPersistenceContract } from "../support/observerPersistenceContract";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -14,6 +24,161 @@ observerPersistenceContract("SQLite", ({ clock, idFactory }) => {
 });
 
 describe("SQLite-only Observer persistence behavior", () => {
+  it("migrates historical session lifecycle without treating legacy NULL as open", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-session-lifecycle-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.slice(0, -1)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      const insert = legacyDatabase.prepare(`
+        INSERT INTO sessions
+          (id, project_id, worktree_id, harness, created_at, ended_at, last_seen_at)
+        VALUES (?, 'web', 'wt_legacy', 'codex', ?, ?, ?)
+      `);
+      insert.run("ses_legacy_unknown", now, null, now);
+      insert.run("ses_legacy_close", now, null, now);
+      insert.run("ses_legacy_conflict", now, null, now);
+      insert.run("ses_legacy_ended", now, now, now);
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const sqlite = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({
+        sqlite,
+        clock: { now: () => new Date(now) },
+      });
+      expect(sqlite.health().schemaVersion).toBe(latestSchemaVersion);
+      await expect(persistence.listSessions()).resolves.toEqual([
+        expect.objectContaining({ id: "ses_legacy_close", lifecycle: "legacy" }),
+        expect.objectContaining({ id: "ses_legacy_conflict", lifecycle: "legacy" }),
+        expect.objectContaining({
+          id: "ses_legacy_ended",
+          lifecycle: "ended",
+          endedAt: now,
+        }),
+        expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "legacy" }),
+      ]);
+      await expect(
+        persistence.markSessionsEnded({
+          subject: { kind: "session", sessionId: "ses_legacy_close" },
+          endedAt: now,
+        }),
+      ).resolves.toBe(1);
+      const worktree = createFakeWorktree({
+        id: "wt_legacy",
+        projectId: "web",
+        branch: "legacy",
+        now,
+      });
+      await persistence.persistReconcileResult({
+        projects: [
+          {
+            id: "web",
+            label: "web",
+            root: "/tmp/station/web",
+            defaults: {
+              harness: "codex",
+              terminal: "tmux",
+              layout: "agent-shell",
+            },
+            worktrunk: { enabled: true },
+          },
+        ],
+        worktrees: [worktree],
+        terminalTargets: [
+          createFakeTerminalTarget({
+            id: "term_legacy_stale",
+            projectId: "web",
+            worktreeId: worktree.id,
+            sessionId: "ses_legacy_unknown",
+            state: "stale",
+            now,
+          }),
+          createFakeTerminalTarget({
+            id: "term_legacy_conflict",
+            projectId: "web",
+            worktreeId: worktree.id,
+            sessionId: "ses_legacy_conflict",
+            harnessRunId: "run_legacy_external",
+            state: "open",
+            now,
+          }),
+        ],
+        harnessRuns: [
+          createFakeHarnessRun({
+            id: "run_legacy_bound_idle",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: worktree.id,
+            sessionId: "ses_legacy_unknown",
+            state: "idle",
+            now,
+          }),
+          createFakeHarnessRun({
+            id: "run_legacy_closed_stale",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: worktree.id,
+            sessionId: "ses_legacy_close",
+            now,
+          }),
+          createFakeHarnessRun({
+            id: "run_legacy_external",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: worktree.id,
+            state: "working",
+            now,
+          }),
+        ],
+        observedAt: now,
+      });
+      await expect(persistence.listSessions()).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "legacy" }),
+          expect.objectContaining({ id: "ses_legacy_conflict", lifecycle: "legacy" }),
+          expect.objectContaining({
+            id: "ses_legacy_close",
+            lifecycle: "ended",
+            endedAt: now,
+          }),
+        ]),
+      );
+      await persistence.persistReconcileResult({
+        projects: [],
+        worktrees: [worktree],
+        terminalTargets: [],
+        harnessRuns: [
+          createFakeHarnessRun({
+            id: "run_legacy_current",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: worktree.id,
+            sessionId: "ses_legacy_unknown",
+            state: "working",
+            now,
+          }),
+        ],
+        observedAt: now,
+      });
+      await expect(persistence.listSessions()).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "open" }),
+        ]),
+      );
+    } finally {
+      sqlite.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("exposes healthy SQLite status in addition to the seven application ports", () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     try {

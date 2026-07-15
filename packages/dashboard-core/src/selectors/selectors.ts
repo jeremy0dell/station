@@ -213,10 +213,19 @@ export function sessionForWorktreeRow(
 ): SessionView | undefined {
   const sessionId = row.agent?.sessionId;
   if (sessionId !== undefined) {
-    const direct = sessions.find((session) => session.id === sessionId);
+    const direct = sessions.find(
+      (session) => session.origin === "station" && session.id === sessionId,
+    );
     if (direct !== undefined) {
       return direct;
     }
+  }
+  const runId = row.agent?.runId;
+  if (runId !== undefined) {
+    const external = sessions.find(
+      (session) => session.origin === "external" && session.harness.runId === runId,
+    );
+    if (external !== undefined) return external;
   }
   return sessions.find((session) => session.worktreeId === row.id);
 }

@@ -1103,6 +1103,33 @@ describe("session command vertical slice", () => {
         ],
       }),
     });
+    await fixture.persistence.persistReconcileResult({
+      projects: config.projects,
+      worktrees: [
+        createFakeWorktree({
+          id: "wt_web_resume",
+          projectId: "web",
+          branch: "resume",
+          now,
+        }),
+      ],
+      terminalTargets: [],
+      harnessRuns: [
+        createFakeHarnessRun({
+          id: "run_previous",
+          projectId: "web",
+          worktreeId: "wt_web_resume",
+          sessionId: "ses_previous",
+          state: "idle",
+          now,
+        }),
+      ],
+      observedAt: now,
+    });
+    await fixture.persistence.markSessionsEnded({
+      subject: { kind: "session", sessionId: "ses_previous" },
+      endedAt: now,
+    });
     const handle = await fixture.persistence.upsertSessionRecoveryHandle({
       id: "report_resume",
       provider: "fake-harness",
@@ -1156,6 +1183,15 @@ describe("session command vertical slice", () => {
           recoveryHandleId: handle.id,
         },
       }),
+    ]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "ses_previous", lifecycle: "open" })]),
+    );
+    expect(
+      (await fixture.persistence.listSessions()).find((session) => session.id === "ses_previous"),
+    ).not.toHaveProperty("endedAt");
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({ id: "ses_previous", origin: "station" }),
     ]);
     fixture.sqlite.close();
   });

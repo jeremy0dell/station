@@ -108,7 +108,7 @@ describe("observe snapshot context", () => {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.7.0",
+    schemaVersion: "0.8.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {},
@@ -129,6 +129,7 @@ function snapshotFixture(): StationSnapshot {
           lastCheckedAt: now,
         },
         counts: {
+          sessions: 1,
           worktrees: 1,
           agents: 1,
           working: 1,
@@ -142,6 +143,7 @@ function snapshotFixture(): StationSnapshot {
     sessions: [sessionFixture()],
     counts: {
       projects: 1,
+      sessions: 1,
       worktrees: 1,
       agents: 1,
       working: 1,
@@ -188,6 +190,7 @@ function rowFixture(): WorktreeRow {
 function sessionFixture(): SessionView {
   return {
     id: "ses_1",
+    origin: "station",
     projectId: "api",
     worktreeId: "wt_api",
     createdAt: now,

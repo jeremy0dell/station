@@ -278,6 +278,12 @@ export function createSqliteObserverPersistence(
     deleteSessionTitleSeed: (sessionId) =>
       transaction((database) => correlationStore.deleteSessionTitleSeed(database, sessionId)),
 
+    markSessionsEnded: (input) =>
+      transaction((database) => correlationStore.markSessionsEnded(database, input)),
+
+    reopenSession: (sessionId) =>
+      transaction((database) => correlationStore.reopenSession(database, sessionId)),
+
     renameSession: (input) =>
       transaction((database) => correlationStore.renameSession(database, input)),
 
