@@ -5,6 +5,7 @@ import type {
   SessionView,
   TerminalProvider,
   TerminalTargetId,
+  WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
 import { isRunningAgentState, SafeErrorSchema } from "@station/contracts";
@@ -178,6 +179,7 @@ export async function removeWorktreeThroughProvider(
   input: {
     providers: ProviderRegistry;
     row: WorktreeRow;
+    target: WorktreeObservation;
     force: boolean;
     context: CommandHandlerContext;
   } & CleanupRuntime,
@@ -185,6 +187,8 @@ export async function removeWorktreeThroughProvider(
   const request = {
     worktreeId: input.row.id,
     projectId: input.row.projectId,
+    expectedPath: input.target.path,
+    expectedBranch: input.target.branch,
   };
   const providerRequest: typeof request & { force?: boolean } = { ...request };
   if (input.force) {

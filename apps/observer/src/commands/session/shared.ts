@@ -466,6 +466,8 @@ export async function removeWorktreeBestEffort(input: {
   providers: ProviderRegistry;
   projectId: string;
   worktreeId: string;
+  expectedPath: string;
+  expectedBranch: string;
   context: CommandHandlerContext;
   logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
@@ -489,6 +491,8 @@ export async function removeWorktreeBestEffort(input: {
         input.providers.worktree.removeWorktree({
           projectId: input.projectId,
           worktreeId: input.worktreeId,
+          expectedPath: input.expectedPath,
+          expectedBranch: input.expectedBranch,
           force: true,
         }),
     );

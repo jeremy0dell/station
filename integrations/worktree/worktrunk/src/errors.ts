@@ -13,6 +13,7 @@ export type WorktrunkProviderErrorCode =
   | "WORKTRUNK_UNAVAILABLE"
   | "WORKTRUNK_UNSUPPORTED_FLAG"
   | "WORKTRUNK_WORKTREE_EXISTS"
+  | "WORKTRUNK_WORKTREE_CHANGED"
   | "WORKTRUNK_WORKTREE_NOT_FOUND";
 
 export class WorktrunkProviderError extends Error implements SafeError {

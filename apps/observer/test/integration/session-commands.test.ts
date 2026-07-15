@@ -591,6 +591,8 @@ describe("session command vertical slice", () => {
       {
         projectId: "web",
         worktreeId: "wt_web_cleanup_open",
+        expectedPath: "/tmp/station/web/cleanup-open",
+        expectedBranch: "cleanup-open",
         force: true,
       },
     ]);
@@ -642,6 +644,8 @@ describe("session command vertical slice", () => {
       {
         projectId: "web",
         worktreeId: "wt_web_cleanup_build",
+        expectedPath: "/tmp/station/web/cleanup-build",
+        expectedBranch: "cleanup-build",
         force: true,
       },
     ]);
@@ -686,6 +690,8 @@ describe("session command vertical slice", () => {
       {
         projectId: "web",
         worktreeId: "wt_web_cleanup_launch",
+        expectedPath: "/tmp/station/web/cleanup-launch",
+        expectedBranch: "cleanup-launch",
         force: true,
       },
     ]);
@@ -1559,6 +1565,8 @@ describe("session command vertical slice", () => {
       {
         projectId: "web",
         worktreeId: "wt_web_cleanup_failure",
+        expectedPath: "/tmp/station/web/cleanup-failure",
+        expectedBranch: "cleanup-failure",
         force: true,
       },
     ]);

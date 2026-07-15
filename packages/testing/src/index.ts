@@ -76,6 +76,7 @@ export type CreateFakeWorktreeInput = {
   branch?: string;
   path?: string;
   now?: FakeProviderClock;
+  isPrimaryCheckout?: boolean;
   dirty?: boolean;
   ahead?: number;
   behind?: number;
@@ -233,6 +234,9 @@ export function createFakeWorktree(input: CreateFakeWorktreeInput = {}): Worktre
     path: input.path ?? `/tmp/station/${projectId}/${branch.replaceAll("/", "-")}`,
     state: "exists",
     source: "worktrunk",
+    ...(input.isPrimaryCheckout === undefined
+      ? {}
+      : { isPrimaryCheckout: input.isPrimaryCheckout }),
     dirty: input.dirty ?? false,
     ahead: input.ahead ?? 0,
     behind: input.behind ?? 0,
@@ -355,11 +359,27 @@ export class FakeWorktreeProvider implements WorktreeProvider {
     maybeThrow(this.#failures, "removeWorktree");
     const recorded: RemoveWorktreeRequest = {
       worktreeId: request.worktreeId,
+      expectedPath: request.expectedPath,
+      expectedBranch: request.expectedBranch,
     };
     if (request.projectId !== undefined) recorded.projectId = request.projectId;
     if (request.force !== undefined) recorded.force = request.force;
-    this.#removed.push(recorded);
     const index = this.#worktrees.findIndex((worktree) => worktree.id === request.worktreeId);
+    const selected = this.#worktrees[index];
+    if (
+      selected !== undefined &&
+      (selected.path !== request.expectedPath || selected.branch !== request.expectedBranch)
+    ) {
+      const error: SafeError = {
+        tag: "WorktreeProviderError",
+        code: "FAKE_WORKTREE_CHANGED",
+        message: "The fake worktree changed before removal.",
+        provider: this.id,
+        worktreeId: request.worktreeId,
+      };
+      throw error;
+    }
+    this.#removed.push(recorded);
     if (index >= 0) {
       this.#worktrees.splice(index, 1);
     }

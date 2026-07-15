@@ -78,6 +78,7 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
+ * Removal revalidates stable identity, path, and branch immediately before invoking Worktrunk.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -292,7 +293,12 @@ export class WorktrunkProvider implements WorktreeProvider {
       } catch (seedError) {
         // Seeding failed after the worktree was created. Remove it so callers never
         // inherit a half-seeded worktree; best-effort, then rethrow the seed cause.
-        await this.removeWorktree({ worktreeId: found.id, force: true }).catch(() => {});
+        await this.removeWorktree({
+          worktreeId: found.id,
+          expectedPath: found.path,
+          expectedBranch: found.branch,
+          force: true,
+        }).catch(() => {});
         this.#observations.delete(found.id);
         throw seedError;
       }
@@ -361,6 +367,16 @@ export class WorktrunkProvider implements WorktreeProvider {
         { hint: "Run listWorktrees before removeWorktree so the provider can resolve the target." },
       );
     }
+    if (
+      !samePath(observation.path, request.expectedPath) ||
+      observation.branch !== request.expectedBranch
+    ) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_WORKTREE_CHANGED",
+        "Worktrunk remove received stale checkout identity.",
+        { hint: "Refresh and reselect the worktree before retrying removal." },
+      );
+    }
     const project = this.#projects.get(observation.projectId);
     if (project === undefined) {
       throw new WorktrunkProviderError(
@@ -371,12 +387,33 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
 
     const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
-    const selected = currentWorktrees.find((worktree) => samePath(worktree.path, observation.path));
-    if (selected?.state !== "exists") {
+    const identityMatches = currentWorktrees.filter(
+      (worktree) => worktree.id === request.worktreeId,
+    );
+    const pathMatches = currentWorktrees.filter((worktree) =>
+      samePath(worktree.path, request.expectedPath),
+    );
+    if (identityMatches.length === 0 && pathMatches.length === 0) {
       throw new WorktrunkProviderError(
         "WORKTRUNK_WORKTREE_NOT_FOUND",
         "Worktrunk remove could not confirm that the selected worktree still exists.",
         { hint: "Run listWorktrees again before retrying removal." },
+      );
+    }
+    const selected = identityMatches[0];
+    if (
+      identityMatches.length !== 1 ||
+      pathMatches.length !== 1 ||
+      selected === undefined ||
+      selected.id !== pathMatches[0]?.id ||
+      selected.state !== "exists" ||
+      !samePath(selected.path, request.expectedPath) ||
+      selected.branch !== request.expectedBranch
+    ) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_WORKTREE_CHANGED",
+        "The selected worktree changed before Worktrunk could remove it.",
+        { hint: "Refresh and reselect the worktree before retrying removal." },
       );
     }
     const branchIsShared =

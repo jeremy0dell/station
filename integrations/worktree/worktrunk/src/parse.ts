@@ -67,6 +67,7 @@ export function parseWorktrunkListItem(
   const ahead = numberField(main, "ahead");
   const behind = numberField(main, "behind");
   const dirty = dirtyFromItem(item);
+  const isPrimaryCheckout = booleanField(item, "is_main");
   const remote = repositoryRemoteFromItem(item);
   const headSha = headShaFromItem(item);
   const observationInput: WorktreeObservation = {
@@ -85,6 +86,7 @@ export function parseWorktrunkListItem(
       ...(metadata === undefined ? {} : { metadata }),
     },
   };
+  if (isPrimaryCheckout !== undefined) observationInput.isPrimaryCheckout = isPrimaryCheckout;
   if (dirty !== undefined) observationInput.dirty = dirty;
   if (ahead !== undefined) observationInput.ahead = ahead;
   if (behind !== undefined) observationInput.behind = behind;

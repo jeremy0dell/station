@@ -7,7 +7,7 @@ import type {
   WorktreeId,
   WorktreeRow,
 } from "@station/contracts";
-import { isRunningAgentState } from "@station/contracts";
+import { isRunningAgentState, normalizeObservedPath } from "@station/contracts";
 
 type TerminalLayout = NonNullable<
   Extract<StationCommand, { type: "session.create" }>["payload"]["terminal"]["layout"]
@@ -143,6 +143,8 @@ export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): St
   const payload: Extract<StationCommand, { type: "worktree.remove" }>["payload"] = {
     projectId: row.projectId,
     worktreeId: row.id,
+    expectedPath: normalizeObservedPath(row.path),
+    expectedBranch: row.branch,
   };
   if (force) {
     payload.force = true;

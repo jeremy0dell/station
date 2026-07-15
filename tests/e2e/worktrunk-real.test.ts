@@ -74,20 +74,30 @@ describeReal("real Worktrunk provider smoke", () => {
       hookBin: stationIngressBin,
     });
 
-    let createdId: string | undefined;
+    let createdForCleanup: { id: string; path: string; branch: string } | undefined;
     try {
       await expect(provider.health()).resolves.toMatchObject({ status: "healthy" });
       await expect(provider.listWorktrees(project)).resolves.toEqual(expect.any(Array));
       const created = await provider.createWorktree({ project, branch });
-      createdId = created.id;
+      createdForCleanup = created;
       expect(created.branch).toBe(branch);
-      await expect(provider.removeWorktree({ worktreeId: created.id })).resolves.toMatchObject({
-        removed: true,
-      });
+      await expect(
+        provider.removeWorktree({
+          worktreeId: created.id,
+          expectedPath: created.path,
+          expectedBranch: created.branch,
+        }),
+      ).resolves.toMatchObject({ removed: true });
+      createdForCleanup = undefined;
     } finally {
-      if (createdId !== undefined) {
+      if (createdForCleanup !== undefined) {
         await provider
-          .removeWorktree({ worktreeId: createdId, force: true })
+          .removeWorktree({
+            worktreeId: createdForCleanup.id,
+            expectedPath: createdForCleanup.path,
+            expectedBranch: createdForCleanup.branch,
+            force: true,
+          })
           .catch(() => undefined);
       }
       await uninstallWorktrunkHooks({
@@ -147,9 +157,13 @@ describeReal("real Worktrunk provider smoke", () => {
       expect(selected).toBeDefined();
       if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
 
-      await expect(provider.removeWorktree({ worktreeId: selected.id })).resolves.toMatchObject({
-        removed: true,
-      });
+      await expect(
+        provider.removeWorktree({
+          worktreeId: selected.id,
+          expectedPath: selected.path,
+          expectedBranch: selected.branch,
+        }),
+      ).resolves.toMatchObject({ removed: true });
 
       const remaining = await git("worktree", "list", "--porcelain");
       const remainingPaths = remaining.stdout

@@ -78,7 +78,7 @@ A project omitting a field inherits the global value.
 | `terminal` | string | e.g. `"tmux"`. Free-form. |
 | `harness` | string | e.g. `"codex"`. Free-form; **not** cross-checked against `[harness.*]`. |
 | `layout` | string | e.g. `"agent-build-shell"`. Free-form. |
-| `default_branch` | string (optional) | e.g. `"main"`. |
+| `default_branch` | string (optional) | e.g. `"main"`. Destructive worktree removal fails closed when neither this value nor the Worktrunk base identifies the protected default branch. |
 | `harness_permission_mode` | `standard` \| `yolo` (optional) | **`auto` is rejected here** — it is Claude-only (see `[harness.*]`). |
 
 `worktree_provider`, `terminal`, `harness`, and `layout` are **required**. Values are

@@ -144,6 +144,8 @@ describeReal("real Codex session lifecycle", () => {
         payload: {
           worktreeId: row.id,
           projectId: row.projectId,
+          expectedPath: row.path,
+          expectedBranch: row.branch,
           force: true,
         },
       };

@@ -286,7 +286,12 @@ describe("WorktrunkProvider", () => {
     });
 
     const created = await provider.createWorktree({ project, branch: "feature" });
-    const removed = await provider.removeWorktree({ worktreeId: created.id, force: true });
+    const removed = await provider.removeWorktree({
+      worktreeId: created.id,
+      expectedPath: created.path,
+      expectedBranch: created.branch,
+      force: true,
+    });
 
     expect(removed).toEqual({ worktreeId: created.id, removed: true });
     expect(calls.map((call) => call.args)).toEqual([
@@ -340,7 +345,12 @@ describe("WorktrunkProvider", () => {
     expect(selected).toBeDefined();
     if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
 
-    await provider.removeWorktree({ worktreeId: selected.id, force: true });
+    await provider.removeWorktree({
+      worktreeId: selected.id,
+      expectedPath: selected.path,
+      expectedBranch: selected.branch,
+      force: true,
+    });
 
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
@@ -382,9 +392,56 @@ describe("WorktrunkProvider", () => {
     expect(selected).toBeDefined();
     if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
 
-    await expect(provider.removeWorktree({ worktreeId: selected.id })).rejects.toMatchObject({
-      code: "WORKTRUNK_WORKTREE_NOT_FOUND",
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+      }),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_NOT_FOUND" });
+    expect(calls.map((call) => call.args)).toEqual([
+      ["list", "--format=json"],
+      ["list", "--format=json"],
+    ]);
+  });
+
+  it("does not remove a selected worktree whose branch changed before mutation", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    let listCalls = 0;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("list")) {
+          listCalls += 1;
+          return result(
+            input,
+            JSON.stringify([
+              {
+                path: linkedPath,
+                branch: listCalls === 1 ? "feature" : "main",
+                is_main: false,
+              },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
     });
+
+    const [selected] = await provider.listWorktrees(project);
+    expect(selected).toBeDefined();
+    if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
+
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+      }),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_CHANGED" });
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
       ["list", "--format=json"],
@@ -531,7 +588,11 @@ describe("WorktrunkProvider", () => {
     });
 
     const created = await provider.createWorktree({ project, branch: "feature" });
-    await provider.removeWorktree({ worktreeId: created.id });
+    await provider.removeWorktree({
+      worktreeId: created.id,
+      expectedPath: created.path,
+      expectedBranch: created.branch,
+    });
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
@@ -565,7 +626,11 @@ describe("WorktrunkProvider", () => {
     });
 
     const created = await provider.createWorktree({ project, branch: "feature" });
-    await provider.removeWorktree({ worktreeId: created.id });
+    await provider.removeWorktree({
+      worktreeId: created.id,
+      expectedPath: created.path,
+      expectedBranch: created.branch,
+    });
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],

@@ -171,6 +171,7 @@ export const WorktreeObservationSchema = z
     path: nonEmptyStringSchema,
     state: WorktreeStateSchema,
     source: WorktreeSourceSchema,
+    isPrimaryCheckout: z.boolean().optional(),
     dirty: z.boolean().optional(),
     ahead: z.number().int().nonnegative().optional(),
     behind: z.number().int().nonnegative().optional(),

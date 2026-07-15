@@ -355,7 +355,11 @@ describe("observer providers", () => {
         branch: "feature",
       });
       await mkdir(createdWorktreePath, { recursive: true });
-      await registry.worktree.removeWorktree({ worktreeId: created.id });
+      await registry.worktree.removeWorktree({
+        worktreeId: created.id,
+        expectedPath: created.path,
+        expectedBranch: created.branch,
+      });
 
       await expect(readFile(logPath, "utf8")).resolves.toBe(
         [

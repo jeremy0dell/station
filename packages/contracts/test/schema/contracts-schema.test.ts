@@ -821,6 +821,15 @@ describe("contract schemas", () => {
       "invalid command fixture",
     );
 
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "worktree.remove",
+        payload: { projectId: "web", worktreeId: "wt_web_feature" },
+      },
+      "worktree removal without selected path and branch identity",
+    );
+
     expectParses(
       StationCommandSchema,
       {

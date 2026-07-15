@@ -174,6 +174,8 @@ describe("TUI command builders", () => {
       payload: {
         projectId: "web",
         worktreeId: "wt_web_idle",
+        expectedPath: "/tmp/station/web/worktrees/fix-nav-mobile",
+        expectedBranch: "fix-nav-mobile",
       },
     });
   });
@@ -189,6 +191,8 @@ describe("TUI command builders", () => {
       payload: {
         projectId: "web",
         worktreeId: "wt_web_idle",
+        expectedPath: "/tmp/station/web/worktrees/fix-nav-mobile",
+        expectedBranch: "fix-nav-mobile",
         force: true,
       },
     });

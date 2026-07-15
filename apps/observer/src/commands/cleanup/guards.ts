@@ -1,13 +1,179 @@
-import { normalize } from "node:path";
-import type { ProjectView, SafeError, SessionView, WorktreeRow } from "@station/contracts";
-import { isRunningAgentState } from "@station/contracts";
+import type {
+  ProjectView,
+  ProviderProjectConfig,
+  RemoveWorktreePayload,
+  SafeError,
+  SessionView,
+  WorktreeObservation,
+  WorktreeRow,
+} from "@station/contracts";
+import { isRunningAgentState, normalizeObservedPath, sameObservedPath } from "@station/contracts";
+
+export type WorktreeRemovalRefusalReason =
+  | "ambiguous_identity"
+  | "branch_changed"
+  | "default_branch"
+  | "identity_changed"
+  | "missing_target"
+  | "path_changed"
+  | "primary_checkout"
+  | "protection_unverified"
+  | "snapshot_changed";
+
+export type WorktreeRemovalTargetResolution =
+  | { ok: true; target: WorktreeObservation }
+  | {
+      ok: false;
+      error: SafeError;
+      refusalReason: WorktreeRemovalRefusalReason;
+      canonicalPath: string;
+      observedBranch: string;
+    };
+
+export function resolveWorktreeRemovalTarget(input: {
+  payload: RemoveWorktreePayload;
+  snapshotRow: WorktreeRow;
+  project: ProviderProjectConfig;
+  currentWorktrees: readonly WorktreeObservation[];
+}): WorktreeRemovalTargetResolution {
+  const canonicalExpectedPath = normalizeObservedPath(input.payload.expectedPath);
+  if (
+    !sameObservedPath(input.snapshotRow.path, canonicalExpectedPath) ||
+    input.snapshotRow.branch !== input.payload.expectedBranch
+  ) {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "snapshot_changed",
+      canonicalPath: normalizeObservedPath(input.snapshotRow.path),
+      observedBranch: input.snapshotRow.branch,
+      message: "The selected worktree changed in the observer snapshot before removal began.",
+    });
+  }
+
+  const projectWorktrees = input.currentWorktrees.filter(
+    (candidate) => candidate.projectId === input.project.id,
+  );
+  const identityMatches = projectWorktrees.filter(
+    (candidate) => candidate.id === input.payload.worktreeId,
+  );
+  const pathMatches = projectWorktrees.filter((candidate) =>
+    sameObservedPath(candidate.path, canonicalExpectedPath),
+  );
+
+  if (identityMatches.length > 1 || pathMatches.length > 1) {
+    return removalRefusal({
+      payload: input.payload,
+      code: "WORKTREE_REMOVE_TARGET_AMBIGUOUS",
+      message: "Station could not uniquely re-resolve the selected worktree.",
+      hint: "Refresh the dashboard and reselect the worktree; no cleanup was performed.",
+      refusalReason: "ambiguous_identity",
+      canonicalPath: canonicalExpectedPath,
+      observedBranch: input.payload.expectedBranch,
+    });
+  }
+
+  const target = identityMatches[0];
+  if (target === undefined) {
+    const pathMatch = pathMatches[0];
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: pathMatch === undefined ? "missing_target" : "identity_changed",
+      canonicalPath: normalizeObservedPath(pathMatch?.path ?? canonicalExpectedPath),
+      observedBranch: pathMatch?.branch ?? input.payload.expectedBranch,
+      message:
+        pathMatch === undefined
+          ? "The selected worktree is no longer present in current provider evidence."
+          : "The selected path now belongs to a different worktree identity.",
+    });
+  }
+
+  const canonicalCurrentPath = normalizeObservedPath(target.path);
+  if (!sameObservedPath(canonicalCurrentPath, canonicalExpectedPath)) {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "path_changed",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+      message: "The selected worktree path changed after it was selected.",
+    });
+  }
+  if (pathMatches[0]?.id !== target.id) {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "identity_changed",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+      message: "The selected path no longer resolves to the same worktree identity.",
+    });
+  }
+  if (target.state !== "exists") {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "missing_target",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+      message: "The selected worktree is no longer an existing checkout.",
+    });
+  }
+  if (target.branch !== input.payload.expectedBranch) {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "branch_changed",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+      message: `The selected worktree changed from branch '${input.payload.expectedBranch}' to '${target.branch}'.`,
+    });
+  }
+
+  if (target.isPrimaryCheckout === true || sameObservedPath(target.path, input.project.root)) {
+    return removalRefusal({
+      payload: input.payload,
+      code: "WORKTREE_ROOT_REMOVAL_NOT_ALLOWED",
+      message: "The project root checkout cannot be removed as a worktree.",
+      hint: "Close the session without removing the checkout, or choose a managed worktree.",
+      refusalReason: "primary_checkout",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+    });
+  }
+
+  const configuredDefaultBranch = input.project.defaultBranch ?? input.project.worktrunk.base;
+  if (
+    configuredDefaultBranch !== undefined &&
+    branchMatchesConfiguredDefault(target.branch, configuredDefaultBranch)
+  ) {
+    return removalRefusal({
+      payload: input.payload,
+      code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED",
+      message: `The selected checkout currently owns the repository default branch '${target.branch}'.`,
+      hint: "Move the default branch back to its protected checkout, refresh, and reselect the disposable worktree.",
+      refusalReason: "default_branch",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+    });
+  }
+  if (configuredDefaultBranch === undefined) {
+    return removalRefusal({
+      payload: input.payload,
+      code: "WORKTREE_REMOVE_PROTECTION_UNVERIFIED",
+      message: "Station could not verify which checkout owns the repository default branch.",
+      hint: "Configure the project's default branch, refresh, and retry.",
+      refusalReason: "protection_unverified",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+    });
+  }
+
+  return { ok: true, target };
+}
 
 export function assertWorktreeRemovalAllowed(
   row: WorktreeRow,
   force: boolean,
   project?: ProjectView | undefined,
+  current?: WorktreeObservation | undefined,
 ): void {
-  if (project !== undefined && samePath(row.path, project.root)) {
+  if (project !== undefined && sameObservedPath(current?.path ?? row.path, project.root)) {
     const error: SafeError = {
       tag: "CommandValidationError",
       code: "WORKTREE_ROOT_REMOVAL_NOT_ALLOWED",
@@ -20,7 +186,7 @@ export function assertWorktreeRemovalAllowed(
     throw error;
   }
 
-  if (row.worktree.dirty === true && !force) {
+  if ((current?.dirty ?? row.worktree.dirty) === true && !force) {
     const error: SafeError = {
       tag: "CommandValidationError",
       code: "WORKTREE_DIRTY_REQUIRES_FORCE",
@@ -96,6 +262,53 @@ function isSessionOrRowRunning(
   return isRunningAgentState(row?.agent?.state ?? session?.status.value);
 }
 
-function samePath(left: string, right: string): boolean {
-  return normalize(left) === normalize(right);
+function staleRemovalRefusal(input: {
+  payload: RemoveWorktreePayload;
+  message: string;
+  refusalReason: WorktreeRemovalRefusalReason;
+  canonicalPath: string;
+  observedBranch: string;
+}): WorktreeRemovalTargetResolution {
+  return removalRefusal({
+    ...input,
+    code: "WORKTREE_REMOVE_STALE_SELECTION",
+    hint: "Refresh the dashboard and reselect the worktree; no cleanup was performed.",
+  });
+}
+
+function removalRefusal(input: {
+  payload: RemoveWorktreePayload;
+  code: string;
+  message: string;
+  hint: string;
+  refusalReason: WorktreeRemovalRefusalReason;
+  canonicalPath: string;
+  observedBranch: string;
+}): WorktreeRemovalTargetResolution {
+  const error: SafeError = {
+    tag: "CommandValidationError",
+    code: input.code,
+    message: input.message,
+    hint: input.hint,
+    worktreeId: input.payload.worktreeId,
+  };
+  if (input.payload.projectId !== undefined) error.projectId = input.payload.projectId;
+  return {
+    ok: false,
+    error,
+    refusalReason: input.refusalReason,
+    canonicalPath: input.canonicalPath,
+    observedBranch: input.observedBranch,
+  };
+}
+
+function branchMatchesConfiguredDefault(observed: string, configured: string): boolean {
+  return branchName(observed) === branchName(configured);
+}
+
+function branchName(value: string): string {
+  return value
+    .replace(/^refs\/heads\//, "")
+    .replace(/^refs\/remotes\/[^/]+\//, "")
+    .replace(/^origin\//, "");
 }

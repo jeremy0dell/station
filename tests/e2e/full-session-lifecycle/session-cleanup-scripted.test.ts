@@ -128,6 +128,8 @@ describe("full session cleanup e2e", () => {
         payload: {
           projectId: "web",
           worktreeId: "wt_web_cleanup",
+          expectedPath: "/tmp/station/web/cleanup",
+          expectedBranch: "cleanup",
           force: true,
         },
       });
@@ -162,6 +164,7 @@ function configFor(root: string, stateDir: string, socketPath: string): StationC
         id: "web",
         label: "web",
         root,
+        defaultBranch: "main",
         defaults: {
           harness: "fake-harness",
           terminal: "fake-terminal",
