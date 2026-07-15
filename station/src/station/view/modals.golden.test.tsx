@@ -9,6 +9,7 @@ import {
   attentionAndFailuresSnapshot,
   externalAgentSnapshot,
   manyProjectsSnapshot,
+  noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
 import type { TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
@@ -194,6 +195,12 @@ const CASES: ModalCase[] = [
     name: "add project sheet",
     keys: [{ input: "A" }],
     expect: ["Add Project", "Start location", "Enter:open Right:open Esc:cancel"],
+  },
+  {
+    name: "first project sheet",
+    keys: [{ input: "\r", return: true }],
+    snapshot: noProjectsSnapshot,
+    expect: ["Add Your First Project", "Start location", "Enter:open Right:open Esc:cancel"],
   },
   {
     name: "widget settings panel",

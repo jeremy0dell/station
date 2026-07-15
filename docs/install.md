@@ -6,10 +6,9 @@ Station is distributed internally as authenticated private GitHub release assets
 
 On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to `jeremy0dell/station`, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
 
-Start in the Git repository you want Station to manage, authenticate `gh`, then fetch and run the installer for the first binary baseline:
+From any directory, authenticate `gh`, then fetch and run the installer for the first binary baseline:
 
 ```bash
-cd /path/to/your/git-project
 gh auth login --hostname github.com
 (
   set -eu
@@ -38,7 +37,7 @@ The recipe never falls back to `main`. `gh` handles private-repository authentic
 
 ### Complete first-run setup
 
-The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to the supported login-shell profile. It does not configure the current project. The recipe begins by changing into the Git repository that `stn setup` will use as the first Station project. Because profile changes apply to future login shells, the remaining handoff for the current shell is:
+The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to the supported login-shell profile. It does not infer a project from the install directory. Because profile changes apply to future login shells, the remaining handoff for the current shell is:
 
 ```bash
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -51,13 +50,13 @@ stn doctor
 stn tui
 ```
 
-If the installer reported a PATH mismatch, its printed current-shell block is the authoritative equivalent and already ends with `stn setup`. When running the installer outside these recipes, change into the project repository before using that block. If you used `--install-dir`, use its printed path instead of `~/.local/bin`.
+If the installer reported a PATH mismatch, its printed current-shell block is the authoritative equivalent and already ends with `stn setup`. It is safe to run that block from `HOME`, Desktop, or another ordinary directory. If you used `--install-dir`, use its printed path instead of `~/.local/bin`.
 
-Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes `~/.config/station/config.toml` for the current repository; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
+Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes a valid zero-project `~/.config/station/config.toml`; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup never adopts its current directory or an ancestor repository. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
 
 The PATH assignment above affects only the current shell. `--persist-path` adds an idempotent entry to the login-shell profile selected from `SHELL` (`.zprofile` for zsh, the first existing bash login profile, or `.profile` for POSIX shells) while preserving existing content such as Homebrew setup. Omit the flag to leave profiles unchanged; unless the exact entry is already present, the installer prints the idempotent command you can run instead, even when its own shell temporarily resolves the launchers. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
 
-On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
+On the cold-boot welcome screen, press `Enter` or `Space` to open project view. On the empty dashboard, press `Enter` (or `A`) on **Add your first project**, choose a folder inside an existing Git repository, and confirm it. A nested folder resolves to its Git root; an ordinary non-Git folder cannot be added from this flow. Then press `N`, review the project, generated session name, and agent in the **Create Session** dialog, and press `Enter` on **Create session** to start the agent session.
 
 Pass `--install-dir PATH` to override the default `~/.local/bin`, and combine it with `--persist-path` to persist that exact custom directory; run `scripts/install.sh --help` from a checkout for the complete command surface.
 
@@ -151,7 +150,7 @@ stn
 
 For a complete source-development workflow, `stn setup check` exits 1 until these tools are present. A compiled binary can still launch when a feature-gated tool is missing:
 
-- Git, run from inside the git repository you want to manage (macOS: the Command Line Tools)
+- Git (macOS: the Command Line Tools); choose the repository explicitly after setup
 - Worktrunk `wt` for core worktree setup
 - tmux for the reference terminal provider and popup path
 - Bun — source-checkout `stn` renders the TUI through `bun run`; compiled `stn` embeds the renderer
@@ -185,7 +184,7 @@ STATION is installed.
 Next:
   stn setup
 
-This configures the core local workflow: the required tools, an agent CLI, and your first project.
+This configures the core local workflow: the required tools, an agent CLI, and a zero-project config.
 Optional integrations can be added later.
 ```
 
@@ -200,7 +199,7 @@ and runner self-interruption against local fake release assets. Every child and
 the overall runner have deadlines. It does not contact GitHub or modify the real
 home directory.
 
-Guided setup writes a first-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
+Guided setup writes a zero-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 
 Useful smoke options:
 

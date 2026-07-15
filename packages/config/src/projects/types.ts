@@ -5,6 +5,8 @@ export type MinimalProjectBlock = {
   id: string;
   label: string;
   root: string;
+  defaultBranch?: string;
+  worktrunkBase?: string;
 };
 
 export type AddProjectToConfigOptions = {

@@ -176,12 +176,19 @@ function firstTableLineIndex(lines: readonly string[]): number {
 }
 
 function formatMinimalProjectBlock(block: MinimalProjectBlock): string {
-  return [
+  const lines = [
     "[[projects]]",
     `id = ${quoteTomlString(block.id)}`,
     `label = ${quoteTomlString(block.label)}`,
     `root = ${quoteTomlString(block.root)}`,
-  ].join("\n");
+  ];
+  if (block.defaultBranch !== undefined) {
+    lines.push(`default_branch = ${quoteTomlString(block.defaultBranch)}`);
+  }
+  if (block.worktrunkBase !== undefined) {
+    lines.push("", "[projects.worktrunk]", `base = ${quoteTomlString(block.worktrunkBase)}`);
+  }
+  return lines.join("\n");
 }
 
 function replaceTomlStringValue(line: string, key: string, value: string): string {

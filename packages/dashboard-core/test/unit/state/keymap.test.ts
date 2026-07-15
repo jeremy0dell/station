@@ -1,6 +1,7 @@
 import type { TuiKey, TuiState } from "@station/dashboard-core";
 import {
   createInitialTuiState,
+  dashboardFooterLabel,
   deriveTuiInputMode,
   editableTextBindings,
   handleTuiKey,
@@ -229,6 +230,22 @@ describe("tui keymap metadata", () => {
       if (textIndex !== -1) {
         expect(`${mode}:${textIndex}`).toBe(`${mode}:${table.length - 1}`);
       }
+    }
+  });
+});
+
+describe("dashboard footer", () => {
+  it("keeps the first-project action at wide and compact widths", () => {
+    for (const columns of [120, 40]) {
+      const label = dashboardFooterLabel({
+        columns,
+        quitHint: "Q/esc:close",
+        firstRun: true,
+      });
+      expect(label).toContain("add first project");
+      expect(label).not.toContain("open");
+      expect(label).not.toContain("N new");
+      expect(label).not.toContain("delete");
     }
   });
 });

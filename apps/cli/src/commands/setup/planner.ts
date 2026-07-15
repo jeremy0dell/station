@@ -430,19 +430,29 @@ function gitCheck(facts: SetupFacts): SetupCheck {
       id: "git-project",
       tier: "required",
       status: "ok",
-      label: "Git project",
-      message: "Current directory is inside a git repository.",
+      label: "Git",
+      message: "Git is available; choose projects explicitly in STATION.",
       details: {
         root: facts.git.root,
         defaultBranch: facts.git.defaultBranch,
       },
     };
   }
+  if (facts.git.reason === "not-a-repo") {
+    return {
+      id: "git-project",
+      tier: "required",
+      status: "ok",
+      label: "Git",
+      message: "Git is available; choose a project explicitly in STATION.",
+      details: { defaultBranch: facts.git.defaultBranch },
+    };
+  }
   return {
     id: "git-project",
     tier: "required",
     status: "missing",
-    label: "Git project",
+    label: "Git",
     message: facts.git.message,
     details: {
       defaultBranch: facts.git.defaultBranch,
@@ -491,7 +501,7 @@ function configCheck(facts: SetupFacts): SetupCheck {
       id: "config",
       tier: "required",
       status: "missing",
-      label: "STATION project config",
+      label: "STATION config",
       message: facts.config.message,
       details: { path: facts.config.path },
     };
@@ -501,7 +511,7 @@ function configCheck(facts: SetupFacts): SetupCheck {
       id: "config",
       tier: "required",
       status: "missing",
-      label: "STATION project config",
+      label: "STATION config",
       message: facts.config.message,
       details: { path: facts.config.path },
     };
@@ -509,57 +519,19 @@ function configCheck(facts: SetupFacts): SetupCheck {
   const supportedHarnesses = new Set(
     facts.harnesses.filter((harness) => harness.status === "ok").map((harness) => harness.id),
   );
-  if (!facts.config.hasProjectForRoot) {
-    const defaultCoreProblem = defaultConfigCoreProblem(facts.config, supportedHarnesses);
-    if (defaultCoreProblem !== undefined) {
-      return {
-        id: "config",
-        tier: "required",
-        status: "missing",
-        label: "STATION project config",
-        message: defaultCoreProblem,
-        details: {
-          path: facts.config.path,
-          worktreeProvider: facts.config.defaults.worktreeProvider,
-          terminal: facts.config.defaults.terminal,
-          harness: facts.config.defaults.harness,
-        },
-      };
-    }
+  const defaultCoreProblem = defaultConfigCoreProblem(facts.config, supportedHarnesses);
+  if (defaultCoreProblem !== undefined) {
     return {
       id: "config",
       tier: "required",
       status: "missing",
-      label: "STATION project config",
-      message: "Config exists but does not include the current git repository.",
-      details: { path: facts.config.path },
-    };
-  }
-  const project = facts.config.matchedProject;
-  if (project === undefined) {
-    return {
-      id: "config",
-      tier: "required",
-      status: "missing",
-      label: "STATION project config",
-      message: "Config includes the current git repository, but setup could not inspect it.",
-      details: { path: facts.config.path },
-    };
-  }
-  const projectCoreProblem = projectConfigCoreProblem(project, supportedHarnesses);
-  if (projectCoreProblem !== undefined) {
-    return {
-      id: "config",
-      tier: "required",
-      status: "missing",
-      label: "STATION project config",
-      message: projectCoreProblem,
+      label: "STATION config",
+      message: defaultCoreProblem,
       details: {
         path: facts.config.path,
-        project: project.id,
-        worktreeProvider: project.worktreeProvider,
-        terminal: project.terminal,
-        harness: project.harness,
+        worktreeProvider: facts.config.defaults.worktreeProvider,
+        terminal: facts.config.defaults.terminal,
+        harness: facts.config.defaults.harness,
       },
     };
   }
@@ -567,8 +539,8 @@ function configCheck(facts: SetupFacts): SetupCheck {
     id: "config",
     tier: "required",
     status: "ok",
-    label: "STATION project config",
-    message: "Config includes the current git repository.",
+    label: "STATION config",
+    message: "Core STATION config is ready; projects are added explicitly in STATION.",
     details: { path: facts.config.path },
   };
 }
@@ -604,32 +576,13 @@ function defaultConfigCoreProblem(
   supportedHarnesses: ReadonlySet<string>,
 ): string | undefined {
   if (config.defaults.worktreeProvider !== "worktrunk") {
-    return `Config defaults use worktree provider ${config.defaults.worktreeProvider}; set defaults.worktree_provider to "worktrunk" before setup can append this project safely.`;
+    return `Config defaults use worktree provider ${config.defaults.worktreeProvider}; set defaults.worktree_provider to "worktrunk" for the setup core path.`;
   }
   if (config.defaults.terminal !== "tmux") {
-    return `Config defaults use terminal ${config.defaults.terminal}; set defaults.terminal to "tmux" before setup can append this project safely.`;
+    return `Config defaults use terminal ${config.defaults.terminal}; set defaults.terminal to "tmux" for the setup core path.`;
   }
   if (!supportedHarnesses.has(config.defaults.harness)) {
     return `Config defaults use harness ${config.defaults.harness}, but setup did not detect that supported harness CLI.`;
-  }
-  return undefined;
-}
-
-function projectConfigCoreProblem(
-  project: NonNullable<Extract<SetupFacts["config"], { status: "valid" }>["matchedProject"]>,
-  supportedHarnesses: ReadonlySet<string>,
-): string | undefined {
-  if (project.worktreeProvider !== "worktrunk") {
-    return `Project ${project.id} uses worktree provider ${project.worktreeProvider}; set the effective provider to "worktrunk" for the setup core path.`;
-  }
-  if (!project.worktrunkEnabled) {
-    return `Project ${project.id} disables Worktrunk; enable project Worktrunk config for the setup core path.`;
-  }
-  if (project.terminal !== "tmux") {
-    return `Project ${project.id} uses terminal ${project.terminal}; set the effective terminal to "tmux" for the setup core path.`;
-  }
-  if (!supportedHarnesses.has(project.harness)) {
-    return `Project ${project.id} uses harness ${project.harness}, but setup did not detect that supported harness CLI.`;
   }
   return undefined;
 }
@@ -724,7 +677,7 @@ function setupActions(
 
   actions.push(...hookSetupActions(facts, selectedHarness, options));
 
-  const configActions = configWriteActions(facts, selectedHarness, configWrite);
+  const configActions = configWriteActions(selectedHarness, configWrite);
   actions.push(...configActions);
   return actions;
 }
@@ -828,11 +781,10 @@ function installAction(
 }
 
 function configWriteActions(
-  facts: SetupFacts,
   selectedHarness: SetupHarnessFact | undefined,
   configWrite: ConfigWritePlan | undefined,
 ): SetupAction[] {
-  if (selectedHarness === undefined || facts.git.status !== "ok") {
+  if (selectedHarness === undefined) {
     return [];
   }
   if (configWrite === undefined || configWrite.operation === "none") {
@@ -868,7 +820,7 @@ function configWriteActions(
     label: configWrite.operation === "create" ? "Write STATION config" : "Append STATION config",
     message:
       configWrite.operation === "create"
-        ? "Create the core STATION config for this repository."
+        ? "Create the core STATION config; add your first project in STATION."
         : "Append safe missing setup blocks to the existing STATION config.",
     path: configWrite.path,
     data: {
@@ -901,7 +853,7 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   if (facts.bun.status === "missing") {
     return ["Install Bun (brew install bun), then run: stn setup check"];
   }
-  if (facts.git.status === "missing") {
+  if (facts.git.status === "missing" && facts.git.reason === "git-absent") {
     return [facts.git.message];
   }
   if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {

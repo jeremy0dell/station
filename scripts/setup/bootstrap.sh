@@ -83,7 +83,7 @@ cat <<'EOF'
 Station is installed.
 
 Next:
-  stn setup     # required tools, an agent CLI, and your first project
+  stn setup     # required tools, an agent CLI, and a zero-project config
   stn           # launch the workspace
 EOF
 

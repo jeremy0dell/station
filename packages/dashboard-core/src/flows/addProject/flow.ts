@@ -176,7 +176,9 @@ function chooseSelected(state: AddProjectFlowState): AddProjectTransition {
 }
 
 function submitReview(state: AddProjectFlowState): AddProjectTransition {
-  if (state.mode !== "review" || state.editingId !== undefined) return { state };
+  if (state.mode !== "review" || state.editingId !== undefined || state.gitRoot === undefined) {
+    return { state };
+  }
   return {
     state: { ...state, submitting: true },
     effects: [
@@ -188,7 +190,6 @@ function submitReview(state: AddProjectFlowState): AddProjectTransition {
             path: state.selectedPath,
             id: state.id,
             label: state.label,
-            ...(state.gitRoot === undefined ? { allowNonGit: true } : {}),
           },
         },
       },

@@ -54,7 +54,9 @@ function handleDashboardBinding(
         state: moveDashboardFocus(state, 1),
       };
     case "tui.focus.activate":
-      return activateFocusedDashboardRow(state);
+      return hasNoProjects(state)
+        ? { state: openAddProject(state, { ...context, firstProject: true }) }
+        : activateFocusedDashboardRow(state);
     case "tui.focus.nextNeedsMe":
       return {
         state: focusNextNeedsMe(state),
@@ -109,7 +111,7 @@ function handleDashboardBinding(
       return openNewSession(state);
     case "tui.addProject.open":
       return {
-        state: openAddProject(state, context),
+        state: openAddProject(state, { ...context, firstProject: hasNoProjects(state) }),
       };
     case "tui.collapse.open":
       return openProjectSlotPicker(state, "projectCollapse");
@@ -122,6 +124,10 @@ function handleDashboardBinding(
     default:
       return assertNever(binding);
   }
+}
+
+function hasNoProjects(state: TuiState): boolean {
+  return state.snapshot?.projects.length === 0;
 }
 
 function assertNever(value: never): never {

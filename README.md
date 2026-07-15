@@ -44,10 +44,9 @@ station keeps track of everything that's running and makes it visible:
 
 The authenticated private binary is the user install path. On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to the private repository, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
 
-Start in the Git repository you want Station to manage, authenticate `gh`, fetch the installer for the binary baseline, and run it:
+From any directory, authenticate `gh`, fetch the installer for the binary baseline, and run it:
 
 ```sh
-cd /path/to/your/git-project
 gh auth login --hostname github.com
 (
   set -eu
@@ -66,7 +65,7 @@ gh auth login --hostname github.com
 )
 ```
 
-The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to your login-shell profile. It does not configure the current project. From the same project shell, make the default install available immediately, run guided setup, verify it, and launch the full workspace:
+The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to your login-shell profile. It does not infer a project from the install directory. In the same shell, make the default install available immediately, run guided setup, verify it, and launch the full workspace:
 
 ```sh
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -79,9 +78,9 @@ stn doctor
 stn tui
 ```
 
-`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, writes `~/.config/station/config.toml` for the current Git repository, and can add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; `--persist-path` makes the same directory available to future login shells. Omit that flag to leave profiles unchanged and receive an exact opt-in command instead. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
+`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, and writes a valid zero-project `~/.config/station/config.toml`; it never adds the current directory implicitly. It can also add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; `--persist-path` makes the same directory available to future login shells. Omit that flag to leave profiles unchanged and receive an exact opt-in command instead. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
 
-On the cold-boot welcome screen, press `Enter` or `Space` to open project view. Press `N`, review the project, generated session name, and agent in the **Create Session** dialog, then press `Enter` on **Create session** to start the agent session.
+On the cold-boot welcome screen, press `Enter` or `Space` to open project view. On the empty dashboard, press `Enter` (or `A`) on **Add your first project**, choose a folder inside an existing Git repository, and confirm it. Station resolves nested selections to their Git root and will not add an ordinary non-Git folder. Then press `N`, review the project, generated session name, and agent in the **Create Session** dialog, and press `Enter` on **Create session** to start the agent session.
 
 `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
 
@@ -103,7 +102,7 @@ On macOS, a fresh checkout can install the development dependencies, build both 
 
 ```sh
 ./scripts/setup/bootstrap.sh
-stn setup     # required tools, an agent CLI, and your first project
+stn setup     # required tools, an agent CLI, and a zero-project config
 stn           # launch the workspace
 ```
 

@@ -52,7 +52,7 @@ describe("guided setup command", () => {
         ]),
         fs,
         activateObserverConfig: async (input) => {
-          expect(fs.files[input.configPath]).toContain("[[projects]]");
+          expect(fs.files[input.configPath]).toContain("projects = []");
           activations.push(input);
         },
         prompt: prompt({ confirms: [false, false, true, false, false] }),
@@ -63,7 +63,7 @@ describe("guided setup command", () => {
 
     expect(result.code).toBe(0);
     const configPath = join(root, "home/.config/station/config.toml");
-    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(fs.files[configPath]).toContain("projects = []");
     expect(activations).toEqual([{ configPath, homeDir: join(root, "home") }]);
     expect(chunks.join("")).toContain(`Applying: Write STATION config (${configPath})`);
     expect(chunks.join("")).toContain("Completed: Write STATION config");
@@ -111,7 +111,7 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Link STATION launchers") ||
-              message.includes("Write STATION project config") ||
+              message.includes("Write core STATION config") ||
               message.includes("Install or load tmux popup binding")
             );
           },
@@ -132,7 +132,7 @@ describe("guided setup command", () => {
       "STATION launcher link failed. Continuing with checkout launcher paths.",
     );
     expect(chunks.join("")).toContain(`Direct fallback: ${join(packageRoot, "bin/stn")} popup`);
-    expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("[[projects]]");
+    expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("projects = []");
   });
 
   it("runs Worktrunk shell integration non-interactively after the STATION prompt", async () => {
@@ -381,7 +381,7 @@ describe("guided setup command", () => {
     const output = chunks.join("");
     expect(result.code).toBe(1);
     expect(activations).toBe(1);
-    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(fs.files[configPath]).toContain("projects = []");
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: TEST_ACTIVATION_FAILED");
     expect(output).toContain("Hint: Inspect observer logs.");
@@ -737,7 +737,7 @@ describe("guided setup command", () => {
         prompt: {
           async confirm(message: string) {
             return (
-              message.includes("Install Codex?") || message.includes("Write STATION project config")
+              message.includes("Install Codex?") || message.includes("Write core STATION config")
             );
           },
           async select() {
@@ -1024,7 +1024,7 @@ describe("guided setup command", () => {
             return (
               message.includes("Install Homebrew") ||
               message.includes("Install missing required tools") ||
-              message.includes("Write STATION project config")
+              message.includes("Write core STATION config")
             );
           },
           async select() {
@@ -1043,7 +1043,7 @@ describe("guided setup command", () => {
         .filter((call) => call.command === "brew" && call.args?.[0] === "install")
         .map((call) => call.args?.[1]),
     ).toEqual(expect.arrayContaining(["worktrunk", "tmux", "bun", "diffnav", "git-delta"]));
-    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(fs.files[configPath]).toContain("projects = []");
   });
 
   it("keeps brew tools after a fresh Mac installs its first agent CLI", async () => {
@@ -1148,7 +1148,7 @@ describe("guided setup command", () => {
               message.includes("Install Homebrew") ||
               message.includes("Install missing required tools") ||
               message.includes("chatgpt.com/codex") ||
-              message.includes("Write STATION project config")
+              message.includes("Write core STATION config")
             );
           },
           async select() {
@@ -1163,7 +1163,7 @@ describe("guided setup command", () => {
     // config: the brew tools (resolvable only under /opt/homebrew/bin) re-read missing.
     expect(result.code).toBe(0);
     expect(calls.some((call) => call.command === "sh")).toBe(true);
-    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(fs.files[configPath]).toContain("projects = []");
   });
 });
 

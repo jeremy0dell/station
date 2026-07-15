@@ -120,12 +120,9 @@ describe("setup core flow e2e", () => {
       await expect(realpath(globalStation)).resolves.toBe(repoRoot);
       expect(run("stn", ["--help"], { cwd: root, env }).stdout).toContain("stn --help");
 
-      const project = join(root, "project");
       const configPath = join(home, ".config", "station", "config.toml");
-      await mkdir(project, { recursive: true });
-      run("git", ["init", "-b", "main"], { cwd: project, env });
       const setup = run("stn", ["--config", configPath, "setup", "apply", "--yes", "--no-brew"], {
-        cwd: project,
+        cwd: root,
         env,
       });
       expect(setup.stdout).toContain("Core setup complete.");
@@ -135,10 +132,8 @@ describe("setup core flow e2e", () => {
       const health = await observer.health();
       const snapshot = await observer.getSnapshot();
       expect(health.pid).toBeTypeOf("number");
-      expect(snapshot.projects).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: "project" })]),
-      );
-      expect(snapshot.counts.projects).toBe(1);
+      expect(snapshot.projects).toEqual([]);
+      expect(snapshot.counts.projects).toBe(0);
 
       const ingress = run("stn-ingress", [], { cwd: root, env, allowFailure: true });
       expect(ingress.status).toBe(1);
@@ -166,7 +161,7 @@ describe("setup core flow e2e", () => {
     }
   });
 
-  it("creates core config from a temp git repo without real external tools", async () => {
+  it("creates a zero-project config from a temp non-git directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-setup-e2e-"));
     const runtimeDir = await mkdtemp(join(tmpdir(), "stn-r-"));
     const observerSocket = join(runtimeDir, "station", "observer.sock");
@@ -174,11 +169,11 @@ describe("setup core flow e2e", () => {
     let passed = false;
     try {
       const home = join(root, "home");
-      const repo = join(root, "repo");
+      const setupCwd = join(root, "setup-cwd");
       const bin = join(root, "bin");
       const configPath = join(home, ".config", "station", "config.toml");
       await mkdir(home, { recursive: true });
-      await mkdir(repo, { recursive: true });
+      await mkdir(setupCwd, { recursive: true });
       await mkdir(bin, { recursive: true });
       await writeShim(
         bin,
@@ -205,8 +200,6 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
-      run("git", ["init", "-b", "main"], { cwd: repo });
-
       const env = {
         ...process.env,
         HOME: home,
@@ -216,7 +209,7 @@ describe("setup core flow e2e", () => {
         STATION_DASHBOARD_COMMAND: "true",
         STATION_FAST_POPUP_NO_FALLBACK: "1",
       };
-      const launch = runStation([], { cwd: repo, env });
+      const launch = runStation([], { cwd: setupCwd, env });
       expect(launch.status).toBe(0);
       const observer = createObserverClient({ socketPath: observerSocket, timeoutMs: 1000 });
       const beforeHealth = await observer.health();
@@ -225,7 +218,7 @@ describe("setup core flow e2e", () => {
       expect(beforeSnapshot).toMatchObject({ counts: { projects: 0 }, projects: [] });
 
       const firstCheck = runStation(["--config", configPath, "setup", "check", "--json"], {
-        cwd: repo,
+        cwd: setupCwd,
         env,
         allowFailure: true,
       });
@@ -241,7 +234,7 @@ describe("setup core flow e2e", () => {
       );
 
       const plan = runStation(["--config", configPath, "setup", "plan", "--json"], {
-        cwd: repo,
+        cwd: setupCwd,
         env,
       });
       const parsedPlan = JSON.parse(plan.stdout);
@@ -251,7 +244,7 @@ describe("setup core flow e2e", () => {
       expect(JSON.stringify(parsedPlan.actions)).not.toContain("github");
 
       const apply = runStation(["--config", configPath, "setup", "apply", "--yes"], {
-        cwd: repo,
+        cwd: setupCwd,
         env,
       });
       expect(apply.stdout).toContain("Core setup complete.");
@@ -261,19 +254,18 @@ describe("setup core flow e2e", () => {
       const afterSnapshot = await observer.getSnapshot();
       expect(afterHealth.pid).toBeTypeOf("number");
       expect(afterHealth.pid).not.toBe(beforeHealth.pid);
-      expect(afterSnapshot.projects).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: "repo" })]),
-      );
-      expect(afterSnapshot.counts.projects).toBe(1);
+      expect(afterSnapshot.projects).toEqual([]);
+      expect(afterSnapshot.counts.projects).toBe(0);
 
       const finalCheck = runStation(["--config", configPath, "setup", "check", "--json"], {
-        cwd: repo,
+        cwd: setupCwd,
         env,
       });
       const finalPlan = JSON.parse(finalCheck.stdout);
       expect(finalPlan.summary.requiredOk).toBe(true);
       await expect(loadConfig({ configPath, homeDir: home })).resolves.toMatchObject({
         config: {
+          projects: [],
           defaults: {
             harness: "codex",
             terminal: "tmux",

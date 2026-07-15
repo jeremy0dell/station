@@ -209,7 +209,7 @@ function Review({
         <>
           <SheetLine width={width}> </SheetLine>
           <SheetMessageLine width={width} tone="warning">
-            This does not look like a git repository.
+            Choose a folder inside an existing Git repository.
           </SheetMessageLine>
         </>
       ) : (
@@ -298,12 +298,12 @@ function reviewFooter(state: Extract<AddProjectFlowState, { mode: "review" }>): 
     return "Enter:save id   Esc:cancel edit";
   }
   return state.gitRoot === undefined
-    ? "Enter:add anyway   N:edit id   B:choose folder   Esc:cancel"
+    ? "B:choose Git repository   Esc:cancel"
     : "Enter:add project   N:edit id   B:choose folder   Esc:cancel";
 }
 
 function titleForState(state: AddProjectFlowState): string {
-  if (state.mode === "start") return "Add Project";
+  if (state.mode === "start") return state.firstProject ? "Add Your First Project" : "Add Project";
   if (state.mode === "choose") return "Choose Project Folder";
   if (state.mode === "review") return "Add Project: Review";
   if (state.mode === "success") return "Project Added";

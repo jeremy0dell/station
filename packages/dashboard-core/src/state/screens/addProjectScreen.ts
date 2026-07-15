@@ -1,7 +1,10 @@
 import { dirname } from "node:path";
 import { editableTextInputIntentForInput } from "../../components/EditableTextInput/editing.js";
 import { createAddProjectFlow, transitionAddProjectFlow } from "../../flows/addProject/flow.js";
-import type { AddProjectFlowEffect } from "../../flows/addProject/types.js";
+import type {
+  AddProjectFlowEffect,
+  CreateAddProjectFlowInput,
+} from "../../flows/addProject/types.js";
 import { toSafeError } from "../../services/errors/errors.js";
 import type {
   TuiFolderReadResult,
@@ -13,7 +16,7 @@ import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export function openAddProject(state: TuiState, input: { cwd: string; homeDir: string }): TuiState {
+export function openAddProject(state: TuiState, input: CreateAddProjectFlowInput): TuiState {
   return {
     ...state,
     screen: {

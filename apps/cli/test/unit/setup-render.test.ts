@@ -8,7 +8,7 @@ describe("setup renderer", () => {
 
     expect(output).toContain("Core\n\n");
     expect(output).toContain("  OK        Worktrunk / wt");
-    expect(output).toContain("  MISSING   STATION project config");
+    expect(output).toContain("  MISSING   STATION config");
     expect(output).toContain("           path /tmp/station/config.toml");
     expect(output).toContain("Actions\n\n");
     expect(output).toContain("  WILL      Write STATION config");
@@ -96,7 +96,7 @@ function plan(): SetupPlan {
         id: "config",
         tier: "required",
         status: "missing",
-        label: "STATION project config",
+        label: "STATION config",
         message: "Config is missing.",
         details: { path: "/tmp/station/config.toml" },
       },

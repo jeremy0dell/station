@@ -272,7 +272,6 @@ downloads its candidate manifest and uses the exact draft ID and commit that
 promotion will verify:
 
 ```sh
-cd /path/to/your/git-project
 (
   set -eu
   umask 077
@@ -363,8 +362,10 @@ manually verify the actual user experience, not a dashboard override:
    run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
    and connects to a healthy Observer.
 4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
-5. Run `stn setup` to add a project. Confirm the open TUI reconnects and shows
-   it after activation on the same Observer socket.
+5. Run `stn setup` from `HOME` or Desktop. Confirm it creates a zero-project
+   config without adopting that directory. In the open TUI, press `Enter` on
+   **Add your first project**, choose a Git repository, and confirm the TUI
+   reconnects and shows it after activation on the same Observer socket.
 6. Expose `stn-tmux-popup` only to the shell running `stn setup`, accept the
    popup binding, and confirm `~/.tmux.conf` contains its safely quoted absolute
    path. Start a fresh tmux server with `PATH=/usr/bin:/bin`; `Ctrl-b Space`
