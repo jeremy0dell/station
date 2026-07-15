@@ -20,6 +20,7 @@ import {
   terminalCloseIntentForSession,
   terminalCloseIntentForWorktree,
 } from "../terminalIntents.js";
+import type { VerifiedWorktreeRemovalTarget } from "./guards.js";
 
 export type CleanupRuntime = {
   clock?: RuntimeClock | undefined;
@@ -178,6 +179,7 @@ export async function removeWorktreeThroughProvider(
   input: {
     providers: ProviderRegistry;
     row: WorktreeRow;
+    target: VerifiedWorktreeRemovalTarget;
     force: boolean;
     context: CommandHandlerContext;
   } & CleanupRuntime,
@@ -185,6 +187,9 @@ export async function removeWorktreeThroughProvider(
   const request = {
     worktreeId: input.row.id,
     projectId: input.row.projectId,
+    expectedPath: input.target.path,
+    expectedBranch: input.target.branch,
+    expectedRegistrationIdentity: input.target.registrationIdentity,
   };
   const providerRequest: typeof request & { force?: boolean } = { ...request };
   if (input.force) {

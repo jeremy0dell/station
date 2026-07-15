@@ -10,6 +10,7 @@ import {
   assertWorktreeRemovalAllowed,
   buildStationSnapshot,
   resolveSessionOrThrow,
+  resolveWorktreeRemovalTarget,
   resolveWorktreeRowOrThrow,
 } from "../../src/internal";
 import { observerHarnessRunFromRun } from "../../src/reconcile/harnessEventStatus";
@@ -84,6 +85,300 @@ describe("cleanup command validation", () => {
       }),
     );
   });
+
+  it("fails closed for primary and default-branch checkouts in normal and bare layouts", () => {
+    const snapshot = snapshotFor({ dirty: false, state: "none" });
+    const row = snapshot.rows[0];
+    const current = createFakeWorktree({
+      id: row.id,
+      projectId: row.projectId,
+      branch: row.branch,
+      path: row.path,
+      registrationIdentity: "git-registration:cleanup",
+      now,
+    });
+    const payload = {
+      worktreeId: row.id,
+      projectId: row.projectId,
+      expectedPath: row.path,
+      expectedBranch: row.branch,
+      expectedRegistrationIdentity: "git-registration:cleanup",
+    };
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedPath: project.root },
+        snapshotRow: { ...row, path: project.root },
+        project,
+        currentWorktrees: [{ ...current, path: project.root }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_ROOT_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "primary_checkout",
+    });
+
+    const bareProject = { ...project, root: "/tmp/station/web.git" };
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project: bareProject,
+        currentWorktrees: [{ ...current, isPrimaryCheckout: true }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_ROOT_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "primary_checkout",
+    });
+
+    const mainRow = { ...row, branch: "main" };
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "main" },
+        snapshotRow: mainRow,
+        project: bareProject,
+        currentWorktrees: [{ ...current, branch: "main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "default_branch",
+    });
+
+    const derivedDefaultProject = {
+      id: project.id,
+      label: project.label,
+      root: bareProject.root,
+      defaults: project.defaults,
+      worktrunk: { enabled: true, base: "origin/main" },
+    };
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "main" },
+        snapshotRow: mainRow,
+        project: derivedDefaultProject,
+        currentWorktrees: [{ ...current, branch: "main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+    });
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "main" },
+        snapshotRow: mainRow,
+        project: { ...derivedDefaultProject, worktrunk: { enabled: true, base: "upstream/main" } },
+        currentWorktrees: [{ ...current, branch: "main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "default_branch",
+    });
+
+    const releaseRow = { ...row, branch: "release/main" };
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "release/main" },
+        snapshotRow: releaseRow,
+        project: {
+          ...derivedDefaultProject,
+          worktrunk: { enabled: true, base: "refs/heads/release/main" },
+        },
+        currentWorktrees: [{ ...current, branch: "release/main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "default_branch",
+    });
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project: { ...derivedDefaultProject, worktrunk: { enabled: true, base: "   " } },
+        currentWorktrees: [current],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_PROTECTION_UNVERIFIED" },
+      refusalReason: "protection_unverified",
+    });
+  });
+
+  it("reports changed, missing, and ambiguous removal selections as stale evidence", () => {
+    const snapshot = snapshotFor({ dirty: false, state: "none" });
+    const row = snapshot.rows[0];
+    const current = createFakeWorktree({
+      id: row.id,
+      projectId: row.projectId,
+      branch: row.branch,
+      path: row.path,
+      registrationIdentity: "git-registration:cleanup",
+      now,
+    });
+    const payload = {
+      worktreeId: row.id,
+      projectId: row.projectId,
+      expectedPath: row.path,
+      expectedBranch: row.branch,
+      expectedRegistrationIdentity: "git-registration:cleanup",
+    };
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [{ ...current, branch: "main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_STALE_SELECTION" },
+      refusalReason: "branch_changed",
+      observedBranch: "main",
+    });
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [{ ...current, path: `${row.path}-moved` }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_STALE_SELECTION" },
+      refusalReason: "path_changed",
+    });
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_STALE_SELECTION" },
+      refusalReason: "missing_target",
+    });
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [current, { ...current }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_TARGET_AMBIGUOUS" },
+      refusalReason: "ambiguous_identity",
+    });
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [{ ...current, registrationIdentity: "git-registration:replacement" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "WORKTREE_REMOVE_STALE_SELECTION",
+        diagnosticDetails: [
+          expect.objectContaining({
+            type: "worktree_removal_refusal",
+            refusalReason: "registration_changed",
+          }),
+        ],
+      },
+      refusalReason: "registration_changed",
+    });
+
+    const { registrationIdentity: _registrationIdentity, ...unverifiedCurrent } = current;
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [unverifiedCurrent],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_STALE_SELECTION" },
+      refusalReason: "registration_unverified",
+    });
+  });
+
+  it("resolves an unchanged disposable worktree for removal", () => {
+    const snapshot = snapshotFor({ dirty: false, state: "none" });
+    const row = snapshot.rows[0];
+    const current = createFakeWorktree({
+      id: row.id,
+      projectId: row.projectId,
+      branch: row.branch,
+      path: row.path,
+      registrationIdentity: "git-registration:cleanup",
+      now,
+    });
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: {
+          worktreeId: row.id,
+          projectId: row.projectId,
+          expectedPath: row.path,
+          expectedBranch: row.branch,
+          expectedRegistrationIdentity: "git-registration:cleanup",
+        },
+        snapshotRow: row,
+        project,
+        currentWorktrees: [current],
+      }),
+    ).toEqual({ ok: true, target: current });
+  });
+
+  it("refuses removal when default-branch protection cannot be verified", () => {
+    const snapshot = snapshotFor({ dirty: false, state: "none" });
+    const row = snapshot.rows[0];
+    const current = createFakeWorktree({
+      id: row.id,
+      projectId: row.projectId,
+      branch: row.branch,
+      path: row.path,
+      registrationIdentity: "git-registration:cleanup",
+      now,
+    });
+    const unverifiedProject = {
+      id: project.id,
+      label: project.label,
+      root: project.root,
+      defaults: project.defaults,
+      worktrunk: { enabled: true },
+    };
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: {
+          worktreeId: row.id,
+          projectId: row.projectId,
+          expectedPath: row.path,
+          expectedBranch: row.branch,
+          expectedRegistrationIdentity: "git-registration:cleanup",
+        },
+        snapshotRow: row,
+        project: unverifiedProject,
+        currentWorktrees: [current],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_PROTECTION_UNVERIFIED" },
+      refusalReason: "protection_unverified",
+    });
+  });
 });
 
 function snapshotFor(input: { dirty: boolean; state: "none" | "working" }) {
@@ -91,6 +386,7 @@ function snapshotFor(input: { dirty: boolean; state: "none" | "working" }) {
     id: "wt_web_cleanup",
     projectId: "web",
     branch: "cleanup",
+    registrationIdentity: "git-registration:cleanup",
     dirty: input.dirty,
     now,
   });
@@ -140,6 +436,7 @@ const project = {
   id: "web",
   label: "web",
   root: "/tmp/station/web",
+  defaultBranch: "main",
   defaults: {
     harness: "fake-harness",
     terminal: "fake-terminal",

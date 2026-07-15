@@ -47,6 +47,7 @@ describe("cleanup command debug bundle diagnostics", () => {
             id: "wt_web_cleanup",
             projectId: "web",
             branch: "cleanup",
+            registrationIdentity: "git-registration:cleanup",
             dirty: true,
             now,
           }),
@@ -101,6 +102,9 @@ describe("cleanup command debug bundle diagnostics", () => {
       payload: {
         projectId: "web",
         worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
       },
     });
     const succeeded = await queue.dispatch({
@@ -108,6 +112,9 @@ describe("cleanup command debug bundle diagnostics", () => {
       payload: {
         projectId: "web",
         worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -163,6 +170,7 @@ function configFor(root: string, stateDir: string): StationConfig {
         id: "web",
         label: "web",
         root,
+        defaultBranch: "main",
         defaults: {
           harness: "fake-harness",
           terminal: "fake-terminal",

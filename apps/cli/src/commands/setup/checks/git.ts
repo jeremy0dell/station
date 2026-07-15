@@ -62,7 +62,9 @@ function isDubiousOwnershipError(error: unknown): boolean {
   if (!isSafeError(error)) {
     return false;
   }
-  const stderr = error.diagnosticDetails?.[0]?.stderrSnippet ?? "";
+  const stderr =
+    error.diagnosticDetails?.find((detail) => detail.type === "external_command")?.stderrSnippet ??
+    "";
   return /dubious ownership|safe\.directory/i.test(stderr);
 }
 

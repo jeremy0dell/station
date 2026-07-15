@@ -139,6 +139,7 @@ export function row(input: {
     projectLabel: input.projectId,
     branch: input.branch,
     path: `/tmp/station/${input.projectId}/worktrees/${input.branch.replaceAll("/", "-")}`,
+    registrationIdentity: `git-registration:${input.id}`,
     worktree: {
       state: "exists",
       source: "worktrunk",

@@ -192,6 +192,9 @@ describe("cleanup command handlers", () => {
       payload: {
         worktreeId: "wt_web_cleanup",
         projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
       },
     });
     await fixture.queue.drain();
@@ -217,6 +220,9 @@ describe("cleanup command handlers", () => {
       payload: {
         worktreeId: "wt_web_cleanup",
         projectId: "web",
+        expectedPath: "/tmp/station/web",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -234,6 +240,38 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("refuses a stale feature selection that now owns the default branch before cleanup", async () => {
+    const fixture = createFixture({ state: "working" });
+    await fixture.core.reconcile("pre-cleanup");
+    fixture.worktreeObservation.branch = "main";
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: fixture.worktreeObservation.path,
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        tag: "CommandValidationError",
+        code: "WORKTREE_REMOVE_STALE_SELECTION",
+        worktreeId: "wt_web_cleanup",
+      },
+    });
+    expect(fixture.harness.snapshot().stopped).toEqual([]);
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    expect(fixture.worktree.snapshot().removed).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("force-removes an active worktree after stopping harness and closing terminal", async () => {
     const fixture = createFixture({ dirty: true, state: "working" });
     await fixture.core.reconcile("pre-cleanup");
@@ -243,6 +281,9 @@ describe("cleanup command handlers", () => {
       payload: {
         worktreeId: "wt_web_cleanup",
         projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -253,7 +294,14 @@ describe("cleanup command handlers", () => {
     ]);
     expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     expect(fixture.worktree.snapshot().removed).toEqual([
-      { projectId: "web", worktreeId: "wt_web_cleanup", force: true },
+      {
+        projectId: "web",
+        worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
     ]);
     expect(await fixture.persistence.listEvents({ commandId: receipt.commandId })).toEqual(
       expect.arrayContaining([
@@ -278,7 +326,14 @@ describe("cleanup command handlers", () => {
 
     const receipt = await fixture.queue.dispatch({
       type: "worktree.remove",
-      payload: { worktreeId: "wt_web_cleanup", projectId: "web", force: true },
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
     });
     await fixture.queue.drain();
 
@@ -292,7 +347,14 @@ describe("cleanup command handlers", () => {
     ]);
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     expect(fixture.worktree.snapshot().removed).toEqual([
-      { projectId: "web", worktreeId: "wt_web_cleanup", force: true },
+      {
+        projectId: "web",
+        worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
     ]);
     fixture.sqlite.close();
   });
@@ -310,6 +372,9 @@ describe("cleanup command handlers", () => {
       payload: {
         worktreeId: "wt_web_cleanup",
         projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -323,7 +388,14 @@ describe("cleanup command handlers", () => {
     ]);
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     expect(fixture.worktree.snapshot().removed).toEqual([
-      { projectId: "web", worktreeId: "wt_web_cleanup", force: true },
+      {
+        projectId: "web",
+        worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
     ]);
     expect(fixture.core.getSnapshot().rows).toEqual([]);
     fixture.sqlite.close();
@@ -338,6 +410,9 @@ describe("cleanup command handlers", () => {
       payload: {
         worktreeId: "wt_web_cleanup",
         projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -349,7 +424,14 @@ describe("cleanup command handlers", () => {
     expect(fixture.harness.snapshot().stopped).toEqual([]);
     expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     expect(fixture.worktree.snapshot().removed).toEqual([
-      { projectId: "web", worktreeId: "wt_web_cleanup", force: true },
+      {
+        projectId: "web",
+        worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
     ]);
     fixture.sqlite.close();
   });
@@ -369,18 +451,18 @@ function createFixture(input: {
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
   const eventBus = createObserverEventBus();
   const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
+  const worktreeObservation = createFakeWorktree({
+    id: "wt_web_cleanup",
+    projectId: "web",
+    branch: "cleanup",
+    registrationIdentity: "git-registration:cleanup",
+    ...(input.projectRootPath === true ? { path: config.projects[0].root } : {}),
+    dirty: input.dirty ?? false,
+    now,
+  });
   const worktree = new FakeWorktreeProvider({
     now,
-    worktrees: [
-      createFakeWorktree({
-        id: "wt_web_cleanup",
-        projectId: "web",
-        branch: "cleanup",
-        ...(input.projectRootPath === true ? { path: config.projects[0].root } : {}),
-        dirty: input.dirty ?? false,
-        now,
-      }),
-    ],
+    worktrees: [worktreeObservation],
   });
   const terminalOptions: ConstructorParameters<typeof FakeTerminalProvider>[0] = {
     now,
@@ -447,7 +529,18 @@ function createFixture(input: {
       ? {}
       : { terminalIntentRunner: input.terminalIntentRunner }),
   });
-  return { sqlite, persistence, eventBus, queue, providers, core, worktree, terminal, harness };
+  return {
+    sqlite,
+    persistence,
+    eventBus,
+    queue,
+    providers,
+    core,
+    worktree,
+    worktreeObservation,
+    terminal,
+    harness,
+  };
 }
 
 class CapturingTerminalIntentRunner implements TerminalIntentRunner {
@@ -494,6 +587,7 @@ const config: StationConfig = {
       id: "web",
       label: "web",
       root: "/tmp/station/web",
+      defaultBranch: "main",
       defaults: {
         harness: "fake-harness",
         terminal: "fake-terminal",

@@ -297,6 +297,8 @@ describe("observer providers", () => {
           "#!/bin/sh",
           `printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
           'if [ "$1" = "switch" ]; then',
+          `  mkdir -p ${JSON.stringify(createdWorktreePath)}`,
+          `  printf '%s\n' 'gitdir: fixture' > ${JSON.stringify(join(createdWorktreePath, ".git"))}`,
           `  printf '%s' ${JSON.stringify(
             JSON.stringify([{ path: createdWorktreePath, branch: "feature" }]),
           )}`,
@@ -354,8 +356,16 @@ describe("observer providers", () => {
         project,
         branch: "feature",
       });
+      if (created.registrationIdentity === undefined) {
+        throw new Error("Expected the created worktree registration identity.");
+      }
       await mkdir(createdWorktreePath, { recursive: true });
-      await registry.worktree.removeWorktree({ worktreeId: created.id });
+      await registry.worktree.removeWorktree({
+        worktreeId: created.id,
+        expectedPath: created.path,
+        expectedBranch: created.branch,
+        expectedRegistrationIdentity: created.registrationIdentity,
+      });
 
       await expect(readFile(logPath, "utf8")).resolves.toBe(
         [

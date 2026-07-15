@@ -112,6 +112,9 @@ describeReal("real Codex session lifecycle", () => {
         90_000,
       );
       const row = findRowByBranch(snapshot, branch);
+      if (row.registrationIdentity === undefined) {
+        throw new Error(`Expected Git registration identity for ${branch}.`);
+      }
       await waitForCodexSentinel(sentinel, { rootPath: row.path });
       expect(row.agent).toMatchObject({
         harness: "codex",
@@ -144,6 +147,9 @@ describeReal("real Codex session lifecycle", () => {
         payload: {
           worktreeId: row.id,
           projectId: row.projectId,
+          expectedPath: row.path,
+          expectedBranch: row.branch,
+          expectedRegistrationIdentity: row.registrationIdentity,
           force: true,
         },
       };

@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -20,6 +21,8 @@ import type {
   WorktreeEventContext,
   WorktreeObservation,
   WorktreeProvider,
+  WorktreeRemovalRefusalDiagnosticDetail,
+  WorktreeRemovalRefusalReason,
 } from "@station/contracts";
 import { ExternalCommandDiagnosticDetailSchema } from "@station/contracts";
 import {
@@ -57,6 +60,7 @@ export type WorktrunkProviderOptions = {
   timeoutMs?: number;
   runner?: ExternalCommandRunner;
   clock?: RuntimeClock;
+  resolveRegistrationIdentity?: (worktreePath: string) => Promise<string | undefined>;
 };
 
 type WorktrunkRunPolicy = {
@@ -78,6 +82,7 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
+ * Removal revalidates native Git registration identity, path, and branch immediately before invoking Worktrunk.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -88,6 +93,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #timeoutMs: number;
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
+  readonly #resolveRegistrationIdentity: (worktreePath: string) => Promise<string | undefined>;
   readonly #observations = new Map<string, WorktreeObservation>();
   readonly #projects = new Map<string, ProviderProjectConfig>();
 
@@ -98,6 +104,8 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#timeoutMs = options.timeoutMs ?? 5000;
     this.#runner = options.runner;
     this.#clock = options.clock ?? systemClock;
+    this.#resolveRegistrationIdentity =
+      options.resolveRegistrationIdentity ?? nativeGitRegistrationIdentity;
   }
 
   capabilities(): WorktreeCapabilities {
@@ -237,11 +245,14 @@ export class WorktrunkProvider implements WorktreeProvider {
       },
       policy,
     );
-    return parseWorktrunkListJson(output.stdout, {
+    const observations = parseWorktrunkListJson(output.stdout, {
       project,
       providerId: this.id,
       observedAt: toIsoTimestamp(this.#clock.now()),
     });
+    return Promise.all(
+      observations.map((observation) => this.#withRegistrationIdentity(observation)),
+    );
   }
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
@@ -267,11 +278,16 @@ export class WorktrunkProvider implements WorktreeProvider {
       worktreePathEnv(request.project, request.branch, request.path),
     );
 
-    const observations = parseCommandObservation(output.stdout, {
+    const commandObservations = parseCommandObservation(output.stdout, {
       project: request.project,
       providerId: this.id,
       observedAt: toIsoTimestamp(this.#clock.now()),
-    }).filter((observation) => isManagedWorktreeObservation(request.project, observation));
+    });
+    const observations = (
+      await Promise.all(
+        commandObservations.map((observation) => this.#withRegistrationIdentity(observation)),
+      )
+    ).filter((observation) => isManagedWorktreeObservation(request.project, observation));
     const found =
       observations.find((observation) => observation.branch === request.branch) ??
       observations.find((observation) => observation.path === request.path) ??
@@ -284,6 +300,15 @@ export class WorktrunkProvider implements WorktreeProvider {
         "Worktrunk create did not return or list the created worktree.",
       );
     }
+    if (found.registrationIdentity === undefined) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_WORKTREE_CHANGED",
+        "Worktrunk created the worktree but Station could not verify its Git registration.",
+        {
+          hint: "Inspect the created worktree and refresh before trying to manage it in Station.",
+        },
+      );
+    }
     // Cache before seeding so the cleanup path can resolve the worktree if seeding fails.
     this.#observations.set(found.id, found);
     if (request.seedFrom !== undefined) {
@@ -292,7 +317,13 @@ export class WorktrunkProvider implements WorktreeProvider {
       } catch (seedError) {
         // Seeding failed after the worktree was created. Remove it so callers never
         // inherit a half-seeded worktree; best-effort, then rethrow the seed cause.
-        await this.removeWorktree({ worktreeId: found.id, force: true }).catch(() => {});
+        await this.removeWorktree({
+          worktreeId: found.id,
+          expectedPath: found.path,
+          expectedBranch: found.branch,
+          expectedRegistrationIdentity: found.registrationIdentity,
+          force: true,
+        }).catch(() => {});
         this.#observations.delete(found.id);
         throw seedError;
       }
@@ -306,6 +337,16 @@ export class WorktrunkProvider implements WorktreeProvider {
       }
     }
     return found;
+  }
+
+  async #withRegistrationIdentity(observation: WorktreeObservation): Promise<WorktreeObservation> {
+    if (observation.state !== "exists") {
+      return observation;
+    }
+    const registrationIdentity = await this.#resolveRegistrationIdentity(observation.path);
+    return registrationIdentity === undefined
+      ? observation
+      : { ...observation, registrationIdentity };
   }
 
   async #seedWorkingTree(srcPath: string, tgtPath: string): Promise<void> {
@@ -355,29 +396,83 @@ export class WorktrunkProvider implements WorktreeProvider {
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
     const observation = this.#observations.get(request.worktreeId);
     if (observation === undefined) {
-      throw new WorktrunkProviderError(
-        "WORKTRUNK_WORKTREE_NOT_FOUND",
-        "Worktrunk remove requires a previously observed worktree.",
-        { hint: "Run listWorktrees before removeWorktree so the provider can resolve the target." },
-      );
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_NOT_FOUND",
+        message: "Worktrunk remove requires a previously observed worktree.",
+        hint: "Run listWorktrees before removeWorktree so the provider can resolve the target.",
+        request,
+        canonicalPath: request.expectedPath,
+        observedBranch: request.expectedBranch,
+        refusalReason: "missing_target",
+      });
+    }
+    const cachedRefusalReason = changedRemovalIdentityReason(observation, request);
+    if (cachedRefusalReason !== undefined) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "Worktrunk remove received stale checkout identity.",
+        hint: "Refresh and reselect the worktree before retrying removal.",
+        request,
+        projectId: observation.projectId,
+        canonicalPath: observation.path,
+        observedBranch: observation.branch,
+        refusalReason: cachedRefusalReason,
+      });
     }
     const project = this.#projects.get(observation.projectId);
     if (project === undefined) {
-      throw new WorktrunkProviderError(
-        "WORKTRUNK_WORKTREE_NOT_FOUND",
-        "Worktrunk remove requires the repository root from a previous project listing.",
-        { hint: "Run listWorktrees for the project before removeWorktree." },
-      );
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_NOT_FOUND",
+        message: "Worktrunk remove requires the repository root from a previous project listing.",
+        hint: "Run listWorktrees for the project before removeWorktree.",
+        request,
+        projectId: observation.projectId,
+        canonicalPath: observation.path,
+        observedBranch: observation.branch,
+        refusalReason: "protection_unverified",
+      });
     }
 
     const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
-    const selected = currentWorktrees.find((worktree) => samePath(worktree.path, observation.path));
-    if (selected?.state !== "exists") {
-      throw new WorktrunkProviderError(
-        "WORKTRUNK_WORKTREE_NOT_FOUND",
-        "Worktrunk remove could not confirm that the selected worktree still exists.",
-        { hint: "Run listWorktrees again before retrying removal." },
-      );
+    const identityMatches = currentWorktrees.filter(
+      (worktree) => worktree.id === request.worktreeId,
+    );
+    const pathMatches = currentWorktrees.filter((worktree) =>
+      samePath(worktree.path, request.expectedPath),
+    );
+    if (identityMatches.length === 0 && pathMatches.length === 0) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_NOT_FOUND",
+        message: "Worktrunk remove could not confirm that the selected worktree still exists.",
+        hint: "Run listWorktrees again before retrying removal.",
+        request,
+        projectId: project.id,
+        canonicalPath: request.expectedPath,
+        observedBranch: request.expectedBranch,
+        refusalReason: "missing_target",
+      });
+    }
+    const selected = identityMatches[0];
+    const pathMatch = pathMatches[0];
+    const finalRefusalReason =
+      identityMatches.length !== 1 || pathMatches.length !== 1
+        ? "ambiguous_identity"
+        : selected === undefined || pathMatch === undefined || selected.id !== pathMatch.id
+          ? "identity_changed"
+          : selected.state !== "exists"
+            ? "missing_target"
+            : changedRemovalIdentityReason(selected, request);
+    if (finalRefusalReason !== undefined || selected === undefined || pathMatch === undefined) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "The selected worktree changed before Worktrunk could remove it.",
+        hint: "Refresh and reselect the worktree before retrying removal.",
+        request,
+        projectId: project.id,
+        canonicalPath: selected?.path ?? pathMatch?.path ?? request.expectedPath,
+        observedBranch: selected?.branch ?? pathMatch?.branch ?? request.expectedBranch,
+        refusalReason: finalRefusalReason ?? "ambiguous_identity",
+      });
     }
     const branchIsShared =
       !selected.branch.startsWith("detached:") &&
@@ -1001,6 +1096,89 @@ function isPathInside(path: string, root: string): boolean {
 
 function samePath(left: string, right: string): boolean {
   return canonicalPathForComparison(left) === canonicalPathForComparison(right);
+}
+
+function changedRemovalIdentityReason(
+  observation: WorktreeObservation,
+  request: RemoveWorktreeRequest,
+): WorktreeRemovalRefusalReason | undefined {
+  if (!samePath(observation.path, request.expectedPath)) {
+    return "path_changed";
+  }
+  if (observation.branch !== request.expectedBranch) {
+    return "branch_changed";
+  }
+  if (observation.registrationIdentity === undefined) {
+    return "registration_unverified";
+  }
+  if (observation.registrationIdentity !== request.expectedRegistrationIdentity) {
+    return "registration_changed";
+  }
+  return undefined;
+}
+
+function worktreeRemovalRefusalError(input: {
+  code: WorktrunkProviderErrorCode;
+  message: string;
+  hint: string;
+  request: RemoveWorktreeRequest;
+  projectId?: string;
+  canonicalPath: string;
+  observedBranch: string;
+  refusalReason: WorktreeRemovalRefusalReason;
+}): WorktrunkProviderError {
+  const detail: WorktreeRemovalRefusalDiagnosticDetail = {
+    type: "worktree_removal_refusal",
+    worktreeId: input.request.worktreeId,
+    canonicalPath: canonicalPathForComparison(input.canonicalPath),
+    observedBranch: input.observedBranch,
+    refusalReason: input.refusalReason,
+    provider: "worktrunk",
+  };
+  if (input.projectId !== undefined) {
+    detail.projectId = input.projectId;
+  }
+  return new WorktrunkProviderError(input.code, input.message, {
+    hint: input.hint,
+    diagnosticDetails: [detail],
+  });
+}
+
+async function nativeGitRegistrationIdentity(worktreePath: string): Promise<string | undefined> {
+  const markerPath = join(worktreePath, ".git");
+  try {
+    const before = await lstat(markerPath, { bigint: true });
+    const kind = before.isFile() ? "file" : before.isDirectory() ? "directory" : undefined;
+    if (kind === undefined || (kind === "file" && before.size > 4096n)) {
+      return undefined;
+    }
+    // Double-stat the native registration object so replacement during the read fails closed.
+    const marker = kind === "file" ? await readFile(markerPath, "utf8") : "";
+    const after = await lstat(markerPath, { bigint: true });
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.birthtimeNs !== after.birthtimeNs ||
+      before.ctimeNs !== after.ctimeNs
+    ) {
+      return undefined;
+    }
+    const digest = createHash("sha256")
+      .update(
+        [
+          kind,
+          before.dev.toString(),
+          before.ino.toString(),
+          before.birthtimeNs.toString(),
+          before.ctimeNs.toString(),
+          marker,
+        ].join("\0"),
+      )
+      .digest("hex");
+    return `git-registration:${digest}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function canonicalPathForComparison(path: string): string {

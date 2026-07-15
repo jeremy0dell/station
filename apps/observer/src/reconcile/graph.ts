@@ -241,6 +241,9 @@ function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
     worktree,
     display,
   };
+  if (input.worktree.registrationIdentity !== undefined) {
+    row.registrationIdentity = input.worktree.registrationIdentity;
+  }
   if (input.terminal !== undefined)
     row.terminal = terminalAttachment(input.terminal, input.harnessRun, input.terminalCapabilities);
   if (input.harnessRun !== undefined) row.agent = rowAgent(input.harnessRun);

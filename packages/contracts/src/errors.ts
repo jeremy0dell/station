@@ -11,6 +11,22 @@ import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
 
 export const ErrorSeveritySchema = z.enum(["debug", "info", "warn", "error", "fatal"]);
 
+export const WorktreeRemovalRefusalReasonSchema = z.enum([
+  "ambiguous_identity",
+  "branch_changed",
+  "default_branch",
+  "identity_changed",
+  "missing_target",
+  "path_changed",
+  "primary_checkout",
+  "protection_unverified",
+  "registration_changed",
+  "registration_unverified",
+  "snapshot_changed",
+]);
+
+export type WorktreeRemovalRefusalReason = z.infer<typeof WorktreeRemovalRefusalReasonSchema>;
+
 export const SafeErrorSchema = z
   .object({
     tag: nonEmptyStringSchema,
@@ -46,7 +62,26 @@ export const ExternalCommandDiagnosticDetailSchema = z
 
 export type ExternalCommandDiagnosticDetail = z.infer<typeof ExternalCommandDiagnosticDetailSchema>;
 
-export const DiagnosticDetailSchema = ExternalCommandDiagnosticDetailSchema;
+export const WorktreeRemovalRefusalDiagnosticDetailSchema = z
+  .object({
+    type: z.literal("worktree_removal_refusal"),
+    provider: ProviderIdSchema.optional(),
+    projectId: ProjectIdSchema.optional(),
+    worktreeId: WorktreeIdSchema,
+    canonicalPath: nonEmptyStringSchema,
+    observedBranch: nonEmptyStringSchema,
+    refusalReason: WorktreeRemovalRefusalReasonSchema,
+  })
+  .strict();
+
+export type WorktreeRemovalRefusalDiagnosticDetail = z.infer<
+  typeof WorktreeRemovalRefusalDiagnosticDetailSchema
+>;
+
+export const DiagnosticDetailSchema = z.discriminatedUnion("type", [
+  ExternalCommandDiagnosticDetailSchema,
+  WorktreeRemovalRefusalDiagnosticDetailSchema,
+]);
 
 export type DiagnosticDetail = z.infer<typeof DiagnosticDetailSchema>;
 

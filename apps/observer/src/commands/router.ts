@@ -90,6 +90,7 @@ export function registerObserverCommandHandlers(
       logger: options.logger,
     }),
     "worktree.remove": createWorktreeRemoveHandler({
+      getProjects,
       providers: options.providers,
       terminalIntentRunner,
       core: options.core,
@@ -97,6 +98,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
     }),
     "session.create": createSessionCreateHandler({
       getProjects,

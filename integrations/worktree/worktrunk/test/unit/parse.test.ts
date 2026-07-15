@@ -104,6 +104,18 @@ describe("Worktrunk list parser", () => {
     expect(observations[0]).not.toHaveProperty("changeSummary");
   });
 
+  it("normalizes Worktrunk is_main as primary-checkout evidence", () => {
+    const observations = parseWorktrunkListJson(
+      JSON.stringify([
+        { branch: "main", path: project.root, is_main: true },
+        { branch: "feature", path: `${project.root}/feature`, is_main: false },
+      ]),
+      { project, observedAt: now },
+    );
+
+    expect(observations.map((observation) => observation.isPrimaryCheckout)).toEqual([true, false]);
+  });
+
   it("rejects invalid structured output with a typed provider error", async () => {
     const source = await fixture("invalid-list.json");
 

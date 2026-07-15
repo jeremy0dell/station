@@ -26,7 +26,19 @@ export type RuntimeExternalCommandDiagnosticDetail = {
   durationMs?: number;
 };
 
-export type RuntimeDiagnosticDetail = RuntimeExternalCommandDiagnosticDetail;
+export type RuntimeWorktreeRemovalRefusalDiagnosticDetail = {
+  type: "worktree_removal_refusal";
+  provider?: string;
+  projectId?: string;
+  worktreeId: string;
+  canonicalPath: string;
+  observedBranch: string;
+  refusalReason: string;
+};
+
+export type RuntimeDiagnosticDetail =
+  | RuntimeExternalCommandDiagnosticDetail
+  | RuntimeWorktreeRemovalRefusalDiagnosticDetail;
 
 export type RuntimeSafeErrorFallback = {
   tag: string;
@@ -145,6 +157,18 @@ function safeErrorCause(error: unknown, seen = new Set<unknown>()): RuntimeSafeE
 }
 
 function copyDiagnosticDetail(detail: RuntimeDiagnosticDetail): RuntimeDiagnosticDetail {
+  if (detail.type === "worktree_removal_refusal") {
+    const copied: RuntimeWorktreeRemovalRefusalDiagnosticDetail = {
+      type: detail.type,
+      worktreeId: detail.worktreeId,
+      canonicalPath: detail.canonicalPath,
+      observedBranch: detail.observedBranch,
+      refusalReason: detail.refusalReason,
+    };
+    if (detail.provider !== undefined) copied.provider = detail.provider;
+    if (detail.projectId !== undefined) copied.projectId = detail.projectId;
+    return copied;
+  }
   const copied: RuntimeExternalCommandDiagnosticDetail = {
     type: "external_command",
     operation: detail.operation,

@@ -75,7 +75,9 @@ export type CreateFakeWorktreeInput = {
   projectId?: string;
   branch?: string;
   path?: string;
+  registrationIdentity?: string;
   now?: FakeProviderClock;
+  isPrimaryCheckout?: boolean;
   dirty?: boolean;
   ahead?: number;
   behind?: number;
@@ -231,8 +233,14 @@ export function createFakeWorktree(input: CreateFakeWorktreeInput = {}): Worktre
     projectId,
     branch,
     path: input.path ?? `/tmp/station/${projectId}/${branch.replaceAll("/", "-")}`,
+    ...(input.registrationIdentity === undefined
+      ? {}
+      : { registrationIdentity: input.registrationIdentity }),
     state: "exists",
     source: "worktrunk",
+    ...(input.isPrimaryCheckout === undefined
+      ? {}
+      : { isPrimaryCheckout: input.isPrimaryCheckout }),
     dirty: input.dirty ?? false,
     ahead: input.ahead ?? 0,
     behind: input.behind ?? 0,
@@ -304,7 +312,7 @@ export class FakeWorktreeProvider implements WorktreeProvider {
   constructor(options: FakeWorktreeProviderOptions = {}) {
     this.id = options.id ?? "fake-worktree";
     this.#now = options.now;
-    this.#worktrees = options.worktrees ?? [];
+    this.#worktrees = (options.worktrees ?? []).map(withFakeRegistrationIdentity);
     this.#createPath = options.createPath;
     this.#health = options.health;
     this.#capabilities = {
@@ -345,6 +353,7 @@ export class FakeWorktreeProvider implements WorktreeProvider {
       projectId: request.project.id,
       branch: request.branch,
       ...(path === undefined ? {} : { path }),
+      registrationIdentity: `fake-registration:${request.project.id}:${request.branch}:${path ?? "managed"}`,
       ...(this.#now === undefined ? {} : { now: this.#now }),
     });
     this.#worktrees.push(worktree);
@@ -355,11 +364,30 @@ export class FakeWorktreeProvider implements WorktreeProvider {
     maybeThrow(this.#failures, "removeWorktree");
     const recorded: RemoveWorktreeRequest = {
       worktreeId: request.worktreeId,
+      expectedPath: request.expectedPath,
+      expectedBranch: request.expectedBranch,
+      expectedRegistrationIdentity: request.expectedRegistrationIdentity,
     };
     if (request.projectId !== undefined) recorded.projectId = request.projectId;
     if (request.force !== undefined) recorded.force = request.force;
-    this.#removed.push(recorded);
     const index = this.#worktrees.findIndex((worktree) => worktree.id === request.worktreeId);
+    const selected = this.#worktrees[index];
+    if (
+      selected !== undefined &&
+      (selected.path !== request.expectedPath ||
+        selected.branch !== request.expectedBranch ||
+        selected.registrationIdentity !== request.expectedRegistrationIdentity)
+    ) {
+      const error: SafeError = {
+        tag: "WorktreeProviderError",
+        code: "FAKE_WORKTREE_CHANGED",
+        message: "The fake worktree changed before removal.",
+        provider: this.id,
+        worktreeId: request.worktreeId,
+      };
+      throw error;
+    }
+    this.#removed.push(recorded);
     if (index >= 0) {
       this.#worktrees.splice(index, 1);
     }
@@ -395,6 +423,13 @@ export class FakeWorktreeProvider implements WorktreeProvider {
       created: this.#created.map((request) => ({ ...request })),
     };
   }
+}
+
+function withFakeRegistrationIdentity(worktree: WorktreeObservation): WorktreeObservation {
+  if (worktree.registrationIdentity === undefined) {
+    worktree.registrationIdentity = `fake-registration:${worktree.id}:${worktree.path}`;
+  }
+  return worktree;
 }
 
 export class FakeTerminalProvider implements TerminalProvider {
