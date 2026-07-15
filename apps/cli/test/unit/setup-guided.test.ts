@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
+import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 import { setupPackageRoot } from "../../src/commands/setup/checks/launchers.js";
 import {
@@ -432,6 +433,7 @@ describe("guided setup command", () => {
   it("installs the optional tmux popup binding when accepted", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
+    const configPath = join(root, "home/.config/station/config.toml");
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
     const chunks: string[] = [];
@@ -443,6 +445,8 @@ describe("guided setup command", () => {
         cwd: repo,
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
+        compiled: true,
+        tmuxPopupOwnerRoot: "/fake/bin",
         runner: fakeRunner([], {
           "git rev-parse --show-toplevel": repo,
           "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
@@ -468,9 +472,16 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(fs.files[join(root, "home/.tmux.conf")]).toContain("'/fake/bin/stn-tmux-popup'");
-    expect(fs.files[join(root, "home/.tmux.conf")]).toContain(
-      "# Change Space to any tmux key; stn setup preserves it.",
+    const tmuxConfig = fs.files[join(root, "home/.tmux.conf")];
+    expect(tmuxConfig).toContain(
+      tmuxPopupBindingBlock("/fake/bin/stn-tmux-popup", {
+        runShellCommand: buildManagedFastPopupRunShellCommand({
+          installedRoot: "/fake/bin",
+          fallbackAlias: "/fake/bin/stn-tmux-popup",
+          tmuxCommand: "/fake/bin/tmux",
+          configPath,
+        }),
+      }),
     );
     expect(chunks.join("")).toContain(
       "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers",
@@ -599,7 +610,7 @@ describe("guided setup command", () => {
     expect(output).not.toContain("persisted and loaded in the current tmux server");
     expect(
       calls.filter((call) => basename(call.command) === "tmux" && call.args?.[0] === "run-shell"),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
   });
 
   it("installs accepted Worktrunk and agent hooks with resolved ingress launcher", async () => {

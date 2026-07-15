@@ -66,6 +66,9 @@ export async function checkSetupConfig(
         harness: loaded.config.defaults.harness,
       },
     };
+    if (loaded.config.terminal?.tmux !== undefined) {
+      fact.tmux = loaded.config.terminal.tmux;
+    }
     // Surface load diagnostics that loadConfigFromToml records but does not
     // throw on (broken project-local file, bad [tui]/[workspace]), so `stn
     // setup check` does not report a config with hidden problems as cleanly valid.

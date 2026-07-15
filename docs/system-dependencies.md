@@ -84,7 +84,7 @@ never selected without consent. A new block defaults to `tmux prefix + Space`:
 ```tmux
 # >>> station popup binding >>>
 # Change Space to any tmux key; stn setup preserves it.
-bind-key Space run-shell -b '<Station-generated fast command>'
+bind-key Space run-shell -b '<Station-managed popup command>'
 # <<< station popup binding <<<
 ```
 
@@ -106,13 +106,17 @@ server. Reloading after a key change can leave the old key active until
 `tmux unbind-key <old-key>` or a server restart; Station does not unbind a key
 whose ownership it cannot prove.
 
-For a compiled install, the generated command uses the canonical installed
-directory, the exact sibling `stn-tmux-popup` alias, and the resolved tmux
-executable. First use can invoke that full CLI fallback to initialize the hidden
-UI; a valid warm use directly attaches or toggles it without loading config or
-starting Bun or the Observer. Controlled binding failures are silent, return
-success to tmux, and show at most a temporary status-line message. Run
-`stn popup` directly for ordinary diagnostic output.
+For a compiled install with default popup geometry, the generated fast command
+uses the canonical installed directory, the exact sibling `stn-tmux-popup`
+alias, and the resolved tmux executable. First use can invoke that full CLI
+fallback to initialize the hidden UI; a valid warm use directly attaches or
+toggles it without loading config or starting Bun or the Observer. Configured
+custom geometry uses the config-aware sibling alias instead so every open reads
+the requested size and position; setup with an explicit `--config` path also
+uses that alias so an existing hidden UI cannot mask a config change. Controlled
+binding failures are silent, return success to tmux, and show at most a
+temporary status-line message. Run `stn popup` directly for ordinary diagnostic
+output.
 
 In a development checkout, the popup launcher may instead be the checkout's
 `integrations/terminal/tmux/bin/stn-popup` path.

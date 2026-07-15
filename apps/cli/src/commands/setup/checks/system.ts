@@ -4,10 +4,20 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { resolveObserverPaths } from "@station/config";
 import { type ExternalCommandRunner, isCompiledBinary } from "@station/runtime";
-import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
+import {
+  buildManagedFastPopupRunShellCommand,
+  defaultTmuxWorkbenchConfig,
+  resolveTmuxWorkbenchConfig,
+} from "@station/tmux";
 import type { CliEnv } from "../../../env.js";
 import { isStationUiInstalled } from "../../../stationWorkspace.js";
-import type { SetupDependencyFact, SetupFacts, SetupMode, SetupStationUiFact } from "../model.js";
+import type {
+  SetupConfigFact,
+  SetupDependencyFact,
+  SetupFacts,
+  SetupMode,
+  SetupStationUiFact,
+} from "../model.js";
 import { checkBrewDependency } from "./brew.js";
 import { checkSetupBun } from "./bun.js";
 import {
@@ -24,7 +34,7 @@ import { type CheckHarnessesOptions, checkSetupHarnesses } from "./harnesses.js"
 import { checkSetupLaunchers, setupLauncherExecutable } from "./launchers.js";
 import { checkSetupStateDir, type SetupStateDirFileSystem } from "./stateDir.js";
 import { checkSetupTmux } from "./tmux.js";
-import { checkSetupTmuxBinding } from "./tmuxBinding.js";
+import { checkSetupTmuxBinding, tmuxPopupRunShellCommand } from "./tmuxBinding.js";
 import { checkSetupWorktrunk, checkSetupWorktrunkAutomation } from "./worktrunk.js";
 import { type CheckXcodeOptions, checkSetupXcode } from "./xcode.js";
 
@@ -155,12 +165,20 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   };
   const resolvedTmuxCommand =
     tmux.resolvedPath ?? (isAbsolute(tmux.command) ? tmux.command : undefined);
-  if (options.tmuxPopupOwnerRoot !== undefined && resolvedTmuxCommand !== undefined) {
-    tmuxBindingOptions.runShellCommand = buildManagedFastPopupRunShellCommand({
+  const defaultPopupGeometry = usesDefaultPopupGeometry(config);
+  const configAwarePopup = options.configPath !== undefined || !defaultPopupGeometry;
+  if (options.tmuxPopupOwnerRoot !== undefined && configAwarePopup) {
+    tmuxBindingOptions.runShellCommand = tmuxPopupRunShellCommand(launcherCommand, config.path);
+  } else if (options.tmuxPopupOwnerRoot !== undefined && resolvedTmuxCommand !== undefined) {
+    const fastBindingOptions: Parameters<typeof buildManagedFastPopupRunShellCommand>[0] = {
       installedRoot: options.tmuxPopupOwnerRoot,
       fallbackAlias: launcherCommand,
       tmuxCommand: resolvedTmuxCommand,
-    });
+    };
+    if (config.status === "valid") {
+      fastBindingOptions.configPath = config.path;
+    }
+    tmuxBindingOptions.runShellCommand = buildManagedFastPopupRunShellCommand(fastBindingOptions);
   }
   const tmuxBinding = await checkSetupTmuxBinding(tmuxBindingOptions);
   const stationUi = compiled
@@ -203,6 +221,17 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     config,
     tmuxBinding,
   };
+}
+
+function usesDefaultPopupGeometry(config: SetupConfigFact): boolean {
+  if (config.status === "missing") return true;
+  if (config.status !== "valid") return false;
+  const tmux = resolveTmuxWorkbenchConfig(config.tmux);
+  return (
+    tmux.popupWidth === defaultTmuxWorkbenchConfig.popupWidth &&
+    tmux.popupHeight === defaultTmuxWorkbenchConfig.popupHeight &&
+    tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition
+  );
 }
 
 async function canExecute(

@@ -27,13 +27,16 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
 - Source popup registrations are scoped to the canonical checkout root that
   created them. Compiled registrations are scoped to the canonical installed
   binary directory instead; neither path may register filesystem root `/`.
-- The optional binding installed by a compiled `stn setup` uses the generated
-  direct tmux fast path. Its first use can enter the exact sibling
-  `stn-tmux-popup` alias, while a valid warm use attaches, toggles, or transfers
-  the existing `_station-ui` session without Bun, config loading, or Observer
-  startup. Build the binary with `pnpm build:binary -- --version <version>` when
-  validating this path; a source `pnpm build` does not create the installed
-  artifact ownership used by the binding.
+- With default popup geometry, the optional binding installed by a compiled
+  `stn setup` uses the generated direct tmux fast path. Custom geometry uses the
+  config-aware exact sibling `stn-tmux-popup` alias instead, as does setup run
+  with an explicit `--config` path. The fast path's
+  first use can enter that alias, while a valid warm use attaches, toggles, or
+  transfers the existing `_station-ui` session without Bun, config loading, or
+  Observer startup. Build the binary with
+  `pnpm build:binary -- --version <version>` when validating this path; a source
+  `pnpm build` does not create the installed artifact ownership used by the
+  binding.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.

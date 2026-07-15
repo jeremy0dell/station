@@ -132,17 +132,21 @@ describe("setup dependency checks", () => {
     expect(plan.checks.some((check) => check.id === "command-line-tools")).toBe(false);
   });
 
-  it("uses the installed popup sibling and resolved tmux path for compiled bindings", async () => {
+  it("uses the fast compiled binding for default geometry without losing explicit config identity", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
+    const home = join(root, "home");
+    const defaultConfigPath = join(home, ".config/station/config.toml");
+    const explicitConfigPath = join(root, "explicit-default.toml");
+    const invalidConfigPath = join(root, "invalid.toml");
+    const missingConfigPath = join(root, "missing.toml");
     const installedRoot = join(root, "installed");
     const popupAlias = join(installedRoot, "stn-tmux-popup");
     await mkdir(repo, { recursive: true });
 
-    const facts = await collectSetupFacts({
-      mode: "check",
+    const baseOptions = {
+      mode: "check" as const,
       cwd: repo,
-      homeDir: join(root, "home"),
       compiled: true,
       tmuxPopupOwnerRoot: installedRoot,
       env: { PATH: "/fake/bin" },
@@ -162,9 +166,40 @@ describe("setup dependency checks", () => {
         "/fake/bin/stn-ingress",
         popupAlias,
       ]),
-      fs: readOnlyFs({}),
+      fs: readOnlyFs({
+        [defaultConfigPath]: configToml(repo, {
+          popupWidth: "50%",
+          popupHeight: "50%",
+          popupPosition: "C",
+        }),
+        [explicitConfigPath]: configToml(repo, {
+          popupWidth: "50%",
+          popupHeight: "50%",
+          popupPosition: "C",
+        }),
+        [invalidConfigPath]: 'schema_version = "invalid"\n',
+      }),
+    };
+    const facts = await collectSetupFacts({ ...baseOptions, homeDir: home });
+    const explicit = await collectSetupFacts({
+      ...baseOptions,
+      configPath: explicitConfigPath,
+      homeDir: home,
     });
-    const plan = buildSetupPlan(facts);
+    const explicitMissing = await collectSetupFacts({
+      ...baseOptions,
+      configPath: missingConfigPath,
+      homeDir: home,
+    });
+    const invalid = await collectSetupFacts({
+      ...baseOptions,
+      configPath: invalidConfigPath,
+      homeDir: home,
+    });
+    const implicitMissing = await collectSetupFacts({
+      ...baseOptions,
+      homeDir: join(root, "empty-home"),
+    });
 
     expect(facts.launchers.tmuxPopup).toMatchObject({
       status: "ok",
@@ -178,12 +213,83 @@ describe("setup dependency checks", () => {
     });
     expect(facts.tmuxBinding.runShellCommand).toBe(
       buildManagedFastPopupRunShellCommand({
+        configPath: defaultConfigPath,
         installedRoot,
         fallbackAlias: popupAlias,
         tmuxCommand: "/fake/bin/tmux",
       }),
     );
-    expect(plan.actions.some((action) => action.id === "tmux-popup-binding")).toBe(true);
+    expect(explicit.tmuxBinding.runShellCommand).toBe(
+      tmuxPopupRunShellCommand(popupAlias, explicitConfigPath),
+    );
+    expect(explicitMissing.config.status).toBe("missing");
+    expect(explicitMissing.tmuxBinding.runShellCommand).toBe(
+      tmuxPopupRunShellCommand(popupAlias, missingConfigPath),
+    );
+    expect(invalid.config.status).toBe("invalid");
+    expect(invalid.tmuxBinding.runShellCommand).toBe(
+      tmuxPopupRunShellCommand(popupAlias, invalidConfigPath),
+    );
+    expect(implicitMissing.config.status).toBe("missing");
+    expect(implicitMissing.tmuxBinding.runShellCommand).toBe(
+      buildManagedFastPopupRunShellCommand({
+        installedRoot,
+        fallbackAlias: popupAlias,
+        tmuxCommand: "/fake/bin/tmux",
+      }),
+    );
+    expect(buildSetupPlan(facts).actions.some((action) => action.id === "tmux-popup-binding")).toBe(
+      true,
+    );
+  });
+
+  it("uses the config-aware popup alias for compiled bindings with custom geometry", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const configPath = join(root, "custom-config.toml");
+    const installedRoot = join(root, "installed");
+    const popupAlias = join(installedRoot, "stn-tmux-popup");
+    await mkdir(repo, { recursive: true });
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      configPath,
+      cwd: repo,
+      homeDir: home,
+      compiled: true,
+      tmuxPopupOwnerRoot: installedRoot,
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner([], {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        "wt --version": "worktrunk 1.2.3\n",
+        "tmux -V": "tmux 3.5a\n",
+        "codex --version": "codex 0.1.0\n",
+      }),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+        "/fake/bin/stn",
+        "/fake/bin/stn-ingress",
+        popupAlias,
+      ]),
+      fs: readOnlyFs({
+        [configPath]: configToml(repo, {
+          popupWidth: "80",
+          popupHeight: "24",
+          popupPosition: "C",
+        }),
+      }),
+    });
+
+    expect(facts.tmuxBinding.runShellCommand).toBe(
+      tmuxPopupRunShellCommand(popupAlias, configPath),
+    );
+    expect(facts.tmuxBinding.runShellCommand).toContain("STATION_CONFIG_PATH=");
+    expect(facts.tmuxBinding.runShellCommand).not.toContain("station-popup-binding");
   });
 
   it("reports missing tmux without trying to generate a compiled fast binding", async () => {
@@ -788,6 +894,29 @@ scroll_on_output = "teleport"
     }
   });
 
+  it("carries an explicit config through the popup alias environment and arguments", () => {
+    const command = tmuxPopupRunShellCommand(
+      "/opt/station/stn-tmux-popup",
+      "/tmp/station-#{session_name}/config.toml",
+    );
+
+    expect(command).toContain("STATION_CONFIG_PATH='/tmp/station-##{session_name}/config.toml'");
+    expect(command).toContain("--config '/tmp/station-##{session_name}/config.toml'");
+  });
+
+  it.each([
+    "\0",
+    "\r",
+    "\n",
+  ])("rejects %j in managed popup launcher and config values", (control) => {
+    expect(() => tmuxPopupRunShellCommand(`/opt/station/stn${control}-tmux-popup`)).toThrow(
+      "unsupported control character",
+    );
+    expect(() =>
+      tmuxPopupRunShellCommand("/opt/station/stn-tmux-popup", `/tmp/station${control}/config.toml`),
+    ).toThrow("unsupported control character");
+  });
+
   it("persists an exact generated command and defaults a fresh block to Space", async () => {
     const root = await tempRoot(tempRoots);
     const homeDir = join(root, "home");
@@ -811,6 +940,38 @@ scroll_on_output = "teleport"
     expect(tmuxPopupBindingBlock(launcherCommand, { runShellCommand })).toContain(
       `bind-key Space run-shell -b ${quotedCommand}`,
     );
+  });
+
+  it("marks a binding stale when an explicit config path is added", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const installedRoot = "/opt/station";
+    const launcherCommand = `${installedRoot}/stn-tmux-popup`;
+    const base = {
+      fallbackAlias: launcherCommand,
+      installedRoot,
+      tmuxCommand: "/opt/homebrew/bin/tmux",
+    };
+    const previous = buildManagedFastPopupRunShellCommand(base);
+    const current = tmuxPopupRunShellCommand(launcherCommand, "/tmp/station/config.toml");
+
+    await expect(
+      checkSetupTmuxBinding({
+        homeDir,
+        launcherCommand,
+        runShellCommand: current,
+        fs: readOnlyFs({
+          [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand, {
+            bindingKey: "M-p",
+            runShellCommand: previous,
+          }),
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: "missing",
+      bindingKey: "M-p",
+      message: expect.stringContaining("stale"),
+    });
   });
 
   it("round-trips the physical one-line compiled command through the owned block", async () => {
@@ -1575,6 +1736,9 @@ function configToml(
     terminal?: string;
     harness?: string;
     useLifecycleHooks?: boolean;
+    popupWidth?: string;
+    popupHeight?: string;
+    popupPosition?: string;
   } = {},
 ): string {
   const lines = [
@@ -1602,6 +1766,23 @@ function configToml(
       `use_lifecycle_hooks = ${options.useLifecycleHooks ? "true" : "false"}`,
       "",
     );
+  }
+  if (
+    options.popupWidth !== undefined ||
+    options.popupHeight !== undefined ||
+    options.popupPosition !== undefined
+  ) {
+    lines.push("[terminal.tmux]");
+    if (options.popupWidth !== undefined) {
+      lines.push(`popup_width = ${JSON.stringify(options.popupWidth)}`);
+    }
+    if (options.popupHeight !== undefined) {
+      lines.push(`popup_height = ${JSON.stringify(options.popupHeight)}`);
+    }
+    if (options.popupPosition !== undefined) {
+      lines.push(`popup_position = ${JSON.stringify(options.popupPosition)}`);
+    }
+    lines.push("");
   }
   return lines.join("\n");
 }

@@ -1,3 +1,4 @@
+import type { TmuxConfig } from "@station/config";
 import { z } from "zod";
 
 export const setupTiers = ["required", "recommended", "optional"] as const;
@@ -201,6 +202,7 @@ export type SetupConfigFact =
       configuredHarnesses: readonly string[];
       configuredHookHarnesses: readonly string[];
       defaults: SetupConfigDefaultsFact;
+      tmux?: TmuxConfig;
       worktrunkUseLifecycleHooks?: boolean;
       matchedProject?: SetupConfigProjectFact;
       // Non-fatal load diagnostics (broken project-local file, bad

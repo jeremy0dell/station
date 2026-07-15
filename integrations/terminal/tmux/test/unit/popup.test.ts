@@ -137,18 +137,9 @@ describe("tmux popup", () => {
     expect(rootMirrorIndex).toBeLessThan(routeCommitIndex);
     expect(routeCommitIndex).toBeLessThan(claimIndex);
 
-    const display = fake.calls.findLast((call) => call.args?.[0] === "display-popup");
-    expect(display?.args).toEqual([
-      "display-popup",
-      "-c",
-      "/dev/ttys001",
-      "-w",
-      "90%",
-      "-h",
-      "80%",
-      "-E",
-      expect.stringContaining("@station_popup_active_claim"),
-    ]);
+    const display = fake.calls.findLast(claimedPopupAction);
+    expect(display?.args?.[3]).toContain("display-popup -c /dev/ttys001 -w 90% -h 80% -E");
+    expect(display?.args?.[3]).toContain("@station_popup_active_claim");
     expect(fake.globalOptions.get("@station_popup_active_claim")).toMatch(/^v1\.open\./);
   });
 
@@ -162,9 +153,11 @@ describe("tmux popup", () => {
       }),
     ).resolves.toEqual({ closed: true, opened: false });
 
-    expect(fake.calls).toContainEqual(
-      expect.objectContaining({ args: ["display-popup", "-c", "/dev/ttys001", "-C"] }),
-    );
+    expect(
+      fake.executedPopupActions.some((action) =>
+        action.includes("display-popup -c /dev/ttys001 -C"),
+      ),
+    ).toBe(true);
     expect(fake.calls.some((call) => call.args?.[0] === "kill-session")).toBe(false);
     expect(fake.calls.some((call) => call.args?.[0] === "new-session")).toBe(false);
     const claimWrites = fake.claimWrites();
@@ -187,9 +180,11 @@ describe("tmux popup", () => {
     ).resolves.toEqual({ closed: true, opened: false });
 
     expect(fake.claimWrites()).toEqual([expect.stringMatching(/^v1\.closing\./)]);
-    expect(fake.calls).toContainEqual(
-      expect.objectContaining({ args: ["display-popup", "-c", "/dev/ttys001", "-C"] }),
-    );
+    expect(
+      fake.executedPopupActions.some((action) =>
+        action.includes("display-popup -c /dev/ttys001 -C"),
+      ),
+    ).toBe(true);
     expect(fake.globalOptions.has("@station_popup_active_claim")).toBe(false);
   });
 
@@ -212,11 +207,11 @@ describe("tmux popup", () => {
     const claimWriteIndex = fake.calls.findIndex((call) =>
       call.args?.at(-1)?.includes("@station_popup_active_claim v1.open."),
     );
-    const closeIndex = fake.calls.findIndex(
-      (call) => call.args?.[0] === "display-popup" && call.args.includes("-C"),
+    const closeIndex = fake.calls.findIndex((call) =>
+      call.args?.[3]?.includes("display-popup -c /dev/ttys001 -C"),
     );
     expect(claimWriteIndex).toBeLessThan(closeIndex);
-    expect(fake.calls[closeIndex]?.args).toEqual(["display-popup", "-c", "/dev/ttys001", "-C"]);
+    expect(fake.executedPopupActions.at(-1)).toContain("display-popup -c /dev/ttys001 -C");
   });
 
   it("uses a valid claim for focus origin and falls back to the compatibility mirror", async () => {
@@ -238,9 +233,11 @@ describe("tmux popup", () => {
     const fake = createPopupTmux({ activeClaim: true, registered: true });
     await expect(dismissTmuxPopup({ runner: fake.runner })).resolves.toEqual({ dismissed: true });
     expect(fake.claimWrites()).toEqual([expect.stringMatching(/^v1\.closing\./)]);
-    expect(fake.calls).toContainEqual(
-      expect.objectContaining({ args: ["display-popup", "-c", "/dev/ttys001", "-C"] }),
-    );
+    expect(
+      fake.executedPopupActions.some((action) =>
+        action.includes("display-popup -c /dev/ttys001 -C"),
+      ),
+    ).toBe(true);
     expect(fake.globalOptions.has("@station_popup_active_claim")).toBe(false);
   });
 
@@ -266,6 +263,52 @@ describe("tmux popup", () => {
     ).resolves.toEqual({ opened: true });
     expect(fake.globalOptions.get("@station_popup_active_claim")).toBe(replacement);
     expect(fake.globalOptions.get("@station_popup_client")).toBe("/dev/ttys099");
+  });
+
+  it("does not display after a newer caller replaces its claim", async () => {
+    const replacement = buildPopupActiveClaim({
+      actionNonce: "99".repeat(16),
+      clientName: "/dev/ttys099",
+      clientPid: 9999,
+      registrationNonce,
+      state: "open",
+    });
+    const fake = createPopupTmux({
+      replaceClaimBeforeDisplay: replacement,
+      root: "/opt/station/bin",
+    });
+
+    await expect(
+      openTmuxPopup({
+        checkoutRoot: fake.root,
+        env: { TMUX: "/tmp/tmux/default,1,0" },
+        runner: fake.runner,
+      }),
+    ).rejects.toMatchObject({ code: "TERMINAL_OPEN_FAILED" });
+
+    expect(fake.executedPopupActions).toEqual([]);
+    expect(fake.globalOptions.get("@station_popup_active_claim")).toBe(replacement);
+  });
+
+  it("does not display from the compatibility path after a claimed caller wins", async () => {
+    const replacement = buildPopupActiveClaim({
+      actionNonce: "98".repeat(16),
+      clientName: "/dev/ttys099",
+      clientPid: 9999,
+      registrationNonce,
+      state: "open",
+    });
+    const fake = createPopupTmux({ replaceClaimBeforeDisplay: replacement });
+
+    await expect(
+      openTmuxPopup({
+        env: { STATION_FOCUS_CLIENT_ID: "/dev/ttys001" },
+        runner: fake.runner,
+      }),
+    ).rejects.toMatchObject({ code: "TERMINAL_OPEN_FAILED" });
+
+    expect(fake.executedPopupActions).toEqual([]);
+    expect(fake.globalOptions.get("@station_popup_active_claim")).toBe(replacement);
   });
 
   it("does not let legacy cleanup or dismiss contention erase a replacement owner", async () => {
@@ -342,9 +385,9 @@ describe("tmux popup", () => {
         runner: fake.runner,
       }),
     ).resolves.toEqual({ opened: true });
-    expect(
-      fake.calls.findLast((call) => call.args?.[0] === "display-popup")?.args.at(-1),
-    ).toContain("attach-session -t _station-ui-dev");
+    expect(fake.calls.findLast(claimedPopupAction)?.args?.[3]).toContain(
+      "attach-session -t _station-ui-dev",
+    );
 
     await expect(resolveRegisteredDevPopupUi({ runner: fake.runner })).resolves.toMatchObject({
       command: fake.devCommand,
@@ -366,9 +409,9 @@ describe("tmux popup", () => {
       registeredDevPopupRoot: "/worktree",
       runner: stale.runner,
     });
-    expect(
-      stale.calls.findLast((call) => call.args?.[0] === "display-popup")?.args.at(-1),
-    ).toContain("attach-session -t _station-ui");
+    expect(stale.calls.findLast(claimedPopupAction)?.args?.[3]).toContain(
+      "attach-session -t _station-ui",
+    );
 
     const wrongRoot = createPopupTmux({
       devCommand: "node other-ui tui --popup --persistent",
@@ -384,9 +427,9 @@ describe("tmux popup", () => {
       registeredDevPopupRoot: "/worktree",
       runner: wrongRoot.runner,
     });
-    expect(
-      wrongRoot.calls.findLast((call) => call.args?.[0] === "display-popup")?.args.at(-1),
-    ).toContain("attach-session -t _station-ui");
+    expect(wrongRoot.calls.findLast(claimedPopupAction)?.args?.[3]).toContain(
+      "attach-session -t _station-ui",
+    );
   });
 
   it("enters the workbench before displaying the popup", async () => {
@@ -398,9 +441,7 @@ describe("tmux popup", () => {
       runner: fake.runner,
     });
     const switchIndex = fake.calls.findIndex((call) => call.args?.[0] === "switch-client");
-    const displayIndex = fake.calls.findIndex(
-      (call) => call.args?.[0] === "display-popup" && !call.args.includes("-C"),
-    );
+    const displayIndex = fake.calls.findIndex(claimedPopupAction);
     expect(fake.calls[switchIndex]?.args).toEqual([
       "switch-client",
       "-c",
@@ -498,12 +539,14 @@ type PopupFakeOptions = {
   malformedRoute?: string;
   registered?: boolean;
   replaceClaimBeforeCleanup?: string;
+  replaceClaimBeforeDisplay?: string;
   replaceClaimBeforeLegacyAction?: string;
   root?: string;
 };
 
 function createPopupTmux(options: PopupFakeOptions = {}) {
   const calls: ExternalCommandInput[] = [];
+  const executedPopupActions: string[] = [];
   const root = options.root ?? "/opt/station/bin";
   const clientName = options.clientName ?? "/dev/ttys001";
   const clientPid = options.clientPid ?? 1234;
@@ -553,6 +596,7 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
 
   let concurrentRoutePending = options.concurrentRouteBeforeCommit;
   let replacementPending = options.replaceClaimBeforeCleanup;
+  let displayReplacementPending = options.replaceClaimBeforeDisplay;
   let legacyReplacementPending = options.replaceClaimBeforeLegacyAction;
   let claimCasMisses = options.claimCasMisses ?? 0;
 
@@ -588,6 +632,16 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     if (args[0] === "if-shell") {
       const condition = args[args.indexOf("-t") >= 0 ? 4 : 2] ?? "";
       const command = args[args.indexOf("-t") >= 0 ? 5 : 3] ?? "";
+      if (command.includes("display-popup") && displayReplacementPending !== undefined) {
+        globalOptions.set("@station_popup_active_claim", displayReplacementPending);
+        globalOptions.set("@station_popup_client", "/dev/ttys099");
+        globalOptions.set("@station_popup_focus_client", "/dev/ttys099");
+        displayReplacementPending = undefined;
+        const expected = extractComparedValue(condition, "@station_popup_active_claim");
+        if ((globalOptions.get("@station_popup_active_claim") ?? "") !== expected) {
+          return tmuxCommandResult(input, "STATION_POPUP_CAS_MISS\n");
+        }
+      }
       if (command.includes("@station_popup_ui_route")) {
         if (concurrentRoutePending !== undefined) {
           globalOptions.set("@station_popup_ui_route", concurrentRoutePending);
@@ -629,6 +683,21 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
           if (globalOptions.get("@station_popup_focus_client") === client) {
             globalOptions.delete("@station_popup_focus_client");
           }
+        }
+        return tmuxCommandResult(input);
+      }
+      if (condition.includes("@station_popup_active_claim") && command.includes("display-popup")) {
+        const expected = extractComparedValue(condition, "@station_popup_active_claim");
+        if ((globalOptions.get("@station_popup_active_claim") ?? "") !== expected) {
+          return tmuxCommandResult(input, "STATION_POPUP_CAS_MISS\n");
+        }
+        for (const optionName of ["@station_popup_client", "@station_popup_focus_client"]) {
+          const value = new RegExp(`set-option -gq ${optionName} ([^ ;]+)`).exec(command)?.[1];
+          if (value !== undefined) globalOptions.set(optionName, value);
+        }
+        executedPopupActions.push(command);
+        if (options.displayExit !== undefined && !command.trimEnd().endsWith(" -C")) {
+          return { ...tmuxCommandResult(input), exitCode: options.displayExit };
         }
         return tmuxCommandResult(input);
       }
@@ -678,6 +747,16 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
         stdout: "",
       });
     }
+    if (
+      args[0] === "display-popup" &&
+      !args.includes("-C") &&
+      displayReplacementPending !== undefined
+    ) {
+      globalOptions.set("@station_popup_active_claim", displayReplacementPending);
+      globalOptions.set("@station_popup_client", "/dev/ttys099");
+      globalOptions.set("@station_popup_focus_client", "/dev/ttys099");
+      displayReplacementPending = undefined;
+    }
     return tmuxCommandResult(input);
   };
 
@@ -690,6 +769,7 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
         .filter((command) => command.length > 0)
         .map((command) => /active_claim (v1\.[^ ;]+)/.exec(command)?.[1] ?? ""),
     devCommand: options.devCommand,
+    executedPopupActions,
     globalOptions,
     indexOfSet: (optionName: string) =>
       calls.findIndex((call) => call.args?.includes(optionName) && call.args[0] === "set-option"),
@@ -697,6 +777,14 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     runner,
     sessionSignatures,
   };
+}
+
+function claimedPopupAction(call: ExternalCommandInput): boolean {
+  return (
+    call.args?.[0] === "if-shell" &&
+    call.args[2]?.includes("@station_popup_active_claim") === true &&
+    call.args[3]?.includes("display-popup") === true
+  );
 }
 
 function applySetOption(

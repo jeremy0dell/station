@@ -169,6 +169,13 @@ async function runGuidedSetupWithPrompt(
     return { code: 1 };
   }
 
+  let tmuxPopupFacts = facts;
+  let tmuxPopupPlan = plan;
+  if (writtenPlan !== undefined) {
+    tmuxPopupFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
+    tmuxPopupPlan = buildSetupPlan(tmuxPopupFacts);
+  }
+
   const shellIntegration = plan.actions.find(
     (action) => action.id === "worktrunk-shell-integration",
   );
@@ -179,16 +186,18 @@ async function runGuidedSetupWithPrompt(
     }
   }
 
-  const tmuxPopupBindingActions = plan.actions.filter(isTmuxPopupBindingAction);
-  const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
+  const tmuxPopupBindingActions = tmuxPopupPlan.actions.filter(isTmuxPopupBindingAction);
+  const popupCommand = formatCommand([tmuxPopupFacts.launchers.station.command, "popup"]);
   const bindingKey =
-    facts.tmuxBinding.status === "conflict" ? undefined : facts.tmuxBinding.bindingKey;
+    tmuxPopupFacts.tmuxBinding.status === "conflict"
+      ? undefined
+      : tmuxPopupFacts.tmuxBinding.bindingKey;
   let tmuxPopupFeedback =
-    facts.tmuxBinding.status === "ok"
+    tmuxPopupFacts.tmuxBinding.status === "ok"
       ? renderTmuxPopupFeedback(
           true,
-          facts.tmuxBinding.liveStatus === "loaded",
-          facts.tmuxBinding.bindingKey,
+          tmuxPopupFacts.tmuxBinding.liveStatus === "loaded",
+          tmuxPopupFacts.tmuxBinding.bindingKey,
           popupCommand,
         )
       : undefined;
@@ -197,7 +206,7 @@ async function runGuidedSetupWithPrompt(
     if (accepted) {
       const bindingResult = await applySetupPlan(
         {
-          ...plan,
+          ...tmuxPopupPlan,
           actions: tmuxPopupBindingActions.map((action) => ({ ...action, selected: true })),
         },
         applyOptions(deps, { announceActions: true, showCommandOutput: true }),
@@ -207,13 +216,13 @@ async function runGuidedSetupWithPrompt(
           .filter((action) => action.status === "completed")
           .map((action) => action.id),
       );
-      let liveLoaded = facts.tmuxBinding.liveStatus === "loaded";
+      let liveLoaded = tmuxPopupFacts.tmuxBinding.liveStatus === "loaded";
       if (completed.has("tmux-live-popup-binding")) {
         const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
-          homeDir: facts.homeDir,
-          launcherCommand: facts.tmuxBinding.launcherCommand,
-          runShellCommand: facts.tmuxBinding.runShellCommand,
-          tmuxCommand: facts.tmux.resolvedPath ?? facts.tmux.command,
+          homeDir: tmuxPopupFacts.homeDir,
+          launcherCommand: tmuxPopupFacts.tmuxBinding.launcherCommand,
+          runShellCommand: tmuxPopupFacts.tmuxBinding.runShellCommand,
+          tmuxCommand: tmuxPopupFacts.tmux.resolvedPath ?? tmuxPopupFacts.tmux.command,
         };
         const env = deps.env ?? options.env;
         if (env !== undefined) recheckOptions.env = env;
@@ -222,7 +231,7 @@ async function runGuidedSetupWithPrompt(
         liveLoaded = (await checkSetupTmuxBinding(recheckOptions)).liveStatus === "loaded";
       }
       tmuxPopupFeedback = renderTmuxPopupFeedback(
-        facts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
+        tmuxPopupFacts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
         liveLoaded,
         bindingKey,
         popupCommand,
@@ -230,11 +239,11 @@ async function runGuidedSetupWithPrompt(
       );
     } else {
       tmuxPopupFeedback =
-        facts.tmuxBinding.status === "ok"
+        tmuxPopupFacts.tmuxBinding.status === "ok"
           ? renderTmuxPopupFeedback(
               true,
-              facts.tmuxBinding.liveStatus === "loaded",
-              facts.tmuxBinding.bindingKey,
+              tmuxPopupFacts.tmuxBinding.liveStatus === "loaded",
+              tmuxPopupFacts.tmuxBinding.bindingKey,
               popupCommand,
             )
           : `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;

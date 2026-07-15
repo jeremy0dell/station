@@ -63,9 +63,10 @@ Pinned so the release job, install script, and acceptance suite agree.
 - `stn-ingress` — symlink → `stn` (argv0 dispatch).
 - `stn-tmux-popup` — symlink → `stn`. Its argv0 identity (and the reserved
   `__tmux-popup` token) remains the complete CLI fallback. The optional binding
-  written by compiled `stn setup` owns the warm direct-attach path; first use or
-  invalid fast state invokes this exact sibling alias. The source POSIX launcher
-  remains unchanged for development installs.
+  written by compiled `stn setup` owns the warm direct-attach path for default
+  popup geometry; custom geometry and explicit `--config` setup use this exact
+  config-aware sibling alias. First use or invalid fast state also invokes the
+  alias. The source POSIX launcher remains unchanged for development installs.
 - `LICENSE` — required. FSL-1.1 (LICENSE:67) obliges every redistributed
   copy to include the Terms or a link and keep copyright notices. The
   archive must carry it.
@@ -112,7 +113,7 @@ stn (bun build --compile, per platform, no ambient env)
 ├── __tui / __dashboard     → TUI renderer (re-exec self: spawn(execPath, ["__tui"]))
 ├── __station-host          → persistent-PTY host
 ├── __tmux-popup            → full popup CLI fallback for the stn-tmux-popup alias
-├── setup-managed binding   → direct warm tmux attach/toggle, then the alias fallback
+├── default setup binding   → direct warm tmux attach/toggle, then the alias fallback
 └── else                    → runCli (commands, setup, doctor, …)
        └── auto-start observer: spawn(process.execPath, ["__observer", …], detached)
 ```
@@ -669,12 +670,13 @@ flow:
    and the observer restarts on the **same socket**. Open the TUI, explicitly
    add an existing Git repository, and verify the observer reflects it
    immediately (B-config); an open TUI reconnects without a manual restart.
-5. Build and install the compiled artifact, then accept setup's optional popup
-   binding. The marked block contains the installed-root fast command and exact
-   sibling `stn-tmux-popup` fallback, and `tmux prefix + Space` works in a fresh
-   server started with `PATH=/usr/bin:/bin`. After one cold open, warm close and
-   reopen reuse the same hidden session, renderer, and Observer PIDs without
-    loading config. Editing the marked key is preserved by later setup runs.
+5. Build and install the compiled artifact with default popup geometry, then
+   accept setup's optional popup binding. The marked block contains the
+   installed-root fast command and exact sibling `stn-tmux-popup` fallback, and
+   `tmux prefix + Space` works in a fresh server started with
+   `PATH=/usr/bin:/bin`. After one cold open, warm close and reopen reuse the
+   same hidden session, renderer, and Observer PIDs without loading config.
+   Editing the marked key is preserved by later setup runs.
 6. `stn-ingress` symlink delivers a provider hook event end to end.
 7. Use local `0.7.0-host-a` and `0.7.0-host-b` builds while **live host PTYs**
    exist → the new build reports

@@ -312,6 +312,8 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(secondPane.pid).toBe(firstPane.pid);
     expect(secondRenderer.pid).toBe(firstRenderer.pid);
     expect(secondRenderer.tty).toBe(secondPane.tty);
+    expect(secondClient.columns).toBe(firstClient.columns);
+    expect(secondClient.rows).toBe(firstClient.rows);
     await assertPathMissing(
       fixture.bareTmuxLogPath,
       "a child invoked bare tmux instead of the private wrapper",
@@ -319,7 +321,11 @@ describeRealTmux("real tmux dev popup routing", () => {
   }, 120_000);
 
   it("compiled managed binding cold-starts, reuses the warm UI, and fails without entering view mode", async () => {
-    const fixture = await createDashboardFixture(tmux);
+    const fixture = await createDashboardFixture(tmux, {
+      height: "50%",
+      position: "C",
+      width: "50%",
+    });
     const validConfig = await readFile(fixture.configPath, "utf8");
     cleanup = async () => {
       await writeFile(fixture.configPath, validConfig, "utf8");
@@ -336,11 +342,24 @@ describeRealTmux("real tmux dev popup routing", () => {
       sessionName: "base",
       env: fixture.env,
     });
+    await tmuxExec(
+      fixture.wrapper,
+      ["new-session", "-d", "-s", "base-cross", "-c", fixture.projectRoot, "sleep 300"],
+      fixture.env,
+    );
+    const secondaryClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base-cross",
+      env: fixture.env,
+    });
+    fixture.otherPtyClients.push(secondaryClient);
+    const outerClients = [fixture.ptyClient, secondaryClient] as const;
 
     const installedRoot = dirname(await realpath(builtBinaryPath));
     const fallbackAlias = join(installedRoot, "stn-tmux-popup");
     expect(await realpath(fallbackAlias)).toBe(await realpath(builtBinaryPath));
     const runShellCommand = buildManagedFastPopupRunShellCommand({
+      configPath: fixture.configPath,
       installedRoot,
       fallbackAlias,
       tmuxCommand: fixture.wrapper,
@@ -351,9 +370,13 @@ describeRealTmux("real tmux dev popup routing", () => {
       fixture.env,
     );
 
-    await triggerPopupBinding(fixture.ptyClient);
+    await Promise.all(outerClients.map(triggerPopupBinding));
     await waitForTmuxSession(fixture.wrapper, persistentUiSessionName);
-    const firstClient = await waitForNestedClient(fixture);
+    const coldAction = await waitForCoherentActivePopup(fixture, outerClients);
+    const firstClient = coldAction.nestedClient;
+    const crossClient =
+      coldAction.owner === fixture.ptyClient ? secondaryClient : fixture.ptyClient;
+    const crossSession = crossClient === fixture.ptyClient ? "base" : "base-cross";
     await waitForHiddenPaneContent(
       fixture,
       isDashboardContent,
@@ -369,12 +392,12 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(await tmuxSessionOption(fixture, "@station_popup_ui_lease")).toBe(route);
     expect(await tmuxGlobalOption(fixture, "@station_popup_ui_root")).toBe(installedRoot);
 
-    await triggerPopupBinding(fixture.ptyClient);
+    await triggerPopupBinding(coldAction.owner);
     await waitForNestedClientGone(fixture);
     await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
 
     await writeFile(fixture.configPath, 'schema_version = "malformed"\n', "utf8");
-    await triggerPopupBinding(fixture.ptyClient);
+    await triggerPopupBinding(coldAction.owner);
     const warmClient = await waitForNestedClient(fixture);
     await waitForHiddenPaneContent(
       fixture,
@@ -389,18 +412,9 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(warmPane.pid).toBe(firstPane.pid);
     expect(warmProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
     expect(warmObserverPid).toBe(firstObserverPid);
+    expect(warmClient.columns).toBe(firstClient.columns);
+    expect(warmClient.rows).toBe(firstClient.rows);
 
-    await tmuxExec(
-      fixture.wrapper,
-      ["new-session", "-d", "-s", "base-cross", "-c", fixture.projectRoot, "sleep 300"],
-      fixture.env,
-    );
-    const crossClient = await startTmuxPtyClient({
-      tmux: fixture.wrapper,
-      sessionName: "base-cross",
-      env: fixture.env,
-    });
-    fixture.otherPtyClients.push(crossClient);
     await triggerPopupBinding(crossClient);
     await waitForGlobalOptionValue(fixture, "@station_popup_client", crossClient.clientName);
     const transferredClient = await waitForNestedClientReplacement(fixture, warmClient.pid);
@@ -417,8 +431,8 @@ describeRealTmux("real tmux dev popup routing", () => {
     await triggerPopupBinding(crossClient);
     await delay(1_000);
 
-    expect(await tmuxPaneInMode(fixture, "base-cross")).toBe("0");
-    const invokingPane = await captureTmuxPane(fixture, "base-cross");
+    expect(await tmuxPaneInMode(fixture, crossSession)).toBe("0");
+    const invokingPane = await captureTmuxPane(fixture, crossSession);
     const outputAfterFailure = crossClient.stdout.text().slice(outputBeforeFailure.length);
     expect(invokingPane).not.toContain("returned 1");
     expect(invokingPane).not.toContain("station-popup-binding");
@@ -444,13 +458,10 @@ describeRealTmux("real tmux dev popup routing", () => {
     await triggerPopupBinding(crossClient);
     await waitForNestedClientGone(fixture);
     await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
-    expect(await tmuxPaneInMode(fixture, "base-cross")).toBe("0");
+    expect(await tmuxPaneInMode(fixture, crossSession)).toBe("0");
 
-    await Promise.all([triggerPopupBinding(fixture.ptyClient), triggerPopupBinding(crossClient)]);
-    const competingAction = await waitForCoherentActivePopup(fixture, [
-      fixture.ptyClient,
-      crossClient,
-    ]);
+    await Promise.all(outerClients.map(triggerPopupBinding));
+    const competingAction = await waitForCoherentActivePopup(fixture, outerClients);
     expect(competingAction.nestedClient.pid).not.toBe(transferredClient.pid);
     expect((await readPaneEvidence(fixture)).pid).toBe(firstPane.pid);
     expect((await waitForDashboardProcessEvidence(fixture, transferredPane)).renderer.pid).toBe(
@@ -482,7 +493,14 @@ describeRealTmux("real tmux dev popup routing", () => {
   }, 180_000);
 });
 
-async function createDashboardFixture(tmux: string): Promise<DashboardFixture> {
+async function createDashboardFixture(
+  tmux: string,
+  geometry: { height: string; position: string; width: string } = {
+    height: "24",
+    position: "C",
+    width: "80",
+  },
+): Promise<DashboardFixture> {
   const root = await makeCheckoutTempRoot();
   try {
     const projectRoot = join(root, "project");
@@ -532,6 +550,7 @@ async function createDashboardFixture(tmux: string): Promise<DashboardFixture> {
       state,
       observerSocketPath,
       wrapper,
+      geometry,
     });
     const env = dashboardFixtureEnv({
       root,
@@ -617,6 +636,7 @@ function dashboardFixtureEnv(input: {
 
 async function writeDashboardConfig(input: {
   configPath: string;
+  geometry: { height: string; position: string; width: string };
   observerSocketPath: string;
   projectRoot: string;
   state: string;
@@ -641,9 +661,9 @@ async function writeDashboardConfig(input: {
       "",
       "[terminal.tmux]",
       `command = ${JSON.stringify(input.wrapper)}`,
-      'popup_width = "80"',
-      'popup_height = "24"',
-      'popup_position = "C"',
+      `popup_width = ${JSON.stringify(input.geometry.width)}`,
+      `popup_height = ${JSON.stringify(input.geometry.height)}`,
+      `popup_position = ${JSON.stringify(input.geometry.position)}`,
       "",
       "[repository.github]",
       "enabled = false",

@@ -44,7 +44,7 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   };
   const popupEnv = {
     ...childEnv,
-    FAKE_TMUX_CLIENT_NAME: "binary-smoke-client",
+    FAKE_TMUX_CLIENT_NAME: "/dev/ttys901",
     FAKE_TMUX_CLIENT_PID: String(process.pid),
     FAKE_TMUX_CLIENT_SESSION: "binary-smoke",
     FAKE_TMUX_STATE_PATH: fakeTmuxStatePath,
@@ -91,11 +91,11 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
       });
       assertIncludes(popupHelp.stdout, "stn popup", "popup symlink dispatch");
 
-      const setup = await run(
-        binaryPath,
-        ["--config", configPath, "setup", "check", "--json", "--no-brew"],
-        { cwd: root, env: popupEnv, allowedExitCodes: [1] },
-      );
+      const setup = await run(binaryPath, ["setup", "check", "--json", "--no-brew"], {
+        cwd: root,
+        env: popupEnv,
+        allowedExitCodes: [1],
+      });
       const setupPlan = JSON.parse(setup.stdout);
       assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
       assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
@@ -628,7 +628,11 @@ async function runManagedPopupBinding(command, env, fakeTmuxStatePath) {
 }
 
 function assertSilentHandledBinding(result, label) {
-  assertEqual(result.code, 0, `${label} status`);
+  if (result.code !== 0) {
+    fail(
+      `${label} status: expected 0, received ${result.code}; stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`,
+    );
+  }
   assertEqual(result.stdout, "", `${label} stdout`);
   assertEqual(result.stderr, "", `${label} stderr`);
 }
@@ -793,7 +797,7 @@ async function sourceFakeTmuxFile(state, args) {
 
 function fakeTmuxClient() {
   return {
-    name: process.env.FAKE_TMUX_CLIENT_NAME ?? "binary-smoke-client",
+    name: process.env.FAKE_TMUX_CLIENT_NAME ?? "/dev/ttys901",
     pid: process.env.FAKE_TMUX_CLIENT_PID ?? "41001",
     sessionName: process.env.FAKE_TMUX_CLIENT_SESSION ?? "binary-smoke",
   };

@@ -7,9 +7,9 @@ import {
 } from "@station/runtime";
 import type { TmuxCommandInput } from "../command.js";
 import { tmuxProviderErrorFromUnknown } from "../errors.js";
+import { shellQuote } from "../shell.js";
 import { buildTmuxPopupArgs } from "./args.js";
 import {
-  closeTmuxPopup,
   popupCommandInput,
   resolveCurrentTmuxClient,
   resolveCurrentTmuxClientId,
@@ -19,7 +19,11 @@ import {
   activePopupClientOption,
   focusPopupClientOption,
 } from "./constants.js";
-import { buildPopupActiveClaim, createPopupProtocolNonce } from "./fastProtocol.js";
+import {
+  buildPopupActiveClaim,
+  createPopupProtocolNonce,
+  isSafePopupClientName,
+} from "./fastProtocol.js";
 import {
   ensurePersistentPopupSession,
   registerFastPopupUi,
@@ -31,11 +35,9 @@ import {
   clearLegacyPopupStateIfUnclaimed,
   compareAndSetActivePopupClaim,
   dismissLegacyPopupIfUnclaimed,
-  replaceLegacyPopupIfUnclaimed,
   resolveActivePopupClaimState,
   resolveActivePopupClient,
   resolveFocusPopupClient,
-  setPopupClaimMirrors,
 } from "./state.js";
 import type {
   BuildTmuxPopupArgsOptions,
@@ -66,11 +68,24 @@ export type {
 } from "./types.js";
 
 type PopupDisplayResult = "opened" | "dismissed";
+type ClaimedPopupActionResult = PopupDisplayResult | "contended";
 
 type PopupDisplayInput = {
   args: string[];
   command: string;
   runner?: ExternalCommandRunner;
+};
+
+type ClaimedPopupActionInput = PopupDisplayInput & {
+  claim: string;
+  clientId: string;
+  previousClientId?: string;
+};
+
+type GuardedPopupActionInput = PopupDisplayInput & {
+  clientId: string;
+  condition: string;
+  previousClientId?: string;
 };
 
 type PopupArgsInput = {
@@ -82,6 +97,9 @@ type PopupArgsInput = {
   persistentUi?: TmuxPersistentPopupUi;
   tuiCommand?: string;
 };
+
+const popupCasMiss = "STATION_POPUP_CAS_MISS";
+const safeTmuxCommandTokenPattern = /^[A-Za-z0-9_@%+=,./:-]+$/;
 
 function defaultTmuxCommand(command: string | undefined): string {
   return command ?? process.env.STATION_TMUX_BIN ?? "tmux";
@@ -267,6 +285,90 @@ async function runPopupDisplay(input: PopupDisplayInput): Promise<PopupDisplayRe
   return result.value.exitCode === 129 ? "dismissed" : "opened";
 }
 
+function tmuxFormatLiteral(value: string): string {
+  return value.replaceAll("#", "##").replaceAll(",", "#,").replaceAll("}", "#}");
+}
+
+function nestedTmuxCommand(args: readonly string[]): string {
+  return args
+    .map((arg) => {
+      const escaped = arg.replaceAll("#", "##");
+      return safeTmuxCommandTokenPattern.test(escaped) ? escaped : shellQuote(escaped);
+    })
+    .join(" ");
+}
+
+async function runGuardedPopupAction(
+  input: GuardedPopupActionInput,
+): Promise<ClaimedPopupActionResult> {
+  if (
+    !isSafePopupClientName(input.clientId) ||
+    (input.previousClientId !== undefined && !isSafePopupClientName(input.previousClientId))
+  ) {
+    throw tmuxProviderErrorFromUnknown(new Error("unsafe tmux popup client"), {
+      code: "TERMINAL_OPEN_FAILED",
+      message: "tmux failed to open the station popup.",
+    });
+  }
+  const action = [
+    nestedTmuxCommand(["set-option", "-gq", activePopupClientOption, input.clientId]),
+    nestedTmuxCommand(["set-option", "-gq", focusPopupClientOption, input.clientId]),
+    ...(input.previousClientId === undefined || input.previousClientId === input.clientId
+      ? []
+      : [nestedTmuxCommand(["display-popup", "-c", input.previousClientId, "-C"])]),
+    nestedTmuxCommand(input.args),
+  ].join(" ; ");
+  const result = await runRuntimeBoundaryWithRetry(
+    {
+      operation: "provider.tmux.popup.guardedAction",
+      error: {
+        tag: "TerminalProviderError",
+        code: "TERMINAL_POPUP_FAILED",
+        message: "tmux failed to open the station popup.",
+        provider: "tmux",
+      },
+      retry: { retries: 0 },
+    },
+    ({ signal }) =>
+      runExternalCommand(
+        {
+          command: input.command,
+          args: ["if-shell", "-F", input.condition, action, `display-message -p ${popupCasMiss}`],
+          signal,
+          maxOutputChars: 64 * 1024,
+          allowedExitCodes: [0, 129],
+        },
+        input.runner,
+      ),
+  );
+  if (!result.ok) {
+    throw tmuxProviderErrorFromUnknown(result.error, {
+      code: "TERMINAL_OPEN_FAILED",
+      message: "tmux failed to open the station popup.",
+    });
+  }
+  if (result.value.stdout.trim() === popupCasMiss) {
+    return "contended";
+  }
+  return result.value.exitCode === 129 ? "dismissed" : "opened";
+}
+
+function runClaimedPopupAction(input: ClaimedPopupActionInput): Promise<ClaimedPopupActionResult> {
+  return runGuardedPopupAction({
+    ...input,
+    condition: `#{==:#{${activePopupClaimOption}},${tmuxFormatLiteral(input.claim)}}`,
+  });
+}
+
+function runUnclaimedPopupAction(
+  input: Omit<GuardedPopupActionInput, "condition">,
+): Promise<ClaimedPopupActionResult> {
+  return runGuardedPopupAction({
+    ...input,
+    condition: `#{&&:#{==:#{${activePopupClaimOption}},},#{==:#{${activePopupClientOption}},${tmuxFormatLiteral(input.previousClientId ?? "")}}}`,
+  });
+}
+
 export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<TmuxPopupResult> {
   const command = defaultTmuxCommand(options.command ?? options.config?.command);
   const persistent = options.persistent !== false;
@@ -301,6 +403,8 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
   }
 
   let activeClaim: string | undefined;
+  let legacyPopupAction = false;
+  let previousPopupClientId: string | undefined;
   if (focusClientId !== undefined && focusClientId.length > 0 && currentClient !== undefined) {
     const claimClient: TmuxClientIdentity = {
       ...currentClient,
@@ -334,20 +438,25 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
           ) {
             continue;
           }
-          await setPopupClaimMirrors({
-            ...tmuxCommand,
-            clientId: claimState.claim.clientName,
-          });
+          let actionResult: ClaimedPopupActionResult | undefined;
           try {
-            await closeTmuxPopup({
-              ...tmuxCommand,
-              clientId: claimState.claim.clientName,
-            });
-          } finally {
-            await clearActivePopupClaimIfCurrent(tmuxCommand, {
+            actionResult = await runClaimedPopupAction({
+              args: ["display-popup", "-c", claimState.claim.clientName, "-C"],
               claim: closingClaim,
               clientId: claimState.claim.clientName,
-            }).catch(() => undefined);
+              command,
+              ...(options.runner === undefined ? {} : { runner: options.runner }),
+            });
+          } finally {
+            if (actionResult !== "contended") {
+              await clearActivePopupClaimIfCurrent(tmuxCommand, {
+                claim: closingClaim,
+                clientId: claimState.claim.clientName,
+              }).catch(() => undefined);
+            }
+          }
+          if (actionResult === "contended") {
+            continue;
           }
           return { opened: false, closed: true };
         }
@@ -368,14 +477,25 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
         ) {
           continue;
         }
-        await setPopupClaimMirrors({ ...tmuxCommand, clientId: focusClientId });
+        let actionResult: ClaimedPopupActionResult | undefined;
         try {
-          await closeTmuxPopup({ ...tmuxCommand, clientId: focusClientId });
-        } finally {
-          await clearActivePopupClaimIfCurrent(tmuxCommand, {
+          actionResult = await runClaimedPopupAction({
+            args: ["display-popup", "-c", focusClientId, "-C"],
             claim: closingClaim,
             clientId: focusClientId,
-          }).catch(() => undefined);
+            command,
+            ...(options.runner === undefined ? {} : { runner: options.runner }),
+          });
+        } finally {
+          if (actionResult !== "contended") {
+            await clearActivePopupClaimIfCurrent(tmuxCommand, {
+              claim: closingClaim,
+              clientId: focusClientId,
+            }).catch(() => undefined);
+          }
+        }
+        if (actionResult === "contended") {
+          continue;
         }
         return { opened: false, closed: true };
       }
@@ -391,6 +511,11 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
         registrationNonce,
         state: "open",
       });
+      if (options.enterWorkbench === true) {
+        await enterWorkbenchForPopup(
+          enterWorkbenchInput(tmuxCommand, focusClientId, options.config),
+        );
+      }
       const replaced = await compareAndSetActivePopupClaim(tmuxCommand, {
         ...(claimState.kind === "absent" ? {} : { expected: claimState.raw }),
         replacement: nextClaim,
@@ -399,25 +524,8 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
         continue;
       }
       activeClaim = nextClaim;
-      try {
-        await setPopupClaimMirrors({ ...tmuxCommand, clientId: focusClientId });
-        const previousClient =
-          claimState.kind === "valid" ? claimState.claim.clientName : activeClientId;
-        if (previousClient !== undefined && previousClient !== focusClientId) {
-          await closeTmuxPopup({ ...tmuxCommand, clientId: previousClient });
-        }
-        if (options.enterWorkbench === true) {
-          await enterWorkbenchForPopup(
-            enterWorkbenchInput(tmuxCommand, focusClientId, options.config),
-          );
-        }
-      } catch (error) {
-        await clearActivePopupClaimIfCurrent(tmuxCommand, {
-          claim: nextClaim,
-          clientId: focusClientId,
-        }).catch(() => undefined);
-        throw error;
-      }
+      previousPopupClientId =
+        claimState.kind === "valid" ? claimState.claim.clientName : activeClientId;
       break;
     }
     if (activeClaim === undefined) {
@@ -439,17 +547,8 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
       await dismissTmuxPopup(dismissOptions(options, command, focusClientId));
       return { opened: false, closed: true };
     }
-    const replaced = await replaceLegacyPopupIfUnclaimed({
-      ...tmuxCommand,
-      clientId: focusClientId,
-      ...(activeClientId === undefined ? {} : { previousClientId: activeClientId }),
-    });
-    if (!replaced) {
-      throw tmuxProviderErrorFromUnknown(new Error("tmux popup claim contention"), {
-        code: "TERMINAL_OPEN_FAILED",
-        message: "tmux failed to claim the station popup.",
-      });
-    }
+    legacyPopupAction = true;
+    previousPopupClientId = activeClientId;
   } else {
     const legacyFocusClientId = await resolveFocusPopupClient(tmuxCommand);
     if (legacyFocusClientId !== undefined) {
@@ -476,7 +575,36 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
 
   let displayResult: PopupDisplayResult;
   try {
-    displayResult = await runPopupDisplay(displayInput);
+    if (activeClaim !== undefined && focusClientId !== undefined) {
+      const claimedResult = await runClaimedPopupAction({
+        ...displayInput,
+        claim: activeClaim,
+        clientId: focusClientId,
+        ...(previousPopupClientId === undefined ? {} : { previousClientId: previousPopupClientId }),
+      });
+      if (claimedResult === "contended") {
+        throw tmuxProviderErrorFromUnknown(new Error("tmux popup claim contention"), {
+          code: "TERMINAL_OPEN_FAILED",
+          message: "tmux failed to claim the station popup.",
+        });
+      }
+      displayResult = claimedResult;
+    } else if (legacyPopupAction && focusClientId !== undefined) {
+      const guardedResult = await runUnclaimedPopupAction({
+        ...displayInput,
+        clientId: focusClientId,
+        ...(previousPopupClientId === undefined ? {} : { previousClientId: previousPopupClientId }),
+      });
+      if (guardedResult === "contended") {
+        throw tmuxProviderErrorFromUnknown(new Error("tmux popup claim contention"), {
+          code: "TERMINAL_OPEN_FAILED",
+          message: "tmux failed to claim the station popup.",
+        });
+      }
+      displayResult = guardedResult;
+    } else {
+      displayResult = await runPopupDisplay(displayInput);
+    }
   } catch (error) {
     if (activeClaim !== undefined && focusClientId !== undefined) {
       await clearActivePopupClaimIfCurrent(tmuxCommand, {
@@ -569,14 +697,26 @@ export async function dismissTmuxPopup(
       claimContended = true;
       continue;
     }
-    await setPopupClaimMirrors({ ...input, clientId: claimState.claim.clientName });
+    let actionResult: ClaimedPopupActionResult | undefined;
     try {
-      await closeTmuxPopup({ ...input, clientId: claimState.claim.clientName });
-    } finally {
-      await clearActivePopupClaimIfCurrent(input, {
+      actionResult = await runClaimedPopupAction({
+        args: ["display-popup", "-c", claimState.claim.clientName, "-C"],
         claim: closingClaim,
         clientId: claimState.claim.clientName,
-      }).catch(() => undefined);
+        command,
+        ...(options.runner === undefined ? {} : { runner: options.runner }),
+      });
+    } finally {
+      if (actionResult !== "contended") {
+        await clearActivePopupClaimIfCurrent(input, {
+          claim: closingClaim,
+          clientId: claimState.claim.clientName,
+        }).catch(() => undefined);
+      }
+    }
+    if (actionResult === "contended") {
+      claimContended = true;
+      continue;
     }
     return { dismissed: true };
   }

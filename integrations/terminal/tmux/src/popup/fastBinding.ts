@@ -19,6 +19,7 @@ import {
 import { popupProtocolSha256 } from "./fastProtocol.js";
 
 export type BuildManagedFastPopupRunShellCommandOptions = {
+  configPath?: string;
   fallbackAlias: string;
   installedRoot: string;
   tmuxCommand: string;
@@ -46,6 +47,12 @@ function validateManagedBindingOptions(options: BuildManagedFastPopupRunShellCom
   }
   if (!isAbsolute(options.tmuxCommand) || containsUnsafeShellValue(options.tmuxCommand)) {
     throw new Error("Station popup binding requires a safe resolved tmux executable.");
+  }
+  if (
+    options.configPath !== undefined &&
+    (!isAbsolute(options.configPath) || containsUnsafeShellValue(options.configPath))
+  ) {
+    throw new Error("Station popup binding requires a safe absolute config path.");
   }
 }
 
@@ -77,6 +84,20 @@ function escapeTmuxFormat(value: string): string {
   return value.replaceAll("#", "##");
 }
 
+function expectedPersistentPopupSignature(options: {
+  configPath?: string;
+  installedRoot: string;
+}): string {
+  const command = [
+    shellQuote(join(options.installedRoot, "stn")),
+    ...(options.configPath === undefined ? [] : ["--config", shellQuote(options.configPath)]),
+    "tui",
+    "--popup",
+    "--persistent",
+  ].join(" ");
+  return `v1:${command}`;
+}
+
 /**
  * ADAPTER
  *
@@ -91,8 +112,10 @@ export function buildManagedFastPopupRunShellCommand(
   const sessionName = defaultPersistentPopupSessionName;
   const expectedRootSha256 = popupProtocolSha256(options.installedRoot);
   const expectedSessionSha256 = popupProtocolSha256(sessionName);
+  const expectedSignatureSha256 = popupProtocolSha256(expectedPersistentPopupSignature(options));
   const installedRoot = escapeTmuxFormat(options.installedRoot);
   const fallbackAlias = escapeTmuxFormat(options.fallbackAlias);
+  const configPath = escapeTmuxFormat(options.configPath ?? "");
   const tmuxCommand = escapeTmuxFormat(options.tmuxCommand);
   const nestedTmuxCommand = escapeTmuxFormat(tmuxCommand);
   const attachCommand = [
@@ -110,10 +133,12 @@ binding_client_pid=$2
 binding_client_session=$3
 tmux_bin=${shellQuote(tmuxCommand)}
 fallback_alias=${shellQuote(fallbackAlias)}
+config_path=${shellQuote(configPath)}
 installed_root=${shellQuote(installedRoot)}
 session_name=${shellQuote(sessionName)}
 expected_root_sha=${shellQuote(expectedRootSha256)}
 expected_session_sha=${shellQuote(expectedSessionSha256)}
+expected_signature_sha=${shellQuote(expectedSignatureSha256)}
 attach_arg=${shellQuote(shellQuote(attachCommand))}
 fmt='#'
 sep=$(printf '\\037')
@@ -121,7 +146,13 @@ trap 'exit 0' HUP INT TERM
 
 fallback_popup() {
   fallback_client_name=\${client_name:-$binding_client_name}
-  if valid_client_name "$fallback_client_name"; then
+  if [ -n "$config_path" ]; then
+    if valid_client_name "$fallback_client_name"; then
+      STATION_CONFIG_PATH=$config_path STATION_FOCUS_CLIENT_ID=$fallback_client_name "$fallback_alias" --config "$config_path" >/dev/null 2>&1
+    else
+      STATION_CONFIG_PATH=$config_path "$fallback_alias" --config "$config_path" >/dev/null 2>&1
+    fi
+  elif valid_client_name "$fallback_client_name"; then
     STATION_FOCUS_CLIENT_ID=$fallback_client_name "$fallback_alias" >/dev/null 2>&1
   else
     "$fallback_alias" >/dev/null 2>&1
@@ -304,6 +335,7 @@ try_fast_popup() {
   [ "\${#registered_signature}" -le 4096 ] || return 1
   case "$registered_signature" in v1:*) ;; *) return 1 ;; esac
   registered_signature_sha=$(sha256_value "$registered_signature") || return 1
+  [ "$registered_signature_sha" = "$expected_signature_sha" ] || return 1
   parse_route || return 1
   [ "$registered_session" = "$session_name" ] || return 1
   [ "$registered_root" = "$installed_root" ] || return 1

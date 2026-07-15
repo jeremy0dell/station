@@ -184,6 +184,14 @@ describe("managed tmux popup fast binding", () => {
     expect(await fixture.calls()).toHaveLength(1);
   });
 
+  it("falls back from a valid route with a different configured UI signature", async () => {
+    const configPath = "/tmp/station config #{session_name}/config.toml";
+    const fixture = await createFixture({}, "managed bin", configPath, "/tmp/previous-config.toml");
+
+    await expect(runBinding(fixture)).resolves.toMatchObject({ code: 0 });
+    expect(await fixture.fallbackConfigCalls()).toEqual([`${configPath}\t--config\t${configPath}`]);
+  });
+
   it("falls back on legacy, mixed-version, and hostile state", async () => {
     const legacy = await createFixture({ activeClient: "/dev/ttys001" });
     await expect(runBinding(legacy)).resolves.toMatchObject({ code: 0 });
@@ -258,7 +266,7 @@ describe("managed tmux popup fast binding", () => {
       "3000",
       "Station popup failed; run stn popup for details",
     ]);
-  });
+  }, 15_000);
 
   it("quotes hostile installation paths, escapes tmux formats, and produces valid POSIX shell", async () => {
     const fixture = await createFixture({}, "station's #{session_name} managed bin");
@@ -271,18 +279,39 @@ describe("managed tmux popup fast binding", () => {
     expect(action).toContain("##{session_name}");
     expect(action).not.toContain("station's #{session_name} managed bin/tmux fake");
   });
+
+  it("rejects relative or control-character config paths", () => {
+    const options = {
+      fallbackAlias: "/opt/station/stn-tmux-popup",
+      installedRoot: "/opt/station",
+      tmuxCommand: "/opt/homebrew/bin/tmux",
+    };
+    for (const configPath of [
+      "relative.toml",
+      "/tmp/config\0.toml",
+      "/tmp/config\r.toml",
+      "/tmp/config\n.toml",
+    ]) {
+      expect(() => buildManagedFastPopupRunShellCommand({ ...options, configPath })).toThrow(
+        "safe absolute config path",
+      );
+    }
+  });
 });
 
 type Fixture = {
   calls: () => Promise<Array<{ args: string[] }>>;
   command: string;
   fallbackCalls: () => Promise<string[]>;
+  fallbackConfigCalls: () => Promise<string[]>;
   statePath: string;
 };
 
 async function createFixture(
   overrides: Partial<FakeState> = {},
   directoryName = "managed bin",
+  configPath?: string,
+  registeredConfigPath = configPath,
 ): Promise<Fixture> {
   const tempRoot = await mkdtemp(join(tmpdir(), "station-fast-binding-"));
   fixtureRoots.add(tempRoot);
@@ -292,12 +321,14 @@ async function createFixture(
   const statePath = join(tempRoot, "state.json");
   const logPath = join(tempRoot, "tmux.jsonl");
   const fallbackLogPath = join(tempRoot, "fallback.log");
+  const fallbackConfigLogPath = join(tempRoot, "fallback-config.log");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(installedRoot, { recursive: true }));
+  const registeredSignature = fixturePopupSignature(installedRoot, registeredConfigPath);
   const route = buildNormalPopupRoute({
     registrationNonce,
     root: installedRoot,
     sessionName: "_station-ui",
-    signature,
+    signature: registeredSignature,
   });
   const state: FakeState = {
     clientName: "/dev/ttys001",
@@ -306,12 +337,13 @@ async function createFixture(
     lease: route,
     root: installedRoot,
     route,
-    sessionSignature: signature,
+    sessionSignature: registeredSignature,
     ...overrides,
   };
   await writeFile(statePath, JSON.stringify(state));
   await writeFile(logPath, "");
   await writeFile(fallbackLogPath, "");
+  await writeFile(fallbackConfigLogPath, "");
   await writeFile(
     tmuxCommand,
     `#!/usr/bin/env node
@@ -349,6 +381,7 @@ process.exit(0);
     fallbackAlias,
     `#!/bin/sh
 printf '%s\\n' "\${STATION_FOCUS_CLIENT_ID:-}" >> ${shellLiteral(fallbackLogPath)}
+printf '%s\\t%s\\t%s\\n' "\${STATION_CONFIG_PATH:-}" "\${1:-}" "\${2:-}" >> ${shellLiteral(fallbackConfigLogPath)}
 printf 'fallback output that must stay hidden\\n'
 printf 'fallback error that must stay hidden\\n' >&2
 exit \${FAKE_FALLBACK_EXIT:-0}
@@ -356,12 +389,29 @@ exit \${FAKE_FALLBACK_EXIT:-0}
   );
   await chmod(tmuxCommand, 0o700);
   await chmod(fallbackAlias, 0o700);
+  const commandOptions: Parameters<typeof buildManagedFastPopupRunShellCommand>[0] = {
+    fallbackAlias,
+    installedRoot,
+    tmuxCommand,
+  };
+  if (configPath !== undefined) commandOptions.configPath = configPath;
   return {
     calls: async () => readJsonLines(logPath),
-    command: buildManagedFastPopupRunShellCommand({ fallbackAlias, installedRoot, tmuxCommand }),
+    command: buildManagedFastPopupRunShellCommand(commandOptions),
     fallbackCalls: async () => readLines(fallbackLogPath),
+    fallbackConfigCalls: async () => readLines(fallbackConfigLogPath),
     statePath,
   };
+}
+
+function fixturePopupSignature(installedRoot: string, configPath: string | undefined): string {
+  return `v1:${[
+    shellLiteral(join(installedRoot, "stn")),
+    ...(configPath === undefined ? [] : ["--config", shellLiteral(configPath)]),
+    "tui",
+    "--popup",
+    "--persistent",
+  ].join(" ")}`;
 }
 
 function popupClaim(state: "closing" | "open", clientPid: number, clientName: string): string {

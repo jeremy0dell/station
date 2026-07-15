@@ -125,8 +125,33 @@ export function tmuxPopupBindingLine(
   return `bind-key ${bindingKey} run-shell -b ${quoteShellValue(runShellCommand)}`;
 }
 
-export function tmuxPopupRunShellCommand(launcherCommand = "stn-tmux-popup"): string {
-  return `env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} ${quoteShellValue(escapeTmuxFormat(launcherCommand))}`;
+export function tmuxPopupRunShellCommand(
+  launcherCommand = "stn-tmux-popup",
+  configPath?: string,
+): string {
+  if (containsUnsafeShellValue(launcherCommand)) {
+    throw new Error("tmux popup launcher contains an unsupported control character.");
+  }
+  if (configPath !== undefined && containsUnsafeShellValue(configPath)) {
+    throw new Error("tmux popup config path contains an unsupported control character.");
+  }
+  const command = ["env"];
+  if (configPath !== undefined) {
+    command.push(`STATION_CONFIG_PATH=${quoteShellValue(escapeTmuxFormat(configPath))}`);
+  }
+  command.push(
+    "STATION_FOCUS_PROVIDER=tmux",
+    "STATION_FOCUS_CLIENT_ID=#{q:client_name}",
+    quoteShellValue(escapeTmuxFormat(launcherCommand)),
+  );
+  if (configPath !== undefined) {
+    command.push("--config", quoteShellValue(escapeTmuxFormat(configPath)));
+  }
+  return command.join(" ");
+}
+
+function containsUnsafeShellValue(value: string): boolean {
+  return value.includes("\0") || value.includes("\r") || value.includes("\n");
 }
 
 function missingTmuxBinding(input: {
