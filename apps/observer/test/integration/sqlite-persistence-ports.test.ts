@@ -29,7 +29,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     const path = join(directory, "observer.sqlite");
     const legacyDatabase = openSqlDatabase(path);
     try {
-      for (const migration of migrations.slice(0, -1)) {
+      for (const migration of migrations.filter(({ version }) => version < 12)) {
         legacyDatabase.exec(migration.sql);
         legacyDatabase
           .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")

@@ -93,7 +93,9 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   const providerReadRetries = input.providerReadRetries ?? 1;
   let config = input.config;
   let projects = providerProjectsFromConfig(config);
-  let reconcileChain: Promise<void> = Promise.resolve();
+  // Binding authorization and base projection share ordering with reconciles so
+  // an awaited authority read cannot commit through a superseding snapshot.
+  let snapshotWriterChain: Promise<void> = Promise.resolve();
   let providerHealth: Record<string, ProviderHealth> = {};
   let lastReconcile: ReconcileTiming | undefined;
   let snapshot = buildInitialSnapshot({
@@ -114,6 +116,11 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     ...(input.logger === undefined ? {} : { logger: input.logger }),
   };
   const observer = { pid, startedAt, version };
+  const enqueueSnapshotWrite = <T>(write: () => Promise<T>): Promise<T> => {
+    const execution = snapshotWriterChain.then(write);
+    snapshotWriterChain = execution.catch(() => undefined).then(() => undefined);
+    return execution;
+  };
 
   return {
     reconcile: async (reason = "manual") => {
@@ -138,46 +145,45 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         return snapshot;
       };
 
-      const previous = reconcileChain;
-      const execution = previous.then(run);
-      reconcileChain = execution.catch(() => undefined).then(() => undefined);
-      return execution;
+      return enqueueSnapshotWrite(run);
     },
     projectHarnessEventStatus: async (report) => {
-      const projectedAt = toIsoTimestamp(clock.now());
-      const sessionId = report.correlation?.sessionId;
-      // Native reports remain diagnostic-only until a durable Station-session
-      // binding can authorize their projection.
-      if (
-        report.correlation?.nativeSessionId !== undefined &&
-        (input.persistence === undefined || sessionId === undefined)
-      ) {
-        return { projected: false, snapshot, events: [] };
-      }
-      if (input.persistence !== undefined && sessionId !== undefined) {
-        const binding = await input.persistence.getSessionHarnessExecution({
-          provider: report.provider,
-          sessionId,
-        });
-        const decision = decideSessionHarnessExecution({
-          current: binding,
-          evidence: sessionHarnessExecutionEvidenceFromReport(report),
-        });
-        if (!decision.mayDeriveState) {
+      const result = await enqueueSnapshotWrite(async (): Promise<StatusProjectionResult> => {
+        const sessionId = report.correlation?.sessionId;
+        // Native reports remain diagnostic-only until a durable Station-session
+        // binding can authorize their projection.
+        if (
+          report.correlation?.nativeSessionId !== undefined &&
+          (input.persistence === undefined || sessionId === undefined)
+        ) {
           return { projected: false, snapshot, events: [] };
         }
-      }
-      const result = projectHarnessEventReportOntoSnapshot({
-        snapshot,
-        report,
-        projectedAt,
+        if (input.persistence !== undefined && sessionId !== undefined) {
+          const binding = await input.persistence.getSessionHarnessExecution({
+            provider: report.provider,
+            sessionId,
+          });
+          const decision = decideSessionHarnessExecution({
+            current: binding,
+            evidence: sessionHarnessExecutionEvidenceFromReport(report),
+          });
+          if (!decision.mayDeriveState) {
+            return { projected: false, snapshot, events: [] };
+          }
+        }
+        const projection = projectHarnessEventReportOntoSnapshot({
+          snapshot,
+          report,
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        if (projection.projected) {
+          snapshot = projection.snapshot;
+        }
+        return projection;
       });
       if (!result.projected) {
         return result;
       }
-      // Commit the base projection synchronously so a concurrent reconcile or
-      // acknowledgeTurn cannot be clobbered by a stale post-await write.
-      snapshot = result.snapshot;
       if (input.persistence === undefined) {
         return result;
       }
@@ -189,6 +195,10 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       });
       if (persisted === undefined) {
         return result;
+      }
+      // A newer completion can win the readiness conflict while this write is pending.
+      if (persisted.token !== report.reportId) {
+        return { projected: false, snapshot, events: [] };
       }
       // Re-resolve against the live snapshot, which may have changed during the
       // upsert await, then apply the readiness marker synchronously.

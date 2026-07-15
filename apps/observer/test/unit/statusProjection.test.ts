@@ -308,6 +308,18 @@ describe("cwd correlation resolution", () => {
     );
     expect(byRun.correlation).toMatchObject({ sessionId: "ses_web_task" });
 
+    const rowOnly = report({
+      status: status("working", "medium", "Codex is working."),
+      correlation: {
+        worktreeId: "wt_web_task",
+        harnessRunId: "run_web_task",
+        nativeSessionId: "native_a",
+      },
+    });
+    expect(withSessionCorrelationFromSnapshot(rowOnly, { ...snapshot, sessions: [] })).toBe(
+      rowOnly,
+    );
+
     const terminalTargetId = "tmux:station:@1:%2";
     const terminalSnapshot = {
       ...snapshot,

@@ -348,6 +348,32 @@ describe("observer persistence", () => {
     reopened.close();
   });
 
+  it("invalidates legacy ingress claims after the native binding schema is applied", async () => {
+    const dbPath = await tempDbPath();
+    const legacy = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
+    const insertClaim = legacy.database.prepare(`
+      INSERT INTO hook_ingress_dedupe (kind, dedupe_id, event_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    insertClaim.run("harness_report", "legacy_report", "evt_legacy_report", now);
+    insertClaim.run("hook_processing", "legacy_processing", "evt_legacy_processing", now);
+    insertClaim.run("hook", "legacy_hook", "evt_legacy_hook", now);
+    legacy.database.exec(`
+      DELETE FROM observer_migrations WHERE version = 14;
+      UPDATE observer_meta SET value = '13' WHERE key = 'schema_version';
+    `);
+    legacy.close();
+
+    const upgraded = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
+
+    expect(
+      upgraded.database
+        .prepare("SELECT kind, dedupe_id FROM hook_ingress_dedupe ORDER BY kind, dedupe_id")
+        .all(),
+    ).toEqual([{ kind: "hook", dedupe_id: "legacy_hook" }]);
+    upgraded.close();
+  });
+
   it("skips retired command rows without requiring a migration", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({

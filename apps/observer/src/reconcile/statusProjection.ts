@@ -86,9 +86,17 @@ export function withSessionCorrelationFromSnapshot(
   });
   const match = matches[0];
   if (matches.length !== 1 || match?.agent?.sessionId === undefined) return report;
+  const session = snapshot.sessions.find(
+    (candidate) =>
+      candidate.origin === "station" &&
+      candidate.id === match.agent?.sessionId &&
+      candidate.projectId === match.projectId &&
+      candidate.worktreeId === match.id,
+  );
+  if (session === undefined) return report;
   return {
     ...report,
-    correlation: { ...correlation, sessionId: match.agent.sessionId },
+    correlation: { ...correlation, sessionId: session.id },
   };
 }
 

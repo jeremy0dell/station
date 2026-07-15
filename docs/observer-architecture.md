@@ -390,11 +390,14 @@ sessions. Terminal attachment requires matching session or run identity. Session
 and activity totals derive from canonical sessions; only worktree totals derive
 from rows.
 
-Observer core serializes full reconciles. The scheduler debounces and coalesces
-reasons while ensuring only one scheduled run is active. Startup-compatible
-requests may join the startup flight; other direct requests retain the rule that
-their scan starts at or after the request. Provider read failures degrade health
-and contribute errors without fabricating successful observations.
+Observer core serializes full reconciles and harness-report authorization plus
+base snapshot projection on one non-poisoning writer chain. Readiness persistence
+and application happen after that base commit and revalidate the live snapshot.
+The scheduler debounces and coalesces reasons while ensuring only one scheduled
+run is active. Startup-compatible requests may join the startup flight; other
+direct requests retain the rule that their scan starts at or after the request.
+Provider read failures degrade health and contribute errors without fabricating
+successful observations.
 
 ### Provider Hook And Harness Report Ingress
 
@@ -491,7 +494,7 @@ from the diagnostic use case.
 | Observer build ordering | Exact builds attach. For different valid SemVer builds, higher precedence wins; at equal precedence the lexicographically greater exact build string wins so the CLI parent and Observer child agree despite having different process identities. Missing or invalid versions refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
-| Reconcile ordering | Core reconciles form a non-poisoning promise chain. Scheduled requests coalesce; queued work after a run receives a later flush. |
+| Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | One worker processes a bounded pending map. New reports can replace pending work for the same key; a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
