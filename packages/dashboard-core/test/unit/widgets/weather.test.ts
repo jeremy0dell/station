@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  compactWeatherText,
   renderWeatherError,
   renderWeatherLoading,
   renderWeatherSuccess,
@@ -24,5 +25,10 @@ describe("weather widget rendering", () => {
     expect(renderWeatherSuccess(config, { temperature: 72.4, weatherCode: 0, isDay: true })).toBe(
       "ATX · 72° ☀️",
     );
+  });
+
+  it("compacts only the separator after the location label", () => {
+    const config = { type: "weather", city: "Austin", label: "A · TX" } as const;
+    expect(compactWeatherText(config, "A · TX · 72° ☀️")).toBe("A · TX 72° ☀️");
   });
 });

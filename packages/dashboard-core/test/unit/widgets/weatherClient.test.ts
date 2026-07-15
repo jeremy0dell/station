@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OpenMeteoWeatherClient } from "../../../src/widgets/weatherClient.js";
+import {
+  OpenMeteoAirQualityClient,
+  OpenMeteoWeatherClient,
+} from "../../../src/widgets/weatherClient.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("OpenMeteoWeatherClient", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("geocodes a city and returns current weather", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -88,7 +91,7 @@ describe("OpenMeteoWeatherClient", () => {
 
     await expect(
       new OpenMeteoWeatherClient().getCurrentWeather("ZZZ", "fahrenheit"),
-    ).rejects.toThrow("Weather location was not found.");
+    ).rejects.toThrow("Location was not found.");
   });
 
   it("rejects invalid forecast JSON at the schema boundary", async () => {
@@ -128,6 +131,53 @@ describe("OpenMeteoWeatherClient", () => {
     await expect(
       new OpenMeteoWeatherClient().getCurrentWeather("New York", "celsius"),
     ).resolves.toEqual({ temperature: 60, weatherCode: 0, isDay: false });
+  });
+});
+
+describe("OpenMeteoAirQualityClient", () => {
+  it("returns the current U.S. AQI for a geocoded city", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ results: [{ latitude: 34.0522, longitude: -118.2437 }] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          current: { time: "2026-07-15T14:00", interval: 3600, us_aqi: 90 },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      new OpenMeteoAirQualityClient().getCurrentAirQuality("Los Angeles, CA"),
+    ).resolves.toEqual({ aqi: 90 });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("current=us_aqi");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("latitude=34.0522");
+  });
+
+  it.each([
+    "90",
+    90.5,
+  ])("rejects malformed air-quality JSON at the schema boundary: %p", async (usAqi) => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ results: [{ latitude: 34.0522, longitude: -118.2437 }] }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ current: { us_aqi: usAqi } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      new OpenMeteoAirQualityClient().getCurrentAirQuality("Los Angeles, CA"),
+    ).rejects.toThrow();
+  });
+
+  it("rejects AQI requests when geocoding has no match", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ results: [] })));
+
+    await expect(new OpenMeteoAirQualityClient().getCurrentAirQuality("ZZZ")).rejects.toThrow(
+      "Location was not found.",
+    );
   });
 });
 

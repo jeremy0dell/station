@@ -153,10 +153,31 @@ describe("Station app composition", () => {
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    const frame = await waitForFrame(station, (candidate) => candidate.includes("NYC · 72°"));
+    const frame = await waitForFrame(station, (candidate) => candidate.includes("NYC 72°"));
 
     expect(frame).toContain("10:42");
-    expect(frame).toContain("NYC · 72°");
+    expect(frame).toContain("NYC 72°");
+    expect(frame).toContain("Open-Meteo");
+  });
+
+  it("renders a configured AQI widget in the Station overlay header", async () => {
+    const station = await renderComposedStation({
+      tuiConfig: {
+        widgets: [{ type: "aqi", city: "Los Angeles, CA", label: "LA" }],
+      },
+      topRowWidgetDeps: {
+        airQualityClient: {
+          getCurrentAirQuality: async () => ({ aqi: 42 }),
+        },
+      },
+    });
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => overlayVisible(station));
+    const frame = await waitForFrame(station, (candidate) => candidate.includes("AQI 42"));
+
+    expect(frame).toContain("AQI 42");
+    expect(frame).toContain("Open-Meteo/CAMS");
   });
 
   it("closes STATION on click-away without writing mouse bytes to the pane underneath", async () => {

@@ -1,6 +1,13 @@
 import { z } from "zod";
-import type { WeatherClient, WeatherCurrentConditions, WeatherTemperatureUnit } from "./types.js";
+import type {
+  AirQualityClient,
+  AirQualityCurrentConditions,
+  WeatherClient,
+  WeatherCurrentConditions,
+  WeatherTemperatureUnit,
+} from "./types.js";
 
+const OPEN_METEO_AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const REQUEST_TIMEOUT_MS = 3_000;
@@ -23,6 +30,12 @@ const ForecastResponseSchema = z.object({
   current: ForecastCurrentSchema,
 });
 
+const AirQualityResponseSchema = z.object({
+  current: z.object({
+    us_aqi: z.number().int().nonnegative(),
+  }),
+});
+
 export class OpenMeteoWeatherClient implements WeatherClient {
   async getCurrentWeather(
     city: string,
@@ -38,6 +51,14 @@ export class OpenMeteoWeatherClient implements WeatherClient {
   }
 }
 
+export class OpenMeteoAirQualityClient implements AirQualityClient {
+  async getCurrentAirQuality(city: string): Promise<AirQualityCurrentConditions> {
+    const coordinates = await geocodeCity(city);
+    return { aqi: await fetchAirQuality(coordinates) };
+  }
+}
+
+export const defaultAirQualityClient: AirQualityClient = new OpenMeteoAirQualityClient();
 export const defaultWeatherClient: WeatherClient = new OpenMeteoWeatherClient();
 
 async function geocodeCity(city: string): Promise<{ latitude: number; longitude: number }> {
@@ -58,7 +79,7 @@ async function geocodeCity(city: string): Promise<{ latitude: number; longitude:
     }
   }
 
-  throw new Error("Weather location was not found.");
+  throw new Error("Location was not found.");
 }
 
 function geocodingQueries(city: string): string[] {
@@ -82,10 +103,22 @@ async function fetchForecast(
   return ForecastResponseSchema.parse(await fetchJson(url)).current;
 }
 
+async function fetchAirQuality(coordinates: {
+  latitude: number;
+  longitude: number;
+}): Promise<number> {
+  const url = new URL(OPEN_METEO_AIR_QUALITY_URL);
+  url.searchParams.set("latitude", String(coordinates.latitude));
+  url.searchParams.set("longitude", String(coordinates.longitude));
+  url.searchParams.set("current", "us_aqi");
+
+  return AirQualityResponseSchema.parse(await fetchJson(url)).current.us_aqi;
+}
+
 async function fetchJson(url: URL): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!response.ok) {
-    throw new Error(`Weather request failed with HTTP ${response.status}.`);
+    throw new Error(`Open-Meteo request failed with HTTP ${response.status}.`);
   }
   return (await response.json()) as unknown;
 }

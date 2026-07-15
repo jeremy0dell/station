@@ -137,11 +137,17 @@ describe("config schemas", () => {
             temperatureUnit: "fahrenheit",
             refreshIntervalMinutes: 15,
           },
+          {
+            type: "aqi",
+            city: "Los Angeles, CA",
+            label: "LA",
+            refreshIntervalMinutes: 60,
+          },
         ],
       },
     });
 
-    expect(config.tui?.widgets?.map((widget) => widget.type)).toEqual(["time", "weather"]);
+    expect(config.tui?.widgets?.map((widget) => widget.type)).toEqual(["time", "weather", "aqi"]);
 
     // The [tui] section schema is strict: bad widgets are rejected outright.
     expect(TuiConfigSchema.safeParse({ widgets: [{ type: "weather", city: "" }] }).success).toBe(
@@ -150,6 +156,7 @@ describe("config schemas", () => {
     expect(
       TuiConfigSchema.safeParse({ widgets: [{ type: "time", timeFormat: "locale" }] }).success,
     ).toBe(false);
+    expect(TuiConfigSchema.safeParse({ widgets: [{ type: "aqi", city: "" }] }).success).toBe(false);
 
     // But the root config attaches [tui] best-effort: bad widget values degrade
     // to `tui: undefined` rather than failing the whole config parse.

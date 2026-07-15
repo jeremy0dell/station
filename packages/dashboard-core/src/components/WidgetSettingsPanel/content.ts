@@ -28,7 +28,7 @@ export function widgetSettingsPanelModel(
   if (screen.focus === "picker") {
     return {
       title: "add widget",
-      note: "weather and tz require config.toml",
+      note: "weather, AQI, and tz require config.toml",
       lines: ADDABLE_WIDGET_TYPES.map((type, index) => ({
         kind: "pickerChoice",
         index,

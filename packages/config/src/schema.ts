@@ -239,6 +239,18 @@ export const TuiWeatherWidgetConfigSchema = z
 
 export type TuiWeatherWidgetConfig = z.infer<typeof TuiWeatherWidgetConfigSchema>;
 
+export const TuiAqiWidgetConfigSchema = z
+  .object({
+    type: z.literal("aqi"),
+    enabled: z.boolean().optional(),
+    city: nonEmptyStringSchema,
+    label: nonEmptyStringSchema.optional(),
+    refreshIntervalMinutes: z.number().int().positive().optional(),
+  })
+  .strict();
+
+export type TuiAqiWidgetConfig = z.infer<typeof TuiAqiWidgetConfigSchema>;
+
 /** Live-agent count derived from the snapshot; no external data source. */
 export const TuiFleetWidgetConfigSchema = z
   .object({
@@ -292,6 +304,7 @@ export type TuiMoonWidgetConfig = z.infer<typeof TuiMoonWidgetConfigSchema>;
 export const TuiWidgetConfigSchema = z.discriminatedUnion("type", [
   TuiTimeWidgetConfigSchema,
   TuiWeatherWidgetConfigSchema,
+  TuiAqiWidgetConfigSchema,
   TuiFleetWidgetConfigSchema,
   TuiPrsWidgetConfigSchema,
   TuiTimezoneWidgetConfigSchema,

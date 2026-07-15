@@ -488,6 +488,12 @@ label = "NYC"
 temperature_unit = "fahrenheit"
 refresh_interval_minutes = 15
 
+[[tui.widgets]]
+type = "aqi"
+city = "Los Angeles, CA"
+label = "LA"
+refresh_interval_minutes = 60
+
 ${projectToml("web", root)}
 `,
       { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
@@ -504,6 +510,12 @@ ${projectToml("web", root)}
         label: "NYC",
         temperatureUnit: "fahrenheit",
         refreshIntervalMinutes: 15,
+      },
+      {
+        type: "aqi",
+        city: "Los Angeles, CA",
+        label: "LA",
+        refreshIntervalMinutes: 60,
       },
     ]);
   });

@@ -198,6 +198,15 @@ function formatTuiWidget(widget: TuiWidgetConfig): string[] {
         lines.push(`refresh_interval_minutes = ${widget.refreshIntervalMinutes}`);
       }
       return lines;
+    case "aqi":
+      lines.push(`city = ${quoteTomlString(widget.city)}`);
+      if (widget.label !== undefined) {
+        lines.push(`label = ${quoteTomlString(widget.label)}`);
+      }
+      if (widget.refreshIntervalMinutes !== undefined) {
+        lines.push(`refresh_interval_minutes = ${widget.refreshIntervalMinutes}`);
+      }
+      return lines;
     case "fleet":
     case "prs":
     case "moon":

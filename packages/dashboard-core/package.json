@@ -28,6 +28,10 @@
       "types": "./dist/state/*.d.ts",
       "import": "./dist/state/*.js"
     },
+    "./widgets/airQuality": {
+      "types": "./dist/widgets/airQuality.d.ts",
+      "import": "./dist/widgets/airQuality.js"
+    },
     "./widgets/moon": {
       "types": "./dist/widgets/moon.d.ts",
       "import": "./dist/widgets/moon.js"

@@ -45,6 +45,12 @@ city = "New York, NY"
 label = "NYC"
 temperature_unit = "fahrenheit"
 
+[[tui.widgets]]
+type = "aqi"
+city = "Los Angeles, CA"
+label = "LA"
+refresh_interval_minutes = 60
+
 [[projects]]
 id = "web"
 label = "web"
@@ -70,6 +76,12 @@ enabled = true
             city: "New York, NY",
             label: "NYC",
             temperatureUnit: "fahrenheit",
+          },
+          {
+            type: "aqi",
+            city: "Los Angeles, CA",
+            label: "LA",
+            refreshIntervalMinutes: 60,
           },
         ],
       },

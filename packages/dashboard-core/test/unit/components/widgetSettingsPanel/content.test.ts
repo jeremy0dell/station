@@ -19,4 +19,11 @@ describe("widgetSettingsPanelModel note", () => {
       "session only · create config.toml to persist",
     );
   });
+
+  it("points parameterized widgets to config.toml from the picker", () => {
+    const screen = { ...widgetSettingsScreen(), focus: "picker" as const };
+    expect(widgetSettingsPanelModel(screen, [{ type: "time" }]).note).toBe(
+      "weather, AQI, and tz require config.toml",
+    );
+  });
 });

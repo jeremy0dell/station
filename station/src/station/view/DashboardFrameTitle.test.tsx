@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { rgbToHex, TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -32,6 +32,7 @@ describe("DashboardFrameTitle", () => {
   async function renderTitle(input: {
     snapshot?: ReturnType<typeof manyProjectsSnapshot>;
     connection?: ReturnType<typeof scenarioState>["connection"];
+    frame?: { left: number; top: number; width: number };
     widgets?: readonly TopRowWidgetView[];
   }) {
     const { store } = makeStationTestStore({
@@ -43,7 +44,7 @@ describe("DashboardFrameTitle", () => {
     const setup = await testRender(
       <DashboardFrameTitle
         store={store}
-        frame={FRAME}
+        frame={input.frame ?? FRAME}
         topRowWidgets={input.widgets ?? []}
         zIndex={1}
       />,
@@ -104,5 +105,61 @@ describe("DashboardFrameTitle", () => {
       widgets: [{ id: "fleet:0", text: "", data: "fleet" }],
     });
     expect(setup.captureCharFrame()).toContain("7 agents");
+  });
+
+  it("renders linked attribution beside a visible AQI widget", async () => {
+    const setup = await renderTitle({
+      widgets: [
+        {
+          id: "aqi:0",
+          text: "LA · AQI 42 good 🟢",
+          compact: "LA AQI 42 🟢",
+        },
+      ],
+    });
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("LA · AQI 42 good 🟢 Open-Meteo/CAMS");
+
+    const attributionCol = frame.split("\n")[0]?.indexOf("Open-Meteo/CAMS") ?? -1;
+    const attributionSpan = spanAtFrameCell(setup.captureSpans(), 0, attributionCol);
+    expect((attributionSpan?.attributes ?? 0) & TextAttributes.UNDERLINE).toBe(
+      TextAttributes.UNDERLINE,
+    );
+  });
+
+  it("renders linked attribution beside a visible weather widget", async () => {
+    const setup = await renderTitle({
+      widgets: [{ id: "weather:0", text: "NYC · 72° ☀️" }],
+    });
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("NYC · 72° ☀️ Open-Meteo");
+
+    const attributionCol = frame.split("\n")[0]?.indexOf("Open-Meteo") ?? -1;
+    const attributionSpan = spanAtFrameCell(setup.captureSpans(), 0, attributionCol);
+    expect((attributionSpan?.attributes ?? 0) & TextAttributes.UNDERLINE).toBe(
+      TextAttributes.UNDERLINE,
+    );
+  });
+
+  it("omits source-backed widgets rather than rendering them without attribution", async () => {
+    const airQuality = await renderTitle({
+      frame: { ...FRAME, width: 58 },
+      widgets: [
+        {
+          id: "aqi:0",
+          text: "LA · AQI 42 good 🟢",
+          compact: "LA AQI 42 🟢",
+        },
+      ],
+    });
+    expect(airQuality.captureCharFrame()).not.toContain("AQI");
+    expect(airQuality.captureCharFrame()).not.toContain("Open-Meteo/CAMS");
+
+    const weather = await renderTitle({
+      frame: { ...FRAME, width: 45 },
+      widgets: [{ id: "weather:0", text: "NYC · 72° ☀️" }],
+    });
+    expect(weather.captureCharFrame()).not.toContain("72°");
+    expect(weather.captureCharFrame()).not.toContain("Open-Meteo");
   });
 });

@@ -87,6 +87,9 @@ describe("widgetSettings screen", () => {
     expect(widgetSettingsRowLabel({ type: "weather", city: "New York, NY" })).toBe(
       "weather New York, NY",
     );
+    expect(widgetSettingsRowLabel({ type: "aqi", city: "Los Angeles", label: "LA" })).toBe(
+      "AQI LA",
+    );
     expect(
       widgetSettingsRowLabel({
         type: "tz",

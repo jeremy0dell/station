@@ -275,7 +275,7 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 ### `[tui]` — runtime TUI widgets (optional, best-effort)
 
 > **Decorative widgets only** — not the same as `[workspace]`. `[tui]` is the
-> clock/weather strip; `[workspace]` is interaction behavior (scroll, welcome,
+> top-row widget strip; `[workspace]` is interaction behavior (scroll, welcome,
 > automations). They never overlap.
 
 `[tui].widgets` is an array discriminated on `type`. Every widget accepts an
@@ -285,12 +285,26 @@ hides it). Array order is display order, left to right:
 - **`type = "time"`** — optional `time_format` (`12h` \| `24h`).
 - **`type = "weather"`** — required `city`; optional `label`, `temperature_unit`
   (`fahrenheit` \| `celsius`), `refresh_interval_minutes` (int > 0).
+- **`type = "aqi"`** — consolidated U.S. Air Quality Index for required `city`;
+  optional `label`, `refresh_interval_minutes` (int > 0; default 60).
 - **`type = "fleet"`** — live-agent count, derived from the observer snapshot.
 - **`type = "prs"`** — open-PR count across sessions, derived from the snapshot.
 - **`type = "tz"`** — a timezone pair; required `zones` (1–2 of
   `{ label, time_zone }`, IANA names — an unknown zone renders `--:--`);
   optional `time_format` (`12h` \| `24h`).
 - **`type = "moon"`** — current moon phase.
+
+Weather and AQI data come from [Open-Meteo](https://open-meteo.com/). AQI values
+are modeled forecasts, not nearby sensor observations: Open-Meteo uses the
+[CAMS European ensemble](https://ads.atmosphere.copernicus.eu/datasets/cams-europe-air-quality-forecasts?tab=overview)
+in Europe and [CAMS Global](https://ads.atmosphere.copernicus.eu/datasets/cams-global-atmospheric-composition-forecasts?tab=overview)
+elsewhere. The native TUI displays linked Open-Meteo attribution next to visible
+weather data and Open-Meteo/CAMS attribution next to visible AQI data.
+
+The built-in Open-Meteo clients use its public free endpoint, which Open-Meteo
+limits to non-commercial use without an uptime guarantee. Station does not yet
+expose the customer endpoint or API-key configuration; see Open-Meteo's
+[pricing and API limits](https://open-meteo.com/en/pricing).
 
 `[tui.island]` — opt-in display modes for the floating Station island (top-right
 button). Both default off:
@@ -510,7 +524,7 @@ knob. Use `observer.state_dir` in config for isolation.
 | Tune the observer daemon | `config.toml` | `[observer]` |
 | React to observer events with a command | `config.toml` | `[[hooks.event]]` |
 | Change scroll behavior, the welcome screen, or pane automations | `config.toml` | `[workspace]` |
-| Add a clock/weather widget | `config.toml` | `[tui].widgets` |
+| Add a top-row widget | `config.toml` | `[tui].widgets` |
 | Set log/DB retention caps | `config.toml` | `[observability.retention]` |
 | Toggle a feature flag | `config.toml` | `[feature_flags]` |
 
@@ -525,7 +539,7 @@ section hard-fails validation, the TUI keeps running with workspace defaults and
 a warning before rendering. Fix the core config error to restore custom scroll,
 welcome, and automation settings.
 
-**`[tui]` vs `[workspace]`?** `[tui]` is decorative widgets (clock/weather);
+**`[tui]` vs `[workspace]`?** `[tui]` is the decorative top-row widget strip;
 `[workspace]` is native-UI interaction behavior (scroll/welcome/automations). Both
 live in `config.toml`; both are read only by the TUI.
 

@@ -1,15 +1,27 @@
-import type { TuiWeatherWidgetConfig, TuiWidgetConfig } from "@station/config";
+import type { TuiAqiWidgetConfig, TuiWeatherWidgetConfig, TuiWidgetConfig } from "@station/config";
+import type { TopRowWidgetText } from "../components/Dashboard/content.js";
+import {
+  renderAirQualityError,
+  renderAirQualityLoading,
+  renderAirQualitySuccess,
+} from "./airQuality.js";
 import { formatMoonWidget } from "./moon.js";
 import { formatTimeWidget, millisecondsUntilNextMinute } from "./time.js";
 import { formatTimezoneWidget } from "./timezone.js";
 import type {
+  AirQualityCurrentConditions,
   TopRowWidgetRuntimeDeps,
   TopRowWidgetView,
   WeatherCurrentConditions,
   WeatherTemperatureUnit,
 } from "./types.js";
-import { renderWeatherError, renderWeatherLoading, renderWeatherSuccess } from "./weather.js";
-import { defaultWeatherClient } from "./weatherClient.js";
+import {
+  compactWeatherText,
+  renderWeatherError,
+  renderWeatherLoading,
+  renderWeatherSuccess,
+} from "./weather.js";
+import { defaultAirQualityClient, defaultWeatherClient } from "./weatherClient.js";
 
 type SetStateAction<T> = T | ((previous: T) => T);
 
@@ -31,7 +43,18 @@ type WeatherCacheEntry = {
   fetchedAtMs: number;
 };
 
-const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
+type AirQualityWidgetEntry = {
+  id: string;
+  config: TuiAqiWidgetConfig;
+};
+
+type AirQualityCacheEntry = {
+  conditions: AirQualityCurrentConditions;
+  fetchedAtMs: number;
+};
+
+const DEFAULT_AIR_QUALITY_REFRESH_INTERVAL_MINUTES = 60;
+const DEFAULT_WEATHER_REFRESH_INTERVAL_MINUTES = 15;
 
 // Hooks are injected rather than imported so dashboard-core stays React-free
 // (no react dependency); each consuming app wires in its own React.
@@ -42,6 +65,23 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
   ): TopRowWidgetView[] {
     const now = deps.now ?? defaultNow;
     const [currentMinute, setCurrentMinute] = hooks.useState(() => now());
+    const airQualityClient = deps.airQualityClient ?? defaultAirQualityClient;
+    const airQualityCache = hooks.useRef(new Map<string, AirQualityCacheEntry>());
+    const [airQualityViews, setAirQualityViews] = hooks.useState<Record<string, TopRowWidgetText>>(
+      {},
+    );
+    const setAirQualityView = hooks.useCallback((id: string, view: TopRowWidgetText) => {
+      setAirQualityViews((previous) => {
+        const current = previous[id];
+        if (current?.text === view.text && current.compact === view.compact) {
+          return previous;
+        }
+        return {
+          ...previous,
+          [id]: view,
+        };
+      });
+    }, []);
     const weatherClient = deps.weatherClient ?? defaultWeatherClient;
     const weatherCache = hooks.useRef(new Map<string, WeatherCacheEntry>());
     const [weatherTexts, setWeatherTexts] = hooks.useState<Record<string, string>>({});
@@ -73,6 +113,13 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
       () =>
         activeWidgets.flatMap(({ widget, index }): WeatherWidgetEntry[] =>
           widget.type === "weather" ? [{ id: `weather:${index}`, config: widget }] : [],
+        ),
+      [activeWidgets],
+    );
+    const airQualityEntries = hooks.useMemo(
+      () =>
+        activeWidgets.flatMap(({ widget, index }): AirQualityWidgetEntry[] =>
+          widget.type === "aqi" ? [{ id: `aqi:${index}`, config: widget }] : [],
         ),
       [activeWidgets],
     );
@@ -132,7 +179,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
             weatherClient,
             setText: (text) => setWeatherText(entry.id, text),
           });
-        }, refreshIntervalMs(entry.config));
+        }, weatherRefreshIntervalMs(entry.config));
         intervals.push(interval);
       }
 
@@ -143,6 +190,52 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
         }
       };
     }, [weatherEntries, weatherClient, now, setWeatherText]);
+
+    hooks.useEffect(() => {
+      if (airQualityEntries.length === 0) {
+        setAirQualityViews({});
+        return;
+      }
+
+      let cancelled = false;
+      const intervals: Array<ReturnType<typeof setInterval>> = [];
+
+      setAirQualityViews((previous) => {
+        const next: Record<string, TopRowWidgetText> = {};
+        for (const entry of airQualityEntries) {
+          next[entry.id] = previous[entry.id] ?? renderAirQualityLoading(entry.config);
+        }
+        return next;
+      });
+
+      for (const entry of airQualityEntries) {
+        void refreshAirQualityWidget(entry, {
+          cancelled: () => cancelled,
+          cache: airQualityCache.current,
+          nowMs: () => now().getTime(),
+          airQualityClient,
+          setView: (view) => setAirQualityView(entry.id, view),
+        });
+
+        const interval = setInterval(() => {
+          void refreshAirQualityWidget(entry, {
+            cancelled: () => cancelled,
+            cache: airQualityCache.current,
+            nowMs: () => now().getTime(),
+            airQualityClient,
+            setView: (view) => setAirQualityView(entry.id, view),
+          });
+        }, airQualityRefreshIntervalMs(entry.config));
+        intervals.push(interval);
+      }
+
+      return () => {
+        cancelled = true;
+        for (const interval of intervals) {
+          clearInterval(interval);
+        }
+      };
+    }, [airQualityClient, airQualityEntries, now, setAirQualityView]);
 
     return hooks.useMemo(
       () =>
@@ -155,9 +248,18 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
               };
             case "weather": {
               const id = `weather:${index}`;
+              const text = weatherTexts[id] ?? renderWeatherLoading(widget);
               return {
                 id,
-                text: weatherTexts[id] ?? renderWeatherLoading(widget),
+                text,
+                compact: compactWeatherText(widget, text),
+              };
+            }
+            case "aqi": {
+              const id = `aqi:${index}`;
+              return {
+                id,
+                ...(airQualityViews[id] ?? renderAirQualityLoading(widget)),
               };
             }
             case "tz":
@@ -174,7 +276,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
           const exhaustive: never = widget;
           return exhaustive;
         }),
-      [activeWidgets, currentMinute, weatherTexts],
+      [activeWidgets, airQualityViews, currentMinute, weatherTexts],
     );
   };
 }
@@ -193,7 +295,10 @@ export async function refreshWeatherWidget(
   const cacheKey = weatherCacheKey(entry.config.city, unit);
   const cached = runtime.cache.get(cacheKey);
   const fetchedAtMs = runtime.nowMs();
-  if (cached !== undefined && fetchedAtMs - cached.fetchedAtMs < refreshIntervalMs(entry.config)) {
+  if (
+    cached !== undefined &&
+    fetchedAtMs - cached.fetchedAtMs < weatherRefreshIntervalMs(entry.config)
+  ) {
     runtime.setText(renderWeatherSuccess(entry.config, cached.conditions));
     return;
   }
@@ -215,8 +320,50 @@ export async function refreshWeatherWidget(
   }
 }
 
-function refreshIntervalMs(config: TuiWeatherWidgetConfig): number {
-  return (config.refreshIntervalMinutes ?? DEFAULT_REFRESH_INTERVAL_MINUTES) * 60_000;
+export async function refreshAirQualityWidget(
+  entry: AirQualityWidgetEntry,
+  runtime: {
+    cancelled: () => boolean;
+    cache: Map<string, AirQualityCacheEntry>;
+    nowMs: () => number;
+    airQualityClient: NonNullable<TopRowWidgetRuntimeDeps["airQualityClient"]>;
+    setView: (view: TopRowWidgetText) => void;
+  },
+): Promise<void> {
+  const cacheKey = airQualityCacheKey(entry.config.city);
+  const cached = runtime.cache.get(cacheKey);
+  const fetchedAtMs = runtime.nowMs();
+  if (
+    cached !== undefined &&
+    fetchedAtMs - cached.fetchedAtMs < airQualityRefreshIntervalMs(entry.config)
+  ) {
+    runtime.setView(renderAirQualitySuccess(entry.config, cached.conditions));
+    return;
+  }
+
+  try {
+    const conditions = await runtime.airQualityClient.getCurrentAirQuality(entry.config.city);
+    if (runtime.cancelled()) {
+      return;
+    }
+    runtime.cache.set(cacheKey, {
+      conditions,
+      fetchedAtMs: runtime.nowMs(),
+    });
+    runtime.setView(renderAirQualitySuccess(entry.config, conditions));
+  } catch {
+    if (!runtime.cancelled()) {
+      runtime.setView(renderAirQualityError(entry.config));
+    }
+  }
+}
+
+function airQualityRefreshIntervalMs(config: TuiAqiWidgetConfig): number {
+  return (config.refreshIntervalMinutes ?? DEFAULT_AIR_QUALITY_REFRESH_INTERVAL_MINUTES) * 60_000;
+}
+
+function weatherRefreshIntervalMs(config: TuiWeatherWidgetConfig): number {
+  return (config.refreshIntervalMinutes ?? DEFAULT_WEATHER_REFRESH_INTERVAL_MINUTES) * 60_000;
 }
 
 function temperatureUnit(config: TuiWeatherWidgetConfig): WeatherTemperatureUnit {
@@ -225,6 +372,10 @@ function temperatureUnit(config: TuiWeatherWidgetConfig): WeatherTemperatureUnit
 
 function weatherCacheKey(city: string, unit: WeatherTemperatureUnit): string {
   return `${city.trim().toLowerCase()}:${unit}`;
+}
+
+function airQualityCacheKey(city: string): string {
+  return city.trim().toLowerCase();
 }
 
 function defaultNow(): Date {
