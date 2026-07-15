@@ -345,17 +345,6 @@ export function pruneLocalRowsForSnapshot(
     }),
   );
   const realWorktreeIds = new Set(snapshot.rows.map((row) => row.id));
-  const launchableSessionWorktreeIds = new Set(
-    snapshot.sessions
-      .filter(
-        (session) =>
-          session.origin === "station" &&
-          (session.status.value === "none" ||
-            session.status.value === "exited" ||
-            session.status.value === "unknown"),
-      )
-      .map((session) => session.worktreeId),
-  );
   const pruned = withPendingRenameTitles(
     {
       ...localRows,
@@ -368,7 +357,9 @@ export function pruneLocalRowsForSnapshot(
         return (
           realRow !== undefined &&
           realRow.agent === undefined &&
-          launchableSessionWorktreeIds.has(row.worktreeId)
+          snapshot.sessions.some(
+            (session) => session.origin === "station" && session.worktreeId === row.worktreeId,
+          )
         );
       }),
     },

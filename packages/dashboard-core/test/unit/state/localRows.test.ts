@@ -73,4 +73,24 @@ describe("TUI local rows", () => {
       pruneLocalRowsForSnapshot(localRows, createCommandSnapshot("none")).pendingStart,
     ).toEqual(localRows.pendingStart);
   });
+
+  it("prunes pending start-agent rows when the retained session disappears", () => {
+    const snapshot = createCommandSnapshot("none");
+    const localRows = {
+      ...createEmptyTuiLocalRows(),
+      pendingStart: [
+        {
+          localId: "start:wt_web_no_agent",
+          projectId: "web",
+          worktreeId: "wt_web_no_agent",
+          branch: "feature-start",
+          createdAt: "2026-06-01T12:00:00.000Z",
+        },
+      ],
+    };
+
+    expect(
+      pruneLocalRowsForSnapshot(localRows, { ...snapshot, sessions: [] }).pendingStart,
+    ).toEqual([]);
+  });
 });

@@ -200,6 +200,18 @@ describe("TUI store", () => {
     ]);
   });
 
+  it("does not treat a retained no-agent session as completed start truth", async () => {
+    const snapshot = createCommandSnapshot("none");
+    const service = new FakeTuiObserverService(snapshot);
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+
+    store.getState().handleKey({ input: "1" });
+
+    await waitFor(() => service.loadCount === 1);
+    expect(store.getState().localRows.pendingStart).toHaveLength(1);
+    expect(service.dispatched).toEqual([expect.objectContaining({ type: "session.startAgent" })]);
+  });
+
   it("syncs terminal rows into view state and clamps dashboard scroll", () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);
