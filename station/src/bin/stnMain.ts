@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { dirname } from "node:path";
 import { dispatchSelfExec, type SelfExecRunners } from "@station/cli/self-exec";
 import cttyHelperAsset from "../../dist/ctty-helper" with { type: "file" };
 import piExtensionAsset from "../../dist/piExtension.mjs" with { type: "file" };
@@ -16,9 +18,18 @@ function popupArgv(argv: readonly string[]): readonly string[] {
   return argv[0] === "popup" ? argv : ["popup", ...argv];
 }
 
-function compiledRunners(): SelfExecRunners {
+function compiledRunners(installedRoot: string): SelfExecRunners {
+  const cliOptions = {
+    popupDeps: {
+      checkoutRoot: installedRoot,
+      preferRegisteredDevPopup: false,
+    },
+    setupDeps: {
+      tmuxPopupOwnerRoot: installedRoot,
+    },
+  };
   return {
-    cli: async (argv) => (await import("@station/cli/main")).runCliMain(argv),
+    cli: async (argv) => (await import("@station/cli/main")).runCliMain(argv, cliOptions),
     observer: async (argv) => {
       const { runCliObserverMain } = await import("@station/cli/observer-main");
       process.exitCode = await runCliObserverMain(argv, {
@@ -36,23 +47,25 @@ function compiledRunners(): SelfExecRunners {
         preparePtyRuntime: prepareCompiledPtyRuntime,
       }),
     tmuxPopup: async (argv) =>
-      (await import("@station/cli/main")).runCliMain(popupArgv(argv)),
+      (await import("@station/cli/main")).runCliMain(popupArgv(argv), cliOptions),
   };
 }
 
 /**
  * COMPOSITION ROOT
  *
- * Binds compiled raw arguments to lazy process entries and packaged runtime assets.
+ * Binds compiled raw arguments to lazy process entries, packaged runtime assets, and
+ * installed popup ownership and setup wiring.
  */
 export async function runStationBinaryMain(): Promise<void> {
+  const installedRoot = dirname(realpathSync(process.execPath));
   await dispatchSelfExec(
     {
       // Bun preserves the invoked symlink in argv0 while process.argv[0] names the executable.
       argv0: process.argv0,
       argv: process.argv.slice(2),
     },
-    compiledRunners(),
+    compiledRunners(installedRoot),
   );
 }
 

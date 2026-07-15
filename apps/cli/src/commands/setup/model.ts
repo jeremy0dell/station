@@ -1,3 +1,4 @@
+import type { TmuxConfig } from "@station/config";
 import { z } from "zod";
 
 export const setupTiers = ["required", "recommended", "optional"] as const;
@@ -166,7 +167,7 @@ export type SetupConfigDefaultsFact = {
 
 export type SetupLauncherFact = {
   status: "ok" | "missing";
-  source: "path" | "checkout" | "missing";
+  source: "path" | "installed" | "checkout" | "missing";
   command: string;
   checkoutPath: string;
   resolvedPath?: string;
@@ -201,6 +202,7 @@ export type SetupConfigFact =
       configuredHarnesses: readonly string[];
       configuredHookHarnesses: readonly string[];
       defaults: SetupConfigDefaultsFact;
+      tmux?: TmuxConfig;
       worktrunkUseLifecycleHooks?: boolean;
       matchedProject?: SetupConfigProjectFact;
       // Non-fatal load diagnostics (broken project-local file, bad
@@ -221,6 +223,7 @@ export type SetupTmuxBindingFact =
       marker: string;
       launcherCommand: string;
       runShellCommand: string;
+      bindingKey: string;
       insideTmux: boolean;
       liveStatus: "loaded" | "missing" | "unknown";
     }
@@ -230,8 +233,19 @@ export type SetupTmuxBindingFact =
       marker: string;
       launcherCommand: string;
       runShellCommand: string;
+      bindingKey: string;
       insideTmux: boolean;
       liveStatus: "loaded" | "missing" | "unknown";
+      message: string;
+    }
+  | {
+      status: "conflict";
+      path: string;
+      marker: string;
+      launcherCommand: string;
+      runShellCommand: string;
+      insideTmux: boolean;
+      liveStatus: "unknown";
       message: string;
     };
 

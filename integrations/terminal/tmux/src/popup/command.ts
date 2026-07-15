@@ -1,7 +1,12 @@
 import type { SafeError } from "@station/contracts";
 import { runTmuxCommand, type TmuxCommandInput, tryRunTmuxCommand } from "../command.js";
 import { tmuxProviderErrorFromUnknown } from "../errors.js";
-import type { TmuxCurrentClientInput, TmuxPopupCommandInputOptions } from "./types.js";
+import { isSafePopupClientName } from "./fastProtocol.js";
+import type {
+  TmuxClientIdentity,
+  TmuxCurrentClientInput,
+  TmuxPopupCommandInputOptions,
+} from "./types.js";
 
 type TmuxPopupCommandMessages = {
   operation?: string;
@@ -31,6 +36,25 @@ function popupTimeoutError(message: string): SafeError {
     message,
     provider: "tmux",
   };
+}
+
+function parseTmuxClientIdentity(value: string): TmuxClientIdentity | undefined {
+  const [pidText, name, sessionName, ...rest] = value.trim().split("\t");
+  if (
+    rest.length > 0 ||
+    pidText === undefined ||
+    name === undefined ||
+    sessionName === undefined ||
+    !/^[1-9][0-9]{0,9}$/.test(pidText) ||
+    !isSafePopupClientName(name)
+  ) {
+    return undefined;
+  }
+  const pid = Number(pidText);
+  if (!Number.isInteger(pid) || pid > 2_147_483_647 || sessionName.length === 0) {
+    return undefined;
+  }
+  return { name, pid, sessionName };
 }
 
 export function popupCommandInput(
@@ -164,4 +188,19 @@ export async function resolveCurrentTmuxClientId(
     message: "tmux failed to resolve the current client for the station popup.",
     timeoutMessage: "tmux current client lookup timed out.",
   });
+}
+
+export async function resolveCurrentTmuxClient(
+  input: TmuxCurrentClientInput,
+): Promise<TmuxClientIdentity | undefined> {
+  if (input.env.TMUX === undefined || input.env.TMUX.length === 0) {
+    return undefined;
+  }
+  const value = await resolveTmuxOption(input, {
+    args: ["display-message", "-p", "#{client_pid}\t#{client_name}\t#{client_session}"],
+    operation: "provider.tmux.popup.currentClientIdentity",
+    message: "tmux failed to resolve the current client identity for the station popup.",
+    timeoutMessage: "tmux current client identity lookup timed out.",
+  });
+  return value === undefined ? undefined : parseTmuxClientIdentity(value);
 }

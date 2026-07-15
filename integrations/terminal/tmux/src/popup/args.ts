@@ -32,6 +32,26 @@ function buildPopupCleanupScript(options: TmuxPopupState): string {
   const focusOptionName =
     options.focusOptionName === undefined ? undefined : shellQuote(options.focusOptionName);
   const clientId = shellQuote(options.clientId);
+  if (options.claim !== undefined && options.claimOptionName !== undefined) {
+    const claimOptionName = options.claimOptionName;
+    const clearCommands = [
+      `set-option -gq -u ${claimOptionName}`,
+      `if-shell -F "#{==:#{${options.optionName}},${options.clientId}}" "set-option -gq -u ${options.optionName}"`,
+      ...(options.focusOptionName === undefined
+        ? []
+        : [
+            `if-shell -F "#{==:#{${options.focusOptionName}},${options.clientId}}" "set-option -gq -u ${options.focusOptionName}"`,
+          ]),
+    ].join(" ; ");
+    return [
+      tmuxCommand,
+      "if-shell",
+      "-F",
+      shellQuote(`#{==:#{${claimOptionName}},${options.claim}}`),
+      shellQuote(clearCommands),
+      ">/dev/null 2>&1 || true",
+    ].join(" ");
+  }
   const commands = [
     `if [ "$(${tmuxCommand} show-options -gqv ${optionName} 2>/dev/null)" = ${clientId} ]; then`,
     `${tmuxCommand} set-option -gq -u ${optionName};`,

@@ -405,6 +405,7 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
       launcherCommand: "stn-tmux-popup",
       runShellCommand:
         "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} 'stn-tmux-popup'",
+      bindingKey: "Space",
       insideTmux: false,
       liveStatus: "unknown",
       message: "Optional tmux popup binding is not installed.",

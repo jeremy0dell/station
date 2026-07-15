@@ -10,6 +10,8 @@ const tmux = process.env.STATION_TMUX_BIN ?? "tmux";
 const globalOptions = [
   "@station_popup_client",
   "@station_popup_focus_client",
+  "@station_popup_active_claim",
+  "@station_popup_ui_route",
   "@station_popup_ui_session_name",
   "@station_popup_ui_expected_signature",
   "@station_popup_ui_root",

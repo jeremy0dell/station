@@ -30,6 +30,7 @@ export type SetupCommandDeps = {
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
   compiled?: boolean;
+  tmuxPopupOwnerRoot?: string;
   stateDirExecute?: (path: string) => Promise<void>;
   stateDirFs?: SetupStateDirFileSystem;
 };

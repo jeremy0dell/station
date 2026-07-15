@@ -1,261 +1,530 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, parse, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createObserverClient } from "../../packages/protocol/dist/index.js";
 import { createStationHostClient } from "../../packages/station-host/dist/index.js";
 
-const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
-const sourceCliPath = resolve("apps/cli/dist/main.js");
-const expectedVersion = parseExpectedVersion(process.argv.slice(2));
-const ptyOnly = process.env.STATION_BINARY_SMOKE_PTY_ONLY === "1";
-const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-"));
-const homeDir = join(root, "home");
-const stateDir = join(root, "state");
-const runtimeDir = join(root, "runtime");
-const hostileDir = join(root, "hostile");
-const socketPath = join(runtimeDir, "observer.sock");
-const configPath = join(root, "config.toml");
-const markerPath = join(root, "ambient-config-pwned");
-const ptyReleasePath = join(root, "release-host-pty");
-const childEnv = isolatedBinaryEnv({ homeDir, runtimeDir });
+if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
+  await runFakeTmuxProcess(process.argv.slice(2));
+} else {
+  const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
+  const sourceCliPath = resolve("apps/cli/dist/main.js");
+  const expectedVersion = parseExpectedVersion(process.argv.slice(2));
+  const ptyOnly = process.env.STATION_BINARY_SMOKE_PTY_ONLY === "1";
+  const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-"));
+  const homeDir = join(root, "home");
+  const stateDir = join(root, "state");
+  const runtimeDir = join(root, "runtime");
+  const hostileDir = join(root, "hostile");
+  const socketPath = join(runtimeDir, "observer.sock");
+  const configPath = join(root, "config.toml");
+  const popupConfigPath = join(homeDir, ".config", "station", "config.toml");
+  const markerPath = join(root, "ambient-config-pwned");
+  const ptyReleasePath = join(root, "release-host-pty");
+  const fakeTmuxDir = join(root, "fake-bin");
+  const fakeTmuxPath = join(fakeTmuxDir, "tmux");
+  const fakeTmuxStatePath = join(root, "fake-tmux-state.json");
+  const childEnv = {
+    ...isolatedBinaryEnv({ homeDir, runtimeDir }),
+    STATION_TMUX_BIN: fakeTmuxPath,
+  };
+  const popupEnv = {
+    ...childEnv,
+    FAKE_TMUX_CLIENT_NAME: "/dev/ttys901",
+    FAKE_TMUX_CLIENT_PID: String(process.pid),
+    FAKE_TMUX_CLIENT_SESSION: "binary-smoke",
+    FAKE_TMUX_STATE_PATH: fakeTmuxStatePath,
+    PATH: `${fakeTmuxDir}:/usr/bin:/bin`,
+    STATION_TMUX_BIN: fakeTmuxPath,
+    TMUX: `${join(runtimeDir, "fake-tmux.sock")},${process.pid},0`,
+  };
 
-let observerClient;
-let observerPid;
-let hostClient;
-let hostProcess;
+  let observerClient;
+  let observerPid;
+  let hostClient;
+  let hostProcess;
 
-try {
-  await access(binaryPath, constants.X_OK);
-  await Promise.all([
-    mkdir(homeDir, { recursive: true, mode: 0o700 }),
-    mkdir(stateDir, { recursive: true, mode: 0o700 }),
-    mkdir(runtimeDir, { recursive: true, mode: 0o700 }),
-    mkdir(hostileDir, { recursive: true, mode: 0o700 }),
-  ]);
-  await writeSmokeConfig(configPath, stateDir, socketPath);
-  await writeHostileConfig(hostileDir, markerPath);
+  try {
+    await access(binaryPath, constants.X_OK);
+    const installedRoot = dirname(await realpath(binaryPath));
+    if (installedRoot === parse(installedRoot).root) {
+      fail("compiled popup ownership unexpectedly resolved to filesystem root");
+    }
+    await assertExactBinaryAlias(installedRoot, "stn-ingress");
+    await assertExactBinaryAlias(installedRoot, "stn-tmux-popup");
+    await Promise.all([
+      mkdir(homeDir, { recursive: true, mode: 0o700 }),
+      mkdir(stateDir, { recursive: true, mode: 0o700 }),
+      mkdir(runtimeDir, { recursive: true, mode: 0o700 }),
+      mkdir(hostileDir, { recursive: true, mode: 0o700 }),
+      mkdir(dirname(popupConfigPath), { recursive: true, mode: 0o700 }),
+      mkdir(fakeTmuxDir, { recursive: true, mode: 0o700 }),
+    ]);
+    await writeFakeTmux(fakeTmuxPath, fakeTmuxStatePath);
+    await writeSmokeConfig(configPath, stateDir, socketPath);
+    await writeSmokeConfig(popupConfigPath, stateDir, socketPath, "tmux");
+    await writeHostileConfig(hostileDir, markerPath);
 
-  if (!ptyOnly) {
-    const version = await run(binaryPath, ["--version"], { env: childEnv });
-    assertEqual(version.stdout.trim(), expectedVersion, "compiled --version");
+    if (!ptyOnly) {
+      const version = await run(binaryPath, ["--version"], { env: childEnv });
+      assertEqual(version.stdout.trim(), expectedVersion, "compiled --version");
 
-    const help = await run(binaryPath, ["--help"], { env: childEnv });
-    assertIncludes(help.stdout, "Usage:", "compiled --help");
+      const help = await run(binaryPath, ["--help"], { env: childEnv });
+      assertIncludes(help.stdout, "Usage:", "compiled --help");
 
-    const popupHelp = await run(join(dirname(binaryPath), "stn-tmux-popup"), ["--help"], {
-      env: childEnv,
-    });
-    assertIncludes(popupHelp.stdout, "stn popup", "popup symlink dispatch");
-
-    const setup = await run(
-      binaryPath,
-      ["--config", configPath, "setup", "check", "--json", "--no-brew"],
-      { cwd: root, env: childEnv, allowedExitCodes: [1] },
-    );
-    const setupPlan = JSON.parse(setup.stdout);
-    assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
-    assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
-    assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
-
-    await run(binaryPath, ["--config", configPath, "observer", "start", "--timeout-ms", "30000"], {
-      env: childEnv,
-    });
-    observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
-    const health = await observerClient.health();
-    observerPid = health.pid;
-    assertEqual(health.status, "healthy", "compiled observer health");
-    await run(binaryPath, ["--config", configPath, "observer", "start", "--timeout-ms", "30000"], {
-      env: childEnv,
-    });
-    assertEqual((await observerClient.health()).pid, observerPid, "same-build observer reuse");
-    const snapshot = await observerClient.getSnapshot();
-    assertEqual(snapshot.observer.healthy, true, "compiled observer snapshot");
-
-    const ingress = await run(
-      join(dirname(binaryPath), "stn-ingress"),
-      ["--socket", socketPath, "--state-dir", stateDir, "worktrunk", "post-create"],
-      {
+      const popupHelp = await run(join(dirname(binaryPath), "stn-tmux-popup"), ["--help"], {
         env: childEnv,
-        input: JSON.stringify({ branch: "station/binary-smoke" }),
-      },
-    );
-    assertEqual(ingress.code, 0, "ingress symlink receipt");
-    assertEqual(
-      await directoryFileCount(join(stateDir, "spool", "hooks")),
-      0,
-      "online ingress must not spool",
-    );
-    assertEqual((await observerClient.health()).status, "healthy", "observer after ingress");
+      });
+      assertIncludes(popupHelp.stdout, "stn popup", "popup symlink dispatch");
 
-    const bootLog = await readFile(join(stateDir, "logs", "observer-boot.log"), "utf8");
-    const bootHeader = JSON.parse(bootLog.split(/\r?\n/, 1)[0] ?? "{}");
-    assertEqual(bootHeader.command?.[0], binaryPath, "detached observer executable");
-    assertEqual(bootHeader.command?.[1], "__observer", "detached observer internal route");
-
-    const piExtensionPath = await findFile(join(stateDir, "run", "assets", "pi"), (name) =>
-      name.endsWith(".mjs"),
-    );
-    const piExtension = await import(`${pathToFileURL(piExtensionPath).href}?smoke=${Date.now()}`);
-    assertEqual(typeof piExtension.default, "function", "packaged Pi default export");
-    assertEqual(
-      typeof piExtension.registerStationPiExtension,
-      "function",
-      "packaged Pi named export",
-    );
-    const piHandlers = new Map();
-    const deliveredEvents = [];
-    piExtension.registerStationPiExtension(
-      { on: (eventType, handler) => piHandlers.set(eventType, handler) },
-      {
-        env: { STATION_WORKTREE_PATH: root },
-        sendReport: async (input) => deliveredEvents.push(input),
-      },
-    );
-    assertEqual(piHandlers.size > 0, true, "packaged Pi handler registration");
-    await piHandlers.get("session_start")?.({ reason: "startup" }, { cwd: root });
-    assertEqual(deliveredEvents.length, 1, "packaged Pi injected event delivery");
-  }
-
-  const hostSocketPath = join(runtimeDir, "station-host.sock");
-  hostProcess = spawn(
-    binaryPath,
-    ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir],
-    {
-      cwd: hostileDir,
-      env: childEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  const hostDiagnostics = collectOutput(hostProcess);
-  hostClient = createStationHostClient({
-    socketPath: hostSocketPath,
-    timeoutMs: 1000,
-    expectedBuildVersion: expectedVersion,
-  });
-  await waitForHost(hostClient, hostDiagnostics);
-  const hostHealth = await hostClient.health();
-  assertEqual(hostHealth.buildVersion, expectedVersion, "compiled station-host build version");
-  await access(markerPath).then(
-    () => fail("hostile .env or bunfig preload created its marker"),
-    () => undefined,
-  );
-
-  const spawned = await hostClient.spawn({
-    terminalTargetId: "native:binary-smoke",
-    worktreeId: "binary-smoke",
-    projectId: "binary-smoke",
-    sessionId: "ses_binary_smoke",
-    worktreePath: root,
-    harnessProvider: "scripted",
-    command: "/bin/sh",
-    args: [
-      "-c",
-      'printf STATION_BINARY_PTY_OK; while [ ! -f "$1" ]; do sleep 1; done; exit 7',
-      "station-binary-pty",
-      ptyReleasePath,
-    ],
-    cwd: root,
-    cols: 80,
-    rows: 24,
-  });
-  const attachment = await hostClient.attach(spawned.ptyId);
-  if (!ptyOnly) {
-    const sourceVersion = (
-      await run(process.execPath, [sourceCliPath, "--version"], { env: childEnv })
-    ).stdout.trim();
-    if (expectedVersion.startsWith("0.0.0-") && sourceVersion !== expectedVersion) {
-      const previousObserverPid = observerPid;
-      await run(
-        process.execPath,
-        [sourceCliPath, "--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-        { env: childEnv },
-      );
-      const successorHealth = await observerClient.health();
-      observerPid = successorHealth.pid;
-      assertEqual(successorHealth.version, sourceVersion, "higher source observer handoff");
+      const setup = await run(binaryPath, ["setup", "check", "--json", "--no-brew"], {
+        cwd: root,
+        env: popupEnv,
+        allowedExitCodes: [1],
+      });
+      const setupPlan = JSON.parse(setup.stdout);
+      assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
+      assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
+      assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
+      const persistedBindingAction = requiredSetupAction(setupPlan, "tmux-popup-binding");
+      const liveBindingAction = requiredSetupAction(setupPlan, "tmux-live-popup-binding");
+      assertEqual(persistedBindingAction.tier, "recommended", "compiled popup binding tier");
+      assertEqual(persistedBindingAction.selected, false, "compiled popup binding remains opt-in");
       assertEqual(
-        observerPid === previousObserverPid,
-        false,
-        "higher source observer replaces lower compiled observer",
+        persistedBindingAction.data?.marker,
+        "# >>> station popup binding >>>",
+        "compiled popup binding start marker",
       );
-      if (previousObserverPid !== undefined) {
-        assertEqual(
-          await waitForProcessExit(previousObserverPid, 10_000),
-          true,
-          "replaced observer exact process exit",
-        );
+      const bindingBlock = persistedBindingAction.data?.appendedText;
+      if (typeof bindingBlock !== "string") {
+        fail("compiled setup popup binding action did not include its marked block");
       }
+      assertIncludes(bindingBlock, "bind-key Space run-shell -b", "compiled popup binding key");
+      assertIncludes(
+        bindingBlock,
+        "# <<< station popup binding <<<",
+        "compiled popup binding end marker",
+      );
+      const popupRunShellCommand = liveBindingAction.command?.at(-1);
+      if (typeof popupRunShellCommand !== "string") {
+        fail("compiled setup live popup binding action did not include its generated command");
+      }
+      assertEqual(
+        liveBindingAction.command?.[0],
+        fakeTmuxPath,
+        "compiled popup binding resolved tmux executable",
+      );
+      assertIncludes(
+        popupRunShellCommand,
+        join(installedRoot, "stn-tmux-popup"),
+        "compiled popup binding exact fallback alias",
+      );
+      assertIncludes(
+        popupRunShellCommand,
+        installedRoot,
+        "compiled popup binding installed ownership",
+      );
+      const tmuxConfigPath = join(homeDir, ".tmux.conf");
+      await writeFile(tmuxConfigPath, bindingBlock, { mode: 0o600 });
+      await run(fakeTmuxPath, ["source-file", tmuxConfigPath], { env: popupEnv });
+      const persistedPopupRunShellCommand = (
+        await readFakeTmuxState(fakeTmuxStatePath)
+      ).bindings.Space?.at(-1);
+      if (typeof persistedPopupRunShellCommand !== "string") {
+        fail("compiled setup popup binding did not load from its persisted marked block");
+      }
+      assertEqual(
+        persistedPopupRunShellCommand,
+        popupRunShellCommand,
+        "compiled persisted popup command round trip",
+      );
 
       await run(
         binaryPath,
         ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-        { env: childEnv },
+        {
+          env: childEnv,
+        },
+      );
+      observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      const health = await observerClient.health();
+      observerPid = health.pid;
+      assertEqual(health.status, "healthy", "compiled observer health");
+      await run(
+        binaryPath,
+        ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+        {
+          env: childEnv,
+        },
+      );
+      assertEqual((await observerClient.health()).pid, observerPid, "same-build observer reuse");
+      const snapshot = await observerClient.getSnapshot();
+      assertEqual(snapshot.observer.healthy, true, "compiled observer snapshot");
+
+      const coldPopup = await runManagedPopupBinding(
+        persistedPopupRunShellCommand,
+        popupEnv,
+        fakeTmuxStatePath,
+      );
+      assertSilentHandledBinding(coldPopup, "compiled cold popup binding");
+      const coldTmuxState = await readFakeTmuxState(fakeTmuxStatePath);
+      const coldSession = requiredFakeTmuxSession(coldTmuxState, "_station-ui");
+      const registeredRoute = coldTmuxState.serverOptions["@station_popup_ui_route"];
+      if (typeof registeredRoute !== "string" || !registeredRoute.startsWith("v1.n.")) {
+        fail("compiled cold popup did not commit a versioned fast route");
+      }
+      assertEqual(
+        coldSession.options["@station_popup_ui_lease"],
+        registeredRoute,
+        "compiled popup route lease",
+      );
+      assertEqual(
+        coldTmuxState.serverOptions["@station_popup_ui_root"],
+        installedRoot,
+        "compiled popup non-root installed ownership",
+      );
+      assertEqual(
+        coldTmuxState.serverOptions["@station_popup_ui_session_name"],
+        "_station-ui",
+        "compiled popup registered session",
+      );
+      assertEqual(coldTmuxState.rendererStarts, 1, "compiled popup renderer start count");
+      const rendererPid = coldSession.rendererPid;
+      assertEqual(processIsAlive(rendererPid), true, "compiled popup renderer process");
+      assertEqual(
+        (await observerClient.health()).pid,
+        observerPid,
+        "compiled cold popup reuses observer",
+      );
+
+      const closeCount = coldTmuxState.tmuxProcessCount;
+      const closePopup = await runManagedPopupBinding(
+        persistedPopupRunShellCommand,
+        popupEnv,
+        fakeTmuxStatePath,
+      );
+      assertSilentHandledBinding(closePopup, "compiled warm popup close");
+      const closedTmuxState = await readFakeTmuxState(fakeTmuxStatePath);
+      assertEqual(
+        closedTmuxState.tmuxProcessCount - closeCount,
+        2,
+        "compiled warm popup close tmux process budget",
+      );
+      assertEqual(
+        closedTmuxState.popups[popupEnv.FAKE_TMUX_CLIENT_NAME]?.open,
+        false,
+        "compiled warm popup closed",
+      );
+      assertActivePopupMarkersCleared(closedTmuxState, "compiled warm popup close");
+
+      await writeFile(popupConfigPath, 'schema_version = "malformed"\n', { mode: 0o600 });
+      const reopenCount = closedTmuxState.tmuxProcessCount;
+      const warmPopup = await runManagedPopupBinding(
+        persistedPopupRunShellCommand,
+        popupEnv,
+        fakeTmuxStatePath,
+      );
+      assertSilentHandledBinding(warmPopup, "compiled malformed-config warm popup");
+      const warmTmuxState = await readFakeTmuxState(fakeTmuxStatePath);
+      assertEqual(
+        warmTmuxState.tmuxProcessCount - reopenCount,
+        2,
+        "compiled warm popup open tmux process budget",
+      );
+      assertEqual(
+        warmTmuxState.popups[popupEnv.FAKE_TMUX_CLIENT_NAME]?.open,
+        true,
+        "compiled warm popup bypasses malformed config",
+      );
+      assertEqual(
+        requiredFakeTmuxSession(warmTmuxState, "_station-ui").rendererPid,
+        rendererPid,
+        "compiled warm popup renderer reuse",
       );
       assertEqual(
         (await observerClient.health()).pid,
         observerPid,
-        "lower compiled build reuses higher observer",
+        "compiled warm popup does not replace observer",
       );
-      await run(
+
+      const directFailure = await run(join(installedRoot, "stn-tmux-popup"), [], {
+        env: popupEnv,
+        allowedExitCodes: [1],
+      });
+      assertEqual(directFailure.stdout, "", "direct popup diagnostic stdout");
+      assertEqual(directFailure.stderr.length > 0, true, "direct popup diagnostic stderr");
+      const failingState = structuredClone(warmTmuxState);
+      failingState.serverOptions["@station_popup_ui_route"] = "malformed";
+      await writeFakeTmuxState(fakeTmuxStatePath, failingState);
+      const failedBinding = await runManagedPopupBinding(
+        persistedPopupRunShellCommand,
+        popupEnv,
+        fakeTmuxStatePath,
+      );
+      assertSilentHandledBinding(failedBinding, "compiled failing popup binding");
+      const failedTmuxState = await readFakeTmuxState(fakeTmuxStatePath);
+      assertEqual(
+        failedTmuxState.statusMessages.at(-1),
+        "Station popup failed; run stn popup for details",
+        "compiled popup nonblocking failure message",
+      );
+      assertEqual(failedTmuxState.paneInMode, 0, "compiled popup failure pane mode");
+      assertEqual(
+        failedTmuxState.paneContent.includes("returned 1"),
+        false,
+        "compiled popup failure returned-status view",
+      );
+      assertEqual(
+        failedTmuxState.paneContent.includes(persistedPopupRunShellCommand),
+        false,
+        "compiled popup failure dispatcher view",
+      );
+      assertEqual(
+        failedTmuxState.popups[popupEnv.FAKE_TMUX_CLIENT_NAME]?.open,
+        true,
+        "compiled popup failure preserves existing UI",
+      );
+      assertEqual(
+        requiredFakeTmuxSession(failedTmuxState, "_station-ui").rendererPid,
+        rendererPid,
+        "compiled popup failure preserves renderer",
+      );
+      assertEqual(
+        (await observerClient.health()).pid,
+        observerPid,
+        "compiled popup failure preserves observer",
+      );
+
+      failedTmuxState.serverOptions["@station_popup_ui_route"] = registeredRoute;
+      await writeFakeTmuxState(fakeTmuxStatePath, failedTmuxState);
+      const cleanupCount = failedTmuxState.tmuxProcessCount;
+      const cleanupPopup = await runManagedPopupBinding(
+        persistedPopupRunShellCommand,
+        popupEnv,
+        fakeTmuxStatePath,
+      );
+      assertSilentHandledBinding(cleanupPopup, "compiled popup cleanup");
+      const cleanedTmuxState = await readFakeTmuxState(fakeTmuxStatePath);
+      assertEqual(
+        cleanedTmuxState.tmuxProcessCount - cleanupCount,
+        2,
+        "compiled popup cleanup tmux process budget",
+      );
+      assertActivePopupMarkersCleared(cleanedTmuxState, "compiled popup cleanup");
+      assertEqual(
+        cleanedTmuxState.popups[popupEnv.FAKE_TMUX_CLIENT_NAME]?.open,
+        false,
+        "compiled popup cleanup closes existing UI",
+      );
+      await writeSmokeConfig(popupConfigPath, stateDir, socketPath, "tmux");
+
+      const ingress = await run(
         join(dirname(binaryPath), "stn-ingress"),
         ["--socket", socketPath, "--state-dir", stateDir, "worktrunk", "post-create"],
         {
           env: childEnv,
-          input: JSON.stringify({ branch: "station/binary-smoke-after-handoff" }),
+          input: JSON.stringify({ branch: "station/binary-smoke" }),
         },
       );
+      assertEqual(ingress.code, 0, "ingress symlink receipt");
       assertEqual(
         await directoryFileCount(join(stateDir, "spool", "hooks")),
         0,
-        "lower-build ingress reuses the higher observer",
+        "online ingress must not spool",
       );
-      assertEqual(processIsAlive(hostProcess.pid), true, "station-host survives observer handoff");
+      assertEqual((await observerClient.health()).status, "healthy", "observer after ingress");
+
+      const bootLog = await readFile(join(stateDir, "logs", "observer-boot.log"), "utf8");
+      const bootHeader = JSON.parse(bootLog.split(/\r?\n/, 1)[0] ?? "{}");
+      assertEqual(bootHeader.command?.[0], binaryPath, "detached observer executable");
+      assertEqual(bootHeader.command?.[1], "__observer", "detached observer internal route");
+
+      const piExtensionPath = await findFile(join(stateDir, "run", "assets", "pi"), (name) =>
+        name.endsWith(".mjs"),
+      );
+      const piExtension = await import(
+        `${pathToFileURL(piExtensionPath).href}?smoke=${Date.now()}`
+      );
+      assertEqual(typeof piExtension.default, "function", "packaged Pi default export");
       assertEqual(
-        (await hostClient.health()).buildVersion,
-        expectedVersion,
-        "station-host build remains unchanged across observer handoff",
+        typeof piExtension.registerStationPiExtension,
+        "function",
+        "packaged Pi named export",
       );
+      const piHandlers = new Map();
+      const deliveredEvents = [];
+      piExtension.registerStationPiExtension(
+        { on: (eventType, handler) => piHandlers.set(eventType, handler) },
+        {
+          env: { STATION_WORKTREE_PATH: root },
+          sendReport: async (input) => deliveredEvents.push(input),
+        },
+      );
+      assertEqual(piHandlers.size > 0, true, "packaged Pi handler registration");
+      await piHandlers.get("session_start")?.({ reason: "startup" }, { cwd: root });
+      assertEqual(deliveredEvents.length, 1, "packaged Pi injected event delivery");
     }
-  }
-  const livePty = (await hostClient.list()).find((entry) => entry.ptyId === spawned.ptyId);
-  assertEqual(
-    livePty?.ptyId,
-    spawned.ptyId,
-    "same host PTY remains listed across observer handoff",
-  );
-  assertEqual(livePty?.alive, true, "same host PTY remains live across observer handoff");
-  await writeFile(ptyReleasePath, "", { mode: 0o600 });
-  const terminalResult = await collectTerminalResult(attachment, 10_000);
-  assertIncludes(terminalResult.output, "STATION_BINARY_PTY_OK", "compiled host PTY output");
-  assertEqual(terminalResult.exitCode, 7, "compiled host PTY exit code");
 
-  const hostLog = await readFile(join(stateDir, "logs", "station-host.jsonl"), "utf8");
-  assertIncludes(hostLog, '"ptyImplementation":"bun"', "compiled host PTY implementation");
-  await findFile(join(stateDir, "run", "assets", "ctty"), (name) => name === "station-ctty-helper");
+    const hostSocketPath = join(runtimeDir, "station-host.sock");
+    hostProcess = spawn(
+      binaryPath,
+      ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir],
+      {
+        cwd: hostileDir,
+        env: childEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    const hostDiagnostics = collectOutput(hostProcess);
+    hostClient = createStationHostClient({
+      socketPath: hostSocketPath,
+      timeoutMs: 1000,
+      expectedBuildVersion: expectedVersion,
+    });
+    await waitForHost(hostClient, hostDiagnostics);
+    const hostHealth = await hostClient.health();
+    assertEqual(hostHealth.buildVersion, expectedVersion, "compiled station-host build version");
+    await access(markerPath).then(
+      () => fail("hostile .env or bunfig preload created its marker"),
+      () => undefined,
+    );
 
-  process.stdout.write("binary smoke passed\n");
-} finally {
-  if (observerClient !== undefined) {
-    await observerClient.stop().catch(() => undefined);
-    await waitForMissing(socketPath).catch(() => undefined);
-  }
-  if (observerPid !== undefined) {
-    await terminateProcess(observerPid);
-  }
-  hostClient?.dispose();
-  if (hostProcess !== undefined && hostProcess.exitCode === null) {
-    hostProcess.kill("SIGTERM");
-    try {
-      await waitForExit(hostProcess, 3000);
-    } catch {
-      hostProcess.kill("SIGKILL");
-      await waitForExit(hostProcess, 3000).catch(() => undefined);
+    const spawned = await hostClient.spawn({
+      terminalTargetId: "native:binary-smoke",
+      worktreeId: "binary-smoke",
+      projectId: "binary-smoke",
+      sessionId: "ses_binary_smoke",
+      worktreePath: root,
+      harnessProvider: "scripted",
+      command: "/bin/sh",
+      args: [
+        "-c",
+        'printf STATION_BINARY_PTY_OK; while [ ! -f "$1" ]; do sleep 1; done; exit 7',
+        "station-binary-pty",
+        ptyReleasePath,
+      ],
+      cwd: root,
+      cols: 80,
+      rows: 24,
+    });
+    const attachment = await hostClient.attach(spawned.ptyId);
+    if (!ptyOnly) {
+      const sourceVersion = (
+        await run(process.execPath, [sourceCliPath, "--version"], { env: childEnv })
+      ).stdout.trim();
+      if (expectedVersion.startsWith("0.0.0-") && sourceVersion !== expectedVersion) {
+        const previousObserverPid = observerPid;
+        await run(
+          process.execPath,
+          [sourceCliPath, "--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+          { env: childEnv },
+        );
+        const successorHealth = await observerClient.health();
+        observerPid = successorHealth.pid;
+        assertEqual(successorHealth.version, sourceVersion, "higher source observer handoff");
+        assertEqual(
+          observerPid === previousObserverPid,
+          false,
+          "higher source observer replaces lower compiled observer",
+        );
+        if (previousObserverPid !== undefined) {
+          assertEqual(
+            await waitForProcessExit(previousObserverPid, 10_000),
+            true,
+            "replaced observer exact process exit",
+          );
+        }
+
+        await run(
+          binaryPath,
+          ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+          { env: childEnv },
+        );
+        assertEqual(
+          (await observerClient.health()).pid,
+          observerPid,
+          "lower compiled build reuses higher observer",
+        );
+        await run(
+          join(dirname(binaryPath), "stn-ingress"),
+          ["--socket", socketPath, "--state-dir", stateDir, "worktrunk", "post-create"],
+          {
+            env: childEnv,
+            input: JSON.stringify({ branch: "station/binary-smoke-after-handoff" }),
+          },
+        );
+        assertEqual(
+          await directoryFileCount(join(stateDir, "spool", "hooks")),
+          0,
+          "lower-build ingress reuses the higher observer",
+        );
+        assertEqual(
+          processIsAlive(hostProcess.pid),
+          true,
+          "station-host survives observer handoff",
+        );
+        assertEqual(
+          (await hostClient.health()).buildVersion,
+          expectedVersion,
+          "station-host build remains unchanged across observer handoff",
+        );
+      }
     }
+    const livePty = (await hostClient.list()).find((entry) => entry.ptyId === spawned.ptyId);
+    assertEqual(
+      livePty?.ptyId,
+      spawned.ptyId,
+      "same host PTY remains listed across observer handoff",
+    );
+    assertEqual(livePty?.alive, true, "same host PTY remains live across observer handoff");
+    await writeFile(ptyReleasePath, "", { mode: 0o600 });
+    const terminalResult = await collectTerminalResult(attachment, 10_000);
+    assertIncludes(terminalResult.output, "STATION_BINARY_PTY_OK", "compiled host PTY output");
+    assertEqual(terminalResult.exitCode, 7, "compiled host PTY exit code");
+
+    const hostLog = await readFile(join(stateDir, "logs", "station-host.jsonl"), "utf8");
+    assertIncludes(hostLog, '"ptyImplementation":"bun"', "compiled host PTY implementation");
+    await findFile(
+      join(stateDir, "run", "assets", "ctty"),
+      (name) => name === "station-ctty-helper",
+    );
+
+    process.stdout.write("binary smoke passed\n");
+  } finally {
+    if (observerClient !== undefined) {
+      await observerClient.stop().catch(() => undefined);
+      await waitForMissing(socketPath).catch(() => undefined);
+    }
+    if (observerPid !== undefined) {
+      await terminateProcess(observerPid);
+    }
+    hostClient?.dispose();
+    if (hostProcess !== undefined && hostProcess.exitCode === null) {
+      hostProcess.kill("SIGTERM");
+      try {
+        await waitForExit(hostProcess, 3000);
+      } catch {
+        hostProcess.kill("SIGKILL");
+        await waitForExit(hostProcess, 3000).catch(() => undefined);
+      }
+    }
+    await stopFakeTmuxProcesses(fakeTmuxStatePath);
+    await rm(root, { recursive: true, force: true });
   }
-  await rm(root, { recursive: true, force: true });
 }
 
 function parseExpectedVersion(args) {
@@ -287,7 +556,7 @@ function isolatedBinaryEnv({ homeDir: home, runtimeDir: runtime }) {
   };
 }
 
-async function writeSmokeConfig(path, state, socket) {
+async function writeSmokeConfig(path, state, socket, terminal = "noop-terminal") {
   await writeFile(
     path,
     [
@@ -300,7 +569,7 @@ async function writeSmokeConfig(path, state, socket) {
       "",
       "[defaults]",
       'worktree_provider = "noop-worktree"',
-      'terminal = "noop-terminal"',
+      `terminal = ${JSON.stringify(terminal)}`,
       'harness = "noop-harness"',
       'layout = "agent-shell"',
       "",
@@ -322,6 +591,513 @@ async function writeHostileConfig(directory, marker) {
     join(directory, "preload.mjs"),
     `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(marker)}, "pwned");\n`,
   );
+}
+
+async function assertExactBinaryAlias(installedRoot, name) {
+  const path = join(installedRoot, name);
+  const stat = await lstat(path);
+  assertEqual(stat.isSymbolicLink(), true, `${name} exact symlink`);
+  assertEqual(await readlink(path), "stn", `${name} exact symlink target`);
+  assertEqual(await realpath(path), join(installedRoot, "stn"), `${name} binary identity`);
+}
+
+function requiredSetupAction(plan, id) {
+  const action = plan.actions?.find((candidate) => candidate.id === id);
+  if (action === undefined) {
+    fail(`compiled setup did not offer ${id}`);
+  }
+  return action;
+}
+
+async function runManagedPopupBinding(command, env, fakeTmuxStatePath) {
+  const expandedCommand = command
+    .replaceAll("#{q:client_name}", env.FAKE_TMUX_CLIENT_NAME)
+    .replaceAll("#{client_pid}", env.FAKE_TMUX_CLIENT_PID)
+    .replaceAll("#{q:client_session}", env.FAKE_TMUX_CLIENT_SESSION);
+  const result = await run("/bin/sh", ["-c", expandedCommand], {
+    env,
+    allowedExitCodes: Array.from({ length: 256 }, (_, code) => code),
+  });
+  if (result.code !== 0) {
+    const state = await readFakeTmuxState(fakeTmuxStatePath);
+    state.paneInMode = 1;
+    state.paneContent += `returned ${result.code}\n${expandedCommand}\n`;
+    await writeFakeTmuxState(fakeTmuxStatePath, state);
+  }
+  return result;
+}
+
+function assertSilentHandledBinding(result, label) {
+  if (result.code !== 0) {
+    fail(
+      `${label} status: expected 0, received ${result.code}; stdout=${JSON.stringify(result.stdout)} stderr=${JSON.stringify(result.stderr)}`,
+    );
+  }
+  assertEqual(result.stdout, "", `${label} stdout`);
+  assertEqual(result.stderr, "", `${label} stderr`);
+}
+
+function requiredFakeTmuxSession(state, sessionName) {
+  const session = state.sessions[sessionName];
+  if (session === undefined || !Number.isInteger(session.rendererPid)) {
+    fail(`fake tmux session ${sessionName} was not created with a renderer process`);
+  }
+  return session;
+}
+
+function assertActivePopupMarkersCleared(state, label) {
+  for (const optionName of [
+    "@station_popup_active_claim",
+    "@station_popup_client",
+    "@station_popup_focus_client",
+  ]) {
+    assertEqual(state.serverOptions[optionName], undefined, `${label} ${optionName}`);
+  }
+}
+
+function initialFakeTmuxState() {
+  return {
+    bindings: {},
+    commandLog: [],
+    paneContent: "",
+    paneInMode: 0,
+    popups: {},
+    rendererPids: [],
+    rendererStarts: 0,
+    serverOptions: {},
+    sessions: {},
+    statusMessages: [],
+    tmuxProcessCount: 0,
+  };
+}
+
+async function writeFakeTmux(path, statePath) {
+  await writeFakeTmuxState(statePath, initialFakeTmuxState());
+  const runnerPath = fileURLToPath(import.meta.url);
+  await writeFile(
+    path,
+    [
+      "#!/bin/sh",
+      "export STATION_BINARY_SMOKE_FAKE_TMUX=1",
+      `export FAKE_TMUX_STATE_PATH=${quoteShellWord(statePath)}`,
+      `exec ${quoteShellWord(process.execPath)} ${quoteShellWord(runnerPath)} "$@"`,
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+}
+
+async function readFakeTmuxState(path) {
+  return JSON.parse(await readFile(path, "utf8"));
+}
+
+async function writeFakeTmuxState(path, state) {
+  await writeFile(path, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+}
+
+async function stopFakeTmuxProcesses(path) {
+  let state;
+  try {
+    state = await readFakeTmuxState(path);
+  } catch {
+    return;
+  }
+  for (const pid of state.rendererPids ?? []) {
+    if (Number.isInteger(pid) && pid > 0) {
+      await terminateProcess(pid).catch(() => undefined);
+    }
+  }
+}
+
+async function runFakeTmuxProcess(args) {
+  const statePath = process.env.FAKE_TMUX_STATE_PATH;
+  if (statePath === undefined) {
+    process.stderr.write("fake tmux state path is missing\n");
+    process.exitCode = 2;
+    return;
+  }
+  const state = await readFakeTmuxState(statePath);
+  state.tmuxProcessCount += 1;
+  state.commandLog.push(args);
+  const result = await executeFakeTmuxCommand(state, args);
+  await writeFakeTmuxState(statePath, state);
+  if (result.stdout !== undefined) process.stdout.write(result.stdout);
+  if (result.stderr !== undefined) process.stderr.write(result.stderr);
+  process.exitCode = result.status;
+}
+
+async function executeFakeTmuxCommand(state, args) {
+  const [command] = args;
+  switch (command) {
+    case "-V":
+      return fakeTmuxResult(0, "tmux 3.5a\n");
+    case "bind-key":
+      return bindFakeTmuxKey(state, args);
+    case "display-message":
+      return displayFakeTmuxMessage(state, args);
+    case "display-popup":
+      return displayFakeTmuxPopup(state, args);
+    case "has-session":
+      return hasFakeTmuxSession(state, args);
+    case "if-shell":
+      return executeFakeTmuxIfShell(state, args);
+    case "kill-session":
+      return killFakeTmuxSession(state, args);
+    case "list-panes":
+      return fakeTmuxResult(0, "");
+    case "list-keys":
+      return listFakeTmuxKeys(state);
+    case "new-session":
+      return createFakeTmuxSession(state, args);
+    case "set-option":
+      return setFakeTmuxOption(state, args);
+    case "show-options":
+      return showFakeTmuxOption(state, args);
+    case "source-file":
+      return sourceFakeTmuxFile(state, args);
+    default:
+      return fakeTmuxResult(1, undefined, `unsupported fake tmux command: ${args.join(" ")}\n`);
+  }
+}
+
+function fakeTmuxResult(status, stdout, stderr, blocked = false) {
+  return { status, stdout, stderr, blocked };
+}
+
+function bindFakeTmuxKey(state, args) {
+  const key = args[1];
+  if (key === undefined) return fakeTmuxResult(1);
+  state.bindings[key] = args.slice(2);
+  return fakeTmuxResult(0);
+}
+
+function listFakeTmuxKeys(state) {
+  const lines = Object.entries(state.bindings).map(
+    ([key, args]) => `bind-key -T prefix ${key} ${args.join(" ")}`,
+  );
+  return fakeTmuxResult(0, lines.length === 0 ? "" : `${lines.join("\n")}\n`);
+}
+
+async function sourceFakeTmuxFile(state, args) {
+  const path = args[1];
+  if (path === undefined) return fakeTmuxResult(1);
+  const source = await readFile(path, "utf8");
+  for (const line of source.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+    const words = splitFakeTmuxWords(trimmed);
+    if (words[0] !== "bind-key") {
+      return fakeTmuxResult(1, undefined, `unsupported fake tmux config: ${trimmed}\n`);
+    }
+    const result = bindFakeTmuxKey(state, words);
+    if (result.status !== 0) return result;
+  }
+  return fakeTmuxResult(0);
+}
+
+function fakeTmuxClient() {
+  return {
+    name: process.env.FAKE_TMUX_CLIENT_NAME ?? "/dev/ttys901",
+    pid: process.env.FAKE_TMUX_CLIENT_PID ?? "41001",
+    sessionName: process.env.FAKE_TMUX_CLIENT_SESSION ?? "binary-smoke",
+  };
+}
+
+function displayFakeTmuxMessage(state, args) {
+  if (args.includes("-d")) {
+    state.statusMessages.push(args.at(-1) ?? "");
+    return fakeTmuxResult(0);
+  }
+  if (!args.includes("-p")) return fakeTmuxResult(0);
+
+  const target = optionValue(args, "-t");
+  const format = args.at(-1) ?? "";
+  const client = fakeTmuxClient();
+  if (target !== undefined && format.includes("@station_popup_ui_route")) {
+    const sessionName = normalizeFakeTmuxSessionName(target);
+    const session = state.sessions[sessionName];
+    if (session === undefined) return fakeTmuxResult(1);
+    const fields = [
+      state.serverOptions["@station_popup_ui_route"],
+      session.options["@station_popup_ui_lease"],
+      state.serverOptions["@station_popup_active_claim"],
+      session.options["@station_popup_ui_signature"],
+      state.serverOptions["@station_popup_ui_session_name"],
+      state.serverOptions["@station_popup_ui_expected_signature"],
+      state.serverOptions["@station_popup_ui_root"],
+      state.serverOptions["@station_popup_client"],
+      state.serverOptions["@station_popup_focus_client"],
+      state.serverOptions["@station_tui_dev_session_name"],
+      state.serverOptions["@station_tui_dev_command"],
+      state.serverOptions["@station_tui_dev_owner"],
+      state.serverOptions["@station_tui_dev_root"],
+      "v1",
+    ].map((value) => value ?? "");
+    return fakeTmuxResult(0, `${fields.join("\u001f")}\n`);
+  }
+  if (format === "#{client_name}") return fakeTmuxResult(0, `${client.name}\n`);
+  if (format === "#{client_pid}") return fakeTmuxResult(0, `${client.pid}\n`);
+  if (format === "#{client_session}") return fakeTmuxResult(0, `${client.sessionName}\n`);
+  if (format.includes("\t")) {
+    return fakeTmuxResult(0, `${client.pid}\t${client.name}\t${client.sessionName}\n`);
+  }
+  return fakeTmuxResult(0, `${format}\n`);
+}
+
+function hasFakeTmuxSession(state, args) {
+  const sessionName = normalizeFakeTmuxSessionName(optionValue(args, "-t") ?? "");
+  return fakeTmuxResult(state.sessions[sessionName] === undefined ? 1 : 0);
+}
+
+function createFakeTmuxSession(state, args) {
+  const sessionName = normalizeFakeTmuxSessionName(optionValue(args, "-s") ?? "");
+  if (sessionName.length === 0) return fakeTmuxResult(1);
+  if (state.sessions[sessionName] !== undefined) return fakeTmuxResult(1);
+  const renderer = spawn("/bin/sleep", ["2147483647"], {
+    detached: true,
+    stdio: "ignore",
+  });
+  renderer.unref();
+  state.rendererStarts += 1;
+  state.rendererPids.push(renderer.pid);
+  state.sessions[sessionName] = {
+    command: args.at(-1) ?? "",
+    options: {},
+    rendererPid: renderer.pid,
+  };
+  return fakeTmuxResult(0);
+}
+
+function killFakeTmuxSession(state, args) {
+  const sessionName = normalizeFakeTmuxSessionName(optionValue(args, "-t") ?? "");
+  const session = state.sessions[sessionName];
+  if (session === undefined) return fakeTmuxResult(1);
+  signalProcess(session.rendererPid, "SIGTERM");
+  delete state.sessions[sessionName];
+  return fakeTmuxResult(0);
+}
+
+function showFakeTmuxOption(state, args) {
+  const target = optionValue(args, "-t");
+  const optionName = args.at(-1);
+  if (optionName === undefined) return fakeTmuxResult(1);
+  const source =
+    target === undefined
+      ? state.serverOptions
+      : state.sessions[normalizeFakeTmuxSessionName(target)]?.options;
+  if (source === undefined) return fakeTmuxResult(1);
+  const value = source[optionName];
+  return fakeTmuxResult(0, value === undefined ? "" : `${value}\n`);
+}
+
+function setFakeTmuxOption(state, args) {
+  let target;
+  let global = false;
+  let unset = false;
+  let optionName;
+  let value;
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "-t") {
+      target = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg?.startsWith("-")) {
+      global ||= arg.includes("g");
+      unset ||= arg.includes("u");
+      continue;
+    }
+    if (optionName === undefined) optionName = arg;
+    else if (value === undefined) value = arg;
+  }
+  if (optionName === undefined) return fakeTmuxResult(1);
+  const source = global
+    ? state.serverOptions
+    : state.sessions[normalizeFakeTmuxSessionName(target ?? "")]?.options;
+  if (source === undefined) return fakeTmuxResult(1);
+  if (unset) delete source[optionName];
+  else source[optionName] = value ?? "";
+  return fakeTmuxResult(0);
+}
+
+function displayFakeTmuxPopup(state, args) {
+  const client = optionValue(args, "-c") ?? fakeTmuxClient().name;
+  if (args.includes("-C")) {
+    state.popups[client] = { ...(state.popups[client] ?? {}), open: false };
+    return fakeTmuxResult(0);
+  }
+  if (state.failNextDisplay === true) {
+    state.failNextDisplay = false;
+    return fakeTmuxResult(1);
+  }
+  state.popups[client] = {
+    command: optionValue(args, "-E") ?? "",
+    open: true,
+  };
+  return fakeTmuxResult(0, undefined, undefined, true);
+}
+
+async function executeFakeTmuxIfShell(state, args) {
+  let index = 1;
+  let target;
+  while (index < args.length && args[index]?.startsWith("-")) {
+    if (args[index] === "-t") {
+      target = args[index + 1];
+      index += 2;
+    } else {
+      index += 1;
+    }
+  }
+  if (target !== undefined && state.sessions[normalizeFakeTmuxSessionName(target)] === undefined) {
+    return fakeTmuxResult(1);
+  }
+  const condition = args[index] ?? "";
+  const targetSession =
+    target === undefined ? undefined : state.sessions[normalizeFakeTmuxSessionName(target)];
+  const selected = fakeTmuxFormatTruthy(evaluateFakeTmuxFormat(state, condition, targetSession))
+    ? args[index + 1]
+    : args[index + 2];
+  if (selected === undefined || selected.length === 0) return fakeTmuxResult(0);
+  return executeFakeTmuxCommandList(state, selected);
+}
+
+async function executeFakeTmuxCommandList(state, source) {
+  let stdout = "";
+  for (const command of splitFakeTmuxCommands(source)) {
+    const words = splitFakeTmuxWords(command);
+    if (words.length === 0) continue;
+    const result = await executeFakeTmuxCommand(state, words);
+    if (result.stdout !== undefined) stdout += result.stdout;
+    if (result.status !== 0 || result.blocked === true) {
+      return fakeTmuxResult(result.status, stdout.length === 0 ? undefined : stdout, result.stderr);
+    }
+  }
+  return fakeTmuxResult(0, stdout.length === 0 ? undefined : stdout);
+}
+
+function evaluateFakeTmuxFormat(state, expression, targetSession) {
+  if (!isWholeFakeTmuxFormat(expression)) return expression;
+  const inner = expression.slice(2, -1);
+  if (inner.startsWith("==:")) {
+    const [left = "", right = ""] = splitFakeTmuxFormatArgs(inner.slice(3));
+    return evaluateFakeTmuxFormat(state, left, targetSession) ===
+      evaluateFakeTmuxFormat(state, right, targetSession)
+      ? "1"
+      : "0";
+  }
+  if (inner.startsWith("&&:")) {
+    const [left = "", right = ""] = splitFakeTmuxFormatArgs(inner.slice(3));
+    return fakeTmuxFormatTruthy(evaluateFakeTmuxFormat(state, left, targetSession)) &&
+      fakeTmuxFormatTruthy(evaluateFakeTmuxFormat(state, right, targetSession))
+      ? "1"
+      : "0";
+  }
+  if (inner.startsWith("@")) {
+    return state.serverOptions[inner] ?? targetSession?.options[inner] ?? "";
+  }
+  return "";
+}
+
+function isWholeFakeTmuxFormat(value) {
+  if (!value.startsWith("#{") || !value.endsWith("}")) return false;
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.startsWith("#{", index)) {
+      depth += 1;
+      index += 1;
+      continue;
+    }
+    if (value[index] === "}") {
+      depth -= 1;
+      if (depth === 0 && index !== value.length - 1) return false;
+    }
+  }
+  return depth === 0;
+}
+
+function splitFakeTmuxFormatArgs(source) {
+  let depth = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    if (source.startsWith("#{", index)) {
+      depth += 1;
+      index += 1;
+      continue;
+    }
+    if (source[index] === "}") {
+      depth -= 1;
+      continue;
+    }
+    if (source[index] === "," && depth === 0) {
+      return [source.slice(0, index), source.slice(index + 1)];
+    }
+  }
+  return [source];
+}
+
+function fakeTmuxFormatTruthy(value) {
+  return value.length > 0 && value !== "0";
+}
+
+function splitFakeTmuxCommands(source) {
+  return splitFakeTmuxShell(source, true);
+}
+
+function splitFakeTmuxWords(source) {
+  return splitFakeTmuxShell(source, false);
+}
+
+function splitFakeTmuxShell(source, commands) {
+  const result = [];
+  let current = "";
+  let quote;
+  let escaped = false;
+  for (const character of source) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\" && quote !== "'") {
+      if (commands) current += character;
+      escaped = true;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) {
+        if (commands) current += character;
+        quote = undefined;
+      } else current += character;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      if (commands) current += character;
+      quote = character;
+      continue;
+    }
+    if (commands ? character === ";" : /\s/.test(character)) {
+      if (current.length > 0) result.push(current);
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  if (escaped) current += "\\";
+  if (current.length > 0) result.push(current);
+  return result;
+}
+
+function optionValue(args, option) {
+  const index = args.indexOf(option);
+  return index === -1 ? undefined : args[index + 1];
+}
+
+function normalizeFakeTmuxSessionName(value) {
+  return value.endsWith(":") ? value.slice(0, -1) : value;
+}
+
+function quoteShellWord(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function run(command, args, options = {}) {

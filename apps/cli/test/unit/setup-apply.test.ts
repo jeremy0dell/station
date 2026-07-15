@@ -139,7 +139,7 @@ describe("setup apply engine", () => {
             marker: "# >>> station popup binding >>>",
             endMarker: "# <<< station popup binding <<<",
             appendedText:
-              "# >>> station popup binding >>>\nbind-key Space run-shell -b 'stn-tmux-popup'\n# <<< station popup binding <<<\n",
+              "# >>> station popup binding >>>\n# Change Space to any tmux key; stn setup preserves it.\nbind-key Space run-shell -b 'stn-tmux-popup'\n# <<< station popup binding <<<\n",
           },
         },
       ]),
@@ -168,7 +168,8 @@ describe("setup apply engine", () => {
         "set -g mouse on",
         "",
         "# >>> station popup binding >>>",
-        "bind-key Space run-shell -b 'stn-tmux-popup'",
+        "# Change Space to any tmux key; stn setup preserves it.",
+        "bind-key C-s run-shell -b 'old-command'",
         "# <<< station popup binding <<<",
         "",
         "set -g status on",
@@ -190,7 +191,7 @@ describe("setup apply engine", () => {
             marker: "# >>> station popup binding >>>",
             endMarker: "# <<< station popup binding <<<",
             appendedText:
-              "# >>> station popup binding >>>\nbind-key Space run-shell -b '/tmp/station/integrations/terminal/tmux/bin/stn-popup'\n# <<< station popup binding <<<\n",
+              "# >>> station popup binding >>>\n# Change Space to any tmux key; stn setup preserves it.\nbind-key C-s run-shell -b 'managed-fast-command'\n# <<< station popup binding <<<\n",
           },
         },
       ]),
@@ -204,9 +205,9 @@ describe("setup apply engine", () => {
     expect(fs.writes["/tmp/home/.tmux.conf"]).toContain("set -g mouse on");
     expect(fs.writes["/tmp/home/.tmux.conf"]).toContain("set -g status on");
     expect(fs.writes["/tmp/home/.tmux.conf"]).toContain(
-      "/tmp/station/integrations/terminal/tmux/bin/stn-popup",
+      "bind-key C-s run-shell -b 'managed-fast-command'",
     );
-    expect(fs.writes["/tmp/home/.tmux.conf"]).not.toContain("'stn-tmux-popup'");
+    expect(fs.writes["/tmp/home/.tmux.conf"]).not.toContain("'old-command'");
   });
 });
 

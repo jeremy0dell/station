@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +13,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
-const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url)).replace(/\/$/, "");
+const repoRoot = realpathSync(fileURLToPath(new URL("../../../../", import.meta.url))).replace(
+  /\/$/,
+  "",
+);
 
 describe("CLI popup command", () => {
   it("ensures the observer before opening a config-less first-run popup", async () => {
@@ -398,6 +402,66 @@ describe("CLI popup command", () => {
         "--persistent",
       ].join(" "),
     );
+  });
+
+  it("prefers an injected installed popup owner over the source checkout", async () => {
+    const fixture = await createTempState();
+    fixture.config.defaults.terminal = "tmux";
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const calls: TmuxPopupOptions[] = [];
+
+    await expect(
+      runCli(["--config", configPath, "popup"], {
+        observerDeps: runningObserverDeps([]),
+        popupDeps: {
+          checkoutRoot: "/opt/station/current",
+          env: {
+            TMUX: "/tmp/tmux-501/default,123,0",
+          },
+          openTmuxPopup: async (options) => {
+            calls.push(options);
+            return { opened: true };
+          },
+          preferRegisteredDevPopup: false,
+        },
+      }),
+    ).resolves.toEqual({
+      code: 0,
+      output: { opened: true },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.checkoutRoot).toBe("/opt/station/current");
+    expect(calls[0]?.preferRegisteredDevPopup).toBe(false);
+  });
+
+  it("omits an unsafe filesystem-root popup owner", async () => {
+    const fixture = await createTempState();
+    fixture.config.defaults.terminal = "tmux";
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const calls: TmuxPopupOptions[] = [];
+
+    await expect(
+      runCli(["--config", configPath, "popup"], {
+        observerDeps: runningObserverDeps([]),
+        popupDeps: {
+          checkoutRoot: "/",
+          env: {
+            TMUX: "/tmp/tmux-501/default,123,0",
+          },
+          openTmuxPopup: async (options) => {
+            calls.push(options);
+            return { opened: true };
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      code: 0,
+      output: { opened: true },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toHaveProperty("checkoutRoot");
   });
 
   it("defaults bare station to the popup command when invoked from tmux", async () => {

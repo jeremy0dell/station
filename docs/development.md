@@ -24,7 +24,19 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
 
 - `pnpm stn` opens the normal station popup from the current checkout's built CLI when run inside tmux.
 - `pnpm stn tui` opens the normal station TUI fullscreen from the current checkout's built CLI.
-- Normal tmux popup fast-path registrations are scoped to the checkout root that created them. A popup launcher from another checkout ignores and clears stale normal popup metadata before falling back to that checkout's CLI.
+- Source popup registrations are scoped to the canonical checkout root that
+  created them. Compiled registrations are scoped to the canonical installed
+  binary directory instead; neither path may register filesystem root `/`.
+- With default popup geometry, the optional binding installed by a compiled
+  `stn setup` uses the generated direct tmux fast path. Custom geometry uses the
+  config-aware exact sibling `stn-tmux-popup` alias instead, as does setup run
+  with an explicit `--config` path. The fast path's
+  first use can enter that alias, while a valid warm use attaches, toggles, or
+  transfers the existing `_station-ui` session without Bun, config loading, or
+  Observer startup. Build the binary with
+  `pnpm build:binary -- --version <version>` when validating this path; a source
+  `pnpm build` does not create the installed artifact ownership used by the
+  binding.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
@@ -366,11 +378,13 @@ manually verify the actual user experience, not a dashboard override:
    config without adopting that directory. In the open TUI, press `Enter` on
    **Add your first project**, choose a Git repository, and confirm the TUI
    reconnects and shows it after activation on the same Observer socket.
-6. Expose `stn-tmux-popup` only to the shell running `stn setup`, accept the
-   popup binding, and confirm `~/.tmux.conf` contains its safely quoted absolute
-   path. Start a fresh tmux server with `PATH=/usr/bin:/bin`; `Ctrl-b Space`
-   must open the popup without a restart or tmux PATH mutation. Also confirm
-   `stn popup` remains the direct fallback.
+6. Accept the compiled install's optional popup binding and confirm
+   `~/.tmux.conf` contains the marked generated command and exact sibling
+   `stn-tmux-popup` fallback. Start a fresh tmux server with
+   `PATH=/usr/bin:/bin`; `tmux prefix + Space` must open the popup without a
+   restart or tmux PATH mutation. Change the marked key, source the file, rerun
+   setup, and confirm the custom key is preserved. Also confirm `stn popup`
+   remains the direct diagnostic path.
 7. Deliver a provider event through `stn-ingress` and confirm it appears in
    Station.
 8. Complete the local `0.7.0-host-a` → `0.7.0-host-b` procedure above with a
@@ -427,14 +441,26 @@ pnpm test:e2e:real:codex-hooks
 ```
 
 The real tmux popup lane requires the root pnpm dependencies and the `station/`
-Bun dependencies, Bun 1.3.14, Python 3, tmux, and a prior `pnpm build`. Set
-`STATION_TMUX_BIN` when the tmux executable is not available as `tmux`. The lane
+Bun dependencies, Bun 1.3.14, Python 3, tmux, and these prerequisite builds:
+
+```bash
+pnpm build
+pnpm build:binary -- --version 0.0.0-local
+```
+
+Set `STATION_TMUX_BIN` when the tmux executable is not available as `tmux`. The lane
 creates a disposable Git project and isolates `HOME`, the XDG directories,
 config, Observer and Host sockets, state, layout, and the Codex, Claude, Cursor,
 and OpenCode homes. It addresses tmux only through a private
 `tmux -L <unique-label> -f /dev/null` server. It aggregates cleanup failures,
 verifies that its recorded processes and temporary root are gone, and remains
 excluded from ordinary PR and `main` CI.
+
+The lane also exercises the compiled generated binding. Warm reopen must retain
+the hidden session, renderer, and Observer PIDs even with an invalid config.
+Fast-path and fallback failures must produce no pane output, leave
+`#{pane_in_mode}` at `0`, and return control without an Escape dismissal. Use
+direct `stn popup` when detailed failure output is needed.
 
 Use `pnpm setup:system:check` before real lanes. Real lanes may require `STATION_REAL_*` flags, installed provider CLIs, credentials, tmux, model access, and isolated temporary projects. They must not become required for ordinary PR or `main` CI.
 

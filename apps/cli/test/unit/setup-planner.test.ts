@@ -262,8 +262,17 @@ describe("setup planner", () => {
     expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
   });
 
-  it("plans the optional tmux popup binding when it is missing", () => {
-    const plan = buildSetupPlan(facts());
+  it("plans the optional tmux popup binding with the preserved key and exact command", () => {
+    const base = facts();
+    const plan = buildSetupPlan(
+      facts({
+        tmuxBinding: {
+          ...base.tmuxBinding,
+          bindingKey: "C-s",
+          runShellCommand: "managed-fast-command",
+        },
+      }),
+    );
 
     expect(plan.actions.find((action) => action.id === "tmux-popup-binding")).toMatchObject({
       kind: "append-file",
@@ -272,7 +281,9 @@ describe("setup planner", () => {
       path: "/tmp/home/.tmux.conf",
       data: {
         marker: "# >>> station popup binding >>>",
-        appendedText: expect.stringContaining("'/tmp/bin/stn-tmux-popup'"),
+        appendedText: expect.stringContaining(
+          "# Change Space to any tmux key; stn setup preserves it.\nbind-key C-s run-shell -b 'managed-fast-command'",
+        ),
       },
     });
     expect(plan.actions.find((action) => action.id === "worktrunk-hooks")?.command).toEqual([
@@ -299,7 +310,7 @@ describe("setup planner", () => {
     ]);
   });
 
-  it("plans the absolute popup command for a reachable tmux server", () => {
+  it("plans the exact popup command and preserved key for a reachable tmux server", () => {
     const plan = buildSetupPlan(
       facts({
         tmuxBinding: {
@@ -307,8 +318,8 @@ describe("setup planner", () => {
           path: "/tmp/home/.tmux.conf",
           marker: "# >>> station popup binding >>>",
           launcherCommand: "/tmp/bin/stn-tmux-popup",
-          runShellCommand:
-            "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
+          runShellCommand: "managed-fast-command",
+          bindingKey: "M-p",
           insideTmux: true,
           liveStatus: "missing",
         },
@@ -316,20 +327,41 @@ describe("setup planner", () => {
     );
 
     expect(plan.actions.find((action) => action.id === "tmux-live-popup-binding")).toMatchObject({
-      command: [
-        "tmux",
-        "bind-key",
-        "Space",
-        "run-shell",
-        "-b",
-        "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
-      ],
+      command: ["tmux", "bind-key", "M-p", "run-shell", "-b", "managed-fast-command"],
     });
     expect(plan.actions.some((action) => action.id === "tmux-popup-binding")).toBe(false);
     expect(plan.checks.find((check) => check.id === "tmux-popup-binding")).toMatchObject({
       status: "warning",
       message: expect.stringContaining("persisted"),
     });
+  });
+
+  it("warns on an owned-block conflict without planning persisted or live actions", () => {
+    const plan = buildSetupPlan(
+      facts({
+        tmux: { status: "missing", command: "tmux", message: "tmux missing." },
+        tmuxBinding: {
+          status: "conflict",
+          path: "/tmp/home/.tmux.conf",
+          marker: "# >>> station popup binding >>>",
+          launcherCommand: "/tmp/bin/stn-tmux-popup",
+          runShellCommand: "managed-fast-command",
+          insideTmux: true,
+          liveStatus: "unknown",
+          message: "tmux popup binding markers are duplicated.",
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "tmux-popup-binding")).toMatchObject({
+      status: "warning",
+      message: "tmux popup binding markers are duplicated.",
+    });
+    expect(
+      plan.actions.some(
+        (action) => action.id === "tmux-popup-binding" || action.id === "tmux-live-popup-binding",
+      ),
+    ).toBe(false);
   });
 
   it("does not plan popup bindings until the launcher is usable", () => {
@@ -616,6 +648,7 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       launcherCommand: "/tmp/bin/stn-tmux-popup",
       runShellCommand:
         "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
+      bindingKey: "Space",
       insideTmux: false,
       liveStatus: "unknown",
       message: "Optional tmux popup binding is not installed.",

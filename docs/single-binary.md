@@ -61,9 +61,12 @@ Pinned so the release job, install script, and acceptance suite agree.
 
 - `stn` — the compiled binary.
 - `stn-ingress` — symlink → `stn` (argv0 dispatch).
-- `stn-tmux-popup` — symlink → `stn`. A4 routes its argv0 identity (and the
-  reserved `__tmux-popup` token) through the existing `popup` CLI command. The
-  source POSIX fast launcher remains unchanged for development installs.
+- `stn-tmux-popup` — symlink → `stn`. Its argv0 identity (and the reserved
+  `__tmux-popup` token) remains the complete CLI fallback. The optional binding
+  written by compiled `stn setup` owns the warm direct-attach path for default
+  popup geometry; custom geometry and explicit `--config` setup use this exact
+  config-aware sibling alias. First use or invalid fast state also invokes the
+  alias. The source POSIX launcher remains unchanged for development installs.
 - `LICENSE` — required. FSL-1.1 (LICENSE:67) obliges every redistributed
   copy to include the Terms or a link and keep copyright notices. The
   archive must carry it.
@@ -109,7 +112,8 @@ stn (bun build --compile, per platform, no ambient env)
 ├── __ingress               → ingress main (owns raw stdin)
 ├── __tui / __dashboard     → TUI renderer (re-exec self: spawn(execPath, ["__tui"]))
 ├── __station-host          → persistent-PTY host
-├── __tmux-popup            → popup toggle (replaces stn-tmux-popup bin)
+├── __tmux-popup            → full popup CLI fallback for the stn-tmux-popup alias
+├── default setup binding   → direct warm tmux attach/toggle, then the alias fallback
 └── else                    → runCli (commands, setup, doctor, …)
        └── auto-start observer: spawn(process.execPath, ["__observer", …], detached)
 ```
@@ -132,6 +136,12 @@ stn (bun build --compile, per platform, no ambient env)
   and `apps/observer` → `@station/observer`. (S1 confirmed the bundler
   resolves through `exports` and the feared `.d.ts` `paths` hazard does not
   fire.)
+- **Installed popup ownership** is the canonical directory containing the
+  running compiled executable. The composition root resolves it once and wires
+  it into both popup registration and setup binding generation. Source launches
+  instead derive a canonical checkout root from the real CLI module path; a
+  virtual compiled module path and filesystem root `/` are never accepted as
+  popup ownership.
 - **Runtime-mode seam** `packages/runtime/src/buildInfo.ts`: build-time
   defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` behind `typeof`
   guards; dev tsc reports `{ version: "0.7.0", compiled: false }`.
@@ -328,11 +338,14 @@ A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
   ownership rather than risking a live session.
 
 Local pre-push and hosted `standard-ci` binary smoke checks: `--version`,
-`--help`, popup argv0 routing, `setup check --json`
+`--help`, exact popup alias symlinks, popup argv0 fallback routing, compiled
+setup binding generation, and `setup check --json`
 (asserting the `launchReady`/`workflowReady` split), an **observer round
 trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
-**detached self-spawn** check (folds in S5). The native PTY test also proves the
+**detached self-spawn** check (folds in S5). A stateful fake tmux proves that a
+warm binding bypasses malformed config while keeping renderer and Observer PIDs
+stable, and that a failed fallback is silent and returns zero. The native PTY test also proves the
 unset compiled selector launches a payload through the extracted helper on the
 current platform. `observerReap.ts` and the same-TTY UI
 reaper recognize the exact compiled process shapes.
@@ -657,9 +670,13 @@ flow:
    and the observer restarts on the **same socket**. Open the TUI, explicitly
    add an existing Git repository, and verify the observer reflects it
    immediately (B-config); an open TUI reconnects without a manual restart.
-5. Run setup with `stn-tmux-popup` visible only on its temporary `PATH` → the
-   persisted binding contains the absolute launcher, and `Ctrl-b Space` works
-   in a fresh tmux server started with `PATH=/usr/bin:/bin`.
+5. Build and install the compiled artifact with default popup geometry, then
+   accept setup's optional popup binding. The marked block contains the
+   installed-root fast command and exact sibling `stn-tmux-popup` fallback, and
+   `tmux prefix + Space` works in a fresh server started with
+   `PATH=/usr/bin:/bin`. After one cold open, warm close and reopen reuse the
+   same hidden session, renderer, and Observer PIDs without loading config.
+   Editing the marked key is preserved by later setup runs.
 6. `stn-ingress` symlink delivers a provider hook event end to end.
 7. Use local `0.7.0-host-a` and `0.7.0-host-b` builds while **live host PTYs**
    exist → the new build reports

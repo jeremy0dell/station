@@ -180,7 +180,7 @@ describe("setup guided feedback e2e", () => {
       expect(result.timedOut).toBe(false);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers; no current server was live-loaded.",
+        "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
       );
       expect(result.stdout).toContain("Direct fallback: stn popup");
 
