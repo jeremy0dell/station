@@ -1,4 +1,6 @@
 import type {
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
   ProviderId,
   SafeError,
   StationEvent,
@@ -651,6 +653,30 @@ class ColdStartConnectFailingService implements TuiObserverService {
 
   async reconcile(): Promise<StationSnapshot> {
     return this.snapshot;
+  }
+
+  async getHarnessReadiness(
+    params: HarnessReadinessQueryParams,
+  ): Promise<HarnessReadinessQueryResult> {
+    return {
+      readiness: {
+        provider: params.provider,
+        label: params.provider,
+        kind: "built_in",
+        configuration: "configured",
+        cli: "available",
+        authentication: "ready",
+        launchability: "ready",
+        trackingSetup: "prepared",
+        tracking: "prepared_unverified",
+        freshness: "fresh",
+        decision: "launch_ready",
+        revision: "fake-readiness-revision",
+        explanation: `${params.provider} is prepared for Station.`,
+        actions: ["use", "technical_details"],
+        technicalDetails: [],
+      },
+    };
   }
 }
 

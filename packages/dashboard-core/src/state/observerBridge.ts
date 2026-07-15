@@ -89,6 +89,7 @@ export function bridgeOperationService(
       await clientRuntime.reconcile(reason);
       return requireSnapshot(clientRuntime);
     },
+    getHarnessReadiness: (params) => service.getHarnessReadiness(params),
     // Command-like RPCs: pass straight through (the observer reconciles itself).
     prepareExternalLaunch: (params) => service.prepareExternalLaunch(params),
     reportExternalExit: (params) => service.reportExternalExit(params),

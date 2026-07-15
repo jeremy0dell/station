@@ -81,9 +81,13 @@ describe("ClaudeHarnessProvider", () => {
 
   it("reports authenticated doctor checks when auth status is logged in", async () => {
     const calls: ExternalCommandInput[] = [];
+    const homeDir = await mkdtemp(join(tmpdir(), "station-claude-provider-"));
     const provider = createClaudeHarnessProvider({
       command: "claude-test",
       now: () => new Date(now),
+      homeDir,
+      env: {},
+      stateDir: join(homeDir, "state"),
       runner: async (input) => {
         calls.push(input);
         if (input.args?.[0] === "--version") {
@@ -104,14 +108,21 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("warns in doctor checks when claude is not logged in", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "station-claude-provider-"));
     const provider = createClaudeHarnessProvider({
       command: "claude-test",
       now: () => new Date(now),
+      homeDir,
+      env: {},
+      stateDir: join(homeDir, "state"),
       runner: async (input) => {
         if (input.args?.[0] === "--version") {
           return result(input, "2.1.173 (Claude Code)\n");
         }
-        return result(input, '{"loggedIn": false}\n');
+        throw Object.assign(new Error("not logged in"), {
+          exitCode: 1,
+          stdout: '{"loggedIn": false}\n',
+        });
       },
     });
 

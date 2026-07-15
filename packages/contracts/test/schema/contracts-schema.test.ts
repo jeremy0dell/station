@@ -13,11 +13,18 @@ import {
   FeatureFlagConfigSchema,
   type FeatureFlagDefinitionsMap,
   HarnessCapabilitiesSchema,
+  HarnessCatalogEntrySchema,
   HarnessEventObservationSchema,
   HarnessEventReportReceiptSchema,
   HarnessEventReportSchema,
   HarnessEventReportSpoolRecordSchema,
   HarnessLaunchPlanSchema,
+  HarnessReadinessFactsSchema,
+  type HarnessReadinessProvider,
+  HarnessReadinessQueryParamsSchema,
+  HarnessReadinessQueryResultSchema,
+  HarnessReadinessSummarySchema,
+  HarnessReadinessTechnicalDetailSchema,
   HarnessResumeTargetSchema,
   HarnessRunObservationSchema,
   HarnessStatusObservationSchema,
@@ -92,7 +99,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.7.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.8.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -102,6 +109,115 @@ describe("contract schemas", () => {
     for (const [name, snapshot] of Object.entries(snapshots)) {
       expect(snapshot.schemaVersion, name).toBe(STATION_SCHEMA_VERSION);
     }
+  });
+
+  it("validates strict provider-neutral harness readiness contracts", () => {
+    const facts = {
+      cli: "available",
+      authentication: "ready",
+      launchability: "ready",
+      trackingSetup: "prepared",
+      installedVersion: "1.2.3",
+      latestVersion: "1.2.4",
+      technicalDetails: [],
+    };
+    expectParses(HarnessReadinessFactsSchema, facts, "harness readiness facts");
+    expectFails(
+      HarnessReadinessFactsSchema,
+      { ...facts, providerData: { path: "/private/provider.json" } },
+      "harness readiness provider data",
+    );
+    expectFails(
+      HarnessReadinessFactsSchema,
+      { ...facts, cli: "missing" },
+      "missing harness CLI with installed version",
+    );
+    expectFails(
+      HarnessReadinessTechnicalDetailSchema,
+      { code: "HARNESS_CHECK_FAILED", message: "Check failed.", rawDoctorOutput: "secret" },
+      "harness readiness raw doctor output",
+    );
+
+    const readiness = {
+      provider: "codex",
+      label: "Codex",
+      kind: "built_in",
+      configuration: "configured",
+      ...facts,
+      tracking: "prepared_unverified",
+      freshness: "fresh",
+      decision: "launch_ready",
+      revision: "revision-1",
+      checkedAt: "2026-07-12T12:00:00.000Z",
+      explanation: "Codex is prepared for Station.",
+      actions: ["use", "technical_details"],
+    };
+    const result = HarnessReadinessQueryResultSchema.parse({ readiness });
+    expect(result.readiness).not.toHaveProperty("providerData");
+    expectFails(
+      HarnessReadinessQueryResultSchema,
+      { readiness: { ...readiness, filesystemPath: "/private/provider.json" } },
+      "harness readiness filesystem path",
+    );
+    expectParses(
+      HarnessReadinessQueryParamsSchema,
+      { provider: "cursor", refresh: true },
+      "targeted harness readiness query",
+    );
+    expectFails(
+      HarnessReadinessQueryParamsSchema,
+      { provider: "cursor", refresh: true, allProviders: true },
+      "harness readiness query with unknown parameter",
+    );
+  });
+
+  it("parses five built-in and configured custom harness catalog entries", async () => {
+    const summary = HarnessReadinessSummarySchema.parse({
+      status: "checking",
+      freshness: "checking",
+      decision: "unknown",
+      revision: "revision-checking",
+    });
+    expect(summary).not.toHaveProperty("checkedAt");
+
+    const entries = [
+      ["codex", "Codex"],
+      ["cursor", "Cursor Agent"],
+      ["opencode", "OpenCode"],
+      ["pi", "Pi"],
+      ["claude", "Claude Code"],
+    ].map(([id, label]) => ({
+      id,
+      label,
+      kind: "built_in",
+      configuration: "not_configured",
+      readiness: summary,
+    }));
+    entries.push({
+      id: "team-agent",
+      label: "Team Agent",
+      kind: "configured_custom",
+      configuration: "configured",
+      readiness: summary,
+    });
+
+    for (const entry of entries) {
+      expectParses(HarnessCatalogEntrySchema, entry, `harness catalog entry ${entry.id}`);
+    }
+    const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expectParses(
+      StationSnapshotSchema,
+      { ...snapshots.noProjects, harnessCatalog: entries },
+      "snapshot with built-in and custom harness catalog",
+    );
+    expectFails(
+      HarnessCatalogEntrySchema,
+      { ...entries[0], command: "codex" },
+      "harness catalog command boundary",
+    );
   });
 
   it("requires a strict observer process identity", () => {
@@ -132,8 +248,10 @@ describe("contract schemas", () => {
   });
 
   it("owns the observer application port and external-launch contracts", () => {
+    expectTypeOf<ObserverApi>().toHaveProperty("getHarnessReadiness");
     expectTypeOf<ObserverApi>().toHaveProperty("prepareExternalLaunch");
     expectTypeOf<ObserverApi>().toHaveProperty("reportExternalExit");
+    expectTypeOf<HarnessReadinessProvider>().toHaveProperty("probe");
 
     expectParses(
       AgentPrepareExternalLaunchParamsSchema,

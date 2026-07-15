@@ -158,17 +158,17 @@ describe("observability helpers", () => {
 
 function minimalSnapshot(): DiagnosticSnapshot {
   return {
-    schemaVersion: "0.7.0",
+    schemaVersion: "0.8.0",
     collectedAt: now,
     observerHealth: {
-      schemaVersion: "0.7.0",
+      schemaVersion: "0.8.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
       version: "0.0.0",
     },
     snapshot: {
-      schemaVersion: "0.7.0",
+      schemaVersion: "0.8.0",
       generatedAt: now,
       observer: {
         pid: 1234,

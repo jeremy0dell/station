@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ClientFeatureFlagsSchema } from "./featureFlags.js";
+import { HarnessCatalogEntrySchema } from "./harnessReadiness.js";
 import {
   HarnessRunIdSchema,
   ProjectIdSchema,
@@ -216,7 +217,7 @@ export const SnapshotHarnessSchema = z
     label: nonEmptyStringSchema,
     /** Best-effort local CLI version; absent when the probe failed or hasn't run. */
     installedVersion: nonEmptyStringSchema.optional(),
-    /** Best-effort registry version from a cached, offline-safe lookup. */
+    /** Best-effort latest version when the readiness provider supplies one. */
     latestVersion: nonEmptyStringSchema.optional(),
     /** Set only when both versions are known; consumers omit the badge otherwise. */
     updateAvailable: z.boolean().optional(),
@@ -256,6 +257,7 @@ export const StationSnapshotSchema = z
       .strict(),
     providerHealth: z.record(ProviderIdSchema, ProviderHealthSchema),
     harnesses: z.array(SnapshotHarnessSchema).optional(),
+    harnessCatalog: z.array(HarnessCatalogEntrySchema).optional(),
     projects: z.array(ProjectViewSchema),
     rows: z.array(WorktreeRowSchema),
     sessions: z.array(SessionViewSchema),

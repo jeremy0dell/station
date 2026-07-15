@@ -20,6 +20,7 @@ import {
 } from "../hooks/observerEventHooks.js";
 import { providerIngressSpoolDir } from "../hooks/spool.js";
 import { createSqliteObserverPersistence } from "../persistence/index.js";
+import { createHarnessReadinessService } from "../providers/readinessService.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { createObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { openObserverSqlite } from "../sqlite.js";
@@ -91,7 +92,8 @@ export type RunObserverMainDeps = {
  *
  * Claims boot ownership before negotiating an incumbent or constructing
  * adapters, then constructs logging and project-config adapters once and passes
- * only their application ports inward. It owns socket and pidfile publication
+ * only their application ports inward. After persistence is available, it starts
+ * the read-only provider readiness refresh. It owns socket and pidfile publication
  * and releases the boot claim before publishing health.
  */
 export async function runObserverMain(
@@ -214,8 +216,17 @@ async function runClaimedObserverRuntime(input: {
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
-  // Fire-and-forget boot probes: snapshots read cached results and fill in as they land.
-  void providers.refreshHarnessVersions();
+  const readiness = createHarnessReadinessService({
+    catalog: providers.harnessCatalog,
+    persistence,
+    clock: systemClock,
+  });
+  // Readiness is process-lifetime cache state; startup does not wait on provider CLIs.
+  void readiness
+    .initialize()
+    .catch((error) =>
+      logger.warn("Harness readiness startup refresh failed.", { error }).catch(() => undefined),
+    );
   void providers.healthCache.refreshAll();
   const featureFlags = createFeatureFlagEvaluator({
     ...(config.featureFlags === undefined ? {} : { overrides: config.featureFlags }),
@@ -224,6 +235,7 @@ async function runClaimedObserverRuntime(input: {
   const core = createObserverCore({
     config,
     providers,
+    readiness,
     persistence,
     clock: systemClock,
     logger,
@@ -330,6 +342,7 @@ async function runClaimedObserverRuntime(input: {
   observerApi = createObserverApi({
     core,
     providers,
+    readiness,
     persistence,
     persistenceHealth: persistence,
     commandQueue,

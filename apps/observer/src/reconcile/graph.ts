@@ -1,6 +1,7 @@
 import type {
   ClientFeatureFlags,
   HarnessCapabilities,
+  HarnessCatalogEntry,
   HarnessRunObservation,
   OrphanedRuntimeState,
   ProviderHealth,
@@ -35,6 +36,7 @@ export type ObserverGraphInput = {
   worktreeProviderId: ProviderId;
   providerHealth: Record<string, ProviderHealth>;
   harnesses?: SnapshotHarness[];
+  harnessCatalog?: HarnessCatalogEntry[];
   harnessCapabilities?: Record<string, HarnessCapabilities>;
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
@@ -192,6 +194,9 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
   };
   if (input.harnesses !== undefined) {
     snapshot.harnesses = input.harnesses;
+  }
+  if (input.harnessCatalog !== undefined) {
+    snapshot.harnessCatalog = input.harnessCatalog;
   }
   return snapshot;
 }

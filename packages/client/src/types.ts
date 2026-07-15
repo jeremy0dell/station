@@ -5,6 +5,8 @@ import type {
   AgentReportExternalExitResult,
   CommandId,
   CommandReceipt,
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
   SafeError,
   StationCommand,
   StationEvent,
@@ -16,6 +18,8 @@ export type {
   AgentPrepareExternalLaunchResult,
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
 } from "@station/contracts";
 
 export type StationClientCommandCompletion =
@@ -39,6 +43,8 @@ export type ObserverService = {
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   waitForCommandCompletion(commandId: CommandId): Promise<StationClientCommandCompletion>;
   reconcile(reason?: string): Promise<StationSnapshot>;
+  /** Return cached readiness, or refresh only the requested harness before returning it. */
+  getHarnessReadiness(params: HarnessReadinessQueryParams): Promise<HarnessReadinessQueryResult>;
   /**
    * Ask the observer to mint a STATION identity for an externally-hosted (e.g.
    * Station-owned) primary agent and return its launch plan. Does not spawn.

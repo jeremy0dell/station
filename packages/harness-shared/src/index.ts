@@ -1,4 +1,12 @@
 export {
+  type BuiltInHarnessCatalogEntry,
+  type BuiltInHarnessId,
+  builtInHarnessCatalog,
+  builtInHarnessCatalogById,
+  builtInHarnessIds,
+  isBuiltInHarnessId,
+} from "./catalog.js";
+export {
   type ClassifyHarnessRunStatusOptions,
   classifyHarnessRunStatus,
 } from "./classify.js";
@@ -49,3 +57,17 @@ export {
   harnessHooksStatusFrom,
   type TerminalBoundHarnessProviderSpec,
 } from "./provider.js";
+export {
+  type HarnessCliProbeOptions,
+  type HarnessCliReadiness,
+  type HarnessReadinessCommandOutcome,
+  type HarnessReadinessEnvironment,
+  type HarnessReadinessEnvironmentOptions,
+  type HarnessReadinessFactsInput,
+  harnessReadinessCommandTimeoutMs,
+  harnessReadinessFacts,
+  mergeReadinessTechnicalDetails,
+  probeHarnessCli,
+  probeReadinessCommand,
+  withIsolatedReadinessEnvironment,
+} from "./readiness.js";

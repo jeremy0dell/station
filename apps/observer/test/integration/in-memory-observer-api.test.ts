@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
 import { registerObserverCommandHandlers } from "../../src/commands/router";
 import type { PersistenceHealthSource } from "../../src/persistence/ports";
+import { createHarnessReadinessService } from "../../src/providers/readinessService";
 import { ProviderRegistry } from "../../src/providers/registry";
 import { createObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
@@ -36,12 +37,19 @@ describe("Observer API with in-memory persistence", () => {
     const eventBus = createObserverEventBus();
     const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
     const providers = fakeProviders();
-    const core = createObserverCore({ config, providers, persistence, clock });
+    const readiness = createHarnessReadinessService({
+      catalog: providers.harnessCatalog,
+      persistence,
+      clock,
+    });
+    await readiness.refresh("fake-harness");
+    const core = createObserverCore({ config, providers, readiness, persistence, clock });
     let metadataStopped = false;
     const persistenceHealth: PersistenceHealthSource = { health: () => healthStub };
     const api = createObserverApi({
       core,
       providers,
+      readiness,
       persistence,
       persistenceHealth,
       commandQueue,
@@ -92,7 +100,15 @@ describe("Observer API with in-memory persistence", () => {
           harness: { provider: "fake-harness", runId: "run_web_task" },
         },
       ],
+      harnessCatalog: [
+        {
+          id: "fake-harness",
+          readiness: { status: "prepared", decision: "launch_ready" },
+        },
+      ],
     });
+    const prepared = await api.getHarnessReadiness({ provider: "fake-harness" });
+    expect(prepared.readiness.tracking).toBe("prepared_unverified");
     await initialEvents.return?.();
 
     const command = await api.dispatch({
@@ -123,6 +139,9 @@ describe("Observer API with in-memory persistence", () => {
 
     expect(firstHook).toMatchObject({ accepted: true, deduped: false });
     expect(duplicateHook).toMatchObject({ accepted: true, deduped: true });
+    await expect(api.getHarnessReadiness({ provider: "fake-harness" })).resolves.toMatchObject({
+      readiness: { tracking: "observed", decision: "launch_ready" },
+    });
     await expect(hookReconcile).resolves.toMatchObject({
       value: { type: "observer.reconciled" },
     });
@@ -202,6 +221,24 @@ function fakeProviders(): ProviderRegistry {
           }),
         ],
       }),
+    ],
+    harnessCatalog: [
+      {
+        provider: {
+          id: "fake-harness",
+          probe: async () => ({
+            cli: "available" as const,
+            authentication: "ready" as const,
+            launchability: "ready" as const,
+            trackingSetup: "prepared" as const,
+            technicalDetails: [],
+          }),
+        },
+        label: "Fake Harness",
+        kind: "configured_custom",
+        configuration: "configured",
+        preparation: { prepare: true, repair: true },
+      },
     ],
   });
 }

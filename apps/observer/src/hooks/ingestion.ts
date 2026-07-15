@@ -69,6 +69,7 @@ export type CreateProviderHookIngressOptions = {
    * normalized here (observer-side) so exactly one code version computes status.
    */
   reportHarnessEvent?: (report: HarnessEventReport) => Promise<HarnessEventReportReceipt>;
+  markTrackingObserved?: (provider: string) => void;
 };
 
 export type CreateHarnessEventReportIngestionOptions = {
@@ -77,6 +78,7 @@ export type CreateHarnessEventReportIngestionOptions = {
   clock?: RuntimeClock;
   requestReconcile?: (reason: string) => void;
   retention?: ObservabilityRetentionConfig;
+  markTrackingObserved?: (provider: string) => void;
 };
 
 const defaultHookId = () => `hook_${randomUUID()}`;
@@ -168,6 +170,9 @@ export function createProviderHookIngress(
               persistence: options.persistence,
               clock,
               ...(options.retention === undefined ? {} : { retention: options.retention }),
+              ...(options.markTrackingObserved === undefined
+                ? {}
+                : { markTrackingObserved: options.markTrackingObserved }),
             });
 
       const shouldReconcile = ingestOptions.triggerReconcile ?? true;
@@ -347,6 +352,9 @@ export function createHarnessEventReportIngestion(
                 expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
               },
             });
+          if (!result.deduped) {
+            options.markTrackingObserved?.(report.provider);
+          }
           // Primary dedupe is acceptance evidence, not proof that later idempotent repairs finished.
           const recoveryHandle = sessionRecoveryHandleFromReport(report);
           if (recoveryHandle !== undefined) {

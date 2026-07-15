@@ -18,6 +18,8 @@ export type {
   AgentReportExternalExitResult,
   ApplyStationEventResult,
   ClientNotice,
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
   ObserverService,
   StationClientCommandCompletion,
   StationClientConnectionState,

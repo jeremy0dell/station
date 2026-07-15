@@ -2,6 +2,7 @@ import type {
   DiagnosticSnapshot,
   DoctorReport,
   HarnessEventReportReceipt,
+  HarnessReadinessQueryResult,
   ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
@@ -26,6 +27,7 @@ export function createFakeObserverApi(
       at: protocolTestNow,
     }),
     getSnapshot: async () => snapshot,
+    getHarnessReadiness: async (params) => harnessReadinessResult(params.provider),
     subscribe: () => stream([]),
     dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
     getCommand: async () => undefined,
@@ -68,6 +70,30 @@ export function createFakeObserverApi(
     runDoctor: async (): Promise<DoctorReport> => doctorReport(snapshot),
     collectDiagnostics: async (): Promise<DiagnosticSnapshot> => diagnosticSnapshot(snapshot),
     ...overrides,
+  };
+}
+
+export function harnessReadinessResult(provider = "codex"): HarnessReadinessQueryResult {
+  return {
+    readiness: {
+      provider,
+      label: provider === "codex" ? "Codex" : provider,
+      kind: "built_in",
+      configuration: "configured",
+      cli: "available",
+      authentication: "ready",
+      launchability: "ready",
+      trackingSetup: "prepared",
+      tracking: "prepared_unverified",
+      installedVersion: "1.2.3",
+      freshness: "fresh",
+      decision: "launch_ready",
+      revision: "readiness-revision-1",
+      checkedAt: protocolTestNow,
+      explanation: `${provider} is prepared for Station.`,
+      actions: ["use", "technical_details"],
+      technicalDetails: [],
+    },
   };
 }
 

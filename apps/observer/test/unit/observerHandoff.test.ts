@@ -147,7 +147,7 @@ describe("negotiateObserverIncumbent", () => {
       fixture.listening = false;
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.7.0" as const,
+        schemaVersion: "0.8.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -226,7 +226,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.listening = false;
       return {
-        schemaVersion: "0.7.0" as const,
+        schemaVersion: "0.8.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -245,7 +245,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.7.0" as const,
+        schemaVersion: "0.8.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -263,7 +263,7 @@ describe("negotiateObserverIncumbent", () => {
       fixture.listening = false;
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.7.0" as const,
+        schemaVersion: "0.8.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -301,7 +301,7 @@ function decisionFor(candidateVersion: string, incumbentVersion: string) {
 
 function handoffFixture() {
   const incumbentHealth: ObserverHealth = {
-    schemaVersion: "0.7.0",
+    schemaVersion: "0.8.0",
     status: "healthy",
     pid: 100,
     startedAt: "2026-07-12T11:00:00.000Z",
@@ -322,7 +322,7 @@ function handoffFixture() {
     incumbentHealth,
     health: vi.fn(async (_socketPath: string, _request: { timeoutMs: number }) => incumbentHealth),
     stop: vi.fn(async (_socketPath: string, _request: { timeoutMs: number }) => ({
-      schemaVersion: "0.7.0" as const,
+      schemaVersion: "0.8.0" as const,
       stopped: true,
       at: "2026-07-12T12:00:00.000Z",
     })),

@@ -7,7 +7,7 @@ describe("provider timeout diagnostic", () => {
     const index = buildDiagnosticEvidenceIndex(
       baseDiagnosticSnapshot({
         observerHealth: {
-          schemaVersion: "0.7.0",
+          schemaVersion: "0.8.0",
           status: "degraded",
           pid: 1234,
           startedAt: diagnosticNow,

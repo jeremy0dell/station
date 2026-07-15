@@ -5,6 +5,7 @@ import type {
   DoctorOptions,
   EventFilter,
   HarnessEventReport,
+  HarnessReadinessQueryParams,
   ObserverApi,
   ProviderHookEvent,
   StationCommand,
@@ -100,6 +101,8 @@ export function createObserverClient(options: CreateObserverClientOptions): Obse
       requestProtocolMethod(options, requestId(), "observer.ingestProviderHookEvent", { event }),
     reportHarnessEvent: async (report: HarnessEventReport) =>
       requestProtocolMethod(options, requestId(), "observer.harnessEvent.report", { report }),
+    getHarnessReadiness: async (params: HarnessReadinessQueryParams) =>
+      requestProtocolMethod(options, requestId(), "harness.readiness.get", params),
     prepareExternalLaunch: async (params) =>
       requestProtocolMethod(options, requestId(), "agent.prepareExternalLaunch", params),
     reportExternalExit: async (params) =>

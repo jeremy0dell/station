@@ -1,32 +1,17 @@
+import { type BuiltInHarnessCatalogEntry, builtInHarnessCatalog } from "@station/harness-shared";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupHarnessFact, SupportedHarnessId } from "../model.js";
+import type { SetupHarnessFact } from "../model.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
 
-export type HarnessDefinition = {
-  id: SupportedHarnessId;
-  label: string;
-  envKey: string;
-  defaultCommand: string;
-};
+export type HarnessDefinition = BuiltInHarnessCatalogEntry;
 
-export const harnessDefinitions: readonly HarnessDefinition[] = [
-  { id: "codex", label: "Codex", envKey: "STATION_CODEX_BIN", defaultCommand: "codex" },
-  {
-    id: "cursor",
-    label: "Cursor Agent",
-    envKey: "STATION_CURSOR_AGENT_BIN",
-    defaultCommand: "agent",
-  },
-  { id: "opencode", label: "OpenCode", envKey: "STATION_OPENCODE_BIN", defaultCommand: "opencode" },
-  { id: "pi", label: "Pi", envKey: "STATION_PI_BIN", defaultCommand: "pi" },
-  { id: "claude", label: "Claude Code", envKey: "STATION_CLAUDE_BIN", defaultCommand: "claude" },
-] as const;
+export const harnessDefinitions = builtInHarnessCatalog;
 
 export type CheckHarnessesOptions = {
   runner?: ExternalCommandRunner;

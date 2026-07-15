@@ -20,6 +20,7 @@ import type {
 } from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
+import type { HarnessReadinessService } from "../providers/readinessService.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
@@ -78,6 +79,7 @@ export type CreateObserverCoreInput = {
   providerTimeoutMs?: number;
   providerReadRetries?: number;
   featureFlags?: FeatureFlagEvaluator;
+  readiness?: HarnessReadinessService;
 };
 
 export function createObserverCore(input: CreateObserverCoreInput): ObserverCore {
@@ -97,7 +99,8 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
     observer: { pid, startedAt, version },
     projects,
     worktreeProviderId: input.providers.worktree.id,
-    harnesses: harnessesFromRegistry(input.providers),
+    harnesses: harnessesFromRegistry(input.providers, input.readiness),
+    ...(input.readiness === undefined ? {} : { harnessCatalog: input.readiness.catalogEntries() }),
     ...(input.featureFlags === undefined
       ? {}
       : { featureFlags: input.featureFlags.clientSnapshot() }),
@@ -119,6 +122,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           observer,
           projects,
           providers: input.providers,
+          ...(input.readiness === undefined ? {} : { readiness: input.readiness }),
           read,
           ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
           providerObservationRetentionDays: providerObservationRetentionDays(
@@ -131,7 +135,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         providerHealth = result.providerHealth;
         lastReconcile = result.lastReconcile;
         snapshot = result.snapshot;
-        return snapshot;
+        return projectReadiness(snapshot, input.providers, input.readiness);
       };
 
       const previous = reconcileChain;
@@ -211,13 +215,28 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       projects = providerProjectsFromConfig(nextConfig);
     },
     getProjects: () => projects,
-    getSnapshot: () => snapshot,
+    getSnapshot: () => projectReadiness(snapshot, input.providers, input.readiness),
     getHealth: () => ({
       status: snapshot.observer.healthy ? "healthy" : "degraded",
       startedAt,
       providerHealth,
       ...(lastReconcile === undefined ? {} : { lastReconcile }),
     }),
+  };
+}
+
+function projectReadiness(
+  snapshot: StationSnapshot,
+  providers: ProviderRegistry,
+  readiness: HarnessReadinessService | undefined,
+): StationSnapshot {
+  if (readiness === undefined) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    harnesses: harnessesFromRegistry(providers, readiness),
+    harnessCatalog: readiness.catalogEntries(),
   };
 }
 

@@ -8,7 +8,6 @@ import type {
   ProviderDoctorContext,
 } from "@station/contracts";
 import {
-  type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHealth,
@@ -26,19 +25,13 @@ import {
   type ClaudeLaunchOptions,
   type ClaudePermissionMode,
 } from "./launch.js";
+import { type ClaudeHarnessReadinessProviderOptions, parseClaudeAuthStatus } from "./readiness.js";
 
-export type ClaudeHarnessProviderOptions = CommonHarnessProviderOptions & {
+export type ClaudeHarnessProviderOptions = ClaudeHarnessReadinessProviderOptions & {
   profile?: string;
   permissionMode?: ClaudePermissionMode;
   approvalPolicy?: string;
   sandboxMode?: string;
-  installHooks?: boolean;
-  claudeSettingsPath?: string;
-  claudeConfigDir?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
   resume?: boolean;
 };
 
@@ -84,7 +77,6 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
   },
   doctorChecks,
   hooksStatus,
-  version: { latestPackage: "@anthropic-ai/claude-code" },
 };
 
 function command(options: ClaudeHarnessProviderOptions): string {
@@ -101,23 +93,19 @@ function hookPathOptions(
   if (options.claudeConfigDir !== undefined) {
     pathOptions.claudeConfigDir = options.claudeConfigDir;
   }
+  if (options.hookScriptPath !== undefined) {
+    pathOptions.hookScriptPath = options.hookScriptPath;
+  }
   if (options.stateDir !== undefined) {
     pathOptions.stateDir = options.stateDir;
   }
-  return pathOptions;
-}
-
-function parseLoggedIn(stdout: string): boolean | undefined {
-  try {
-    const parsed: unknown = JSON.parse(stdout);
-    if (typeof parsed === "object" && parsed !== null && "loggedIn" in parsed) {
-      const loggedIn = (parsed as { loggedIn: unknown }).loggedIn;
-      return typeof loggedIn === "boolean" ? loggedIn : undefined;
-    }
-  } catch {
-    return undefined;
+  if (options.env !== undefined) {
+    pathOptions.env = options.env;
   }
-  return undefined;
+  if (options.homeDir !== undefined) {
+    pathOptions.homeDir = options.homeDir;
+  }
+  return pathOptions;
 }
 
 function claudeHookDoctorOptions(
@@ -183,10 +171,11 @@ async function doctorChecks(
         args: ["auth", "status"],
         timeoutMs: options.timeoutMs ?? 5000,
         maxOutputChars: 4096,
+        allowedExitCodes: [0, 1],
       },
       options.runner,
     );
-    const loggedIn = parseLoggedIn(result.stdout);
+    const loggedIn = parseClaudeAuthStatus(result.stdout);
     if (loggedIn === true) {
       checks.push({
         name: "claude.auth",

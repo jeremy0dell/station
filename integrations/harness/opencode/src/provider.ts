@@ -7,7 +7,6 @@ import type {
   ProviderDoctorCheck,
 } from "@station/contracts";
 import {
-  type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHealth,
@@ -19,18 +18,14 @@ import { openCodeProviderErrorFromUnknown } from "./errors.js";
 import { normalizeOpenCodeRawEvent } from "./events.js";
 import { buildOpenCodeLaunchPlan, type OpenCodeLaunchOptions } from "./launch.js";
 import { doctorOpenCodePlugin } from "./pluginInstall.js";
+import type { OpenCodeHarnessReadinessProviderOptions } from "./readiness.js";
 
-export type OpenCodeHarnessProviderOptions = CommonHarnessProviderOptions & {
+export type OpenCodeHarnessProviderOptions = OpenCodeHarnessReadinessProviderOptions & {
   profile?: string;
   permissionMode?: HarnessPermissionMode;
   approvalPolicy?: string;
   sandboxMode?: string;
-  installHooks?: boolean;
   configPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  env?: NodeJS.ProcessEnv;
   resume?: boolean;
 };
 

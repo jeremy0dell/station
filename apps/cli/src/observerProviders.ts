@@ -4,11 +4,13 @@ import {
   type ClaudeHarnessProviderOptions,
   claudeHookAdapter,
   createClaudeHarnessProvider,
+  createClaudeHarnessReadinessProvider,
 } from "@station/claude";
 import {
   type CodexHarnessProviderOptions,
   codexHookAdapter,
   createCodexHarnessProvider,
+  createCodexHarnessReadinessProvider,
 } from "@station/codex";
 import {
   type ClaudeHarnessProviderConfig,
@@ -21,6 +23,8 @@ import type {
   HarnessCapabilities,
   HarnessPermissionMode,
   HarnessProvider,
+  HarnessReadinessFacts,
+  HarnessReadinessProvider,
   HarnessRunObservation,
   ProviderHealth,
   RepositoryProvider,
@@ -35,15 +39,23 @@ import type {
 import {
   type CursorHarnessProviderOptions,
   createCursorHarnessProvider,
+  createCursorHarnessReadinessProvider,
   cursorHookAdapter,
 } from "@station/cursor";
 import { GithubRepositoryProvider } from "@station/github-repository";
-import { ProviderRegistry } from "@station/observer/internal";
+import { builtInHarnessCatalog, isBuiltInHarnessId } from "@station/harness-shared";
+import { type HarnessReadinessRegistration, ProviderRegistry } from "@station/observer/internal";
 import {
   createOpenCodeHarnessProvider,
+  createOpenCodeHarnessReadinessProvider,
   type OpenCodeHarnessProviderOptions,
 } from "@station/opencode";
-import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
+import {
+  createPiHarnessProvider,
+  createPiHarnessReadinessProvider,
+  type PiHarnessProviderOptions,
+  piHookAdapter,
+} from "@station/pi";
 import { systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
@@ -59,8 +71,8 @@ export type CreateProviderRegistryOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Constructs concrete provider adapters, including the packaged Pi extension
- * path supplied by compiled CLI composition, and assigns their Observer roles.
+ * Assigns active launch/discovery providers separately from catalog-wide
+ * read-only readiness adapters, including the packaged Pi extension path.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -72,6 +84,7 @@ export function createProviderRegistry(
   const worktree = createWorktreeProvider(config);
   const terminal = createTerminalProvider(config);
   const harnesses = createHarnessProviders(config, options);
+  const harnessCatalog = createHarnessReadinessCatalog(config, options);
   const repositories = createRepositoryProviders(config);
   // The externally-hosted native provider registers Station-owned terminal
   // targets; the default terminal provider stays the project default (e.g. tmux).
@@ -91,6 +104,7 @@ export function createProviderRegistry(
     terminal,
     managedTerminal: station,
     harnesses,
+    harnessCatalog,
     repositories,
     hookAdapters: [
       claudeHookAdapter,
@@ -164,6 +178,40 @@ function createHarnessProviders(
   config: StationConfig,
   options: CreateProviderRegistryOptions,
 ): HarnessProvider[] {
+  return configuredHarnessIds(config).map((id) => createHarnessProvider(id, config, options));
+}
+
+function createHarnessReadinessCatalog(
+  config: StationConfig,
+  options: CreateProviderRegistryOptions,
+): HarnessReadinessRegistration[] {
+  const configuredIds = configuredHarnessIds(config);
+  const registrations: HarnessReadinessRegistration[] = builtInHarnessCatalog.map((entry) => ({
+    provider: createBuiltInReadinessProvider(entry.id, config, options),
+    label: entry.label,
+    kind: "built_in" as const,
+    configuration: harnessConfiguration(config, entry.id, configuredIds),
+    preparation: {
+      prepare: entry.id !== "pi",
+      repair: entry.id !== "pi",
+    },
+  }));
+  for (const id of configuredIds) {
+    if (isBuiltInHarnessId(id)) {
+      continue;
+    }
+    registrations.push({
+      provider: new ConfiguredCustomHarnessReadinessProvider(id),
+      label: id,
+      kind: "configured_custom",
+      configuration: config.harness?.[id]?.enabled === false ? "disabled" : "configured",
+      preparation: { prepare: false, repair: false },
+    });
+  }
+  return registrations;
+}
+
+function configuredHarnessIds(config: StationConfig): string[] {
   const ids = new Set<string>();
   ids.add(config.defaults.harness);
   for (const project of config.projects) {
@@ -172,7 +220,37 @@ function createHarnessProviders(
   for (const providerId of Object.keys(config.harness ?? {})) {
     ids.add(providerId);
   }
-  return Array.from(ids).map((id) => createHarnessProvider(id, config, options));
+  return Array.from(ids);
+}
+
+function harnessConfiguration(
+  config: StationConfig,
+  id: string,
+  configuredIds: readonly string[],
+): HarnessReadinessRegistration["configuration"] {
+  if (config.harness?.[id]?.enabled === false) {
+    return "disabled";
+  }
+  return configuredIds.includes(id) ? "configured" : "not_configured";
+}
+
+function createBuiltInReadinessProvider(
+  id: (typeof builtInHarnessCatalog)[number]["id"],
+  config: StationConfig,
+  options: CreateProviderRegistryOptions,
+): HarnessReadinessProvider {
+  switch (id) {
+    case "codex":
+      return createCodexHarnessReadinessProvider(codexProviderOptions(config, options));
+    case "cursor":
+      return createCursorHarnessReadinessProvider(cursorProviderOptions(config, options));
+    case "opencode":
+      return createOpenCodeHarnessReadinessProvider(openCodeProviderOptions(config, options));
+    case "pi":
+      return createPiHarnessReadinessProvider(piProviderOptions(config, options));
+    case "claude":
+      return createClaudeHarnessReadinessProvider(claudeProviderOptions(config, options));
+  }
 }
 
 function createHarnessProvider(
@@ -193,96 +271,23 @@ function createHarnessProvider(
   }
 
   if (id === "claude") {
-    const options: ClaudeHarnessProviderOptions = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    if (providerConfig?.profile !== undefined) {
-      options.profile = providerConfig.profile;
-    }
-    const permissionMode = resolveClaudePermissionMode(config);
-    if (permissionMode !== undefined) {
-      options.permissionMode = permissionMode;
-    }
-    if (providerConfig?.approvalPolicy !== undefined) {
-      options.approvalPolicy = providerConfig.approvalPolicy;
-    }
-    if (providerConfig?.sandboxMode !== undefined) {
-      options.sandboxMode = providerConfig.sandboxMode;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    applyObserverPaths(options, config, true);
-    return createClaudeHarnessProvider(options);
+    return createClaudeHarnessProvider(claudeProviderOptions(config, registryOptions));
   }
 
   if (id === "codex") {
-    const options: CodexHarnessProviderOptions = {};
-    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
-    if (providerConfig?.profile !== undefined) {
-      options.profile = providerConfig.profile;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    applyObserverPaths(options, config, true);
-    return createCodexHarnessProvider(options);
+    return createCodexHarnessProvider(codexProviderOptions(config, registryOptions));
   }
 
   if (id === "cursor") {
-    const options: CursorHarnessProviderOptions = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    applyObserverPaths(options, config, true);
-    return createCursorHarnessProvider(options);
+    return createCursorHarnessProvider(cursorProviderOptions(config, registryOptions));
   }
 
   if (id === "opencode") {
-    const options: OpenCodeHarnessProviderOptions = {};
-    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
-    if (providerConfig?.profile !== undefined) {
-      options.profile = providerConfig.profile;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    applyObserverPaths(options, config, false);
-    return createOpenCodeHarnessProvider(options);
+    return createOpenCodeHarnessProvider(openCodeProviderOptions(config, registryOptions));
   }
 
   if (id === "pi") {
-    const options: PiHarnessProviderOptions = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    if (registryOptions.piExtensionPath !== undefined) {
-      options.extensionPath = registryOptions.piExtensionPath;
-    }
-    applyObserverPaths(options, config, false);
-    return createPiHarnessProvider(options);
+    return createPiHarnessProvider(piProviderOptions(config, registryOptions));
   }
 
   if (id === "noop-harness") {
@@ -290,6 +295,95 @@ function createHarnessProvider(
   }
 
   return new UnavailableHarnessProvider(id);
+}
+
+function claudeProviderOptions(
+  config: StationConfig,
+  registryOptions: CreateProviderRegistryOptions,
+): ClaudeHarnessProviderOptions {
+  const providerConfig = harnessProviderConfig(config, "claude");
+  const options: ClaudeHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) options.command = providerConfig.command;
+  if (providerConfig?.profile !== undefined) options.profile = providerConfig.profile;
+  const permissionMode = resolveClaudePermissionMode(config);
+  if (permissionMode !== undefined) options.permissionMode = permissionMode;
+  if (providerConfig?.approvalPolicy !== undefined) {
+    options.approvalPolicy = providerConfig.approvalPolicy;
+  }
+  if (providerConfig?.sandboxMode !== undefined) options.sandboxMode = providerConfig.sandboxMode;
+  if (providerConfig?.installHooks !== undefined)
+    options.installHooks = providerConfig.installHooks;
+  if (providerConfig?.resume !== undefined) options.resume = providerConfig.resume;
+  if (registryOptions.configPath !== undefined) {
+    options.stationConfigPath = registryOptions.configPath;
+  }
+  applyObserverPaths(options, config, true);
+  return options;
+}
+
+function codexProviderOptions(
+  config: StationConfig,
+  registryOptions: CreateProviderRegistryOptions,
+): CodexHarnessProviderOptions {
+  const providerConfig = harnessProviderConfig(config, "codex");
+  const options: CodexHarnessProviderOptions = {};
+  applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, "codex"));
+  if (providerConfig?.profile !== undefined) options.profile = providerConfig.profile;
+  if (providerConfig?.resume !== undefined) options.resume = providerConfig.resume;
+  if (registryOptions.configPath !== undefined) {
+    options.stationConfigPath = registryOptions.configPath;
+  }
+  applyObserverPaths(options, config, true);
+  return options;
+}
+
+function cursorProviderOptions(
+  config: StationConfig,
+  registryOptions: CreateProviderRegistryOptions,
+): CursorHarnessProviderOptions {
+  const providerConfig = harnessProviderConfig(config, "cursor");
+  const options: CursorHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) options.command = providerConfig.command;
+  if (providerConfig?.installHooks !== undefined)
+    options.installHooks = providerConfig.installHooks;
+  if (providerConfig?.resume !== undefined) options.resume = providerConfig.resume;
+  if (registryOptions.configPath !== undefined) options.configPath = registryOptions.configPath;
+  applyObserverPaths(options, config, true);
+  return options;
+}
+
+function openCodeProviderOptions(
+  config: StationConfig,
+  registryOptions: CreateProviderRegistryOptions,
+): OpenCodeHarnessProviderOptions {
+  const providerConfig = harnessProviderConfig(config, "opencode");
+  const options: OpenCodeHarnessProviderOptions = {};
+  applyHarnessAgentOptions(
+    options,
+    providerConfig,
+    resolveHarnessPermissionMode(config, "opencode"),
+  );
+  if (providerConfig?.profile !== undefined) options.profile = providerConfig.profile;
+  if (providerConfig?.resume !== undefined) options.resume = providerConfig.resume;
+  if (registryOptions.configPath !== undefined) options.configPath = registryOptions.configPath;
+  applyObserverPaths(options, config, false);
+  return options;
+}
+
+function piProviderOptions(
+  config: StationConfig,
+  registryOptions: CreateProviderRegistryOptions,
+): PiHarnessProviderOptions {
+  const providerConfig = harnessProviderConfig(config, "pi");
+  const options: PiHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) options.command = providerConfig.command;
+  if (providerConfig?.resume !== undefined) options.resume = providerConfig.resume;
+  if (registryOptions.configPath !== undefined) options.configPath = registryOptions.configPath;
+  if (registryOptions.piExtensionPath !== undefined) {
+    options.extensionPath = registryOptions.piExtensionPath;
+  }
+  applyObserverPaths(options, config, false);
+  return options;
 }
 
 function createRepositoryProviders(config: StationConfig): RepositoryProvider[] {
@@ -613,5 +707,19 @@ class UnavailableHarnessProvider implements HarnessProvider {
 
   async classifyRun(): Promise<never> {
     throw providerUnavailableError(this.id);
+  }
+}
+
+class ConfiguredCustomHarnessReadinessProvider implements HarnessReadinessProvider {
+  constructor(readonly id: string) {}
+
+  async probe(): Promise<HarnessReadinessFacts> {
+    return {
+      cli: "unknown",
+      authentication: "unknown",
+      launchability: "unknown",
+      trackingSetup: "unsupported",
+      technicalDetails: [],
+    };
   }
 }

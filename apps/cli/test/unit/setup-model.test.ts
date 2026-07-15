@@ -1,9 +1,11 @@
+import { builtInHarnessCatalog } from "@station/harness-shared";
 import { describe, expect, it } from "vitest";
 import { harnessDefinitions } from "../../src/commands/setup/checks/harnesses.js";
 import { SetupPlanSchema, supportedHarnessIds } from "../../src/commands/setup/model.js";
 
 describe("setup model", () => {
   it("keeps supported harness ids aligned with setup detection", () => {
+    expect(harnessDefinitions).toEqual(builtInHarnessCatalog);
     expect([...supportedHarnessIds]).toEqual(harnessDefinitions.map((harness) => harness.id));
     expect([...supportedHarnessIds]).not.toContain("crush");
   });

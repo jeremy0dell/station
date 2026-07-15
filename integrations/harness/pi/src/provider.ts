@@ -5,7 +5,6 @@ import type {
   HarnessProvider,
 } from "@station/contracts";
 import {
-  type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   type TerminalBoundHarnessProviderSpec,
@@ -14,9 +13,9 @@ import { classifyPiRunStatus } from "./classify.js";
 import { piProviderErrorFromUnknown } from "./errors.js";
 import { normalizePiRawEvent } from "./event/mapping.js";
 import { buildPiLaunchPlan } from "./launch.js";
+import type { PiHarnessReadinessProviderOptions } from "./readiness.js";
 
-export type PiHarnessProviderOptions = CommonHarnessProviderOptions & {
-  extensionPath?: string;
+export type PiHarnessProviderOptions = PiHarnessReadinessProviderOptions & {
   configPath?: string;
   observerSocketPath?: string;
   stateDir?: string;

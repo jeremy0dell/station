@@ -9,6 +9,8 @@ import type {
   EventFilter,
   HarnessEventReport,
   HarnessEventReportReceipt,
+  HarnessReadinessQueryParams,
+  HarnessReadinessQueryResult,
   ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
@@ -18,7 +20,12 @@ import type {
   StationCommand,
   StationEvent,
 } from "@station/contracts";
-import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
+import {
+  HarnessReadinessQueryParamsSchema,
+  HarnessReadinessQueryResultSchema,
+  STARTUP_RECONCILE_REASONS,
+  STATION_SCHEMA_VERSION,
+} from "@station/contracts";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";
@@ -47,6 +54,7 @@ import {
   type WorktreeMetadataRefreshService,
 } from "../metadata/refresh.js";
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../persistence/index.js";
+import type { HarnessReadinessService } from "../providers/readinessService.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import type { StationLogger } from "../stationLogger.js";
@@ -69,6 +77,7 @@ import { createSpoolDrainer, type SpoolDrainDeps } from "./spoolDrain.js";
 export type CreateObserverApiOptions = {
   core: ObserverCore;
   providers?: ProviderRegistry;
+  readiness?: HarnessReadinessService;
   persistence: ObserverPersistenceBundle;
   persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
@@ -208,6 +217,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     health: () => buildHealth(options, clock, harnessIngressQueue),
     stop: () => buildStop(options, harnessIngressQueue, metadataRefresh, clock),
     getSnapshot: async () => options.core.getSnapshot(),
+    getHarnessReadiness: (params) => getHarnessReadiness(options, params),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
     dispatch: (command: StationCommand) => options.commandQueue.dispatch(command),
@@ -230,6 +240,25 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
   };
 
   return api;
+}
+
+async function getHarnessReadiness(
+  options: CreateObserverApiOptions,
+  input: HarnessReadinessQueryParams,
+): Promise<HarnessReadinessQueryResult> {
+  const params = HarnessReadinessQueryParamsSchema.parse(input);
+  if (options.readiness === undefined) {
+    throw {
+      tag: "HarnessReadinessProviderNotFoundError",
+      code: "HARNESS_READINESS_PROVIDER_NOT_FOUND",
+      message: "The requested harness readiness provider is not in the catalog.",
+      provider: params.provider,
+    };
+  }
+  const readiness = params.refresh
+    ? await options.readiness.refresh(params.provider)
+    : options.readiness.get(params.provider);
+  return HarnessReadinessQueryResultSchema.parse({ readiness });
 }
 
 function reconcileAfterExternalLaunch(
@@ -340,6 +369,9 @@ function buildProviderHookIngress(
       : { retention: options.config.observability.retention }),
     requestReconcile: scheduler.request,
     reportHarnessEvent,
+    ...(options.readiness === undefined
+      ? {}
+      : { markTrackingObserved: options.readiness.markTrackingObserved }),
   });
 }
 
@@ -357,6 +389,9 @@ function buildHarnessEventReportIngestion(
       ? {}
       : { retention: options.config.observability.retention }),
     requestReconcile: scheduler.request,
+    ...(options.readiness === undefined
+      ? {}
+      : { markTrackingObserved: options.readiness.markTrackingObserved }),
   });
 }
 

@@ -9,10 +9,11 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCommandQueue,
   createHarnessEventReportIngestion,
+  createHarnessReadinessService,
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
@@ -401,10 +402,41 @@ describe("observer provider hook ingress", () => {
       idFactory: ids(),
     });
     const eventBus = createObserverEventBus();
+    const createReadiness = () =>
+      createHarnessReadinessService({
+        catalog: new Map([
+          [
+            "codex",
+            {
+              provider: {
+                id: "codex",
+                probe: async () => ({
+                  cli: "available" as const,
+                  authentication: "ready" as const,
+                  launchability: "ready" as const,
+                  trackingSetup: "prepared" as const,
+                  technicalDetails: [],
+                }),
+              },
+              label: "Codex",
+              kind: "built_in" as const,
+              configuration: "configured" as const,
+              preparation: { prepare: true, repair: true },
+            },
+          ],
+        ]),
+        persistence,
+        clock,
+      });
+    const readiness = createReadiness();
+    await readiness.refresh("codex");
+    expect(readiness.catalogEntries()[0]?.readiness.status).toBe("prepared");
+    const markTrackingObserved = vi.fn(readiness.markTrackingObserved);
     const ingestion = createHarnessEventReportIngestion({
       persistence,
       eventBus,
       clock,
+      markTrackingObserved,
     });
     const report = harnessReport("report_dedupe_1");
 
@@ -413,10 +445,16 @@ describe("observer provider hook ingress", () => {
 
     expect(first).toMatchObject({ status: "accepted", deduped: false });
     expect(second).toMatchObject({ status: "accepted", deduped: true });
+    expect(markTrackingObserved).toHaveBeenCalledTimes(1);
+    expect(markTrackingObserved).toHaveBeenCalledWith("codex");
+    expect(readiness.catalogEntries()[0]?.readiness.status).toBe("ready");
     expect(
       (await persistence.listEvents({ type: "harness.eventReported" })).map((event) => event.event),
     ).toHaveLength(1);
     await expect(persistence.listProviderObservations()).resolves.toHaveLength(1);
+    const restartedReadiness = createReadiness();
+    await restartedReadiness.initialize();
+    expect(restartedReadiness.catalogEntries()[0]?.readiness.status).toBe("ready");
     sqlite.close();
   });
 
@@ -430,7 +468,13 @@ describe("observer provider hook ingress", () => {
     });
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
-    const ingress = createProviderHookIngress({ persistence, providers, clock });
+    const markTrackingObserved = vi.fn();
+    const ingress = createProviderHookIngress({
+      persistence,
+      providers,
+      clock,
+      markTrackingObserved,
+    });
     const event = {
       schemaVersion: STATION_SCHEMA_VERSION,
       hookId: "hook_context_retry",
@@ -448,6 +492,8 @@ describe("observer provider hook ingress", () => {
     await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
       deduped: true,
     });
+    expect(markTrackingObserved).toHaveBeenCalledTimes(1);
+    expect(markTrackingObserved).toHaveBeenCalledWith("fake-harness");
 
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
       expect.objectContaining({
@@ -484,9 +530,11 @@ describe("observer provider hook ingress", () => {
         return persistence.upsertSessionRecoveryHandle(input);
       },
     };
+    const markTrackingObserved = vi.fn();
     const ingestion = createHarnessEventReportIngestion({
       persistence: retryingPersistence,
       clock,
+      markTrackingObserved,
     });
     const report = {
       ...harnessReport("report_repair_1"),
@@ -514,6 +562,8 @@ describe("observer provider hook ingress", () => {
       accepted: true,
       deduped: true,
     });
+    expect(markTrackingObserved).toHaveBeenCalledTimes(1);
+    expect(markTrackingObserved).toHaveBeenCalledWith("codex");
     await expect(persistence.listSessionRecoveryHandles()).resolves.toHaveLength(1);
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
       expect.objectContaining({
