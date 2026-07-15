@@ -11,6 +11,7 @@ import {
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
 } from "@station/contracts";
+import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { maxIso, optionalJson } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
@@ -163,6 +164,52 @@ export function renameSession(
   return row === undefined ? undefined : sessionFromRow(row);
 }
 
+export function markSessionsEnded(
+  database: SqlDatabase,
+  input: {
+    subject:
+      | { kind: "session"; sessionId: string }
+      | { kind: "worktree"; projectId: string; worktreeId: string };
+    endedAt: string;
+  },
+): number {
+  const result =
+    input.subject.kind === "session"
+      ? database
+          .prepare(
+            `
+              UPDATE sessions
+              SET lifecycle = 'ended', ended_at = ?
+              WHERE id = ? AND (lifecycle IS NULL OR lifecycle = 'open')
+            `,
+          )
+          .run(input.endedAt, input.subject.sessionId)
+      : database
+          .prepare(
+            `
+              UPDATE sessions
+              SET lifecycle = 'ended', ended_at = ?
+              WHERE project_id = ? AND worktree_id = ?
+                AND (lifecycle IS NULL OR lifecycle = 'open')
+            `,
+          )
+          .run(input.endedAt, input.subject.projectId, input.subject.worktreeId);
+  return Number(result.changes);
+}
+
+export function reopenSession(
+  database: SqlDatabase,
+  sessionId: string,
+): PersistedSession | undefined {
+  database
+    .prepare("UPDATE sessions SET lifecycle = 'open', ended_at = NULL WHERE id = ?")
+    .run(sessionId);
+  const row = database.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as
+    | SqliteSessionRow
+    | undefined;
+  return row === undefined ? undefined : sessionFromRow(row);
+}
+
 export function seedSessionTitle(
   database: SqlDatabase,
   input: {
@@ -178,13 +225,17 @@ export function seedSessionTitle(
     .prepare(
       `
         INSERT INTO sessions
-          (id, project_id, worktree_id, title, created_at, ended_at, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, NULL, ?)
+          (id, project_id, worktree_id, title, created_at, ended_at, last_seen_at, lifecycle)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, 'open')
         ON CONFLICT(id) DO UPDATE SET
           project_id = excluded.project_id,
           worktree_id = excluded.worktree_id,
           title = COALESCE(sessions.title, excluded.title),
-          last_seen_at = excluded.last_seen_at
+          last_seen_at = excluded.last_seen_at,
+          lifecycle = CASE
+            WHEN sessions.lifecycle = 'ended' THEN 'ended'
+            ELSE 'open'
+          END
       `,
     )
     .run(
@@ -360,18 +411,26 @@ function upsertSessions(
     ) {
       continue;
     }
+    const existing = sessions.get(target.sessionId);
+    const activates = terminalCanActivateSession({ target, runs: harnessRuns });
     const session: PersistedSession = {
       id: target.sessionId,
       projectId: target.projectId,
       worktreeId: target.worktreeId,
+      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
       terminalProvider: target.provider,
       state: target.state,
-      createdAt: target.observedAt,
-      lastSeenAt: target.observedAt,
+      createdAt: existing?.createdAt ?? target.observedAt,
+      lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
     };
     const title = sessionTitleForWorktree(worktreesById, target.worktreeId);
     if (title !== undefined) {
       session.title = title;
+    } else if (existing?.title !== undefined) {
+      session.title = existing.title;
+    }
+    if (existing?.harness !== undefined) {
+      session.harness = existing.harness;
     }
     sessions.set(target.sessionId, session);
   }
@@ -385,10 +444,16 @@ function upsertSessions(
       continue;
     }
     const existing = sessions.get(run.sessionId);
+    const activates = harnessRunCanActivateSession({
+      run,
+      terminals: terminalTargets,
+      runs: harnessRuns,
+    });
     const session: PersistedSession = {
       id: run.sessionId,
       projectId: run.projectId,
       worktreeId: run.worktreeId,
+      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
       harness: run.provider,
       state: run.state,
       createdAt: existing?.createdAt ?? run.observedAt,
@@ -411,8 +476,8 @@ function upsertSessions(
       .prepare(
         `
           INSERT INTO sessions
-            (id, project_id, worktree_id, title, harness, terminal_provider, state, created_at, ended_at, last_seen_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            (id, project_id, worktree_id, title, harness, terminal_provider, state, created_at, ended_at, last_seen_at, lifecycle)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             project_id = excluded.project_id,
             worktree_id = excluded.worktree_id,
@@ -420,7 +485,12 @@ function upsertSessions(
             harness = COALESCE(excluded.harness, sessions.harness),
             terminal_provider = COALESCE(excluded.terminal_provider, sessions.terminal_provider),
             state = excluded.state,
-            last_seen_at = excluded.last_seen_at
+            last_seen_at = excluded.last_seen_at,
+            lifecycle = CASE
+              WHEN sessions.lifecycle = 'ended' THEN 'ended'
+              WHEN sessions.lifecycle = 'open' OR excluded.lifecycle = 'open' THEN 'open'
+              ELSE NULL
+            END
         `,
       )
       .run(
@@ -433,6 +503,7 @@ function upsertSessions(
         session.state ?? null,
         session.createdAt,
         session.lastSeenAt,
+        session.lifecycle === "legacy" ? null : session.lifecycle,
       );
   }
 }

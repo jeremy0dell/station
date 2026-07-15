@@ -174,10 +174,13 @@ export type PersistedWorktreeMetadataCurrent<
   lastError?: SafeError;
 };
 
+export type PersistedSessionLifecycle = "legacy" | "open" | "ended";
+
 export type PersistedSession = {
   id: string;
   projectId: string;
   worktreeId: string;
+  lifecycle: PersistedSessionLifecycle;
   title?: string;
   harness?: string;
   terminalProvider?: string;

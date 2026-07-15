@@ -71,9 +71,12 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    decision (`Harness event report processed.` / `skipped.` with
    `projected`/`correlatedBy`/`deduped`). An accepted report with
    `projected: false` is a correlation failure and must stay visible.
-6. **Evolution is additive.** New fields optional, enums keep catch-all
-   members (`input`), schema stamps (`schemaVersion`) travel with payloads.
-   New signal kinds require census evidence, not speculation.
+6. **Evolution is explicit.** Prefer optional fields and keep enum catch-all
+   members (`input`). Schema stamps (`schemaVersion`) travel with payloads, and
+   any required shared-shape change bumps the exact `STATION_SCHEMA_VERSION`.
+   After such a bump, reinstall the binary and rerun `stn setup` or
+   `stn hooks install <target> --yes` for every enabled provider before testing
+   ingress. New signal kinds require census evidence, not speculation.
 7. **Busy statuses decay.** `working`/`starting` are claims that signals are
    still flowing; reconcile projects a run whose newest signal is older than
    15 minutes to `unknown` (low confidence, source `reconcile`) instead of

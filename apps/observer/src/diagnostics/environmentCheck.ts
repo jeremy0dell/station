@@ -31,7 +31,7 @@ export function buildSessionEnvironmentCheck(
 }
 
 function isDetachedOrStale(session: SessionView): boolean {
-  return session.terminal.state === "detached" || session.terminal.state === "stale";
+  return session.terminal?.state === "detached" || session.terminal?.state === "stale";
 }
 
 /** ` — station: 4 open · tmux: 3 detached` (empty for zero sessions). */
@@ -40,7 +40,12 @@ function summarizeProviders(sessions: readonly SessionView[]): string {
     return "";
   }
   const byProvider = new Map<string, Map<string, number>>();
+  let withoutTerminal = 0;
   for (const session of sessions) {
+    if (session.terminal === undefined) {
+      withoutTerminal += 1;
+      continue;
+    }
     const states = byProvider.get(session.terminal.provider) ?? new Map<string, number>();
     states.set(session.terminal.state, (states.get(session.terminal.state) ?? 0) + 1);
     byProvider.set(session.terminal.provider, states);
@@ -48,6 +53,9 @@ function summarizeProviders(sessions: readonly SessionView[]): string {
   const segments = sortedEntries(byProvider).map(
     ([provider, states]) => `${provider}: ${countText(states)}`,
   );
+  if (withoutTerminal > 0) {
+    segments.push(`no terminal: ${withoutTerminal}`);
+  }
   return ` — ${segments.join(" · ")}`;
 }
 
@@ -57,7 +65,7 @@ const MAX_LISTED = 4;
 function describeSessions(sessions: readonly SessionView[]): string {
   const shown = sessions
     .slice(0, MAX_LISTED)
-    .map((session) => `${session.title} [${session.terminal.provider}]`);
+    .map((session) => `${session.title} [${session.terminal?.provider ?? "no terminal"}]`);
   const remainder = sessions.length - shown.length;
   return remainder > 0 ? `${shown.join(", ")}, +${remainder} more` : shown.join(", ");
 }

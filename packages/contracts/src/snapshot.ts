@@ -44,6 +44,7 @@ export const ProjectViewSchema = z
     health: ProviderHealthSchema,
     counts: z
       .object({
+        sessions: z.number().int().nonnegative(),
         worktrees: z.number().int().nonnegative(),
         agents: z.number().int().nonnegative(),
         working: z.number().int().nonnegative(),
@@ -170,9 +171,14 @@ export const WorktreeViewSchema = WorktreeRowSchema;
 export type WorktreeRow = z.infer<typeof WorktreeRowSchema>;
 export type WorktreeView = WorktreeRow;
 
+export const SessionOriginSchema = z.enum(["station", "external"]);
+
+export type SessionOrigin = z.infer<typeof SessionOriginSchema>;
+
 export const SessionViewSchema = z
   .object({
     id: SessionIdSchema,
+    origin: SessionOriginSchema,
     projectId: ProjectIdSchema,
     worktreeId: WorktreeIdSchema,
     createdAt: TimestampSchema,
@@ -186,7 +192,7 @@ export const SessionViewSchema = z
         capabilities: HarnessCapabilitiesSchema,
       })
       .strict(),
-    terminal: TerminalAttachmentSchema,
+    terminal: TerminalAttachmentSchema.optional(),
     status: ObservedStatusSchema,
     title: nonEmptyStringSchema,
     tags: z.array(nonEmptyStringSchema),
@@ -263,6 +269,7 @@ export const StationSnapshotSchema = z
     counts: z
       .object({
         projects: z.number().int().nonnegative(),
+        sessions: z.number().int().nonnegative(),
         worktrees: z.number().int().nonnegative(),
         agents: z.number().int().nonnegative(),
         working: z.number().int().nonnegative(),

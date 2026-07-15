@@ -16,7 +16,7 @@ const harnessCapabilities = {
 };
 
 export const mockObserverSnapshot = {
-  schemaVersion: "0.7.0",
+  schemaVersion: "0.8.0",
   generatedAt: fixtureNow,
   observer: {
     pid: 4242,
@@ -65,6 +65,7 @@ export const mockObserverSnapshot = {
         lastCheckedAt: fixtureNow,
       },
       counts: {
+        sessions: 2,
         worktrees: 3,
         agents: 2,
         working: 1,
@@ -193,6 +194,7 @@ export const mockObserverSnapshot = {
   sessions: [
     {
       id: "ses_station_design",
+      origin: "station",
       projectId: "station",
       worktreeId: "wt_station_design",
       createdAt: "2026-06-11T11:59:00.000Z",
@@ -226,6 +228,7 @@ export const mockObserverSnapshot = {
     },
     {
       id: "ses_notify_cleanup",
+      origin: "station",
       projectId: "station",
       worktreeId: "wt_notify_cleanup",
       createdAt: "2026-06-11T10:42:00.000Z",
@@ -260,6 +263,7 @@ export const mockObserverSnapshot = {
   ],
   counts: {
     projects: 1,
+    sessions: 2,
     worktrees: 3,
     agents: 2,
     working: 1,

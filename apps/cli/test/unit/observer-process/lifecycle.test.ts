@@ -54,7 +54,7 @@ describe("CLI observer process lifecycle", () => {
                 throw new Error("not yet");
               }
               return {
-                schemaVersion: "0.7.0",
+                schemaVersion: "0.8.0",
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
@@ -104,7 +104,7 @@ describe("CLI observer process lifecycle", () => {
                 throw new Error("not running");
               }
               return {
-                schemaVersion: "0.7.0",
+                schemaVersion: "0.8.0",
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
@@ -215,7 +215,7 @@ describe("CLI observer process lifecycle", () => {
                   tag: "ProtocolError",
                   code: "PROTOCOL_SCHEMA_MISMATCH",
                   message:
-                    "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.7.0.",
+                    "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.8.0.",
                   hint: "A different STATION checkout may own the observer socket.",
                 };
               },
@@ -253,7 +253,7 @@ describe("CLI observer process lifecycle", () => {
           clientFactory: () =>
             ({
               health: async () => ({
-                schemaVersion: "0.7.0",
+                schemaVersion: "0.8.0",
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
@@ -284,7 +284,7 @@ describe("CLI observer process lifecycle", () => {
         clientFactory: () =>
           ({
             health: async () => ({
-              schemaVersion: "0.7.0",
+              schemaVersion: "0.8.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -293,7 +293,7 @@ describe("CLI observer process lifecycle", () => {
             }),
             stop: async () => {
               stops += 1;
-              return { schemaVersion: "0.7.0", stopped: true, at: now };
+              return { schemaVersion: "0.8.0", stopped: true, at: now };
             },
           }) as never,
       },
@@ -329,7 +329,7 @@ describe("CLI observer process lifecycle", () => {
             health: async () => {
               if (!running) throw new Error("stopped");
               return {
-                schemaVersion: "0.7.0",
+                schemaVersion: "0.8.0",
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
@@ -340,7 +340,7 @@ describe("CLI observer process lifecycle", () => {
             stop: async () => {
               stops += 1;
               running = false;
-              return { schemaVersion: "0.7.0", stopped: true, at: now };
+              return { schemaVersion: "0.8.0", stopped: true, at: now };
             },
           }) as never,
       },
@@ -370,7 +370,7 @@ describe("CLI observer process lifecycle", () => {
         clientFactory: () =>
           ({
             health: async () => ({
-              schemaVersion: "0.7.0",
+              schemaVersion: "0.8.0",
               status: "healthy",
               pid,
               startedAt: now,
@@ -379,7 +379,7 @@ describe("CLI observer process lifecycle", () => {
             }),
             stop: async () => {
               stops += 1;
-              return { schemaVersion: "0.7.0", stopped: true, at: now };
+              return { schemaVersion: "0.8.0", stopped: true, at: now };
             },
           }) as never,
       },
@@ -409,7 +409,7 @@ describe("CLI observer process lifecycle", () => {
               healthAttempts += 1;
               if (!spawned || healthAttempts < 3) {
                 return {
-                  schemaVersion: "0.7.0",
+                  schemaVersion: "0.8.0",
                   status: "healthy",
                   pid: 1234,
                   startedAt: now,
@@ -418,7 +418,7 @@ describe("CLI observer process lifecycle", () => {
                 };
               }
               return {
-                schemaVersion: "0.7.0",
+                schemaVersion: "0.8.0",
                 status: "healthy",
                 pid: 5678,
                 startedAt: now,
@@ -457,7 +457,7 @@ describe("CLI observer process lifecycle", () => {
         clientFactory: () =>
           ({
             health: async () => ({
-              schemaVersion: "0.7.0",
+              schemaVersion: "0.8.0",
               status: "healthy",
               ...identity,
             }),

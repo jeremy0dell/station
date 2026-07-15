@@ -34,19 +34,31 @@ export function applyStationEvent(
     });
   }
   if (event.type === "session.created") {
-    return withSnapshot(snapshot, { sessions: upsertSession(snapshot.sessions, event.session) });
+    return withSnapshot(
+      snapshot,
+      { sessions: upsertSession(snapshot.sessions, event.session) },
+      true,
+    );
   }
   if (event.type === "session.updated") {
-    return withSnapshot(snapshot, {
-      sessions: snapshot.sessions.map((session) =>
-        session.id === event.sessionId ? mergeSessionPatch(session, event.patch) : session,
-      ),
-    });
+    return withSnapshot(
+      snapshot,
+      {
+        sessions: snapshot.sessions.map((session) =>
+          session.id === event.sessionId ? mergeSessionPatch(session, event.patch) : session,
+        ),
+      },
+      true,
+    );
   }
   if (event.type === "session.removed") {
-    return withSnapshot(snapshot, {
-      sessions: snapshot.sessions.filter((session) => session.id !== event.sessionId),
-    });
+    return withSnapshot(
+      snapshot,
+      {
+        sessions: snapshot.sessions.filter((session) => session.id !== event.sessionId),
+      },
+      true,
+    );
   }
   if (event.type === "provider.healthChanged") {
     return {
@@ -90,6 +102,7 @@ export function applyStationEvent(
 function withSnapshot(
   snapshot: StationSnapshot,
   patch: Partial<Pick<StationSnapshot, "rows" | "sessions">>,
+  needsSnapshotRefresh = false,
 ): ApplyStationEventResult {
   const nextSnapshot: StationSnapshot = {
     ...snapshot,
@@ -98,7 +111,7 @@ function withSnapshot(
   };
   return {
     snapshot: nextSnapshot,
-    needsSnapshotRefresh: false,
+    needsSnapshotRefresh,
     notices: [],
   };
 }
@@ -210,18 +223,22 @@ function displayForAgent(agent: NonNullable<WorktreeRow["agent"]>): WorktreeRow[
 function mergeSessionPatch(session: SessionView, patch: OptionalPatch<SessionView>): SessionView {
   const next: SessionView = {
     id: patch.id ?? session.id,
+    origin: patch.origin ?? session.origin,
     projectId: patch.projectId ?? session.projectId,
     worktreeId: patch.worktreeId ?? session.worktreeId,
     createdAt: patch.createdAt ?? session.createdAt,
     updatedAt: patch.updatedAt ?? session.updatedAt,
     harness: session.harness,
-    terminal: session.terminal,
     status: session.status,
     title: patch.title ?? session.title,
     tags: patch.tags ?? session.tags,
   };
+  if (session.terminal !== undefined) next.terminal = session.terminal;
   if (patch.harness !== undefined) next.harness = { ...session.harness, ...patch.harness };
-  if (patch.terminal !== undefined) next.terminal = { ...session.terminal, ...patch.terminal };
+  if (patch.terminal !== undefined) {
+    next.terminal =
+      session.terminal === undefined ? patch.terminal : { ...session.terminal, ...patch.terminal };
+  }
   if (patch.status !== undefined) next.status = { ...session.status, ...patch.status };
   return next;
 }

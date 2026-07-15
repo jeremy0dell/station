@@ -155,6 +155,7 @@ function applySessionPatch(
 ): SessionView {
   const next: SessionView = { ...current };
   if (patch.id !== undefined) next.id = patch.id;
+  if (patch.origin !== undefined) next.origin = patch.origin;
   if (patch.projectId !== undefined) next.projectId = patch.projectId;
   if (patch.worktreeId !== undefined) next.worktreeId = patch.worktreeId;
   if (patch.createdAt !== undefined) next.createdAt = patch.createdAt;

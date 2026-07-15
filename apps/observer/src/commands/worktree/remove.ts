@@ -4,11 +4,12 @@ import {
   WorktreeRemovalRefusalDiagnosticDetailSchema,
 } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
-import type { EventJournal } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
+import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import {
   assertWorktreeRemovalAllowed,
@@ -31,7 +32,7 @@ export type CreateWorktreeRemoveHandlerOptions = {
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
-  persistence: EventJournal;
+  persistence: EventJournal & SessionStore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
@@ -56,7 +57,10 @@ export function createWorktreeRemoveHandler(
     const row = resolveWorktreeRowOrThrow(snapshot, payload.worktreeId, payload.projectId);
     const projectView = snapshot.projects.find((candidate) => candidate.id === row.projectId);
     const project = findProjectOrThrow(options.getProjects(), row.projectId);
-    const previousSessionId = row.agent?.sessionId;
+    const stationSession = snapshot.sessions.find(
+      (session) => session.origin === "station" && session.worktreeId === row.id,
+    );
+    const previousSessionId = stationSession?.id ?? row.agent?.sessionId;
     const force = payload.force === true;
     const currentWorktrees = await runProviderMutation(
       {
@@ -142,6 +146,10 @@ export function createWorktreeRemoveHandler(
       throw error;
     }
     throwIfAborted(context.signal);
+    await options.persistence.markSessionsEnded({
+      subject: { kind: "worktree", projectId: row.projectId, worktreeId: row.id },
+      endedAt: nowIso(options.clock),
+    });
 
     const nextSnapshot = await reconcileAndPublish({
       core: options.core,

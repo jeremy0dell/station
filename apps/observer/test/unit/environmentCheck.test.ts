@@ -7,6 +7,10 @@ function session(title: string, provider: string, state: string): SessionView {
   return { title, terminal: { provider, state } } as unknown as SessionView;
 }
 
+function sessionWithoutTerminal(title: string): SessionView {
+  return { title } as unknown as SessionView;
+}
+
 function orphan(kind: OrphanedRuntimeState["kind"]): OrphanedRuntimeState {
   return { kind } as unknown as OrphanedRuntimeState;
 }
@@ -26,6 +30,16 @@ describe("buildSessionEnvironmentCheck", () => {
     });
     expect(check.status).toBe("ok");
     expect(check.message).toBe("2 session(s) — native: 2 open.");
+  });
+
+  it("reports canonical sessions that have no observed terminal", () => {
+    const check = buildSessionEnvironmentCheck({
+      sessions: [sessionWithoutTerminal("external")],
+      orphans: [],
+    });
+
+    expect(check.status).toBe("ok");
+    expect(check.message).toBe("1 session(s) — no terminal: 1.");
   });
 
   it("warns and names detached sessions with their provider (the silent-click case)", () => {

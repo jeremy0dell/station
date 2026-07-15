@@ -12,10 +12,11 @@ import {
   selectProjectChoices,
   selectProjectGroups,
   selectVisibleRows,
+  sessionForWorktreeRow,
   worktreeRowDisplayTitle,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI selectors", () => {
   it("assigns selection keys in order without 0 or uppercase keys and caps at 35", () => {
@@ -194,6 +195,19 @@ describe("TUI selectors", () => {
     expect(
       worktreeRowDisplayTitle({ ...row, agent: undefined }, [], createInitialTuiState().localRows),
     ).toBe(row.branch);
+  });
+
+  it("resolves an external row by run identity before retained Station membership", () => {
+    const external = createExternalAgentSnapshot();
+    const station = createDashboardSnapshot();
+    const row = external.rows.find((candidate) => candidate.id === "wt_web_idle");
+    const retained = station.sessions.find((session) => session.worktreeId === row?.id);
+    if (row === undefined || retained === undefined) throw new Error("missing fixture membership");
+
+    expect(sessionForWorktreeRow(row, [retained, ...external.sessions])).toMatchObject({
+      origin: "external",
+      id: row.agent?.runId,
+    });
   });
 
   it("filters by search and collapses project groups without changing snapshot truth", () => {

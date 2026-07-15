@@ -65,6 +65,10 @@ import type {
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
 } from "../../src/persistence/types.js";
+import {
+  harnessRunCanActivateSession,
+  terminalCanActivateSession,
+} from "../../src/sessionActivation.js";
 
 type CreateInMemoryObserverPersistenceOptions = {
   clock?: RuntimeClock;
@@ -348,6 +352,7 @@ export function createInMemoryObserverPersistence(
             id: input.sessionId,
             projectId: input.projectId,
             worktreeId: input.worktreeId,
+            lifecycle: "open",
             title: input.title,
             createdAt: input.createdAt,
             lastSeenAt: input.lastSeenAt,
@@ -359,11 +364,38 @@ export function createInMemoryObserverPersistence(
         existing.worktreeId = input.worktreeId;
         if (existing.title === undefined) existing.title = input.title;
         existing.lastSeenAt = input.lastSeenAt;
+        if (existing.lifecycle !== "ended") existing.lifecycle = "open";
         return existing;
       }),
 
     deleteSessionTitleSeed: (sessionId) =>
       transaction((draft) => (draft.sessions.delete(sessionId) ? 1 : 0)),
+
+    markSessionsEnded: (input) =>
+      transaction((draft) => {
+        let changed = 0;
+        for (const session of draft.sessions.values()) {
+          const matches =
+            input.subject.kind === "session"
+              ? session.id === input.subject.sessionId
+              : session.projectId === input.subject.projectId &&
+                session.worktreeId === input.subject.worktreeId;
+          if (!matches || session.lifecycle === "ended") continue;
+          session.lifecycle = "ended";
+          session.endedAt = input.endedAt;
+          changed += 1;
+        }
+        return changed;
+      }),
+
+    reopenSession: (sessionId) =>
+      transaction((draft) => {
+        const session = draft.sessions.get(sessionId);
+        if (session === undefined) return undefined;
+        session.lifecycle = "open";
+        delete session.endedAt;
+        return session;
+      }),
 
     renameSession: (input) =>
       transaction((draft) => {
@@ -876,17 +908,22 @@ function upsertSessions(
     ) {
       continue;
     }
+    const existing = sessions.get(target.sessionId);
+    const activates = terminalCanActivateSession({ target, runs: harnessRuns });
     const session: PersistedSession = {
       id: target.sessionId,
       projectId: target.projectId,
       worktreeId: target.worktreeId,
+      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
       terminalProvider: target.provider,
       state: target.state,
-      createdAt: target.observedAt,
-      lastSeenAt: target.observedAt,
+      createdAt: existing?.createdAt ?? target.observedAt,
+      lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
     };
     const title = worktreesById.get(target.worktreeId)?.branch;
     if (title !== undefined) session.title = title;
+    else if (existing?.title !== undefined) session.title = existing.title;
+    if (existing?.harness !== undefined) session.harness = existing.harness;
     sessions.set(target.sessionId, session);
   }
 
@@ -899,10 +936,16 @@ function upsertSessions(
       continue;
     }
     const existing = sessions.get(run.sessionId);
+    const activates = harnessRunCanActivateSession({
+      run,
+      terminals: terminalTargets,
+      runs: harnessRuns,
+    });
     const session: PersistedSession = {
       id: run.sessionId,
       projectId: run.projectId,
       worktreeId: run.worktreeId,
+      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
       harness: run.provider,
       state: run.state,
       createdAt: existing?.createdAt ?? run.observedAt,
@@ -933,6 +976,10 @@ function upsertSessions(
     if (session.state === undefined) delete existing.state;
     else existing.state = session.state;
     existing.lastSeenAt = session.lastSeenAt;
+    if (existing.lifecycle !== "ended") {
+      existing.lifecycle =
+        existing.lifecycle === "open" || session.lifecycle === "open" ? "open" : "legacy";
+    }
   }
 }
 

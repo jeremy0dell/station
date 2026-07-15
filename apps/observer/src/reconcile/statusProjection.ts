@@ -8,7 +8,7 @@ import type {
   WorktreeRow,
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
-import { countsForRows, statusPolicy } from "./statusPolicy.js";
+import { countsForSnapshot, statusPolicy } from "./statusPolicy.js";
 
 type WorktreeAgent = NonNullable<WorktreeRow["agent"]>;
 type CorrelatedBy = "harnessRunId" | "sessionId" | "worktreeId";
@@ -156,10 +156,7 @@ function sessionTitleForAgent(
   sessions: readonly SessionView[],
   agent: WorktreeAgent,
 ): string | undefined {
-  if (agent.sessionId === undefined) {
-    return undefined;
-  }
-  return sessions.find((session) => session.id === agent.sessionId)?.title;
+  return sessionForAgent(sessions, agent)?.title;
 }
 
 function unprojected(snapshot: StationSnapshot): StatusProjectionResult {
@@ -284,18 +281,33 @@ function projectSession(
   event?: StationEvent;
   sessionId?: string;
 } {
-  const sessionId = agent.sessionId;
-  if (sessionId === undefined) {
+  const projectedSession = sessionForAgent(sessions, agent);
+  if (projectedSession === undefined) {
     return {
       sessions: [...sessions],
       changed: false,
+    };
+  }
+  const sessionId = projectedSession.id;
+
+  if (
+    projectedSession.origin === "external" &&
+    (status.value === "exited" || status.value === "none")
+  ) {
+    return {
+      sessions: sessions.filter(
+        (session) => !(session.origin === "external" && session.id === sessionId),
+      ),
+      changed: true,
+      event: { type: "session.removed", sessionId },
+      sessionId,
     };
   }
 
   let changed = false;
   let event: StationEvent | undefined;
   const nextSessions = sessions.map((session) => {
-    if (session.id !== sessionId) {
+    if (session.origin !== projectedSession.origin || session.id !== sessionId) {
       return session;
     }
     const nextSession: SessionView = {
@@ -332,6 +344,21 @@ function projectSession(
   };
 }
 
+function sessionForAgent(
+  sessions: readonly SessionView[],
+  agent: WorktreeAgent,
+): SessionView | undefined {
+  if (agent.sessionId !== undefined) {
+    return sessions.find(
+      (session) => session.origin === "station" && session.id === agent.sessionId,
+    );
+  }
+  if (agent.runId === undefined) return undefined;
+  return sessions.find(
+    (session) => session.origin === "external" && session.harness.runId === agent.runId,
+  );
+}
+
 function rebuildSnapshot(input: {
   snapshot: StationSnapshot;
   rows: WorktreeRow[];
@@ -339,9 +366,13 @@ function rebuildSnapshot(input: {
   generatedAt: string;
 }): StationSnapshot {
   const projects = input.snapshot.projects.map((project) => {
+    const projectSessions = input.sessions.filter((session) => session.projectId === project.id);
     const nextProject: ProjectView = {
       ...project,
-      counts: countsForRows(input.rows.filter((row) => row.projectId === project.id)),
+      counts: countsForSnapshot(
+        input.rows.filter((row) => row.projectId === project.id),
+        projectSessions,
+      ),
     };
     return nextProject;
   });
@@ -353,7 +384,7 @@ function rebuildSnapshot(input: {
     sessions: input.sessions,
     counts: {
       projects: projects.length,
-      ...countsForRows(input.rows),
+      ...countsForSnapshot(input.rows, input.sessions),
     },
   };
 }

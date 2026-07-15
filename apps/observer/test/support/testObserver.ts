@@ -40,6 +40,7 @@ export function emptyStationSnapshot(generatedAt: string): StationSnapshot {
     sessions: [],
     counts: {
       projects: 0,
+      sessions: 0,
       worktrees: 0,
       agents: 0,
       working: 0,

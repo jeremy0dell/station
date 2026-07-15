@@ -1,8 +1,9 @@
 import type { RuntimeClock } from "@station/runtime";
-import type { EventJournal } from "../../persistence/index.js";
+import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import {
   assertSessionCloseAllowed,
@@ -20,7 +21,7 @@ export type CreateSessionCloseHandlerOptions = {
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
-  persistence: EventJournal;
+  persistence: EventJournal & SessionStore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
@@ -51,6 +52,12 @@ export function createSessionCloseHandler(
       commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
+    if (session.origin === "station" && payload.mode !== "harness") {
+      await options.persistence.markSessionsEnded({
+        subject: { kind: "session", sessionId: session.id },
+        endedAt: nowIso(options.clock),
+      });
+    }
 
     const nextSnapshot = await reconcileAndPublish({
       core: options.core,

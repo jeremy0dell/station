@@ -117,7 +117,7 @@ function buildStationItems(
   }
   const project = state.snapshot.projects.find((candidate) => candidate.id === row.projectId);
   const items: ContextMenuItem[] = [];
-  if (sessionForWorktreeRow(row, state.snapshot.sessions) !== undefined) {
+  if (sessionForWorktreeRow(row, state.snapshot.sessions)?.origin === "station") {
     items.push({
       id: "station.renameSession",
       label: "Rename Session",

@@ -242,7 +242,7 @@ No single layer owns all truth.
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
-| `StationSnapshot` | Current normalized graph held in memory. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
+| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
@@ -369,6 +369,26 @@ Reconcile reads worktree and terminal actors, derives the worktree context for
 harness reads, applies cached metadata and durable overlays, correlates the
 graph, persists the result, and replaces the in-memory snapshot. It then
 publishes state-change and reconcile events and schedules metadata refresh.
+
+Session reconciliation keeps the newest explicitly open Station-owned durable
+session for each still-configured worktree when its harness is known, even when
+no live run or terminal is observed. Legacy rows with no explicit lifecycle are
+not retained. A Station-bound run in `starting`, `idle`, `working`,
+`needs_attention`, or `stuck`, or an `open`/`detached` terminal explicitly bound
+to the same Station session, activates them as open. A run correlated to a terminal
+by run ID, or by session ID when no terminal run ID exists, also requires a reachable
+matching terminal; an uncorrelated active run may stand alone. When a terminal's
+run binding resolves, that run must claim the same session. Weak or conflicting
+evidence may refresh legacy correlation metadata, including the remembered harness,
+without activating membership.
+Cleanup records both `ended` lifecycle and `endedAt`, and generic terminal or run
+evidence cannot reopen that record. An explicit resume can reopen the same
+session. External sessions are derived independently and exist only from current,
+unexpired harness-run evidence whose status is neither `none`, `unknown`, nor
+`exited`; they reuse the normalized run id and are not persisted as Station-owned
+sessions. Terminal attachment requires matching session or run identity. Session
+and activity totals derive from canonical sessions; only worktree totals derive
+from rows.
 
 Observer core serializes full reconciles. The scheduler debounces and coalesces
 reasons while ensuring only one scheduled run is active. Startup-compatible
@@ -506,8 +526,8 @@ when it changes several tables:
 - `ObservationStore` owns typed provider observations, current-observation
   queries, and expiry.
 - `ReconcileStore` owns the complete atomic `persistReconcileResult` operation.
-- `SessionStore` owns sessions, titles, recovery handles, turn readiness, and
-  purpose-specific remembered-harness lookup.
+- `SessionStore` owns explicit session lifecycle, titles, recovery handles, turn
+  readiness, and purpose-specific remembered-harness lookup.
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 

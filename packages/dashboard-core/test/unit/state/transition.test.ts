@@ -512,6 +512,12 @@ describe("TUI screen transitions", () => {
     expect(openRenameEditForRow(search, "wt_web_idle")).toBe(search);
   });
 
+  it("does not open rename for external session membership", () => {
+    const state = createInitialTuiState({ initialSnapshot: createExternalAgentSnapshot() });
+
+    expect(openRenameEditForRow(state, "wt_web_idle")).toBe(state);
+  });
+
   it("edits the rename draft at the cursor position", () => {
     const opened = handleTuiKey(
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {

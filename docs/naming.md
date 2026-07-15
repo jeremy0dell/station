@@ -127,7 +127,12 @@ Some names are compatibility aliases, not the preferred vocabulary:
 - `hook.ingested` and `hook.spoolDrained` are removed, not aliased. Use `providerHook.ingested` and `providerHook.spoolDrained`; the retired strings error as input rather than silently upgrading.
 - `hookSpool` names are acceptable for filesystem compatibility, but new code should prefer `providerHookSpool` or a broader `providerIngressSpool` when the spool contains both provider hook events and harness event reports.
 
-Because STATION is pre-alpha — no shipped installs, no externally persisted payloads, no generated scripts in the wild — there is no compatibility surface to preserve for STATION's own retired names. Remove a retired name instead of aliasing it. Do not add alias-only wrappers for names that are not part of a real external contract.
+Because STATION is pre-alpha, there is no compatibility surface to preserve for
+STATION's own retired names. Remove a retired name instead of aliasing it. Do
+not add alias-only wrappers for names that are not part of a real external
+contract. This does not permit silent shared-schema drift: breaking payload
+changes bump the exact schema version and require generated provider hooks to
+be reinstalled.
 
 ## Status Sources
 
@@ -158,7 +163,15 @@ Three lifecycle units are easy to conflate. Keep them distinct in names, command
 
 ### Session
 
-A session is one agent / harness run. The observer mints its id as `ses_<uuid>` (`apps/observer/src/commands/session/shared.ts`). A session lives inside a worktree but is not the worktree — ending a session leaves the checkout and panes intact.
+A session is one agent/harness lifecycle inside a worktree, not the worktree
+itself. `StationSnapshot.sessions` is canonical membership. `origin: "station"`
+identifies Observer-owned lifecycle state: the Observer mints its id as
+`ses_<uuid>` (`apps/observer/src/commands/session/shared.ts`), and the newest
+explicitly open durable record can remain a member without a currently observed
+run or terminal. `origin: "external"` identifies current external run evidence: the
+view reuses the normalized harness run id and is removed when that evidence is
+expired, `none`, `unknown`, or `exited`. Ending a session leaves the checkout
+and panes intact.
 
 There is no deletable "session" unit and no `session.remove` command. The durable, deletable unit is the worktree.
 

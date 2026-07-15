@@ -53,7 +53,7 @@ export function isExternalAgentRemovalUnavailable(
   return (
     agent !== undefined &&
     isRunningAgentState(agent.state) &&
-    sessionForWorktreeRow(row, snapshot.sessions) === undefined &&
+    sessionForWorktreeRow(row, snapshot.sessions)?.origin !== "station" &&
     snapshot.providerHealth[agent.harness]?.capabilities?.canStop === false &&
     row.terminal?.closeable !== true
   );

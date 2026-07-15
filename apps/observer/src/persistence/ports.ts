@@ -131,7 +131,7 @@ export interface ReconcileStore {
 /**
  * DRIVEN PORT
  *
- * Maintains Observer-owned sessions, titles, remembered harness selection, recovery handles, and turn readiness.
+ * Maintains Observer-owned session lifecycle, titles, remembered harness selection, recovery handles, and turn readiness.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
@@ -149,6 +149,13 @@ export interface SessionStore {
     lastSeenAt: string;
   }): Promise<PersistedSession>;
   deleteSessionTitleSeed(sessionId: string): Promise<number>;
+  markSessionsEnded(input: {
+    subject:
+      | { kind: "session"; sessionId: string }
+      | { kind: "worktree"; projectId: string; worktreeId: string };
+    endedAt: string;
+  }): Promise<number>;
+  reopenSession(sessionId: string): Promise<PersistedSession | undefined>;
   renameSession(input: { sessionId: string; title: string }): Promise<PersistedSession | undefined>;
   upsertSessionRecoveryHandle(input: SessionRecoveryHandle): Promise<SessionRecoveryHandle>;
   getSessionRecoveryHandle(handleId: string): Promise<SessionRecoveryHandle | undefined>;
