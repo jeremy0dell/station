@@ -250,6 +250,7 @@ function scenarioRow(input: ScenarioRowInput): WorktreeRow {
     projectLabel: input.project.label,
     branch: input.branch,
     path: `/Users/example/.worktrees/${input.project.id}/${input.branch.replaceAll("/", "-")}`,
+    registrationIdentity: `git-registration:${input.id}`,
     worktree: {
       state: "exists",
       source: "worktrunk",
