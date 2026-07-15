@@ -10,6 +10,7 @@ import type { StationSnapshot } from "@station/contracts";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   attentionAndFailuresSnapshot,
+  externalAgentSnapshot,
   manyProjectsSnapshot,
   noProjectsSnapshot,
   scenarioState,
@@ -149,6 +150,17 @@ describe("dashboard golden frames", () => {
     // Project headers with the disclosure marker and session/agent counts.
     expect(frame).toContain("▼ station  4 sessions");
     expect(frame).toContain("▼ observer  2 sessions");
+  });
+
+  it("renders external sessions while hiding bare worktrees", async () => {
+    const snapshot = externalAgentSnapshot();
+    const setup = await renderDashboard({ width: 120, height: 40, snapshot });
+    const frame = setup.captureCharFrame();
+
+    expect(frame).toContain("pty-buffer");
+    expect(frame).toContain("docs-cleanup");
+    expect(frame).not.toContain("old-experiment");
+    expect(frame).toContain(`${snapshot.counts.sessions} sessions`);
   });
 
   it("colors alert rows red and check glyphs by state", async () => {
@@ -317,7 +329,7 @@ describe("dashboard golden frames", () => {
     expect(lines.find((line) => line.startsWith("▏"))).toContain("popup-latency");
   });
 
-  it("paints hovered worktree rows through the trailing action column", async () => {
+  it("paints hovered session rows through the trailing action column", async () => {
     const setup = await renderDashboard({ width: 80, height: 24, snapshot: manyProjectsSnapshot() });
     const before = setup.captureCharFrame();
     const lines = before.split("\n");

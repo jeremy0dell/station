@@ -1,10 +1,11 @@
-import type { WorktreeRow } from "@station/contracts";
+import type { SessionId, WorktreeRow } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
 import {
   createEditableTextInputState,
   editableTextInputIntentForInput,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
+import { selectDashboardSessionRow } from "../../selectors/selectors.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
@@ -75,7 +76,7 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
 // open it directly for a clicked row (skipping chooseSlot), like renameSession.
 export function openForkDetailsForRow(
   state: TuiState,
-  rowId: string,
+  rowId: SessionId,
   returnTo?: "dashboard",
 ): TuiState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "fork") {
@@ -85,10 +86,11 @@ export function openForkDetailsForRow(
   if (snapshot === undefined) {
     return state;
   }
-  const row = snapshot.rows.find((candidate) => candidate.id === rowId);
-  if (row === undefined) {
+  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
+  if (sessionRow === undefined) {
     return state;
   }
+  const row = sessionRow.worktree;
   const project = snapshot.projects.find((candidate) => candidate.id === row.projectId);
   if (project === undefined) {
     return state;
@@ -102,7 +104,9 @@ export function openForkDetailsForRow(
     projectLabel: row.projectLabel,
     sourceBranch: row.branch,
     sourceDirty: row.worktree.dirty === true,
-    sourceAgentRunning: isRunningAgentState(row.agent?.state),
+    sourceAgentRunning: snapshot.sessions.some(
+      (session) => session.worktreeId === row.id && isRunningAgentState(session.status.value),
+    ),
     draftBranch: createEditableTextInputState(
       suggestForkBranch(row.branch, snapshot.rows, row.projectId),
     ),

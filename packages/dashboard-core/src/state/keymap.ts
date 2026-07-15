@@ -135,7 +135,7 @@ export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
 
-const slotHelp = { keys: "1-9 a-z", label: "start or focus visible row" };
+const slotHelp = { keys: "1-9 a-z", label: "open visible session" };
 
 // Dashboard dispatch resolves through this table before executing the binding's
 // action. Other mode tables feed copy/tests so documented chords cannot drift

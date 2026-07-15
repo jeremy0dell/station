@@ -45,7 +45,7 @@ export function createCommandSnapshot(
   state: "none" | "idle" = "idle",
   options: { dirty?: boolean } = {},
 ): StationSnapshot {
-  return snapshotFromRows([
+  const snapshot = snapshotFromRows([
     row({
       id: state === "none" ? "wt_web_no_agent" : "wt_web_idle",
       projectId: "web",
@@ -54,6 +54,23 @@ export function createCommandSnapshot(
       ...(options.dirty === undefined ? {} : { dirty: options.dirty }),
     }),
   ]);
+  if (state !== "none") {
+    return snapshot;
+  }
+  const source = snapshot.rows[0];
+  if (source === undefined) {
+    throw new Error("Command fixture requires a worktree.");
+  }
+  return {
+    ...snapshot,
+    sessions: [retainedSessionForRow(source)],
+    counts: { ...snapshot.counts, sessions: 1 },
+    projects: snapshot.projects.map((project) =>
+      project.id === source.projectId
+        ? { ...project, counts: { ...project.counts, sessions: 1 } }
+        : project,
+    ),
+  };
 }
 
 export function createPromptCapableSnapshot(): StationSnapshot {
@@ -254,6 +271,31 @@ function sessionForRow(candidate: WorktreeRow): SessionView {
     },
     title: candidate.branch,
     tags: [candidate.agent.harness, candidate.terminal.provider],
+  };
+}
+
+function retainedSessionForRow(candidate: WorktreeRow): SessionView {
+  return {
+    id: `ses_${candidate.id}`,
+    origin: "station",
+    projectId: candidate.projectId,
+    worktreeId: candidate.id,
+    createdAt: "2026-05-20T11:59:00.000Z",
+    updatedAt: fixtureNow,
+    harness: {
+      provider: candidate.projectId === "api" ? "opencode" : "codex",
+      mode: "interactive",
+      capabilities: defaultCapabilities,
+    },
+    status: {
+      value: "none",
+      confidence: "high",
+      reason: "No harness run is associated with this session.",
+      source: "observer_command",
+      updatedAt: fixtureNow,
+    },
+    title: candidate.branch,
+    tags: [],
   };
 }
 

@@ -1,30 +1,24 @@
-import type { SessionId, WorktreeRow } from "@station/contracts";
+import type { SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import {
   type DashboardViewportItem,
   selectDashboardItems,
 } from "../selectors/dashboardViewport.js";
+import type { DashboardSessionRow } from "../selectors/selectors.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import type { TuiTransition } from "./transition.js";
 import type { TuiState } from "./types.js";
 
-type WorktreeItem = Extract<DashboardViewportItem, { type: "worktree" }>;
+type SessionItem = Extract<DashboardViewportItem, { type: "session" }>;
 
 /** Focuses the visible dashboard row for a canonical session identity. */
 export function focusDashboardSession(state: TuiState, sessionId: SessionId): TuiState {
   if (state.snapshot === undefined) {
     return clearDashboardFocus(state);
   }
-  // Match only canonical session identity; worktree and row ids are not session ids.
-  const session = state.snapshot.sessions.find((candidate) => candidate.id === sessionId);
-  if (session === undefined) {
-    return clearDashboardFocus(state);
-  }
   const items = selectDashboardItems(state.snapshot, state);
-  const index = items.findIndex(
-    (item) => item.type === "worktree" && item.row.id === session.worktreeId,
-  );
+  const index = items.findIndex((item) => item.type === "session" && item.row.id === sessionId);
   return index === -1 ? clearDashboardFocus(state) : focusItem(state, items, index);
 }
 
@@ -62,7 +56,7 @@ export function focusNextNeedsMe(state: TuiState): TuiState {
   }
   const items = selectDashboardItems(state.snapshot, state);
   const candidates = focusableIndexes(items).filter((index) => {
-    const item = items[index] as WorktreeItem;
+    const item = items[index] as SessionItem;
     return rowNeedsYou(item.row);
   });
   if (candidates.length === 0) {
@@ -85,25 +79,25 @@ export function activateFocusedDashboardRow(state: TuiState): TuiTransition {
  * dashboard activation both refuse — a pending row, or one filtered out of the
  * view (viewport scroll does not unfocus; the cursor rule keeps it committable).
  */
-export function focusedSelectableRow(state: TuiState): WorktreeRow | undefined {
+export function focusedSelectableRow(state: TuiState): DashboardSessionRow | undefined {
   if (state.snapshot === undefined) {
     return undefined;
   }
   const items = selectDashboardItems(state.snapshot, state);
   const index = focusedItemIndex(items, state);
-  const item = index === undefined ? undefined : (items[index] as WorktreeItem);
+  const item = index === undefined ? undefined : (items[index] as SessionItem);
   if (item === undefined || item.pendingRemove !== undefined || item.pendingStart !== undefined) {
     return undefined;
   }
   return item.row;
 }
 
-export function rowNeedsYou(row: WorktreeRow): boolean {
-  return row.agent?.state === "needs_attention" || row.agent?.state === "stuck";
+export function rowNeedsYou(row: DashboardSessionRow): boolean {
+  return row.session.status.value === "needs_attention" || row.session.status.value === "stuck";
 }
 
 function focusableIndexes(items: readonly DashboardViewportItem[]): number[] {
-  return items.flatMap((item, index) => (item.type === "worktree" ? [index] : []));
+  return items.flatMap((item, index) => (item.type === "session" ? [index] : []));
 }
 
 function focusedItemIndex(
@@ -114,7 +108,7 @@ function focusedItemIndex(
     return undefined;
   }
   const index = items.findIndex(
-    (item) => item.type === "worktree" && item.row.id === state.focusedRowId,
+    (item) => item.type === "session" && item.row.id === state.focusedRowId,
   );
   return index === -1 ? undefined : index;
 }
@@ -140,7 +134,7 @@ function focusItem(
   index: number,
 ): TuiState {
   const item = items[index];
-  if (item === undefined || item.type !== "worktree") {
+  if (item === undefined || item.type !== "session") {
     return { ...state };
   }
   const { bodyRows, offset } = viewportWindow(state, items.length);

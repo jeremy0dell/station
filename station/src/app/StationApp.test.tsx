@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import type { StationSnapshot } from "@station/contracts";
 import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets/types";
 import type { StationMouseEvent } from "../input/mouse.js";
 import { createStation, StationApp } from "./createStation.js";
@@ -14,7 +15,11 @@ import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { waitFor } from "../terminal/testing/waitFor.js";
-import { manyProjectsSnapshot, noProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import {
+  attentionAndFailuresSnapshot,
+  manyProjectsSnapshot,
+  noProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { createStationStubObserverService } from "../station/store/stubObserverService.js";
@@ -116,7 +121,7 @@ describe("Station app composition", () => {
     station.store.actions.focusPane(firstPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "wt_station_working",
+      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_working",
     );
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
@@ -127,8 +132,43 @@ describe("Station app composition", () => {
     station.store.actions.focusPane(secondPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "wt_station_idle",
+      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_idle",
     );
+  });
+
+  it("opens the attention dashboard instead of focusing another session in the same worktree", async () => {
+    const base = attentionAndFailuresSnapshot();
+    const flagged = base.sessions.find((session) => session.status.value === "needs_attention");
+    const local = base.sessions.find((session) => session.status.value === "working");
+    if (flagged === undefined || local === undefined) {
+      throw new Error("fixture is expected to contain attention and working sessions");
+    }
+    const snapshot: StationSnapshot = {
+      ...base,
+      sessions: base.sessions.map((session) =>
+        session.id === local.id
+          ? {
+              ...session,
+              projectId: flagged.projectId,
+              worktreeId: flagged.worktreeId,
+            }
+          : session,
+      ),
+    };
+    const station = await renderComposedStation({ snapshot });
+    const paneId = agentWorktreePaneId(flagged.worktreeId);
+    station.store.actions.createPane(paneId, { role: "primary-agent" });
+    station.store.actions.setPrimaryAgent(paneId, {
+      sessionId: local.id,
+      terminalTargetId: `native:${flagged.worktreeId}`,
+    });
+    station.store.actions.focusPane(MAIN_PANE_ID);
+    await waitForFrame(station, (frame) => frame.includes("!!!!"));
+
+    await station.setup.mockMouse.click(SURFACE.width - 1, 0, MouseButtons.LEFT);
+
+    await waitFor(() => overlayVisible(station));
+    expect(station.store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
   });
 
   it("renders configured widgets in the Station overlay header", async () => {
@@ -250,7 +290,7 @@ describe("Station app composition", () => {
     expect(station.spawnCount()).toBe(0);
 
     station.composition.stationInput.dispatchMouse(
-      { kind: "station", target: { kind: "openShellForRow", rowId: "wt_station_idle" } },
+      { kind: "station", target: { kind: "openShellForRow", rowId: "ses_wt_station_idle" } },
       LEFT_DOWN,
     );
     await waitFor(() => station.store.getState().workspace.panes.length === 1);
@@ -582,11 +622,12 @@ async function renderComposedStation(options: {
   tuiConfig?: TuiConfig;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   boot?: "empty";
+  snapshot?: StationSnapshot;
 } = {}) {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   const store =
     options?.boot === "empty" ? createStationStore({ boot: "empty" }) : createStationStore();
-  const source = new TrackingStationSource(manyProjectsSnapshot());
+  const source = new TrackingStationSource(options.snapshot ?? manyProjectsSnapshot());
   const scripted = createScriptedTerminal();
   const shutdowns: number[] = [];
   let spawnCount = 0;

@@ -337,10 +337,14 @@ export function pruneLocalRowsForSnapshot(
   localRows: TuiLocalRows,
   snapshot: StationSnapshot,
 ): TuiLocalRows {
-  const realRows = new Set(snapshot.rows.map((row) => `${row.projectId}\u0000${row.branch}`));
-  const realWorktreeIds = new Set(snapshot.rows.map((row) => row.id));
   const rowsByWorktreeId = new Map(snapshot.rows.map((row) => [row.id, row]));
-  const sessionWorktreeIds = new Set(snapshot.sessions.map((session) => session.worktreeId));
+  const realRows = new Set(
+    snapshot.sessions.flatMap((session) => {
+      const row = rowsByWorktreeId.get(session.worktreeId);
+      return row === undefined ? [] : [`${session.projectId}\u0000${row.branch}`];
+    }),
+  );
+  const realWorktreeIds = new Set(snapshot.rows.map((row) => row.id));
   const pruned = withPendingRenameTitles(
     {
       ...localRows,
@@ -353,7 +357,9 @@ export function pruneLocalRowsForSnapshot(
         return (
           realRow !== undefined &&
           realRow.agent === undefined &&
-          !sessionWorktreeIds.has(row.worktreeId)
+          snapshot.sessions.some(
+            (session) => session.origin === "station" && session.worktreeId === row.worktreeId,
+          )
         );
       }),
     },

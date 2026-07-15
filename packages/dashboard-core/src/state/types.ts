@@ -30,7 +30,7 @@ export type TuiViewState = {
   terminalRows: number;
   localRows: TuiLocalRows;
   /** List cursor; native overlays synchronize it once per open and clear it on close. */
-  focusedRowId?: WorktreeId;
+  focusedRowId?: SessionId;
   /** Per-list cursor for screens migrated onto the shared selection engine. */
   selection: TuiSelectionState;
 };
@@ -76,7 +76,7 @@ export type TuiScreen =
   | {
       name: "removeWorktree";
       step: "confirm";
-      rowId: WorktreeId;
+      rowId: SessionId;
       forceRequired: boolean;
       label: string;
     }
@@ -84,7 +84,7 @@ export type TuiScreen =
   | {
       name: "renameSession";
       step: "editName";
-      rowId: WorktreeId;
+      rowId: SessionId;
       sessionId: SessionId;
       currentTitle: string;
       draftTitle: EditableTextInputState;
@@ -135,7 +135,7 @@ export type CreateInitialTuiStateOptions = {
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;
-  focusedRowId?: WorktreeId;
+  focusedRowId?: SessionId;
   widgets?: readonly TuiWidgetConfig[];
   widgetsPersisted?: boolean;
   runtime?: Partial<TuiRuntimeState>;

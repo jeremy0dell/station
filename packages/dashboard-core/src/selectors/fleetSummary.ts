@@ -1,9 +1,10 @@
 import type { StationSnapshot } from "@station/contracts";
 import { isReadyToRead } from "../components/WorktreeRow/rowInput.js";
+import { selectDashboardSessionRows } from "./selectors.js";
 
 // Fleet triage counts derived client-side: the observer's snapshot.counts carry
 // only working/idle/attention/unknown and fold "ready" into idle, so the fleet
-// bar computes the full disjoint breakdown from the rows. "needsYou" = attention
+// bar computes the full disjoint breakdown from canonical sessions. "needsYou" = attention
 // OR stuck (snapshot.counts.attention deliberately excludes stuck).
 export type FleetSummary = {
   ready: number;
@@ -25,13 +26,13 @@ export function selectFleetSummary(snapshot: StationSnapshot): FleetSummary {
     exited: 0,
     unknown: 0,
   };
-  for (const row of snapshot.rows) {
-    const state = row.agent?.state;
+  for (const row of selectDashboardSessionRows(snapshot)) {
+    const state = row.session.status.value;
     if (state === "needs_attention" || state === "stuck") {
       summary.needsYou += 1;
     } else if (state === "working") {
       summary.working += 1;
-    } else if (isReadyToRead(row)) {
+    } else if (isReadyToRead(row.presentation)) {
       summary.ready += 1;
     } else if (state === "idle") {
       summary.idle += 1;
@@ -42,8 +43,7 @@ export function selectFleetSummary(snapshot: StationSnapshot): FleetSummary {
     } else if (state === "unknown") {
       summary.unknown += 1;
     }
-    // No agent (state === undefined) is a session without a harness — not a
-    // fleet-status lane, so it is intentionally uncounted.
+    // A retained session with no agent is not a fleet-status lane.
   }
   return summary;
 }

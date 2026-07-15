@@ -1,9 +1,10 @@
-import type {
-  CommandId,
-  SafeError,
-  StationCommand,
-  StationSnapshot,
-  WorktreeRow,
+import {
+  type CommandId,
+  type SafeError,
+  type StationCommand,
+  type StationSnapshot,
+  type WorktreeRow,
+  worktreeHasLiveAgent,
 } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
@@ -116,10 +117,7 @@ function startedRowForSnapshot(
   if (row === undefined) {
     return undefined;
   }
-  if (
-    row.agent === undefined &&
-    !snapshot.sessions.some((session) => session.worktreeId === worktreeId)
-  ) {
+  if (!worktreeHasLiveAgent(row)) {
     return undefined;
   }
   return { snapshot, row };

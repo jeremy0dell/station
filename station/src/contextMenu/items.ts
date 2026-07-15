@@ -4,7 +4,6 @@ import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../s
 import {
   selectDashboardViewport,
   isExternalAgentRemovalUnavailable,
-  sessionForWorktreeRow,
   type TuiState,
 } from "@station/dashboard-core";
 import type {
@@ -115,9 +114,11 @@ function buildStationItems(
   if (row === undefined) {
     return [noActionsItem()];
   }
-  const project = state.snapshot.projects.find((candidate) => candidate.id === row.projectId);
+  const project = state.snapshot.projects.find(
+    (candidate) => candidate.id === row.worktree.projectId,
+  );
   const items: ContextMenuItem[] = [];
-  if (sessionForWorktreeRow(row, state.snapshot.sessions)?.origin === "station") {
+  if (row.session.origin === "station") {
     items.push({
       id: "station.renameSession",
       label: "Rename Session",
@@ -130,7 +131,7 @@ function buildStationItems(
     label: "Fork Session",
     action: { kind: "forkSession", rowId: row.id },
   });
-  if (project === undefined || !samePath(row.path, project.root)) {
+  if (project === undefined || !samePath(row.worktree.path, project.root)) {
     items.push({
       id: "station.removeWorktree",
       label: isExternalAgentRemovalUnavailable(row, state.snapshot)

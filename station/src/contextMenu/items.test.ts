@@ -9,6 +9,8 @@ import {
 import type { Automation } from "../config/stationConfig.js";
 import { buildContextMenuItems, resolveContextMenuAction } from "./items.js";
 
+const STATION_IDLE_SESSION_ID = "ses_wt_station_idle";
+
 describe("buildContextMenuItems", () => {
   it("builds pane menu items with split actions enabled", () => {
     const store = createStationStore();
@@ -146,7 +148,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: "wt_station_idle" } },
+        { kind: "station", target: { kind: "row", rowId: STATION_IDLE_SESSION_ID } },
         store.getState(),
         stationState,
       ),
@@ -154,43 +156,68 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.renameSession",
         label: "Rename Session",
-        action: { kind: "renameSession", rowId: "wt_station_idle" },
+        action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: "wt_station_idle" },
+        action: { kind: "forkSession", rowId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.removeWorktree",
         label: "Delete Session",
         danger: true,
-        action: { kind: "removeWorktree", rowId: "wt_station_idle" },
+        action: { kind: "removeWorktree", rowId: STATION_IDLE_SESSION_ID },
       },
     ]);
   });
 
-  it("offers remove-worktree for rows without a current session", () => {
+  it("keeps retained Station sessions actionable without a current agent", () => {
     const store = createStationStore();
     const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: "wt_station_none" } },
+        { kind: "station", target: { kind: "row", rowId: "ses_wt_station_none" } },
         store.getState(),
         stationState,
       ),
     ).toEqual([
       {
+        id: "station.renameSession",
+        label: "Rename Session",
+        action: { kind: "renameSession", rowId: "ses_wt_station_none" },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: "wt_station_none" },
+        action: { kind: "forkSession", rowId: "ses_wt_station_none" },
       },
       {
         id: "station.removeWorktree",
         label: "Delete Session",
         danger: true,
-        action: { kind: "removeWorktree", rowId: "wt_station_none" },
+        action: { kind: "removeWorktree", rowId: "ses_wt_station_none" },
+      },
+    ]);
+  });
+
+  it("keeps bare worktrees out of dashboard row actions", () => {
+    const store = createStationStore();
+    const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
+
+    expect(
+      buildContextMenuItems(
+        { kind: "station", target: { kind: "row", rowId: "wt_scripts_none" } },
+        store.getState(),
+        stationState,
+      ),
+    ).toEqual([
+      {
+        id: "station.noActions",
+        label: "No Actions Available",
+        disabled: true,
+        action: { kind: "noop" },
       },
     ]);
   });
@@ -200,7 +227,7 @@ describe("buildContextMenuItems", () => {
     const stationState = createInitialTuiState({ initialSnapshot: externalAgentSnapshot() });
 
     const items = buildContextMenuItems(
-      { kind: "station", target: { kind: "row", rowId: "wt_station_idle" } },
+      { kind: "station", target: { kind: "row", rowId: "run_wt_station_idle" } },
       store.getState(),
       stationState,
     );
@@ -209,14 +236,47 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: "wt_station_idle" },
+        action: { kind: "forkSession", rowId: "run_wt_station_idle" },
       },
       {
         id: "station.removeWorktree",
         label: "Delete Worktree…",
         danger: true,
-        action: { kind: "removeWorktree", rowId: "wt_station_idle" },
+        action: { kind: "removeWorktree", rowId: "run_wt_station_idle" },
       },
+    ]);
+  });
+
+  it("keeps management actions session-specific when Station and external sessions share a checkout", () => {
+    const store = createStationStore();
+    const external = externalAgentSnapshot();
+    const retained = manyProjectsSnapshot().sessions.find(
+      (session) => session.id === STATION_IDLE_SESSION_ID,
+    );
+    if (retained === undefined) throw new Error("fixture is missing the retained Station session");
+    const stationState = createInitialTuiState({
+      initialSnapshot: { ...external, sessions: [retained, ...external.sessions] },
+    });
+
+    const stationItems = buildContextMenuItems(
+      { kind: "station", target: { kind: "row", rowId: retained.id } },
+      store.getState(),
+      stationState,
+    );
+    const externalItems = buildContextMenuItems(
+      { kind: "station", target: { kind: "row", rowId: "run_wt_station_idle" } },
+      store.getState(),
+      stationState,
+    );
+
+    expect(stationItems.map((item) => item.label)).toEqual([
+      "Rename Session",
+      "Fork Session",
+      "Delete Worktree…",
+    ]);
+    expect(externalItems.map((item) => item.label)).toEqual([
+      "Fork Session",
+      "Delete Worktree…",
     ]);
   });
 
@@ -236,7 +296,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: "wt_station_idle" } },
+        { kind: "station", target: { kind: "row", rowId: STATION_IDLE_SESSION_ID } },
         store.getState(),
         stationState,
       ),
@@ -244,12 +304,12 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.renameSession",
         label: "Rename Session",
-        action: { kind: "renameSession", rowId: "wt_station_idle" },
+        action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: "wt_station_idle" },
+        action: { kind: "forkSession", rowId: STATION_IDLE_SESSION_ID },
       },
     ]);
   });
@@ -259,7 +319,7 @@ describe("buildContextMenuItems", () => {
     const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
 
     for (const target of [
-      { kind: "openShellForRow", rowId: "wt_station_idle" } as const,
+      { kind: "openShellForRow", rowId: STATION_IDLE_SESSION_ID } as const,
       { kind: "body" } as const,
     ]) {
       expect(
@@ -300,7 +360,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: "wt_station_idle" } },
+        { kind: "station", target: { kind: "row", rowId: STATION_IDLE_SESSION_ID } },
         store.getState(),
         stationState,
       )[0]?.disabled,

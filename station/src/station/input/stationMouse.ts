@@ -42,7 +42,7 @@ export type StationMouseTarget =
   | { kind: "row"; rowId: string }
   | { kind: "projectHeader"; projectId: string }
   | { kind: "link"; url: string }
-  /** The `[+sh]` affordance on a worktree row: open a shell in its checkout. */
+  /** The `[+sh]` affordance on a session row: open a shell in its checkout. */
   | { kind: "openShellForRow"; rowId: string }
   /** The `[+sh]` affordance on a project header: open a shell in its root. */
   | { kind: "openShellForProject"; projectId: string }
@@ -170,7 +170,10 @@ export function routeStationMouse(
       // The choose-slot modes (remove/rename) keep their slot semantics: a
       // click selects that row.
       if (mode === "dashboard") {
-        return fromRowAgentTarget(resolveRowAgentTarget(store, target.rowId));
+        const targetRow = resolveRowAgentTarget(store, target.rowId);
+        return targetRow.kind === "launch-managed"
+          ? fromRowAgentTarget(targetRow)
+          : fromKeyOutcome(dispatchRowSlot(store, target.rowId));
       }
       return fromKeyOutcome(dispatchRowSlot(store, target.rowId));
     case "link":

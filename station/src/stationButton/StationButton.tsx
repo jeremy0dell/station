@@ -48,12 +48,16 @@ export function StationButton({ store, stationViewStore, dispatchMouse, island }
   const onFocusSession = useCallback(
     (event: StationMouseEvent) => {
       const worktreeId = status.attentionWorktreeId;
-      // The agent pane id is deterministic from the worktree id; focus it only
-      // when that pane actually hosts a primary agent in this workspace.
+      const sessionId = status.attentionSessionId;
+      // A worktree can contain multiple canonical sessions, while its local
+      // primary-agent pane id is shared; require the exact session identity.
       const candidate = worktreeId === undefined ? undefined : agentWorktreePaneId(worktreeId);
+      const candidatePane =
+        candidate === undefined ? undefined : selectPaneRecord(store.getState(), candidate);
       const paneId =
-        candidate !== undefined &&
-        selectPaneRecord(store.getState(), candidate)?.role === "primary-agent"
+        candidatePane?.role === "primary-agent" &&
+        sessionId !== undefined &&
+        candidatePane.agentIdentity?.sessionId === sessionId
           ? candidate
           : undefined;
       if (paneId !== undefined) {
@@ -67,7 +71,7 @@ export function StationButton({ store, stationViewStore, dispatchMouse, island }
         dispatchMouse({ kind: "header" }, event);
       }
     },
-    [dispatchMouse, status.attentionWorktreeId, store],
+    [dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
   );
 
   return (

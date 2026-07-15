@@ -105,7 +105,7 @@ describe("StationOverlay", () => {
 
     expect(calls.at(-1)?.target).toEqual({
       kind: "station",
-      target: { kind: "row", rowId: "wt_station_working" },
+      target: { kind: "row", rowId: "ses_wt_station_working" },
     });
   });
 });

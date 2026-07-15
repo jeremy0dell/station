@@ -2,7 +2,7 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes } from "@opentui/core";
-import type { ProjectView, StationSnapshot, WorktreeId } from "@station/contracts";
+import type { ProjectView, SessionId, StationSnapshot } from "@station/contracts";
 import { useState } from "react";
 import {
   dashboardFooterLabel,
@@ -137,7 +137,7 @@ function FleetBar({
   columns,
 }: {
   summary: FleetSummary;
-  counts: { projects: number; worktrees: number; agents: number };
+  counts: { projects: number; sessions: number; agents: number };
   columns: number;
 }) {
   const parts: { glyph: string; color: string; label: string; animate?: boolean }[] = [
@@ -160,7 +160,7 @@ function FleetBar({
   const lanesWidth =
     "FLEET".length + parts.reduce((total, part) => total + 3 + 1 + part.label.length, 0);
   const totals = fleetCountsLabel(
-    { projects: counts.projects, sessions: counts.worktrees, agents: counts.agents },
+    { projects: counts.projects, sessions: counts.sessions, agents: counts.agents },
     Math.max(0, columns - lanesWidth - 2),
   );
   return (
@@ -242,7 +242,7 @@ function dashboardRowLayouts(
   items: readonly DashboardViewportItem[],
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
-  focusedRowId?: WorktreeId,
+  focusedRowId?: SessionId,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
   const rowInputs = items.flatMap((item) => {
     const input = rowGridInputForViewportItem(item, keyByRow, focusedRowId);
@@ -270,7 +270,7 @@ function DashboardBody({
   columns: number;
   items: readonly DashboardViewportItem[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  focusedRowId?: WorktreeId | undefined;
+  focusedRowId?: SessionId | undefined;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -296,7 +296,7 @@ function DashboardViewportRow({
   columns: number;
   item: DashboardViewportItem;
   layout: RowGridLayout | undefined;
-  focusedRowId?: WorktreeId | undefined;
+  focusedRowId?: SessionId | undefined;
 }) {
   switch (item.type) {
     case "projectGap":
@@ -310,9 +310,9 @@ function DashboardViewportRow({
           <EmptySessionButton projectId={item.project.id} />
         </box>
       );
-    case "worktree":
+    case "session":
       return layout === undefined ? null : (
-        <WorktreeRowLine rowId={item.row.id} layout={layout} focused={item.row.id === focusedRowId} />
+        <SessionRowLine rowId={item.row.id} layout={layout} focused={item.row.id === focusedRowId} />
       );
     case "createLocalRow":
       // Local create rows have no slot and no activation target.
@@ -324,7 +324,7 @@ function DashboardViewportRow({
   }
 }
 
-function WorktreeRowLine({
+function SessionRowLine({
   rowId,
   layout,
   focused,

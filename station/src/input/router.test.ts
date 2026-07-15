@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createTuiStore } from "@station/dashboard-core";
+import { createTuiStore, selectDashboardSessionRows } from "@station/dashboard-core";
 import type { StationSnapshot } from "@station/contracts";
 import {
   attentionAndFailuresSnapshot,
@@ -350,16 +350,16 @@ describe("the station-button layer (island ↵ jump)", () => {
     return createStationKeymap(stationViewStore);
   }
 
-  function flaggedRowId(snapshot: StationSnapshot): string {
-    const row = snapshot.rows.find(
+  function flaggedSession(snapshot: StationSnapshot) {
+    const row = selectDashboardSessionRows(snapshot).find(
       (candidate) =>
-        candidate.display.statusLabel === "needs attention" ||
-        candidate.display.statusLabel === "stuck",
+        candidate.session.status.value === "needs_attention" ||
+        candidate.session.status.value === "stuck",
     );
     if (row === undefined) {
-      throw new Error("fixture is expected to contain a flagged row");
+      throw new Error("fixture is expected to contain a flagged session");
     }
-    return row.id;
+    return row;
   }
 
   it("opens the overlay on ↵ while hovering the alerting island with no local agent pane", () => {
@@ -374,13 +374,52 @@ describe("the station-button layer (island ↵ jump)", () => {
 
   it("focuses the flagged session's agent pane on ↵ when it is hosted locally", () => {
     const snapshot = attentionAndFailuresSnapshot();
-    const paneId = agentWorktreePaneId(flaggedRowId(snapshot));
+    const flagged = flaggedSession(snapshot);
+    const paneId = agentWorktreePaneId(flagged.worktree.id);
     const store = createStationStore();
     store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: flagged.session.id,
+      terminalTargetId: `native:${flagged.worktree.id}`,
+    });
     store.actions.setStationButtonHover(true);
     expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
       kind: "focus",
       target: { kind: "pane", paneId },
+    });
+  });
+
+  it("opens the overlay instead of focusing another session in the same worktree", () => {
+    const base = attentionAndFailuresSnapshot();
+    const flagged = flaggedSession(base);
+    const local = base.sessions.find((session) => session.status.value === "working");
+    if (local === undefined) {
+      throw new Error("fixture is expected to contain a working session");
+    }
+    const snapshot: StationSnapshot = {
+      ...base,
+      sessions: base.sessions.map((session) =>
+        session.id === local.id
+          ? {
+              ...session,
+              projectId: flagged.session.projectId,
+              worktreeId: flagged.worktree.id,
+            }
+          : session,
+      ),
+    };
+    const paneId = agentWorktreePaneId(flagged.worktree.id);
+    const store = createStationStore();
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: local.id,
+      terminalTargetId: `native:${flagged.worktree.id}`,
+    });
+    store.actions.setStationButtonHover(true);
+
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "overlay-open",
+      overlayId: STATION_OVERLAY_ID,
     });
   });
 

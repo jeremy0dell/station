@@ -1,4 +1,4 @@
-import type { ProjectView, WorktreeId } from "@station/contracts";
+import type { ProjectView, SessionId } from "@station/contracts";
 import stringWidth from "string-width";
 import type {
   DashboardSessionOverflow,
@@ -102,7 +102,7 @@ export function projectHeaderLabelParts(
   collapsed: boolean,
 ): { title: string; counts: string } {
   const caret = collapsed ? "▶" : "▼";
-  const sessions = `${project.counts.worktrees} ${plural(project.counts.worktrees, "session")}`;
+  const sessions = `${project.counts.sessions} ${plural(project.counts.sessions, "session")}`;
   const agents =
     project.counts.agents > 0
       ? ` · ${project.counts.agents} ${plural(project.counts.agents, "agent")}`
@@ -133,9 +133,9 @@ export function scrollIndicatorLabel(
 export function rowGridInputForViewportItem(
   item: DashboardViewportItem,
   keyByRow: ReadonlyMap<string, string>,
-  focusedRowId?: WorktreeId,
+  focusedRowId?: SessionId,
 ): RowGridRowInput | undefined {
-  if (item.type === "worktree") {
+  if (item.type === "session") {
     const focused = focusedRowId !== undefined && item.row.id === focusedRowId;
     if (item.pendingRemove !== undefined) {
       return worktreeStyleRowGridInput({
@@ -165,7 +165,7 @@ export function rowGridInputForViewportItem(
     }
     return worktreeRowGridInput({
       id: item.id,
-      row: item.row,
+      row: item.row.presentation,
       slot: keyByRow.get(item.row.id),
       title: item.displayTitle,
       focused,

@@ -113,7 +113,7 @@ export type StationBinding = {
   help?: { keys: string; label: string };
 };
 
-const slotHelp = { keys: "1-9 a-z", label: "start or focus visible row" };
+const slotHelp = { keys: "1-9 a-z", label: "open visible session" };
 
 /**
  * The cursor/edit key block shared by every single-field edit mode: arrow
@@ -333,7 +333,7 @@ export const STATION_HELP_CONTENT = [
   { key: "↵", description: "open focused session" },
   { key: "tab", description: "next session needing you" },
   { key: "wheel", description: "scroll project list" },
-  { key: "1-9/a-z", description: "start or focus row" },
+  { key: "1-9/a-z", description: "open visible session" },
   { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
   { key: "W", description: "widgets" },
   { key: "X", description: "delete session" },

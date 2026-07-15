@@ -5,11 +5,11 @@
 // path in apps/tui (direct project-header collapse, wheel paging). Every
 // mutation here lands via store.handleKey or a shared pure state function — no
 // bespoke screen logic, except where a Station-only action diverges from the
-// shared machine: a worktree-row slot key (resolveKeyRowAgentTarget) and the New
+// shared machine: a session-row slot key (resolveKeyRowAgentTarget) and the New
 // Session submit (resolveKeyNewSessionSubmit) are resolved here so keyboard and
 // mouse reach the same Station managed-launch path.
 import type { StoreApi } from "zustand/vanilla";
-import type { ProviderId } from "@station/contracts";
+import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
   choiceValueByKey,
   createNewSessionNameToken,
@@ -20,6 +20,7 @@ import {
   openWidgetSettings as openWidgetSettingsState,
   selectAddProjectRow as selectAddProjectRowState,
   selectDashboardItems,
+  selectDashboardSessionRow,
   selectDashboardViewport,
   widgetSettingsAddFromPicker,
   widgetSettingsOpenPicker,
@@ -113,7 +114,7 @@ export function representativeKeyForBinding(binding: StationBinding): TuiKey | u
 /**
  * Dispatches a row interaction as the row's current slot key, so a click
  * means exactly what the slot accelerator means in the active mode
- * (dashboard: start-or-focus; remove/rename choose-slot: choose this row).
+ * (dashboard: open session; remove/rename choose-slot: choose this row).
  * Rows without a slot (pending-operation rows) are inert.
  */
 export function dispatchRowSlot(store: StoreApi<TuiStore>, rowId: string): StationKeyOutcome {
@@ -168,13 +169,17 @@ export function resolveRowAgentTarget(store: StoreApi<TuiStore>, rowId: string):
   if (snapshot === undefined) {
     return { kind: "none" };
   }
-  const row = snapshot.rows.find((candidate) => candidate.id === rowId);
-  if (row === undefined) {
+  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
+  if (sessionRow === undefined || sessionRow.session.origin !== "station") {
+    return { kind: "none" };
+  }
+  const row = sessionRow.worktree;
+  if (worktreeHasLiveAgent(row) && row.agent?.sessionId !== sessionRow.session.id) {
     return { kind: "none" };
   }
   return {
     kind: "launch-managed",
-    rowId: row.id,
+    rowId: sessionRow.id,
     projectId: row.projectId,
     worktreeId: row.id,
     paneId: agentWorktreePaneId(row.id),
@@ -221,11 +226,11 @@ export function resolveKeyFocusedRowAgentTarget(
     return { kind: "none" };
   }
   const item = selectDashboardItems(state.snapshot, state).find(
-    (candidate) => candidate.type === "worktree" && candidate.row.id === focusedRowId,
+    (candidate) => candidate.type === "session" && candidate.row.id === focusedRowId,
   );
   if (
     item === undefined ||
-    item.type !== "worktree" ||
+    item.type !== "session" ||
     item.pendingRemove !== undefined ||
     item.pendingStart !== undefined
   ) {
@@ -423,8 +428,8 @@ export function addWidgetSettingsPickerChoice(store: StoreApi<TuiStore>, index: 
 }
 
 /**
- * Resolve `[+sh]` from snapshot rows, not dashboard choices: pending-start/remove
- * rows still represent real worktrees even when `rowChoices` filters them out.
+ * Resolve `[shell]` through canonical dashboard membership while allowing a
+ * pending operation to hide the row from `rowChoices`.
  */
 export function resolveRowPaneTarget(
   store: StoreApi<TuiStore>,
@@ -434,10 +439,11 @@ export function resolveRowPaneTarget(
   if (snapshot === undefined) {
     return undefined;
   }
-  const row = snapshot.rows.find((candidate) => candidate.id === rowId);
-  if (row === undefined) {
+  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
+  if (sessionRow === undefined) {
     return undefined;
   }
+  const row = sessionRow.worktree;
   return { paneId: worktreePaneId(row.id), cwd: row.path, role: "shell", worktreeId: row.id };
 }
 

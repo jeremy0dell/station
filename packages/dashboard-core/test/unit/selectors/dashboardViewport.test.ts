@@ -4,29 +4,49 @@ import {
   selectDashboardViewport,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("dashboard viewport selector", () => {
+  it("does not flatten bare worktrees into dashboard session items", () => {
+    const snapshot = createDashboardSnapshot();
+    const items = selectDashboardItems(snapshot, createInitialTuiState());
+
+    expect(items.map((item) => item.id)).not.toContain("session:ses_wt_web_no_agent");
+  });
+
+  it("renders a project empty when its only remaining checkout is bare", () => {
+    const base = createDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      sessions: base.sessions.filter((session) => session.projectId !== "web"),
+    };
+    const items = selectDashboardItems(snapshot, createInitialTuiState());
+
+    expect(items.map((item) => item.id)).toContain("empty:web");
+    expect(
+      items.some((item) => item.type === "session" && item.row.worktree.id === "wt_web_no_agent"),
+    ).toBe(false);
+  });
+
   it("flattens projects into dashboard render items", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState();
 
     expect(
       selectDashboardItems(snapshot, state).map((item) =>
-        item.type === "worktree" ? `${item.type}:${item.row.id}` : item.id,
+        item.type === "session" ? `${item.type}:${item.row.id}` : item.id,
       ),
     ).toEqual([
       "project:web",
-      "worktree:wt_web_working",
-      "worktree:wt_web_attention",
-      "worktree:wt_web_exited",
-      "worktree:wt_web_no_agent",
-      "worktree:wt_web_idle",
-      "worktree:wt_web_unknown",
-      "worktree:wt_web_stuck",
+      "session:ses_wt_web_working",
+      "session:ses_wt_web_attention",
+      "session:ses_wt_web_exited",
+      "session:ses_wt_web_idle",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
       "gap:api",
       "project:api",
-      "worktree:wt_api_working",
+      "session:ses_wt_api_working",
     ]);
   });
 
@@ -41,15 +61,15 @@ describe("dashboard viewport selector", () => {
     expect(viewport.bodyRows).toBe(3);
     expect(viewport.clampedScrollOffset).toBe(1);
     expect(viewport.hiddenAbove).toBe(1);
-    expect(viewport.hiddenBelow).toBe(7);
+    expect(viewport.hiddenBelow).toBe(6);
     expect(
       viewport.visibleItems.map((item) =>
-        item.type === "worktree" ? item.row.id : `${item.type}:${item.id}`,
+        item.type === "session" ? item.row.id : `${item.type}:${item.id}`,
       ),
-    ).toEqual(["wt_web_working", "wt_web_attention", "wt_web_exited"]);
+    ).toEqual(["ses_wt_web_working", "ses_wt_web_attention", "ses_wt_web_exited"]);
   });
 
-  it("uses only viewport-visible worktrees for row choices", () => {
+  it("uses only viewport-visible sessions for row choices", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       scrollOffset: 4,
@@ -58,9 +78,9 @@ describe("dashboard viewport selector", () => {
     const viewport = selectDashboardViewport(snapshot, state);
 
     expect(viewport.rowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
-      ["1", "wt_web_no_agent"],
-      ["2", "wt_web_idle"],
-      ["3", "wt_web_unknown"],
+      ["1", "ses_wt_web_idle"],
+      ["2", "ses_wt_web_unknown"],
+      ["3", "ses_wt_web_stuck"],
     ]);
   });
 
@@ -74,10 +94,10 @@ describe("dashboard viewport selector", () => {
       }),
     );
 
-    expect(viewport.clampedScrollOffset).toBe(8);
-    expect(viewport.hiddenAbove).toBe(8);
+    expect(viewport.clampedScrollOffset).toBe(7);
+    expect(viewport.hiddenAbove).toBe(7);
     expect(viewport.hiddenBelow).toBe(0);
-    expect(viewport.visibleItems.at(-1)?.id).toBe("worktree:wt_api_working");
+    expect(viewport.visibleItems.at(-1)?.id).toBe("session:ses_wt_api_working");
   });
 
   it("keeps empty project rows in the flattened body when no worktrees match", () => {
@@ -127,7 +147,7 @@ describe("dashboard viewport selector", () => {
         item.type === "createLocalRow" ? `${item.type}:${item.row.branch}` : item.id,
       ),
     ).toContain("createLocalRow:feature/pending");
-    expect(viewport.rowChoices.map((choice) => choice.value.branch)).not.toContain(
+    expect(viewport.rowChoices.map((choice) => choice.value.worktree.branch)).not.toContain(
       "feature/pending",
     );
   });
@@ -190,12 +210,16 @@ describe("dashboard viewport selector", () => {
 
     expect(
       viewport.items
-        .filter((item) => item.type === "worktree" || item.type === "createLocalRow")
+        .filter((item) => item.type === "session" || item.type === "createLocalRow")
         .slice(0, 3)
         .map((item) =>
-          item.type === "worktree" ? `worktree:${item.row.id}` : `create:${item.row.branch}`,
+          item.type === "session" ? `session:${item.row.id}` : `create:${item.row.branch}`,
         ),
-    ).toEqual(["worktree:wt_web_stuck", "create:bbb pending task", "worktree:wt_web_working"]);
+    ).toEqual([
+      "session:ses_wt_web_stuck",
+      "create:bbb pending task",
+      "session:ses_wt_web_working",
+    ]);
   });
 
   it("renders one observer row when branch metadata changes but the session title stays stable", () => {
@@ -213,15 +237,15 @@ describe("dashboard viewport selector", () => {
     };
     const viewport = selectDashboardViewport(changed, createInitialTuiState());
     const titledItems = viewport.items.filter(
-      (item) => item.type === "worktree" && item.displayTitle === "fix-nav-mobile",
+      (item) => item.type === "session" && item.displayTitle === "fix-nav-mobile",
     );
 
     expect(titledItems).toEqual([
       expect.objectContaining({
-        type: "worktree",
+        type: "session",
         row: expect.objectContaining({
-          id: "wt_web_idle",
-          branch: "agent-created-branch",
+          id: "ses_wt_web_idle",
+          worktree: expect.objectContaining({ branch: "agent-created-branch" }),
         }),
       }),
     ]);
@@ -252,19 +276,19 @@ describe("dashboard viewport selector", () => {
     );
 
     const item = viewport.items.find(
-      (candidate) => candidate.type === "worktree" && candidate.row.id === "wt_web_idle",
+      (candidate) => candidate.type === "session" && candidate.row.id === "ses_wt_web_idle",
     );
     expect(item).toMatchObject({
-      type: "worktree",
+      type: "session",
       pendingRemove: {
         localId: "remove:wt_web_idle",
       },
     });
-    expect(viewport.rowChoices.map((choice) => choice.value.id)).not.toContain("wt_web_idle");
+    expect(viewport.rowChoices.map((choice) => choice.value.id)).not.toContain("ses_wt_web_idle");
   });
 
   it("keeps pending start rows slotted for display but removes them from actions", () => {
-    const snapshot = createDashboardSnapshot();
+    const snapshot = createCommandSnapshot("none");
     const viewport = selectDashboardViewport(
       snapshot,
       createInitialTuiState({
@@ -287,28 +311,24 @@ describe("dashboard viewport selector", () => {
     );
 
     const item = viewport.items.find(
-      (candidate) => candidate.type === "worktree" && candidate.row.id === "wt_web_no_agent",
+      (candidate) => candidate.type === "session" && candidate.row.id === "ses_wt_web_no_agent",
     );
     expect(item).toMatchObject({
-      type: "worktree",
+      type: "session",
       pendingStart: {
         localId: "start:wt_web_no_agent",
       },
     });
     expect(
       viewport.displayRowChoices.map((choice) => [choice.key, choice.value.id]),
-    ).toContainEqual(["4", "wt_web_no_agent"]);
+    ).toContainEqual(["1", "ses_wt_web_no_agent"]);
     expect(viewport.rowChoices.map((choice) => [choice.key, choice.value.id])).not.toContainEqual([
-      "4",
-      "wt_web_no_agent",
-    ]);
-    expect(viewport.rowChoices.map((choice) => [choice.key, choice.value.id])).toContainEqual([
-      "5",
-      "wt_web_idle",
+      "1",
+      "ses_wt_web_no_agent",
     ]);
   });
 
-  it("carries resolved titles for dashboard worktree rendering", () => {
+  it("carries resolved titles for dashboard session rendering", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
@@ -319,10 +339,10 @@ describe("dashboard viewport selector", () => {
     const viewport = selectDashboardViewport(titled, createInitialTuiState());
 
     const item = viewport.items.find(
-      (candidate) => candidate.type === "worktree" && candidate.row.id === "wt_web_idle",
+      (candidate) => candidate.type === "session" && candidate.row.id === "ses_wt_web_idle",
     );
     expect(item).toMatchObject({
-      type: "worktree",
+      type: "session",
       displayTitle: "Readable feature task",
     });
   });

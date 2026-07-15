@@ -1,9 +1,10 @@
 import type { TerminalFocusOrigin, WorktreeRow } from "@station/contracts";
 import { worktreeHasLiveAgent } from "@station/contracts";
+import type { DashboardSessionRow } from "../selectors/selectors.js";
 import { safeErrorToToast } from "../services/errors/errors.js";
 import {
-  buildFocusCommand,
   buildResumeAgentCommand,
+  buildSessionFocusCommand,
   buildStartAgentCommand,
 } from "./commandBuilders.js";
 import { addPendingStartAgentRow } from "./localRows.js";
@@ -11,15 +12,35 @@ import { addTuiToast } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
 import type { TuiState } from "./types.js";
 
-export function activateDashboardRow(state: TuiState, row: WorktreeRow): TuiTransition {
+export function activateDashboardRow(
+  state: TuiState,
+  sessionRow: DashboardSessionRow,
+): TuiTransition {
+  const { presentation: row, session, worktree } = sessionRow;
   // Launch (or resume) unless the row has a genuinely live agent to focus. A "?"
   // (unknown) row whose terminal is dead is launchable here, not a dead focus -
   // the dashboard-side half of the observer's relaunch-unknown-rows fix.
-  if (row.recovery !== undefined || !worktreeHasLiveAgent(row)) {
-    return startOrResumeAgentForRow(state, row);
+  if (!worktreeHasLiveAgent(row)) {
+    if (session.origin === "external") {
+      return {
+        state: addTuiToast(state, {
+          kind: "info",
+          message: "This external session is no longer active. Refresh the dashboard.",
+        }),
+      };
+    }
+    if (otherSessionHasLiveAgent(sessionRow)) {
+      return {
+        state: addTuiToast(state, {
+          kind: "info",
+          message: "Another session is already active in this checkout.",
+        }),
+      };
+    }
+    return startOrResumeAgentForRow(state, worktree);
   }
 
-  if (row.terminal !== undefined && row.terminal.focusable !== true) {
+  if (session.terminal?.focusable !== true) {
     // The agent's terminal cannot be focused from the dashboard (e.g. it is
     // hosted by Station, whose provider reports canFocusTarget:false). Surface a
     // one-time notice instead of dispatching a focus the provider can only
@@ -27,15 +48,28 @@ export function activateDashboardRow(state: TuiState, row: WorktreeRow): TuiTran
     return {
       state: addTuiToast(state, {
         kind: "info",
-        message: `This agent runs in the "${row.terminal.provider}" terminal and can't be focused from the dashboard.`,
+        message:
+          session.terminal === undefined
+            ? "This session has no focusable terminal."
+            : `This agent runs in the "${session.terminal.provider}" terminal and can't be focused from the dashboard.`,
       }),
     };
   }
 
   return {
     state,
-    commands: [buildFocusCommand(row, focusCommandOptions(state.runtime.focusOrigin))],
+    commands: [buildSessionFocusCommand(session, focusCommandOptions(state.runtime.focusOrigin))],
   };
+}
+
+function otherSessionHasLiveAgent(row: DashboardSessionRow): boolean {
+  if (!worktreeHasLiveAgent(row.worktree)) {
+    return false;
+  }
+  if (row.session.origin === "station") {
+    return row.worktree.agent?.sessionId !== row.session.id;
+  }
+  return row.worktree.agent?.runId !== row.session.harness.runId;
 }
 
 function startOrResumeAgentForRow(state: TuiState, row: WorktreeRow): TuiTransition {

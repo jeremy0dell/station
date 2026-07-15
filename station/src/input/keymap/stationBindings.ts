@@ -4,7 +4,7 @@ import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
 import { rowNeedsUser } from "../../stationButton/status.js";
-import type { TuiStore } from "@station/dashboard-core";
+import { selectDashboardSessionRows, type TuiStore } from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
   paneLaunchForkSessionOutcome,
@@ -139,7 +139,12 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
 function createStationButtonLayer(
   stationViewStore: StoreApi<TuiStore>,
 ): KeymapLayer<RouteOutcome> {
-  const attentionRow = () => stationViewStore.getState().snapshot?.rows.find(rowNeedsUser);
+  const attentionRow = () => {
+    const snapshot = stationViewStore.getState().snapshot;
+    return snapshot === undefined
+      ? undefined
+      : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
+  };
   return {
     id: "station-button",
     isActive: (state) =>
@@ -156,8 +161,12 @@ function createStationButtonLayer(
           }
           // Mirror the island's click: focus the flagged session's live agent
           // pane, else open the dashboard so the user can act on it.
-          const paneId = agentWorktreePaneId(row.id);
-          if (selectPaneRecord(state, paneId)?.role === "primary-agent") {
+          const paneId = agentWorktreePaneId(row.worktree.id);
+          const pane = selectPaneRecord(state, paneId);
+          if (
+            pane?.role === "primary-agent" &&
+            pane.agentIdentity?.sessionId === row.session.id
+          ) {
             return { kind: "focus", target: { kind: "pane", paneId } };
           }
           return { kind: "overlay-open", overlayId: STATION_OVERLAY_ID };

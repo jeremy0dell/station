@@ -20,8 +20,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ script│  ↵          open focused session                             │qs] [▾] 
  [9] ○ a│  tab        next session needing you                         │6 #5 x1 
  [a] ? m│  wheel      scroll project list                              │ -1 #10 
- [b] - o│  1-9/a-z    start or focus row                               │        
-        │  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │        
+        │  1-9/a-z    open visible session                             │        
+▼ empty-│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -35,7 +35,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -45,11 +45,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
                                                                                 
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
- [b] - old-experiment                     -         no agent                    
-search: api                                                                     
+                                                                                
+search: apiject  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -63,7 +63,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       -         no agent
+ [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffer                         codex     idle                  #73 ✓
  [4] + session-resume                     codex     starting
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
@@ -119,7 +119,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       -         no agent
+ [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffer                         codex     idle                  #73 ✓
  [4] + session-resume                     codex     starting
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
@@ -160,8 +160,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ s│                          │                                             │▾] 
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
- [b│                          │                                             │   
-   │ ↑↓ move   →/enter edit   esc close                                     │   
+   │                          │                                             │   
+▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -188,8 +188,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ s│                          │                                             │▾] 
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
- [b│                          │                                             │   
-   │ ←/esc back                                                             │   
+   │                          │                                             │   
+▼ e│ ←/esc back                                                             │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -216,8 +216,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ s│                          │                                             │▾] 
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
- [b│                          │                                             │   
-   │ ↑↓ move   →/enter edit   esc close                                     │   
+   │                          │                                             │   
+▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -231,7 +231,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -241,11 +241,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
                                                                                 
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to delete                   │code  unknown           +3 -1 #10 
-│                                            │      no agent                    
-│ ↑↓ move · ↵ choose · slot or click         │                                  
+│                                            │                                  
+│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
@@ -259,7 +259,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -272,8 +272,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Delete session?                            │                    [sh] [qs] [▾] 
 │ Session  cli-help-man                      │code  idle           +14 -6 #5 x1 
 │ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10 
-│                                            │      no agent                    
-│ Yes (y)     No (n)                         │                                  
+│                                            │                                  
+│ Yes (y)     No (n)                         │                    [sh] [qs] [▾] 
 │ Esc/Enter:cancel                           │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
@@ -287,7 +287,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       -         no agent
+ [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffer                         codex     idle                  #73 ✓
  [4] + session-resume                     codex     starting
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
@@ -301,7 +301,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ This agent was started outside Station.                          │14 -6 #5 x1
 │ Station can see its status, but cannot stop it.                  │  +3 -1 #10
 │                                                                  │
-│ Stop or remove it from its original terminal or external tooling.│
+│ Stop or remove it from its original terminal or external tooling.│h] [qs] [▾]
 │                                                                  │
 │ Esc/Enter:close                                                  │───────────
 └──────────────────────────────────────────────────────────────────┘/esc:close
@@ -315,7 +315,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -325,11 +325,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
                                                                                 
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
- [b] - old-experiment                     -         no agent                    
-Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                                   
+                                                                                
+Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
@@ -371,7 +371,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -381,11 +381,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
                                                                                 
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾] 
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to fork                     │code  unknown           +3 -1 #10 
-│                                            │      no agent                    
-│ ↑↓ move · ↵ choose · slot or click         │                                  
+│                                            │                                  
+│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
@@ -399,7 +399,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -412,8 +412,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
 │ > Branch cli-help-man-fork|                │code  idle           +14 -6 #5 x1 
 │   Copy   [x] uncommitted changes           │code  unknown           +3 -1 #10 
-│ Source keeps running — copy is read-only.  │      no agent                    
-│                                            │                                  
+│ Source keeps running — copy is read-only.  │                                  
+│                                            │                    [sh] [qs] [▾] 
 │ Fork (enter)                               │                                  
 │ ↑↓:field space:toggle enter:fork esc:back  │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
@@ -427,7 +427,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -455,7 +455,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -483,7 +483,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -511,7 +511,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR 
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
- [2] - docs-cleanup                       -         no agent                    
+ [2] - docs-cleanup                       codex     no agent                    
  [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
  [4] + session-resume                     codex     starting                    
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
@@ -539,7 +539,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       -         no agent
+ [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffer                         codex     idle                  #73 ✓
  [4] + session-resume                     codex     starting
  [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 …
@@ -623,7 +623,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       -         no agent
+ [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
  [4] + session-r│ widgets                                      │
  [5] ⠋ station-o│ saved to config.toml                         │ +412 -96 #76 …
@@ -633,11 +633,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [7] ⠋ provider-│   [ + add widget ]                           │   +32 -8 #16 …
  [8] ○ trace-bun│ ↵ toggle   [ ] reorder   x remove   a add   e│     +1 -1 #4 ✓
                 └──────────────────────────────────────────────┘
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾]
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
- [b] - old-experiment                     -         no agent
 
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]
 
 ───────────────────────────────────────────────────────────────────────────────
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
@@ -651,7 +651,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
        SESSION                            AGENT     STATUS            DIFF · PR
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾]
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓
- [2] - docs-cleanup                       -         no agent
+ [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
  [4] + session-r│ add widget                                   │
  [5] ⠋ station-o│ weather and tz require config.toml           │ +412 -96 #76 …
@@ -661,11 +661,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [7] ⠋ provider-│   moon                                       │   +32 -8 #16 …
  [8] ○ trace-bun│ ↵ add   esc back                             │     +1 -1 #4 ✓
                 └──────────────────────────────────────────────┘
-▼ scripts  3 sessions · 2 agents                                  [sh] [qs] [▾]
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾]
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
- [b] - old-experiment                     -         no agent
 
+▼ empty-project  0 sessions                                       [sh] [qs] [▾]
 
 ───────────────────────────────────────────────────────────────────────────────
 ↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
