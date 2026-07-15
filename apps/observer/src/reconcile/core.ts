@@ -176,6 +176,10 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
           report,
           projectedAt: toIsoTimestamp(clock.now()),
         });
+        // Durable session authorization must match the canonical session selected by projection.
+        if (sessionId !== undefined && projection.sessionId !== sessionId) {
+          return { projected: false, snapshot, events: [] };
+        }
         if (projection.projected) {
           snapshot = projection.snapshot;
         }

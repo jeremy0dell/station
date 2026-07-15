@@ -292,6 +292,43 @@ describe("observer turn readiness", () => {
     }
   });
 
+  it("keeps an authorized report diagnostic-only when its projection identities disagree", async () => {
+    const fixture = fixtureCore({
+      harnessState: "working",
+      decoratePersistence: (persistence) => ({
+        ...persistence,
+        getSessionHarnessExecution: async ({ provider, sessionId }) => ({
+          provider,
+          sessionId,
+          nativeSessionId: "native_ended_a",
+          state: "working",
+          statusUpdatedAt: now,
+        }),
+      }),
+    });
+
+    try {
+      await fixture.core.reconcile("projection-identity-mismatch");
+      const foreignCompletion = report({
+        reportId: "report_ended_a_completion",
+        turnCompleted: true,
+        nativeSessionId: "native_ended_a",
+      });
+      foreignCompletion.correlation = {
+        ...foreignCompletion.correlation,
+        sessionId: "ses_ended_a",
+      };
+
+      const result = await fixture.core.projectHarnessEventStatus(foreignCompletion);
+
+      expect(result).toMatchObject({ projected: false, events: [] });
+      expect(fixture.core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "working" });
+      await expect(fixture.persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+    } finally {
+      fixture.sqlite.close();
+    }
+  });
+
   it("rejects a readiness marker owned by a newer completion", async () => {
     const upsertStarted = deferred<void>();
     const continueUpsert = deferred<void>();
