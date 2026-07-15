@@ -116,7 +116,7 @@ describe("Station app composition", () => {
     station.store.actions.focusPane(firstPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "wt_station_working",
+      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_working",
     );
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
@@ -127,7 +127,7 @@ describe("Station app composition", () => {
     station.store.actions.focusPane(secondPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "wt_station_idle",
+      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_idle",
     );
   });
 
@@ -250,7 +250,7 @@ describe("Station app composition", () => {
     expect(station.spawnCount()).toBe(0);
 
     station.composition.stationInput.dispatchMouse(
-      { kind: "station", target: { kind: "openShellForRow", rowId: "wt_station_idle" } },
+      { kind: "station", target: { kind: "openShellForRow", rowId: "ses_wt_station_idle" } },
       LEFT_DOWN,
     );
     await waitFor(() => station.store.getState().workspace.panes.length === 1);

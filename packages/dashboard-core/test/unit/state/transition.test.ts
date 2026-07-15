@@ -4,6 +4,7 @@ import {
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
+  selectDashboardViewport,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
@@ -47,7 +48,7 @@ describe("TUI screen transitions", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const withPending: typeof base = {
       ...base,
-      focusedRowId: "wt_api_working",
+      focusedRowId: "ses_wt_api_working",
       localRows: {
         ...base.localRows,
         pendingRemove: [
@@ -72,7 +73,7 @@ describe("TUI screen transitions", () => {
       initialSnapshot: createDashboardSnapshot(),
       collapsedProjectIds: ["api"],
     });
-    const state: typeof base = { ...base, focusedRowId: "wt_api_working" };
+    const state: typeof base = { ...base, focusedRowId: "ses_wt_api_working" };
     const opened = handleTuiKey(state, { input: "X" }).state;
     const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
     // The row is filtered out of view; ↵ must not act on a row the user cannot see.
@@ -101,7 +102,7 @@ describe("TUI screen transitions", () => {
       terminalRows: 10,
     });
 
-    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state.scrollOffset).toBe(8);
+    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state.scrollOffset).toBe(7);
     expect(
       handleTuiKey({ ...state, scrollOffset: 0 }, { input: "", mouseScroll: "up" }).state
         .scrollOffset,
@@ -205,14 +206,57 @@ describe("TUI screen transitions", () => {
     expect(transition.state.localRows.pendingStart).toEqual([]);
   });
 
+  it("focuses the exact external session when a checkout has mixed membership", () => {
+    const external = createExternalAgentSnapshot();
+    const retained = createDashboardSnapshot().sessions.find(
+      (session) => session.worktreeId === "wt_web_idle",
+    );
+    const externalSession = external.sessions.find(
+      (session) => session.worktreeId === "wt_web_idle",
+    );
+    if (retained === undefined || externalSession === undefined) {
+      throw new Error("missing mixed-membership fixture sessions");
+    }
+    const focusableExternal = {
+      ...externalSession,
+      terminal: {
+        provider: "tmux",
+        state: "open" as const,
+        focusable: true,
+        closeable: true,
+      },
+    };
+    const snapshot = {
+      ...external,
+      sessions: [
+        retained,
+        ...external.sessions.map((session) =>
+          session.id === externalSession.id ? focusableExternal : session,
+        ),
+      ],
+    };
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const choice = selectDashboardViewport(snapshot, state).rowChoices.find(
+      (candidate) => candidate.value.id === externalSession.id,
+    );
+    if (choice === undefined) throw new Error("external session must be selectable");
+
+    const transition = handleTuiKey(state, { input: choice.key });
+
+    expect(transition.operations).toBeUndefined();
+    expect(transition.commands).toEqual([
+      { type: "terminal.focus", payload: { sessionId: externalSession.id } },
+    ]);
+  });
+
   it("shows a notice instead of dispatching focus when the agent's terminal is not focusable", () => {
     const base = createCommandSnapshot("idle");
     const snapshot = {
       ...base,
-      rows: base.rows.map((row) =>
-        row.agent === undefined || row.terminal === undefined
-          ? row
-          : { ...row, terminal: { ...row.terminal, focusable: false } },
+      sessions: base.sessions.map((session) =>
+        session.terminal === undefined
+          ? session
+          : { ...session, terminal: { ...session.terminal, focusable: false } },
       ),
     };
     const transition = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
@@ -258,12 +302,12 @@ describe("TUI screen transitions", () => {
       createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "X" },
     );
-    const transition = handleTuiKey(opened.state, { input: "5" });
+    const transition = handleTuiKey(opened.state, { input: "4" });
 
     expect(transition.state.screen).toEqual({
       name: "removeWorktree",
       step: "confirm",
-      rowId: "wt_web_idle",
+      rowId: "ses_wt_web_idle",
       forceRequired: true,
       label: "fix-nav-mobile",
     });
@@ -272,7 +316,7 @@ describe("TUI screen transitions", () => {
   it("opens removal information without dispatching for an external unstoppable agent", () => {
     const snapshot = createExternalAgentSnapshot();
     const state = createInitialTuiState({ initialSnapshot: snapshot });
-    const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "5" });
+    const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "4" });
 
     expect(opened.state.screen).toEqual({
       name: "removeWorktree",
@@ -312,27 +356,27 @@ describe("TUI screen transitions", () => {
     };
     const withTerminalStop = {
       ...stoppableSnapshot,
-      rows: stoppableSnapshot.rows.map((row) =>
-        row.id === "wt_web_idle"
+      sessions: stoppableSnapshot.sessions.map((session) =>
+        session.id === "run_wt_web_idle"
           ? {
-              ...row,
+              ...session,
               terminal: {
                 provider: "tmux",
                 state: "open" as const,
                 closeable: true,
               },
             }
-          : row,
+          : session,
       ),
     };
 
     for (const snapshot of [withProviderStop, withTerminalStop]) {
       const state = createInitialTuiState({ initialSnapshot: snapshot });
-      const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "5" });
+      const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "4" });
       expect(opened.state.screen).toMatchObject({
         name: "removeWorktree",
         step: "confirm",
-        rowId: "wt_web_idle",
+        rowId: "run_wt_web_idle",
       });
     }
   });
@@ -342,7 +386,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "X",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
 
     const transition = handleTuiKey(state, { input: "y" });
@@ -388,7 +432,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: { ...snapshot, rows } }), {
         input: "X",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
 
     const transition = handleTuiKey(state, { input: "y" });
@@ -422,7 +466,7 @@ describe("TUI screen transitions", () => {
     expect(transition.state.screen).toMatchObject({
       name: "removeWorktree",
       step: "confirm",
-      rowId: "wt_web_attention",
+      rowId: "ses_wt_web_attention",
     });
   });
 
@@ -446,7 +490,7 @@ describe("TUI screen transitions", () => {
     expect(transition.state.screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      rowId: "wt_web_attention",
+      rowId: "ses_wt_web_attention",
       sessionId: "ses_wt_web_attention",
       currentTitle: "checkout-copy",
     });
@@ -467,41 +511,36 @@ describe("TUI screen transitions", () => {
     expect(transition.state.scrollOffset).toBe(1);
   });
 
-  it("shows an error toast when the picked rename row has no session", () => {
-    const opened = handleTuiKey(
-      createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") }),
-      { input: "R" },
-    );
+  it("does not offer a rename slot for a bare worktree", () => {
+    const base = createDashboardSnapshot();
+    const bare = base.rows.filter((row) => row.id === "wt_web_no_agent");
+    const snapshot = { ...base, rows: bare, sessions: [] };
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "R",
+    });
 
     const transition = handleTuiKey(opened.state, { input: "1" });
 
     expect(transition.state.screen).toEqual({ name: "renameSession", step: "chooseSlot" });
-    expect(transition.state.toasts).toEqual([
-      expect.objectContaining({
-        toast: expect.objectContaining({
-          kind: "error",
-          message: "No session exists for that row.",
-        }),
-      }),
-    ]);
+    expect(transition.state.toasts).toEqual([]);
   });
 
   it("opens the rename editor directly for a dashboard row", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
 
-    const next = openRenameEditForRow(state, "wt_web_idle");
+    const next = openRenameEditForRow(state, "ses_wt_web_idle");
 
     expect(next.screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      rowId: "wt_web_idle",
+      rowId: "ses_wt_web_idle",
       sessionId: "ses_wt_web_idle",
       currentTitle: "fix-nav-mobile",
     });
   });
 
   it("guards direct rename open for stale, no-session, and unrelated screens", () => {
-    const dashboard = createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") });
+    const dashboard = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     expect(openRenameEditForRow(dashboard, "missing")).toBe(dashboard);
     expect(openRenameEditForRow(dashboard, "wt_web_no_agent")).toBe(dashboard);
 
@@ -509,13 +548,13 @@ describe("TUI screen transitions", () => {
       ...createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       screen: { name: "search", value: "" } as const,
     };
-    expect(openRenameEditForRow(search, "wt_web_idle")).toBe(search);
+    expect(openRenameEditForRow(search, "ses_wt_web_idle")).toBe(search);
   });
 
   it("does not open rename for external session membership", () => {
     const state = createInitialTuiState({ initialSnapshot: createExternalAgentSnapshot() });
 
-    expect(openRenameEditForRow(state, "wt_web_idle")).toBe(state);
+    expect(openRenameEditForRow(state, "run_wt_web_idle")).toBe(state);
   });
 
   it("edits the rename draft at the cursor position", () => {
@@ -523,7 +562,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "R",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
     const left = handleTuiKey(opened, { input: "", leftArrow: true }).state;
     const inserted = handleTuiKey(left, { input: "!" }).state;
@@ -541,7 +580,7 @@ describe("TUI screen transitions", () => {
   it("lets direct rename flows skip back to the dashboard on escape", () => {
     const opened = openRenameEditForRow(
       createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      "wt_web_idle",
+      "ses_wt_web_idle",
       { returnTo: "dashboard" },
     );
 
@@ -550,7 +589,7 @@ describe("TUI screen transitions", () => {
     expect(opened.screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      rowId: "wt_web_idle",
+      rowId: "ses_wt_web_idle",
       returnTo: "dashboard",
     });
     expect(transition.state.screen).toEqual({ name: "dashboard" });
@@ -561,7 +600,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "R",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
     if (opened.screen.name !== "renameSession" || opened.screen.step !== "editName") {
       throw new Error("expected rename edit screen");
@@ -589,7 +628,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "R",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
     if (opened.screen.name !== "renameSession" || opened.screen.step !== "editName") {
       throw new Error("expected rename edit screen");
@@ -623,7 +662,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "R",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
 
     const transition = handleTuiKey(state, { input: "\r", return: true });
@@ -637,7 +676,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "R",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
 
     const typed = " updated"
@@ -675,7 +714,7 @@ describe("TUI screen transitions", () => {
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "X",
       }).state,
-      { input: "5" },
+      { input: "4" },
     ).state;
 
     const transition = handleTuiKey(state, key);

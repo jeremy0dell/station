@@ -6,7 +6,7 @@
 // reserved chords (Ctrl-O/Ctrl-Q) pierce any catchAll by stack rule. Every
 // sequence is consumed (modal); dismiss/exit intents surface as the
 // overlay-close outcome so the coordination store owns visibility and focus
-// restore. One exception — a worktree-row slot key — resolves to a managed
+// restore. One exception — a Station-session slot key — resolves to a managed
 // launch (see catchAll) so the keyboard opens an agent exactly as a click does.
 import type { StoreApi } from "zustand/vanilla";
 import type { KeymapLayer } from "../../input/keymap/keymaps.js";

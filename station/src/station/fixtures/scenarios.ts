@@ -88,6 +88,7 @@ export function manyProjectsSnapshot(): StationSnapshot {
     ],
     {
       projects: [STATION, OBSERVER, SCRIPTS, EMPTY],
+      retainedSessionWorktreeIds: ["wt_station_none"],
       alerts: [
         {
           id: "alert_station_mock",
@@ -343,15 +344,21 @@ function scenarioChecks(
 
 type SnapshotExtras = {
   projects: readonly ScenarioProject[];
+  retainedSessionWorktreeIds?: readonly string[];
   providerHealth?: Record<string, ProviderHealth>;
   alerts?: StationSnapshot["alerts"];
 };
 
 function snapshotFromRows(rows: WorktreeRow[], extras: SnapshotExtras): StationSnapshot {
-  const projects = extras.projects.map((project) => projectView(project, rows));
+  const retainedSessionWorktreeIds = new Set(extras.retainedSessionWorktreeIds ?? []);
   const sessions = rows.flatMap((candidate) =>
-    candidate.agent?.sessionId === undefined ? [] : [sessionForRow(candidate)],
+    candidate.agent?.sessionId !== undefined
+      ? [sessionForRow(candidate)]
+      : retainedSessionWorktreeIds.has(candidate.id)
+        ? [retainedSessionForRow(candidate)]
+        : [],
   );
+  const projects = extras.projects.map((project) => projectView(project, rows, sessions));
   const counts = countsForRows(rows);
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
@@ -379,12 +386,17 @@ function snapshotFromRows(rows: WorktreeRow[], extras: SnapshotExtras): StationS
     counts: {
       projects: projects.length,
       ...counts,
+      sessions: sessions.length,
     },
     alerts: extras.alerts ?? [],
   } satisfies StationSnapshot;
 }
 
-function projectView(project: ScenarioProject, rows: readonly WorktreeRow[]): ProjectView {
+function projectView(
+  project: ScenarioProject,
+  rows: readonly WorktreeRow[],
+  sessions: readonly SessionView[],
+): ProjectView {
   const projectRows = rows.filter((candidate) => candidate.projectId === project.id);
   return {
     id: project.id,
@@ -401,7 +413,10 @@ function projectView(project: ScenarioProject, rows: readonly WorktreeRow[]): Pr
       status: "healthy",
       lastCheckedAt: SCENARIO_NOW,
     },
-    counts: countsForRows(projectRows),
+    counts: {
+      ...countsForRows(projectRows),
+      sessions: sessions.filter((session) => session.projectId === project.id).length,
+    },
   };
 }
 
@@ -453,6 +468,42 @@ function sessionForRow(candidate: WorktreeRow): SessionView {
     },
     title: candidate.branch,
     tags: [candidate.agent.harness, candidate.terminal.provider],
+  };
+}
+
+function retainedSessionForRow(candidate: WorktreeRow): SessionView {
+  return {
+    id: `ses_${candidate.id}`,
+    origin: "station",
+    projectId: candidate.projectId,
+    worktreeId: candidate.id,
+    createdAt: "2026-06-12T11:59:00.000Z",
+    updatedAt: SCENARIO_NOW,
+    harness: {
+      provider: "codex",
+      mode: "interactive",
+      capabilities: {
+        canLaunch: true,
+        canDiscoverRuns: true,
+        canEmitEvents: true,
+        canClassifyStatus: true,
+        canReceivePrompt: false,
+        canResume: true,
+        canStop: true,
+        canRunNonInteractive: true,
+        canExposeApprovalState: true,
+        supportsModifiedEnterSoftNewline: true,
+      },
+    },
+    status: {
+      value: "none",
+      confidence: "high",
+      reason: "No harness run is associated with this session.",
+      source: "observer_command",
+      updatedAt: SCENARIO_NOW,
+    },
+    title: candidate.branch,
+    tags: [],
   };
 }
 

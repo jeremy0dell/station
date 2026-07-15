@@ -76,7 +76,8 @@ function snapshotWithHarness(projectId: string, harness: string): StationSnapsho
 describe("routeStationMouse", () => {
   it("launches the row's primary agent (managed) on a dashboard row click", () => {
     const store = makeStore();
-    const rowId = "wt_station_idle";
+    const worktreeId = "wt_station_idle";
+    const rowId = `ses_${worktreeId}`;
 
     const outcome = routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, store);
 
@@ -84,9 +85,9 @@ describe("routeStationMouse", () => {
       kind: "launch-managed",
       rowId,
       projectId: "station",
-      worktreeId: rowId,
-      paneId: agentWorktreePaneId(rowId),
-      cwd: rowPath(rowId),
+      worktreeId,
+      paneId: agentWorktreePaneId(worktreeId),
+      cwd: rowPath(worktreeId),
     });
     // The dashboard click no longer dispatches the start-or-focus slot key, so
     // no pending-start row is queued.
@@ -96,7 +97,11 @@ describe("routeStationMouse", () => {
   it("emits launch-managed regardless of harness (the observer resolves it)", () => {
     const store = makeStore(snapshotWithHarness("station", "ghost"));
 
-    const outcome = routeStationMouse({ kind: "row", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "row", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      store,
+    );
 
     expect(outcome).toMatchObject({ kind: "launch-managed", worktreeId: "wt_station_idle" });
     // No local toast: harness resolution (and any failure) is the observer's job now.
@@ -115,7 +120,7 @@ describe("routeStationMouse", () => {
   it("chooses the clicked row in remove mode, same as the slot key", () => {
     const clicked = makeStore();
     const keyed = makeStore();
-    const rowId = "wt_station_working";
+    const rowId = "ses_wt_station_working";
     clicked.getState().handleKey({ input: "X" });
     keyed.getState().handleKey({ input: "X" });
     const slot = slotForRow(keyed, rowId);
@@ -129,7 +134,8 @@ describe("routeStationMouse", () => {
 
   it("confirms remove with the sheet yes button", () => {
     const store = makeStore();
-    const rowId = "wt_station_working";
+    const worktreeId = "wt_station_working";
+    const rowId = `ses_${worktreeId}`;
     store.getState().handleKey({ input: "X" });
     store.getState().handleKey({ input: slotForRow(store, rowId) });
 
@@ -138,13 +144,13 @@ describe("routeStationMouse", () => {
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toEqual({ name: "dashboard" });
     expect(store.getState().localRows.pendingRemove).toMatchObject([
-      { localId: `remove:${rowId}`, worktreeId: rowId },
+      { localId: `remove:${worktreeId}`, worktreeId },
     ]);
   });
 
   it("cancels remove with the sheet no button", () => {
     const store = makeStore();
-    const rowId = "wt_station_working";
+    const rowId = "ses_wt_station_working";
     store.getState().handleKey({ input: "X" });
     store.getState().handleKey({ input: slotForRow(store, rowId) });
 
@@ -174,7 +180,7 @@ describe("routeStationMouse", () => {
   it("chooses the clicked row in fork mode, same as the slot key", () => {
     const clicked = makeStore();
     const keyed = makeStore();
-    const rowId = "wt_station_working";
+    const rowId = "ses_wt_station_working";
     clicked.getState().handleKey({ input: "F" });
     keyed.getState().handleKey({ input: "F" });
     const slot = slotForRow(keyed, rowId);
@@ -188,7 +194,8 @@ describe("routeStationMouse", () => {
 
   it("launches a fork from the sheet submit button", () => {
     const store = makeStore();
-    const rowId = "wt_station_working";
+    const worktreeId = "wt_station_working";
+    const rowId = `ses_${worktreeId}`;
     store.getState().handleKey({ input: "F" });
     store.getState().handleKey({ input: slotForRow(store, rowId) });
     expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
@@ -198,7 +205,7 @@ describe("routeStationMouse", () => {
     expect(outcome.kind).toBe("launch-fork");
     if (outcome.kind === "launch-fork") {
       expect(outcome.projectId).toBe("station");
-      expect(outcome.sourceWorktreeId).toBe(rowId);
+      expect(outcome.sourceWorktreeId).toBe(worktreeId);
       expect(outcome.copyDirty).toBe(true);
       expect(outcome.branch.length).toBeGreaterThan(0);
     }
@@ -218,7 +225,11 @@ describe("routeStationMouse", () => {
     store.getState().handleKey({ input: "/" });
     const before = store.getState();
 
-    const outcome = routeStationMouse({ kind: "row", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "row", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      store,
+    );
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toEqual(before.screen);
@@ -358,7 +369,11 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     // Derive cwd from the live snapshot, not a duplicated path literal, so the
     // assertion proves the resolver reads row.path (not some equivalent format).
-    const outcome = routeStationMouse({ kind: "openShellForRow", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      store,
+    );
     expect(outcome).toEqual({
       kind: "open-pane",
       paneId: "pane-wt-wt_station_idle",
@@ -381,20 +396,21 @@ describe("routeStationMouse", () => {
 
   it("keeps [+sh] live on a worktree that has a pending agent start", () => {
     const store = makeStore();
-    const rowId = "wt_station_none";
+    const worktreeId = "wt_station_none";
+    const rowId = `ses_${worktreeId}`;
     // Put the row into a pending-start (transient) state via the start-or-focus
     // slot key: it drops out of rowChoices but still renders a clickable [+sh].
     // Opening a shell is orthogonal to agent activation, so the affordance must
-    // still resolve against snapshot.rows. (The dashboard *mouse* row-click now
-    // opens the primary agent, so the pending-start is driven by the keyboard.)
+    // still resolve the session's backing checkout. (The dashboard *mouse*
+    // row-click opens the primary agent, so keyboard drives the pending start.)
     store.getState().handleKey({ input: slotForRow(store, rowId) });
     const outcome = routeStationMouse({ kind: "openShellForRow", rowId }, LEFT_DOWN, store);
     expect(outcome).toEqual({
       kind: "open-pane",
-      paneId: `pane-wt-${rowId}`,
-      cwd: rowPath(rowId),
+      paneId: `pane-wt-${worktreeId}`,
+      cwd: rowPath(worktreeId),
       role: "shell",
-      worktreeId: rowId,
+      worktreeId,
     });
   });
 
@@ -402,7 +418,7 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "/" }); // enter search (non-dashboard) mode
 
-    expect(routeStationMouse({ kind: "openShellForRow", rowId: "wt_station_idle" }, LEFT_DOWN, store)).toEqual({
+    expect(routeStationMouse({ kind: "openShellForRow", rowId: "ses_wt_station_idle" }, LEFT_DOWN, store)).toEqual({
       kind: "handled",
     });
     expect(
@@ -577,7 +593,7 @@ describe("resolveKeyRowAgentTarget", () => {
     // The keyboard "open" and the click are one path: the key resolves to the
     // same target a click on that row resolves.
     const store = makeStore();
-    const rowId = "wt_station_idle";
+    const rowId = "ses_wt_station_idle";
 
     expect(resolveKeyRowAgentTarget(store, slotForRow(store, rowId))).toEqual(
       resolveRowAgentTarget(store, rowId),
@@ -588,7 +604,7 @@ describe("resolveKeyRowAgentTarget", () => {
     // The same slot key that opens an agent in dashboard mode must instead
     // select the row for removal here — so it defers to the machine, not launch.
     const store = makeStore();
-    const slot = slotForRow(store, "wt_station_idle");
+    const slot = slotForRow(store, "ses_wt_station_idle");
     store.getState().handleKey({ input: "X" }); // enter remove choose-slot mode
 
     expect(resolveKeyRowAgentTarget(store, slot)).toEqual({ kind: "none" });

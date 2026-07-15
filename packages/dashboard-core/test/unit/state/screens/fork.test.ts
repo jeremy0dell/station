@@ -139,7 +139,7 @@ describe("fork screen", () => {
     };
     const opened = openForkDetailsForRow(
       createInitialTuiState({ initialSnapshot: snapshot }),
-      "wt_web_idle",
+      "ses_wt_web_idle",
     );
     const screen = detailsScreen(opened);
     expect(screen.draftBranch.value).toBe("fix-nav-mobile-fork");

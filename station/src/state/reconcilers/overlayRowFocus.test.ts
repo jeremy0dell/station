@@ -29,7 +29,7 @@ describe("createOverlayRowFocusReconciler", () => {
 
       stationStore.actions.openOverlay(STATION_OVERLAY_ID);
 
-      expect(stationViewStore.getState().focusedRowId).toBe(FIRST_ROW_ID);
+      expect(stationViewStore.getState().focusedRowId).toBe(FIRST_SESSION_ID);
       dispose();
     }
   });
@@ -72,7 +72,7 @@ describe("createOverlayRowFocusReconciler", () => {
       const stationStore = createStationStore({ boot: "empty" });
       arrangePane(stationStore);
       const stationViewStore = loadedViewStore();
-      stationViewStore.setState({ focusedRowId: SECOND_ROW_ID, scrollOffset: 2 });
+      stationViewStore.setState({ focusedRowId: SECOND_SESSION_ID, scrollOffset: 2 });
       const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
 
       stationStore.actions.openOverlay(STATION_OVERLAY_ID);
@@ -92,14 +92,14 @@ describe("createOverlayRowFocusReconciler", () => {
     const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
 
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
-    expect(stationViewStore.getState().focusedRowId).toBe(FIRST_ROW_ID);
+    expect(stationViewStore.getState().focusedRowId).toBe(FIRST_SESSION_ID);
 
     stationStore.actions.closeOverlay();
     expect("focusedRowId" in stationViewStore.getState()).toBe(false);
 
     stationStore.actions.focusPane("pane-second");
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
-    expect(stationViewStore.getState().focusedRowId).toBe(SECOND_ROW_ID);
+    expect(stationViewStore.getState().focusedRowId).toBe(SECOND_SESSION_ID);
     dispose();
   });
 
@@ -113,11 +113,11 @@ describe("createOverlayRowFocusReconciler", () => {
 
     const firstSnapshot = manyProjectsSnapshot();
     stationViewStore.setState({ snapshot: firstSnapshot, loading: false });
-    expect(stationViewStore.getState().focusedRowId).toBe(FIRST_ROW_ID);
+    expect(stationViewStore.getState().focusedRowId).toBe(FIRST_SESSION_ID);
 
     stationViewStore.getState().handleKey({ input: "", downArrow: true });
     const navigatedRowId = stationViewStore.getState().focusedRowId;
-    expect(navigatedRowId).not.toBe(FIRST_ROW_ID);
+    expect(navigatedRowId).not.toBe(FIRST_SESSION_ID);
 
     stationViewStore.setState(scrollDashboard(stationViewStore.getState(), 1));
     const scrolledOffset = stationViewStore.getState().scrollOffset;
@@ -159,9 +159,9 @@ describe("createOverlayRowFocusReconciler", () => {
     stationViewStore.setState({ snapshot: manyProjectsSnapshot(), loading: false });
     expect("focusedRowId" in stationViewStore.getState()).toBe(false);
 
-    stationViewStore.setState({ focusedRowId: SECOND_ROW_ID });
+    stationViewStore.setState({ focusedRowId: SECOND_SESSION_ID });
     stationStore.actions.closeOverlay();
-    expect(stationViewStore.getState().focusedRowId).toBe(SECOND_ROW_ID);
+    expect(stationViewStore.getState().focusedRowId).toBe(SECOND_SESSION_ID);
   });
 });
 

@@ -12,7 +12,7 @@ import { createStationViewStore } from "./stationViewStore.js";
 describe("createStationViewStore", () => {
   it("routes row activation through the stubbed command service with real pending state", async () => {
     const store = makeStore();
-    const slot = slotForRow(store, "wt_station_none");
+    const slot = slotForRow(store, "ses_wt_station_none");
 
     store.getState().handleKey({ input: slot });
 
@@ -55,7 +55,7 @@ describe("createStationViewStore", () => {
 
   it("routes X through remove pending state and stub rejection feedback", async () => {
     const store = makeStore();
-    const slot = slotForRow(store, "wt_station_idle");
+    const slot = slotForRow(store, "ses_wt_station_idle");
 
     store.getState().handleKey({ input: "X" });
     store.getState().handleKey({ input: slot });
@@ -73,7 +73,7 @@ describe("createStationViewStore", () => {
 
   it("routes R through rename pending state and stub rejection feedback", async () => {
     const store = makeStore();
-    const slot = slotForRow(store, "wt_station_idle");
+    const slot = slotForRow(store, "ses_wt_station_idle");
 
     store.getState().handleKey({ input: "R" });
     store.getState().handleKey({ input: slot });

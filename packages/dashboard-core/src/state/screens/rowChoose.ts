@@ -1,4 +1,4 @@
-import type { WorktreeId } from "@station/contracts";
+import type { SessionId } from "@station/contracts";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
 import { focusedSelectableRow, moveDashboardFocus } from "../dashboardFocus.js";
@@ -19,7 +19,7 @@ import type { TuiState } from "../types.js";
 export function handleDashboardRowChoiceKey(
   state: TuiState,
   key: TuiKey,
-  commit: (state: TuiState, rowId: WorktreeId) => TuiTransition,
+  commit: (state: TuiState, rowId: SessionId) => TuiTransition,
 ): TuiTransition {
   if (key.upArrow === true) {
     return { state: moveDashboardFocus(state, -1) };

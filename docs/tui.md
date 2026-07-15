@@ -34,9 +34,9 @@ bun run dashboard                     # read-only dashboard renderer
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
-- Treat `snapshot.sessions` as session-membership and session/activity-count truth;
-  `snapshot.rows` remains worktree inventory. Do not infer membership from row agent or terminal
-  presence. Migrating dashboard rows and action gating to that truth is a separate UI slice.
+- Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
+  search, selection, and actions project those sessions and join `snapshot.rows` only for checkout
+  metadata; bare worktrees remain inventory and do not appear in the primary session list.
 
 ## Surface Rules
 

@@ -1,6 +1,9 @@
-import type { SessionView, StationSnapshot, WorktreeRow } from "@station/contracts";
 import { createEditableTextInputState } from "../../components/EditableTextInput/editing.js";
-import { sessionForWorktreeRow, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
+import {
+  selectDashboardSessionRow,
+  sessionForWorktreeRow,
+  sessionRowDisplayTitle,
+} from "../../selectors/selectors.js";
 import type { TuiState } from "../types.js";
 
 export type OpenRenameEditForRowOptions = {
@@ -19,13 +22,12 @@ export function openRenameEditForRow(
   if (resolved === undefined) {
     return state;
   }
-  const { row, session, snapshot } = resolved;
-  const currentTitle = worktreeRowDisplayTitle(row, snapshot.sessions, state.localRows);
+  const currentTitle = sessionRowDisplayTitle(resolved, state.localRows);
   const screen: Extract<TuiState["screen"], { name: "renameSession"; step: "editName" }> = {
     name: "renameSession",
     step: "editName",
-    rowId: row.id,
-    sessionId: session.id,
+    rowId: resolved.id,
+    sessionId: resolved.session.id,
     currentTitle,
     draftTitle: createEditableTextInputState(currentTitle),
   };
@@ -42,21 +44,20 @@ function canOpenRenameFromScreen(state: TuiState): boolean {
   );
 }
 
-function resolveCurrentRowSession(
-  state: TuiState,
-  rowId: string,
-): { row: WorktreeRow; session: SessionView; snapshot: StationSnapshot } | undefined {
+function resolveCurrentRowSession(state: TuiState, rowId: string) {
   const snapshot = state.snapshot;
   if (snapshot === undefined) {
     return undefined;
   }
-  const row = snapshot.rows.find((candidate) => candidate.id === rowId);
-  if (row === undefined) {
+  const direct = selectDashboardSessionRow(snapshot, rowId);
+  const worktree = snapshot.rows.find((candidate) => candidate.id === rowId);
+  const paneSession =
+    worktree === undefined ? undefined : sessionForWorktreeRow(worktree, snapshot.sessions);
+  const row =
+    direct ??
+    (paneSession === undefined ? undefined : selectDashboardSessionRow(snapshot, paneSession.id));
+  if (row?.session.origin !== "station") {
     return undefined;
   }
-  const session = sessionForWorktreeRow(row, snapshot.sessions);
-  if (session?.origin !== "station") {
-    return undefined;
-  }
-  return { row, session, snapshot };
+  return row;
 }

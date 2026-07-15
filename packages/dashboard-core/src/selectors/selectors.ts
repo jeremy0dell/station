@@ -3,6 +3,7 @@ import type {
   ProjectView,
   ProviderHealth,
   ProviderId,
+  SessionId,
   SessionView,
   SnapshotHarness,
   StationSnapshot,
@@ -62,8 +63,16 @@ export type KeyedChoice<T> = {
 
 export type ProjectGroup = {
   project: ProjectView;
-  rows: WorktreeRow[];
+  rows: DashboardSessionRow[];
   collapsed: boolean;
+};
+
+export type DashboardSessionRow = {
+  /** Dashboard identity is the canonical session id, never the checkout id. */
+  id: SessionId;
+  session: SessionView;
+  worktree: WorktreeRow;
+  presentation: WorktreeRow;
 };
 
 export type NewSessionHarnessOption = {
@@ -102,19 +111,15 @@ export function selectProjectGroups(
   state: TuiViewState,
 ): ProjectGroup[] {
   const query = normalizeSearch(state.searchQuery);
+  const sessionRows = selectDashboardSessionRows(snapshot);
   return snapshot.projects.map((project) => {
     const collapsed = state.collapsedProjectIds.has(project.id);
-    const matchingRows = snapshot.rows
-      .filter((row) => row.projectId === project.id)
+    const matchingRows = sessionRows
+      .filter((row) => row.worktree.projectId === project.id)
       .filter((row) =>
-        rowMatchesSearch(
-          row,
-          project,
-          query,
-          worktreeRowDisplayTitle(row, snapshot.sessions, state.localRows),
-        ),
+        rowMatchesSearch(row, project, query, sessionRowDisplayTitle(row, state.localRows)),
       )
-      .sort((left, right) => compareRows(left, right, snapshot.sessions, state.localRows));
+      .sort((left, right) => compareRows(left, right, state.localRows));
     return {
       project,
       rows: collapsed ? [] : matchingRows,
@@ -123,8 +128,29 @@ export function selectProjectGroups(
   });
 }
 
-export function selectVisibleRows(snapshot: StationSnapshot, state: TuiViewState): WorktreeRow[] {
+export function selectVisibleRows(
+  snapshot: StationSnapshot,
+  state: TuiViewState,
+): DashboardSessionRow[] {
   return selectProjectGroups(snapshot, state).flatMap((group) => group.rows);
+}
+
+export function selectDashboardSessionRows(snapshot: StationSnapshot): DashboardSessionRow[] {
+  const worktreesById = new Map(snapshot.rows.map((row) => [row.id, row]));
+  return snapshot.sessions.flatMap((session) => {
+    const source = worktreesById.get(session.worktreeId);
+    if (source === undefined || source.projectId !== session.projectId) {
+      return [];
+    }
+    return [dashboardSessionRow(session, source)];
+  });
+}
+
+export function selectDashboardSessionRow(
+  snapshot: StationSnapshot,
+  sessionId: SessionId,
+): DashboardSessionRow | undefined {
+  return selectDashboardSessionRows(snapshot).find((row) => row.id === sessionId);
 }
 
 export function selectProjectChoices(
@@ -242,6 +268,13 @@ export function worktreeRowDisplayTitle(
   return pendingRenameTitles(localRows)[session.id]?.title ?? session.title;
 }
 
+export function sessionRowDisplayTitle(
+  row: Pick<DashboardSessionRow, "session">,
+  localRows: TuiLocalRows,
+): string {
+  return pendingRenameTitles(localRows)[row.session.id]?.title ?? row.session.title;
+}
+
 /**
  * The default harness to render as a project's current selection: the optimistic
  * pending value (set the moment a new agent is picked) until the snapshot
@@ -260,23 +293,22 @@ export function selectProjectDefaultHarness(
 }
 
 function compareRows(
-  left: WorktreeRow,
-  right: WorktreeRow,
-  sessions: readonly SessionView[],
+  left: DashboardSessionRow,
+  right: DashboardSessionRow,
   localRows: TuiLocalRows,
 ): number {
   return (
-    worktreeRowDisplayTitle(left, sessions, localRows).localeCompare(
-      worktreeRowDisplayTitle(right, sessions, localRows),
+    sessionRowDisplayTitle(left, localRows).localeCompare(
+      sessionRowDisplayTitle(right, localRows),
     ) ||
-    left.branch.localeCompare(right.branch) ||
-    left.path.localeCompare(right.path) ||
+    left.worktree.branch.localeCompare(right.worktree.branch) ||
+    left.worktree.path.localeCompare(right.worktree.path) ||
     left.id.localeCompare(right.id)
   );
 }
 
 function rowMatchesSearch(
-  row: WorktreeRow,
+  row: DashboardSessionRow,
   project: ProjectView,
   query: string,
   displayTitle: string,
@@ -286,13 +318,101 @@ function rowMatchesSearch(
   }
   return [
     displayTitle,
-    row.branch,
-    row.display.statusLabel,
-    row.display.reason,
-    row.agent?.harness,
-    row.terminal?.provider,
+    row.worktree.branch,
+    row.session.status.value,
+    row.session.status.reason,
+    row.session.harness.provider,
+    row.session.terminal?.provider,
     project.label,
   ].some((value) => normalizeSearch(value ?? "").includes(query));
+}
+
+function dashboardSessionRow(session: SessionView, source: WorktreeRow): DashboardSessionRow {
+  return {
+    id: session.id,
+    session,
+    worktree: source,
+    presentation: sessionPresentation(session, source),
+  };
+}
+
+function sessionPresentation(session: SessionView, source: WorktreeRow): WorktreeRow {
+  const row: WorktreeRow = {
+    ...source,
+    display: sessionDisplay(session),
+  };
+  row.agent = sessionAgent(session, source);
+  if (session.terminal === undefined) {
+    delete row.terminal;
+  } else {
+    row.terminal = session.terminal;
+  }
+  if (session.origin === "external") {
+    delete row.recovery;
+  }
+  return row;
+}
+
+function sessionAgent(
+  session: SessionView,
+  source: WorktreeRow,
+): NonNullable<WorktreeRow["agent"]> {
+  const agent: NonNullable<WorktreeRow["agent"]> = {
+    harness: session.harness.provider,
+    state: session.status.value,
+    confidence: session.status.confidence,
+    reason: session.status.reason,
+    updatedAt: session.status.updatedAt,
+  };
+  if (session.harness.pid !== undefined) agent.pid = session.harness.pid;
+  if (session.harness.runId !== undefined) agent.runId = session.harness.runId;
+  if (session.origin === "station") agent.sessionId = session.id;
+  if (session.status.attention !== undefined) agent.attention = session.status.attention;
+  if (sourceAgentMatchesSession(source, session) && source.agent?.turnReadiness !== undefined) {
+    agent.turnReadiness = source.agent.turnReadiness;
+  }
+  return agent;
+}
+
+function sourceAgentMatchesSession(source: WorktreeRow, session: SessionView): boolean {
+  if (session.origin === "station") {
+    return source.agent?.sessionId === session.id;
+  }
+  return session.harness.runId !== undefined && source.agent?.runId === session.harness.runId;
+}
+
+function sessionDisplay(session: SessionView): WorktreeRow["display"] {
+  const value = session.status.value;
+  const display: WorktreeRow["display"] = {
+    statusLabel:
+      value === "needs_attention" ? "needs attention" : value === "none" ? "no agent" : value,
+    sortPriority: sessionStatusPriority(value),
+    alert: value === "needs_attention" || value === "stuck",
+    reason: session.status.reason,
+  };
+  if (value === "stuck") display.warning = true;
+  return display;
+}
+
+function sessionStatusPriority(value: SessionView["status"]["value"]): number {
+  switch (value) {
+    case "needs_attention":
+      return 10;
+    case "stuck":
+      return 20;
+    case "working":
+      return 30;
+    case "starting":
+      return 35;
+    case "idle":
+      return 40;
+    case "unknown":
+      return 50;
+    case "exited":
+      return 60;
+    case "none":
+      return 70;
+  }
 }
 
 function normalizeSearch(value: string): string {

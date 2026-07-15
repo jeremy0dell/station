@@ -3,6 +3,7 @@ import type {
   ProviderId,
   SafeError,
   SessionId,
+  SessionView,
   StationCommand,
   TerminalFocusOrigin,
   WorktreeId,
@@ -73,6 +74,19 @@ export function buildFocusCommand(
     type: "terminal.focus",
     payload,
   };
+}
+
+export function buildSessionFocusCommand(
+  session: Pick<SessionView, "id">,
+  options: BuildFocusCommandOptions = {},
+): Extract<StationCommand, { type: "terminal.focus" }> {
+  const payload: Extract<StationCommand, { type: "terminal.focus" }>["payload"] = {
+    sessionId: session.id,
+  };
+  if (options.origin !== undefined) {
+    payload.origin = options.origin;
+  }
+  return { type: "terminal.focus", payload };
 }
 
 export function buildStartAgentCommand(

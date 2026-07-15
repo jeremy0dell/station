@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { createInitialTuiState, selectFleetSummary } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  selectDashboardSessionRows,
+  selectFleetSummary,
+} from "@station/dashboard-core";
 import {
   attentionAndFailuresSnapshot,
   manyProjectsSnapshot,
@@ -37,14 +41,13 @@ describe("selectStationButtonStatus", () => {
   it("flags the first session needing the user and counts the queue", () => {
     const snapshot = attentionAndFailuresSnapshot();
     const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
-    const flagged = snapshot.rows.filter(
-      (row) =>
-        row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck",
+    const flagged = selectDashboardSessionRows(snapshot).filter(
+      (row) => row.session.status.value === "needs_attention" || row.session.status.value === "stuck",
     );
 
     expect(status.attention).toBe(true);
     expect(status.needsYouCount).toBe(flagged.length);
-    expect(status.attentionWorktreeId).toBe(flagged[0]?.id);
+    expect(status.attentionWorktreeId).toBe(flagged[0]?.worktree.id);
     expect(typeof status.sessionName).toBe("string");
   });
 
@@ -74,17 +77,41 @@ describe("selectStationButtonStatus", () => {
     }
 
     // One entry per project holding sessions, in row display order.
-    const projectIds = [...new Set(snapshot.rows.map((row) => row.projectId))];
+    const sessionRows = selectDashboardSessionRows(snapshot);
+    const projectIds = [...new Set(sessionRows.map((row) => row.worktree.projectId))];
     expect(rollup.map((entry) => entry.projectId)).toEqual(projectIds);
 
     // A project with a flagged session rolls up to needsYou even when it also
     // has calmer sessions.
-    const flagged = snapshot.rows.find(
-      (row) =>
-        row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck",
+    const flagged = sessionRows.find(
+      (row) => row.session.status.value === "needs_attention" || row.session.status.value === "stuck",
     );
-    const flaggedEntry = rollup.find((entry) => entry.projectId === flagged?.projectId);
+    const flaggedEntry = rollup.find((entry) => entry.projectId === flagged?.worktree.projectId);
     expect(flaggedEntry?.status).toBe("needsYou");
+  });
+
+  it("does not include a bare worktree in button counts or project rollups", () => {
+    const base = manyProjectsSnapshot();
+    const bare = base.rows.find((row) => row.id === "wt_scripts_none");
+    if (bare === undefined) throw new Error("fixture is expected to contain a bare worktree");
+    const snapshot = {
+      ...base,
+      rows: [bare],
+      sessions: [],
+    };
+
+    expect(
+      selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }), {
+        projectRollup: true,
+      }),
+    ).toEqual({
+      attention: false,
+      needsYouCount: 0,
+      workingCount: 0,
+      readyCount: 0,
+      idleCount: 0,
+      projectRollup: [],
+    });
   });
 
   it("compares field-wise so the snapshot reference can stay stable", () => {

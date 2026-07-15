@@ -40,7 +40,7 @@ const CASES: ModalCase[] = [
   {
     name: "help overlay",
     keys: [{ input: "H" }],
-    expect: ["station help", "Ctrl-\\", "split pane right", "1-9/a-z", "start or focus row", "╭", "╰"],
+    expect: ["station help", "Ctrl-\\", "split pane right", "1-9/a-z", "open visible session", "╭", "╰"],
   },
   {
     name: "search prompt",
@@ -126,7 +126,7 @@ const CASES: ModalCase[] = [
     snapshot: externalAgentSnapshot,
     trimSnapshotTrailingWhitespace: true,
     prepare: (store) => {
-      store.setState(openRemoveWorktreeConfirmForRow(store.getState(), "wt_station_idle"));
+      store.setState(openRemoveWorktreeConfirmForRow(store.getState(), "run_wt_station_idle"));
     },
     expect: [
       "Cannot delete worktree",

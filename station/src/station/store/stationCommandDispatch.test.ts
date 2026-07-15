@@ -9,7 +9,7 @@ import { createObserverStationClient } from "../../sources/observerStationClient
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
-import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
+import { externalAgentSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { routeStationMouse } from "../input/stationMouse.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
 import { createStationViewStore } from "./stationViewStore.js";
@@ -34,8 +34,8 @@ describe("station command dispatch through the shared client", () => {
     }
   });
 
-  async function makeLiveStore(): Promise<Harness> {
-    const fake = new FakeTuiObserverService(manyProjectsSnapshot());
+  async function makeLiveStore(snapshot = manyProjectsSnapshot()): Promise<Harness> {
+    const fake = new FakeTuiObserverService(snapshot);
     const client = createObserverStationClient({ service: fake });
     const store = createStationViewStore(client);
     const detach = store.getState().start();
@@ -52,7 +52,7 @@ describe("station command dispatch through the shared client", () => {
 
   it("row activation dispatches terminal.focus and waits for completion", async () => {
     const { fake, store } = await makeLiveStore();
-    const slot = slotForRow(store, "wt_station_idle");
+    const slot = slotForRow(store, "ses_wt_station_idle");
 
     store.getState().handleKey({ input: slot });
 
@@ -67,7 +67,11 @@ describe("station command dispatch through the shared client", () => {
   it("launches the worktree's managed primary agent on row click instead of dispatching focus", async () => {
     const { fake, store } = await makeLiveStore();
 
-    const outcome = routeStationMouse({ kind: "row", rowId: "wt_station_idle" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "row", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      store,
+    );
 
     // The mouse row-click now launches the session's managed primary agent (a
     // router outcome the Station store consumes that asks the observer to
@@ -84,6 +88,37 @@ describe("station command dispatch through the shared client", () => {
     expect(fake.dispatched).toEqual([]);
     expect(fake.waitedForCommandIds).toEqual([]);
     expect(errorToastMessages(store)).toEqual([]);
+  });
+
+  it("routes an external session click through exact observer focus", async () => {
+    const base = externalAgentSnapshot();
+    const external = base.sessions.find((session) => session.origin === "external");
+    if (external === undefined) throw new Error("external fixture session is missing");
+    const snapshot = {
+      ...base,
+      sessions: base.sessions.map((session) =>
+        session.id === external.id
+          ? {
+              ...session,
+              terminal: {
+                provider: "tmux",
+                state: "open" as const,
+                focusable: true,
+                closeable: true,
+              },
+            }
+          : session,
+      ),
+    };
+    const { fake, store } = await makeLiveStore(snapshot);
+
+    const outcome = routeStationMouse({ kind: "row", rowId: external.id }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    await waitFor(() => fake.waitedForCommandIds.length === 1);
+    expect(fake.dispatched).toEqual([
+      { type: "terminal.focus", payload: { sessionId: external.id } },
+    ]);
   });
 
   it("routes Z refresh through the client runtime", async () => {

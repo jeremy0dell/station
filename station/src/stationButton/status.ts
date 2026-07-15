@@ -1,9 +1,11 @@
 import type { WorktreeId, WorktreeRow } from "@station/contracts";
 import {
   isReadyToRead,
+  selectDashboardSessionRows,
   selectFleetSummary,
+  sessionRowDisplayTitle,
+  type DashboardSessionRow,
   type TuiState,
-  worktreeRowDisplayTitle,
 } from "@station/dashboard-core";
 
 /** Worst agent status across a project's sessions, calmest last. */
@@ -56,9 +58,8 @@ export function selectStationButtonStatus(
     return EMPTY_STATUS;
   }
   const fleet = selectFleetSummary(snapshot);
-  // The attention identity is the first row asking for the user (rows are
-  // already in display order).
-  const attentionRow = snapshot.rows.find(rowNeedsUser);
+  const sessionRows = selectDashboardSessionRows(snapshot);
+  const attentionRow = sessionRows.find((row) => rowNeedsUser(row.presentation));
   const status: StationButtonStatus = {
     attention: attentionRow !== undefined,
     needsYouCount: fleet.needsYou,
@@ -67,11 +68,11 @@ export function selectStationButtonStatus(
     idleCount: fleet.idle,
   };
   if (attentionRow !== undefined) {
-    status.sessionName = worktreeRowDisplayTitle(attentionRow, snapshot.sessions, state.localRows);
-    status.attentionWorktreeId = attentionRow.id;
+    status.sessionName = sessionRowDisplayTitle(attentionRow, state.localRows);
+    status.attentionWorktreeId = attentionRow.worktree.id;
   }
   if (options?.projectRollup === true) {
-    status.projectRollup = rollupProjects(snapshot.rows);
+    status.projectRollup = rollupProjects(sessionRows);
   }
   return status;
 }
@@ -83,15 +84,15 @@ const ROLLUP_SEVERITY: Record<ProjectRollupStatus, number> = {
   idle: 0,
 };
 
-function rowRollupStatus(row: WorktreeRow): ProjectRollupStatus {
-  const state = row.agent?.state;
+function rowRollupStatus(row: DashboardSessionRow): ProjectRollupStatus {
+  const state = row.session.status.value;
   if (state === "needs_attention" || state === "stuck") {
     return "needsYou";
   }
   if (state === "working") {
     return "working";
   }
-  if (isReadyToRead(row)) {
+  if (isReadyToRead(row.presentation)) {
     return "ready";
   }
   // Calm lanes (idle/starting/exited/unknown/no agent) all read as idle here;
@@ -99,13 +100,17 @@ function rowRollupStatus(row: WorktreeRow): ProjectRollupStatus {
   return "idle";
 }
 
-function rollupProjects(rows: readonly WorktreeRow[]): readonly ProjectRollupEntry[] {
+function rollupProjects(rows: readonly DashboardSessionRow[]): readonly ProjectRollupEntry[] {
   const byProject = new Map<string, ProjectRollupEntry>();
   for (const row of rows) {
     const status = rowRollupStatus(row);
-    const existing = byProject.get(row.projectId);
+    const existing = byProject.get(row.worktree.projectId);
     if (existing === undefined) {
-      byProject.set(row.projectId, { projectId: row.projectId, name: row.projectLabel, status });
+      byProject.set(row.worktree.projectId, {
+        projectId: row.worktree.projectId,
+        name: row.worktree.projectLabel,
+        status,
+      });
     } else if (ROLLUP_SEVERITY[status] > ROLLUP_SEVERITY[existing.status]) {
       existing.status = status;
     }

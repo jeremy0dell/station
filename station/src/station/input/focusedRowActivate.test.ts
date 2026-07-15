@@ -47,15 +47,21 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
     if (focusedRowId === undefined) {
       throw new Error("Expected a focused row.");
     }
+    const worktreeId = store
+      .getState()
+      .snapshot?.sessions.find((session) => session.id === focusedRowId)?.worktreeId;
+    if (worktreeId === undefined) {
+      throw new Error("Expected the focused session's worktree.");
+    }
     store.setState({
       localRows: {
         ...store.getState().localRows,
         pendingStart: [
           {
-            localId: `start:${focusedRowId}`,
+            localId: `start:${worktreeId}`,
             operation: "startAgent",
             projectId: "station",
-            worktreeId: focusedRowId,
+            worktreeId,
             branch: "station-overlay",
             createdAt: "2026-07-02T12:00:00.000Z",
           },

@@ -1,5 +1,9 @@
-import { isRunningAgentState, type StationSnapshot, type WorktreeRow } from "@station/contracts";
-import { sessionForWorktreeRow, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
+import { isRunningAgentState, type SessionId, type StationSnapshot } from "@station/contracts";
+import {
+  type DashboardSessionRow,
+  selectDashboardSessionRow,
+  sessionRowDisplayTitle,
+} from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
@@ -46,20 +50,20 @@ export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransi
 }
 
 export function isExternalAgentRemovalUnavailable(
-  row: WorktreeRow,
+  row: DashboardSessionRow,
   snapshot: StationSnapshot,
 ): boolean {
-  const agent = row.agent;
-  return (
-    agent !== undefined &&
-    isRunningAgentState(agent.state) &&
-    sessionForWorktreeRow(row, snapshot.sessions)?.origin !== "station" &&
-    snapshot.providerHealth[agent.harness]?.capabilities?.canStop === false &&
-    row.terminal?.closeable !== true
+  return snapshot.sessions.some(
+    (session) =>
+      session.worktreeId === row.worktree.id &&
+      session.origin === "external" &&
+      isRunningAgentState(session.status.value) &&
+      snapshot.providerHealth[session.harness.provider]?.capabilities?.canStop === false &&
+      session.terminal?.closeable !== true,
   );
 }
 
-export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string): TuiState {
+export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: SessionId): TuiState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "removeWorktree") {
     return state;
   }
@@ -67,11 +71,12 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string):
   if (snapshot === undefined) {
     return state;
   }
-  const row = snapshot.rows.find((candidate) => candidate.id === rowId);
-  if (row === undefined) {
+  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
+  if (sessionRow === undefined) {
     return state;
   }
-  if (isExternalAgentRemovalUnavailable(row, snapshot)) {
+  const row = sessionRow.worktree;
+  if (isExternalAgentRemovalUnavailable(sessionRow, snapshot)) {
     return {
       ...state,
       screen: {
@@ -80,15 +85,14 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: string):
       },
     };
   }
-  const label =
-    worktreeRowDisplayTitle(row, snapshot.sessions, state.localRows).trim() || row.branch;
+  const label = sessionRowDisplayTitle(sessionRow, state.localRows).trim() || row.branch;
   return {
     ...state,
     screen: {
       name: "removeWorktree",
       step: "confirm",
-      rowId: row.id,
-      forceRequired: cleanupForceRequired(row, "remove-worktree"),
+      rowId: sessionRow.id,
+      forceRequired: removeWorktreeForceRequired(sessionRow, snapshot),
       label,
     },
   };
@@ -115,12 +119,25 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
   }
 
   const screen = state.screen;
-  const row = state.snapshot?.rows.find((candidate) => candidate.id === screen.rowId);
-  if (row === undefined) {
+  const snapshot = state.snapshot;
+  if (snapshot === undefined) {
+    return { state: { ...state, screen: { name: "dashboard" } } };
+  }
+  const sessionRow = selectDashboardSessionRow(snapshot, screen.rowId);
+  if (sessionRow === undefined) {
     return {
       state: {
         ...state,
         screen: { name: "dashboard" },
+      },
+    };
+  }
+  const row = sessionRow.worktree;
+  if (isExternalAgentRemovalUnavailable(sessionRow, snapshot)) {
+    return {
+      state: {
+        ...state,
+        screen: { name: "removeWorktree", step: "unavailable" },
       },
     };
   }
@@ -143,7 +160,10 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
     };
   }
 
-  const command = buildRemoveWorktreeCommand(row, screen.forceRequired);
+  const command = buildRemoveWorktreeCommand(
+    row,
+    screen.forceRequired || removeWorktreeForceRequired(sessionRow, snapshot),
+  );
   if (command.type !== "worktree.remove") {
     return { state };
   }
@@ -174,4 +194,14 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
       },
     ],
   };
+}
+
+function removeWorktreeForceRequired(row: DashboardSessionRow, snapshot: StationSnapshot): boolean {
+  return (
+    cleanupForceRequired(row.worktree, "remove-worktree") ||
+    snapshot.sessions.some(
+      (session) =>
+        session.worktreeId === row.worktree.id && isRunningAgentState(session.status.value),
+    )
+  );
 }

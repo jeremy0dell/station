@@ -74,9 +74,33 @@ describe("TUI selectors", () => {
     const groups = selectProjectGroups(snapshot, createInitialTuiState());
 
     expect(groups.map((group) => [group.project.id, group.rows.length])).toEqual([
-      ["web", 7],
+      ["web", 6],
       ["api", 1],
     ]);
+  });
+
+  it("uses canonical session membership, including concurrent Station and external sessions", () => {
+    const external = createExternalAgentSnapshot();
+    const retained = createDashboardSnapshot().sessions.find(
+      (session) => session.worktreeId === "wt_web_idle",
+    );
+    const externalSession = external.sessions.find(
+      (session) => session.worktreeId === "wt_web_idle",
+    );
+    if (retained === undefined || externalSession === undefined) {
+      throw new Error("missing mixed-membership fixture sessions");
+    }
+    const snapshot = {
+      ...external,
+      sessions: [retained, ...external.sessions],
+    };
+    const web = selectProjectGroups(snapshot, createInitialTuiState()).find(
+      (group) => group.project.id === "web",
+    );
+
+    expect(web?.rows.map((candidate) => candidate.id)).toContain(retained.id);
+    expect(web?.rows.map((candidate) => candidate.id)).toContain(externalSession.id);
+    expect(web?.rows.map((candidate) => candidate.id)).not.toContain("wt_web_no_agent");
   });
 
   it("sorts rows inside project groups by resolved display title, not live status", () => {
@@ -85,20 +109,18 @@ describe("TUI selectors", () => {
       (group) => group.project.id === "web",
     );
 
-    expect(web?.rows.map((candidate) => candidate.branch)).toEqual([
+    expect(web?.rows.map((candidate) => candidate.worktree.branch)).toEqual([
       "cache-refactor",
       "checkout-copy",
       "done-run",
-      "feature-auth",
       "fix-nav-mobile",
       "ghost-signal",
       "slow-tests",
     ]);
-    expect(web?.rows.map((candidate) => candidate.display.statusLabel)).toEqual([
+    expect(web?.rows.map((candidate) => candidate.presentation.display.statusLabel)).toEqual([
       "working",
       "needs attention",
       "exited",
-      "no agent",
       "idle",
       "unknown",
       "stuck",
@@ -130,22 +152,18 @@ describe("TUI selectors", () => {
     expect(after?.rows.map((candidate) => candidate.id)).toEqual(
       before?.rows.map((candidate) => candidate.id),
     );
-    expect(after?.rows.map((candidate) => candidate.id)).toContain("wt_web_idle");
+    expect(after?.rows.map((candidate) => candidate.id)).toContain("ses_wt_web_idle");
   });
 
   it("keeps the same row position when status priority changes", () => {
     const snapshot = createDashboardSnapshot();
     const changed = {
       ...snapshot,
-      rows: snapshot.rows.map((candidate) =>
-        candidate.id === "wt_web_no_agent"
+      sessions: snapshot.sessions.map((candidate) =>
+        candidate.id === "ses_wt_web_exited"
           ? {
               ...candidate,
-              display: {
-                statusLabel: "needs attention" as const,
-                sortPriority: 10,
-                alert: true,
-              },
+              status: { ...candidate.status, value: "needs_attention" as const },
             }
           : candidate,
       ),
@@ -221,7 +239,7 @@ describe("TUI selectors", () => {
       selection: new Map(),
     };
     expect(selectVisibleRows(snapshot, searched).map((candidate) => candidate.id)).toEqual([
-      "wt_web_idle",
+      "ses_wt_web_idle",
     ]);
 
     const collapsed: TuiViewState = {
@@ -234,9 +252,23 @@ describe("TUI selectors", () => {
     };
     const groups = selectProjectGroups(snapshot, collapsed);
     expect(groups.find((group) => group.project.id === "web")?.collapsed).toBe(true);
-    expect(selectVisibleRows(snapshot, collapsed).map((candidate) => candidate.projectId)).toEqual([
-      "api",
-    ]);
+    expect(
+      selectVisibleRows(snapshot, collapsed).map((candidate) => candidate.worktree.projectId),
+    ).toEqual(["api"]);
+  });
+
+  it("does not make a bare worktree searchable as a session", () => {
+    const snapshot = createDashboardSnapshot();
+    const searched: TuiViewState = {
+      searchQuery: "feature-auth",
+      collapsedProjectIds: new Set(),
+      scrollOffset: 0,
+      terminalRows: 24,
+      localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
+      selection: new Map(),
+    };
+
+    expect(selectVisibleRows(snapshot, searched)).toEqual([]);
   });
 
   it("searches by resolved session title while sorting uses resolved titles", () => {
@@ -259,13 +291,13 @@ describe("TUI selectors", () => {
     };
 
     expect(selectVisibleRows(titled, searched).map((candidate) => candidate.id)).toEqual([
-      "wt_web_stuck",
+      "ses_wt_web_stuck",
     ]);
 
     const web = selectProjectGroups(titled, createInitialTuiState()).find(
       (group) => group.project.id === "web",
     );
-    expect(web?.rows.map((candidate) => candidate.id)[0]).toBe("wt_web_stuck");
+    expect(web?.rows.map((candidate) => candidate.id)[0]).toBe("ses_wt_web_stuck");
   });
 
   it("assigns project choices from rendered project headers", () => {

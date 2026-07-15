@@ -140,7 +140,7 @@ function representativeStates(): Record<StationInputMode, TuiState> {
     projectSettingsPicker: drive(base, [{ input: "P" }]),
     removeChooseSlot: drive(base, [{ input: "X" }]),
     removeConfirm: drive(base, [{ input: "X" }, { input: "1" }]),
-    removeUnavailable: openRemoveWorktreeConfirmForRow(externalBase, "wt_station_idle"),
+    removeUnavailable: openRemoveWorktreeConfirmForRow(externalBase, "run_wt_station_idle"),
     projectSettings: openProjectSettings(base, "station"),
     renameChooseSlot: drive(renameBase, [{ input: "R" }]),
     renameEdit: drive(renameBase, [{ input: "R" }, { input: "1" }]),

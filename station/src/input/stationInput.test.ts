@@ -324,7 +324,7 @@ describe("createStationInputRuntime", () => {
     expect(stationViewStore.getState().screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      rowId: "wt_station_idle",
+      rowId: "ses_wt_station_idle",
       returnTo: "dashboard",
     });
 
@@ -658,8 +658,9 @@ describe("createStationInputRuntime", () => {
 
 describe("createStationInputRuntime open-pane wiring", () => {
   // wt_station_idle -> branch pty-buffer; the fixture derives both ids and path.
-  const ROW_ID = "wt_station_idle";
-  const PANE_ID = worktreePaneId(ROW_ID);
+  const WORKTREE_ID = "wt_station_idle";
+  const SESSION_ID = "ses_wt_station_idle";
+  const PANE_ID = worktreePaneId(WORKTREE_ID);
   const CWD = "/Users/example/.worktrees/station/pty-buffer";
 
   function paneHarness(options?: {
@@ -707,7 +708,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     });
     const clickRowAffordance = (): boolean =>
       runtime.dispatchMouse(
-        { kind: "station", target: { kind: "openShellForRow", rowId: ROW_ID } },
+        { kind: "station", target: { kind: "openShellForRow", rowId: SESSION_ID } },
         LEFT_DOWN,
       );
     return { runtime, store, calls, clickRowAffordance };
@@ -825,7 +826,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
 
   it("opens a worktree shell as a split beside its primary agent pane", () => {
     const { store, calls, clickRowAffordance } = paneHarness();
-    const agentPaneId = agentWorktreePaneId(ROW_ID);
+    const agentPaneId = agentWorktreePaneId(WORKTREE_ID);
     store.actions.createPane(agentPaneId, { role: "primary-agent" });
     store.actions.setPrimaryAgent(agentPaneId, {
       sessionId: "ses_managed",
@@ -922,11 +923,11 @@ describe("createStationInputRuntime open-pane wiring", () => {
     store.subscribe(reconcile);
     reconcile();
     const runtime = createStationInputRuntime({ store, shutdown: () => {}, stationViewStore, registry });
-    const expectedCwd = snapshot.rows.find((row) => row.id === ROW_ID)?.path;
+    const expectedCwd = snapshot.rows.find((row) => row.id === WORKTREE_ID)?.path;
 
     store.actions.openOverlay(STATION_OVERLAY_ID);
     runtime.dispatchMouse(
-      { kind: "station", target: { kind: "openShellForRow", rowId: ROW_ID } },
+      { kind: "station", target: { kind: "openShellForRow", rowId: SESSION_ID } },
       LEFT_DOWN,
     );
     // Lazy spawn-on-first-resize: the shell starts here, at the cwd that must
@@ -955,7 +956,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       stationViewStore,
     });
     store.actions.openOverlay(STATION_OVERLAY_ID);
-    const rightClickRow = (rowId = "wt_station_idle"): boolean =>
+    const rightClickRow = (rowId = "ses_wt_station_idle"): boolean =>
       runtime.dispatchMouse({ kind: "station", target: { kind: "row", rowId } }, RIGHT_DOWN);
     return { runtime, store, stationViewStore, rightClickRow };
   }
@@ -970,7 +971,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(stationViewStore.getState().screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      rowId: "wt_station_idle",
+      rowId: "ses_wt_station_idle",
       sessionId: "ses_wt_station_idle",
       currentTitle: "pty-buffer",
     });
@@ -1006,7 +1007,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(stationViewStore.getState().screen).toEqual({
       name: "removeWorktree",
       step: "confirm",
-      rowId: "wt_station_idle",
+      rowId: "ses_wt_station_idle",
       forceRequired: true,
       label: "pty-buffer",
     });
@@ -1017,7 +1018,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       externalAgentSnapshot(),
     );
 
-    rightClickRow();
+    rightClickRow("run_wt_station_idle");
     // Menu order: Fork, Delete Worktree… — one down reaches the informational action.
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
@@ -1111,10 +1112,11 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   // Same fixture row as the shell wiring suite (wt_station_idle, branch pty-buffer,
   // project station), but the agent lands in the distinct agent pane id, not the
   // [+sh] shell pane. The launch command/args/env come from the observer's plan.
-  const ROW_ID = "wt_station_idle";
-  const AGENT_PANE_ID = agentWorktreePaneId(ROW_ID);
+  const WORKTREE_ID = "wt_station_idle";
+  const ROW_ID = "ses_wt_station_idle";
+  const AGENT_PANE_ID = agentWorktreePaneId(WORKTREE_ID);
   const CWD = "/Users/example/.worktrees/station/pty-buffer";
-  const TERMINAL_TARGET_ID = `native:${ROW_ID}`;
+  const TERMINAL_TARGET_ID = `native:${WORKTREE_ID}`;
 
   function preparedPlan(): AgentPrepareExternalLaunchResult {
     return {
@@ -1218,10 +1220,19 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     return {
       ...snapshot,
       rows: snapshot.rows.map((row): WorktreeRow => {
-        if (row.id !== ROW_ID || row.terminal === undefined) {
+        if (row.id !== WORKTREE_ID || row.terminal === undefined) {
           return row;
         }
         return { ...row, terminal: { ...row.terminal, provider: "native", ...terminalOverrides } };
+      }),
+      sessions: snapshot.sessions.map((session) => {
+        if (session.id !== ROW_ID || session.terminal === undefined) {
+          return session;
+        }
+        return {
+          ...session,
+          terminal: { ...session.terminal, provider: "native", ...terminalOverrides },
+        };
       }),
     };
   }
@@ -1230,7 +1241,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     return {
       ...snapshot,
       rows: snapshot.rows.map((row): WorktreeRow => {
-        if (row.id !== ROW_ID || row.agent === undefined) {
+        if (row.id !== WORKTREE_ID || row.agent === undefined) {
           return row;
         }
         return {
@@ -1272,7 +1283,9 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(dispatch({ kind: "row", rowId: ROW_ID })).toBe(true);
     await settle();
 
-    expect(observerService.preparedLaunches).toEqual([{ projectId: "station", worktreeId: ROW_ID }]);
+    expect(observerService.preparedLaunches).toEqual([
+      { projectId: "station", worktreeId: WORKTREE_ID },
+    ]);
     // Order is load-bearing: ensure (with the observer's plan) → createPane → setPrimaryAgent.
     expect(calls).toEqual([
       `ensure:${AGENT_PANE_ID}:${CWD}:codex:--exec`,
@@ -1301,7 +1314,9 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(pressKey(slotKeyFor(stationViewStore))).toBe(true);
     await settle();
 
-    expect(observerService.preparedLaunches).toEqual([{ projectId: "station", worktreeId: ROW_ID }]);
+    expect(observerService.preparedLaunches).toEqual([
+      { projectId: "station", worktreeId: WORKTREE_ID },
+    ]);
     expect(calls).toEqual([
       `ensure:${AGENT_PANE_ID}:${CWD}:codex:--exec`,
       `createPane:${AGENT_PANE_ID}:primary-agent`,
@@ -1463,9 +1478,14 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     const snapshot: StationSnapshot = {
       ...base,
       rows: base.rows.map((row): WorktreeRow =>
-        row.id === ROW_ID && row.terminal !== undefined
+        row.id === WORKTREE_ID && row.terminal !== undefined
           ? { ...row, terminal: { ...row.terminal, state: "detached" } }
           : row,
+      ),
+      sessions: base.sessions.map((session) =>
+        session.id === ROW_ID && session.terminal !== undefined
+          ? { ...session, terminal: { ...session.terminal, state: "detached" } }
+          : session,
       ),
     };
     const { store, calls, dispatch, settle, observerService, stationViewStore } = agentHarness(
@@ -1662,7 +1682,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
 
     expect(dispatch({ kind: "openShellForRow", rowId: ROW_ID })).toBe(true);
 
-    const shellPaneId = worktreePaneId(ROW_ID);
+    const shellPaneId = worktreePaneId(WORKTREE_ID);
     // No command/args seeded (default shell), role shell, and no observer prepare.
     expect(calls).toEqual([`ensure:${shellPaneId}:${CWD}::`, `createPane:${shellPaneId}:shell`]);
     expect(store.getState().workspace.panes.find((pane) => pane.id === shellPaneId)?.role).toEqual(

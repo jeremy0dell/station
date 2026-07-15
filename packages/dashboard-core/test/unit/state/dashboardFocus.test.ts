@@ -9,7 +9,7 @@ import {
   selectDashboardItems,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 const DOWN = { input: "", downArrow: true } as const;
@@ -17,8 +17,8 @@ const UP = { input: "", upArrow: true } as const;
 const NEXT_NEEDS_ME = { input: "i", ctrl: true } as const;
 const RETURN = { input: "\r", return: true } as const;
 
-// Fixture worktree order under project web: working, attention, exited,
-// no_agent, idle, unknown, stuck — then project api: api_working.
+// Canonical session order under project web: working, attention, exited,
+// idle, unknown, stuck — then project api: api_working.
 function state(options: Partial<Parameters<typeof createInitialTuiState>[0]> = {}): TuiState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot(), ...options });
 }
@@ -38,8 +38,8 @@ describe("dashboard focus cursor", () => {
     });
     const focused = focusDashboardSession(initial, "ses_wt_api_working");
 
-    expect(focused.focusedRowId).toBe("wt_api_working");
-    expect(focused.scrollOffset).toBe(6);
+    expect(focused.focusedRowId).toBe("ses_wt_api_working");
+    expect(focused.scrollOffset).toBe(5);
   });
 
   it.each([
@@ -53,7 +53,7 @@ describe("dashboard focus cursor", () => {
       "ses_wt_api_working",
     ],
   ])("clears focus for a %s without moving the viewport", (_label, updateSnapshot, sessionId) => {
-    const initial = state({ focusedRowId: "wt_web_attention", scrollOffset: 3 });
+    const initial = state({ focusedRowId: "ses_wt_web_attention", scrollOffset: 3 });
     const snapshot = updateSnapshot(initial.snapshot as StationSnapshot);
     const focused = focusDashboardSession({ ...initial, snapshot }, sessionId);
 
@@ -63,7 +63,7 @@ describe("dashboard focus cursor", () => {
 
   it("clears focus when search filters out the session without changing search or scroll", () => {
     const initial = state({
-      focusedRowId: "wt_web_attention",
+      focusedRowId: "ses_wt_web_attention",
       searchQuery: "cache-refactor",
       scrollOffset: 2,
     });
@@ -76,7 +76,7 @@ describe("dashboard focus cursor", () => {
 
   it("clears focus when the session project is collapsed without changing collapse or scroll", () => {
     const initial = state({
-      focusedRowId: "wt_web_attention",
+      focusedRowId: "ses_wt_web_attention",
       collapsedProjectIds: ["api"],
       scrollOffset: 2,
     });
@@ -88,7 +88,7 @@ describe("dashboard focus cursor", () => {
   });
 
   it("removes transient focus without changing the viewport", () => {
-    const initial = state({ focusedRowId: "wt_web_attention", scrollOffset: 2 });
+    const initial = state({ focusedRowId: "ses_wt_web_attention", scrollOffset: 2 });
     const cleared = clearDashboardFocus(initial);
 
     expect("focusedRowId" in cleared).toBe(false);
@@ -106,7 +106,7 @@ describe("dashboard focus cursor", () => {
     store.getState().focusDashboardSession("ses_wt_web_attention");
     store.getState().handleKey(DOWN);
 
-    expect(store.getState().focusedRowId).toBe("wt_web_exited");
+    expect(store.getState().focusedRowId).toBe("ses_wt_web_exited");
 
     store.getState().clearDashboardFocus();
 
@@ -116,17 +116,17 @@ describe("dashboard focus cursor", () => {
 
   it("enters on the first visible session row and walks rows, skipping headers", () => {
     const first = handleTuiKey(state({ terminalRows: 12 }), DOWN).state;
-    expect(first.focusedRowId).toBe("wt_web_working");
+    expect(first.focusedRowId).toBe("ses_wt_web_working");
     expect(first.scrollOffset).toBe(0);
 
     const second = handleTuiKey(first, DOWN).state;
-    expect(second.focusedRowId).toBe("wt_web_attention");
+    expect(second.focusedRowId).toBe("ses_wt_web_attention");
   });
 
   it("enters upward on the last visible session row", () => {
     const entered = handleTuiKey(state({ terminalRows: 12 }), UP).state;
     // terminalRows 12 -> bodyRows 5: header + four session rows visible.
-    expect(entered.focusedRowId).toBe("wt_web_no_agent");
+    expect(entered.focusedRowId).toBe("ses_wt_web_idle");
   });
 
   it("scrolls the viewport to keep the cursor visible when walking past the bottom", () => {
@@ -134,38 +134,38 @@ describe("dashboard focus cursor", () => {
     for (let presses = 0; presses < 5; presses += 1) {
       current = handleTuiKey(current, DOWN).state;
     }
-    expect(current.focusedRowId).toBe("wt_web_idle");
+    expect(current.focusedRowId).toBe("ses_wt_web_unknown");
     // Item index 5 must sit inside the 5-row window: offset = 5 - 5 + 1.
     expect(current.scrollOffset).toBe(1);
   });
 
   it("clamps at both ends of the session list", () => {
     const top = handleTuiKey(handleTuiKey(state(), DOWN).state, UP).state;
-    expect(handleTuiKey(top, UP).state.focusedRowId).toBe("wt_web_working");
+    expect(handleTuiKey(top, UP).state.focusedRowId).toBe("ses_wt_web_working");
 
     let bottom = state({ terminalRows: 40 });
     for (let presses = 0; presses < 12; presses += 1) {
       bottom = handleTuiKey(bottom, DOWN).state;
     }
-    expect(bottom.focusedRowId).toBe("wt_api_working");
+    expect(bottom.focusedRowId).toBe("ses_wt_api_working");
   });
 
   it("re-enters from the viewport when the focused row leaves the snapshot", () => {
     const stale = { ...state({ terminalRows: 12 }), focusedRowId: "wt_gone" };
-    expect(handleTuiKey(stale, DOWN).state.focusedRowId).toBe("wt_web_working");
+    expect(handleTuiKey(stale, DOWN).state.focusedRowId).toBe("ses_wt_web_working");
   });
 
   it("jumps to the next needs-attention or stuck row and wraps", () => {
     const first = handleTuiKey(state({ terminalRows: 12 }), NEXT_NEEDS_ME).state;
-    expect(first.focusedRowId).toBe("wt_web_attention");
+    expect(first.focusedRowId).toBe("ses_wt_web_attention");
 
     const second = handleTuiKey(first, NEXT_NEEDS_ME).state;
-    expect(second.focusedRowId).toBe("wt_web_stuck");
+    expect(second.focusedRowId).toBe("ses_wt_web_stuck");
     // The stuck row (item index 7) scrolled into the 5-row window.
-    expect(second.scrollOffset).toBe(3);
+    expect(second.scrollOffset).toBe(2);
 
     const wrapped = handleTuiKey(second, NEXT_NEEDS_ME).state;
-    expect(wrapped.focusedRowId).toBe("wt_web_attention");
+    expect(wrapped.focusedRowId).toBe("ses_wt_web_attention");
   });
 
   it("activates the focused row with return", () => {
@@ -187,13 +187,14 @@ describe("dashboard focus cursor", () => {
   });
 
   it("does not re-dispatch for a row whose start is already pending", () => {
-    const initial = state();
-    const items = selectDashboardItems(createDashboardSnapshot(), initial);
-    expect(items.some((item) => item.type === "worktree")).toBe(true);
+    const snapshot = createCommandSnapshot("none");
+    const initial = createInitialTuiState({ initialSnapshot: snapshot });
+    const items = selectDashboardItems(snapshot, initial);
+    expect(items.some((item) => item.type === "session")).toBe(true);
 
     const pending: TuiState = {
       ...initial,
-      focusedRowId: "wt_web_no_agent",
+      focusedRowId: "ses_wt_web_no_agent",
       localRows: {
         ...initial.localRows,
         pendingStart: [
