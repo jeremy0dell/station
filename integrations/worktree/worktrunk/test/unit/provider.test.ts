@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { gitLocalEnvironmentVariables, nodeExternalCommandRunner } from "@station/runtime";
-import { WorktrunkProvider } from "@station/worktrunk";
+import { WorktrunkProvider, type WorktrunkProviderOptions } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -24,10 +24,17 @@ const project: ProviderProjectConfig = {
   },
 };
 
+function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
+  return new WorktrunkProvider({
+    resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
+    ...options,
+  });
+}
+
 describe("WorktrunkProvider", () => {
   it("lists worktrees through strict argv arrays", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       configPath: "/tmp/wt/config.toml",
       clock: { now: () => new Date(now) },
@@ -66,7 +73,7 @@ describe("WorktrunkProvider", () => {
         includeExternal: false,
       },
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) =>
@@ -100,7 +107,7 @@ describe("WorktrunkProvider", () => {
         includeExternal: false,
       },
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) =>
@@ -135,7 +142,7 @@ describe("WorktrunkProvider", () => {
         includeExternal: false,
       },
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) =>
@@ -169,7 +176,7 @@ describe("WorktrunkProvider", () => {
         includeExternal: false,
       },
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -203,7 +210,7 @@ describe("WorktrunkProvider", () => {
         includeExternal: false,
       },
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -237,7 +244,7 @@ describe("WorktrunkProvider", () => {
         includeExternal: false,
       },
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -264,7 +271,7 @@ describe("WorktrunkProvider", () => {
 
   it("creates and removes worktrees using Worktrunk lifecycle commands", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -290,6 +297,7 @@ describe("WorktrunkProvider", () => {
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
+      expectedRegistrationIdentity: `git-registration:${created.path}`,
       force: true,
     });
 
@@ -309,6 +317,31 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("retains a created worktree when its Git registration cannot be verified", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async () => undefined,
+      runner: async (input) => {
+        calls.push(input);
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+        );
+      },
+    });
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      message: "Worktrunk created the worktree but Station could not verify its Git registration.",
+      hint: "Inspect the created worktree and refresh before trying to manage it in Station.",
+    });
+    expect(calls.map((call) => call.args)).toEqual([
+      ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
+    ]);
+  });
+
   it("removes a selected shared-branch worktree without deleting the shared branch", async () => {
     const calls: ExternalCommandInput[] = [];
     const linkedPath = "/tmp/station/web/duplicate-linked";
@@ -320,7 +353,7 @@ describe("WorktrunkProvider", () => {
       },
     };
     let listCalls = 0;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -349,6 +382,7 @@ describe("WorktrunkProvider", () => {
       worktreeId: selected.id,
       expectedPath: selected.path,
       expectedBranch: selected.branch,
+      expectedRegistrationIdentity: `git-registration:${selected.path}`,
       force: true,
     });
 
@@ -372,7 +406,7 @@ describe("WorktrunkProvider", () => {
     const calls: ExternalCommandInput[] = [];
     const linkedPath = "/tmp/station/web/feature";
     let listCalls = 0;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -397,6 +431,7 @@ describe("WorktrunkProvider", () => {
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
+        expectedRegistrationIdentity: `git-registration:${selected.path}`,
       }),
     ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_NOT_FOUND" });
     expect(calls.map((call) => call.args)).toEqual([
@@ -409,7 +444,7 @@ describe("WorktrunkProvider", () => {
     const calls: ExternalCommandInput[] = [];
     const linkedPath = "/tmp/station/web/feature";
     let listCalls = 0;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -440,6 +475,7 @@ describe("WorktrunkProvider", () => {
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
+        expectedRegistrationIdentity: `git-registration:${selected.path}`,
       }),
     ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_CHANGED" });
     expect(calls.map((call) => call.args)).toEqual([
@@ -494,7 +530,7 @@ describe("WorktrunkProvider", () => {
     const srcStatusBefore = (await git(srcPath, "status", "--porcelain")).stdout;
 
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -565,7 +601,7 @@ describe("WorktrunkProvider", () => {
 
   it("skips Worktrunk hooks for automated mutations when lifecycle hooks are disabled", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -592,6 +628,7 @@ describe("WorktrunkProvider", () => {
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
+      expectedRegistrationIdentity: `git-registration:${created.path}`,
     });
 
     expect(calls.map((call) => call.args)).toEqual([
@@ -603,7 +640,7 @@ describe("WorktrunkProvider", () => {
 
   it("pre-approves Worktrunk hook prompts for automated mutations when lifecycle hooks are enabled", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: true,
       clock: { now: () => new Date(now) },
@@ -630,6 +667,7 @@ describe("WorktrunkProvider", () => {
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
+      expectedRegistrationIdentity: `git-registration:${created.path}`,
     });
 
     expect(calls.map((call) => call.args)).toEqual([
@@ -640,7 +678,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("classifies duplicate branch failures and preserves external command diagnostics", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async () => {
@@ -671,7 +709,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("classifies duplicate worktree path failures", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async () => {
@@ -690,7 +728,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("classifies unsupported automation flag failures", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -710,7 +748,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("classifies hook prompt approval failures", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async () => {
@@ -769,7 +807,7 @@ describe("WorktrunkProvider", () => {
       label: "healthy",
       root: healthyRoot,
     };
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
@@ -842,7 +880,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("classifies missing base failures", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async () => {
@@ -862,7 +900,7 @@ describe("WorktrunkProvider", () => {
 
   it("reports supported Worktrunk automation mode in doctor checks", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -893,7 +931,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("warns about missing registrations with safe prune commands", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -935,7 +973,7 @@ describe("WorktrunkProvider", () => {
       root: "/tmp/station/api",
     };
     let slowScanAborted = false;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -1003,7 +1041,7 @@ describe("WorktrunkProvider", () => {
     let activeScans = 0;
     let maxActiveScans = 0;
     let completedScans = 0;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
@@ -1032,7 +1070,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("reports unsupported configured Worktrunk automation flags in doctor checks", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       useLifecycleHooks: true,
       clock: { now: () => new Date(now) },
@@ -1054,7 +1092,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("reports unavailable health when the wt binary is missing", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "missing-wt",
       clock: { now: () => new Date(now) },
       runner: async () => {
@@ -1078,7 +1116,7 @@ describe("WorktrunkProvider", () => {
 
   it("aborts Worktrunk subprocesses on timeout with a typed provider error", async () => {
     let aborted = false;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       timeoutMs: 5,
       clock: { now: () => new Date(now) },
@@ -1099,7 +1137,7 @@ describe("WorktrunkProvider", () => {
   });
 
   it("maps invalid create output to a WorktrunkProviderError", async () => {
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => result(input, "{not-json"),
@@ -1113,7 +1151,7 @@ describe("WorktrunkProvider", () => {
 
   it("retries safe reads but not create commands", async () => {
     let listCalls = 0;
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {

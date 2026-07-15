@@ -1,4 +1,8 @@
-import type { ProviderProjectConfig } from "@station/contracts";
+import {
+  type ProviderProjectConfig,
+  type WorktreeRemovalRefusalDiagnosticDetail,
+  WorktreeRemovalRefusalDiagnosticDetailSchema,
+} from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type { EventJournal } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
@@ -37,7 +41,8 @@ export type CreateWorktreeRemoveHandlerOptions = {
 /**
  * USE CASE
  *
- * Revalidates a selected checkout before coordinating terminal and worktree removal.
+ * Revalidates selected checkout and Git registration identity before coordinating removal.
+ * Provider-side race refusals retain command-correlated evidence for diagnostics.
  */
 export function createWorktreeRemoveHandler(
   options: CreateWorktreeRemoveHandlerOptions,
@@ -110,15 +115,32 @@ export function createWorktreeRemoveHandler(
       commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
-    await removeWorktreeThroughProvider({
-      providers: options.providers,
-      row,
-      target: resolution.target,
-      force,
-      context,
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-    });
+    try {
+      await removeWorktreeThroughProvider({
+        providers: options.providers,
+        row,
+        target: resolution.target,
+        force,
+        context,
+        clock: options.clock,
+        commandTimeoutMs: options.commandTimeoutMs,
+      });
+    } catch (error) {
+      const refusal = worktreeRemovalRefusalDiagnostic(error);
+      if (refusal !== undefined) {
+        await options.logger?.warn("Worktree removal refused during final provider validation.", {
+          commandId: context.commandId,
+          traceId: context.trace.traceId,
+          projectId: refusal.projectId ?? row.projectId,
+          worktreeId: refusal.worktreeId,
+          canonicalPath: refusal.canonicalPath,
+          observedBranch: refusal.observedBranch,
+          refusalReason: refusal.refusalReason,
+          provider: refusal.provider ?? options.providers.worktree.id,
+        });
+      }
+      throw error;
+    }
     throwIfAborted(context.signal);
 
     const nextSnapshot = await reconcileAndPublish({
@@ -144,4 +166,23 @@ export function createWorktreeRemoveHandler(
       clock: options.clock,
     });
   };
+}
+
+function worktreeRemovalRefusalDiagnostic(
+  error: unknown,
+): WorktreeRemovalRefusalDiagnosticDetail | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const details = (error as { diagnosticDetails?: unknown }).diagnosticDetails;
+  if (!Array.isArray(details)) {
+    return undefined;
+  }
+  for (const detail of details) {
+    const parsed = WorktreeRemovalRefusalDiagnosticDetailSchema.safeParse(detail);
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+  return undefined;
 }

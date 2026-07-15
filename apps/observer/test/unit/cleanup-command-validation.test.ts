@@ -94,6 +94,7 @@ describe("cleanup command validation", () => {
       projectId: row.projectId,
       branch: row.branch,
       path: row.path,
+      registrationIdentity: "git-registration:cleanup",
       now,
     });
     const payload = {
@@ -101,6 +102,7 @@ describe("cleanup command validation", () => {
       projectId: row.projectId,
       expectedPath: row.path,
       expectedBranch: row.branch,
+      expectedRegistrationIdentity: "git-registration:cleanup",
     };
 
     expect(
@@ -162,6 +164,49 @@ describe("cleanup command validation", () => {
       ok: false,
       error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
     });
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "main" },
+        snapshotRow: mainRow,
+        project: { ...derivedDefaultProject, worktrunk: { enabled: true, base: "upstream/main" } },
+        currentWorktrees: [{ ...current, branch: "main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "default_branch",
+    });
+
+    const releaseRow = { ...row, branch: "release/main" };
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "release/main" },
+        snapshotRow: releaseRow,
+        project: {
+          ...derivedDefaultProject,
+          worktrunk: { enabled: true, base: "refs/heads/release/main" },
+        },
+        currentWorktrees: [{ ...current, branch: "release/main" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "default_branch",
+    });
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project: { ...derivedDefaultProject, worktrunk: { enabled: true, base: "   " } },
+        currentWorktrees: [current],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_PROTECTION_UNVERIFIED" },
+      refusalReason: "protection_unverified",
+    });
   });
 
   it("reports changed, missing, and ambiguous removal selections as stale evidence", () => {
@@ -172,6 +217,7 @@ describe("cleanup command validation", () => {
       projectId: row.projectId,
       branch: row.branch,
       path: row.path,
+      registrationIdentity: "git-registration:cleanup",
       now,
     });
     const payload = {
@@ -179,6 +225,7 @@ describe("cleanup command validation", () => {
       projectId: row.projectId,
       expectedPath: row.path,
       expectedBranch: row.branch,
+      expectedRegistrationIdentity: "git-registration:cleanup",
     };
 
     expect(
@@ -230,6 +277,40 @@ describe("cleanup command validation", () => {
       error: { code: "WORKTREE_REMOVE_TARGET_AMBIGUOUS" },
       refusalReason: "ambiguous_identity",
     });
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [{ ...current, registrationIdentity: "git-registration:replacement" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "WORKTREE_REMOVE_STALE_SELECTION",
+        diagnosticDetails: [
+          expect.objectContaining({
+            type: "worktree_removal_refusal",
+            refusalReason: "registration_changed",
+          }),
+        ],
+      },
+      refusalReason: "registration_changed",
+    });
+
+    const { registrationIdentity: _registrationIdentity, ...unverifiedCurrent } = current;
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload,
+        snapshotRow: row,
+        project,
+        currentWorktrees: [unverifiedCurrent],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_STALE_SELECTION" },
+      refusalReason: "registration_unverified",
+    });
   });
 
   it("resolves an unchanged disposable worktree for removal", () => {
@@ -240,6 +321,7 @@ describe("cleanup command validation", () => {
       projectId: row.projectId,
       branch: row.branch,
       path: row.path,
+      registrationIdentity: "git-registration:cleanup",
       now,
     });
 
@@ -250,6 +332,7 @@ describe("cleanup command validation", () => {
           projectId: row.projectId,
           expectedPath: row.path,
           expectedBranch: row.branch,
+          expectedRegistrationIdentity: "git-registration:cleanup",
         },
         snapshotRow: row,
         project,
@@ -266,6 +349,7 @@ describe("cleanup command validation", () => {
       projectId: row.projectId,
       branch: row.branch,
       path: row.path,
+      registrationIdentity: "git-registration:cleanup",
       now,
     });
     const unverifiedProject = {
@@ -283,6 +367,7 @@ describe("cleanup command validation", () => {
           projectId: row.projectId,
           expectedPath: row.path,
           expectedBranch: row.branch,
+          expectedRegistrationIdentity: "git-registration:cleanup",
         },
         snapshotRow: row,
         project: unverifiedProject,
@@ -301,6 +386,7 @@ function snapshotFor(input: { dirty: boolean; state: "none" | "working" }) {
     id: "wt_web_cleanup",
     projectId: "web",
     branch: "cleanup",
+    registrationIdentity: "git-registration:cleanup",
     dirty: input.dirty,
     now,
   });

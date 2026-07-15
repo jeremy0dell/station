@@ -35,6 +35,7 @@ export const RemoveWorktreePayloadSchema = z
     projectId: ProjectIdSchema.optional(),
     expectedPath: nonEmptyStringSchema,
     expectedBranch: nonEmptyStringSchema,
+    expectedRegistrationIdentity: nonEmptyStringSchema,
     force: z.boolean().optional(),
   })
   .strict();

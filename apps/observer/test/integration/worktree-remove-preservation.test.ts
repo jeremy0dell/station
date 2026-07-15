@@ -24,7 +24,7 @@ const execFileAsync = promisify(execFile);
 const now = "2026-07-14T20:00:00.000Z";
 
 describe("worktree removal preservation", () => {
-  it("preserves Git topology and dirty state when Worktrunk filters a selected checkout that becomes main", async () => {
+  it("protects a same-path replacement and preserves it when Worktrunk later filters it", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-remove-preservation-"));
     const repo = join(root, "repo");
     const linked = join(root, "feature");
@@ -95,8 +95,53 @@ describe("worktree removal preservation", () => {
     try {
       await core.reconcile("capture-feature-selection");
       const selected = core.getSnapshot().rows.find((row) => row.branch === "feature");
-      expect(selected).toMatchObject({ branch: "feature", path: linked });
+      expect(selected).toMatchObject({
+        branch: "feature",
+        path: linked,
+        registrationIdentity: expect.stringMatching(/^git-registration:/),
+      });
       if (selected === undefined) throw new Error("Expected the feature worktree row.");
+      if (selected.registrationIdentity === undefined) {
+        throw new Error("Expected the feature worktree registration identity.");
+      }
+
+      await git(repo, "worktree", "remove", "--force", linked);
+      await git(repo, "worktree", "add", linked, "feature");
+      const replacementReceipt = await queue.dispatch({
+        type: "worktree.remove",
+        payload: {
+          projectId: "web",
+          worktreeId: selected.id,
+          expectedPath: selected.path,
+          expectedBranch: selected.branch,
+          expectedRegistrationIdentity: selected.registrationIdentity,
+          force: true,
+        },
+      });
+      await queue.drain();
+
+      await expect(persistence.getCommand(replacementReceipt.commandId)).resolves.toMatchObject({
+        status: "failed",
+        error: { code: "WORKTREE_REMOVE_STALE_SELECTION", worktreeId: selected.id },
+        diagnostics: [
+          expect.objectContaining({
+            type: "worktree_removal_refusal",
+            worktreeId: selected.id,
+            canonicalPath: linked,
+            observedBranch: "feature",
+            refusalReason: "registration_changed",
+          }),
+        ],
+      });
+      expect(worktrunkCalls.filter((args) => args.includes("remove"))).toEqual([]);
+      await expect(access(linked)).resolves.toBeUndefined();
+
+      await core.reconcile("capture-replacement-selection");
+      const replacement = core.getSnapshot().rows.find((row) => row.branch === "feature");
+      if (replacement?.registrationIdentity === undefined) {
+        throw new Error("Expected the replacement worktree registration identity.");
+      }
+      expect(replacement.registrationIdentity).not.toBe(selected.registrationIdentity);
 
       await git(repo, "switch", "--detach");
       await git(linked, "switch", "main");
@@ -114,9 +159,10 @@ describe("worktree removal preservation", () => {
         type: "worktree.remove",
         payload: {
           projectId: "web",
-          worktreeId: selected.id,
-          expectedPath: selected.path,
-          expectedBranch: selected.branch,
+          worktreeId: replacement.id,
+          expectedPath: replacement.path,
+          expectedBranch: replacement.branch,
+          expectedRegistrationIdentity: replacement.registrationIdentity,
           force: true,
         },
       });
@@ -126,7 +172,7 @@ describe("worktree removal preservation", () => {
         status: "failed",
         error: {
           code: "WORKTREE_REMOVE_STALE_SELECTION",
-          worktreeId: selected.id,
+          worktreeId: replacement.id,
         },
       });
       expect(worktrunkCalls.filter((args) => args.includes("remove"))).toEqual([]);
@@ -135,7 +181,7 @@ describe("worktree removal preservation", () => {
       expect(warnings).toContainEqual(
         expect.objectContaining({
           commandId: receipt.commandId,
-          worktreeId: selected.id,
+          worktreeId: replacement.id,
           canonicalPath: linked,
           observedBranch: "feature",
           refusalReason: "missing_target",
@@ -155,6 +201,125 @@ describe("worktree removal preservation", () => {
     } finally {
       await queue.shutdown();
       await git(repo, "worktree", "remove", "--force", linked).catch(() => undefined);
+      sqlite.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records correlated refusal evidence when registration changes at final adapter validation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-remove-final-race-"));
+    const repo = join(root, "repo");
+    const linked = join(root, "feature");
+    const stateDir = join(root, "state");
+    await mkdir(repo, { recursive: true });
+    await mkdir(stateDir, { recursive: true });
+    const clock = { now: () => new Date(now) };
+    const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
+    const ids = observerIds();
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
+    const eventBus = createObserverEventBus();
+    const warnings: Record<string, unknown>[] = [];
+    const logger = {
+      async info(): Promise<void> {},
+      async warn(_message: string, attributes?: Record<string, unknown>): Promise<void> {
+        warnings.push(attributes ?? {});
+      },
+      async error(): Promise<void> {},
+    };
+    const worktrunkCalls: string[][] = [];
+    let finalRaceArmed = false;
+    let armedIdentityReads = 0;
+    const worktree = new WorktrunkProvider({
+      command: "wt",
+      clock,
+      resolveRegistrationIdentity: async () => {
+        if (!finalRaceArmed) return "git-registration:original";
+        armedIdentityReads += 1;
+        return armedIdentityReads === 1
+          ? "git-registration:original"
+          : "git-registration:replacement";
+      },
+      runner: async (input) => {
+        worktrunkCalls.push(input.args ?? []);
+        return externalResult(input, JSON.stringify([{ path: linked, branch: "feature" }]));
+      },
+    });
+    const terminal = new FakeTerminalProvider({ now });
+    const harness = new FakeHarnessProvider({ now });
+    const providers = new ProviderRegistry({ worktree, terminal, harnesses: [harness] });
+    const config = configFor(repo, stateDir);
+    const core = createObserverCore({ config, providers, persistence, clock, logger });
+    const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus, logger });
+    registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
+      queue,
+      core,
+      providers,
+      projects: config.projects,
+      persistence,
+      eventBus,
+      clock,
+      logger,
+    });
+
+    try {
+      await core.reconcile("capture-original-registration");
+      const selected = core.getSnapshot().rows[0];
+      expect(selected).toMatchObject({
+        branch: "feature",
+        path: linked,
+        registrationIdentity: "git-registration:original",
+      });
+      if (selected?.registrationIdentity === undefined) {
+        throw new Error("Expected the original worktree registration identity.");
+      }
+      finalRaceArmed = true;
+
+      const receipt = await queue.dispatch({
+        type: "worktree.remove",
+        payload: {
+          projectId: "web",
+          worktreeId: selected.id,
+          expectedPath: selected.path,
+          expectedBranch: selected.branch,
+          expectedRegistrationIdentity: selected.registrationIdentity,
+          force: true,
+        },
+      });
+      await queue.drain();
+
+      await expect(persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+        status: "failed",
+        error: { code: "WORKTRUNK_WORKTREE_CHANGED" },
+        diagnostics: [
+          expect.objectContaining({
+            type: "worktree_removal_refusal",
+            provider: "worktrunk",
+            projectId: "web",
+            worktreeId: selected.id,
+            canonicalPath: linked,
+            observedBranch: "feature",
+            refusalReason: "registration_changed",
+          }),
+        ],
+      });
+      expect(worktrunkCalls.filter((args) => args.includes("remove"))).toEqual([]);
+      expect(terminal.snapshot().closed).toEqual([]);
+      expect(harness.snapshot().stopped).toEqual([]);
+      expect(warnings).toContainEqual(
+        expect.objectContaining({
+          commandId: receipt.commandId,
+          traceId: expect.any(String),
+          provider: "worktrunk",
+          projectId: "web",
+          worktreeId: selected.id,
+          canonicalPath: linked,
+          observedBranch: "feature",
+          refusalReason: "registration_changed",
+        }),
+      );
+    } finally {
+      await queue.shutdown();
       sqlite.close();
       await rm(root, { recursive: true, force: true });
     }

@@ -111,6 +111,9 @@ export function worktreeObservationFromRow(
     reason: "Resolved from the current observer snapshot.",
     observedAt,
   };
+  if (row.registrationIdentity !== undefined) {
+    observation.registrationIdentity = row.registrationIdentity;
+  }
   if (row.worktree.dirty !== undefined) observation.dirty = row.worktree.dirty;
   if (row.worktree.ahead !== undefined) observation.ahead = row.worktree.ahead;
   if (row.worktree.behind !== undefined) observation.behind = row.worktree.behind;
@@ -468,11 +471,25 @@ export async function removeWorktreeBestEffort(input: {
   worktreeId: string;
   expectedPath: string;
   expectedBranch: string;
+  expectedRegistrationIdentity: string | undefined;
   context: CommandHandlerContext;
   logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
 }): Promise<void> {
+  if (input.expectedRegistrationIdentity === undefined) {
+    await input.logger?.warn("Session cleanup skipped an unverified worktree removal.", {
+      commandId: input.context.commandId,
+      traceId: input.context.trace.traceId,
+      provider: input.providers.worktree.id,
+      operation: "removeWorktree",
+      projectId: input.projectId,
+      worktreeId: input.worktreeId,
+      refusalReason: "registration_unverified",
+    });
+    return;
+  }
+  const expectedRegistrationIdentity = input.expectedRegistrationIdentity;
   try {
     await runProviderMutation(
       {
@@ -493,6 +510,7 @@ export async function removeWorktreeBestEffort(input: {
           worktreeId: input.worktreeId,
           expectedPath: input.expectedPath,
           expectedBranch: input.expectedBranch,
+          expectedRegistrationIdentity,
           force: true,
         }),
     );

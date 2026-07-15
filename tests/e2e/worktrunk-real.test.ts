@@ -74,18 +74,24 @@ describeReal("real Worktrunk provider smoke", () => {
       hookBin: stationIngressBin,
     });
 
-    let createdForCleanup: { id: string; path: string; branch: string } | undefined;
+    let createdForCleanup:
+      | { id: string; path: string; branch: string; registrationIdentity: string }
+      | undefined;
     try {
       await expect(provider.health()).resolves.toMatchObject({ status: "healthy" });
       await expect(provider.listWorktrees(project)).resolves.toEqual(expect.any(Array));
       const created = await provider.createWorktree({ project, branch });
-      createdForCleanup = created;
+      if (created.registrationIdentity === undefined) {
+        throw new Error("Expected the created worktree registration identity.");
+      }
+      createdForCleanup = { ...created, registrationIdentity: created.registrationIdentity };
       expect(created.branch).toBe(branch);
       await expect(
         provider.removeWorktree({
           worktreeId: created.id,
           expectedPath: created.path,
           expectedBranch: created.branch,
+          expectedRegistrationIdentity: created.registrationIdentity,
         }),
       ).resolves.toMatchObject({ removed: true });
       createdForCleanup = undefined;
@@ -96,6 +102,7 @@ describeReal("real Worktrunk provider smoke", () => {
             worktreeId: createdForCleanup.id,
             expectedPath: createdForCleanup.path,
             expectedBranch: createdForCleanup.branch,
+            expectedRegistrationIdentity: createdForCleanup.registrationIdentity,
             force: true,
           })
           .catch(() => undefined);
@@ -156,12 +163,16 @@ describeReal("real Worktrunk provider smoke", () => {
       const selected = listed.find((worktree) => sameObservedPath(worktree.path, linked));
       expect(selected).toBeDefined();
       if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
+      if (selected.registrationIdentity === undefined) {
+        throw new Error("Expected the linked worktree registration identity.");
+      }
 
       await expect(
         provider.removeWorktree({
           worktreeId: selected.id,
           expectedPath: selected.path,
           expectedBranch: selected.branch,
+          expectedRegistrationIdentity: selected.registrationIdentity,
         }),
       ).resolves.toMatchObject({ removed: true });
 

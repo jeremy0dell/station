@@ -5,7 +5,6 @@ import type {
   SessionView,
   TerminalProvider,
   TerminalTargetId,
-  WorktreeObservation,
   WorktreeRow,
 } from "@station/contracts";
 import { isRunningAgentState, SafeErrorSchema } from "@station/contracts";
@@ -21,6 +20,7 @@ import {
   terminalCloseIntentForSession,
   terminalCloseIntentForWorktree,
 } from "../terminalIntents.js";
+import type { VerifiedWorktreeRemovalTarget } from "./guards.js";
 
 export type CleanupRuntime = {
   clock?: RuntimeClock | undefined;
@@ -179,7 +179,7 @@ export async function removeWorktreeThroughProvider(
   input: {
     providers: ProviderRegistry;
     row: WorktreeRow;
-    target: WorktreeObservation;
+    target: VerifiedWorktreeRemovalTarget;
     force: boolean;
     context: CommandHandlerContext;
   } & CleanupRuntime,
@@ -189,6 +189,7 @@ export async function removeWorktreeThroughProvider(
     projectId: input.row.projectId,
     expectedPath: input.target.path,
     expectedBranch: input.target.branch,
+    expectedRegistrationIdentity: input.target.registrationIdentity,
   };
   const providerRequest: typeof request & { force?: boolean } = { ...request };
   if (input.force) {

@@ -1,6 +1,7 @@
 import type {
   ProjectView,
   ProviderId,
+  SafeError,
   SessionId,
   StationCommand,
   TerminalFocusOrigin,
@@ -140,11 +141,22 @@ export function buildCleanupCommand(
 }
 
 export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): StationCommand {
+  if (row.registrationIdentity === undefined) {
+    throw {
+      tag: "CommandValidationError",
+      code: "WORKTREE_REMOVE_REGISTRATION_UNVERIFIED",
+      message: "Station cannot verify this checkout's Git registration.",
+      hint: "Refresh the dashboard before trying to remove the checkout.",
+      projectId: row.projectId,
+      worktreeId: row.id,
+    } satisfies SafeError;
+  }
   const payload: Extract<StationCommand, { type: "worktree.remove" }>["payload"] = {
     projectId: row.projectId,
     worktreeId: row.id,
     expectedPath: normalizeObservedPath(row.path),
     expectedBranch: row.branch,
+    expectedRegistrationIdentity: row.registrationIdentity,
   };
   if (force) {
     payload.force = true;

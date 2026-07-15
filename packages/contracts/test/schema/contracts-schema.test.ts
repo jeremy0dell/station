@@ -827,7 +827,7 @@ describe("contract schemas", () => {
         type: "worktree.remove",
         payload: { projectId: "web", worktreeId: "wt_web_feature" },
       },
-      "worktree removal without selected path and branch identity",
+      "worktree removal without selected path, branch, and registration identity",
     );
 
     expectParses(

@@ -354,12 +354,14 @@ unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
-`worktree.remove` carries the selected worktree ID, canonical path, and branch.
-Its use case refreshes provider evidence and uniquely re-resolves that identity
-before terminal or worktree cleanup, refusing primary, default-branch, stale,
-missing, or ambiguous targets. The worktree adapter rechecks the same expected
-path and branch immediately before its mutation so an external checkout change
-cannot turn branch text into removal identity.
+`worktree.remove` carries the selected worktree ID, canonical path, branch, and
+opaque Git registration identity. Its use case refreshes provider evidence and
+uniquely re-resolves that identity before terminal or worktree cleanup, refusing
+primary, default-branch, stale, missing, or ambiguous targets. The worktree
+adapter rechecks the expected registration identity, path, and branch immediately
+before mutation so an external checkout replacement cannot reuse the selected
+path and branch as removal identity. Adapter race refusals retain provider-neutral,
+trace-correlated diagnostic evidence.
 
 ### Reconciliation
 

@@ -5,23 +5,18 @@ import type {
   SafeError,
   SessionView,
   WorktreeObservation,
+  WorktreeRemovalRefusalDiagnosticDetail,
+  WorktreeRemovalRefusalReason,
   WorktreeRow,
 } from "@station/contracts";
 import { isRunningAgentState, normalizeObservedPath, sameObservedPath } from "@station/contracts";
 
-export type WorktreeRemovalRefusalReason =
-  | "ambiguous_identity"
-  | "branch_changed"
-  | "default_branch"
-  | "identity_changed"
-  | "missing_target"
-  | "path_changed"
-  | "primary_checkout"
-  | "protection_unverified"
-  | "snapshot_changed";
+export type VerifiedWorktreeRemovalTarget = WorktreeObservation & {
+  registrationIdentity: string;
+};
 
 export type WorktreeRemovalTargetResolution =
-  | { ok: true; target: WorktreeObservation }
+  | { ok: true; target: VerifiedWorktreeRemovalTarget }
   | {
       ok: false;
       error: SafeError;
@@ -39,7 +34,8 @@ export function resolveWorktreeRemovalTarget(input: {
   const canonicalExpectedPath = normalizeObservedPath(input.payload.expectedPath);
   if (
     !sameObservedPath(input.snapshotRow.path, canonicalExpectedPath) ||
-    input.snapshotRow.branch !== input.payload.expectedBranch
+    input.snapshotRow.branch !== input.payload.expectedBranch ||
+    input.snapshotRow.registrationIdentity !== input.payload.expectedRegistrationIdentity
   ) {
     return staleRemovalRefusal({
       payload: input.payload,
@@ -124,6 +120,25 @@ export function resolveWorktreeRemovalTarget(input: {
       message: `The selected worktree changed from branch '${input.payload.expectedBranch}' to '${target.branch}'.`,
     });
   }
+  if (target.registrationIdentity === undefined) {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "registration_unverified",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+      message: "Station could not verify the selected checkout's Git registration.",
+    });
+  }
+  const registrationIdentity = target.registrationIdentity;
+  if (registrationIdentity !== input.payload.expectedRegistrationIdentity) {
+    return staleRemovalRefusal({
+      payload: input.payload,
+      refusalReason: "registration_changed",
+      canonicalPath: canonicalCurrentPath,
+      observedBranch: target.branch,
+      message: "The selected path now belongs to a different Git checkout registration.",
+    });
+  }
 
   if (target.isPrimaryCheckout === true || sameObservedPath(target.path, input.project.root)) {
     return removalRefusal({
@@ -138,10 +153,11 @@ export function resolveWorktreeRemovalTarget(input: {
   }
 
   const configuredDefaultBranch = input.project.defaultBranch ?? input.project.worktrunk.base;
-  if (
-    configuredDefaultBranch !== undefined &&
-    branchMatchesConfiguredDefault(target.branch, configuredDefaultBranch)
-  ) {
+  const defaultBranchCandidates =
+    configuredDefaultBranch === undefined
+      ? []
+      : configuredDefaultBranchCandidates(configuredDefaultBranch);
+  if (defaultBranchCandidates.includes(target.branch)) {
     return removalRefusal({
       payload: input.payload,
       code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED",
@@ -152,7 +168,7 @@ export function resolveWorktreeRemovalTarget(input: {
       observedBranch: target.branch,
     });
   }
-  if (configuredDefaultBranch === undefined) {
+  if (defaultBranchCandidates.length === 0) {
     return removalRefusal({
       payload: input.payload,
       code: "WORKTREE_REMOVE_PROTECTION_UNVERIFIED",
@@ -164,7 +180,7 @@ export function resolveWorktreeRemovalTarget(input: {
     });
   }
 
-  return { ok: true, target };
+  return { ok: true, target: { ...target, registrationIdentity } };
 }
 
 export function assertWorktreeRemovalAllowed(
@@ -285,12 +301,23 @@ function removalRefusal(input: {
   canonicalPath: string;
   observedBranch: string;
 }): WorktreeRemovalTargetResolution {
-  const error: SafeError = {
+  const detail: WorktreeRemovalRefusalDiagnosticDetail = {
+    type: "worktree_removal_refusal",
+    worktreeId: input.payload.worktreeId,
+    canonicalPath: input.canonicalPath,
+    observedBranch: input.observedBranch,
+    refusalReason: input.refusalReason,
+  };
+  if (input.payload.projectId !== undefined) detail.projectId = input.payload.projectId;
+  const error: SafeError & {
+    diagnosticDetails: WorktreeRemovalRefusalDiagnosticDetail[];
+  } = {
     tag: "CommandValidationError",
     code: input.code,
     message: input.message,
     hint: input.hint,
     worktreeId: input.payload.worktreeId,
+    diagnosticDetails: [detail],
   };
   if (input.payload.projectId !== undefined) error.projectId = input.payload.projectId;
   return {
@@ -302,13 +329,21 @@ function removalRefusal(input: {
   };
 }
 
-function branchMatchesConfiguredDefault(observed: string, configured: string): boolean {
-  return branchName(observed) === branchName(configured);
-}
-
-function branchName(value: string): string {
-  return value
-    .replace(/^refs\/heads\//, "")
-    .replace(/^refs\/remotes\/[^/]+\//, "")
-    .replace(/^origin\//, "");
+function configuredDefaultBranchCandidates(value: string): string[] {
+  const configured = value.trim();
+  if (configured === "") {
+    return [];
+  }
+  if (configured.startsWith("refs/heads/")) {
+    return [configured.slice("refs/heads/".length)].filter(Boolean);
+  }
+  const remoteRef = configured.match(/^refs\/remotes\/[^/]+\/(.+)$/)?.[1];
+  if (remoteRef !== undefined) {
+    return [remoteRef];
+  }
+  const slash = configured.indexOf("/");
+  if (slash < 1 || slash === configured.length - 1) {
+    return [configured];
+  }
+  return [...new Set([configured, configured.slice(slash + 1)])];
 }

@@ -64,6 +64,7 @@ describe("full session cleanup e2e", () => {
             id: "wt_web_cleanup",
             projectId: "web",
             branch: "cleanup",
+            registrationIdentity: "git-registration:cleanup",
             now,
           }),
         ],
@@ -130,6 +131,7 @@ describe("full session cleanup e2e", () => {
           worktreeId: "wt_web_cleanup",
           expectedPath: "/tmp/station/web/cleanup",
           expectedBranch: "cleanup",
+          expectedRegistrationIdentity: "git-registration:cleanup",
           force: true,
         },
       });

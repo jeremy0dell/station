@@ -593,6 +593,7 @@ describe("session command vertical slice", () => {
         worktreeId: "wt_web_cleanup_open",
         expectedPath: "/tmp/station/web/cleanup-open",
         expectedBranch: "cleanup-open",
+        expectedRegistrationIdentity: "fake-registration:web:cleanup-open:managed",
         force: true,
       },
     ]);
@@ -646,6 +647,7 @@ describe("session command vertical slice", () => {
         worktreeId: "wt_web_cleanup_build",
         expectedPath: "/tmp/station/web/cleanup-build",
         expectedBranch: "cleanup-build",
+        expectedRegistrationIdentity: "fake-registration:web:cleanup-build:managed",
         force: true,
       },
     ]);
@@ -692,6 +694,7 @@ describe("session command vertical slice", () => {
         worktreeId: "wt_web_cleanup_launch",
         expectedPath: "/tmp/station/web/cleanup-launch",
         expectedBranch: "cleanup-launch",
+        expectedRegistrationIdentity: "fake-registration:web:cleanup-launch:managed",
         force: true,
       },
     ]);
@@ -1567,6 +1570,7 @@ describe("session command vertical slice", () => {
         worktreeId: "wt_web_cleanup_failure",
         expectedPath: "/tmp/station/web/cleanup-failure",
         expectedBranch: "cleanup-failure",
+        expectedRegistrationIdentity: "fake-registration:web:cleanup-failure:managed",
         force: true,
       },
     ]);

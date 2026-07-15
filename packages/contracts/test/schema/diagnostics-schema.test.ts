@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   DebugBundleManifestSchema,
+  DiagnosticDetailSchema,
   DiagnosticEvidenceIndexSchema,
   DiagnosticSnapshotSchema,
   DoctorReportSchema,
@@ -133,5 +134,23 @@ describe("diagnostics schemas", () => {
       await loadJson("diagnostic-evidence-index.json"),
       "diagnostic evidence index",
     );
+  });
+
+  it("parses provider-neutral worktree removal refusal evidence strictly", () => {
+    const refusal = {
+      type: "worktree_removal_refusal",
+      provider: "worktrunk",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      canonicalPath: "/tmp/station/web/feature",
+      observedBranch: "feature",
+      refusalReason: "registration_changed",
+    };
+
+    expect(DiagnosticDetailSchema.parse(refusal)).toEqual(refusal);
+    expect(
+      DiagnosticDetailSchema.safeParse({ ...refusal, refusalReason: "provider_private_reason" })
+        .success,
+    ).toBe(false);
   });
 });

@@ -1,9 +1,11 @@
 import { isRunningAgentState, type StationSnapshot, type WorktreeRow } from "@station/contracts";
 import { sessionForWorktreeRow, worktreeRowDisplayTitle } from "../../selectors/selectors.js";
+import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import { addPendingRemoveWorktreeRow } from "../localRows.js";
+import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
@@ -120,6 +122,24 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
         ...state,
         screen: { name: "dashboard" },
       },
+    };
+  }
+  if (row.registrationIdentity === undefined) {
+    return {
+      state: addTuiToast(
+        {
+          ...state,
+          screen: { name: "dashboard" },
+        },
+        safeErrorToToast({
+          tag: "CommandValidationError",
+          code: "WORKTREE_REMOVE_REGISTRATION_UNVERIFIED",
+          message: "Station cannot verify this checkout's Git registration.",
+          hint: "Refresh the dashboard before trying to remove the checkout.",
+          projectId: row.projectId,
+          worktreeId: row.id,
+        }),
+      ),
     };
   }
 

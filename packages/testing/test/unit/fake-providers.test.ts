@@ -219,6 +219,7 @@ describe("fake providers", () => {
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "fake-registration:wt_web_cleanup:/tmp/station/web/cleanup",
         force: true,
       }),
     ).resolves.toEqual({ worktreeId: "wt_web_cleanup", removed: true });
@@ -240,6 +241,7 @@ describe("fake providers", () => {
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "fake-registration:wt_web_cleanup:/tmp/station/web/cleanup",
         force: true,
       },
     ]);

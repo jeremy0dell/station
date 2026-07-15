@@ -369,11 +369,37 @@ describe("TUI screen transitions", () => {
             worktreeId: "wt_web_idle",
             expectedPath: "/tmp/station/web/worktrees/fix-nav-mobile",
             expectedBranch: "fix-nav-mobile",
+            expectedRegistrationIdentity: "git-registration:wt_web_idle",
             force: true,
           },
         },
       }),
     ]);
+  });
+
+  it("refuses removal with an actionable toast when checkout registration is unverified", () => {
+    const snapshot = createDashboardSnapshot();
+    const rows = snapshot.rows.map((row) => {
+      if (row.id !== "wt_web_idle") return row;
+      const { registrationIdentity: _registrationIdentity, ...unverified } = row;
+      return unverified;
+    });
+    const state = handleTuiKey(
+      handleTuiKey(createInitialTuiState({ initialSnapshot: { ...snapshot, rows } }), {
+        input: "X",
+      }).state,
+      { input: "5" },
+    ).state;
+
+    const transition = handleTuiKey(state, { input: "y" });
+
+    expect(transition.operations).toBeUndefined();
+    expect(transition.state.screen).toEqual({ name: "dashboard" });
+    expect(transition.state.toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Station cannot verify this checkout's Git registration.",
+      hint: "Refresh the dashboard before trying to remove the checkout.",
+    });
   });
 
   it("remaps remove slot choices to the visible viewport after scrolling", () => {

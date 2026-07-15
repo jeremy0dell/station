@@ -194,6 +194,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
       },
     });
     await fixture.queue.drain();
@@ -221,6 +222,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: "/tmp/station/web",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -250,6 +252,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: fixture.worktreeObservation.path,
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -280,6 +283,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -295,6 +299,7 @@ describe("cleanup command handlers", () => {
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     ]);
@@ -326,6 +331,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -346,6 +352,7 @@ describe("cleanup command handlers", () => {
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     ]);
@@ -367,6 +374,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -385,6 +393,7 @@ describe("cleanup command handlers", () => {
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     ]);
@@ -403,6 +412,7 @@ describe("cleanup command handlers", () => {
         projectId: "web",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     });
@@ -419,6 +429,7 @@ describe("cleanup command handlers", () => {
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
         force: true,
       },
     ]);
@@ -444,6 +455,7 @@ function createFixture(input: {
     id: "wt_web_cleanup",
     projectId: "web",
     branch: "cleanup",
+    registrationIdentity: "git-registration:cleanup",
     ...(input.projectRootPath === true ? { path: config.projects[0].root } : {}),
     dirty: input.dirty ?? false,
     now,

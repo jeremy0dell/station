@@ -169,6 +169,7 @@ export const WorktreeObservationSchema = z
     projectId: ProjectIdSchema,
     branch: nonEmptyStringSchema,
     path: nonEmptyStringSchema,
+    registrationIdentity: nonEmptyStringSchema.optional(),
     state: WorktreeStateSchema,
     source: WorktreeSourceSchema,
     isPrimaryCheckout: z.boolean().optional(),

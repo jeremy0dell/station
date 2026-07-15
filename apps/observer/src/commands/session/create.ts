@@ -136,6 +136,7 @@ export function createSessionCreateHandler(
           worktreeId: createdWorktree.id,
           expectedPath: createdWorktree.path,
           expectedBranch: createdWorktree.branch,
+          expectedRegistrationIdentity: createdWorktree.registrationIdentity,
           context,
           logger: options.logger,
           clock: options.clock,

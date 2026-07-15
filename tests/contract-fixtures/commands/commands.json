@@ -28,6 +28,7 @@
       "worktreeId": "wt_web_feature_auth",
       "expectedPath": "/tmp/station/web/worktrees/feature-auth",
       "expectedBranch": "feature/auth",
+      "expectedRegistrationIdentity": "git-registration:fixture-feature-auth",
       "force": false
     }
   },

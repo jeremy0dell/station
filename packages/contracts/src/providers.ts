@@ -163,6 +163,7 @@ export type RemoveWorktreeRequest = {
   worktreeId: WorktreeId;
   expectedPath: string;
   expectedBranch: string;
+  expectedRegistrationIdentity: string;
   projectId?: ProjectId;
   force?: boolean;
 };
@@ -382,7 +383,7 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
  * DRIVEN PORT
  *
  * Supplies worktree lifecycle evidence and mutations without exposing provider mechanics.
- * Removal adapters must revalidate the expected path and branch immediately before mutation.
+ * Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.
  */
 export interface WorktreeProvider {
   id: ProviderId;

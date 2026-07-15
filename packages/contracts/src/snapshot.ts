@@ -156,6 +156,7 @@ export const WorktreeRowSchema = z
     projectLabel: nonEmptyStringSchema,
     branch: nonEmptyStringSchema,
     path: nonEmptyStringSchema,
+    registrationIdentity: nonEmptyStringSchema.optional(),
     worktree: WorktreeRuntimeSchema,
     terminal: TerminalAttachmentSchema.optional(),
     agent: WorktreeAgentSchema.optional(),

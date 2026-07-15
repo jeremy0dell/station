@@ -108,6 +108,9 @@ describeReal("real Claude session lifecycle", () => {
         90_000,
       );
       const row = findRowByBranch(snapshot, branch);
+      if (row.registrationIdentity === undefined) {
+        throw new Error(`Expected Git registration identity for ${branch}.`);
+      }
       await waitForClaudeSentinel(sentinel, { rootPath: row.path });
       expect(row.agent).toMatchObject({
         harness: "claude",
@@ -142,6 +145,7 @@ describeReal("real Claude session lifecycle", () => {
           projectId: row.projectId,
           expectedPath: row.path,
           expectedBranch: row.branch,
+          expectedRegistrationIdentity: row.registrationIdentity,
           force: true,
         },
       };
