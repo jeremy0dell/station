@@ -34,6 +34,7 @@ describe("selectStationButtonStatus", () => {
     expect(status.attention).toBe(false);
     expect(status.needsYouCount).toBe(0);
     expect(status.sessionName).toBeUndefined();
+    expect(status.attentionSessionId).toBeUndefined();
     expect(status.attentionWorktreeId).toBeUndefined();
     expect(status.projectRollup).toBeUndefined();
   });
@@ -47,6 +48,7 @@ describe("selectStationButtonStatus", () => {
 
     expect(status.attention).toBe(true);
     expect(status.needsYouCount).toBe(flagged.length);
+    expect(status.attentionSessionId).toBe(flagged[0]?.session.id);
     expect(status.attentionWorktreeId).toBe(flagged[0]?.worktree.id);
     expect(typeof status.sessionName).toBe("string");
   });
@@ -64,6 +66,7 @@ describe("selectStationButtonStatus", () => {
 
     expect(status.attention).toBe(true);
     expect(status.needsYouCount).toBe(1);
+    expect(status.attentionSessionId).toBe(stuckRow.agent?.sessionId);
     expect(status.attentionWorktreeId).toBe(stuckRow.id);
   });
 
@@ -122,6 +125,7 @@ describe("selectStationButtonStatus", () => {
 
     expect(stationButtonStatusEqual(a, b)).toBe(true);
     expect(stationButtonStatusEqual(a, { ...a, workingCount: a.workingCount + 1 })).toBe(false);
+    expect(stationButtonStatusEqual(a, { ...a, attentionSessionId: "ses_other" })).toBe(false);
     // Roll-up presence and content participate in the comparison.
     expect(stationButtonStatusEqual(a, { ...a, projectRollup: undefined })).toBe(false);
     if (a.projectRollup !== undefined && a.projectRollup.length > 0) {

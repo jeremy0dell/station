@@ -1,4 +1,4 @@
-import type { WorktreeId, WorktreeRow } from "@station/contracts";
+import type { SessionId, WorktreeId, WorktreeRow } from "@station/contracts";
 import {
   isReadyToRead,
   selectDashboardSessionRows,
@@ -28,6 +28,8 @@ export type StationButtonStatus = {
   /** Disjoint from ready; the totals summary shows ready + idle as "idle". */
   idleCount: number;
   sessionName?: string;
+  /** The canonical session behind the attention state. */
+  attentionSessionId?: SessionId;
   /** The worktree behind the attention state, so a click can focus its pane. */
   attentionWorktreeId?: WorktreeId;
   /** Worst status per project, in row display order; built only when requested. */
@@ -69,6 +71,7 @@ export function selectStationButtonStatus(
   };
   if (attentionRow !== undefined) {
     status.sessionName = sessionRowDisplayTitle(attentionRow, state.localRows);
+    status.attentionSessionId = attentionRow.session.id;
     status.attentionWorktreeId = attentionRow.worktree.id;
   }
   if (options?.projectRollup === true) {
@@ -127,6 +130,7 @@ export function stationButtonStatusEqual(a: StationButtonStatus, b: StationButto
     a.readyCount === b.readyCount &&
     a.idleCount === b.idleCount &&
     a.sessionName === b.sessionName &&
+    a.attentionSessionId === b.attentionSessionId &&
     a.attentionWorktreeId === b.attentionWorktreeId &&
     rollupEqual(a.projectRollup, b.projectRollup)
   );
