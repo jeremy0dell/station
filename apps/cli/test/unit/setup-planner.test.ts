@@ -234,6 +234,34 @@ describe("setup planner", () => {
     ]);
   });
 
+  it("treats Git outside a repository as ready for first-project selection", () => {
+    const config = validConfigFact({ hasProjectForRoot: false });
+    delete config.matchedProject;
+
+    const plan = buildSetupPlan(
+      facts({
+        git: {
+          status: "missing",
+          reason: "not-a-repo",
+          defaultBranch: "main",
+          message: "Choose a project after setup.",
+        },
+        config,
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "git-project")).toMatchObject({
+      status: "ok",
+      label: "Git",
+      message: expect.stringContaining("choose a project"),
+    });
+    expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
+      status: "ok",
+    });
+    expect(plan.summary.requiredOk).toBe(true);
+    expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
+  });
+
   it("plans the optional tmux popup binding when it is missing", () => {
     const plan = buildSetupPlan(facts());
 
@@ -473,7 +501,7 @@ describe("setup planner", () => {
     expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
   });
 
-  it("fails readiness for existing projects outside the core setup path", () => {
+  it("checks global setup defaults without adopting the current repository", () => {
     const plan = buildSetupPlan(
       facts({
         config: validConfigFact({
@@ -488,10 +516,11 @@ describe("setup planner", () => {
       }),
     );
 
-    expect(plan.summary.requiredOk).toBe(false);
-    expect(plan.checks.find((check) => check.id === "config")?.message).toContain(
-      "uses terminal noop-terminal",
-    );
+    expect(plan.summary.requiredOk).toBe(true);
+    expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
+      status: "ok",
+      message: "Core STATION config is ready; projects are added explicitly in STATION.",
+    });
   });
 });
 

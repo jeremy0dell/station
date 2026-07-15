@@ -928,9 +928,13 @@ export function dashboardFooterLabel({
   // Spec A5 triage keybar: the visible chords are the triage loop; everything
   // else lives behind "? help".
   const full = firstRun
-    ? `A add project  ${quitHint}`
+    ? `↵ add first project  A add project  ${quitHint}`
     : `↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
+  const compactFirstRun = `↵ add first project  ${quitHint}`;
   const compactClose = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${QUIT_HINT_CLOSE}`;
+  if (firstRun && full.length > columns) {
+    return compactFirstRun;
+  }
   return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
 }
 

@@ -6,7 +6,7 @@ Station integrates with Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, and Ope
 stn setup
 ```
 
-This configures the core local workflow: the required tools, an agent CLI, and your first project. Optional integrations can be added later.
+This configures the core local workflow: the required tools, an agent CLI, and a zero-project config. Add the first project explicitly in Station. Optional integrations can be added later.
 
 The compiled `stn` launches its TUI and Observer without Node.js, pnpm, or Bun. A local source checkout expects Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14 for development. Real-provider test lanes remain opt-in.
 `stn setup system --check` reports those versions, but it does not change the active Node or pnpm
@@ -45,12 +45,13 @@ workflow, not for launch:
 - tmux
 - Bun — only a source-checkout launcher shells out to `bun run`; the compiled binary embeds the renderer
 - diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
-- git (the binary) and a git repository for the first project
+- git (the binary); select an existing git repository explicitly after setup
 - one supported agent CLI: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
 
 On macOS, the Command Line Tools provide git and the compilers Homebrew needs.
-`stn setup` detects a missing-git binary distinctly from "not inside a repo" and,
-on macOS, reports missing Command Line Tools with the `xcode-select --install`
+`stn setup` detects a missing-git binary distinctly from "not inside a repo". The
+latter is healthy because setup does not adopt its working directory. On macOS,
+setup reports missing Command Line Tools with the `xcode-select --install`
 remediation. `scripts/setup/bootstrap.sh` preflights both before touching Homebrew.
 
 Recommended after setup:

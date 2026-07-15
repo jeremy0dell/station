@@ -28,16 +28,19 @@ public.
 brew tap jeremy0dell/station
 brew trust jeremy0dell/station
 brew install station
-cd /path/to/first/git/project
 stn setup
 stn doctor
 stn
 ```
 
+Setup is independent of the current directory. On first launch, choose **Add
+your first project** and select an existing Git repository.
+
 Homebrew should install Station and its machine-level dependencies. It should not
 write `~/.config/station/config.toml`, install provider hooks, install the tmux
 popup binding, start the observer, or run `stn doctor` during formula install.
-Those steps are user/project aware and belong to `stn setup`.
+Those steps are user and runtime aware and belong to `stn setup`; explicit
+project selection belongs to the first-project flow in Station.
 
 ## Formula shape
 

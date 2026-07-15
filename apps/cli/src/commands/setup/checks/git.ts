@@ -53,7 +53,7 @@ export async function checkSetupGit(options: CheckGitOptions = {}): Promise<Setu
       // so the not-a-repo wording is wrong; point at the real fix instead.
       message: isDubiousOwnershipError(error)
         ? "git refused this repository for dubious ownership (it is owned by a different user, common with mounted volumes or containers). Run: git config --global --add safe.directory <repository path>, then run stn setup."
-        : "Run stn setup from inside the git repository you want to manage.",
+        : "Git is available. Finish setup here, then choose a project explicitly in STATION.",
     };
   }
 }

@@ -10,12 +10,25 @@ If you only ever edit one thing, it is `~/.config/station/config.toml`.
 If that default file does not exist yet, `stn` and its `tui`/`popup` launch
 routes use in-memory first-run defaults, ensure the observer, and show the
 existing empty-state UI. They do not create a config file; `stn setup` remains
-the writer. After every successful guided or non-interactive setup config write,
-setup starts or restarts the observer and waits for it to become healthy with
-the updated configuration. If activation fails, setup retains the config, exits
-nonzero, and points to `stn observer restart`. This exception applies only to the
-implicit default path: a missing explicit `--config`, an unreadable file,
-malformed TOML, or invalid config still stops launch with an error.
+the writer. Setup writes `projects = []` and never infers a project from its
+working directory; use the empty dashboard's **Add your first project** flow to
+choose an existing Git repository explicitly. After every successful guided or
+non-interactive setup config write, setup starts or restarts the observer and
+waits for it to become healthy with the updated configuration. If activation
+fails, setup retains the config, exits nonzero, and points to
+`stn observer restart`. This exception applies only to the implicit default
+path: a missing explicit `--config`, an unreadable file, malformed TOML, or
+invalid config still stops launch with an error.
+
+The generated zero-project config leaves `[defaults].default_branch` and
+`[worktree.worktrunk].base` unset because setup has no selected repository from
+which to verify them. When a Git project is explicitly added, Station persists
+both per-project values only from a committed `origin/HEAD` for a configured
+origin, the committed symbolic HEAD of exactly one other configured remote, or
+exactly one committed local branch. With ambiguous, malformed, unborn, or
+unreadable Git evidence, both remain unset; Station omits Worktrunk's `--base`,
+and destructive worktree removal fails closed until the protected default
+branch is configured.
 
 > The annotated `examples/config.toml` is the copy-paste starting point;
 > `examples/project-local-config.toml` shows the project-local file. This page is
@@ -97,7 +110,7 @@ accepted by config validation but become unavailable providers at runtime.
 | `command` | string | Worktrunk CLI, e.g. `"wt"`. Overrides `STATION_WORKTRUNK_BIN`; fallback is `wt`. |
 | `config_path` | string | Path to worktrunk's own config. `~` expands at load time. |
 | `managed_root` | string | Root for managed worktrees, e.g. `~/.worktrees`; `~` expands at load time. |
-| `base` | string | Default base branch for Worktrunk project listings and new worktrees. Project entries inherit this unless `[projects.worktrunk].base` is set. |
+| `base` | string (optional) | Default base branch for Worktrunk project listings and new worktrees. Project entries inherit this unless `[projects.worktrunk].base` is set; when neither is configured, Station omits `--base`. |
 | `include_main` | bool | Default include-main policy for Worktrunk project listings. Project entries inherit this unless overridden. |
 | `include_external` | bool | Default include-external policy for Worktrunk project listings. Project entries inherit this unless overridden. |
 | `use_lifecycle_hooks` | bool | Worktrunk automation mode. `false` makes automated mutations pass `--no-hooks`; `true` passes `--yes`; unset uses Worktrunk defaults. |

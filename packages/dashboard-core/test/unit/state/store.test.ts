@@ -260,6 +260,23 @@ describe("TUI store", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 
+  it("opens the explicit first-project flow with Enter on an empty dashboard", () => {
+    const snapshot = createNoProjectsSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      folderService: fakeFolderService(),
+    });
+
+    store.getState().handleKey({ input: "\r", return: true });
+
+    expect(store.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "start", firstProject: true },
+    });
+  });
+
   it("sets a project default harness, refreshes the snapshot, and shows success", async () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);

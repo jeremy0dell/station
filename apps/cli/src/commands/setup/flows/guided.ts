@@ -48,7 +48,10 @@ async function runGuidedSetupWithPrompt(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<SetupCommandResult> {
-  await write(deps, "Core setup: required tools, one agent, and your first project.\n\n");
+  await write(
+    deps,
+    "Core setup: required tools and one agent. Add your first project in STATION.\n\n",
+  );
   let facts = await collectForCommand("apply", options, deps, {});
 
   // Bootstrap layer (macOS): Command Line Tools, then Homebrew — the prerequisites
@@ -125,7 +128,7 @@ async function runGuidedSetupWithPrompt(
   const configActions = plan.actions.filter(isConfigAction).filter((action) => action.selected);
   let writtenPlan: SetupPlan | undefined;
   if (configActions.length > 0) {
-    const accepted = await prompt.confirm("Write STATION project config?");
+    const accepted = await prompt.confirm("Write core STATION config?");
     if (!accepted) {
       await write(deps, "Config was not written.\n");
       return { code: 1 };

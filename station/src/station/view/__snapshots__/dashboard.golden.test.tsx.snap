@@ -220,7 +220,7 @@ exports[`dashboard golden frames renders no-projects at 80x24 1`] = `
 "                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
                                                                                 
-No projects configured yet.                                                     
+Add your first project.                                                         
                                                                                 
                                                                                 
                                                                                 
@@ -240,7 +240,7 @@ No projects configured yet.
                                                                                 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-A add project  Q/esc:close                                                      
+↵ add first project  A add project  Q/esc:close                                 
 "
 `;
 
@@ -248,7 +248,7 @@ exports[`dashboard golden frames renders no-projects at 120x40 1`] = `
 "                                                                                                                        
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
                                                                                                                         
-No projects configured yet.                                                                                             
+Add your first project.                                                                                                 
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -284,7 +284,7 @@ No projects configured yet.
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-A add project  Q/esc:close                                                                                              
+↵ add first project  A add project  Q/esc:close                                                                         
 "
 `;
 
@@ -292,7 +292,7 @@ exports[`dashboard golden frames renders no-projects at 60x16 1`] = `
 "                                                            
 ─────────────────────────────────────────────────────────── 
                                                             
-No projects configured yet.                                 
+Add your first project.                                     
                                                             
                                                             
                                                             
@@ -304,7 +304,7 @@ No projects configured yet.
                                                             
                                                             
 ─────────────────────────────────────────────────────────── 
-A add project  Q/esc:close                                  
+↵ add first project  A add project  Q/esc:close             
 "
 `;
 
@@ -312,7 +312,7 @@ exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
 "                                        
 ─────────────────────────────────────── 
                                         
-No projects configured yet.             
+Add your first project.                 
                                         
                                         
                                         
@@ -320,6 +320,6 @@ No projects configured yet.
                                         
                                         
 ─────────────────────────────────────── 
-A add project  Q/esc:close              
+↵ add first project  Q/esc:close        
 "
 `;

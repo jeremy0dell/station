@@ -40,12 +40,10 @@ describe("setup config writer", () => {
       worktreeProvider: "worktrunk",
       terminal: "tmux",
       harness: "codex",
-      defaultBranch: "main",
     });
-    expect(loaded.config.projects[0]).toMatchObject({
-      id: "repo",
-      root: repo,
-    });
+    expect(loaded.config.defaults.defaultBranch).toBeUndefined();
+    expect(loaded.config.worktree?.worktrunk?.base).toBeUndefined();
+    expect(loaded.config.projects).toEqual([]);
   });
 
   it("keeps generated config on the first-run observer socket", async () => {
@@ -109,7 +107,7 @@ describe("setup config writer", () => {
     expect(write.content).toContain("install_hooks = true");
   });
 
-  it("appends only missing project and harness blocks to a valid existing config", async () => {
+  it("appends only a missing harness block to a valid existing config", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const otherRepo = join(root, "other");
@@ -141,8 +139,79 @@ describe("setup config writer", () => {
     if (write.operation !== "append") throw new Error("expected append plan");
     expect(write.content.startsWith(source.trimEnd())).toBe(true);
     expect(write.appendedText).toContain("[harness.codex]");
-    expect(write.appendedText).toContain("[[projects]]");
+    expect(write.appendedText).not.toContain("[[projects]]");
     expect(write.appendedText).not.toContain("[defaults]");
+  });
+
+  it("creates a zero-project config when setup is run outside a repository", async () => {
+    const root = await tempRoot(tempRoots);
+    const facts = setupFacts(root, {
+      git: {
+        status: "missing",
+        reason: "not-a-repo",
+        defaultBranch: "main",
+        message: "Choose a project after setup.",
+      },
+      config: {
+        status: "missing",
+        path: join(root, "config.toml"),
+        message: "missing",
+      },
+    });
+
+    const write = await planSetupConfigWrite(facts);
+
+    expect(write.operation).toBe("create");
+    if (write.operation !== "create") throw new Error("expected create plan");
+    const loaded = await loadConfigFromToml(write.content, {
+      configPath: write.path,
+      homeDir: root,
+    });
+    expect(loaded.config.projects).toEqual([]);
+    expect(write.content).toContain("projects = []");
+    expect(write.content).not.toContain("[[projects]]");
+  });
+
+  it("keeps zero-project config independent of an ancestor repository's default branch", async () => {
+    const root = await tempRoot(tempRoots);
+    const config = {
+      status: "missing" as const,
+      path: join(root, "config.toml"),
+      message: "missing",
+    };
+    const outsideRepo = await planSetupConfigWrite(
+      setupFacts(root, {
+        git: {
+          status: "missing",
+          reason: "not-a-repo",
+          defaultBranch: "main",
+          message: "Choose a project after setup.",
+        },
+        config,
+      }),
+    );
+    const insideTrunkRepo = await planSetupConfigWrite(
+      setupFacts(join(root, "ancestor"), {
+        git: {
+          status: "ok",
+          root: join(root, "ancestor"),
+          repoName: "ancestor",
+          defaultBranch: "trunk",
+        },
+        config,
+      }),
+    );
+
+    expect(outsideRepo.operation).toBe("create");
+    expect(insideTrunkRepo.operation).toBe("create");
+    if (outsideRepo.operation !== "create" || insideTrunkRepo.operation !== "create") {
+      throw new Error("expected create plans");
+    }
+    expect(insideTrunkRepo.content).toBe(outsideRepo.content);
+    expect(insideTrunkRepo.content).not.toContain("default_branch =");
+    expect(insideTrunkRepo.content).not.toContain("base =");
+    expect(insideTrunkRepo.content).not.toContain('default_branch = "trunk"');
+    expect(insideTrunkRepo.content).not.toContain('base = "trunk"');
   });
 
   it("does not plan broad rewrites for an already-covered config", async () => {
@@ -175,7 +244,7 @@ describe("setup config writer", () => {
 
     await expect(planSetupConfigWrite(facts)).resolves.toEqual({
       operation: "none",
-      reason: "Config already includes this repository and selected harness.",
+      reason: "Config already includes the selected harness and core defaults.",
     });
   });
 
@@ -229,7 +298,7 @@ describe("setup config writer", () => {
     expect(write.content).toContain('[terminal.tmux]\ncommand = "/custom/bin/tmux"');
   });
 
-  it("blocks appending a project that would inherit non-core defaults", async () => {
+  it("blocks appending a harness when the existing defaults are outside the core path", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const otherRepo = join(root, "other");

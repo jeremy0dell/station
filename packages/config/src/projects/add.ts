@@ -1,6 +1,6 @@
 import { loadConfig, loadConfigFromToml } from "../load/index.js";
 import { projectConfigSafeError } from "./errors.js";
-import { findGitRoot, resolveExistingDirectory } from "./git.js";
+import { detectGitDefaultBranch, findGitRoot, resolveExistingDirectory } from "./git.js";
 import {
   labelFromRoot,
   minimalBlockFromProject,
@@ -48,6 +48,13 @@ export async function addProjectToConfig(
   const id = uniqueProjectId(requestedId, loaded.loaded.projects);
   const label = options.label ?? labelFromRoot(root);
   const block: MinimalProjectBlock = { id, label, root };
+  if (gitRoot !== undefined) {
+    const detectedDefault = await detectGitDefaultBranch(root);
+    if (detectedDefault !== undefined) {
+      block.defaultBranch = detectedDefault.defaultBranch;
+      block.worktrunkBase = detectedDefault.worktrunkBase;
+    }
+  }
   const candidateSource = appendProjectBlock(loaded.source, block);
 
   await loadConfigFromToml(candidateSource, {

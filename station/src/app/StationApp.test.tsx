@@ -64,24 +64,24 @@ describe("Station app composition", () => {
     expect(station.composition.stationViewStore.getState().collapsedProjectIds.has("station")).toBe(true);
 
     station.source.setSnapshot(noProjectsSnapshot());
-    expect(await waitForFrame(station, (frame) => frame.includes("No projects configured yet."))).toContain(
-      "No projects configured yet.",
+    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
+      "Add your first project.",
     );
 
     station.setup.mockInput.pressKey("c", { ctrl: true });
     await waitFor(() => !overlayVisible(station));
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("No projects configured yet."))).toContain(
-      "No projects configured yet.",
+    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
+      "Add your first project.",
     );
 
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => !overlayVisible(station));
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("No projects configured yet."))).toContain(
-      "No projects configured yet.",
+    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
+      "Add your first project.",
     );
 
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);

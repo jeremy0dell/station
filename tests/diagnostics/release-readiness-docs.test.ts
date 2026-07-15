@@ -78,10 +78,7 @@ describe("release readiness docs", () => {
       );
       expect(recipes, path).toHaveLength(1);
       for (const recipe of recipes) {
-        expect(recipe, path).toContain("cd /path/to/your/git-project");
-        expect(recipe.indexOf("cd /path/to/your/git-project"), path).toBeLessThan(
-          recipe.indexOf("gh api --method GET"),
-        );
+        expect(recipe, path).not.toContain("cd /path/to/your/git-project");
         expect(recipe, path).toContain("umask 077");
         expect(recipe, path).toContain("export GH_HOST=github.com");
         expect(recipe.indexOf("export GH_HOST=github.com"), path).toBeLessThan(
@@ -248,7 +245,10 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("--persist-path");
       expect(document, path).toContain("explicit");
       expect(document, path).toContain("login-shell profile");
-      expect(document, path).toContain("cd /path/to/your/git-project");
+      expect(document, path).toContain("From any directory");
+      expect(document, path).toContain("zero-project");
+      expect(document, path).toContain("Add your first project");
+      expect(document, path).not.toContain("cd /path/to/your/git-project");
       expect(document, path).toMatch(/PATH="\$HOME\/\.local\/bin\$\{PATH:\+":\$PATH"\}"/);
       expect(document, path).toContain("hash -r");
       expect(document, path).toContain("stn setup");
@@ -256,7 +256,7 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("stn tui");
       expect(document, path).toContain("~/.config/station/config.toml");
       expect(document, path).toContain("future login shells");
-      expect(document, path).toContain("cold-boot welcome screen");
+      expect(document, path).toContain("empty dashboard");
       expect(document, path).toContain("Create Session");
       expect(document, path).toContain("start the agent session");
     }

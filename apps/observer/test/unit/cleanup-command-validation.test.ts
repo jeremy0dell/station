@@ -146,6 +146,20 @@ describe("cleanup command validation", () => {
       refusalReason: "default_branch",
     });
 
+    const trunkRow = { ...row, branch: "trunk" };
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: { ...payload, expectedBranch: "trunk" },
+        snapshotRow: trunkRow,
+        project: { ...bareProject, defaultBranch: "trunk" },
+        currentWorktrees: [{ ...current, branch: "trunk" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_DEFAULT_BRANCH_REMOVAL_NOT_ALLOWED" },
+      refusalReason: "default_branch",
+    });
+
     const derivedDefaultProject = {
       id: project.id,
       label: project.label,
@@ -201,6 +215,25 @@ describe("cleanup command validation", () => {
         snapshotRow: row,
         project: { ...derivedDefaultProject, worktrunk: { enabled: true, base: "   " } },
         currentWorktrees: [current],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "WORKTREE_REMOVE_PROTECTION_UNVERIFIED" },
+      refusalReason: "protection_unverified",
+    });
+
+    expect(
+      resolveWorktreeRemovalTarget({
+        payload: {
+          worktreeId: row.id,
+          projectId: row.projectId,
+          expectedPath: row.path,
+          expectedBranch: "main",
+          expectedRegistrationIdentity: "git-registration:cleanup",
+        },
+        snapshotRow: { ...row, branch: "main" },
+        project: { ...derivedDefaultProject, worktrunk: { enabled: true } },
+        currentWorktrees: [{ ...current, branch: "main" }],
       }),
     ).toMatchObject({
       ok: false,

@@ -113,4 +113,60 @@ describe("add project flow", () => {
     expect(Object.hasOwn(failed ?? {}, "filter")).toBe(false);
     expect(Object.hasOwn(failed ?? {}, "searchEntries")).toBe(false);
   });
+
+  it("does not submit a folder until a git repository is detected", () => {
+    const started = createAddProjectFlow({
+      cwd: "/Users/example/Desktop",
+      homeDir: "/Users/example",
+      firstProject: true,
+    });
+    const reviewed = transitionAddProjectFlow(started, {
+      type: "folderReviewed",
+      review: {
+        selectedPath: "/Users/example/Desktop/notes",
+        id: "notes",
+        label: "notes",
+      },
+    }).state;
+    if (reviewed?.mode !== "review") throw new Error("expected review mode");
+
+    const submitted = transitionAddProjectFlow(reviewed, { type: "submit" });
+
+    expect(submitted.state).toEqual(reviewed);
+    expect(submitted.effects).toBeUndefined();
+    expect(reviewed.firstProject).toBe(true);
+  });
+
+  it("submits a detected git root without a non-git override", () => {
+    const started = createAddProjectFlow({
+      cwd: "/Users/example/Developer/station",
+      homeDir: "/Users/example",
+    });
+    const reviewed = transitionAddProjectFlow(started, {
+      type: "folderReviewed",
+      review: {
+        selectedPath: "/Users/example/Developer/station/packages/config",
+        gitRoot: "/Users/example/Developer/station",
+        id: "station",
+        label: "station",
+      },
+    }).state;
+    if (reviewed?.mode !== "review") throw new Error("expected review mode");
+
+    const submitted = transitionAddProjectFlow(reviewed, { type: "submit" });
+
+    expect(submitted.effects).toEqual([
+      {
+        type: "submitProject",
+        command: {
+          type: "project.add",
+          payload: {
+            path: "/Users/example/Developer/station/packages/config",
+            id: "station",
+            label: "station",
+          },
+        },
+      },
+    ]);
+  });
 });

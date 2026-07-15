@@ -13,7 +13,9 @@ import type { StepWizardState } from "../stepWizard.js";
 
 export type AddProjectStep = "start" | "choose" | "review" | "success" | "failed";
 
-type AddProjectBaseState = StepWizardState<AddProjectStep>;
+type AddProjectBaseState = StepWizardState<AddProjectStep> & {
+  firstProject: boolean;
+};
 
 export type AddProjectStartChoice = {
   label: string;
@@ -74,6 +76,7 @@ export type AddProjectFlowState =
 export type CreateAddProjectFlowInput = {
   cwd: string;
   homeDir: string;
+  firstProject?: boolean;
 };
 
 export type AddProjectFlowAction =

@@ -167,9 +167,11 @@ what "required" means), split the setup summary into two truths:
   binary itself and a writable state dir; compiled mode also proves that
   extracted executable assets can run there. Nothing else. Bare `stn` gates
   on this.
-- `workflowReady` — full worktree workflow: worktrunk, tmux, diffnav,
-  git-delta, an agent CLI, git repo cwd, a project in config. `stn setup`
-  reports these as unmet *capabilities*, not as "broken."
+- `workflowReady` — core worktree workflow prerequisites: Git, worktrunk,
+  tmux, diffnav, git-delta, an agent CLI, and valid core config. It is
+  independent of the current directory and remains true with zero projects;
+  choosing a project is the next TUI onboarding state. `stn setup` reports
+  missing prerequisites as unmet *capabilities*, not as "broken."
 
 Each check keeps its real status; `stn setup check --json` gains both
 booleans and retains `requiredOk` as an alias of `workflowReady`. The compiled
@@ -651,9 +653,10 @@ flow:
 2. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
 3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
-4. Run `stn setup` adding a project → the observer restarts on the **same
-   socket** and reflects the new project immediately (B-config); an open TUI
-   reconnects without a manual restart.
+4. From `HOME` or `Desktop`, run `stn setup` → zero-project config is written
+   and the observer restarts on the **same socket**. Open the TUI, explicitly
+   add an existing Git repository, and verify the observer reflects it
+   immediately (B-config); an open TUI reconnects without a manual restart.
 5. Run setup with `stn-tmux-popup` visible only on its temporary `PATH` → the
    persisted binding contains the absolute launcher, and `Ctrl-b Space` works
    in a fresh tmux server started with `PATH=/usr/bin:/bin`.

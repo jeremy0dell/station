@@ -17,6 +17,7 @@ import type {
 type AddProjectWizardFields<TMode extends AddProjectStep> = {
   mode: TMode;
   stepHistory: AddProjectFlowState["stepHistory"];
+  firstProject: boolean;
 };
 
 export function createAddProjectStartState(input: CreateAddProjectFlowInput): AddProjectStartState {
@@ -24,6 +25,7 @@ export function createAddProjectStartState(input: CreateAddProjectFlowInput): Ad
   return {
     mode: wizard.mode,
     stepHistory: wizard.stepHistory,
+    firstProject: input.firstProject === true,
     selectedIndex: 0,
     choices: startChoices(input.cwd, input.homeDir),
   };
@@ -132,12 +134,14 @@ function wizardFieldsFor<TMode extends AddProjectStep>(
     return {
       mode,
       stepHistory: state.stepHistory,
+      firstProject: state.firstProject,
     };
   }
   const next = enterWizardStep(state, mode);
   return {
     mode: next.mode,
     stepHistory: next.stepHistory,
+    firstProject: state.firstProject,
   };
 }
 

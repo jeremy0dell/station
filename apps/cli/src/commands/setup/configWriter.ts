@@ -1,13 +1,5 @@
-import { basename } from "node:path";
-import { stableName } from "@station/runtime";
 import { selectSetupHarness } from "./harnessSelection.js";
-import type {
-  ConfigWritePlan,
-  SetupConfigFact,
-  SetupFacts,
-  SetupGitFact,
-  SetupHarnessFact,
-} from "./model.js";
+import type { ConfigWritePlan, SetupConfigFact, SetupFacts, SetupHarnessFact } from "./model.js";
 
 export type PlanSetupConfigWriteOptions = {
   selectedHarness?: SetupHarnessFact;
@@ -30,19 +22,11 @@ export async function planSetupConfigWrite(
       reason: "No supported harness CLI is available; config was not planned.",
     };
   }
-  if (facts.git.status !== "ok") {
-    return {
-      operation: "blocked",
-      path: facts.configPath,
-      reason: "No git repository was detected; config was not planned.",
-    };
-  }
-
   if (facts.config.status === "missing") {
     return {
       operation: "create",
       path: facts.configPath,
-      content: renderNewSetupConfig(facts.git, selectedHarness, facts, options),
+      content: renderNewSetupConfig(selectedHarness, facts, options),
     };
   }
 
@@ -54,17 +38,14 @@ export async function planSetupConfigWrite(
     };
   }
 
-  return planExistingConfigAppend(facts.config, facts.git, selectedHarness, options);
+  return planExistingConfigAppend(facts.config, selectedHarness, options);
 }
 
 export function renderNewSetupConfig(
-  git: Extract<SetupGitFact, { status: "ok" }>,
   harness: SetupHarnessFact,
   facts?: Pick<SetupFacts, "worktrunk" | "tmux">,
   options: Pick<PlanSetupConfigWriteOptions, "installWorktrunkHooks" | "installHarnessHooks"> = {},
 ): string {
-  const projectId = projectIdForGit(git);
-  const defaultBranch = git.defaultBranch;
   const worktrunkCommand =
     facts?.worktrunk === undefined ? "wt" : detectedCommand(facts.worktrunk, "wt");
   const tmuxCommand =
@@ -72,6 +53,7 @@ export function renderNewSetupConfig(
   const installWorktrunkHooks = options.installWorktrunkHooks === true;
   return [
     "schema_version = 1",
+    "projects = []",
     "",
     "[observer]",
     'state_dir = "~/.local/state/station"',
@@ -81,12 +63,10 @@ export function renderNewSetupConfig(
     'terminal = "tmux"',
     `harness = ${tomlString(harness.id)}`,
     'layout = "agent-shell"',
-    `default_branch = ${tomlString(defaultBranch)}`,
     "",
     "[worktree.worktrunk]",
     `command = ${tomlString(worktrunkCommand)}`,
     'managed_root = "~/.worktrees"',
-    `base = ${tomlString(defaultBranch)}`,
     "include_main = false",
     "include_external = false",
     `use_lifecycle_hooks = ${installWorktrunkHooks ? "true" : "false"}`,
@@ -107,11 +87,6 @@ export function renderNewSetupConfig(
       ? ["install_hooks = true"]
       : []),
     "",
-    "[[projects]]",
-    `id = ${tomlString(projectId)}`,
-    `label = ${tomlString(git.repoName)}`,
-    `root = ${tomlString(git.root)}`,
-    "",
   ].join("\n");
 }
 
@@ -122,7 +97,7 @@ function resolveConfigWriteHarness(
   if (facts.config.status !== "valid") {
     return fallback;
   }
-  const configuredHarness = facts.config.matchedProject?.harness ?? facts.config.defaults.harness;
+  const configuredHarness = facts.config.defaults.harness;
   return (
     facts.harnesses.find(
       (harness) => harness.id === configuredHarness && harness.status === "ok",
@@ -132,7 +107,6 @@ function resolveConfigWriteHarness(
 
 function planExistingConfigAppend(
   config: Extract<SetupConfigFact, { status: "valid" }>,
-  git: Extract<SetupGitFact, { status: "ok" }>,
   harness: SetupHarnessFact,
   options: Pick<PlanSetupConfigWriteOptions, "installHarnessHooks">,
 ): ConfigWritePlan {
@@ -145,16 +119,14 @@ function planExistingConfigAppend(
     };
   }
   const appendedText = renderAppendText({
-    git,
     harness,
-    addProject: !config.hasProjectForRoot,
     addHarness: !config.configuredHarnesses.includes(harness.id),
     installHarnessHooks: options.installHarnessHooks === true,
   });
   if (appendedText.length === 0) {
     return {
       operation: "none",
-      reason: "Config already includes this repository and selected harness.",
+      reason: "Config already includes the selected harness and core defaults.",
     };
   }
   return {
@@ -169,38 +141,20 @@ function existingConfigAppendCoreProblem(
   config: Extract<SetupConfigFact, { status: "valid" }>,
   harness: SetupHarnessFact,
 ): string | undefined {
-  if (config.matchedProject === undefined) {
-    if (config.defaults.worktreeProvider !== "worktrunk") {
-      return `Config defaults use worktree provider ${config.defaults.worktreeProvider}; setup will not rewrite existing defaults.`;
-    }
-    if (config.defaults.terminal !== "tmux") {
-      return `Config defaults use terminal ${config.defaults.terminal}; setup will not rewrite existing defaults.`;
-    }
-    if (config.defaults.harness !== harness.id) {
-      return `Config defaults use harness ${config.defaults.harness}; setup will not rewrite existing defaults.`;
-    }
-    return undefined;
+  if (config.defaults.worktreeProvider !== "worktrunk") {
+    return `Config defaults use worktree provider ${config.defaults.worktreeProvider}; setup will not rewrite existing defaults.`;
   }
-
-  if (config.matchedProject.worktreeProvider !== "worktrunk") {
-    return `Project ${config.matchedProject.id} uses worktree provider ${config.matchedProject.worktreeProvider}; setup will not rewrite existing project defaults.`;
+  if (config.defaults.terminal !== "tmux") {
+    return `Config defaults use terminal ${config.defaults.terminal}; setup will not rewrite existing defaults.`;
   }
-  if (!config.matchedProject.worktrunkEnabled) {
-    return `Project ${config.matchedProject.id} disables Worktrunk; setup will not rewrite existing project defaults.`;
-  }
-  if (config.matchedProject.terminal !== "tmux") {
-    return `Project ${config.matchedProject.id} uses terminal ${config.matchedProject.terminal}; setup will not rewrite existing project defaults.`;
-  }
-  if (config.matchedProject.harness !== harness.id) {
-    return `Project ${config.matchedProject.id} uses harness ${config.matchedProject.harness}; setup will not rewrite existing project defaults.`;
+  if (config.defaults.harness !== harness.id) {
+    return `Config defaults use harness ${config.defaults.harness}; setup will not rewrite existing defaults.`;
   }
   return undefined;
 }
 
 function renderAppendText(input: {
-  git: Extract<SetupGitFact, { status: "ok" }>;
   harness: SetupHarnessFact;
-  addProject: boolean;
   addHarness: boolean;
   installHarnessHooks: boolean;
 }): string {
@@ -217,26 +171,7 @@ function renderAppendText(input: {
       ].join("\n"),
     );
   }
-  if (input.addProject) {
-    blocks.push(
-      [
-        "[[projects]]",
-        `id = ${tomlString(projectIdForGit(input.git))}`,
-        `label = ${tomlString(input.git.repoName)}`,
-        `root = ${tomlString(input.git.root)}`,
-      ].join("\n"),
-    );
-  }
   return blocks.length === 0 ? "" : `\n${blocks.join("\n\n")}\n`;
-}
-
-function projectIdForGit(git: Extract<SetupGitFact, { status: "ok" }>): string {
-  return stableName({
-    profile: "id",
-    display: [basename(git.root) || git.repoName],
-    unique: [git.root],
-    maxLength: 64,
-  });
 }
 
 function tomlString(value: string): string {

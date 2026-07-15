@@ -174,7 +174,7 @@ describe("CLI setup command", () => {
     expect(activationCount).toBe(0);
   });
 
-  it("activates an appended project with the normalized config path and setup home", async () => {
+  it("does not append or activate the current repository during setup", async () => {
     const root = await tempRoot(tempRoots);
     const home = join(root, "home");
     const repo = join(root, "repo");
@@ -182,7 +182,8 @@ describe("CLI setup command", () => {
     const configPath = join(home, "station", "config.toml");
     await mkdir(repo, { recursive: true });
     await mkdir(otherRepo, { recursive: true });
-    const fs = fakeFs({ [configPath]: setupConfigToml(otherRepo, { includeHarness: true }) });
+    const original = setupConfigToml(otherRepo, { includeHarness: true });
+    const fs = fakeFs({ [configPath]: original });
     const activations: Array<{ configPath: string; homeDir: string }> = [];
 
     const result = await runCli(["--config", "~/station/config.toml", "setup", "apply", "--yes"], {
@@ -193,16 +194,14 @@ describe("CLI setup command", () => {
         runner: readySetupRunner(repo),
         access: readySetupAccess(),
         fs,
-        activateObserverConfig: async (input) => {
-          expect(fs.files[input.configPath]).toContain(`root = ${JSON.stringify(repo)}`);
-          activations.push(input);
-        },
+        activateObserverConfig: async (input) => activations.push(input),
         writeStdout: () => undefined,
       },
     });
 
     expect(result.code).toBe(0);
-    expect(activations).toEqual([{ configPath, homeDir: home }]);
+    expect(fs.files[configPath]).toBe(original);
+    expect(activations).toEqual([]);
   });
 
   it("activates a harness-only config write", async () => {
@@ -266,7 +265,7 @@ describe("CLI setup command", () => {
 
     const output = chunks.join("");
     expect(result.code).toBe(1);
-    expect(fs.files[configPath]).toContain("[[projects]]");
+    expect(fs.files[configPath]).toContain("projects = []");
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: OBSERVER_EXITED_ON_START");
     expect(output).toContain("Hint: Inspect the observer boot log.");
