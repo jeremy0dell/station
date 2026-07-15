@@ -1,8 +1,13 @@
 import type { TuiAqiWidgetConfig } from "@station/config";
-import type { TopRowWidgetText } from "../components/Dashboard/content.js";
+import type { TopRowWidgetAttribution, TopRowWidgetText } from "../components/Dashboard/content.js";
 import type { AirQualityCurrentConditions } from "./types.js";
 import { locationLabel } from "./weather.js";
 import { WEATHER_ERROR_EMOJI, WEATHER_LOADING_EMOJI } from "./weatherEmoji.js";
+
+const AIR_QUALITY_ATTRIBUTION: TopRowWidgetAttribution = {
+  label: "Open-Meteo/CAMS",
+  url: "https://open-meteo.com/",
+};
 
 export type AirQualityCategory = {
   label: string;
@@ -33,6 +38,7 @@ export function renderAirQualityLoading(config: TuiAqiWidgetConfig): TopRowWidge
   return {
     text: `${label} · AQI -- ${WEATHER_LOADING_EMOJI}`,
     compact: `${label} AQI -- ${WEATHER_LOADING_EMOJI}`,
+    attribution: AIR_QUALITY_ATTRIBUTION,
   };
 }
 
@@ -41,6 +47,7 @@ export function renderAirQualityError(config: TuiAqiWidgetConfig): TopRowWidgetT
   return {
     text: `${label} · AQI -- ${WEATHER_ERROR_EMOJI}`,
     compact: `${label} AQI -- ${WEATHER_ERROR_EMOJI}`,
+    attribution: AIR_QUALITY_ATTRIBUTION,
   };
 }
 
@@ -54,5 +61,6 @@ export function renderAirQualitySuccess(
   return {
     text: `${label} · AQI ${aqi} ${category.label} ${category.glyph}`,
     compact: `${label} AQI ${aqi} ${category.glyph}`,
+    attribution: AIR_QUALITY_ATTRIBUTION,
   };
 }

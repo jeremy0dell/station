@@ -16,10 +16,28 @@ export type DashboardHeaderStatus = {
   compact?: string;
 };
 
+export type TopRowWidgetAttribution = {
+  label: string;
+  url: string;
+};
+
 export type TopRowWidgetText = {
   text: string;
   /** Narrower form tried before the strip starts dropping widgets outright. */
   compact?: string;
+  /** Source credit rendered and width-budgeted with this widget. */
+  attribution?: TopRowWidgetAttribution;
+};
+
+export type HeaderStripWidget = {
+  text: string;
+  attribution?: TopRowWidgetAttribution;
+};
+
+export type HeaderStripLayout = {
+  text: string;
+  statusText: string;
+  widgets: readonly HeaderStripWidget[];
 };
 
 /**
@@ -35,18 +53,37 @@ export function headerStrip({
   status?: DashboardHeaderStatus;
   maxWidth: number;
 }): string {
+  return headerStripLayout({
+    widgets,
+    ...(status === undefined ? {} : { status }),
+    maxWidth,
+  }).text;
+}
+
+/** Selects the exact status and widget variants that fit, preserving render metadata. */
+export function headerStripLayout({
+  widgets,
+  status,
+  maxWidth,
+}: {
+  widgets: readonly TopRowWidgetText[];
+  status?: DashboardHeaderStatus;
+  maxWidth: number;
+}): HeaderStripLayout {
   for (const statusText of status === undefined ? [""] : statusTextCandidates(status)) {
-    for (const strip of [...widgetStripCandidates(widgets), ""]) {
-      const joined = [statusText, strip].filter((part) => part.length > 0).join(" · ");
-      if (joined.length === 0) {
+    for (const candidateWidgets of widgetStripCandidates(widgets)) {
+      const text = [statusText, ...candidateWidgets.map(widgetText)]
+        .filter((part) => part.length > 0)
+        .join(" · ");
+      if (text.length === 0) {
         continue;
       }
-      if (stringWidth(joined) <= maxWidth) {
-        return joined;
+      if (stringWidth(text) <= maxWidth) {
+        return { text, statusText, widgets: candidateWidgets };
       }
     }
   }
-  return "";
+  return { text: "", statusText: "", widgets: [] };
 }
 
 function statusTextCandidates(status: DashboardHeaderStatus): string[] {
@@ -61,19 +98,48 @@ function statusTextCandidates(status: DashboardHeaderStatus): string[] {
  * compact form, then dropping widgets from the right (still compact) — so the
  * strip narrows before it loses information.
  */
-function* widgetStripCandidates(widgets: readonly TopRowWidgetText[]): Generator<string> {
-  if (widgets.length === 0) {
-    return;
+function* widgetStripCandidates(
+  widgets: readonly TopRowWidgetText[],
+): Generator<readonly HeaderStripWidget[]> {
+  if (widgets.length > 0) {
+    const full = widgetCandidates(widgets, false);
+    const compact = widgetCandidates(widgets, true);
+    yield full;
+    if (compact.some((widget, i) => widget.text !== full[i]?.text)) {
+      yield compact;
+    }
+    for (let visibleCount = widgets.length - 1; visibleCount > 0; visibleCount -= 1) {
+      yield compact.slice(0, visibleCount);
+    }
   }
-  const full = widgets.map((widget) => widget.text);
-  const compact = widgets.map((widget) => widget.compact ?? widget.text);
-  yield full.join(" · ");
-  if (compact.some((text, i) => text !== full[i])) {
-    yield compact.join(" · ");
+  yield [];
+}
+
+function widgetCandidates(
+  widgets: readonly TopRowWidgetText[],
+  compact: boolean,
+): HeaderStripWidget[] {
+  const attributions: TopRowWidgetAttribution[] = [];
+  return widgets.map((widget) => {
+    const text = compact ? (widget.compact ?? widget.text) : widget.text;
+    if (
+      widget.attribution === undefined ||
+      attributions.some(
+        ({ label, url }) => label === widget.attribution?.label && url === widget.attribution.url,
+      )
+    ) {
+      return { text };
+    }
+    attributions.push(widget.attribution);
+    return { text, attribution: widget.attribution };
+  });
+}
+
+function widgetText(widget: HeaderStripWidget): string {
+  if (widget.attribution === undefined) {
+    return widget.text;
   }
-  for (let visibleCount = widgets.length - 1; visibleCount > 0; visibleCount -= 1) {
-    yield compact.slice(0, visibleCount).join(" · ");
-  }
+  return `${widget.text} ${widget.attribution.label}`;
 }
 
 /** Right side of the FLEET row; falls back to bare numbers, then to nothing. */

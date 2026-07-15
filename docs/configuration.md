@@ -298,8 +298,8 @@ Weather and AQI data come from [Open-Meteo](https://open-meteo.com/). AQI values
 are modeled forecasts, not nearby sensor observations: Open-Meteo uses the
 [CAMS European ensemble](https://ads.atmosphere.copernicus.eu/datasets/cams-europe-air-quality-forecasts?tab=overview)
 in Europe and [CAMS Global](https://ads.atmosphere.copernicus.eu/datasets/cams-global-atmospheric-composition-forecasts?tab=overview)
-elsewhere. The native TUI displays linked Open-Meteo attribution next to visible
-weather data and Open-Meteo/CAMS attribution next to visible AQI data.
+elsewhere. The native TUI displays linked Open-Meteo/CAMS attribution next to
+visible AQI data.
 
 The built-in Open-Meteo clients use its public free endpoint, which Open-Meteo
 limits to non-commercial use without an uptime guarantee. Station does not yet

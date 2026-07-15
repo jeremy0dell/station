@@ -17,12 +17,6 @@ export function weatherLabel(config: TuiWeatherWidgetConfig): string {
   return locationLabel(config.city, config.label);
 }
 
-export function compactWeatherText(config: TuiWeatherWidgetConfig, text: string): string {
-  const label = weatherLabel(config);
-  const prefix = `${label} · `;
-  return text.startsWith(prefix) ? `${label} ${text.slice(prefix.length)}` : text;
-}
-
 export function renderWeatherLoading(config: TuiWeatherWidgetConfig): string {
   return `${weatherLabel(config)} · --° ${WEATHER_LOADING_EMOJI}`;
 }

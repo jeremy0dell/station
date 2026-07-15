@@ -41,7 +41,7 @@ export class OpenMeteoWeatherClient implements WeatherClient {
     city: string,
     temperatureUnit: WeatherTemperatureUnit,
   ): Promise<WeatherCurrentConditions> {
-    const coordinates = await geocodeCity(city);
+    const coordinates = await geocodeCity(city, "Weather location was not found.", "Weather");
     const forecast = await fetchForecast(coordinates, temperatureUnit);
     return {
       temperature: forecast.temperature_2m,
@@ -53,7 +53,11 @@ export class OpenMeteoWeatherClient implements WeatherClient {
 
 export class OpenMeteoAirQualityClient implements AirQualityClient {
   async getCurrentAirQuality(city: string): Promise<AirQualityCurrentConditions> {
-    const coordinates = await geocodeCity(city);
+    const coordinates = await geocodeCity(
+      city,
+      "Air quality location was not found.",
+      "Air quality",
+    );
     return { aqi: await fetchAirQuality(coordinates) };
   }
 }
@@ -61,7 +65,11 @@ export class OpenMeteoAirQualityClient implements AirQualityClient {
 export const defaultAirQualityClient: AirQualityClient = new OpenMeteoAirQualityClient();
 export const defaultWeatherClient: WeatherClient = new OpenMeteoWeatherClient();
 
-async function geocodeCity(city: string): Promise<{ latitude: number; longitude: number }> {
+async function geocodeCity(
+  city: string,
+  notFoundMessage: string,
+  requestName: string,
+): Promise<{ latitude: number; longitude: number }> {
   for (const query of geocodingQueries(city)) {
     const url = new URL(OPEN_METEO_GEOCODING_URL);
     url.searchParams.set("name", query);
@@ -69,7 +77,7 @@ async function geocodeCity(city: string): Promise<{ latitude: number; longitude:
     url.searchParams.set("language", "en");
     url.searchParams.set("format", "json");
 
-    const response = GeocodingResponseSchema.parse(await fetchJson(url));
+    const response = GeocodingResponseSchema.parse(await fetchJson(url, requestName));
     const match = response.results?.[0];
     if (match !== undefined) {
       return {
@@ -79,7 +87,7 @@ async function geocodeCity(city: string): Promise<{ latitude: number; longitude:
     }
   }
 
-  throw new Error("Location was not found.");
+  throw new Error(notFoundMessage);
 }
 
 function geocodingQueries(city: string): string[] {
@@ -100,7 +108,7 @@ async function fetchForecast(
   url.searchParams.set("temperature_unit", temperatureUnit);
   url.searchParams.set("forecast_days", "1");
 
-  return ForecastResponseSchema.parse(await fetchJson(url)).current;
+  return ForecastResponseSchema.parse(await fetchJson(url, "Weather")).current;
 }
 
 async function fetchAirQuality(coordinates: {
@@ -112,13 +120,13 @@ async function fetchAirQuality(coordinates: {
   url.searchParams.set("longitude", String(coordinates.longitude));
   url.searchParams.set("current", "us_aqi");
 
-  return AirQualityResponseSchema.parse(await fetchJson(url)).current.us_aqi;
+  return AirQualityResponseSchema.parse(await fetchJson(url, "Air quality")).current.us_aqi;
 }
 
-async function fetchJson(url: URL): Promise<unknown> {
+async function fetchJson(url: URL, requestName: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!response.ok) {
-    throw new Error(`Open-Meteo request failed with HTTP ${response.status}.`);
+    throw new Error(`${requestName} request failed with HTTP ${response.status}.`);
   }
   return (await response.json()) as unknown;
 }

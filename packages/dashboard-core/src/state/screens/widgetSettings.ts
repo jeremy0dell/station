@@ -5,9 +5,8 @@ import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
 /**
- * Widget types addable from the picker: the parameterless ones only. AQI,
- * weather, and tz need config fields (city, zones), so they are added in config.toml
- * and managed (toggle/reorder/remove) here like any other entry.
+ * Widget types addable from the picker: the parameterless ones only. Widgets
+ * with required fields are added in config.toml and managed here like any other entry.
  */
 export const ADDABLE_WIDGET_TYPES = ["time", "fleet", "prs", "moon"] as const;
 

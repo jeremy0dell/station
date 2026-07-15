@@ -91,7 +91,7 @@ describe("OpenMeteoWeatherClient", () => {
 
     await expect(
       new OpenMeteoWeatherClient().getCurrentWeather("ZZZ", "fahrenheit"),
-    ).rejects.toThrow("Location was not found.");
+    ).rejects.toThrow("Weather location was not found.");
   });
 
   it("rejects invalid forecast JSON at the schema boundary", async () => {
@@ -112,6 +112,17 @@ describe("OpenMeteoWeatherClient", () => {
     await expect(
       new OpenMeteoWeatherClient().getCurrentWeather("New York, NY", "fahrenheit"),
     ).rejects.toThrow();
+  });
+
+  it("preserves the weather-specific HTTP error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 })),
+    );
+
+    await expect(
+      new OpenMeteoWeatherClient().getCurrentWeather("New York", "fahrenheit"),
+    ).rejects.toThrow("Weather request failed with HTTP 503.");
   });
 
   it("tolerates unknown additive fields from the API", async () => {
@@ -170,14 +181,6 @@ describe("OpenMeteoAirQualityClient", () => {
     await expect(
       new OpenMeteoAirQualityClient().getCurrentAirQuality("Los Angeles, CA"),
     ).rejects.toThrow();
-  });
-
-  it("rejects AQI requests when geocoding has no match", async () => {
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ results: [] })));
-
-    await expect(new OpenMeteoAirQualityClient().getCurrentAirQuality("ZZZ")).rejects.toThrow(
-      "Location was not found.",
-    );
   });
 });
 

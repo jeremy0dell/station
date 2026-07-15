@@ -1,11 +1,10 @@
 import { TextAttributes } from "@opentui/core";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import stringWidth from "string-width";
 import {
-  type DashboardHeaderStatus,
-  headerStrip,
+  headerStripLayout,
   observerHeaderStatusForConnection,
   selectFleetSummary,
   type TuiStore,
@@ -18,9 +17,6 @@ import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 const PRODUCT_LABEL = "station";
 const OVERVIEW_SUBTITLE = "· overview";
 const WIDGET_SETTINGS_AFFORDANCE = "[+]";
-const OPEN_METEO_ATTRIBUTION_URL = "https://open-meteo.com/";
-const OPEN_METEO_ATTRIBUTION_LABEL = "Open-Meteo";
-const OPEN_METEO_CAMS_ATTRIBUTION_LABEL = "Open-Meteo/CAMS";
 // One corner + one border dash on each flank of an embedded run of text.
 const EDGE = 2;
 
@@ -31,68 +27,6 @@ export type DashboardFrameTitleProps = {
   topRowWidgets?: readonly TopRowWidgetView[];
   zIndex: number;
 };
-
-type HeaderStripView = {
-  text: string;
-  attributionLabel?: string;
-};
-
-function attributedHeaderStrip({
-  widgets,
-  status,
-  maxWidth,
-}: {
-  widgets: readonly TopRowWidgetView[];
-  status?: DashboardHeaderStatus;
-  maxWidth: number;
-}): HeaderStripView {
-  const renderStrip = (candidateWidgets: readonly TopRowWidgetView[], width: number) =>
-    headerStrip({
-      widgets: candidateWidgets,
-      ...(status === undefined ? {} : { status }),
-      maxWidth: Math.max(0, width),
-    });
-  const airQualityAttribution = renderStrip(
-    widgets,
-    maxWidth - stringWidth(` ${OPEN_METEO_CAMS_ATTRIBUTION_LABEL}`),
-  );
-  if (stripContainsWidgetType(airQualityAttribution, widgets, "aqi:")) {
-    return {
-      text: airQualityAttribution,
-      attributionLabel: OPEN_METEO_CAMS_ATTRIBUTION_LABEL,
-    };
-  }
-
-  const withoutAirQuality = widgets.filter((widget) => !widget.id.startsWith("aqi:"));
-  const weatherAttribution = renderStrip(
-    withoutAirQuality,
-    maxWidth - stringWidth(` ${OPEN_METEO_ATTRIBUTION_LABEL}`),
-  );
-  if (stripContainsWidgetType(weatherAttribution, withoutAirQuality, "weather:")) {
-    return { text: weatherAttribution, attributionLabel: OPEN_METEO_ATTRIBUTION_LABEL };
-  }
-
-  // Source-backed widgets are omitted when their link cannot fit; they must never appear uncredited.
-  return {
-    text: renderStrip(
-      withoutAirQuality.filter((widget) => !widget.id.startsWith("weather:")),
-      maxWidth,
-    ),
-  };
-}
-
-function stripContainsWidgetType(
-  strip: string,
-  widgets: readonly TopRowWidgetView[],
-  idPrefix: string,
-): boolean {
-  return widgets.some(
-    (widget) =>
-      widget.id.startsWith(idPrefix) &&
-      (strip.includes(widget.text) ||
-        (widget.compact !== undefined && strip.includes(widget.compact))),
-  );
-}
 
 /**
  * The frame's top border carries the identity and the widget strip, mock-style:
@@ -121,13 +55,12 @@ export function DashboardFrameTitle({
   const affordance = ` ${WIDGET_SETTINGS_AFFORDANCE} `;
   const stripBudget =
     frame.width - 2 * EDGE - stringWidth(title) - stringWidth(affordance) - 2;
-  const strip = attributedHeaderStrip({
+  const strip = headerStripLayout({
     widgets: resolveTopRowWidgets(topRowWidgets, snapshot),
     ...(status === undefined ? {} : { status }),
-    maxWidth: stripBudget,
+    maxWidth: Math.max(0, stripBudget),
   });
-  const attribution = strip.attributionLabel === undefined ? "" : ` ${strip.attributionLabel}`;
-  const right = strip.text.length > 0 ? ` ${strip.text}${attribution}${affordance}` : affordance;
+  const right = strip.text.length > 0 ? ` ${strip.text}${affordance}` : affordance;
   const rightLeft = frame.left + frame.width - EDGE - stringWidth(right);
 
   return (
@@ -153,18 +86,23 @@ export function DashboardFrameTitle({
       >
         {strip.text.length > 0 ? (
           <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>
-            {` ${strip.text}`}
-            {strip.attributionLabel !== undefined ? (
-              <>
-                {" "}
-                <a
-                  href={OPEN_METEO_ATTRIBUTION_URL}
-                  attributes={TextAttributes.UNDERLINE}
-                >
-                  {strip.attributionLabel}
-                </a>
-              </>
-            ) : null}
+            {" "}
+            {strip.statusText}
+            {strip.statusText.length > 0 && strip.widgets.length > 0 ? " · " : null}
+            {strip.widgets.map((widget, index) => (
+              <Fragment key={`${index}:${widget.text}`}>
+                {index > 0 ? " · " : null}
+                {widget.text}
+                {widget.attribution === undefined ? null : (
+                  <>
+                    {" "}
+                    <a href={widget.attribution.url} attributes={TextAttributes.UNDERLINE}>
+                      {widget.attribution.label}
+                    </a>
+                  </>
+                )}
+              </Fragment>
+            ))}
           </text>
         ) : null}
         <text

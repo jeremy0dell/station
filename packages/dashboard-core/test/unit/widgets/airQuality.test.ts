@@ -6,6 +6,11 @@ import {
   renderAirQualitySuccess,
 } from "../../../src/widgets/airQuality.js";
 
+const ATTRIBUTION = {
+  label: "Open-Meteo/CAMS",
+  url: "https://open-meteo.com/",
+};
+
 describe("air quality widget rendering", () => {
   it.each([
     [0, "good", "🟢"],
@@ -27,10 +32,15 @@ describe("air quality widget rendering", () => {
     expect(renderAirQualitySuccess({ type: "aqi", city: "New York, NY" }, { aqi: 42 })).toEqual({
       text: "NEW · AQI 42 good 🟢",
       compact: "NEW AQI 42 🟢",
+      attribution: ATTRIBUTION,
     });
     expect(
       renderAirQualitySuccess({ type: "aqi", city: "Los Angeles", label: "LA" }, { aqi: 90 }),
-    ).toEqual({ text: "LA · AQI 90 moderate 🟡", compact: "LA AQI 90 🟡" });
+    ).toEqual({
+      text: "LA · AQI 90 moderate 🟡",
+      compact: "LA AQI 90 🟡",
+      attribution: ATTRIBUTION,
+    });
   });
 
   it("renders loading and error states", () => {
@@ -38,10 +48,12 @@ describe("air quality widget rendering", () => {
     expect(renderAirQualityLoading(config)).toEqual({
       text: "ATX · AQI -- ⏳",
       compact: "ATX AQI -- ⏳",
+      attribution: ATTRIBUTION,
     });
     expect(renderAirQualityError(config)).toEqual({
       text: "ATX · AQI -- 🫥",
       compact: "ATX AQI -- 🫥",
+      attribution: ATTRIBUTION,
     });
   });
 });

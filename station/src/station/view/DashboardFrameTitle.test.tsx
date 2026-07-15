@@ -107,13 +107,17 @@ describe("DashboardFrameTitle", () => {
     expect(setup.captureCharFrame()).toContain("7 agents");
   });
 
-  it("renders linked attribution beside a visible AQI widget", async () => {
+  it("renders explicit linked attribution without inspecting the widget id", async () => {
     const setup = await renderTitle({
       widgets: [
         {
-          id: "aqi:0",
+          id: "custom:0",
           text: "LA · AQI 42 good 🟢",
           compact: "LA AQI 42 🟢",
+          attribution: {
+            label: "Open-Meteo/CAMS",
+            url: "https://open-meteo.com/",
+          },
         },
       ],
     });
@@ -127,21 +131,16 @@ describe("DashboardFrameTitle", () => {
     );
   });
 
-  it("renders linked attribution beside a visible weather widget", async () => {
+  it("does not infer attribution from a weather widget id", async () => {
     const setup = await renderTitle({
       widgets: [{ id: "weather:0", text: "NYC · 72° ☀️" }],
     });
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("NYC · 72° ☀️ Open-Meteo");
-
-    const attributionCol = frame.split("\n")[0]?.indexOf("Open-Meteo") ?? -1;
-    const attributionSpan = spanAtFrameCell(setup.captureSpans(), 0, attributionCol);
-    expect((attributionSpan?.attributes ?? 0) & TextAttributes.UNDERLINE).toBe(
-      TextAttributes.UNDERLINE,
-    );
+    expect(frame).toContain("NYC · 72° ☀️");
+    expect(frame).not.toContain("Open-Meteo");
   });
 
-  it("omits source-backed widgets rather than rendering them without attribution", async () => {
+  it("omits an attributed widget rather than rendering it without attribution", async () => {
     const airQuality = await renderTitle({
       frame: { ...FRAME, width: 58 },
       widgets: [
@@ -149,17 +148,14 @@ describe("DashboardFrameTitle", () => {
           id: "aqi:0",
           text: "LA · AQI 42 good 🟢",
           compact: "LA AQI 42 🟢",
+          attribution: {
+            label: "Open-Meteo/CAMS",
+            url: "https://open-meteo.com/",
+          },
         },
       ],
     });
     expect(airQuality.captureCharFrame()).not.toContain("AQI");
     expect(airQuality.captureCharFrame()).not.toContain("Open-Meteo/CAMS");
-
-    const weather = await renderTitle({
-      frame: { ...FRAME, width: 45 },
-      widgets: [{ id: "weather:0", text: "NYC · 72° ☀️" }],
-    });
-    expect(weather.captureCharFrame()).not.toContain("72°");
-    expect(weather.captureCharFrame()).not.toContain("Open-Meteo");
   });
 });
