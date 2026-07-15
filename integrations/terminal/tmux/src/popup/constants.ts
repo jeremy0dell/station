@@ -1,5 +1,8 @@
 export const activePopupClientOption = "@station_popup_client";
+export const activePopupClaimOption = "@station_popup_active_claim";
 export const focusPopupClientOption = "@station_popup_focus_client";
+export const persistentUiLeaseOption = "@station_popup_ui_lease";
+export const persistentUiRouteOption = "@station_popup_ui_route";
 export const persistentUiSignatureOption = "@station_popup_ui_signature";
 export const registeredPopupExpectedSignatureOption = "@station_popup_ui_expected_signature";
 export const registeredPopupRootOption = "@station_popup_ui_root";

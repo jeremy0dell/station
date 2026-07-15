@@ -11,6 +11,8 @@ import {
 import {
   defaultPersistentPopupSessionName,
   defaultPersistentPopupTuiCommand,
+  persistentUiLeaseOption,
+  persistentUiRouteOption,
   persistentUiSignatureOption,
   registeredDevPopupCommandOption,
   registeredDevPopupOwnerOption,
@@ -20,6 +22,12 @@ import {
   registeredPopupRootOption,
   registeredPopupSessionNameOption,
 } from "./constants.js";
+import {
+  buildNormalPopupRoute,
+  type NormalPopupRoute,
+  normalPopupRouteMatches,
+  parseNormalPopupRoute,
+} from "./fastProtocol.js";
 import type {
   ResolvePersistentPopupUiOptions,
   TmuxPersistentPopupSessionOptions,
@@ -35,10 +43,6 @@ type RegisteredDevPopupResultInput = {
   root?: string;
   sessionName: string;
 };
-
-function persistentPopupSignature(tuiCommand: string): string {
-  return `v1:${tuiCommand}`;
-}
 
 function registeredDevPopupResult(
   options: RegisteredDevPopupResultInput,
@@ -114,6 +118,69 @@ async function setPersistentPopupSessionSignature(
   });
 }
 
+async function resolvePersistentPopupSessionLease(
+  input: TmuxCommandInput,
+  sessionName: string,
+): Promise<string | undefined> {
+  return resolveTmuxOption(input, {
+    args: ["show-options", "-t", sessionName, "-qv", persistentUiLeaseOption],
+    operation: "provider.tmux.popup.persistentUiLease",
+    message: "tmux failed to resolve the persistent station popup UI lease.",
+    timeoutMessage: "tmux persistent popup UI lease lookup timed out.",
+  });
+}
+
+async function setPersistentPopupSessionLease(
+  input: TmuxCommandInput,
+  options: { lease: string; sessionName: string },
+): Promise<void> {
+  await runTmuxPopupCommand(input, {
+    args: ["set-option", "-t", options.sessionName, "-q", persistentUiLeaseOption, options.lease],
+    operation: "provider.tmux.popup.setPersistentUiLease",
+    message: "tmux failed to record the persistent station popup UI lease.",
+    timeoutMessage: "tmux persistent popup UI lease update timed out.",
+  });
+}
+
+function globalOptionEqualsFormat(optionName: string, value: string | undefined): string {
+  const literal = (value ?? "").replaceAll("#", "##").replaceAll(",", "#,").replaceAll("}", "#}");
+  return `#{==:#{${optionName}},${literal}}`;
+}
+
+async function compareAndSetPersistentPopupRoute(
+  input: TmuxCommandInput,
+  options: { expected?: string; lease: string; route: string; sessionName: string },
+): Promise<boolean> {
+  const routeMatches = globalOptionEqualsFormat(persistentUiRouteOption, options.expected);
+  const leaseMatches = globalOptionEqualsFormat(persistentUiLeaseOption, options.lease);
+  await runTmuxPopupCommand(input, {
+    args: [
+      "if-shell",
+      "-F",
+      "-t",
+      `${options.sessionName}:`,
+      `#{&&:${routeMatches},${leaseMatches}}`,
+      `set-option -gq ${persistentUiRouteOption} ${options.route}`,
+    ],
+    operation: "provider.tmux.popup.commitPersistentUiRoute",
+    message: "tmux failed to commit the persistent station popup UI route.",
+    timeoutMessage: "tmux persistent popup UI route commit timed out.",
+  });
+  return (await resolveTmuxGlobalOption(input, persistentUiRouteOption)) === options.route;
+}
+
+function registeredRouteMatches(
+  route: NormalPopupRoute,
+  ui: TmuxPersistentPopupUi & { root: string },
+  signature: string,
+): boolean {
+  return normalPopupRouteMatches(route, {
+    root: ui.root,
+    sessionName: ui.sessionName,
+    signature,
+  });
+}
+
 async function killPersistentPopupSession(
   input: TmuxCommandInput,
   sessionName: string,
@@ -136,6 +203,10 @@ async function enablePersistentPopupSessionMouse(
     message: "tmux failed to enable mouse support for the persistent station popup UI.",
     timeoutMessage: "tmux persistent popup UI mouse setup timed out.",
   });
+}
+
+export function persistentPopupSignature(tuiCommand: string): string {
+  return `v1:${tuiCommand}`;
 }
 
 export async function ensurePersistentPopupSession(
@@ -240,14 +311,70 @@ export async function resolvePersistentPopupUi(
 export async function registerFastPopupUi(
   input: TmuxCommandInput,
   ui: TmuxPersistentPopupUi,
-): Promise<void> {
-  await setTmuxGlobalOption(input, registeredPopupSessionNameOption, ui.sessionName);
-  await setTmuxGlobalOption(
+): Promise<NormalPopupRoute | undefined> {
+  if (ui.root === undefined || !(await hasTmuxSession(input, ui.sessionName))) {
+    return undefined;
+  }
+  const signature = persistentPopupSignature(ui.command);
+  if ((await resolvePersistentPopupSessionSignature(input, ui.sessionName)) !== signature) {
+    return undefined;
+  }
+
+  const previousRouteValue = await resolveTmuxGlobalOption(input, persistentUiRouteOption);
+  const previousRoute =
+    previousRouteValue === undefined ? undefined : parseNormalPopupRoute(previousRouteValue);
+  if (
+    previousRouteValue !== undefined &&
+    previousRoute === undefined &&
+    previousRouteValue.length > 4096
+  ) {
+    return undefined;
+  }
+
+  const currentLease = await resolvePersistentPopupSessionLease(input, ui.sessionName);
+  const currentSessionName = await resolveTmuxGlobalOption(input, registeredPopupSessionNameOption);
+  const currentSignature = await resolveTmuxGlobalOption(
     input,
     registeredPopupExpectedSignatureOption,
-    persistentPopupSignature(ui.command),
   );
-  if (ui.root !== undefined) {
-    await setTmuxGlobalOption(input, registeredPopupRootOption, ui.root);
+  const currentRoot = await resolveTmuxGlobalOption(input, registeredPopupRootOption);
+  if (
+    previousRoute !== undefined &&
+    registeredRouteMatches(
+      previousRoute,
+      ui as TmuxPersistentPopupUi & { root: string },
+      signature,
+    ) &&
+    currentLease === previousRouteValue &&
+    currentSessionName === ui.sessionName &&
+    currentSignature === signature &&
+    currentRoot === ui.root
+  ) {
+    return previousRoute;
   }
+
+  const routeValue = buildNormalPopupRoute({
+    root: ui.root,
+    sessionName: ui.sessionName,
+    signature,
+  });
+  const route = parseNormalPopupRoute(routeValue);
+  if (route === undefined) {
+    return undefined;
+  }
+
+  await setPersistentPopupSessionLease(input, { lease: routeValue, sessionName: ui.sessionName });
+  await setTmuxGlobalOption(input, registeredPopupSessionNameOption, ui.sessionName);
+  await setTmuxGlobalOption(input, registeredPopupExpectedSignatureOption, signature);
+  await setTmuxGlobalOption(input, registeredPopupRootOption, ui.root);
+  const committed = await compareAndSetPersistentPopupRoute(input, {
+    lease: routeValue,
+    route: routeValue,
+    sessionName: ui.sessionName,
+    ...(previousRouteValue === undefined ? {} : { expected: previousRouteValue }),
+  });
+  if (!committed) {
+    return undefined;
+  }
+  return route;
 }

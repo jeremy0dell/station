@@ -1,12 +1,13 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { ObserverProcessIdentitySchema } from "@station/contracts";
 import { environmentWithoutGitLocals, resolveExecutablePath } from "@station/runtime";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { openTmuxPopup } from "../../src/popup";
+import { buildManagedFastPopupRunShellCommand, openTmuxPopup } from "../../src/popup";
+import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
 import { shellQuote } from "../../src/shell";
 
 const execFileAsync = promisify(execFile);
@@ -14,6 +15,7 @@ const runRealTmux = process.env.STATION_REAL_TMUX === "1";
 const describeRealTmux = runRealTmux ? describe : describe.skip;
 const checkoutRoot = resolve(".");
 const builtCliPath = join(checkoutRoot, "apps/cli/dist/main.js");
+const builtBinaryPath = join(checkoutRoot, "station/dist/bin/stn");
 const persistentUiSessionName = "_station-ui";
 const rendererEntry = "src/dashboardRenderer/main.tsx";
 const outputTailBytes = 64 * 1024;
@@ -97,6 +99,7 @@ type DashboardFixture = {
   nestedClientPids: Set<number>;
   observerPids: Set<number>;
   observerSocketPath: string;
+  otherPtyClients: TmuxPtyClient[];
   panePids: Set<number>;
   projectRoot: string;
   ptyClient?: TmuxPtyClient;
@@ -161,6 +164,9 @@ describeRealTmux("real tmux dev popup routing", () => {
     await execFileAsync("python3", ["--version"], { timeout: 10_000 });
     await access(builtCliPath).catch(() => {
       throw new Error(`Built CLI not found at ${builtCliPath}; run pnpm build first.`);
+    });
+    await access(builtBinaryPath).catch(() => {
+      throw new Error(`Compiled CLI not found at ${builtBinaryPath}; run pnpm build:binary first.`);
     });
   });
 
@@ -258,7 +264,7 @@ describeRealTmux("real tmux dev popup routing", () => {
 
     const firstClient = await waitForNestedClient(fixture);
     const firstPane = await readPaneEvidence(fixture);
-    const firstProcesses = await waitForDashboardProcessEvidence(firstPane);
+    const firstProcesses = await waitForDashboardProcessEvidence(fixture, firstPane);
     const firstRenderer = firstProcesses.renderer;
     const popupAttach = await waitForPopupAttachRecord(fixture);
     await recordObserverPid(fixture);
@@ -299,7 +305,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       "dashboard did not render after reopening the popup",
     );
     const secondPane = await readPaneEvidence(fixture);
-    const secondProcesses = await waitForDashboardProcessEvidence(secondPane);
+    const secondProcesses = await waitForDashboardProcessEvidence(fixture, secondPane);
     const secondRenderer = secondProcesses.renderer;
     recordRuntimeEvidence(fixture, secondClient, secondPane, secondProcesses);
 
@@ -311,6 +317,169 @@ describeRealTmux("real tmux dev popup routing", () => {
       "a child invoked bare tmux instead of the private wrapper",
     );
   }, 120_000);
+
+  it("compiled managed binding cold-starts, reuses the warm UI, and fails without entering view mode", async () => {
+    const fixture = await createDashboardFixture(tmux);
+    const validConfig = await readFile(fixture.configPath, "utf8");
+    cleanup = async () => {
+      await writeFile(fixture.configPath, validConfig, "utf8");
+      await cleanupDashboardFixture(fixture);
+    };
+
+    await tmuxExec(
+      fixture.wrapper,
+      ["new-session", "-d", "-s", "base", "-c", fixture.projectRoot, "sleep 300"],
+      fixture.env,
+    );
+    fixture.ptyClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base",
+      env: fixture.env,
+    });
+
+    const installedRoot = dirname(await realpath(builtBinaryPath));
+    const fallbackAlias = join(installedRoot, "stn-tmux-popup");
+    expect(await realpath(fallbackAlias)).toBe(await realpath(builtBinaryPath));
+    const runShellCommand = buildManagedFastPopupRunShellCommand({
+      installedRoot,
+      fallbackAlias,
+      tmuxCommand: fixture.wrapper,
+    });
+    await tmuxExec(
+      fixture.wrapper,
+      ["bind-key", "Space", "run-shell", "-b", runShellCommand],
+      fixture.env,
+    );
+
+    await triggerPopupBinding(fixture.ptyClient);
+    await waitForTmuxSession(fixture.wrapper, persistentUiSessionName);
+    const firstClient = await waitForNestedClient(fixture);
+    await waitForHiddenPaneContent(
+      fixture,
+      isDashboardContent,
+      "compiled cold binding did not render the dashboard",
+    );
+    const firstPane = await readPaneEvidence(fixture);
+    const firstProcesses = await waitForDashboardProcessEvidence(fixture, firstPane);
+    const firstObserverPid = await recordObserverPid(fixture);
+    recordRuntimeEvidence(fixture, firstClient, firstPane, firstProcesses);
+
+    const route = await tmuxGlobalOption(fixture, "@station_popup_ui_route");
+    expect(route).toMatch(/^v1\.n\./);
+    expect(await tmuxSessionOption(fixture, "@station_popup_ui_lease")).toBe(route);
+    expect(await tmuxGlobalOption(fixture, "@station_popup_ui_root")).toBe(installedRoot);
+
+    await triggerPopupBinding(fixture.ptyClient);
+    await waitForNestedClientGone(fixture);
+    await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+
+    await writeFile(fixture.configPath, 'schema_version = "malformed"\n', "utf8");
+    await triggerPopupBinding(fixture.ptyClient);
+    const warmClient = await waitForNestedClient(fixture);
+    await waitForHiddenPaneContent(
+      fixture,
+      isDashboardContent,
+      "compiled warm binding did not bypass malformed config",
+    );
+    const warmPane = await readPaneEvidence(fixture);
+    const warmProcesses = await waitForDashboardProcessEvidence(fixture, warmPane);
+    const warmObserverPid = await recordObserverPid(fixture);
+    recordRuntimeEvidence(fixture, warmClient, warmPane, warmProcesses);
+
+    expect(warmPane.pid).toBe(firstPane.pid);
+    expect(warmProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
+    expect(warmObserverPid).toBe(firstObserverPid);
+
+    await tmuxExec(
+      fixture.wrapper,
+      ["new-session", "-d", "-s", "base-cross", "-c", fixture.projectRoot, "sleep 300"],
+      fixture.env,
+    );
+    const crossClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base-cross",
+      env: fixture.env,
+    });
+    fixture.otherPtyClients.push(crossClient);
+    await triggerPopupBinding(crossClient);
+    await waitForGlobalOptionValue(fixture, "@station_popup_client", crossClient.clientName);
+    const transferredClient = await waitForNestedClientReplacement(fixture, warmClient.pid);
+    const transferredPane = await readPaneEvidence(fixture);
+    const transferredProcesses = await waitForDashboardProcessEvidence(fixture, transferredPane);
+    recordRuntimeEvidence(fixture, transferredClient, transferredPane, transferredProcesses);
+
+    expect(transferredPane.pid).toBe(firstPane.pid);
+    expect(transferredProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
+    expect(await recordObserverPid(fixture)).toBe(firstObserverPid);
+
+    await setGlobalOption(fixture.wrapper, "@station_popup_ui_route", "malformed");
+    const outputBeforeFailure = crossClient.stdout.text();
+    await triggerPopupBinding(crossClient);
+    await delay(1_000);
+
+    expect(await tmuxPaneInMode(fixture, "base-cross")).toBe("0");
+    const invokingPane = await captureTmuxPane(fixture, "base-cross");
+    const outputAfterFailure = crossClient.stdout.text().slice(outputBeforeFailure.length);
+    expect(invokingPane).not.toContain("returned 1");
+    expect(invokingPane).not.toContain("station-popup-binding");
+    expect(outputAfterFailure).not.toContain("returned 1");
+    expect(outputAfterFailure).not.toContain("station-popup-binding");
+
+    const stillAttached = await waitForNestedClient(fixture);
+    expect(stillAttached.pid).toBe(transferredClient.pid);
+    expect((await readPaneEvidence(fixture)).pid).toBe(firstPane.pid);
+    expect((await waitForDashboardProcessEvidence(fixture, transferredPane)).renderer.pid).toBe(
+      firstProcesses.renderer.pid,
+    );
+    expect(await recordObserverPid(fixture)).toBe(firstObserverPid);
+
+    await crossClient.write(Buffer.from("?", "utf8"));
+    await waitForHiddenPaneContent(
+      fixture,
+      (content) => content.includes("station help"),
+      "dashboard was not usable after both popup routes failed",
+    );
+
+    await setGlobalOption(fixture.wrapper, "@station_popup_ui_route", route);
+    await triggerPopupBinding(crossClient);
+    await waitForNestedClientGone(fixture);
+    await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+    expect(await tmuxPaneInMode(fixture, "base-cross")).toBe("0");
+
+    await Promise.all([triggerPopupBinding(fixture.ptyClient), triggerPopupBinding(crossClient)]);
+    const competingAction = await waitForCoherentActivePopup(fixture, [
+      fixture.ptyClient,
+      crossClient,
+    ]);
+    expect(competingAction.nestedClient.pid).not.toBe(transferredClient.pid);
+    expect((await readPaneEvidence(fixture)).pid).toBe(firstPane.pid);
+    expect((await waitForDashboardProcessEvidence(fixture, transferredPane)).renderer.pid).toBe(
+      firstProcesses.renderer.pid,
+    );
+    expect(await recordObserverPid(fixture)).toBe(firstObserverPid);
+    expect(await tmuxPaneInMode(fixture, "base")).toBe("0");
+    expect(await tmuxPaneInMode(fixture, "base-cross")).toBe("0");
+
+    await competingAction.owner.write(Buffer.from([0x1b]));
+    await waitForHiddenPaneContent(
+      fixture,
+      (content) => isDashboardContent(content) && !content.includes("station help"),
+      "competing managed actions left the dashboard unusable",
+    );
+    await competingAction.owner.write(Buffer.from("?", "utf8"));
+    await waitForHiddenPaneContent(
+      fixture,
+      (content) => content.includes("station help"),
+      "competing managed actions did not preserve dashboard input",
+    );
+    await triggerPopupBinding(competingAction.owner);
+    await waitForNestedClientGone(fixture);
+    await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+    await assertPathMissing(
+      fixture.bareTmuxLogPath,
+      "a child invoked bare tmux instead of the private wrapper",
+    );
+  }, 180_000);
 });
 
 async function createDashboardFixture(tmux: string): Promise<DashboardFixture> {
@@ -358,7 +527,7 @@ async function createDashboardFixture(tmux: string): Promise<DashboardFixture> {
     const shimDir = await writeFailingTmuxShim(root, bareTmuxLogPath);
     const observerSocketPath = join(run, "observer.sock");
     const configPath = await writeDashboardConfig({
-      root,
+      configPath: join(home, ".config/station/config.toml"),
       projectRoot,
       state,
       observerSocketPath,
@@ -388,6 +557,7 @@ async function createDashboardFixture(tmux: string): Promise<DashboardFixture> {
       nestedClientPids: new Set<number>(),
       observerPids: new Set<number>(),
       observerSocketPath,
+      otherPtyClients: [],
       panePids: new Set<number>(),
       projectRoot,
       rendererPids: new Set<number>(),
@@ -446,15 +616,15 @@ function dashboardFixtureEnv(input: {
 }
 
 async function writeDashboardConfig(input: {
+  configPath: string;
   observerSocketPath: string;
   projectRoot: string;
-  root: string;
   state: string;
   wrapper: string;
 }): Promise<string> {
-  const configPath = join(input.root, "config.toml");
+  await mkdir(dirname(input.configPath), { recursive: true });
   await writeFile(
-    configPath,
+    input.configPath,
     [
       "schema_version = 1",
       "",
@@ -486,7 +656,7 @@ async function writeDashboardConfig(input: {
     ].join("\n"),
     "utf8",
   );
-  return configPath;
+  return input.configPath;
 }
 
 async function writeFailingTmuxShim(root: string, logPath: string): Promise<string> {
@@ -741,6 +911,29 @@ async function waitForPaneContent(
   );
 }
 
+async function waitForHiddenPaneContent(
+  fixture: DashboardFixture,
+  predicate: (content: string) => boolean,
+  failureMessage: string,
+): Promise<string> {
+  const deadline = Date.now() + 30_000;
+  let content = "";
+  while (Date.now() < deadline) {
+    content = await tmuxExec(
+      fixture.wrapper,
+      ["capture-pane", "-p", "-t", persistentUiSessionName],
+      fixture.env,
+    ).catch(() => "");
+    if (predicate(content)) {
+      return content;
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `${failureMessage}\nLast hidden pane:\n${content.slice(-8_000)}${await fixtureDiagnostics(fixture)}`,
+  );
+}
+
 async function fixtureDiagnostics(fixture: DashboardFixture): Promise<string> {
   const sessions = await tmuxExec(
     fixture.wrapper,
@@ -812,43 +1005,71 @@ async function readAttachRecords(path: string): Promise<AttachRecord[]> {
 async function waitForNestedClient(fixture: DashboardFixture): Promise<NestedClientEvidence> {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const output = await tmuxExec(
-      fixture.wrapper,
-      [
-        "list-clients",
-        "-t",
-        persistentUiSessionName,
-        "-F",
-        "#{client_name}\t#{client_pid}\t#{client_width}\t#{client_height}\t#{client_tty}",
-      ],
-      fixture.env,
-    ).catch(() => "");
-    const lines = nonEmptyLines(output);
-    if (lines.length > 1) {
-      throw new Error(`expected one nested popup client, found ${lines.length}`);
-    }
-    const line = lines[0];
-    if (line !== undefined) {
-      const [name, pidText, columnsText, rowsText, tty] = line.split("\t");
-      if (
-        name !== undefined &&
-        pidText !== undefined &&
-        columnsText !== undefined &&
-        rowsText !== undefined &&
-        tty !== undefined
-      ) {
-        return {
-          name,
-          pid: positiveInteger(pidText, "nested client pid"),
-          columns: positiveInteger(columnsText, "nested client columns"),
-          rows: positiveInteger(rowsText, "nested client rows"),
-          tty: normalizeTty(tty),
-        };
-      }
+    const client = await readNestedClient(fixture);
+    if (client !== undefined) {
+      fixture.nestedClientPids.add(client.pid);
+      return client;
     }
     await delay(100);
   }
   throw new Error("nested popup tmux client did not attach");
+}
+
+async function waitForNestedClientReplacement(
+  fixture: DashboardFixture,
+  previousPid: number,
+): Promise<NestedClientEvidence> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const client = await readNestedClient(fixture);
+    if (client !== undefined && client.pid !== previousPid) {
+      fixture.nestedClientPids.add(client.pid);
+      return client;
+    }
+    await delay(100);
+  }
+  throw new Error(`nested popup client ${previousPid} was not replaced`);
+}
+
+async function readNestedClient(
+  fixture: DashboardFixture,
+): Promise<NestedClientEvidence | undefined> {
+  const output = await tmuxExec(
+    fixture.wrapper,
+    [
+      "list-clients",
+      "-t",
+      persistentUiSessionName,
+      "-F",
+      "#{client_name}\t#{client_pid}\t#{client_width}\t#{client_height}\t#{client_tty}",
+    ],
+    fixture.env,
+  ).catch(() => "");
+  const lines = nonEmptyLines(output);
+  if (lines.length > 1) {
+    throw new Error(`expected one nested popup client, found ${lines.length}`);
+  }
+  const line = lines[0];
+  if (line === undefined) {
+    return undefined;
+  }
+  const [name, pidText, columnsText, rowsText, tty] = line.split("\t");
+  if (
+    name === undefined ||
+    pidText === undefined ||
+    columnsText === undefined ||
+    rowsText === undefined ||
+    tty === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    name,
+    pid: positiveInteger(pidText, "nested client pid"),
+    columns: positiveInteger(columnsText, "nested client columns"),
+    rows: positiveInteger(rowsText, "nested client rows"),
+    tty: normalizeTty(tty),
+  };
 }
 
 async function waitForNestedClientGone(fixture: DashboardFixture): Promise<void> {
@@ -893,16 +1114,19 @@ async function readPaneEvidence(fixture: DashboardFixture): Promise<PaneEvidence
   ) {
     throw new Error(`invalid hidden pane evidence: ${output}`);
   }
-  return {
+  const pane = {
     id,
     pid: positiveInteger(pidText, "hidden pane pid"),
     tty: normalizeTty(tty),
     columns: positiveInteger(columnsText, "hidden pane columns"),
     rows: positiveInteger(rowsText, "hidden pane rows"),
   };
+  fixture.panePids.add(pane.pid);
+  return pane;
 }
 
 async function waitForDashboardProcessEvidence(
+  fixture: DashboardFixture,
   pane: PaneEvidence,
 ): Promise<DashboardProcessEvidence> {
   const deadline = Date.now() + 10_000;
@@ -915,6 +1139,8 @@ async function waitForDashboardProcessEvidence(
     );
     const cliMatches = processTree.filter(isNestedDashboardCliProcess);
     const rendererMatches = processTree.filter(isDashboardRendererProcess);
+    for (const cli of cliMatches) fixture.nestedCliPids.add(cli.pid);
+    for (const renderer of rendererMatches) fixture.rendererPids.add(renderer.pid);
     if (cliMatches.length > 1) {
       throw new Error(`expected one nested dashboard CLI, found ${cliMatches.length}`);
     }
@@ -947,12 +1173,16 @@ async function waitForDashboardProcessEvidence(
 }
 
 function isNestedDashboardCliProcess(record: ProcessRecord): boolean {
-  const [command, entry, ...args] = record.command.split(/\s+/);
-  const tuiIndex = args.indexOf("tui");
-  return (
+  const [command, ...commandArgs] = record.command.split(/\s+/);
+  const sourceCli =
     command !== undefined &&
     basename(command) === basename(process.execPath) &&
-    entry === builtCliPath &&
+    commandArgs[0] === builtCliPath;
+  const compiledCli = command !== undefined && resolve(command) === builtBinaryPath;
+  const args = sourceCli ? commandArgs.slice(1) : commandArgs;
+  const tuiIndex = args.indexOf("tui");
+  return (
+    (sourceCli || compiledCli) &&
     tuiIndex >= 0 &&
     args[tuiIndex + 1] === "--popup" &&
     args[tuiIndex + 2] === "--persistent"
@@ -961,7 +1191,11 @@ function isNestedDashboardCliProcess(record: ProcessRecord): boolean {
 
 function isDashboardRendererProcess(record: ProcessRecord): boolean {
   const [command, entry] = record.command.split(/\s+/);
-  return command !== undefined && basename(command) === "bun" && entry === rendererEntry;
+  const sourceRenderer =
+    command !== undefined && basename(command) === "bun" && entry === rendererEntry;
+  const compiledRenderer =
+    command !== undefined && resolve(command) === builtBinaryPath && entry === "__dashboard";
+  return sourceRenderer || compiledRenderer;
 }
 
 async function processRecords(): Promise<ProcessRecord[]> {
@@ -1026,7 +1260,7 @@ function recordRuntimeEvidence(
   fixture.rendererPids.add(processes.renderer.pid);
 }
 
-async function recordObserverPid(fixture: DashboardFixture): Promise<void> {
+async function recordObserverPid(fixture: DashboardFixture): Promise<number> {
   const identityPath = `${fixture.observerSocketPath}.pid`;
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -1035,7 +1269,7 @@ async function recordObserverPid(fixture: DashboardFixture): Promise<void> {
       const identity = ObserverProcessIdentitySchema.parse(JSON.parse(serialized));
       expect(identity.socketPath).toBe(fixture.observerSocketPath);
       fixture.observerPids.add(identity.pid);
-      return;
+      return identity.pid;
     }
     await delay(100);
   }
@@ -1047,6 +1281,98 @@ function assertPositiveDimensions(evidence: Record<string, Dimensions>): void {
     expect(dimensions.columns, `${label} columns`).toBeGreaterThan(0);
     expect(dimensions.rows, `${label} rows`).toBeGreaterThan(0);
   }
+}
+
+async function triggerPopupBinding(client: TmuxPtyClient): Promise<void> {
+  await client.write(Buffer.from([0x02]));
+  await delay(25);
+  await client.write(Buffer.from(" ", "utf8"));
+}
+
+async function tmuxGlobalOption(fixture: DashboardFixture, name: string): Promise<string> {
+  return tmuxExec(fixture.wrapper, ["show-options", "-gqv", name], fixture.env).then((value) =>
+    value.trimEnd(),
+  );
+}
+
+async function tmuxSessionOption(fixture: DashboardFixture, name: string): Promise<string> {
+  return tmuxExec(
+    fixture.wrapper,
+    ["show-options", "-t", persistentUiSessionName, "-qv", name],
+    fixture.env,
+  ).then((value) => value.trimEnd());
+}
+
+async function waitForGlobalOptionValue(
+  fixture: DashboardFixture,
+  name: string,
+  expected: string,
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  let actual = "";
+  while (Date.now() < deadline) {
+    actual = await tmuxGlobalOption(fixture, name);
+    if (actual === expected) {
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `tmux option ${name} did not become ${JSON.stringify(expected)}; last value was ${JSON.stringify(actual)}${await fixtureDiagnostics(fixture)}`,
+  );
+}
+
+async function waitForCoherentActivePopup(
+  fixture: DashboardFixture,
+  owners: readonly TmuxPtyClient[],
+): Promise<{
+  nestedClient: NestedClientEvidence;
+  owner: TmuxPtyClient;
+}> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const rawClaim = await tmuxGlobalOption(fixture, "@station_popup_active_claim");
+    const claim = parsePopupActiveClaim(rawClaim);
+    const owner = owners.find((client) => client.clientName === claim?.clientName);
+    const nestedClient = await readNestedClient(fixture);
+    if (
+      claim?.state === "open" &&
+      owner !== undefined &&
+      nestedClient !== undefined &&
+      (await tmuxGlobalOption(fixture, "@station_popup_client")) === claim.clientName &&
+      (await tmuxGlobalOption(fixture, "@station_popup_focus_client")) === claim.clientName
+    ) {
+      await delay(200);
+      const settledClaim = await tmuxGlobalOption(fixture, "@station_popup_active_claim");
+      const settledClient = await readNestedClient(fixture);
+      if (
+        settledClaim === rawClaim &&
+        settledClient?.pid === nestedClient.pid &&
+        (await tmuxGlobalOption(fixture, "@station_popup_client")) === claim.clientName &&
+        (await tmuxGlobalOption(fixture, "@station_popup_focus_client")) === claim.clientName
+      ) {
+        return { nestedClient, owner };
+      }
+    }
+    await delay(100);
+  }
+  throw new Error("competing managed bindings did not settle on one coherent popup owner");
+}
+
+async function tmuxPaneInMode(fixture: DashboardFixture, sessionName: string): Promise<string> {
+  return tmuxExec(
+    fixture.wrapper,
+    ["display-message", "-p", "-t", `${sessionName}:0.0`, "#{pane_in_mode}"],
+    fixture.env,
+  ).then((value) => value.trim());
+}
+
+async function captureTmuxPane(fixture: DashboardFixture, sessionName: string): Promise<string> {
+  return tmuxExec(
+    fixture.wrapper,
+    ["capture-pane", "-p", "-S", "-", "-t", `${sessionName}:0.0`],
+    fixture.env,
+  );
 }
 
 async function closeOuterPopup(fixture: DashboardFixture): Promise<void> {
@@ -1072,8 +1398,14 @@ async function expectSuccessfulExit(child: TrackedChild, timeoutMs: number): Pro
 async function cleanupDashboardFixture(fixture: DashboardFixture): Promise<void> {
   const failures: Error[] = [];
   await cleanupStep(failures, "close active popup and await popup CLIs", async () => {
-    if (fixture.cliProcesses.some((tracked) => isChildRunning(tracked.child))) {
-      await closeOuterPopup(fixture);
+    for (const client of [fixture.ptyClient, ...fixture.otherPtyClients]) {
+      if (client !== undefined) {
+        await tmuxExec(
+          fixture.wrapper,
+          ["display-popup", "-c", client.clientName, "-C"],
+          fixture.env,
+        ).catch(() => undefined);
+      }
     }
     for (const child of fixture.cliProcesses) {
       await expectSuccessfulExit(child, 10_000);
@@ -1092,6 +1424,10 @@ async function cleanupDashboardFixture(fixture: DashboardFixture): Promise<void>
     );
   });
   await cleanupStep(failures, "detach outer PTY client", async () => {
+    const otherPtyClients = fixture.otherPtyClients.splice(0);
+    for (const client of otherPtyClients) {
+      await client.close();
+    }
     const ptyClient = fixture.ptyClient;
     fixture.ptyClient = undefined;
     await ptyClient?.close();
@@ -1236,10 +1572,6 @@ function processExists(pid: number): boolean {
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== "ESRCH";
   }
-}
-
-function isChildRunning(child: ChildProcess): boolean {
-  return child.exitCode === null && child.signalCode === null;
 }
 
 async function assertPathMissing(path: string, message: string): Promise<void> {

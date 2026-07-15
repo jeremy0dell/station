@@ -1,4 +1,5 @@
-import { dirname, join } from "node:path";
+import { realpathSync } from "node:fs";
+import { dirname, join, normalize, parse } from "node:path";
 import { emptyConfig } from "@station/config";
 import type { CliEnv } from "../../env.js";
 import { selfExecArgv } from "../../selfExec.js";
@@ -59,6 +60,7 @@ async function runPopupCliCommand(context: CliCommandRunContext, firstRun = fals
   if (context.options.popupDeps !== undefined) {
     Object.assign(popupDeps, context.options.popupDeps);
   }
+  delete popupDeps.checkoutRoot;
   if (context.options.observerDeps !== undefined) {
     popupDeps.observer = context.options.observerDeps;
   }
@@ -74,7 +76,13 @@ async function runPopupCliCommand(context: CliCommandRunContext, firstRun = fals
   if (uiSessionName !== undefined) {
     popupOptions.uiSessionName = uiSessionName;
   }
-  popupOptions.checkoutRoot = repoRootFromCliModule(context.cliEntryPath);
+  const checkoutRoot = popupOwnerRoot(
+    context.cliEntryPath,
+    context.options.popupDeps?.checkoutRoot,
+  );
+  if (checkoutRoot !== undefined) {
+    popupOptions.checkoutRoot = checkoutRoot;
+  }
   const result = await runPopupCommand(context.args, popupOptions, popupDeps);
   return { code: "code" in result ? result.code : 0, output: result };
 }
@@ -111,6 +119,11 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function repoRootFromCliModule(cliEntryPath: string): string {
-  return join(dirname(cliEntryPath), "../../..");
+function popupOwnerRoot(
+  cliEntryPath: string,
+  installedRoot: string | undefined,
+): string | undefined {
+  const root = installedRoot ?? realpathSync(join(dirname(cliEntryPath), "../../.."));
+  const normalizedRoot = normalize(root);
+  return normalizedRoot === parse(normalizedRoot).root ? undefined : root;
 }

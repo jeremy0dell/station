@@ -1,6 +1,10 @@
+import { constants as fsConstants } from "node:fs";
+import { access as nodeAccess } from "node:fs/promises";
 import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { resolveObserverPaths } from "@station/config";
 import { type ExternalCommandRunner, isCompiledBinary } from "@station/runtime";
+import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import type { CliEnv } from "../../../env.js";
 import { isStationUiInstalled } from "../../../stationWorkspace.js";
 import type { SetupDependencyFact, SetupFacts, SetupMode, SetupStationUiFact } from "../model.js";
@@ -48,6 +52,7 @@ export type CollectSetupFactsOptions = {
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
   compiled?: boolean;
+  tmuxPopupOwnerRoot?: string;
   stateDirExecute?: (path: string) => Promise<void>;
   stateDirFs?: SetupStateDirFileSystem;
 };
@@ -115,14 +120,49 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
       : {}),
     ...(options.runner === undefined ? {} : { runner: options.runner }),
   });
-  const tmuxBinding = await checkSetupTmuxBinding({
+  const launcherCommand =
+    options.tmuxPopupOwnerRoot === undefined
+      ? setupLauncherExecutable(launchers.tmuxPopup)
+      : join(options.tmuxPopupOwnerRoot, "stn-tmux-popup");
+  const resolvedLaunchers =
+    options.tmuxPopupOwnerRoot === undefined
+      ? launchers
+      : {
+          ...launchers,
+          tmuxPopup: (await canExecute(launcherCommand, options.access))
+            ? {
+                status: "ok" as const,
+                source: "installed" as const,
+                command: launchers.tmuxPopup.command,
+                resolvedPath: launcherCommand,
+                checkoutPath: launchers.tmuxPopup.checkoutPath,
+              }
+            : {
+                status: "missing" as const,
+                source: "missing" as const,
+                command: launchers.tmuxPopup.command,
+                checkoutPath: launchers.tmuxPopup.checkoutPath,
+                message: `The installed stn-tmux-popup alias is missing or not executable at ${launcherCommand}.`,
+              },
+        };
+  const tmuxBindingOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
     homeDir,
     env,
     ...(options.fs === undefined ? {} : { fs: options.fs }),
-    launcherCommand: setupLauncherExecutable(launchers.tmuxPopup),
+    launcherCommand,
     ...(options.runner === undefined ? {} : { runner: options.runner }),
-    tmuxCommand: tmux.command,
-  });
+    tmuxCommand: tmux.resolvedPath ?? tmux.command,
+  };
+  const resolvedTmuxCommand =
+    tmux.resolvedPath ?? (isAbsolute(tmux.command) ? tmux.command : undefined);
+  if (options.tmuxPopupOwnerRoot !== undefined && resolvedTmuxCommand !== undefined) {
+    tmuxBindingOptions.runShellCommand = buildManagedFastPopupRunShellCommand({
+      installedRoot: options.tmuxPopupOwnerRoot,
+      fallbackAlias: launcherCommand,
+      tmuxCommand: resolvedTmuxCommand,
+    });
+  }
+  const tmuxBinding = await checkSetupTmuxBinding(tmuxBindingOptions);
   const stationUi = compiled
     ? ({ status: "skipped" } as const)
     : await resolveStationUiFact({
@@ -157,12 +197,28 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     gitDelta,
     brew,
     xcode,
-    launchers,
+    launchers: resolvedLaunchers,
     git,
     harnesses,
     config,
     tmuxBinding,
   };
+}
+
+async function canExecute(
+  path: string,
+  injectedAccess: ((path: string) => Promise<void>) | undefined,
+): Promise<boolean> {
+  try {
+    if (injectedAccess === undefined) {
+      await nodeAccess(path, fsConstants.X_OK);
+    } else {
+      await injectedAccess(path);
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Mirrors doctor's rendererRuntimeCheck: the station/ Bun lane only matters when Bun

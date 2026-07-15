@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { runCli } from "@station/cli";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
+import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 
 describe("CLI setup command", () => {
@@ -90,6 +91,72 @@ describe("CLI setup command", () => {
     expect(plan.checks.some((check) => check.id === "station-ui")).toBe(false);
     expect(plan.checks.some((check) => check.id === "command-line-tools")).toBe(false);
     expect(plan.actions.some((action) => action.id === "install-bun")).toBe(false);
+  });
+
+  it("generates the compiled binding from installed ownership while preserving its key", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const installedRoot = join(root, "installed");
+    const popupAlias = join(installedRoot, "stn-tmux-popup");
+    const tmuxCommand = "/fake/bin/tmux";
+    const tmuxConfigPath = join(home, ".tmux.conf");
+    await mkdir(repo, { recursive: true });
+    const fs = readOnlyFs({
+      [tmuxConfigPath]: [
+        "# >>> station popup binding >>>",
+        "# Change Space to any tmux key; stn setup preserves it.",
+        "bind-key C-s run-shell -b 'old-command'",
+        "# <<< station popup binding <<<",
+        "",
+      ].join("\n"),
+    });
+
+    const result = await runCli(["setup", "plan", "--json"], {
+      setupDeps: {
+        compiled: true,
+        tmuxPopupOwnerRoot: installedRoot,
+        cwd: repo,
+        homeDir: home,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          tmuxCommand,
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          popupAlias,
+        ]),
+        fs,
+      },
+    });
+
+    expect(result.code).toBe(0);
+    const plan = result.output as {
+      actions: Array<{ id: string; data?: { appendedText?: string } }>;
+      checks: Array<{ id: string; details?: Record<string, string> }>;
+    };
+    const runShellCommand = buildManagedFastPopupRunShellCommand({
+      installedRoot,
+      fallbackAlias: popupAlias,
+      tmuxCommand,
+    });
+    expect(plan.checks.find((check) => check.id === "tmux-popup-binding")?.details).toMatchObject({
+      bindingKey: "C-s",
+    });
+    const bindingAction = plan.actions.find((action) => action.id === "tmux-popup-binding");
+    expect(bindingAction?.data?.appendedText).toContain("bind-key C-s run-shell -b");
+    expect(bindingAction?.data?.appendedText).toContain(
+      `'${runShellCommand.replaceAll("'", "'\\''")}'`,
+    );
   });
 
   it("setup plan is read-only and includes a config write action", async () => {

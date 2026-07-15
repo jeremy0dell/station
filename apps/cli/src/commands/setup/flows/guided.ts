@@ -181,11 +181,18 @@ async function runGuidedSetupWithPrompt(
 
   const tmuxPopupBindingActions = plan.actions.filter(isTmuxPopupBindingAction);
   const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
+  const bindingKey =
+    facts.tmuxBinding.status === "conflict" ? undefined : facts.tmuxBinding.bindingKey;
   let tmuxPopupFeedback =
     facts.tmuxBinding.status === "ok"
-      ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded", popupCommand)
+      ? renderTmuxPopupFeedback(
+          true,
+          facts.tmuxBinding.liveStatus === "loaded",
+          facts.tmuxBinding.bindingKey,
+          popupCommand,
+        )
       : undefined;
-  if (tmuxPopupBindingActions.length > 0) {
+  if (tmuxPopupBindingActions.length > 0 && bindingKey !== undefined) {
     const accepted = await prompt.confirm("Install or load tmux popup binding?");
     if (accepted) {
       const bindingResult = await applySetupPlan(
@@ -205,7 +212,8 @@ async function runGuidedSetupWithPrompt(
         const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
           homeDir: facts.homeDir,
           launcherCommand: facts.tmuxBinding.launcherCommand,
-          tmuxCommand: facts.tmux.command,
+          runShellCommand: facts.tmuxBinding.runShellCommand,
+          tmuxCommand: facts.tmux.resolvedPath ?? facts.tmux.command,
         };
         const env = deps.env ?? options.env;
         if (env !== undefined) recheckOptions.env = env;
@@ -216,13 +224,19 @@ async function runGuidedSetupWithPrompt(
       tmuxPopupFeedback = renderTmuxPopupFeedback(
         facts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
         liveLoaded,
+        bindingKey,
         popupCommand,
         bindingResult.failedAction !== undefined,
       );
     } else {
       tmuxPopupFeedback =
         facts.tmuxBinding.status === "ok"
-          ? renderTmuxPopupFeedback(true, facts.tmuxBinding.liveStatus === "loaded", popupCommand)
+          ? renderTmuxPopupFeedback(
+              true,
+              facts.tmuxBinding.liveStatus === "loaded",
+              facts.tmuxBinding.bindingKey,
+              popupCommand,
+            )
           : `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;
     }
   }
@@ -304,12 +318,13 @@ async function pathExists(path: string, deps: SetupCommandDeps): Promise<boolean
 function renderTmuxPopupFeedback(
   persisted: boolean,
   liveLoaded: boolean,
+  bindingKey: string,
   popupCommand: string,
   repairIncomplete = false,
 ): string {
   const lines = persisted
     ? [
-        `Tmux popup binding: Ctrl-b Space is ${
+        `Tmux popup binding: tmux prefix + ${bindingKey} is ${
           liveLoaded
             ? "persisted and loaded in the current tmux server"
             : "persisted for future tmux servers; no current server was live-loaded"

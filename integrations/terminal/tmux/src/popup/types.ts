@@ -45,6 +45,12 @@ export type TmuxCurrentClientInput = {
   timeoutMs?: number;
 };
 
+export type TmuxClientIdentity = {
+  name: string;
+  pid: number;
+  sessionName: string;
+};
+
 export type TmuxPersistentPopupSessionOptions = {
   command?: string;
   runner?: ExternalCommandRunner;
@@ -96,6 +102,8 @@ export type ResolvePersistentPopupUiOptions = {
 };
 
 export type TmuxPopupState = {
+  claim?: string;
+  claimOptionName?: string;
   clientId: string;
   focusOptionName?: string;
   optionName: string;

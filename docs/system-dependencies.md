@@ -56,7 +56,7 @@ remediation. `scripts/setup/bootstrap.sh` preflights both before touching Homebr
 
 Recommended after setup:
 
-- tmux popup binding (`Ctrl-b Space`) for opening and closing the dashboard overlay
+- tmux popup binding (`tmux prefix + Space` by default) for opening and closing the dashboard overlay
 - Worktrunk shell integration
 - `stn doctor`
 
@@ -78,12 +78,44 @@ worktree_provider = "worktrunk"
 ```
 
 The tmux provider shells out to `tmux` for the workbench and popup local-use path. Guided
-`stn setup` can append a marked `Ctrl-b Space` binding to `~/.tmux.conf` when you accept the
-recommended popup binding step. Inside tmux, setup can also load that binding into the current
-tmux server so a restart or manual `tmux source-file ~/.tmux.conf` is not required.
+`stn setup` offers an optional recommended binding in a marked block in `~/.tmux.conf`; it is
+never selected without consent. A new block defaults to `tmux prefix + Space`:
 
-The generated binding uses the resolved absolute `stn-tmux-popup` launcher. In a development checkout this
-may be the checkout's `integrations/terminal/tmux/bin/stn-popup` path rather than a bare command.
+```tmux
+# >>> station popup binding >>>
+# Change Space to any tmux key; stn setup preserves it.
+bind-key Space run-shell -b '<Station-generated fast command>'
+# <<< station popup binding <<<
+```
+
+The key belongs to the user. Change `Space` on the marked `bind-key` line to a
+supported prefix-table key such as `p`, `F12`, `C-s`, `C-Space`, or `M-p`, then load it:
+
+```bash
+tmux source-file ~/.tmux.conf
+```
+
+Later setup runs preserve that valid key while updating Station's generated
+command. A deleted or commented binding is treated as absent and only offered
+for installation again. Duplicate or malformed markers, multiple binding lines,
+and unsupported selectors are reported as conflicts and are never rewritten or
+loaded. Unmarked custom bindings are never inferred or changed.
+
+Inside tmux, setup can load the exact marked key and command into the current
+server. Reloading after a key change can leave the old key active until
+`tmux unbind-key <old-key>` or a server restart; Station does not unbind a key
+whose ownership it cannot prove.
+
+For a compiled install, the generated command uses the canonical installed
+directory, the exact sibling `stn-tmux-popup` alias, and the resolved tmux
+executable. First use can invoke that full CLI fallback to initialize the hidden
+UI; a valid warm use directly attaches or toggles it without loading config or
+starting Bun or the Observer. Controlled binding failures are silent, return
+success to tmux, and show at most a temporary status-line message. Run
+`stn popup` directly for ordinary diagnostic output.
+
+In a development checkout, the popup launcher may instead be the checkout's
+`integrations/terminal/tmux/bin/stn-popup` path.
 Run `pnpm station:link` only when you want bare `stn`, `stn-ingress`, and `stn-tmux-popup` commands
 available globally.
 

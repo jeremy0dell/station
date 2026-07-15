@@ -121,8 +121,18 @@ function tmuxPopupBindingCheck(facts: SetupFacts): SetupCheck {
       path: facts.tmuxBinding.path,
       launcherCommand: facts.tmuxBinding.launcherCommand,
       liveStatus: facts.tmuxBinding.liveStatus,
+      ...(facts.tmuxBinding.status === "conflict"
+        ? {}
+        : { bindingKey: facts.tmuxBinding.bindingKey }),
     },
   } as const;
+  if (facts.tmuxBinding.status === "conflict") {
+    return {
+      ...base,
+      status: "warning",
+      message: facts.tmuxBinding.message,
+    };
+  }
   if (facts.tmux.status !== "ok") {
     return {
       ...base,
@@ -180,6 +190,7 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
   const launchers = [facts.launchers.station, facts.launchers.ingress, facts.launchers.tmuxPopup];
   const missing = launchers.filter((launcher) => launcher.status === "missing");
   const checkout = launchers.filter((launcher) => launcher.source === "checkout");
+  const installed = launchers.filter((launcher) => launcher.source === "installed");
   const details = {
     station: setupLauncherExecutable(facts.launchers.station),
     ingress: setupLauncherExecutable(facts.launchers.ingress),
@@ -203,6 +214,16 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
       label: "STATION launchers",
       message:
         "Bare station launchers are not on PATH; setup will use current-checkout launcher paths.",
+      details,
+    };
+  }
+  if (installed.length > 0) {
+    return {
+      id: "station-launchers",
+      tier: "recommended",
+      status: "ok",
+      label: "STATION launchers",
+      message: "STATION launchers are available from PATH or the installed artifact.",
       details,
     };
   }
@@ -642,18 +663,22 @@ function setupActions(
       tier: "recommended",
       selected: false,
       label: "Install tmux popup binding",
-      message: "Append a Ctrl-b Space binding for the STATION popup dashboard to ~/.tmux.conf.",
+      message: `Install the tmux prefix + ${facts.tmuxBinding.bindingKey} binding for the STATION popup dashboard in ~/.tmux.conf.`,
       path: facts.tmuxBinding.path,
       data: {
         marker: facts.tmuxBinding.marker,
         endMarker: tmuxPopupBindingEndMarker,
-        appendedText: tmuxPopupBindingBlock(facts.tmuxBinding.launcherCommand),
+        appendedText: tmuxPopupBindingBlock(facts.tmuxBinding.launcherCommand, {
+          bindingKey: facts.tmuxBinding.bindingKey,
+          runShellCommand: facts.tmuxBinding.runShellCommand,
+        }),
       },
     });
   }
   if (
     facts.tmux.status === "ok" &&
     facts.launchers.tmuxPopup.status === "ok" &&
+    facts.tmuxBinding.status !== "conflict" &&
     facts.tmuxBinding.insideTmux &&
     facts.tmuxBinding.liveStatus !== "loaded"
   ) {
@@ -663,11 +688,11 @@ function setupActions(
       tier: "recommended",
       selected: false,
       label: "Load tmux popup binding",
-      message: "Install the Ctrl-b Space STATION popup binding in the current tmux server.",
+      message: `Install the tmux prefix + ${facts.tmuxBinding.bindingKey} STATION popup binding in the current tmux server.`,
       command: [
-        facts.tmux.command,
+        facts.tmux.resolvedPath ?? facts.tmux.command,
         "bind-key",
-        "Space",
+        facts.tmuxBinding.bindingKey,
         "run-shell",
         "-b",
         facts.tmuxBinding.runShellCommand,
@@ -684,7 +709,7 @@ function setupActions(
 
 function stationLaunchersNeedLink(facts: SetupFacts): boolean {
   return [facts.launchers.station, facts.launchers.ingress, facts.launchers.tmuxPopup].some(
-    (launcher) => launcher.source !== "path",
+    (launcher) => launcher.source !== "path" && launcher.source !== "installed",
   );
 }
 

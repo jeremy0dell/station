@@ -469,10 +469,64 @@ describe("guided setup command", () => {
 
     expect(result.code).toBe(0);
     expect(fs.files[join(root, "home/.tmux.conf")]).toContain("'/fake/bin/stn-tmux-popup'");
+    expect(fs.files[join(root, "home/.tmux.conf")]).toContain(
+      "# Change Space to any tmux key; stn setup preserves it.",
+    );
     expect(chunks.join("")).toContain(
-      "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers",
+      "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers",
     );
     expect(chunks.join("")).toContain("Direct fallback: stn popup");
+  });
+
+  it("preserves a customized tmux key while replacing Station's command", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({
+      [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock("/old/stn-tmux-popup", {
+        bindingKey: "C-s",
+      }),
+    });
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: prompt({ confirms: [false, false, true, false, true] }),
+        writeStdout: (chunk) => chunks.push(chunk),
+      },
+    );
+
+    const tmuxConfig = fs.files[join(homeDir, ".tmux.conf")];
+    expect(result.code).toBe(0);
+    expect(tmuxConfig).toContain("bind-key C-s run-shell -b");
+    expect(tmuxConfig).toContain("'/fake/bin/stn-tmux-popup'");
+    expect(tmuxConfig).not.toContain("/old/stn-tmux-popup");
+    expect(chunks.join("")).toContain("Tmux popup binding: tmux prefix + C-s is persisted");
   });
 
   it("does not report a rebound tmux launcher as loaded when startup still fails", async () => {
@@ -540,7 +594,7 @@ describe("guided setup command", () => {
     const output = chunks.join("");
     expect(result.code).toBe(0);
     expect(output).toContain(
-      "Tmux popup binding: Ctrl-b Space is persisted for future tmux servers; no current server was live-loaded.",
+      "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
     );
     expect(output).not.toContain("persisted and loaded in the current tmux server");
     expect(
