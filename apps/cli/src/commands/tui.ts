@@ -4,6 +4,7 @@ import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import {
   isCompiledBinary,
+  type RuntimeSafeError,
   safeErrorFromUnknown,
   stationObserverBuildVersion,
   systemClock,
@@ -70,6 +71,13 @@ export type TuiCommandResult =
       observer: ObserverStatus;
     };
 
+const nestedTuiDisabledError = {
+  tag: "TuiCommandError",
+  code: "NESTED_TUI_DISABLED",
+  message: "Nested Station is disabled.",
+  hint: "Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.",
+} satisfies RuntimeSafeError;
+
 /**
  * COMPOSITION ROOT
  *
@@ -81,6 +89,21 @@ export async function runTuiCommand(
   deps: TuiCommandDeps = {},
 ): Promise<TuiCommandResult> {
   const parsed = parseTuiArgs(args, options.timeoutMs);
+  const env = deps.env ?? process.env;
+  const stationPaneMarker =
+    env.TMUX !== undefined && env.TMUX_PANE !== undefined
+      ? JSON.stringify([env.TMUX, env.TMUX_PANE])
+      : "1";
+  // Only the incoming launcher marker exempts popup mode; buildRendererEnv stamps the child later for routing.
+  const popupLauncherChild = parsed.popupMode && env.STATION_TUI_POPUP === "1";
+  if (
+    env.STATION_PANE === stationPaneMarker &&
+    !parsed.allowNested &&
+    !parsed.devFakeDashboard &&
+    !popupLauncherChild
+  ) {
+    throw nestedTuiDisabledError;
+  }
   if (parsed.devFakeDashboard) {
     // The Bun renderer carries its own mock source; the --fake-* counts are
     // accepted for back-compat but the mock uses its baseline scenario.
@@ -345,6 +368,7 @@ async function reconcileBeforeTui(input: {
 }
 
 type ParsedTuiArgs = {
+  allowNested: boolean;
   devFakeDashboard: boolean;
   fakeProjects: number;
   fakeWorktreesPerProject: number;
@@ -361,7 +385,7 @@ function parseTuiArgs(args: string[], timeoutMs: number | undefined): ParsedTuiA
     "--fake-worktrees-per-project",
   );
   const remainingArgs = fakeWorktreesPerProject.args;
-  const knownFlags = new Set(["--popup", "--persistent", "--dev-fake-dashboard"]);
+  const knownFlags = new Set(["--allow-nested", "--popup", "--persistent", "--dev-fake-dashboard"]);
   const unknown = remainingArgs.find((arg) => !knownFlags.has(arg));
   if (unknown !== undefined) {
     throw new Error(`Unknown tui option: ${unknown}`);
@@ -380,6 +404,7 @@ function parseTuiArgs(args: string[], timeoutMs: number | undefined): ParsedTuiA
   }
 
   const result: ParsedTuiArgs = {
+    allowNested: remainingArgs.includes("--allow-nested"),
     devFakeDashboard,
     fakeProjects: fakeProjects.value ?? 4,
     fakeWorktreesPerProject: fakeWorktreesPerProject.value ?? 24,

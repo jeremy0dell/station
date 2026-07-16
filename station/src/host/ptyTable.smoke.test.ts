@@ -29,14 +29,26 @@ if (SMOKE) {
           worktreePath: process.cwd(),
           harnessProvider: "scripted",
           command: "/bin/sh",
-          args: ["-c", "printf READY; sleep 2"],
+          args: ["-c", 'printf "READY:%s" "$STATION_PANE"; sleep 2'],
           cwd: process.cwd(),
+          env: { STATION_PANE: "0" },
           cols: 80,
           rows: 24,
         });
 
-        await waitUntil(() => table.snapshot(ptyId).scrollback.join("").includes("READY"), 2000);
-        expect(table.snapshot(ptyId).scrollback.join("")).toContain("READY");
+        const stationPaneMarker =
+          process.env.TMUX !== undefined && process.env.TMUX_PANE !== undefined
+            ? JSON.stringify([process.env.TMUX, process.env.TMUX_PANE])
+            : "1";
+        await waitUntil(
+          () =>
+            table
+              .snapshot(ptyId)
+              .scrollback.join("")
+              .includes(`READY:${stationPaneMarker}`),
+          2000,
+        );
+        expect(table.snapshot(ptyId).scrollback.join("")).toContain(`READY:${stationPaneMarker}`);
 
         // The PTY is parented to the host, not a client: it survives with none attached.
         await delay(1100);
