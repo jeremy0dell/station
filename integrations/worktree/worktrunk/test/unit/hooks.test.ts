@@ -46,6 +46,7 @@ describe("Worktrunk hook setup", () => {
       observerSocketPath: "/tmp/station/run/observer.sock",
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
+      hookBin: "/tmp/checkout/bin/stn-ingress",
     });
     const second = await installWorktrunkHooks({
       worktrunkConfigPath: configPath,
@@ -53,6 +54,7 @@ describe("Worktrunk hook setup", () => {
       observerSocketPath: "/tmp/station/run/observer.sock",
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
+      hookBin: "/tmp/checkout/bin/stn-ingress",
     });
     const contents = await readFile(configPath, "utf8");
 

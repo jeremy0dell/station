@@ -7,6 +7,7 @@ import { installCursorHooks } from "@station/cursor";
 import { openCodeHookAdapter } from "@station/opencode";
 import { createPiHarnessProvider } from "@station/pi";
 import { createStationHostController } from "@station/terminal";
+import { installWorktrunkHooks } from "@station/worktrunk";
 import { describe, expect, it, vi } from "vitest";
 import { createProviderRegistry } from "../../src/observerProviders";
 
@@ -387,6 +388,59 @@ describe("observer providers", () => {
     }
   });
 
+  it("passes observer routing into Worktrunk hook doctor checks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-worktrunk-hooks-factory-"));
+    try {
+      const command = join(root, "wt");
+      const configPath = join(root, "station.config.toml");
+      const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+      const stateDir = join(root, "state");
+      const observerSocketPath = join(root, "run", "observer.sock");
+      const hookSpoolDir = join(stateDir, "spool", "hooks");
+      await writeFile(command, "#!/bin/sh\nprintf '%s\\n' --yes\n", "utf8");
+      await chmod(command, 0o700);
+      await installWorktrunkHooks({
+        worktrunkConfigPath,
+        stationConfigPath: configPath,
+        observerSocketPath,
+        stateDir,
+        hookSpoolDir,
+        autoStartFromHooks: false,
+        hookBin: join(root, "checkout with space", "bin", "stn-ingress"),
+      });
+
+      const registry = createProviderRegistry({
+        ...config,
+        observer: {
+          stateDir,
+          socketPath: observerSocketPath,
+          autoStartFromHooks: false,
+        },
+        defaults: {
+          ...config.defaults,
+          worktreeProvider: "worktrunk",
+        },
+        worktree: {
+          worktrunk: {
+            command,
+            configPath: worktrunkConfigPath,
+            useLifecycleHooks: true,
+          },
+        },
+      });
+
+      await expect(
+        registry.worktree.doctorChecks?.({ stationConfigPath: configPath, projects: [] }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "worktrunk-hooks", status: "ok" }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("passes Cursor command config into the Cursor harness provider", async () => {
     const registry = createProviderRegistry({
       ...config,
@@ -536,6 +590,8 @@ describe("observer providers", () => {
         "/tmp/station/web/task",
         "--profile",
         "station",
+        "--enable",
+        "hooks",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",

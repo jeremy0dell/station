@@ -109,6 +109,8 @@ describe("CodexHarnessProvider", () => {
         "/tmp/station/web/task",
         "--profile",
         "station",
+        "--enable",
+        "hooks",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",

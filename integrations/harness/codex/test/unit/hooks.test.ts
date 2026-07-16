@@ -70,6 +70,7 @@ describe("Codex hook setup", () => {
       observerSocketPath: "/tmp/station/run/observer.sock",
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
+      hookBin: "/tmp/checkout/bin/stn-ingress",
       env,
     });
     const second = await installCodexHooks({
@@ -78,6 +79,7 @@ describe("Codex hook setup", () => {
       observerSocketPath: "/tmp/station/run/observer.sock",
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
+      hookBin: "/tmp/checkout/bin/stn-ingress",
       env,
     });
     const config = await readFile(configPath, "utf8");

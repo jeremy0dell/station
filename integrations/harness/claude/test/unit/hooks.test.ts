@@ -75,7 +75,7 @@ describe("Claude hook setup", () => {
     const claudeConfigDir = join(root, "claude-home");
     const settingsPath = join(root, "state", "hooks", "station-claude-settings.json");
     const hookScriptPath = join(root, "state", "hooks", "station-claude-hook.sh");
-    const options = {
+    const runtimeOptions = {
       claudeSettingsPath: settingsPath,
       claudeConfigDir,
       hookScriptPath,
@@ -86,8 +86,14 @@ describe("Claude hook setup", () => {
       env: {},
     };
 
-    const first = await installClaudeHooks(options);
-    const second = await installClaudeHooks(options);
+    const first = await installClaudeHooks({
+      ...runtimeOptions,
+      hookBin: "/tmp/checkout/bin/stn-ingress",
+    });
+    const second = await installClaudeHooks({
+      ...runtimeOptions,
+      hookBin: "/tmp/checkout/bin/stn-ingress",
+    });
     const script = await readFile(hookScriptPath, "utf8");
     const scriptMode = (await stat(hookScriptPath)).mode & 0o777;
     const settings = JSON.parse(await readFile(settingsPath, "utf8")) as {
@@ -105,7 +111,7 @@ describe("Claude hook setup", () => {
     expect(script).toContain("claude > /dev/null");
     expect(script).not.toContain("payload_file=");
     expect(scriptMode).toBe(0o700);
-    await expect(doctorClaudeHooks({ ...options, enabled: true })).resolves.toMatchObject({
+    await expect(doctorClaudeHooks({ ...runtimeOptions, enabled: true })).resolves.toMatchObject({
       status: "ok",
       installed: true,
       settingsPath,

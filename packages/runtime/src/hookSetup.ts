@@ -274,6 +274,56 @@ export function providerHookScriptRoutesByStationEnv(script: string, provider: s
   );
 }
 
+export function providerHookInvocationMatchesIgnoringBin(
+  actual: string,
+  expected: string,
+  provider: string,
+): boolean {
+  if (actual === expected) {
+    return true;
+  }
+  const actualNormalized = withoutProviderHookBin(actual, provider);
+  const expectedNormalized = withoutProviderHookBin(expected, provider);
+  return actualNormalized !== undefined && actualNormalized === expectedNormalized;
+}
+
+function withoutProviderHookBin(source: string, provider: string): string | undefined {
+  const markers = [
+    ` ${guardedArrayExpansion("SOCKET_ARG")} `,
+    " --socket ",
+    " --state-dir ",
+    " --spool-dir ",
+    " --config ",
+    " --no-auto-start ",
+    ` ${shellQuote(provider)}`,
+  ];
+  for (const marker of markers) {
+    let offset = 0;
+    for (;;) {
+      const boundary = source.indexOf(marker, offset);
+      if (boundary < 0) {
+        break;
+      }
+      const lineStart = source.lastIndexOf("\n", boundary) + 1;
+      const hookBin = source.slice(lineStart, boundary);
+      if (isProviderHookBinWord(hookBin)) {
+        return `${source.slice(0, lineStart)}<provider-hook-bin>${source.slice(boundary)}`;
+      }
+      offset = boundary + marker.length;
+    }
+  }
+  return undefined;
+}
+
+function isProviderHookBinWord(value: string): boolean {
+  const hookBin = shellSafeTokenPattern.test(value)
+    ? value
+    : /^'[^']*'(?:\\''[^']*')*$/.test(value)
+      ? value.slice(1, -1).replaceAll("'\\''", "'")
+      : undefined;
+  return hookBin === "stn-ingress" || hookBin?.endsWith("/stn-ingress") === true;
+}
+
 export function hookCommandsForEvents<EventName extends string>(
   eventNames: readonly EventName[],
   hookScriptPath: string,
@@ -402,5 +452,7 @@ export function commandLine(args: readonly string[]): string {
 }
 
 export function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+  return shellSafeTokenPattern.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
+
+const shellSafeTokenPattern = /^[A-Za-z0-9_./:=@+-]+$/;
