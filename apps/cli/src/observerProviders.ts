@@ -42,6 +42,7 @@ import { ProviderRegistry } from "@station/observer/internal";
 import {
   createOpenCodeHarnessProvider,
   type OpenCodeHarnessProviderOptions,
+  openCodeHookAdapter,
 } from "@station/opencode";
 import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
 import { systemClock, toIsoTimestamp } from "@station/runtime";
@@ -96,6 +97,7 @@ export function createProviderRegistry(
       claudeHookAdapter,
       codexHookAdapter,
       cursorHookAdapter,
+      openCodeHookAdapter,
       piHookAdapter,
       worktrunkHookAdapter,
     ],

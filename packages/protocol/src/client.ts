@@ -6,6 +6,7 @@ import type {
   EventFilter,
   HarnessEventReport,
   ObserverApi,
+  ObserverHealth,
   ProviderHookEvent,
   StationCommand,
   StationEvent,
@@ -37,6 +38,16 @@ export type CommandWaitOptions = {
   timeoutMs?: number;
 };
 
+/** Process identity pinned before a mutation; version may be absent in legacy health. */
+export type ExpectedObserverIdentity = Required<Pick<ObserverHealth, "pid" | "startedAt">> &
+  Pick<ObserverHealth, "version"> & {
+    socketPath: string;
+  };
+
+type ExpectedObserver =
+  | { kind: "build"; version: string }
+  | { kind: "process"; identity: ExpectedObserverIdentity };
+
 export type ObserverClient = ObserverApi & {
   waitForCommand(
     commandId: CommandId,
@@ -50,8 +61,8 @@ export type CreateObserverClientOptions = {
   requestId?: () => string;
   /** Exact Observer build selector required before each non-health operation. */
   expectedBuildVersion?: string;
-  /** Revalidates and supplies the exact selector immediately before a guarded operation. */
-  expectedBuildVersionProvider?: () => string;
+  /** Exact process identity required before an ownership-changing operation. */
+  expectedObserverIdentity?: ExpectedObserverIdentity;
 };
 
 type OpenSubscription = {
@@ -124,20 +135,15 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   method: TMethod,
   params?: unknown,
 ): Promise<ProtocolResult<TMethod>> {
-  const expectedBuildVersion =
-    method === "observer.health" ? undefined : resolveExpectedBuildVersion(options);
+  const expectedObserver =
+    method === "observer.health" ? undefined : resolveExpectedObserver(options);
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
     ({ signal }) =>
       openRequestConnection(options, signal, async (connection) => {
         const iterator = connection.messages()[Symbol.asyncIterator]();
-        if (expectedBuildVersion !== undefined) {
-          await assertExpectedObserverBuild(
-            connection,
-            iterator,
-            `${id}_health`,
-            expectedBuildVersion,
-          );
+        if (expectedObserver !== undefined) {
+          await assertExpectedObserver(connection, iterator, `${id}_health`, expectedObserver);
         }
         return readResponseForRequest(connection, iterator, id, method, params);
       }),
@@ -201,28 +207,44 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   }
 }
 
-async function assertExpectedObserverBuild(
+async function assertExpectedObserver(
   connection: NdjsonConnection,
   iterator: AsyncIterator<unknown>,
   id: string,
-  expectedBuildVersion: string,
+  expectedObserver: ExpectedObserver,
 ): Promise<void> {
   const health = await readResponseForRequest(connection, iterator, id, "observer.health");
-  assertObserverBuildVersion(expectedBuildVersion, health.version);
+  assertObserverIdentity(expectedObserver, health);
 }
 
-function assertObserverBuildVersion(
-  expectedBuildVersion: string,
-  actualBuildVersion: string | undefined,
+function assertObserverIdentity(
+  expectedObserver: ExpectedObserver,
+  actualObserver: ObserverHealth,
 ): void {
-  if (actualBuildVersion === expectedBuildVersion) {
+  const expectedBuildVersion =
+    expectedObserver.kind === "build"
+      ? expectedObserver.version
+      : expectedObserver.identity.version;
+  if (
+    (expectedObserver.kind === "build" && actualObserver.version === expectedBuildVersion) ||
+    (expectedObserver.kind === "process" &&
+      actualObserver.pid === expectedObserver.identity.pid &&
+      actualObserver.startedAt === expectedObserver.identity.startedAt &&
+      actualObserver.version === expectedObserver.identity.version &&
+      // Legacy health can omit socketPath; this connection already proves the configured endpoint.
+      (actualObserver.socketPath === undefined ||
+        actualObserver.socketPath === expectedObserver.identity.socketPath))
+  ) {
     return;
   }
 
-  const reportedBuildVersion = actualBuildVersion ?? "missing";
+  const reportedBuildVersion = actualObserver.version ?? "missing";
   throw protocolSafeError({
     code: "OBSERVER_BUILD_MISMATCH",
-    message: `Observer build mismatch: this client expects "${expectedBuildVersion}", but the socket owner reports "${reportedBuildVersion}".`,
+    message:
+      expectedObserver.kind === "build"
+        ? `Observer build mismatch: this client expects "${expectedBuildVersion}", but the socket owner reports "${reportedBuildVersion}".`
+        : "Observer process changed before the guarded operation could run.",
     hint: "Close and relaunch this client so it can hand off to the current Observer, or use a config with an isolated observer socket_path and state_dir.",
   });
 }
@@ -325,19 +347,19 @@ async function openSubscription(
   filter?: EventFilter,
   signal?: AbortSignal,
 ): Promise<OpenSubscription> {
-  const expectedBuildVersion = resolveExpectedBuildVersion(options);
+  const expectedObserver = resolveExpectedObserver(options);
   const connection = await connectUnixSocket(
     options.socketPath,
     options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
   );
   const iterator = connection.messages()[Symbol.asyncIterator]();
   try {
-    if (expectedBuildVersion !== undefined) {
-      await assertExpectedObserverBuildForSubscription(
+    if (expectedObserver !== undefined) {
+      await assertExpectedObserverForSubscription(
         connection,
         iterator,
         `${id}_health`,
-        expectedBuildVersion,
+        expectedObserver,
         requestTimeoutMs(options),
         signal,
       );
@@ -352,15 +374,23 @@ async function openSubscription(
   }
 }
 
-function resolveExpectedBuildVersion(options: CreateObserverClientOptions): string | undefined {
-  return options.expectedBuildVersionProvider?.() ?? options.expectedBuildVersion;
+function resolveExpectedObserver(
+  options: CreateObserverClientOptions,
+): ExpectedObserver | undefined {
+  if (options.expectedObserverIdentity !== undefined) {
+    return { kind: "process", identity: options.expectedObserverIdentity };
+  }
+  if (options.expectedBuildVersion !== undefined) {
+    return { kind: "build", version: options.expectedBuildVersion };
+  }
+  return undefined;
 }
 
-async function assertExpectedObserverBuildForSubscription(
+async function assertExpectedObserverForSubscription(
   connection: NdjsonConnection,
   iterator: AsyncIterator<unknown>,
   id: string,
-  expectedBuildVersion: string,
+  expectedObserver: ExpectedObserver,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -383,7 +413,7 @@ async function assertExpectedObserverBuildForSubscription(
     });
   }
   const health = parseProtocolResponseResult(response, "observer.health");
-  assertObserverBuildVersion(expectedBuildVersion, health.version);
+  assertObserverIdentity(expectedObserver, health);
 }
 
 async function readSubscriptionAck(

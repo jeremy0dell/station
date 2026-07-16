@@ -24,10 +24,15 @@ import {
 import { createStationHostClient } from "../../packages/station-host/dist/index.js";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-const alternateProductionSource = "apps/cli/src/observerProcess/health.ts";
+const alternateProductionSource = "apps/cli/src/commandRegistry.ts";
 const alternateBuildMarker = " (alternate binary smoke build)";
+let smokeRunSignal;
 
-if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
+class SmokeRunCancelledError extends Error {}
+
+if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
+  await runObserverCancellationSelfCheck();
+} else if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   await runFakeTmuxProcess(process.argv.slice(2));
 } else {
   const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
@@ -79,8 +84,15 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   let alternateBinaryPath;
   let alternateObserverVersion;
   let orderedSameVersionBuilds;
+  const cancellation = installSmokeCancellation();
+  smokeRunSignal = cancellation.signal;
 
   try {
+    if (process.env.STATION_BINARY_SMOKE_CANCELLATION_EXIT_SELF_CHECK === "1") {
+      process.kill(process.pid, "SIGINT");
+      await delay(0);
+      throw runCancelledError(process.execPath, [], cancellation.signal);
+    }
     await access(binaryPath, constants.X_OK);
     const installedRoot = dirname(await realpath(binaryPath));
     if (installedRoot === parse(installedRoot).root) {
@@ -103,8 +115,10 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
 
     if (!ptyOnly) {
       await requireCommittedCleanCheckout(repoRoot);
-      await runGit(["worktree", "add", "--detach", alternateWorktreePath, "HEAD"]);
       alternateWorktreeAdded = true;
+      await runGit(["worktree", "add", "--detach", alternateWorktreePath, "HEAD"], {
+        terminateDescendants: true,
+      });
       alternateBinaryPath = await buildAlternateBinary({
         worktreePath: alternateWorktreePath,
         expectedVersion,
@@ -190,14 +204,16 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
         "compiled persisted popup command round trip",
       );
 
-      await run(
+      observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      await runObserverStart(
         binaryPath,
         ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
         {
+          client: observerClient,
           env: childEnv,
+          socketPath,
         },
       );
-      observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
       const health = await observerClient.health();
       observerPid = health.pid;
       assertEqual(health.status, "healthy", "compiled observer health");
@@ -221,11 +237,13 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
         ],
         expectedVersion,
       );
-      await run(
+      await runObserverStart(
         binaryPath,
         ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
         {
+          client: observerClient,
           env: childEnv,
+          socketPath,
         },
       );
       assertEqual((await observerClient.health()).pid, observerPid, "same-build observer reuse");
@@ -451,10 +469,10 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
             "current observer exits before lower-build setup",
           );
         }
-        await run(
+        await runObserverStart(
           lowerBuild.binaryPath,
           ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-          { env: childEnv },
+          { client: observerClient, env: childEnv, socketPath },
         );
         const lowerHealth = await observerClient.health();
         observerPid = lowerHealth.pid;
@@ -516,10 +534,10 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
         fail("same-version binary ordering was not initialized");
       }
       const lowerObserverPid = observerPid;
-      await run(
+      await runObserverStart(
         higherBuild.binaryPath,
         ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-        { env: childEnv },
+        { client: observerClient, env: childEnv, socketPath },
       );
       const higherHealth = await observerClient.health();
       observerPid = higherHealth.pid;
@@ -618,10 +636,10 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
       });
       if (expectedVersion.startsWith("0.0.0-") && sourceVersion !== expectedVersion) {
         const previousObserverPid = observerPid;
-        await run(
+        await runObserverStart(
           process.execPath,
           [sourceCliPath, "--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-          { env: childEnv },
+          { client: observerClient, env: childEnv, socketPath },
         );
         const successorHealth = await observerClient.health();
         observerPid = successorHealth.pid;
@@ -643,10 +661,10 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
           );
         }
 
-        await run(
+        await runObserverStart(
           binaryPath,
           ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-          { env: childEnv },
+          { client: observerClient, env: childEnv, socketPath },
         );
         assertEqual(
           (await observerClient.health()).pid,
@@ -696,9 +714,11 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
       join(stateDir, "run", "assets", "ctty"),
       (name) => name === "station-ctty-helper",
     );
-
     process.stdout.write("binary smoke passed\n");
+  } catch (error) {
+    if (!(error instanceof SmokeRunCancelledError)) throw error;
   } finally {
+    smokeRunSignal = undefined;
     try {
       if (observerClient !== undefined) {
         await observerClient.stop().catch(() => undefined);
@@ -724,7 +744,11 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
           await removeTemporaryWorktree(alternateWorktreePath);
         }
       } finally {
-        await rm(root, { recursive: true, force: true });
+        try {
+          await rm(root, { recursive: true, force: true });
+        } finally {
+          cancellation.dispose();
+        }
       }
     }
   }
@@ -744,8 +768,8 @@ async function buildAlternateBinary({ worktreePath, expectedVersion }) {
   const sourcePath = join(worktreePath, alternateProductionSource);
   const source = await readFile(sourcePath, "utf8");
   const originalMessage =
-    'message: "Observer build handoff was refused because ownership could not be changed safely.",';
-  const alternateMessage = `message: "Observer build handoff was refused because ownership could not be changed safely${alternateBuildMarker}.",`;
+    'description: "STATION is a terminal-native control plane for AI-agent worktree sessions.",';
+  const alternateMessage = `description: "STATION is a terminal-native control plane for AI-agent worktree sessions${alternateBuildMarker}.",`;
   if (source.split(originalMessage).length !== 2) {
     fail(
       `alternate binary smoke could not apply its production change to ${alternateProductionSource}`,
@@ -758,22 +782,27 @@ async function buildAlternateBinary({ worktreePath, expectedVersion }) {
   await run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], {
     cwd: worktreePath,
     env: buildEnv,
+    terminateDescendants: true,
     timeoutMs: 300_000,
   });
   await run("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], {
     cwd: join(worktreePath, "station"),
     env: buildEnv,
+    terminateDescendants: true,
     timeoutMs: 300_000,
   });
   await run("pnpm", ["build:binary", "--", "--version", expectedVersion], {
     cwd: worktreePath,
     env: buildEnv,
+    terminateDescendants: true,
     timeoutMs: 900_000,
   });
   await assertOnlyAlternateProductionChange(worktreePath);
 
   const path = join(worktreePath, "station", "dist", "bin", "stn");
   await access(path, constants.X_OK);
+  const help = await run(path, ["--help"], { env: buildEnv });
+  assertIncludes(help.stdout, alternateBuildMarker, "alternate binary production-source delta");
   return path;
 }
 
@@ -807,9 +836,11 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
   try {
     const version = await run(binaryPath, ["--version"], { env });
     assertEqual(version.stdout.trim(), expectedVersion, `${label} display version`);
-    await run(binaryPath, ["--config", configPath, "observer", "start", "--timeout-ms", "30000"], {
-      env,
-    });
+    await runObserverStart(
+      binaryPath,
+      ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+      { client, env, socketPath },
+    );
     const health = await client.health();
     pid = health.pid;
     assertEqual(health.status, "healthy", `${label} health`);
@@ -1471,40 +1502,174 @@ function quoteShellWord(value) {
 
 function run(command, args, options = {}) {
   return new Promise((resolveRun, reject) => {
+    const cancellationSignal =
+      options.deferSmokeCancellation === true ? undefined : (options.signal ?? smokeRunSignal);
+    if (cancellationSignal?.aborted === true) {
+      reject(runCancelledError(command, args, cancellationSignal));
+      return;
+    }
+    const terminateDescendants =
+      options.terminateDescendants === true && process.platform !== "win32";
     const child = spawn(command, args, {
       cwd: options.cwd,
+      detached: terminateDescendants,
       env: options.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
+    let terminationError;
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      cancellationSignal?.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const terminate = (error) => {
+      if (terminationError !== undefined) return;
+      terminationError = error;
+      killRunChild(child, terminateDescendants);
+    };
     const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`${command} ${args.join(" ")} timed out\n${stderr}`));
+      terminate(new Error(`${command} ${args.join(" ")} timed out\n${stderr}`));
     }, options.timeoutMs ?? 30_000);
+    const onAbort = () => {
+      terminate(runCancelledError(command, args, cancellationSignal));
+    };
+    cancellationSignal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.once("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      finish(() => reject(error));
     });
-    child.once("exit", (code, signal) => {
-      clearTimeout(timeout);
+    child.once("close", (code, signal) => {
+      if (terminationError !== undefined) {
+        finish(() => reject(terminationError));
+        return;
+      }
       const allowed = options.allowedExitCodes ?? [0];
       if (code === null || !allowed.includes(code)) {
-        reject(
-          new Error(
-            `${command} ${args.join(" ")} exited ${code ?? signal ?? "unknown"}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        finish(() =>
+          reject(
+            new Error(
+              `${command} ${args.join(" ")} exited ${code ?? signal ?? "unknown"}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+            ),
           ),
         );
         return;
       }
-      resolveRun({ code, stdout, stderr });
+      finish(() => resolveRun({ code, stdout, stderr }));
     });
     child.stdin.end(options.input);
   });
+}
+
+async function runObserverStart(command, args, { client, env, socketPath }) {
+  const cancellationSignal = smokeRunSignal;
+  if (cancellationSignal?.aborted === true) {
+    throw runCancelledError(command, args, cancellationSignal);
+  }
+  // The launcher owns its detached child until startup resolves, so cancellation waits for that bounded handoff.
+  await run(command, args, {
+    deferSmokeCancellation: true,
+    env,
+    timeoutMs: 35_000,
+  });
+  if (cancellationSignal?.aborted !== true) return;
+
+  const health = await client.health();
+  await client.stop().catch(() => undefined);
+  await waitForMissing(socketPath).catch(() => undefined);
+  await terminateProcess(health.pid);
+  throw runCancelledError(command, args, cancellationSignal);
+}
+
+async function runObserverCancellationSelfCheck() {
+  const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-cancel-"));
+  const pidPath = join(root, "observer.pid");
+  const socketPath = join(root, "observer.sock");
+  const controller = new AbortController();
+  let observerPid;
+  smokeRunSignal = controller.signal;
+  const cancel = setTimeout(() => controller.abort("SIGINT"), 50);
+  const launcher = `
+    const { spawn } = require("node:child_process");
+    const { writeFileSync } = require("node:fs");
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    writeFileSync(${JSON.stringify(pidPath)}, String(child.pid));
+    writeFileSync(${JSON.stringify(socketPath)}, "published");
+    setTimeout(() => {}, 150);
+  `;
+  const client = {
+    health: async () => {
+      observerPid = Number(await readFile(pidPath, "utf8"));
+      return { pid: observerPid };
+    },
+    stop: async () => {
+      if (observerPid !== undefined) signalProcess(observerPid, "SIGTERM");
+      await rm(socketPath, { force: true });
+    },
+  };
+
+  try {
+    await runObserverStart(process.execPath, ["-e", launcher], {
+      client,
+      env: process.env,
+      socketPath,
+    });
+    fail("cancelled observer startup unexpectedly completed");
+  } catch (error) {
+    assertIncludes(String(error), "was cancelled by SIGINT", "observer startup cancellation");
+  } finally {
+    clearTimeout(cancel);
+    smokeRunSignal = undefined;
+    if (observerPid !== undefined) await terminateProcess(observerPid);
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+function installSmokeCancellation() {
+  const controller = new AbortController();
+  const handleSignal = (signal) => {
+    process.exitCode = signal === "SIGINT" ? 130 : 143;
+    controller.abort(signal);
+  };
+  const onInterrupt = () => handleSignal("SIGINT");
+  const onTerminate = () => handleSignal("SIGTERM");
+  process.on("SIGINT", onInterrupt);
+  process.on("SIGTERM", onTerminate);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      process.off("SIGINT", onInterrupt);
+      process.off("SIGTERM", onTerminate);
+    },
+  };
+}
+
+function killRunChild(child, terminateDescendants) {
+  if (terminateDescendants && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // The direct child remains the safe fallback if its process group has already exited.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
+function runCancelledError(command, args, signal) {
+  const reason = signal.reason === undefined ? "" : ` by ${String(signal.reason)}`;
+  return new SmokeRunCancelledError(`${command} ${args.join(" ")} was cancelled${reason}.`);
 }
 
 function collectOutput(child) {

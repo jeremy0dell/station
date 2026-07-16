@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import * as contracts from "@station/contracts";
 import { installCursorHooks } from "@station/cursor";
+import { openCodeHookAdapter } from "@station/opencode";
 import { createPiHarnessProvider } from "@station/pi";
 import { createStationHostController } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
@@ -67,6 +68,12 @@ describe("observer providers", () => {
     expect(registry.defaultTerminalId).toBe(config.defaults.terminal);
     expect(registry.terminal).not.toBe(managedTerminal);
     expect("terminalIntentRunner" in registry).toBe(false);
+  });
+
+  it("registers OpenCode hook normalization at the CLI composition root", () => {
+    const registry = createProviderRegistry(config);
+
+    expect(registry.hookAdapters.get("opencode")).toBe(openCodeHookAdapter);
   });
 
   it("keeps explicit noop providers healthy for empty/test startup", async () => {

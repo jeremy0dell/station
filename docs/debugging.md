@@ -188,9 +188,10 @@ version (`0.7.0` in this example).
 
 `OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
 could not proceed safely. Read the running/requested display versions and build
-IDs in the error. A same-version legacy or losing build must be stopped
-explicitly or isolated; it must not attach to different code. Inspect
-`logs/observer-boot.log`, compare `lsof -t <socket>` with the
+IDs in the error. A same-version legacy or losing identified build with stable
+PID/start-time health can be stopped explicitly; missing process identity
+refuses rather than risking a successor. It must not attach to different code.
+Inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
 strict pidfile and `ps -ww -p <pid> -o lstart=,command=`, then retry only after
 resolving missing or conflicting evidence. Automatic handoff never uses
 SIGKILL; `stn observer reap --force` remains the explicit operator path for

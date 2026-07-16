@@ -1,4 +1,5 @@
-import { HarnessEventObservationSchema } from "@station/contracts";
+import type { ProviderHookEvent } from "@station/contracts";
+import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactOpenCodeHookPayload } from "../../src/compaction";
 import { OpenCodeCompactEventSchema } from "../../src/eventSchemas";
@@ -7,6 +8,7 @@ import {
   openCodeHookPayloadToHarnessEventReport,
   parseOpenCodeCompactEvent,
 } from "../../src/events";
+import { openCodeHookAdapter } from "../../src/hookAdapter";
 import { openCodeForwardedEventTypes, openCodeIngressRules } from "../../src/ingressRules";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -326,6 +328,116 @@ describe("OpenCode event parsing", () => {
       rawEventType: "file.edited",
       providerData: {
         filePath: "/tmp/station/web/task/src/app.ts",
+      },
+    });
+  });
+
+  it("enriches and scopes forwarded OpenCode hooks with Station identity", () => {
+    const baseEvent: ProviderHookEvent = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      provider: "opencode",
+      kind: "harness",
+      event: "session.idle",
+      receivedAt: now,
+    };
+
+    expect(
+      openCodeHookAdapter.enrichPayload?.({
+        payload: {
+          event_type: "session.idle",
+          cwd: "/tmp/station/web/task",
+        },
+        env: {
+          STATION_SESSION_ID: "ses_web_task",
+          STATION_WORKTREE_ID: "wt_web_task",
+        },
+      }),
+    ).toMatchObject({
+      station_session_id: "ses_web_task",
+      station_worktree_id: "wt_web_task",
+    });
+    expect(
+      openCodeHookAdapter.decideScope?.({
+        ...baseEvent,
+        payload: {
+          station_session_id: "ses_web_task",
+          station_worktree_id: "wt_web_task",
+        },
+      }),
+    ).toEqual({ action: "accept", reason: "station-env" });
+    expect(
+      openCodeHookAdapter.decideScope?.({
+        ...baseEvent,
+        event: "message.part.delta",
+        payload: {
+          station_session_id: "ses_web_task",
+          station_worktree_id: "wt_web_task",
+        },
+      }),
+    ).toEqual({ action: "ignore", reason: "event-not-forwarded" });
+    expect(
+      openCodeHookAdapter.decideScope?.({
+        ...baseEvent,
+        payload: {
+          station_worktree_id: "wt_web_task",
+        },
+      }),
+    ).toEqual({ action: "ignore", reason: "missing-station-env" });
+  });
+
+  it("converts OpenCode hook envelopes to reports with provider observation time", () => {
+    const observedAt = "2026-05-20T11:59:59.000Z";
+    const hookEvent: ProviderHookEvent = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_opencode_idle",
+      provider: "opencode",
+      kind: "harness",
+      event: "session.idle",
+      receivedAt: now,
+      payload: {
+        event_type: "session.idle",
+        observed_at: observedAt,
+        cwd: "/tmp/station/web/task",
+        opencode_session_id: "opencode_session_123",
+        station_worktree_id: "wt_web_task",
+        station_session_id: "ses_web_task",
+        station_terminal_target_id: "tmux:station:@1:%2",
+      },
+    };
+    const compacted = openCodeHookAdapter.compactPayload?.(hookEvent);
+    if (compacted === undefined) {
+      throw new Error("OpenCode hook payload compaction was not registered.");
+    }
+    const result = openCodeHookAdapter.toHarnessEventReport?.({
+      event: compacted.event,
+      payloadSummary: compacted.payloadSummary,
+      fallbackReportId: () => "fallback_report_id",
+    });
+    if (result === undefined || !result.ok) {
+      throw new Error("OpenCode hook report mapping failed.");
+    }
+
+    expect(result.report).toMatchObject({
+      reportId: "hook_opencode_idle",
+      provider: "opencode",
+      kind: "harness",
+      eventType: "session.idle",
+      observedAt,
+      status: {
+        value: "idle",
+      },
+      turn: {
+        kind: "turn_completed",
+      },
+      correlation: {
+        worktreeId: "wt_web_task",
+        sessionId: "ses_web_task",
+        terminalTargetId: "tmux:station:@1:%2",
+        nativeSessionId: "opencode_session_123",
+      },
+      diagnostics: {
+        rawEventType: "session.idle",
+        compacted: false,
       },
     });
   });

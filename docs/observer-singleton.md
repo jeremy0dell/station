@@ -118,7 +118,9 @@ Boot sequence while holding `C`:
    candidate replaces an incumbent only through verified graceful handoff;
    same-version legacy, losing, incomplete, conflicting, or wedged evidence refuses. The
    original 3d-a contract stopped at attach, while 3d-b extends this branch
-   without adding client-side ownership mutation.
+   without adding client-side ownership mutation. The controlled stop request
+   pins the revalidated process health and performs its final health check plus
+   stop on one connection, so a socket replacement fails closed.
 3. For `absent` or `stale`, **bind or reclaim** through the existing claimed
    bind path, capture socket identity, publish and fsync the socket-specific
    pidfile, arm the seeded ownership watcher, and commit readiness.
@@ -126,6 +128,15 @@ Boot sequence while holding `C`:
    reconcile follows outside the claim. A pre-ready stop or startup failure
    retains the claim through socket and pidfile cleanup, then releases it from
    the outer lifecycle cleanup path.
+
+After stop begins, lifecycle admission rejects new command, ingress, snapshot,
+diagnostic, and subscription operations before API routing. Health and repeated
+stop remain lifecycle-only; health stays gated while shutdown converges.
+Explicit CLI stop/restart pins PID and start time before sending stop on the same
+connection; legacy health may omit build version or socket path, but missing
+process identity refuses. The stop receipt is only acceptance: CLI success waits
+until the endpoint is no longer listening, including through an unhealthy
+shutdown transition.
 
 Supporting:
 - Normal CLI and provider-hook children receive the caller's bounded startup

@@ -8,7 +8,12 @@ import {
   loadConfig,
   type StationConfig,
 } from "@station/config";
-import type { ObserverApi, ObserverProcessIdentity, ObserverStopReceipt } from "@station/contracts";
+import type {
+  ObserverApi,
+  ObserverProcessIdentity,
+  ObserverStopReceipt,
+  SafeError,
+} from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import {
   parseStationObserverBuildVersion,
@@ -376,6 +381,7 @@ async function runClaimedObserverRuntime(input: {
       api,
       clock: systemClock,
       drainOnStart: false,
+      guardOperation: startupGate.assertReadyForOperation,
     });
     ownsSocket = true;
     const boundIdentity = await readSocketIdentity(socketPath);
@@ -542,6 +548,7 @@ function resolvePath(input: string, homeDir: string): string {
 
 type ObserverStartupGate = {
   requestStop(): void;
+  assertReadyForOperation(): void;
   settleReady(releaseClaim: () => ObserverBootClaimReleaseResult): ObserverStartupCommit;
   settleFailed(): void;
   waitUntilSettled(): Promise<void>;
@@ -572,6 +579,17 @@ export function createObserverStartupGate(): ObserverStartupGate {
       if (state === "stopping" || state === "failed") return;
       if (state === "ready") ready = pending();
       state = "stopping";
+    },
+    assertReadyForOperation: () => {
+      if (state === "ready") return;
+      throw {
+        tag: "ObserverLifecycleError",
+        code: state === "starting" ? "OBSERVER_NOT_READY" : "OBSERVER_STOPPING",
+        message:
+          state === "starting"
+            ? "Observer is not ready to accept operations."
+            : "Observer is stopping and cannot accept new operations.",
+      } satisfies SafeError;
     },
     settleReady: (releaseClaim) => {
       if (state !== "starting") {

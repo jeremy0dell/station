@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,9 @@ describe("station Pi extension", () => {
 
     expect(source).toContain('from "./event/names.js"');
     expect(source).not.toContain('from "./events.js"');
-    expect(source).not.toContain("node:child_process");
+    expect(source).toContain("node:child_process");
+    expect(source).not.toContain("@station/protocol");
+    expect(source).not.toContain("HarnessEventReportSpoolRecordSchema");
     expect(source).not.toContain("station-hook");
   });
 
@@ -117,18 +119,39 @@ describe("station Pi extension", () => {
     expect(JSON.stringify(delivered)).not.toContain("raw command body");
   });
 
-  it("spools compact reports when the observer socket is unavailable", async () => {
+  it("routes compact payloads and explicit runtime paths through stn-ingress", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-pi-extension-"));
+    const ingressPath = join(root, "stn-ingress");
+    const argsPath = join(root, "ingress-args.json");
+    const stdinPath = join(root, "ingress-stdin.json");
     const spoolDir = join(root, "spool", "hooks");
+    await writeFile(
+      ingressPath,
+      [
+        `#!${process.execPath}`,
+        'const { writeFileSync } = require("node:fs");',
+        `writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(process.argv.slice(2)));`,
+        "let input = '';",
+        "process.stdin.setEncoding('utf8');",
+        "process.stdin.on('data', (chunk) => { input += chunk; });",
+        `process.stdin.on('end', () => writeFileSync(${JSON.stringify(stdinPath)}, input));`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
     const handlers = new Map<string, (event: unknown, context: unknown) => Promise<void>>();
     const deps: PiExtensionDeps = {
       env: {
         ...env(),
-        STATION_OBSERVER_SOCKET_PATH: join(root, "missing.sock"),
+        STATION_INGRESS_BIN: ingressPath,
+        STATION_OBSERVER_SOCKET_PATH: join(root, "observer.sock"),
+        STATION_OBSERVER_STATE_DIR: join(root, "state"),
         STATION_HOOK_SPOOL_DIR: spoolDir,
       },
       pid: 4321,
-      reportId: () => "report_pi_session_start",
+      reportId: () => {
+        throw new Error("production ingress must not build a second normalized report");
+      },
     };
 
     registerStationPiExtension(
@@ -141,21 +164,57 @@ describe("station Pi extension", () => {
     );
     await handlers.get("session_start")?.({ reason: "startup" }, context());
 
-    const files = await readdir(spoolDir);
-    expect(files).toHaveLength(1);
-    const record = JSON.parse(await readFile(join(spoolDir, files[0] ?? ""), "utf8"));
-    expect(record).toMatchObject({
-      report: {
-        reportId: "report_pi_session_start",
-        provider: "pi",
-        eventType: "session_start",
-        correlation: {
-          sessionId: "ses_web_task",
-          worktreeId: "wt_web_task",
-        },
-      },
+    expect(JSON.parse(await readFile(argsPath, "utf8"))).toEqual([
+      "--socket",
+      join(root, "observer.sock"),
+      "--state-dir",
+      join(root, "state"),
+      "--spool-dir",
+      spoolDir,
+      "--config",
+      "/tmp/station/config.toml",
+      "pi",
+      "session_start",
+    ]);
+    expect(JSON.parse(await readFile(stdinPath, "utf8"))).toMatchObject({
+      event_type: "session_start",
+      reason: "startup",
+      station_session_id: "ses_web_task",
+      station_worktree_id: "wt_web_task",
     });
   });
+
+  it("bounds a hung stn-ingress child without writing a provider-owned spool", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-pi-extension-"));
+    const ingress = await writeHangingIngress(root);
+    const spoolDir = join(root, "spool", "hooks");
+    const handlers = new Map<string, (event: unknown, context: unknown) => Promise<void>>();
+
+    registerStationPiExtension(
+      {
+        on: (event, handler) => {
+          handlers.set(event, handler);
+        },
+      },
+      {
+        env: {
+          ...env(),
+          STATION_INGRESS_BIN: ingress.path,
+          STATION_HOOK_SPOOL_DIR: spoolDir,
+        },
+      },
+    );
+
+    const startedAt = Date.now();
+    await expect(
+      handlers.get("session_start")?.({ reason: "startup" }, context()),
+    ).resolves.toBeUndefined();
+
+    expect(Date.now() - startedAt).toBeLessThan(7_000);
+    await expect(access(ingress.startedPath)).resolves.toBeUndefined();
+    await waitForProcessExit(Number(await readFile(ingress.pidPath, "utf8")));
+    await expect(access(spoolDir)).rejects.toThrow();
+  }, 8_000);
 
   it("omits prompts, message bodies, tool results, and system prompts", () => {
     const rawSecret = "secret raw body";
@@ -210,4 +269,39 @@ function context() {
       getSessionFile: () => "/tmp/pi/session.jsonl",
     },
   };
+}
+
+async function writeHangingIngress(root: string) {
+  const path = join(root, "stn-ingress");
+  const startedPath = join(root, "ingress-started");
+  const pidPath = join(root, "ingress-pid");
+  await writeFile(
+    path,
+    [
+      `#!${process.execPath}`,
+      'const { writeFileSync } = require("node:fs");',
+      `writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));`,
+      "process.stdin.resume();",
+      "process.stdin.on('end', () => {",
+      `  writeFileSync(${JSON.stringify(startedPath)}, 'started');`,
+      "  setInterval(() => undefined, 1000);",
+      "});",
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { path, startedPath, pidPath };
+}
+
+async function waitForProcessExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } catch {
+      return;
+    }
+  }
+  throw new Error(`Timed out waiting for ingress process ${pid} to exit.`);
 }

@@ -311,9 +311,11 @@ Current startup proceeds in this order:
 
 Version-and-build-aware replacement remains inside step 3 while the claim is held. The
 handoff use case revalidates `lsof`, pidfile, argv, and OS start token before
-controlled stop and before its single permitted SIGTERM. A stop receipt is not
-exit proof: successor startup requires both socket closure and exact incumbent
-death. Missing, invalid, conflicting, or wedged evidence returns
+controlled stop and before its single permitted SIGTERM. Controlled stop binds
+the revalidated health identity to a health-plus-stop exchange on one connection,
+so a replacement cannot be stopped through the earlier incumbent's authorization.
+A stop receipt is not exit proof: successor startup requires both socket closure
+and exact incumbent death. Missing, invalid, conflicting, or wedged evidence returns
 `OBSERVER_HANDOFF_REFUSED`; automatic handoff never sends SIGKILL. Station Host
 is outside this lifecycle and continues to own live PTYs independently.
 
@@ -321,6 +323,12 @@ After startup accepts an Observer, command, ingress, and Station clients pin
 that exact selector. Each later operation checks health and sends the request
 over the same socket connection, so replacement between readiness and mutation
 fails with `OBSERVER_BUILD_MISMATCH` instead of delegating work to new code.
+The exported Station client runtime therefore accepts either an injected service
+or a socket plus the already-accepted build selector; unpinned socket-backed
+construction refuses before any connection attempt.
+Once stop begins, the server routes only lifecycle health and idempotent stop
+traffic; health remains gated by shutdown state, while application operations
+fail with `OBSERVER_STOPPING` before API routing.
 
 Composition must make lifecycle ownership obvious. Anything that owns a timer,
 fiber, watcher, queue, socket, child process, or durable handle must have a
@@ -330,6 +338,12 @@ defined startup failure path and shutdown owner.
 
 The current API stop path drains harness ingress and metadata watchers, then
 schedules process shutdown. Process shutdown disables health responses first.
+The explicit CLI stop/restart path pins PID and start time, plus version and
+socket when reported, before sending stop on the same connection. Legacy health
+may omit version or socket, but missing PID/start time refuses. A stop receipt
+does not complete the CLI operation while the endpoint remains live; shutdown-
+gated or otherwise unhealthy responses keep polling until the socket closes or
+the bounded stop timeout fails.
 If the process still owns the socket, it conditionally removes only an exact
 matching process identity and syncs the socket directory before the protocol
 server releases the socket. A displaced process marks ownership lost before
@@ -420,11 +434,14 @@ already-normalized HarnessEventReport -> strict validation ---+
     -> schedule reconcile for fresh provider-backed graph truth
 ```
 
-`stn-ingress` performs delivery and writes the offline spool when the Observer
-cannot be reached. Hooks delivered as raw `ProviderHookEvent`s are normalized
-Observer-side through injected provider hook adapters. Integrations that
-already own a typed report path, including Pi, normalize once in that adapter
-and submit a `HarnessEventReport`; the Observer does not normalize it again.
+`stn-ingress` owns build-aware delivery and writes the offline spool when a
+compatible Observer cannot be reached for an ordinary transport failure. Known
+build, schema, and handoff incompatibility is rejected instead of entering the
+shared spool, where a mismatched incumbent could otherwise drain it. Shipped
+Pi and OpenCode transports invoke `stn-ingress`; hooks delivered as raw
+`ProviderHookEvent`s are normalized Observer-side through the selected injected
+provider adapter exactly once. Integrations that submit an already-normalized
+`HarnessEventReport` bypass provider normalization in the Observer.
 
 The harness queue acknowledges accepted online work before durable processing
 or reconcile. Queue acceptance is process-memory acceptance, not a durability
@@ -498,12 +515,12 @@ from the diagnostic use case.
 | Concern | Current contract |
 | --- | --- |
 | Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
-| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Source clients reverify the published identity before using it. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
+| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
-| Harness ingress | One worker processes a bounded pending map. New reports can replace pending work for the same key; a full map rejects unrelated work with a backpressure error. |
+| Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |

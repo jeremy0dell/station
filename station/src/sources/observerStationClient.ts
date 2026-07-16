@@ -11,14 +11,14 @@ export type CreateObserverStationClientOptions = {
   socketPath?: string;
   /** Exact Observer selector accepted by the CLI before launching Station. */
   expectedBuildVersion?: string;
-  /** Revalidates source state and supplies the exact selector for each operation. */
-  expectedBuildVersionProvider?: () => string;
   /** Test seam: inject a fake observer service instead of a socket. */
   service?: ObserverService;
   onAttentionNeeded?: (event: StationAttentionEvent) => void;
 };
 
 /**
+ * COMPOSITION ROOT
+ *
  * One shared ObserverService feeds runtime state and command dispatch. Snapshot
  * and reconcile operations must go through the runtime-backed bridge, or the
  * next incremental event can overwrite the side-loaded state.
@@ -33,9 +33,6 @@ export function createObserverStationClient(
       ...(options.expectedBuildVersion === undefined
         ? {}
         : { expectedBuildVersion: options.expectedBuildVersion }),
-      ...(options.expectedBuildVersionProvider === undefined
-        ? {}
-        : { expectedBuildVersionProvider: options.expectedBuildVersionProvider }),
       clientLabel: "Station",
     });
   const runtime = createStationClientRuntime({

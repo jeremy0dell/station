@@ -88,7 +88,7 @@ export function observerHandoffRefusedError(
     tag: "ObserverStartupError",
     code: "OBSERVER_HANDOFF_REFUSED",
     message: "Observer build handoff was refused because ownership could not be changed safely.",
-    hint: `Running build: ${formatObserverBuild(health.version)}. Requested build: ${formatObserverBuild(requestedVersion)}. ${reason} Run \`stn observer stop\` and retry, or use an isolated Observer socket/state directory.`,
+    hint: `Running build: ${formatObserverBuild(health.version)}. Requested build: ${formatObserverBuild(requestedVersion)}. ${reason} Run \`stn observer stop\` and retry when health reports stable process identity; otherwise use the matching checkout or an isolated Observer socket/state directory.`,
   };
 }
 

@@ -1,8 +1,13 @@
 import { lstat } from "node:fs/promises";
-import type { ObserverStopReceipt, SafeError } from "@station/contracts";
+import type { ObserverHealth, ObserverStopReceipt, SafeError } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
-import { createObserverClient, isSocketStale } from "@station/protocol";
 import {
+  createObserverClient,
+  type ExpectedObserverIdentity,
+  isSocketStale,
+} from "@station/protocol";
+import {
+  parseStationObserverBuildVersion,
   type RuntimeClock,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithRetryAndTimeout,
@@ -10,11 +15,7 @@ import {
   stationObserverBuildVersion,
   systemClock,
 } from "@station/runtime";
-import {
-  classifyObserverHealth,
-  defaultClientFactory,
-  observerHandoffRefusedError,
-} from "./observerProcess/health.js";
+import { classifyObserverHealth, observerHandoffRefusedError } from "./observerProcess/health.js";
 import { startObserverProcess } from "./observerProcess/startup.js";
 import type {
   ObserverProcessDeps,
@@ -136,18 +137,57 @@ export async function startObserver(
   };
 }
 
+/**
+ * USE CASE
+ *
+ * Stops only the exact Observer process attributed by the initial health response.
+ */
 export async function stopObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStopReceipt> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
-  const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath);
-  const receipt = await client.stop();
+  const status = await getObserverStatus({ ...options, paths }, deps);
+  if (status.status !== "running") {
+    throw (
+      status.error ?? {
+        tag: "ObserverConnectionError",
+        code: "OBSERVER_NOT_RUNNING",
+        message: "Observer is not running.",
+      }
+    );
+  }
+  return stopRunningObserver(status, options, deps);
+}
+
+async function stopRunningObserver(
+  status: Extract<ObserverStatus, { status: "running" }>,
+  options: ObserverProcessOptions,
+  deps: ObserverProcessDeps,
+): Promise<ObserverStopReceipt> {
   const timeoutMs = options.timeoutMs ?? 5_000;
+  const deadlineMs = Date.now() + timeoutMs;
+  const expectedObserverIdentity = requireExpectedObserverIdentity(status);
+  const requestTimeoutMs = remainingStopTimeoutMs(deadlineMs);
+  if (requestTimeoutMs <= 0) throw observerStopTimeoutError();
+  const client =
+    deps.clientFactory?.(status.paths.socketPath, {
+      expectedObserverIdentity,
+      timeoutMs: requestTimeoutMs,
+    }) ??
+    createObserverClient({
+      socketPath: status.paths.socketPath,
+      timeoutMs: requestTimeoutMs,
+      expectedObserverIdentity,
+    });
+  const receipt = await client.stop();
+  const convergenceTimeoutMs = remainingStopTimeoutMs(deadlineMs);
+  if (convergenceTimeoutMs <= 0) throw observerStopTimeoutError();
+  const retries = Math.max(1, Math.ceil(convergenceTimeoutMs / 25));
   const stopped = await runRuntimeBoundaryWithRetryAndTimeout(
     {
       operation: "cli.observer.waitForStop",
-      timeoutMs,
+      timeoutMs: convergenceTimeoutMs,
       error: {
         tag: "ObserverConnectionError",
         code: "OBSERVER_STOP_FAILED",
@@ -159,14 +199,21 @@ export async function stopObserver(
         message: "Observer did not stop before the timeout.",
       },
       retry: {
-        retries: Math.max(1, Math.ceil(timeoutMs / 25)),
+        retries,
         delayMs: 25,
+        shouldRetry: (error, attempt) =>
+          error.code !== "OBSERVER_STOP_TIMEOUT" && attempt < retries,
       },
     },
     async () => {
-      const status = await getObserverStatus({ ...options, paths }, deps);
-      if (status.status === "running") {
-        throw new Error("observer still running");
+      const remainingMs = remainingStopTimeoutMs(deadlineMs);
+      if (remainingMs <= 0) throw observerStopTimeoutError();
+      const current = await getObserverStatus(
+        { ...options, paths: status.paths, timeoutMs: remainingMs },
+        deps,
+      );
+      if (current.status !== "stopped" && current.status !== "stale") {
+        throw new Error("observer endpoint still live");
       }
     },
   );
@@ -176,6 +223,63 @@ export async function stopObserver(
   return receipt;
 }
 
+function remainingStopTimeoutMs(deadlineMs: number): number {
+  return Math.max(0, deadlineMs - Date.now());
+}
+
+function observerStopTimeoutError(): SafeError {
+  return {
+    tag: "ObserverConnectionError",
+    code: "OBSERVER_STOP_TIMEOUT",
+    message: "Observer did not stop before the timeout.",
+  };
+}
+
+function requireExpectedObserverIdentity(
+  status: Extract<ObserverStatus, { status: "running" }>,
+): ExpectedObserverIdentity {
+  const identity = expectedObserverIdentity(status);
+  if (identity !== undefined) return identity;
+  throw {
+    tag: "ObserverConnectionError",
+    code: "OBSERVER_STOP_FAILED",
+    message: "Observer stop requires stable process identity from health.",
+    hint: "The Observer must report a PID and start time before Station can stop that exact process safely.",
+  } satisfies SafeError;
+}
+
+function expectedObserverIdentity(
+  status: Extract<ObserverStatus, { status: "running" }>,
+): ExpectedObserverIdentity | undefined {
+  const { health, paths } = status;
+  if (
+    health.pid === undefined ||
+    health.startedAt === undefined ||
+    (health.socketPath !== undefined && health.socketPath !== paths.socketPath)
+  ) {
+    return undefined;
+  }
+  const identity: ExpectedObserverIdentity = {
+    pid: health.pid,
+    startedAt: health.startedAt,
+    socketPath: paths.socketPath,
+  };
+  if (health.version !== undefined) identity.version = health.version;
+  return identity;
+}
+
+function hasLegacyObserverBuildIdentity(health: ObserverHealth): boolean {
+  return (
+    health.version === undefined ||
+    parseStationObserverBuildVersion(health.version).buildIdentity === undefined
+  );
+}
+
+/**
+ * USE CASE
+ *
+ * Restarts an exact or replaceable incumbent without stopping a newer winning build.
+ */
 export async function restartObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
@@ -195,15 +299,21 @@ export async function restartObserver(
         ),
       };
     }
-    if (classification.action === "refuse") {
+    if (
+      classification.action === "refuse" &&
+      hasLegacyObserverBuildIdentity(status.health) &&
+      expectedObserverIdentity(status) !== undefined
+    ) {
+      // Explicit restart is the recovery path for a legacy build only when its process stays pinned.
+      await stopRunningObserver(status, options, deps);
+    } else if (classification.action === "refuse") {
       return {
         status: "unhealthy",
         paths: status.paths,
         error: observerHandoffRefusedError(status.health, buildVersion, classification.reason),
       };
-    }
-    if (classification.reason === "exact-build") {
-      await stopObserver({ ...options, paths: status.paths }, deps);
+    } else if (classification.reason === "exact-build") {
+      await stopRunningObserver(status, options, deps);
     }
   }
   return startObserver({ ...options, paths: status.paths }, deps);

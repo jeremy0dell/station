@@ -10,6 +10,7 @@ declare const STATION_BUILD_IDENTITY: string;
 const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
 const OBSERVER_BUILD_IDENTITY_MARKER = /\+(?:[0-9A-Za-z-]+\.)*station\./u;
 const OBSERVER_BUILD_IDENTITY_PATTERN = /^(.+)([+.])station\.([0-9a-f]{64})$/u;
+let verifiedSourceBuildIdentity: string | undefined;
 
 export type StationBuildInfo = {
   version: string;
@@ -18,11 +19,11 @@ export type StationBuildInfo = {
   buildIdentity: string;
 };
 
-/** Returns compiled identity or a source identity revalidated against the current checkout. */
+/** Returns compiled identity or one source identity verified for this process lifetime. */
 export function stationBuildInfo(): StationBuildInfo {
   return {
     version: typeof STATION_BUILD_VERSION === "undefined" ? "0.7.0" : STATION_BUILD_VERSION,
-    compiled: typeof STATION_BUILD_COMPILED === "undefined" ? false : STATION_BUILD_COMPILED,
+    compiled: isCompiledBinary(),
     buildIdentity:
       typeof STATION_BUILD_IDENTITY === "undefined"
         ? sourceBuildIdentity()
@@ -69,10 +70,13 @@ export function hasStationObserverBuildIdentityMarker(selector: string): boolean
 }
 
 export function isCompiledBinary(): boolean {
-  return stationBuildInfo().compiled;
+  return typeof STATION_BUILD_COMPILED === "undefined" ? false : STATION_BUILD_COMPILED;
 }
 
 function sourceBuildIdentity(): string {
+  if (verifiedSourceBuildIdentity !== undefined) {
+    return verifiedSourceBuildIdentity;
+  }
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   const root = join(moduleDirectory, "..", "..", "..");
   const path =
@@ -108,5 +112,6 @@ function sourceBuildIdentity(): string {
       { cause: error },
     );
   }
-  return identity;
+  verifiedSourceBuildIdentity = identity;
+  return verifiedSourceBuildIdentity;
 }

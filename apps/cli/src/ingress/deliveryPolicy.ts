@@ -7,6 +7,7 @@ import type {
   ProviderHookReceipt,
   SafeError,
 } from "@station/contracts";
+import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { safeErrorFromUnknown, stationObserverBuildVersion, systemClock } from "@station/runtime";
 import { classifyObserverHealth, observerHandoffRefusedError } from "../observerProcess/health.js";
 import {
@@ -31,12 +32,18 @@ type ReceiptRecorder = (input: {
 
 const autoStartLockName = "hook-autostart.lock";
 const minimumAutoStartLockStaleMs = 5000;
+const nonSpoolableErrorCodes = new Set([
+  "OBSERVER_BUILD_MISMATCH",
+  "OBSERVER_HANDOFF_PENDING",
+  "OBSERVER_HANDOFF_REFUSED",
+  "PROTOCOL_SCHEMA_MISMATCH",
+]);
 
 /**
  * USE CASE
  *
  * Gates provider-hook delivery on Observer build compatibility, negotiates an
- * allowed replacement before retrying, and spools whenever safe delivery cannot be proven.
+ * allowed replacement before retrying, spools offline events, and rejects known incompatibility.
  */
 export async function deliverProviderHookWithSpooling(input: {
   paths: ObserverPaths;
@@ -56,7 +63,7 @@ export async function deliverProviderHookWithSpooling(input: {
   const startupDeadlineMs = Date.now() + input.startupTimeoutMs;
   const readiness = await prepareObserverForDelivery(input, startupDeadlineMs);
   if (!readiness.ok) {
-    return recordReceipt(input, await input.spoolReceipt(readiness.error));
+    return settleUndelivered(input, readiness.error);
   }
 
   const firstDelivery = await input.deliver(readiness.buildVersion);
@@ -83,12 +90,34 @@ export async function deliverProviderHookWithSpooling(input: {
       if (retryDelivery.receipt !== undefined) {
         return recordReceipt(input, retryDelivery.receipt);
       }
-      return recordReceipt(input, await input.spoolReceipt(retryDelivery.error));
+      return settleUndelivered(input, retryDelivery.error);
     }
-    return recordReceipt(input, await input.spoolReceipt(startResult.error));
+    return settleUndelivered(input, startResult.error);
   }
 
-  return recordReceipt(input, await input.spoolReceipt(firstDelivery.error));
+  return settleUndelivered(input, firstDelivery.error);
+}
+
+async function settleUndelivered(
+  input: Parameters<typeof deliverProviderHookWithSpooling>[0],
+  error: SafeError | undefined,
+): Promise<ProviderHookReceipt> {
+  if (error?.code !== undefined && nonSpoolableErrorCodes.has(error.code)) {
+    return recordReceipt(
+      input,
+      ProviderHookReceiptSchema.parse({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: input.event.hookId ?? `hook_rejected_${Date.now()}`,
+        provider: input.event.provider,
+        event: input.event.event,
+        accepted: false,
+        status: "rejected",
+        receivedAt: input.event.receivedAt,
+        error,
+      }),
+    );
+  }
+  return recordReceipt(input, await input.spoolReceipt(error));
 }
 
 async function prepareObserverForDelivery(

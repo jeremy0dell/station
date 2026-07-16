@@ -16,8 +16,12 @@ export type CreateStationClientOptions = {
   onAttentionNeeded?: (event: StationAttentionEvent) => void;
 };
 
-// The only place that decides whether Station shows live or mock STATION state.
-// Downstream code receives one identity-free client boundary either way.
+/**
+ * COMPOSITION ROOT
+ *
+ * Chooses live or mock Station state and fixes the accepted Observer identity
+ * before downstream UI code receives an identity-free client boundary.
+ */
 export function createStationClient(
   env: Record<string, string | undefined> = process.env,
   options: CreateStationClientOptions = {},
@@ -48,34 +52,11 @@ export function createStationClient(
   const acceptedBuildVersion = launchedObserverBuildVersion ?? localBuildVersion;
   return createObserverStationClient({
     socketPath: resolveStationObserverSocketPath(env),
-    expectedBuildVersionProvider: () => {
-      let currentLocalBuildVersion: string;
-      try {
-        currentLocalBuildVersion = stationObserverBuildVersion();
-      } catch {
-        throw sourceBuildVerificationError(localBuildVersion, acceptedBuildVersion);
-      }
-      if (currentLocalBuildVersion !== localBuildVersion) {
-        throw sourceBuildChangedError(localBuildVersion, currentLocalBuildVersion);
-      }
-      return acceptedBuildVersion;
-    },
+    expectedBuildVersion: acceptedBuildVersion,
     ...(options.onAttentionNeeded === undefined
       ? {}
       : { onAttentionNeeded: options.onAttentionNeeded }),
   });
-}
-
-function sourceBuildVerificationError(
-  launchedBuild: string,
-  acceptedObserverBuild: string,
-): SafeError {
-  return {
-    tag: "ProtocolError",
-    code: "OBSERVER_BUILD_MISMATCH",
-    message: `Station can no longer verify client build "${launchedBuild}" before using accepted Observer "${acceptedObserverBuild}".`,
-    hint: "Run pnpm build, then close and relaunch Station before issuing more Observer operations.",
-  };
 }
 
 function incompleteBuildContextError(): SafeError {

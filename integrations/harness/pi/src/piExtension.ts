@@ -1,12 +1,9 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HarnessEventReport, HarnessEventReportReceipt, SafeError } from "@station/contracts";
-import { HarnessEventReportSpoolRecordSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { createObserverClient } from "@station/protocol";
-import { safeErrorFromUnknown, systemClock, toIsoTimestamp } from "@station/runtime";
+import type { HarnessEventReport } from "@station/contracts";
+import { systemClock, toIsoTimestamp } from "@station/runtime";
 import { parsePiCompactEvent } from "./event/compactEvent.js";
 import { compactPiHookPayload } from "./event/compaction.js";
 import { piHookPayloadToHarnessEventReport } from "./event/mapping.js";
@@ -25,23 +22,37 @@ type HookCommandInput = {
   report: HarnessEventReport;
 };
 
+type HookIngressInput = Omit<HookCommandInput, "report">;
+
 export type PiExtensionDeps = {
   env?: NodeJS.ProcessEnv;
   pid?: number;
   now?: () => Date;
   sendReport?: (input: HookCommandInput) => Promise<void>;
   reportId?: () => string;
+  /** Test seam; production ingress child lifetime is always bounded by the default. */
+  ingressTimeoutMs?: number;
 };
 
 const defaultReportId = () => `hook_${Date.now()}_${randomUUID()}`;
+const defaultIngressTimeoutMs = 5000;
 
+/**
+ * ADAPTER
+ *
+ * Compacts Pi lifecycle events and delegates delivery to build-aware CLI ingress.
+ */
 export function registerStationPiExtension(pi: PiExtensionApi, deps: PiExtensionDeps = {}): void {
   for (const eventType of piSupportedEventNames) {
     pi.on(eventType, async (event, context) => {
       try {
         const payload = compactPiExtensionEvent(eventType, event, context, deps);
-        const report = reportFromPiExtensionPayload(eventType, payload, deps);
-        await (deps.sendReport ?? defaultSendReport(deps))({ eventType, payload, report });
+        if (deps.sendReport === undefined) {
+          await defaultSendReport(deps)({ eventType, payload });
+        } else {
+          const report = reportFromPiExtensionPayload(eventType, payload, deps);
+          await deps.sendReport({ eventType, payload, report });
+        }
       } catch {
         // Extension telemetry must never interrupt the user's Pi session.
       }
@@ -157,98 +168,74 @@ function reportFromPiExtensionPayload(
   });
 }
 
-function defaultSendReport(deps: PiExtensionDeps): (input: HookCommandInput) => Promise<void> {
+function defaultSendReport(deps: PiExtensionDeps): (input: HookIngressInput) => Promise<void> {
   return async (input) => {
-    try {
-      const client = createObserverClient({
-        socketPath: observerSocketPath(deps.env ?? process.env),
-        timeoutMs: 2000,
-      });
-      const receipt = await client.reportHarnessEvent(input.report);
-      if (receipt.status !== "accepted") {
-        throw receipt.error ?? new Error(`Observer rejected Pi report ${input.report.reportId}.`);
-      }
-    } catch (error) {
-      await spoolReport(
-        input.report,
-        safeErrorFromUnknown(error, spoolErrorDefaults(input.report)),
-        deps,
-      );
+    const env = deps.env ?? process.env;
+    const timeoutMs = Math.max(
+      1,
+      Math.min(deps.ingressTimeoutMs ?? defaultIngressTimeoutMs, defaultIngressTimeoutMs),
+    );
+    const child = spawn(ingressCommand(env), ingressArgs(env, input.eventType), {
+      env,
+      stdio: ["pipe", "ignore", "ignore"],
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+    });
+    await writeIngressPayload(child, input.payload);
+  };
+}
+
+function ingressCommand(env: NodeJS.ProcessEnv): string {
+  return env.STATION_INGRESS_BIN?.trim() || "stn-ingress";
+}
+
+function ingressArgs(env: NodeJS.ProcessEnv, eventType: string): string[] {
+  const args: string[] = [];
+  appendIngressPath(args, "--socket", env.STATION_OBSERVER_SOCKET_PATH);
+  appendIngressPath(args, "--state-dir", env.STATION_OBSERVER_STATE_DIR);
+  appendIngressPath(args, "--spool-dir", env.STATION_HOOK_SPOOL_DIR);
+  appendIngressPath(args, "--config", env.STATION_CONFIG_PATH);
+  args.push("pi", eventType);
+  return args;
+}
+
+function appendIngressPath(args: string[], flag: string, value: string | undefined): void {
+  if (value !== undefined && value.length > 0) {
+    args.push(flag, value);
+  }
+}
+
+function writeIngressPayload(child: ReturnType<typeof spawn>, payload: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stdin = child.stdin;
+    if (stdin === null) {
+      reject(new Error("stn-ingress stdin was not available."));
+      return;
     }
-  };
-}
-
-async function spoolReport(
-  report: HarnessEventReport,
-  error: SafeError,
-  deps: PiExtensionDeps,
-): Promise<HarnessEventReportReceipt> {
-  const env = deps.env ?? process.env;
-  const clock = deps.now?.() ?? systemClock.now();
-  const spoolId = `spool_${Date.now()}_${randomUUID()}`;
-  const spoolDir = hookSpoolDir(env);
-  await mkdir(spoolDir, { recursive: true, mode: 0o700 });
-  await chmod(spoolDir, 0o700);
-  const record = HarnessEventReportSpoolRecordSchema.parse({
-    schemaVersion: STATION_SCHEMA_VERSION,
-    spoolId,
-    createdAt: toIsoTimestamp(clock),
-    report,
-    attempts: 0,
-    lastError: error,
+    let settled = false;
+    const settle = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const abort = (error: unknown) => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The child may already be gone; settling the provider callback still wins.
+      }
+      settle(error);
+    };
+    child.once("error", abort);
+    stdin.once("error", abort);
+    child.once("close", (code) => {
+      settle(
+        code === 0 ? undefined : new Error(`stn-ingress exited with code ${code ?? "unknown"}.`),
+      );
+    });
+    stdin.end(JSON.stringify(payload));
   });
-  await writeFile(join(spoolDir, `${spoolId}.json`), JSON.stringify(record, null, 2), {
-    mode: 0o600,
-    flag: "wx",
-  });
-  return {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    reportId: report.reportId,
-    provider: report.provider,
-    eventType: report.eventType,
-    accepted: true,
-    status: "spooled",
-    receivedAt: report.observedAt,
-    projected: false,
-    scheduledReconcile: false,
-    error,
-  };
-}
-
-function observerSocketPath(env: NodeJS.ProcessEnv): string {
-  if (
-    env.STATION_OBSERVER_SOCKET_PATH !== undefined &&
-    env.STATION_OBSERVER_SOCKET_PATH.length > 0
-  ) {
-    return env.STATION_OBSERVER_SOCKET_PATH;
-  }
-  if (env.XDG_RUNTIME_DIR !== undefined && env.XDG_RUNTIME_DIR.length > 0) {
-    return join(env.XDG_RUNTIME_DIR, "station", "observer.sock");
-  }
-  return join(observerStateDir(env), "run", "observer.sock");
-}
-
-function hookSpoolDir(env: NodeJS.ProcessEnv): string {
-  if (env.STATION_HOOK_SPOOL_DIR !== undefined && env.STATION_HOOK_SPOOL_DIR.length > 0) {
-    return env.STATION_HOOK_SPOOL_DIR;
-  }
-  return join(observerStateDir(env), "spool", "hooks");
-}
-
-function observerStateDir(env: NodeJS.ProcessEnv): string {
-  if (env.STATION_OBSERVER_STATE_DIR !== undefined && env.STATION_OBSERVER_STATE_DIR.length > 0) {
-    return env.STATION_OBSERVER_STATE_DIR;
-  }
-  return join(homedir(), ".local", "state", "station");
-}
-
-function spoolErrorDefaults(report: HarnessEventReport) {
-  return {
-    tag: "HookDeliveryError",
-    code: "HOOK_REPORT_DELIVERY_FAILED",
-    message: "Pi harness event report could not be delivered to the observer.",
-    provider: report.provider,
-  };
 }
 
 function piSessionId(

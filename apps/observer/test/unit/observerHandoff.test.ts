@@ -205,6 +205,15 @@ describe("negotiateObserverIncumbent", () => {
     await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
     expect(healthTimeouts).toEqual([40, 35]);
     expect(stopTimeouts).toEqual([30]);
+    expect(fixture.stop).toHaveBeenCalledWith(socketPath, {
+      timeoutMs: 30,
+      expectedObserver: {
+        pid: fixture.incumbentHealth.pid,
+        startedAt: fixture.incumbentHealth.startedAt,
+        version: fixture.incumbentHealth.version,
+        socketPath,
+      },
+    });
   });
 
   it("does not begin stop after earlier lifecycle calls exhaust the deadline", async () => {
@@ -220,6 +229,31 @@ describe("negotiateObserverIncumbent", () => {
       code: "OBSERVER_HANDOFF_REFUSED",
     });
     expect(healthTimeouts).toEqual([40, 20]);
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the exact process changes between verification and stop", async () => {
+    const fixture = handoffFixture();
+    const replacementHealth = {
+      ...fixture.incumbentHealth,
+      pid: 200,
+      startedAt: "2026-07-12T11:30:00.000Z",
+    };
+    fixture.health
+      .mockResolvedValueOnce(fixture.incumbentHealth)
+      .mockImplementationOnce(async () => {
+        fixture.identity.pid = replacementHealth.pid;
+        fixture.identity.osStartTime = "Sat Jul 12 11:30:00 2026";
+        fixture.holders[0] = replacementHealth.pid;
+        fixture.startToken = fixture.identity.osStartTime;
+        return replacementHealth;
+      });
+
+    await expect(runNegotiation(fixture)).rejects.toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+      message: "The incumbent Observer process changed during handoff.",
+    });
     expect(fixture.stop).not.toHaveBeenCalled();
     expect(fixture.signal).not.toHaveBeenCalled();
   });
@@ -402,10 +436,10 @@ function handoffFixture() {
     ],
     socketHolders: () => fixture.holders,
     processStartToken: () => fixture.startToken,
-    readProcessIdentity: async () => identity,
+    readProcessIdentity: async () => ({ ...identity }),
     signal: fixture.signal,
   };
-  return Object.assign(fixture, { lifecycle, evidence });
+  return Object.assign(fixture, { lifecycle, evidence, identity });
 }
 
 function runNegotiation(fixture: ReturnType<typeof handoffFixture>) {

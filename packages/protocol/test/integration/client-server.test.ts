@@ -193,44 +193,173 @@ describe("protocol client/server", () => {
     }
   });
 
-  it("revalidates a dynamic build expectation before every mutation", async () => {
+  it("checks exact process health and stops it on one connection", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const expectedObserverIdentity = {
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: `0.0.0+station.${"e".repeat(64)}`,
+      socketPath,
+    };
+    const baseApi = createFakeObserverApi();
+    const health = { ...(await baseApi.health()), ...expectedObserverIdentity };
+    const stopReceipt = await baseApi.stop();
+    const methods: string[] = [];
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        methods.push(healthRequest.method);
+        connection.send(protocolSuccessResponse(healthRequest.id, "observer.health", health));
+
+        const stopRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        methods.push(stopRequest.method);
+        connection.send(protocolSuccessResponse(stopRequest.id, "observer.stop", stopReceipt));
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedObserverIdentity,
+      requestId: ids("exact-stop"),
+    });
+
+    try {
+      await expect(client.stop()).resolves.toMatchObject({ stopped: true });
+      expect(connectionCount).toBe(1);
+      expect(methods).toEqual(["observer.health", "observer.stop"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("checks legacy process health and stops it on one connection", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const expectedObserverIdentity = {
+      pid: 42,
+      startedAt: protocolTestNow,
+      socketPath,
+    };
+    const baseApi = createFakeObserverApi();
+    const legacyHealth = {
+      ...(await baseApi.health()),
+      pid: expectedObserverIdentity.pid,
+      startedAt: expectedObserverIdentity.startedAt,
+    };
+    delete legacyHealth.version;
+    delete legacyHealth.socketPath;
+    const stopReceipt = await baseApi.stop();
+    const methods: string[] = [];
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        methods.push(healthRequest.method);
+        connection.send(protocolSuccessResponse(healthRequest.id, "observer.health", legacyHealth));
+
+        const stopRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        methods.push(stopRequest.method);
+        connection.send(protocolSuccessResponse(stopRequest.id, "observer.stop", stopReceipt));
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedObserverIdentity,
+      requestId: ids("legacy-stop"),
+    });
+
+    try {
+      await expect(client.stop()).resolves.toMatchObject({ stopped: true });
+      expect(connectionCount).toBe(1);
+      expect(methods).toEqual(["observer.health", "observer.stop"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("refuses to stop when the socket process changed after attribution", async () => {
     const { socketPath } = await createTempSocketPath();
     const buildVersion = `0.0.0+station.${"d".repeat(64)}`;
     const baseApi = createFakeObserverApi();
-    let reconcileCalls = 0;
-    let buildChanged = false;
-    const changedError = {
-      tag: "ProtocolError" as const,
-      code: "OBSERVER_BUILD_MISMATCH",
-      message: "Station source changed after launch.",
-      hint: "Rebuild and relaunch Station.",
+    const expectedObserverIdentity = {
+      pid: 41,
+      startedAt: protocolTestNow,
+      version: buildVersion,
+      socketPath,
     };
+    let stopCalls = 0;
     const server = await startProtocolServer({
       socketPath,
       api: createFakeObserverApi({
-        health: async () => ({ ...(await baseApi.health()), version: buildVersion }),
-        reconcile: async (reason) => {
-          reconcileCalls += 1;
-          return baseApi.reconcile(reason);
+        health: async () => ({
+          ...(await baseApi.health()),
+          ...expectedObserverIdentity,
+          pid: expectedObserverIdentity.pid + 1,
+        }),
+        stop: async () => {
+          stopCalls += 1;
+          return baseApi.stop();
         },
       }),
     });
     const client = createObserverClient({
       socketPath,
-      expectedBuildVersionProvider: () => {
-        if (buildChanged) throw changedError;
-        return buildVersion;
-      },
-      requestId: ids("dynamic-build"),
+      expectedObserverIdentity,
+      requestId: ids("exact-process"),
     });
 
     try {
-      await expect(client.reconcile("before-source-change")).resolves.toMatchObject({
-        reason: "before-source-change",
+      await expect(client.stop()).rejects.toMatchObject({
+        code: "OBSERVER_BUILD_MISMATCH",
+        message: "Observer process changed before the guarded operation could run.",
       });
-      buildChanged = true;
-      await expect(client.reconcile("must-not-run")).rejects.toEqual(changedError);
-      expect(reconcileCalls).toBe(1);
+      expect(stopCalls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("runs the lifecycle guard again for a mutation queued after stop", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const baseApi = createFakeObserverApi();
+    let stopping = false;
+    let reconcileCalls = 0;
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        stop: async () => {
+          stopping = true;
+          return baseApi.stop();
+        },
+        reconcile: async (reason) => {
+          reconcileCalls += 1;
+          return baseApi.reconcile(reason);
+        },
+      }),
+      requestGuard: (method) => {
+        if (stopping && method !== "observer.health" && method !== "observer.stop") {
+          throw {
+            tag: "ObserverLifecycleError",
+            code: "OBSERVER_STOPPING",
+            message: "Observer is stopping and cannot accept new operations.",
+          };
+        }
+      },
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("stopping") });
+
+    try {
+      await expect(client.health()).resolves.toMatchObject({ status: "healthy" });
+      await expect(client.stop()).resolves.toMatchObject({ stopped: true });
+      await expect(client.reconcile("must-not-run")).rejects.toMatchObject({
+        code: "OBSERVER_STOPPING",
+      });
+      expect(reconcileCalls).toBe(0);
     } finally {
       await server.close();
     }

@@ -16,6 +16,7 @@ import {
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
+import { isOpenCodeForwardedEventType } from "@station/opencode";
 import { createObserverClient } from "@station/protocol";
 import {
   pathIsSameOrInside,
@@ -95,6 +96,12 @@ export type SendPiHookInput = ProviderHookSenderOptions & {
   env?: NodeJS.ProcessEnv;
 };
 
+export type SendOpenCodeHookInput = ProviderHookSenderOptions & {
+  eventType: string;
+  payload: unknown;
+  env?: NodeJS.ProcessEnv;
+};
+
 const defaultHookId = () => `hook_${Date.now()}_${randomUUID()}`;
 const defaultDeliveryTimeoutMs = 2000;
 
@@ -113,6 +120,12 @@ export async function sendWorktrunkHookEvent(
   );
 }
 
+/**
+ * USE CASE
+ *
+ * Validates shared provider-hook ingress, pins delivery to the accepted
+ * Observer build, and applies the centralized delivery-or-spool policy.
+ */
 export async function sendProviderHookEvent(
   input: SendProviderHookEventInput,
   deps: ProviderHookSenderDeps = {},
@@ -299,6 +312,41 @@ export async function sendPiHookPayload(
   );
 }
 
+/**
+ * ADAPTER
+ *
+ * Translates compact OpenCode hook payloads into the shared provider ingress contract.
+ */
+export async function sendOpenCodeHookPayload(
+  input: SendOpenCodeHookInput,
+  deps: ProviderHookSenderDeps = {},
+): Promise<ProviderHookReceipt> {
+  const clock = deps.clock ?? systemClock;
+  const enrichedPayload = enrichStationHookIdentityPayload({
+    payload: input.payload,
+    env: input.env ?? process.env,
+  });
+  if (!hasStationOwnership(enrichedPayload) || !isOpenCodeForwardedEventType(input.eventType)) {
+    return ignoredProviderHookReceipt({
+      provider: "opencode",
+      event: input.eventType,
+      clock,
+      hookId: deps.hookId,
+    });
+  }
+
+  return sendProviderHookEvent(
+    {
+      ...input,
+      provider: "opencode",
+      kind: "harness",
+      event: input.eventType,
+      payload: enrichedPayload,
+    },
+    deps,
+  );
+}
+
 async function attemptHookDelivery(
   paths: ObserverPaths,
   event: ProviderHookEvent,
@@ -307,7 +355,10 @@ async function attemptHookDelivery(
   deps: ProviderHookSenderDeps,
 ): Promise<ProviderDeliveryAttempt> {
   const delivery = await deliverHook(paths, event, timeoutMs, expectedBuildVersion, deps);
-  if (delivery.ok && delivery.value.status === "ingested") {
+  if (
+    delivery.ok &&
+    (delivery.value.status === "ingested" || delivery.value.status === "rejected")
+  ) {
     return { receipt: delivery.value };
   }
   if (delivery.ok) {
@@ -348,7 +399,7 @@ async function deliverHook(
     async () => {
       const client = observerClient(paths.socketPath, timeoutMs, expectedBuildVersion, deps);
       const receipt = await client.ingestProviderHookEvent(event);
-      if (receipt.status !== "ingested") {
+      if (receipt.status !== "ingested" && receipt.status !== "rejected") {
         throw (
           receipt.error ??
           safeErrorFromUnknown(receipt, {

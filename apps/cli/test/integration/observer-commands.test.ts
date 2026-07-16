@@ -30,6 +30,7 @@ describe("CLI observer commands", () => {
               pid: 1234,
               startedAt: now,
               version: zeroBuildVersion,
+              socketPath: fixture.socketPath,
             };
           },
           stop: async () => {
@@ -76,6 +77,7 @@ describe("CLI observer commands", () => {
               pid: 1234,
               startedAt: now,
               version: zeroBuildVersion,
+              socketPath: fixture.socketPath,
             };
           },
           stop: async () => {

@@ -68,6 +68,18 @@ export type ObserverLifecycleRequest = {
   timeoutMs: number;
 };
 
+export type ObserverExpectedProcessHealth = {
+  pid: number;
+  startedAt: string;
+  version: string;
+  socketPath: string;
+};
+
+export type ObserverStopRequest = ObserverLifecycleRequest & {
+  /** Process identity that must answer health on the same connection used for stop. */
+  expectedObserver: ObserverExpectedProcessHealth;
+};
+
 /**
  * DRIVEN PORT
  *
@@ -90,7 +102,7 @@ export interface ObserverProcessEvidenceSource {
  */
 export interface ObserverIncumbentLifecycle {
   health(socketPath: string, request: ObserverLifecycleRequest): Promise<ObserverHealth>;
-  stop(socketPath: string, request: ObserverLifecycleRequest): Promise<ObserverStopReceipt>;
+  stop(socketPath: string, request: ObserverStopRequest): Promise<ObserverStopReceipt>;
   socketListening(socketPath: string, request: ObserverLifecycleRequest): Promise<boolean>;
 }
 
@@ -222,15 +234,19 @@ export async function negotiateObserverIncumbent(
     if (decision.action === "attach") return { action: "attach", health };
     if (decision.action === "refuse") throw handoffRefused(decision.reason);
 
-    const incumbent = await requireVerifiedIncumbent(input, health, deps);
+    const incumbent = (await requireVerifiedIncumbent(input, health, deps)).processIdentity;
     // The claim excludes another legitimate successor, but ownership evidence
     // is still refreshed immediately before asking this exact process to stop.
     const revalidatedHealth = await deps.lifecycle.health(input.socketPath, {
       timeoutMs: remainingHandoffMs(deadline, now),
     });
-    await requireVerifiedIncumbent(input, revalidatedHealth, deps);
+    const revalidatedIncumbent = await requireVerifiedIncumbent(input, revalidatedHealth, deps);
+    if (!observerProcessIdentitiesMatch(incumbent, revalidatedIncumbent.processIdentity)) {
+      throw handoffRefused("The incumbent Observer process changed during handoff.");
+    }
     await deps.lifecycle.stop(input.socketPath, {
       timeoutMs: remainingHandoffMs(deadline, now),
+      expectedObserver: revalidatedIncumbent.health,
     });
 
     if (await waitForExactExit(input.socketPath, incumbent, gracefulDeadline, deps, now, sleep)) {
@@ -267,7 +283,10 @@ async function requireVerifiedIncumbent(
   input: { socketPath: string; candidate: ObserverHandoffCandidate },
   health: ObserverHealth,
   deps: ObserverHandoffDeps,
-): Promise<ObserverProcessIdentity> {
+): Promise<{
+  processIdentity: ObserverProcessIdentity;
+  health: ObserverExpectedProcessHealth;
+}> {
   const decision = classifyObserverIncumbent({ candidate: input.candidate, incumbent: health });
   if (decision.action !== "replace") {
     throw handoffRefused(
@@ -295,7 +314,15 @@ async function requireVerifiedIncumbent(
     throw handoffRefused("The incumbent Observer pidfile did not corroborate socket ownership.");
   }
   await requireVerifiedProcessEvidence(input.socketPath, identity, deps);
-  return identity;
+  return {
+    processIdentity: identity,
+    health: {
+      pid: health.pid,
+      startedAt: health.startedAt,
+      version: health.version,
+      socketPath: health.socketPath,
+    },
+  };
 }
 
 async function requireVerifiedProcessEvidence(

@@ -29,6 +29,10 @@ describe("build identity", () => {
     expect(clean).toMatch(/^[0-9a-f]{64}$/u);
     await expect(computeBuildIdentity(root)).resolves.toBe(clean);
 
+    await writeFile(join(root, "packages", "example", "test", "value.test.ts"), "changed\n");
+    await writeFile(join(root, "packages", "example", "value.spec.tsx"), "changed\n");
+    await expect(computeBuildIdentity(root)).resolves.toBe(clean);
+
     await writeFile(trackedPath, "changed\n");
     const dirty = await computeBuildIdentity(root);
     expect(dirty).not.toBe(clean);
@@ -154,11 +158,19 @@ async function createRepository(): Promise<string> {
     join(root, "packages", "example", "package.json"),
     '{"name":"@station/example","scripts":{"build":"tsc"}}\n',
   );
+  await mkdir(join(root, "packages", "example", "test"), { recursive: true });
+  await writeFile(join(root, "packages", "example", "test", "value.test.ts"), "tracked\n");
   await writeFile(
     join(root, "packages", "example", "dist", "index.js"),
     "export const build = 'current';\n",
   );
-  git(root, ["add", ".gitignore", "tracked.txt", "packages/example/package.json"]);
+  git(root, [
+    "add",
+    ".gitignore",
+    "tracked.txt",
+    "packages/example/package.json",
+    "packages/example/test/value.test.ts",
+  ]);
   git(root, ["commit", "--quiet", "-m", "initial"]);
   return root;
 }

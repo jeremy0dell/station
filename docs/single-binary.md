@@ -240,10 +240,10 @@ and that migrations run identically — the observer's `openObserverSqlite`
 already applies `PRAGMA journal_mode = WAL` and migrations, so the driver
 only needs to guarantee both `exec` and `prepare().run()` semantics match.
 
-Feed `stationBuildInfo().version` into `createObserverCore` (fixes the
-hardcoded `"0.0.0"` in `reconcile/core.ts`) for snapshot and `stn --version`
-display. Observer health and pidfile ownership publish
-`stationObserverBuildVersion()` so handoff also proves immutable build identity.
+Feed `stationBuildInfo().version` into snapshot and `stn --version` display.
+Source processes verify that build info at most once, while Observer health and
+pidfile ownership publish `stationObserverBuildVersion()` so handoff also proves
+immutable build identity.
 
 **Tests:** vitest driver-mapping units (node); a bun-lane test (`bun test`)
 for the bun driver asserting `run().changes`, `get()`-no-row `undefined`,

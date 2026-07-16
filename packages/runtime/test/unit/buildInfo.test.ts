@@ -1,8 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  isCompiledBinary,
   parseStationObserverBuildVersion,
-  stationBuildInfo,
   stationObserverBuildVersion,
 } from "../../src/buildInfo.js";
 
@@ -17,26 +15,49 @@ vi.mock("node:child_process", () => ({
 }));
 
 describe("station build info", () => {
-  it("reports the source-mode defaults when compile-time defines are absent", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    verifyBuildIdentity.mockReset();
+  });
+
+  it("caches one verified source identity for the process lifetime", async () => {
+    const {
+      isCompiledBinary,
+      stationBuildInfo,
+      stationObserverBuildVersion: currentObserverBuildVersion,
+    } = await import("../../src/buildInfo.js");
+
+    expect(isCompiledBinary()).toBe(false);
+    expect(verifyBuildIdentity).not.toHaveBeenCalled();
     expect(stationBuildInfo()).toEqual({
       version: "0.7.0",
       compiled: false,
       buildIdentity,
     });
-    expect(isCompiledBinary()).toBe(false);
+    expect(currentObserverBuildVersion()).toBe(`0.7.0+station.${buildIdentity}`);
+    expect(currentObserverBuildVersion()).toBe(`0.7.0+station.${buildIdentity}`);
+    expect(stationBuildInfo()).toEqual({
+      version: "0.7.0",
+      compiled: false,
+      buildIdentity,
+    });
     expect(verifyBuildIdentity).toHaveBeenCalledWith(
       process.execPath,
       [expect.stringMatching(/scripts\/build-identity\.mjs$/u), "--verify", buildIdentity],
       expect.objectContaining({ stdio: "ignore" }),
     );
+    expect(verifyBuildIdentity).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses a source build whose published input or output identity is stale", () => {
+  it("refuses a source build whose published input or output identity is stale", async () => {
     verifyBuildIdentity.mockImplementationOnce(() => {
       throw new Error("stale identity");
     });
+    const { stationBuildInfo } = await import("../../src/buildInfo.js");
 
     expect(() => stationBuildInfo()).toThrow("does not match the current checkout");
+    expect(stationBuildInfo()).toMatchObject({ buildIdentity });
+    expect(verifyBuildIdentity).toHaveBeenCalledTimes(2);
   });
 
   it("appends reserved identity metadata without changing the display version", () => {

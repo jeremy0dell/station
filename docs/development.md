@@ -51,15 +51,18 @@ are inherited. Remove linked worktrees and other Git-created resources through G
 their directories.
 
 `pnpm build` computes one immutable Observer build identity from the current
-Git `HEAD`, the sorted tracked plus untracked-nonignored working-tree contents,
-and the resulting production package `dist` contents. It rebuilds, verifies the
-inputs did not move, then atomically publishes
-`packages/runtime/dist/station-build-id`. Source CLI/Observer output and a
-binary compiled from that output therefore share an identity; rebuilding
-unchanged inputs and outputs reuses it. Source processes reverify both halves
-before using the sidecar, so a scoped compile, cache restore, source edit, or
-failed build cannot silently claim an older identity. Run `pnpm build` again;
-do not copy or retain this sidecar across a failed or different build.
+Git `HEAD`, the sorted production inputs from tracked plus untracked-nonignored
+working-tree contents, and the resulting production package `dist` contents.
+Test trees and TypeScript test/spec files are excluded to match Turbo's
+production build inputs. It rebuilds, verifies the inputs did not move, then
+atomically publishes `packages/runtime/dist/station-build-id`. Source
+CLI/Observer output and a binary compiled from that output therefore share an
+identity; rebuilding unchanged inputs and outputs reuses it. A source process
+verifies both halves before first adopting the sidecar, then reuses that
+verified identity without further Git or hash I/O for its lifetime. That first
+verification prevents a scoped compile, cache restore, source edit, or failed
+build from silently claiming an older identity. Run `pnpm build` again; do not
+copy or retain this sidecar across a failed or different build.
 
 The deterministic local gate is:
 

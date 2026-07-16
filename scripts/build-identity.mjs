@@ -65,7 +65,9 @@ async function computeBuildInputIdentity(root) {
   const untracked = splitNullTerminated(
     await runGit(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
   );
-  const paths = [...new Set([...tracked, ...untracked])].sort(compareUtf8);
+  const paths = [...new Set([...tracked, ...untracked])]
+    .filter(isProductionBuildInput)
+    .sort(compareUtf8);
   const hash = createHash("sha256");
   updateHashField(hash, "domain", BUILD_INPUT_IDENTITY_DOMAIN);
   updateHashField(hash, "head", head);
@@ -289,6 +291,16 @@ function splitNullTerminated(value) {
 
 function compareUtf8(left, right) {
   return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
+
+function isProductionBuildInput(path) {
+  const segments = path.split("/");
+  const name = segments.at(-1) ?? "";
+  return (
+    !segments.some(
+      (segment) => segment === "test" || segment === "tests" || segment === "__tests__",
+    ) && !/\.(?:test|spec)\.tsx?$/u.test(name)
+  );
 }
 
 function updateHashField(hash, label, value) {
