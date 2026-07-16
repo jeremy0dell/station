@@ -34,6 +34,7 @@
     "dev": "node scripts/tui-dev.mjs",
     "station:devbox": "node scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
+    "station:devbox:tmux:smoke": "node scripts/test-runners/run-station-tmux-devbox-smoke.mjs",
     "smoke:binary": "node scripts/test-runners/run-binary-smoke.mjs",
     "smoke:install": "node scripts/test-runners/run-install-smoke.mjs",
     "typecheck": "turbo run typecheck",

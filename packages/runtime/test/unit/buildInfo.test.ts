@@ -6,6 +6,9 @@ import {
 
 const buildIdentity = "a".repeat(64);
 const verifyBuildIdentity = vi.hoisted(() => vi.fn());
+const verifiedSourceBuildIdentitySlot = Symbol.for(
+  "@station/runtime/verified-source-build-identity",
+);
 
 vi.mock("node:fs", () => ({
   readFileSync: () => `${buildIdentity}\n`,
@@ -18,9 +21,10 @@ describe("station build info", () => {
   beforeEach(() => {
     vi.resetModules();
     verifyBuildIdentity.mockReset();
+    Reflect.deleteProperty(globalThis, verifiedSourceBuildIdentitySlot);
   });
 
-  it("caches one verified source identity for the process lifetime", async () => {
+  it("caches one verified source identity across module resets in the same process", async () => {
     const {
       isCompiledBinary,
       stationBuildInfo,
@@ -47,6 +51,11 @@ describe("station build info", () => {
       expect.objectContaining({ stdio: "ignore" }),
     );
     expect(verifyBuildIdentity).toHaveBeenCalledTimes(1);
+
+    vi.resetModules();
+    const reloaded = await import("../../src/buildInfo.js");
+    expect(reloaded.stationBuildInfo()).toMatchObject({ buildIdentity });
+    expect(verifyBuildIdentity).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a source build whose published input or output identity is stale", async () => {
@@ -57,6 +66,11 @@ describe("station build info", () => {
 
     expect(() => stationBuildInfo()).toThrow("does not match the current checkout");
     expect(stationBuildInfo()).toMatchObject({ buildIdentity });
+    expect(verifyBuildIdentity).toHaveBeenCalledTimes(2);
+
+    vi.resetModules();
+    const reloaded = await import("../../src/buildInfo.js");
+    expect(reloaded.stationBuildInfo()).toMatchObject({ buildIdentity });
     expect(verifyBuildIdentity).toHaveBeenCalledTimes(2);
   });
 

@@ -54,6 +54,16 @@ without lifecycle control. Focus-success dismissal is scoped to the exact origin
 operation and the provider-owned popup claim/lease, preventing a stale renderer from dismissing a
 replacement popup.
 
+When the private tmux devbox runs the dashboard under Bun `--hot`, the CLI
+parent and its IPC channel remain authoritative for the lifetime of
+`_station-ui`. A source reload synchronously releases the prior OpenTUI stdin
+owner, then unmounts the old React root, removes popup listeners, detaches the
+old source/store, stops the old Station client, and recreates those renderer
+resources inside the same Bun process. The renderer disposer deliberately does
+not disconnect the CLI-owned IPC channel. Source build identity is verified
+once per OS process so a harmless reload reuses the accepted identity; a new
+process still verifies the current checkout and outputs.
+
 You can also run the renderer directly during development:
 
 ```bash

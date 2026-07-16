@@ -228,6 +228,7 @@ describe("createPopupRuntime", () => {
       code: "TUI_RENDERER_CONTROL_DISPOSED",
     });
     expect(disposedChannel.unsubscribeCount).toBe(1);
+    expect(disposedChannel.closeCount).toBe(0);
     expect(disposedControlLossCount).toBe(0);
   });
 });
