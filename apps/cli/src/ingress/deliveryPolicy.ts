@@ -7,7 +7,7 @@ import type {
   ProviderHookReceipt,
   SafeError,
 } from "@station/contracts";
-import { safeErrorFromUnknown, stationBuildInfo, systemClock } from "@station/runtime";
+import { safeErrorFromUnknown, stationObserverBuildVersion, systemClock } from "@station/runtime";
 import { classifyObserverHealth, observerHandoffRefusedError } from "../observerProcess/health.js";
 import {
   getProviderHookObserverStatus,
@@ -48,7 +48,8 @@ export async function deliverProviderHookWithSpooling(input: {
   configPath?: string;
   observerCommand?: ProviderHookObserverCommand;
   deps: ProviderHookObserverStartupDeps;
-  deliver: () => Promise<ProviderDeliveryAttempt>;
+  /** Sends only through a client pinned to the selector proven by readiness. */
+  deliver: (expectedBuildVersion: string) => Promise<ProviderDeliveryAttempt>;
   spoolReceipt: (error: SafeError | undefined) => Promise<ProviderHookReceipt>;
   recordReceipt?: ReceiptRecorder;
 }): Promise<ProviderHookReceipt> {
@@ -58,7 +59,7 @@ export async function deliverProviderHookWithSpooling(input: {
     return recordReceipt(input, await input.spoolReceipt(readiness.error));
   }
 
-  const firstDelivery = await input.deliver();
+  const firstDelivery = await input.deliver(readiness.buildVersion);
   if (firstDelivery.receipt !== undefined) {
     return recordReceipt(input, firstDelivery.receipt);
   }
@@ -78,7 +79,7 @@ export async function deliverProviderHookWithSpooling(input: {
     }
     const startResult = await maybeStartObserver(startupInput);
     if (startResult.ok) {
-      const retryDelivery = await input.deliver();
+      const retryDelivery = await input.deliver(startResult.buildVersion);
       if (retryDelivery.receipt !== undefined) {
         return recordReceipt(input, retryDelivery.receipt);
       }
@@ -101,7 +102,7 @@ async function prepareObserverForDelivery(
     deps: ProviderHookObserverStartupDeps;
   },
   startupDeadlineMs: number,
-): Promise<{ ok: true } | { ok: false; error: SafeError }> {
+): Promise<{ ok: true; buildVersion: string } | { ok: false; error: SafeError }> {
   const statusTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
   if (statusTimeoutMs === undefined) return providerHookStartupTimedOut();
   const statusOptions: Parameters<typeof getProviderHookObserverStatus>[0] = {
@@ -114,10 +115,20 @@ async function prepareObserverForDelivery(
   }
   const status = await getProviderHookObserverStatus(statusOptions, input.deps);
   if (status.status === "running") {
-    const buildVersion = input.deps.buildVersion ?? stationBuildInfo().version;
+    const buildVersion = input.deps.buildVersion ?? stationObserverBuildVersion();
     const classification = classifyObserverHealth(status.health, buildVersion);
     if (classification.action === "attach") {
-      return { ok: true };
+      if (status.health.version !== undefined) {
+        return { ok: true, buildVersion: status.health.version };
+      }
+      return {
+        ok: false,
+        error: observerHandoffRefusedError(
+          status.health,
+          buildVersion,
+          "The running Observer did not report a build version.",
+        ),
+      };
     }
     if (classification.action === "refuse" || !input.autoStart) {
       return {
@@ -222,7 +233,17 @@ async function maybeStartObserver(input: {
     }
     const started = await startProviderHookObserver(startupOptions, input.deps);
     if (started.status === "running") {
-      return { ok: true as const };
+      if (started.health.version !== undefined) {
+        return { ok: true as const, buildVersion: started.health.version };
+      }
+      return {
+        ok: false as const,
+        error: observerHandoffRefusedError(
+          started.health,
+          input.deps.buildVersion ?? stationObserverBuildVersion(),
+          "The running Observer did not report a build version.",
+        ),
+      };
     }
     return {
       ok: false as const,
@@ -325,14 +346,17 @@ async function waitForContendedAutoStart(input: {
   deps: ProviderHookObserverStartupDeps;
 }) {
   try {
-    await waitForProviderHookObserverHealth(
+    const health = await waitForProviderHookObserverHealth(
       {
         paths: input.paths,
         timeoutMs: input.timeoutMs,
       },
       input.deps,
     );
-    return { ok: true as const };
+    if (health.version === undefined) {
+      throw new Error("The running Observer did not report a build version.");
+    }
+    return { ok: true as const, buildVersion: health.version };
   } catch (error) {
     return {
       ok: false as const,

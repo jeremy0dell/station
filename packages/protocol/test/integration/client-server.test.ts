@@ -9,6 +9,8 @@ import {
   connectUnixSocket,
   createObserverClient,
   listenUnixSocket,
+  ProtocolRequestSchema,
+  protocolSuccessResponse,
   startProtocolServer,
 } from "@station/protocol";
 import { describe, expect, it } from "vitest";
@@ -104,6 +106,134 @@ describe("protocol client/server", () => {
     });
 
     await server.close();
+  });
+
+  it.each([
+    ["another build", `0.0.0+station.${"a".repeat(64)}`],
+    ["a legacy Observer", undefined],
+  ] as const)("rejects a pinned mutation before invoking %s", async (_scenario, actualBuildVersion) => {
+    const { socketPath } = await createTempSocketPath();
+    const expectedBuildVersion = `0.0.0+station.${"b".repeat(64)}`;
+    const baseApi = createFakeObserverApi();
+    const health = await baseApi.health();
+    const reportedHealth = { ...health };
+    if (actualBuildVersion === undefined) {
+      delete reportedHealth.version;
+    } else {
+      reportedHealth.version = actualBuildVersion;
+    }
+    let reconcileCalls = 0;
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        health: async () => reportedHealth,
+        reconcile: async (reason) => {
+          reconcileCalls += 1;
+          return baseApi.reconcile(reason);
+        },
+      }),
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedBuildVersion,
+      requestId: ids("mismatch"),
+    });
+
+    try {
+      await expect(client.reconcile("must-not-run")).rejects.toMatchObject({
+        tag: "ProtocolError",
+        code: "OBSERVER_BUILD_MISMATCH",
+        message: expect.stringContaining(
+          `expects "${expectedBuildVersion}", but the socket owner reports "${actualBuildVersion ?? "missing"}"`,
+        ),
+        hint: expect.stringContaining("isolated observer socket_path and state_dir"),
+      });
+      expect(reconcileCalls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("runs a pinned mutation after checking the matching build on the same connection", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const buildVersion = `0.0.0+station.${"c".repeat(64)}`;
+    const baseApi = createFakeObserverApi();
+    const health = { ...(await baseApi.health()), version: buildVersion };
+    const receipt = await baseApi.reconcile("matching-build");
+    const methods: string[] = [];
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        methods.push(healthRequest.method);
+        connection.send(protocolSuccessResponse(healthRequest.id, "observer.health", health));
+
+        const mutationRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        methods.push(mutationRequest.method);
+        connection.send(protocolSuccessResponse(mutationRequest.id, "observer.reconcile", receipt));
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedBuildVersion: buildVersion,
+      requestId: ids("matching"),
+    });
+
+    try {
+      await expect(client.reconcile("matching-build")).resolves.toMatchObject({
+        reason: "matching-build",
+      });
+      expect(connectionCount).toBe(1);
+      expect(methods).toEqual(["observer.health", "observer.reconcile"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("revalidates a dynamic build expectation before every mutation", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const buildVersion = `0.0.0+station.${"d".repeat(64)}`;
+    const baseApi = createFakeObserverApi();
+    let reconcileCalls = 0;
+    let buildChanged = false;
+    const changedError = {
+      tag: "ProtocolError" as const,
+      code: "OBSERVER_BUILD_MISMATCH",
+      message: "Station source changed after launch.",
+      hint: "Rebuild and relaunch Station.",
+    };
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        health: async () => ({ ...(await baseApi.health()), version: buildVersion }),
+        reconcile: async (reason) => {
+          reconcileCalls += 1;
+          return baseApi.reconcile(reason);
+        },
+      }),
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedBuildVersionProvider: () => {
+        if (buildChanged) throw changedError;
+        return buildVersion;
+      },
+      requestId: ids("dynamic-build"),
+    });
+
+    try {
+      await expect(client.reconcile("before-source-change")).resolves.toMatchObject({
+        reason: "before-source-change",
+      });
+      buildChanged = true;
+      await expect(client.reconcile("must-not-run")).rejects.toEqual(changedError);
+      expect(reconcileCalls).toBe(1);
+    } finally {
+      await server.close();
+    }
   });
 
   it("round-trips agent.prepareExternalLaunch and agent.reportExternalExit", async () => {

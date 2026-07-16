@@ -48,6 +48,10 @@ export type CreateObserverClientOptions = {
   socketPath: string;
   timeoutMs?: number;
   requestId?: () => string;
+  /** Exact Observer build selector required before each non-health operation. */
+  expectedBuildVersion?: string;
+  /** Revalidates and supplies the exact selector immediately before a guarded operation. */
+  expectedBuildVersionProvider?: () => string;
 };
 
 type OpenSubscription = {
@@ -120,12 +124,23 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   method: TMethod,
   params?: unknown,
 ): Promise<ProtocolResult<TMethod>> {
+  const expectedBuildVersion =
+    method === "observer.health" ? undefined : resolveExpectedBuildVersion(options);
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
     ({ signal }) =>
-      openRequestConnection(options, signal, (connection) =>
-        readResponseForRequest(connection, id, method, params),
-      ),
+      openRequestConnection(options, signal, async (connection) => {
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        if (expectedBuildVersion !== undefined) {
+          await assertExpectedObserverBuild(
+            connection,
+            iterator,
+            `${id}_health`,
+            expectedBuildVersion,
+          );
+        }
+        return readResponseForRequest(connection, iterator, id, method, params);
+      }),
   );
 
   return unwrapBoundaryResult(result);
@@ -166,21 +181,50 @@ async function openRequestConnection<T>(
 
 async function readResponseForRequest<TMethod extends ProtocolMethod>(
   connection: NdjsonConnection,
+  iterator: AsyncIterator<unknown>,
   id: string,
   method: TMethod,
   params?: unknown,
 ): Promise<ProtocolResult<TMethod>> {
   connection.send(protocolRequest(id, method, params));
 
-  for await (const message of connection.messages()) {
-    const response = parseProtocolResponseMessage(message);
+  for (;;) {
+    const next = await iterator.next();
+    if (next.done) {
+      throw protocolSocketClosedError();
+    }
+    const response = parseProtocolResponseMessage(next.value);
     if (response.id !== id) {
       continue;
     }
     return parseProtocolResponseResult(response, method);
   }
+}
 
-  throw protocolSocketClosedError();
+async function assertExpectedObserverBuild(
+  connection: NdjsonConnection,
+  iterator: AsyncIterator<unknown>,
+  id: string,
+  expectedBuildVersion: string,
+): Promise<void> {
+  const health = await readResponseForRequest(connection, iterator, id, "observer.health");
+  assertObserverBuildVersion(expectedBuildVersion, health.version);
+}
+
+function assertObserverBuildVersion(
+  expectedBuildVersion: string,
+  actualBuildVersion: string | undefined,
+): void {
+  if (actualBuildVersion === expectedBuildVersion) {
+    return;
+  }
+
+  const reportedBuildVersion = actualBuildVersion ?? "missing";
+  throw protocolSafeError({
+    code: "OBSERVER_BUILD_MISMATCH",
+    message: `Observer build mismatch: this client expects "${expectedBuildVersion}", but the socket owner reports "${reportedBuildVersion}".`,
+    hint: "Close and relaunch this client so it can hand off to the current Observer, or use a config with an isolated observer socket_path and state_dir.",
+  });
 }
 
 function parseProtocolResponseResult<TMethod extends ProtocolMethod>(
@@ -281,12 +325,23 @@ async function openSubscription(
   filter?: EventFilter,
   signal?: AbortSignal,
 ): Promise<OpenSubscription> {
+  const expectedBuildVersion = resolveExpectedBuildVersion(options);
   const connection = await connectUnixSocket(
     options.socketPath,
     options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
   );
   const iterator = connection.messages()[Symbol.asyncIterator]();
   try {
+    if (expectedBuildVersion !== undefined) {
+      await assertExpectedObserverBuildForSubscription(
+        connection,
+        iterator,
+        `${id}_health`,
+        expectedBuildVersion,
+        requestTimeoutMs(options),
+        signal,
+      );
+    }
     connection.send(protocolRequest(id, "events.subscribe", filter));
     // The acknowledgement is bounded; the event stream itself remains long-lived.
     await readSubscriptionAck(connection, iterator, id, requestTimeoutMs(options), signal);
@@ -295,6 +350,40 @@ async function openSubscription(
     connection.close();
     throw error;
   }
+}
+
+function resolveExpectedBuildVersion(options: CreateObserverClientOptions): string | undefined {
+  return options.expectedBuildVersionProvider?.() ?? options.expectedBuildVersion;
+}
+
+async function assertExpectedObserverBuildForSubscription(
+  connection: NdjsonConnection,
+  iterator: AsyncIterator<unknown>,
+  id: string,
+  expectedBuildVersion: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  connection.send(protocolRequest(id, "observer.health"));
+  const message = await readNextProtocolMessage(
+    connection,
+    iterator,
+    {
+      timeoutMs,
+      code: "PROTOCOL_REQUEST_TIMEOUT",
+      message: "Observer protocol build check timed out.",
+    },
+    signal,
+  );
+  const response = parseProtocolResponseMessage(message);
+  if (response.id !== id) {
+    throw protocolSafeError({
+      code: "PROTOCOL_RESPONSE_VALIDATION_FAILED",
+      message: "Observer protocol build check did not match the request.",
+    });
+  }
+  const health = parseProtocolResponseResult(response, "observer.health");
+  assertObserverBuildVersion(expectedBuildVersion, health.version);
 }
 
 async function readSubscriptionAck(

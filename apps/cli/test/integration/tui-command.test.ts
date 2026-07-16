@@ -9,6 +9,7 @@ import { createTempState, writeConfigToml } from "../../../../tests/support/temp
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
 
 const now = "2026-05-20T12:00:00.000Z";
+const observerBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
 const tuiConfig: TuiConfig = {
   widgets: [
     {
@@ -58,13 +59,19 @@ function emptySnapshot(reason: string) {
 type SpawnObserverInput = Parameters<NonNullable<ObserverProcessDeps["spawnObserver"]>>[0];
 
 function runningObserverDeps(
-  options: { reconciles?: string[]; hangReconcile?: boolean; spawns?: SpawnObserverInput[] } = {},
+  options: {
+    reconciles?: string[];
+    hangReconcile?: boolean;
+    spawns?: SpawnObserverInput[];
+    onSpawn?: () => void;
+  } = {},
 ) {
   let running = false;
   return {
-    buildVersion: "0.0.0",
+    buildVersion: observerBuildVersion,
     spawnObserver: async (input: SpawnObserverInput) => {
       options.spawns?.push(input);
+      options.onSpawn?.();
       running = true;
       return { pid: 1234, unref: () => undefined };
     },
@@ -77,7 +84,7 @@ function runningObserverDeps(
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           };
         },
         reconcile: (reason: string) => {
@@ -122,12 +129,51 @@ describe("CLI tui command", () => {
     ]);
     expect(envs).toEqual([
       {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
         STATION_OBSERVER_SOCKET_PATH: join(fixture.root, ".local/state/station/run/observer.sock"),
       },
     ]);
     await expect(access(join(fixture.root, ".config/station/config.toml"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("captures one caller build before startup even when the checkout changes while awaiting it", async () => {
+    const fixture = await createTempState();
+    const envs: Array<Record<string, string>> = [];
+    let currentBuildVersion = observerBuildVersion;
+    const changedBuildVersion = `0.7.0+station.${"b".repeat(64)}`;
+    const { buildVersion: _ignoredBuildVersion, ...observerDeps } = runningObserverDeps({
+      onSpawn: () => {
+        currentBuildVersion = changedBuildVersion;
+      },
+    });
+    const readBuildVersion = vi.fn(() => currentBuildVersion);
+
+    const result = await runTuiCommand(
+      [],
+      { config: fixture.config },
+      {
+        observer: observerDeps,
+        buildVersion: readBuildVersion,
+        spawnRenderer: async ({ env }) => {
+          envs.push(env);
+          return { status: "exited", code: 0 };
+        },
+      },
+    );
+
+    expect(result).toEqual({ status: "exited", code: 0 });
+    expect(readBuildVersion).toHaveBeenCalledTimes(1);
+    expect(currentBuildVersion).toBe(changedBuildVersion);
+    expect(envs).toEqual([
+      {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+      },
+    ]);
   });
 
   it("keeps explicit missing and malformed implicit configs as hard errors", async () => {
@@ -174,7 +220,13 @@ describe("CLI tui command", () => {
     });
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
-    expect(envs).toEqual([{ STATION_OBSERVER_SOCKET_PATH: fixture.socketPath }]);
+    expect(envs).toEqual([
+      {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+      },
+    ]);
     // The startup reconcile is deferred and never awaited: not yet run when the
     // renderer resolves, then fires as "tui-startup".
     expect(reconciles).toEqual([]);
@@ -202,6 +254,7 @@ describe("CLI tui command", () => {
         { config: fixture.config },
         {
           observer: {
+            buildVersion: observerBuildVersion,
             spawnObserver: async () => {
               spawned = true;
               markSpawned();
@@ -217,7 +270,7 @@ describe("CLI tui command", () => {
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
-                    version: "0.7.0",
+                    version: observerBuildVersion,
                   };
                 },
                 reconcile: async () => emptySnapshot("tui-startup"),
@@ -272,6 +325,7 @@ describe("CLI tui command", () => {
           { config: fixture.config },
           {
             observer: {
+              buildVersion: observerBuildVersion,
               spawnObserver: async () => {
                 throw new Error("observer should not spawn for a warm attachment");
               },
@@ -282,7 +336,7 @@ describe("CLI tui command", () => {
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
-                    version: "0.7.0",
+                    version: observerBuildVersion,
                   }),
                   reconcile: async () => emptySnapshot("tui-startup"),
                 }) as never,
@@ -315,7 +369,13 @@ describe("CLI tui command", () => {
     });
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
-    expect(envs).toEqual([{ STATION_OBSERVER_SOCKET_PATH: fixture.socketPath }]);
+    expect(envs).toEqual([
+      {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+      },
+    ]);
   });
 
   it("signals popup mode to the renderer via env", async () => {
@@ -335,7 +395,12 @@ describe("CLI tui command", () => {
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
     expect(envs).toEqual([
-      { STATION_OBSERVER_SOCKET_PATH: fixture.socketPath, STATION_TUI_POPUP: "1" },
+      {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+        STATION_TUI_POPUP: "1",
+      },
     ]);
   });
 
@@ -547,7 +612,12 @@ describe("CLI tui command", () => {
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
     expect(envs).toEqual([
-      { STATION_OBSERVER_SOCKET_PATH: fixture.socketPath, STATION_TUI_POPUP: "1" },
+      {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+        STATION_TUI_POPUP: "1",
+      },
     ]);
   });
 
@@ -700,7 +770,13 @@ describe("CLI tui command", () => {
     });
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
-    expect(envs).toEqual([{ STATION_OBSERVER_SOCKET_PATH: fixture.socketPath }]);
+    expect(envs).toEqual([
+      {
+        STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+      },
+    ]);
   });
 
   it("rejects invalid fake dashboard count flags before observer startup", async () => {

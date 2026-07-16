@@ -489,11 +489,18 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_PROJECT_ID`, `STATION_WORKTREE_ID`, `STATION_WORKTREE_PATH`,
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
-`STATION_HOOK_SPOOL_DIR`, `STATION_TUI_POPUP`, `STATION_FOCUS_PROVIDER`, and
-`STATION_FOCUS_CLIENT_ID`. Hook scripts and launched agents receive these so they
-can report back to the right observer/session. `STATION_STATE_DIR` is a hook-script
-fallback for `stn-ingress --state-dir`; it is **not** a global observer relocation
-knob. Use `observer.state_dir` in config for isolation.
+`STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_TUI_POPUP`, `STATION_FOCUS_PROVIDER`,
+and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two build variables as a
+pair: the first identifies the renderer artifact and the second pins it to the
+exact Observer selector the CLI accepted. A directly launched source renderer
+falls back to its own built selector. Before every Observer operation the renderer also
+revalidates that its local source inputs and production outputs still match the
+build it launched with. It is not a hand-authored override. Hook scripts and launched
+agents receive the other context so they can report back to the right
+observer/session. `STATION_STATE_DIR` is a hook-script fallback for
+`stn-ingress --state-dir`; it is **not** a global observer relocation knob. Use
+`observer.state_dir` in config for isolation.
 
 ---
 

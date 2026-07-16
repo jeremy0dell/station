@@ -52,6 +52,8 @@ export type ProviderHookSenderOptions = {
 
 type ProviderHookClientFactoryOptions = {
   timeoutMs: number;
+  /** Exact Observer selector accepted by delivery readiness. */
+  expectedBuildVersion?: string;
 };
 
 export type ProviderHookSenderDeps = ProviderHookObserverStartupDeps & {
@@ -135,11 +137,12 @@ export async function sendProviderHookEvent(
     startupTimeoutMs: input.startupTimeoutMs ?? 1500,
     rateLimitMs: input.rateLimitMs ?? 2000,
     deps,
-    deliver: () =>
+    deliver: (expectedBuildVersion) =>
       attemptHookDelivery(
         input.paths,
         event,
         input.deliveryTimeoutMs ?? defaultDeliveryTimeoutMs,
+        expectedBuildVersion,
         deps,
       ),
     spoolReceipt: (error) => spool(input.paths, event, error, deps),
@@ -300,9 +303,10 @@ async function attemptHookDelivery(
   paths: ObserverPaths,
   event: ProviderHookEvent,
   timeoutMs: number,
+  expectedBuildVersion: string,
   deps: ProviderHookSenderDeps,
 ): Promise<ProviderDeliveryAttempt> {
-  const delivery = await deliverHook(paths, event, timeoutMs, deps);
+  const delivery = await deliverHook(paths, event, timeoutMs, expectedBuildVersion, deps);
   if (delivery.ok && delivery.value.status === "ingested") {
     return { receipt: delivery.value };
   }
@@ -320,6 +324,7 @@ async function deliverHook(
   paths: ObserverPaths,
   event: ProviderHookEvent,
   timeoutMs: number,
+  expectedBuildVersion: string,
   deps: ProviderHookSenderDeps,
 ) {
   return runRuntimeBoundaryWithTimeout(
@@ -341,7 +346,7 @@ async function deliverHook(
       },
     },
     async () => {
-      const client = observerClient(paths.socketPath, timeoutMs, deps);
+      const client = observerClient(paths.socketPath, timeoutMs, expectedBuildVersion, deps);
       const receipt = await client.ingestProviderHookEvent(event);
       if (receipt.status !== "ingested") {
         throw (
@@ -493,10 +498,11 @@ function jsonByteCount(value: unknown): number | null {
 function observerClient(
   socketPath: string,
   timeoutMs: number,
+  expectedBuildVersion: string,
   deps: ProviderHookSenderDeps,
 ): ReturnType<typeof createObserverClient> {
   return (
-    deps.clientFactory?.(socketPath, { timeoutMs }) ??
-    createObserverClient({ socketPath, timeoutMs })
+    deps.clientFactory?.(socketPath, { timeoutMs, expectedBuildVersion }) ??
+    createObserverClient({ socketPath, timeoutMs, expectedBuildVersion })
   );
 }

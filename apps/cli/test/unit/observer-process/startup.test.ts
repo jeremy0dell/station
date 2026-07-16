@@ -2,13 +2,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
-import { stationBuildInfo } from "@station/runtime";
+import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const higherBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 
-const healthyObserver = (pid = 1234, version = stationBuildInfo().version) =>
+const healthyObserver = (pid = 1234, version = stationObserverBuildVersion()) =>
   ({
     schemaVersion: "0.8.0",
     status: "healthy",
@@ -231,7 +232,7 @@ describe("CLI observer process startup", () => {
 
     expect(result).toMatchObject({
       status: "running",
-      health: { version: stationBuildInfo().version },
+      health: { version: stationObserverBuildVersion() },
     });
     expect(result.health?.pid).toBeUndefined();
     expect(kills).toBe(1);
@@ -245,7 +246,7 @@ describe("CLI observer process startup", () => {
     const result = await startObserver(
       { config: fixture.config, timeoutMs: 5_000 },
       {
-        buildVersion: "2.0.0",
+        buildVersion: higherBuildVersion,
         spawnObserver: async () =>
           fakeChild({
             pid: 5678,
@@ -256,12 +257,17 @@ describe("CLI observer process startup", () => {
           }),
         clientFactory: fakeClientFactory(async () => {
           healthCalls += 1;
-          return healthCalls < 3 ? healthyObserver(1234, "1.0.0") : healthyObserver(5678, "2.0.0");
+          return healthCalls < 3
+            ? healthyObserver(1234, "1.0.0")
+            : healthyObserver(5678, higherBuildVersion);
         }),
       },
     );
 
-    expect(result).toMatchObject({ status: "running", health: { pid: 5678, version: "2.0.0" } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { pid: 5678, version: higherBuildVersion },
+    });
     expect(healthCalls).toBe(3);
     expect(kills).toBe(0);
   });

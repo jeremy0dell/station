@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ObserverHealth, ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
+import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { createStaleSocketFile } from "../../../../tests/support/sockets";
 import {
@@ -67,7 +68,7 @@ describe("provider hook ingress command", () => {
         "--observer-entry",
         observerEntry,
         "--startup-timeout-ms",
-        "500",
+        "2000",
         "worktrunk",
         "post-create",
       ],
@@ -590,6 +591,7 @@ describe("provider hook ingress command", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     let observedTimeoutMs: number | undefined;
+    let observedBuildVersion: string | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -612,6 +614,7 @@ describe("provider hook ingress command", () => {
         hookId: () => "report_codex_timeout",
         clientFactory: (_socketPath, options) => {
           observedTimeoutMs = options.timeoutMs;
+          observedBuildVersion = options.expectedBuildVersion;
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => ({
             schemaVersion: "0.8.0",
             hookId: event.hookId ?? "hook_timeout_1",
@@ -633,6 +636,7 @@ describe("provider hook ingress command", () => {
 
     expect(receipt.status).toBe("ingested");
     expect(observedTimeoutMs).toBe(4321);
+    expect(observedBuildVersion).toBe(stationObserverBuildVersion());
   });
 
   it("spools raw Codex hook events when online delivery is unavailable", async () => {
@@ -771,7 +775,7 @@ function healthyObserver(paths: { socketPath: string; stateDir: string }): Obser
     status: "healthy",
     pid: 12345,
     startedAt: now,
-    version: "0.7.0",
+    version: stationObserverBuildVersion(),
     socketPath: paths.socketPath,
     stateDir: paths.stateDir,
   };

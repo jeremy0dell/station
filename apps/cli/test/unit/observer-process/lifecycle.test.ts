@@ -9,6 +9,11 @@ import { fileExists } from "../../../../../tests/support/spool";
 import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const zeroBuildVersion = `0.0.0+station.${"a".repeat(64)}`;
+const losingBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
+const winningBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
+const exactOneBuildVersion = `1.0.0+station.${"a".repeat(64)}`;
+const exactTwoBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 
 describe("CLI observer process lifecycle", () => {
   it("maps stale sockets distinctly from stopped observers", async () => {
@@ -39,7 +44,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 200,
       },
       {
-        buildVersion: "0.0.0",
+        buildVersion: zeroBuildVersion,
         clock: { now: () => new Date(now) },
         spawnObserver: async (input): Promise<ChildProcessLike> => {
           spawnInput = input;
@@ -58,7 +63,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
-                version: "0.0.0",
+                version: zeroBuildVersion,
               };
             },
           }) as never,
@@ -90,7 +95,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 200,
       },
       {
-        buildVersion: "0.0.0",
+        buildVersion: zeroBuildVersion,
         clock: { now: () => new Date(now) },
         spawnObserver: async (): Promise<ChildProcessLike> => {
           staleSocketPresentAtSpawn = await fileExists(fixture.socketPath);
@@ -108,7 +113,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
-                version: "0.0.0",
+                version: zeroBuildVersion,
               };
             },
           }) as never,
@@ -241,11 +246,11 @@ describe("CLI observer process lifecycle", () => {
     const fixture = await createTempState();
     let spawned = false;
 
-    for (const version of ["1.2.3", "2.0.0"]) {
+    for (const version of [losingBuildVersion, "2.0.0"]) {
       const result = await startObserver(
         { config: fixture.config },
         {
-          buildVersion: "1.2.3",
+          buildVersion: losingBuildVersion,
           spawnObserver: async () => {
             spawned = true;
             return { pid: 5678, unref: () => undefined };
@@ -269,6 +274,44 @@ describe("CLI observer process lifecycle", () => {
     expect(spawned).toBe(false);
   });
 
+  it("refuses without spawning when a same-version incumbent has the winning identity", async () => {
+    const fixture = await createTempState();
+    let spawned = false;
+
+    const result = await startObserver(
+      { config: fixture.config },
+      {
+        buildVersion: losingBuildVersion,
+        spawnObserver: async () => {
+          spawned = true;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.8.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: winningBuildVersion,
+              socketPath: fixture.socketPath,
+            }),
+          }) as never,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_HANDOFF_REFUSED",
+        hint: expect.stringMatching(
+          /Running build: 1\.2\.3 \(build b{12}\).*Requested build: 1\.2\.3 \(build a{12}\)/u,
+        ),
+      },
+    });
+    expect(spawned).toBe(false);
+  });
+
   it("refuses to restart a newer incumbent from a lower build", async () => {
     const fixture = await createTempState();
     let stops = 0;
@@ -276,7 +319,7 @@ describe("CLI observer process lifecycle", () => {
     const result = await restartObserver(
       { config: fixture.config },
       {
-        buildVersion: "1.0.0",
+        buildVersion: exactOneBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
           return { pid: 5678, unref: () => undefined };
@@ -318,7 +361,7 @@ describe("CLI observer process lifecycle", () => {
     const result = await restartObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
-        buildVersion: "1.0.0",
+        buildVersion: exactOneBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
           running = true;
@@ -333,7 +376,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
-                version: "1.0.0",
+                version: exactOneBuildVersion,
                 socketPath: fixture.socketPath,
               };
             },
@@ -346,7 +389,10 @@ describe("CLI observer process lifecycle", () => {
       },
     );
 
-    expect(result).toMatchObject({ status: "running", health: { version: "1.0.0" } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { version: exactOneBuildVersion },
+    });
     expect(stops).toBe(1);
     expect(spawns).toBe(1);
   });
@@ -360,10 +406,10 @@ describe("CLI observer process lifecycle", () => {
     const result = await restartObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
-        buildVersion: "2.0.0",
+        buildVersion: exactTwoBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
-          version = "2.0.0";
+          version = exactTwoBuildVersion;
           pid = 5678;
           return { pid, unref: () => undefined };
         },
@@ -385,7 +431,10 @@ describe("CLI observer process lifecycle", () => {
       },
     );
 
-    expect(result).toMatchObject({ status: "running", health: { pid: 5678, version: "2.0.0" } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { pid: 5678, version: exactTwoBuildVersion },
+    });
     expect(stops).toBe(0);
     expect(spawns).toBe(1);
   });
@@ -398,7 +447,7 @@ describe("CLI observer process lifecycle", () => {
     const result = await startObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
-        buildVersion: "2.0.0",
+        buildVersion: exactTwoBuildVersion,
         spawnObserver: async () => {
           spawned = true;
           return { pid: 5678, unref: () => undefined };
@@ -422,7 +471,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 5678,
                 startedAt: now,
-                version: "2.0.0",
+                version: exactTwoBuildVersion,
                 socketPath: fixture.socketPath,
               };
             },
@@ -432,7 +481,10 @@ describe("CLI observer process lifecycle", () => {
 
     expect(spawned).toBe(true);
     expect(healthAttempts).toBeGreaterThanOrEqual(3);
-    expect(result).toMatchObject({ status: "running", health: { version: "2.0.0", pid: 5678 } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { version: exactTwoBuildVersion, pid: 5678 },
+    });
   });
 
   it.each([

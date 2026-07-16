@@ -13,15 +13,64 @@ const candidate = {
   startedAt: "2026-07-12T12:00:00.000Z",
   pid: 200,
 };
+const lowerBuildIdentity = "1".repeat(64);
+const higherBuildIdentity = "e".repeat(64);
 
 describe("classifyObserverIncumbent", () => {
   it("attaches to an exact build", () => {
+    const buildVersion = observerBuildVersion("2.0.0", lowerBuildIdentity);
     expect(
       classifyObserverIncumbent({
-        candidate,
-        incumbent: { version: candidate.version },
+        candidate: { ...candidate, version: buildVersion },
+        incumbent: { version: buildVersion },
       }),
     ).toEqual({ action: "attach", reason: "exact-build" });
+  });
+
+  it("replaces only in the winning direction for different same-version builds", () => {
+    const lower = observerBuildVersion("2.0.0", lowerBuildIdentity);
+    const higher = observerBuildVersion("2.0.0", higherBuildIdentity);
+
+    expect(decisionFor(higher, lower)).toEqual({
+      action: "replace",
+      reason: "candidate-wins",
+    });
+    expect(decisionFor(lower, higher)).toMatchObject({ action: "refuse" });
+  });
+
+  it("refuses same-version handoff when only one contender has build identity", () => {
+    const identified = observerBuildVersion("2.0.0", higherBuildIdentity);
+
+    expect(decisionFor(identified, "2.0.0")).toMatchObject({ action: "refuse" });
+    expect(decisionFor("2.0.0", identified)).toMatchObject({ action: "refuse" });
+  });
+
+  it.each([
+    `2.0.0+station.${"A".repeat(64)}`,
+    `2.0.0+station.${"a".repeat(63)}`,
+    `2.0.0+station.${"a".repeat(65)}`,
+    `2.0.0+station.${"g".repeat(64)}`,
+    `2.0.0+station.${lowerBuildIdentity}.station.${higherBuildIdentity}`,
+  ])("refuses malformed reserved build identity %s", (malformed) => {
+    const identified = observerBuildVersion("2.0.0", higherBuildIdentity);
+    expect(decisionFor(identified, malformed)).toMatchObject({ action: "refuse" });
+    expect(decisionFor(malformed, identified)).toMatchObject({ action: "refuse" });
+  });
+
+  it("refuses exact legacy reuse while retaining cross-version SemVer handoff", () => {
+    expect(decisionFor("2.0.0", "2.0.0")).toMatchObject({ action: "refuse" });
+    expect(
+      decisionFor(
+        observerBuildVersion("2.0.0", lowerBuildIdentity),
+        observerBuildVersion("1.9.9", higherBuildIdentity),
+      ),
+    ).toEqual({ action: "replace", reason: "candidate-wins" });
+    expect(
+      decisionFor(
+        observerBuildVersion("1.9.9", higherBuildIdentity),
+        observerBuildVersion("2.0.0", lowerBuildIdentity),
+      ),
+    ).toEqual({ action: "attach", reason: "incumbent-wins" });
   });
 
   it("uses strict SemVer precedence without numeric truncation", () => {
@@ -297,6 +346,10 @@ function decisionFor(candidateVersion: string, incumbentVersion: string) {
       pid: 100,
     },
   });
+}
+
+function observerBuildVersion(version: string, buildIdentity: string): string {
+  return `${version}${version.includes("+") ? "." : "+"}station.${buildIdentity}`;
 }
 
 function handoffFixture() {

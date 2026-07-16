@@ -38,7 +38,7 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
   `pnpm build` does not create the installed artifact ownership used by the
   binding.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
-- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
+- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
@@ -49,6 +49,17 @@ Git-backed fixtures and child processes must clear Git's repository-local enviro
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`
 are inherited. Remove linked worktrees and other Git-created resources through Git before deleting
 their directories.
+
+`pnpm build` computes one immutable Observer build identity from the current
+Git `HEAD`, the sorted tracked plus untracked-nonignored working-tree contents,
+and the resulting production package `dist` contents. It rebuilds, verifies the
+inputs did not move, then atomically publishes
+`packages/runtime/dist/station-build-id`. Source CLI/Observer output and a
+binary compiled from that output therefore share an identity; rebuilding
+unchanged inputs and outputs reuses it. Source processes reverify both halves
+before using the sidecar, so a scoped compile, cache restore, source edit, or
+failed build cannot silently claim an older identity. Run `pnpm build` again;
+do not copy or retain this sidecar across a failed or different build.
 
 The deterministic local gate is:
 
@@ -112,11 +123,15 @@ gate and the hosted `standard-ci` job run these checks.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
-claim-held no-side-effect behavior, pidfile publication, version-aware graceful
-handoff and refusal, and clean restart while the persistent claim remains. The
-compiled binary smoke also proves source/compiled ordering and Station Host PTY
-continuity across Observer replacement. Run both after `pnpm build` when
-changing startup, socket ownership, pidfiles, or claim lifecycle behavior.
+claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
+same-version build-identity handoff and refusal, cross-version graceful handoff,
+and clean restart while the persistent claim remains. The compiled binary smoke
+also builds a second artifact from one production-source change in an isolated
+detached worktree, queries both exact selectors, proves lower-to-higher
+same-version replacement and post-handoff mutation refusal, then proves
+source/compiled ordering and Station Host PTY continuity across both Observer
+replacements. Run both after `pnpm build` when changing startup, socket
+ownership, pidfiles, or claim lifecycle behavior.
 
 For focused Station PTY work, run both implementations explicitly:
 
@@ -161,8 +176,12 @@ baseline target for older CPU compatibility. The smoke runs the binary with a
 child `PATH` that contains neither Node nor Bun and covers Observer self-spawn,
 ingress and popup argv0 dispatch, packaged assets, hostile working-directory
 configuration, and a real host-backed Bun PTY.
-The `0.0.0-local` build identity also exercises cross-version Observer handoff
-and verifies that the same live Host PTY survives it.
+The `0.0.0-local` display version exercises cross-version Observer handoff. The
+smoke first builds two independently stamped binaries at that display version,
+runs the lower identity as incumbent, replaces it with the higher identity, and
+verifies that a later mutating command from the loser is refused without
+changing the Observer, Station Host, or live PTY. It requires a committed clean
+checkout so the detached-worktree artifact has one controlled source delta.
 
 To inspect the UX manually after the smoke:
 

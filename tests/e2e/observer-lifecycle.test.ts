@@ -19,6 +19,7 @@ import { emptyConfig } from "@station/config";
 import { ObserverProcessIdentitySchema } from "@station/contracts";
 import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
+import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { createRealStaleSocket, waitForSocketClosed } from "../support/sockets";
 import { createTempState, writeConfigToml } from "../support/temp-projects";
@@ -59,6 +60,8 @@ describe("observer lifecycle e2e", () => {
         socketPath: fixture.socketPath,
         stateDir: fixture.stateDir,
       });
+      const build = stationBuildInfo();
+      expect(status.health.version).toBe(stationObserverBuildVersion(build));
       const identity = ObserverProcessIdentitySchema.parse(
         JSON.parse(await readFile(pidfilePath, "utf8")),
       );
@@ -75,6 +78,7 @@ describe("observer lifecycle e2e", () => {
       });
       await expect(client.getSnapshot()).resolves.toMatchObject({
         schemaVersion: "0.8.0",
+        observer: { version: build.version },
         counts: { projects: 0 },
       });
       await expect(access(join(fixture.root, "config.toml"))).rejects.toMatchObject({
@@ -167,10 +171,11 @@ describe("observer lifecycle e2e", () => {
 
     try {
       const startedAt = Date.now();
-      const status = await startObserver({ config, timeoutMs: 10_000 }, { buildVersion: "0.7.0" });
+      const buildVersion = stationObserverBuildVersion();
+      const status = await startObserver({ config, timeoutMs: 10_000 }, { buildVersion });
       expect(status).toMatchObject({
         status: "running",
-        health: { version: "0.7.0", socketPath: fixture.socketPath },
+        health: { version: buildVersion, socketPath: fixture.socketPath },
       });
       expect(Date.now() - startedAt).toBeGreaterThanOrEqual(300);
       if (status.status !== "running") throw new Error("Successor Observer did not start.");
@@ -183,9 +188,113 @@ describe("observer lifecycle e2e", () => {
         ),
       ).toMatchObject({
         pid: status.health.pid,
-        version: "0.7.0",
+        version: buildVersion,
         socketPath: fixture.socketPath,
       });
+    } finally {
+      if (successorStarted) {
+        await successorClient.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+      await terminateFixture(incumbent.child);
+    }
+  });
+
+  it("hands off between different builds with the same display version", async () => {
+    const fixture = await createTempState();
+    const build = stationBuildInfo();
+    const incumbentVersion = stationObserverBuildVersion({
+      ...build,
+      buildIdentity: "0".repeat(64),
+    });
+    const candidateVersion = stationObserverBuildVersion(build);
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: incumbentVersion,
+    });
+    const successorClient = createObserverClient({
+      socketPath: fixture.socketPath,
+      timeoutMs: 1000,
+    });
+    let successorStarted = false;
+
+    try {
+      const status = await startObserver(
+        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 10_000 },
+        { buildVersion: candidateVersion },
+      );
+      expect(status).toMatchObject({
+        status: "running",
+        health: { version: candidateVersion, socketPath: fixture.socketPath },
+      });
+      if (status.status !== "running") throw new Error("Successor Observer did not start.");
+      successorStarted = true;
+      expect(status.health.pid).not.toBe(incumbent.child.pid);
+      await expectProcessExit(incumbent.child.pid);
+    } finally {
+      if (successorStarted) {
+        await successorClient.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+      await terminateFixture(incumbent.child);
+    }
+  });
+
+  it("refuses a losing same-version build until the incumbent is explicitly stopped", async () => {
+    const fixture = await createTempState();
+    const build = stationBuildInfo();
+    const incumbentVersion = stationObserverBuildVersion({
+      ...build,
+      buildIdentity: "f".repeat(64),
+    });
+    const candidateVersion = stationObserverBuildVersion(build);
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: incumbentVersion,
+    });
+    const successorClient = createObserverClient({
+      socketPath: fixture.socketPath,
+      timeoutMs: 1000,
+    });
+    let successorStarted = false;
+    let spawned = false;
+
+    try {
+      const refused = await startObserver(
+        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 10_000 },
+        {
+          buildVersion: candidateVersion,
+          spawnObserver: async () => {
+            spawned = true;
+            throw new Error("same-version refusal must happen before spawn");
+          },
+        },
+      );
+      expect(refused).toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      });
+      expect(spawned).toBe(false);
+      expect(processIsAlive(incumbent.child.pid)).toBe(true);
+      await expect(incumbent.client.health()).resolves.toMatchObject({
+        pid: incumbent.child.pid,
+        version: incumbentVersion,
+      });
+
+      await incumbent.client.stop();
+      await waitForSocketClosed(fixture.socketPath);
+      await expectProcessExit(incumbent.child.pid);
+      const restarted = await startObserver({
+        config: observerConfig(fixture.stateDir, fixture.socketPath),
+        timeoutMs: 10_000,
+      });
+      expect(restarted).toMatchObject({
+        status: "running",
+        health: { version: candidateVersion },
+      });
+      successorStarted = restarted.status === "running";
     } finally {
       if (successorStarted) {
         await successorClient.stop().catch(() => undefined);
@@ -206,8 +315,8 @@ describe("observer lifecycle e2e", () => {
 
     try {
       const status = await startObserver(
-        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 4000 },
-        { buildVersion: "0.7.0" },
+        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 10_000 },
+        { buildVersion: stationObserverBuildVersion() },
       );
       expect(status).toMatchObject({
         status: "unhealthy",
@@ -241,7 +350,7 @@ describe("observer lifecycle e2e", () => {
     try {
       const status = await startObserver(
         { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 4000 },
-        { buildVersion: "0.7.0" },
+        { buildVersion: stationObserverBuildVersion() },
       );
       expect(status).toMatchObject({
         status: "unhealthy",

@@ -14,9 +14,18 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createObserverClient } from "../../packages/protocol/dist/index.js";
+import {
+  parseStationObserverBuildVersion,
+  stationObserverBuildVersion,
+} from "../../packages/runtime/dist/index.js";
 import { createStationHostClient } from "../../packages/station-host/dist/index.js";
+
+const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+const alternateProductionSource = "apps/cli/src/observerProcess/health.ts";
+const alternateBuildMarker = " (alternate binary smoke build)";
 
 if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   await runFakeTmuxProcess(process.argv.slice(2));
@@ -24,8 +33,17 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
   const sourceCliPath = resolve("apps/cli/dist/main.js");
   const expectedVersion = parseExpectedVersion(process.argv.slice(2));
+  const buildIdentity = (
+    await readFile(resolve("packages/runtime/dist/station-build-id"), "utf8")
+  ).trim();
+  const compiledObserverVersion = stationObserverBuildVersion({
+    version: expectedVersion,
+    compiled: true,
+    buildIdentity,
+  });
   const ptyOnly = process.env.STATION_BINARY_SMOKE_PTY_ONLY === "1";
   const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-"));
+  const alternateWorktreePath = join(root, "alternate-worktree");
   const homeDir = join(root, "home");
   const stateDir = join(root, "state");
   const runtimeDir = join(root, "runtime");
@@ -57,6 +75,10 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   let observerPid;
   let hostClient;
   let hostProcess;
+  let alternateWorktreeAdded = false;
+  let alternateBinaryPath;
+  let alternateObserverVersion;
+  let orderedSameVersionBuilds;
 
   try {
     await access(binaryPath, constants.X_OK);
@@ -80,6 +102,21 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
     await writeHostileConfig(hostileDir, markerPath);
 
     if (!ptyOnly) {
+      await requireCommittedCleanCheckout(repoRoot);
+      await runGit(["worktree", "add", "--detach", alternateWorktreePath, "HEAD"]);
+      alternateWorktreeAdded = true;
+      alternateBinaryPath = await buildAlternateBinary({
+        worktreePath: alternateWorktreePath,
+        expectedVersion,
+      });
+      alternateObserverVersion = await queryBinaryObserverVersion({
+        binaryPath: alternateBinaryPath,
+        expectedVersion,
+        // Keep the macOS Unix-domain socket path below sockaddr_un.sun_path's limit.
+        root: join(root, "a"),
+        label: "alternate compiled observer",
+      });
+
       const version = await run(binaryPath, ["--version"], { env: childEnv });
       assertEqual(version.stdout.trim(), expectedVersion, "compiled --version");
 
@@ -164,6 +201,26 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
       const health = await observerClient.health();
       observerPid = health.pid;
       assertEqual(health.status, "healthy", "compiled observer health");
+      assertEqual(
+        health.version,
+        compiledObserverVersion,
+        "compiled observer immutable build identity",
+      );
+      orderedSameVersionBuilds = orderSameVersionBuilds(
+        [
+          {
+            binaryPath,
+            label: "current",
+            observerVersion: health.version,
+          },
+          {
+            binaryPath: alternateBinaryPath,
+            label: "alternate",
+            observerVersion: alternateObserverVersion,
+          },
+        ],
+        expectedVersion,
+      );
       await run(
         binaryPath,
         ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
@@ -174,6 +231,7 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
       assertEqual((await observerClient.health()).pid, observerPid, "same-build observer reuse");
       const snapshot = await observerClient.getSnapshot();
       assertEqual(snapshot.observer.healthy, true, "compiled observer snapshot");
+      assertEqual(snapshot.observer.version, expectedVersion, "compiled observer display version");
 
       const coldPopup = await runManagedPopupBinding(
         persistedPopupRunShellCommand,
@@ -377,6 +435,35 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
       assertEqual(piHandlers.size > 0, true, "packaged Pi handler registration");
       await piHandlers.get("session_start")?.({ reason: "startup" }, { cwd: root });
       assertEqual(deliveredEvents.length, 1, "packaged Pi injected event delivery");
+
+      const lowerBuild = orderedSameVersionBuilds?.[0];
+      if (lowerBuild === undefined) {
+        fail("same-version binary ordering was not initialized");
+      }
+      if ((await observerClient.health()).version !== lowerBuild.observerVersion) {
+        const previousObserverPid = observerPid;
+        await observerClient.stop();
+        await waitForMissing(socketPath);
+        if (previousObserverPid !== undefined) {
+          assertEqual(
+            await waitForProcessExit(previousObserverPid, 10_000),
+            true,
+            "current observer exits before lower-build setup",
+          );
+        }
+        await run(
+          lowerBuild.binaryPath,
+          ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+          { env: childEnv },
+        );
+        const lowerHealth = await observerClient.health();
+        observerPid = lowerHealth.pid;
+        assertEqual(
+          lowerHealth.version,
+          lowerBuild.observerVersion,
+          "deterministic lower-build incumbent",
+        );
+      }
     }
 
     const hostSocketPath = join(runtimeDir, "station-host.sock");
@@ -423,9 +510,112 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
     });
     const attachment = await hostClient.attach(spawned.ptyId);
     if (!ptyOnly) {
+      const lowerBuild = orderedSameVersionBuilds?.[0];
+      const higherBuild = orderedSameVersionBuilds?.[1];
+      if (lowerBuild === undefined || higherBuild === undefined) {
+        fail("same-version binary ordering was not initialized");
+      }
+      const lowerObserverPid = observerPid;
+      await run(
+        higherBuild.binaryPath,
+        ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
+        { env: childEnv },
+      );
+      const higherHealth = await observerClient.health();
+      observerPid = higherHealth.pid;
+      assertEqual(
+        higherHealth.version,
+        higherBuild.observerVersion,
+        "higher same-version build replaces lower incumbent",
+      );
+      assertEqual(
+        observerPid === lowerObserverPid,
+        false,
+        "same-version handoff replaces the Observer process",
+      );
+      if (lowerObserverPid !== undefined) {
+        assertEqual(
+          await waitForProcessExit(lowerObserverPid, 10_000),
+          true,
+          "same-version handoff waits for lower Observer exit",
+        );
+      }
+      assertEqual(processIsAlive(hostProcess.pid), true, "same-version handoff preserves host");
+      assertEqual(
+        (await hostClient.health()).buildVersion,
+        expectedVersion,
+        "same-version handoff preserves host build",
+      );
+      const handedOffPty = (await hostClient.list()).find((entry) => entry.ptyId === spawned.ptyId);
+      assertEqual(handedOffPty?.alive, true, "same-version handoff preserves live PTY");
+
+      const commandCountBeforeRefusal = readCommandCount(join(stateDir, "observer.sqlite"));
+      const refusedMutation = await run(
+        lowerBuild.binaryPath,
+        [
+          "--config",
+          configPath,
+          "command",
+          "dispatch",
+          "--stdin",
+          "--wait",
+          "--timeout-ms",
+          "10000",
+        ],
+        {
+          env: childEnv,
+          input: JSON.stringify({
+            type: "observer.reconcile",
+            payload: { reason: "binary-smoke-losing-same-version-build" },
+          }),
+          allowedExitCodes: [1],
+        },
+      );
+      assertIncludes(
+        refusedMutation.stderr,
+        "OBSERVER_HANDOFF_REFUSED",
+        "losing same-version mutation refusal code",
+      );
+      assertIncludes(
+        refusedMutation.stderr,
+        lowerBuild.buildIdentity.slice(0, 12),
+        "losing same-version mutation caller identity",
+      );
+      assertIncludes(
+        refusedMutation.stderr,
+        higherBuild.buildIdentity.slice(0, 12),
+        "losing same-version mutation incumbent identity",
+      );
+      const healthAfterRefusal = await observerClient.health();
+      assertEqual(
+        healthAfterRefusal.pid,
+        observerPid,
+        "losing same-version mutation preserves Observer process",
+      );
+      assertEqual(
+        healthAfterRefusal.version,
+        higherBuild.observerVersion,
+        "losing same-version mutation preserves Observer build",
+      );
+      assertEqual(
+        readCommandCount(join(stateDir, "observer.sqlite")),
+        commandCountBeforeRefusal,
+        "losing same-version mutation is not recorded",
+      );
+      assertEqual(processIsAlive(hostProcess.pid), true, "same-version refusal preserves host");
+      const refusedMutationPty = (await hostClient.list()).find(
+        (entry) => entry.ptyId === spawned.ptyId,
+      );
+      assertEqual(refusedMutationPty?.alive, true, "same-version refusal preserves live PTY");
+
       const sourceVersion = (
         await run(process.execPath, [sourceCliPath, "--version"], { env: childEnv })
       ).stdout.trim();
+      const sourceObserverVersion = stationObserverBuildVersion({
+        version: sourceVersion,
+        compiled: false,
+        buildIdentity,
+      });
       if (expectedVersion.startsWith("0.0.0-") && sourceVersion !== expectedVersion) {
         const previousObserverPid = observerPid;
         await run(
@@ -435,7 +625,11 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
         );
         const successorHealth = await observerClient.health();
         observerPid = successorHealth.pid;
-        assertEqual(successorHealth.version, sourceVersion, "higher source observer handoff");
+        assertEqual(
+          successorHealth.version,
+          sourceObserverVersion,
+          "higher source observer handoff",
+        );
         assertEqual(
           observerPid === previousObserverPid,
           false,
@@ -505,26 +699,201 @@ if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
 
     process.stdout.write("binary smoke passed\n");
   } finally {
-    if (observerClient !== undefined) {
-      await observerClient.stop().catch(() => undefined);
-      await waitForMissing(socketPath).catch(() => undefined);
-    }
-    if (observerPid !== undefined) {
-      await terminateProcess(observerPid);
-    }
-    hostClient?.dispose();
-    if (hostProcess !== undefined && hostProcess.exitCode === null) {
-      hostProcess.kill("SIGTERM");
+    try {
+      if (observerClient !== undefined) {
+        await observerClient.stop().catch(() => undefined);
+        await waitForMissing(socketPath).catch(() => undefined);
+      }
+      if (observerPid !== undefined) {
+        await terminateProcess(observerPid);
+      }
+      hostClient?.dispose();
+      if (hostProcess !== undefined && hostProcess.exitCode === null) {
+        hostProcess.kill("SIGTERM");
+        try {
+          await waitForExit(hostProcess, 3000);
+        } catch {
+          hostProcess.kill("SIGKILL");
+          await waitForExit(hostProcess, 3000).catch(() => undefined);
+        }
+      }
+      await stopFakeTmuxProcesses(fakeTmuxStatePath);
+    } finally {
       try {
-        await waitForExit(hostProcess, 3000);
-      } catch {
-        hostProcess.kill("SIGKILL");
-        await waitForExit(hostProcess, 3000).catch(() => undefined);
+        if (alternateWorktreeAdded) {
+          await removeTemporaryWorktree(alternateWorktreePath);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
       }
     }
-    await stopFakeTmuxProcesses(fakeTmuxStatePath);
-    await rm(root, { recursive: true, force: true });
   }
+}
+
+async function requireCommittedCleanCheckout(root) {
+  const status = await runGit(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: root });
+  if (status.stdout.length === 0) {
+    return;
+  }
+  fail(
+    `binary smoke's two-artifact acceptance requires a committed clean checkout; commit or remove:\n${status.stdout}`,
+  );
+}
+
+async function buildAlternateBinary({ worktreePath, expectedVersion }) {
+  const sourcePath = join(worktreePath, alternateProductionSource);
+  const source = await readFile(sourcePath, "utf8");
+  const originalMessage =
+    'message: "Observer build handoff was refused because ownership could not be changed safely.",';
+  const alternateMessage = `message: "Observer build handoff was refused because ownership could not be changed safely${alternateBuildMarker}.",`;
+  if (source.split(originalMessage).length !== 2) {
+    fail(
+      `alternate binary smoke could not apply its production change to ${alternateProductionSource}`,
+    );
+  }
+  await writeFile(sourcePath, source.replace(originalMessage, alternateMessage), "utf8");
+  await assertOnlyAlternateProductionChange(worktreePath);
+
+  const buildEnv = environmentWithoutGitLocals({ ...process.env, CI: "1" });
+  await run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], {
+    cwd: worktreePath,
+    env: buildEnv,
+    timeoutMs: 300_000,
+  });
+  await run("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], {
+    cwd: join(worktreePath, "station"),
+    env: buildEnv,
+    timeoutMs: 300_000,
+  });
+  await run("pnpm", ["build:binary", "--", "--version", expectedVersion], {
+    cwd: worktreePath,
+    env: buildEnv,
+    timeoutMs: 900_000,
+  });
+  await assertOnlyAlternateProductionChange(worktreePath);
+
+  const path = join(worktreePath, "station", "dist", "bin", "stn");
+  await access(path, constants.X_OK);
+  return path;
+}
+
+async function assertOnlyAlternateProductionChange(worktreePath) {
+  const status = await runGit(["status", "--porcelain=v1", "--untracked-files=all"], {
+    cwd: worktreePath,
+  });
+  assertEqual(
+    status.stdout.trim(),
+    `M ${alternateProductionSource}`,
+    "alternate artifact production-source delta",
+  );
+}
+
+async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, label }) {
+  const homeDir = join(root, "home");
+  const stateDir = join(root, "state");
+  const runtimeDir = join(root, "runtime");
+  const socketPath = join(runtimeDir, "observer.sock");
+  const configPath = join(root, "config.toml");
+  const env = isolatedBinaryEnv({ homeDir, runtimeDir });
+  const client = createObserverClient({ socketPath, timeoutMs: 5000 });
+  let pid;
+
+  await Promise.all([
+    mkdir(join(homeDir, "tmp"), { recursive: true, mode: 0o700 }),
+    mkdir(stateDir, { recursive: true, mode: 0o700 }),
+    mkdir(runtimeDir, { recursive: true, mode: 0o700 }),
+  ]);
+  await writeSmokeConfig(configPath, stateDir, socketPath);
+  try {
+    const version = await run(binaryPath, ["--version"], { env });
+    assertEqual(version.stdout.trim(), expectedVersion, `${label} display version`);
+    await run(binaryPath, ["--config", configPath, "observer", "start", "--timeout-ms", "30000"], {
+      env,
+    });
+    const health = await client.health();
+    pid = health.pid;
+    assertEqual(health.status, "healthy", `${label} health`);
+    if (health.version === undefined) {
+      fail(`${label} did not publish an exact build selector`);
+    }
+    return health.version;
+  } finally {
+    await client.stop().catch(() => undefined);
+    await waitForMissing(socketPath).catch(() => undefined);
+    if (pid !== undefined) {
+      await terminateProcess(pid);
+    }
+  }
+}
+
+function orderSameVersionBuilds(builds, expectedVersion) {
+  const identified = builds.map((build) => {
+    if (build.binaryPath === undefined || build.observerVersion === undefined) {
+      fail(`${build.label} binary did not produce complete build evidence`);
+    }
+    const parsed = parseStationObserverBuildVersion(build.observerVersion);
+    assertEqual(parsed.version, expectedVersion, `${build.label} Observer display version`);
+    if (parsed.buildIdentity === undefined) {
+      fail(`${build.label} Observer did not publish immutable build identity`);
+    }
+    return { ...build, buildIdentity: parsed.buildIdentity };
+  });
+  if (identified[0]?.buildIdentity === identified[1]?.buildIdentity) {
+    fail("independently built artifacts unexpectedly published the same build identity");
+  }
+  return identified.sort((left, right) =>
+    left.buildIdentity < right.buildIdentity
+      ? -1
+      : left.buildIdentity > right.buildIdentity
+        ? 1
+        : 0,
+  );
+}
+
+async function removeTemporaryWorktree(worktreePath) {
+  await Promise.all([
+    rm(join(worktreePath, "node_modules"), { recursive: true, force: true }),
+    rm(join(worktreePath, "station", "node_modules"), { recursive: true, force: true }),
+  ]);
+  try {
+    await runGit(["worktree", "remove", "--force", "--force", worktreePath], {
+      timeoutMs: 300_000,
+    });
+  } catch {
+    await rm(worktreePath, { recursive: true, force: true });
+    await runGit(["worktree", "prune", "--expire", "now"], { timeoutMs: 300_000 });
+  }
+}
+
+function runGit(args, options = {}) {
+  return run("git", ["-C", options.cwd ?? repoRoot, ...args], {
+    ...options,
+    env: environmentWithoutGitLocals(options.env ?? process.env),
+  });
+}
+
+function environmentWithoutGitLocals(source) {
+  const env = { ...source };
+  for (const key of [
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+  ]) {
+    delete env[key];
+  }
+  return env;
 }
 
 function parseExpectedVersion(args) {
@@ -1212,6 +1581,16 @@ async function directoryFileCount(directory) {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return 0;
     throw error;
+  }
+}
+
+function readCommandCount(path) {
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    const row = database.prepare("SELECT count(*) AS count FROM commands").get();
+    return row?.count;
+  } finally {
+    database.close();
   }
 }
 

@@ -143,8 +143,12 @@ stn (bun build --compile, per platform, no ambient env)
   virtual compiled module path and filesystem root `/` are never accepted as
   popup ownership.
 - **Runtime-mode seam** `packages/runtime/src/buildInfo.ts`: build-time
-  defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` behind `typeof`
-  guards; dev tsc reports `{ version: "0.7.0", compiled: false }`.
+  defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` /
+  `STATION_BUILD_IDENTITY` behind `typeof` guards. Source output reads the
+  atomically published `station-build-id` sidecar and reverifies its repository
+  inputs plus production package outputs; compiled and source output from the
+  same whole-repository build therefore produce the same Observer selector while
+  retaining `{ version: "0.7.0", compiled: false }` display semantics.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -237,8 +241,9 @@ already applies `PRAGMA journal_mode = WAL` and migrations, so the driver
 only needs to guarantee both `exec` and `prepare().run()` semantics match.
 
 Feed `stationBuildInfo().version` into `createObserverCore` (fixes the
-hardcoded `"0.0.0"` in `reconcile/core.ts`), surfacing a real version in
-observer health. `stn --version`.
+hardcoded `"0.0.0"` in `reconcile/core.ts`) for snapshot and `stn --version`
+display. Observer health and pidfile ownership publish
+`stationObserverBuildVersion()` so handoff also proves immutable build identity.
 
 **Tests:** vitest driver-mapping units (node); a bun-lane test (`bun test`)
 for the bun driver asserting `run().changes`, `get()`-no-row `undefined`,
@@ -316,8 +321,8 @@ source POSIX launcher unchanged.
 **Status: implemented.** `station/src/bin/stnMain.ts` composes
 `dispatchSelfExec` with lazy route imports; `scripts/build-binary.mjs` and
 `build:binary` build one native artifact with Bun 1.3.14. The compile command
-carries **both** ambient-config disable flags (F1), version/compiled defines,
-and the native target mapping; x64 selects Bun's `-baseline` targets.
+carries **both** ambient-config disable flags (F1), version/compiled/build-
+identity defines, and the native target mapping; x64 selects Bun's `-baseline` targets.
 `link-station-packages.sh` links the CLI and Observer applications.
 
 A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
@@ -345,9 +350,14 @@ trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
 **detached self-spawn** check (folds in S5). A stateful fake tmux proves that a
 warm binding bypasses malformed config while keeping renderer and Observer PIDs
-stable, and that a failed fallback is silent and returns zero. The native PTY test also proves the
-unset compiled selector launches a payload through the extracted helper on the
-current platform. `observerReap.ts` and the same-TTY UI
+stable and that a failed fallback is silent and returns zero. From a committed
+clean checkout, the smoke also builds an isolated detached-worktree binary with
+one production-source delta at the same display version, queries both immutable
+selectors, runs the lower identity as incumbent, proves higher-identity handoff,
+then refuses a losing artifact's mutating command without recording it or
+touching the replacement Observer, Station Host, or live PTY. The native PTY
+test also proves the unset compiled selector launches a payload through the
+extracted helper on the current platform. `observerReap.ts` and the same-TTY UI
 reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
@@ -572,8 +582,11 @@ untouched.
 **Status: implemented.** Same-version config activation uses B-config. Renderer exit code 86 =
 "restart observer" on a `halted` + `PROTOCOL_SCHEMA_MISMATCH` state → the
 CLI parent restarts once and respawns the renderer. Singleton 3d-b supplies
-cross-version Observer ordering: higher valid SemVer replaces lower only after
-verified graceful handoff, while lower callers reuse the higher incumbent.
+Observer ordering: exact immutable builds reuse; different builds at one
+display version elect one verified replacement winner and refuse the loser;
+same-version reuse refuses any missing legacy identity; and higher valid
+SemVer replaces lower only after verified graceful handoff while lower-version
+callers reuse the higher incumbent.
 
 ### B-host — station-host upgrade behavior (F7 — was undefined)
 

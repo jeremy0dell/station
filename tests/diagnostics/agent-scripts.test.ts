@@ -24,6 +24,11 @@ type TurboConfig = {
   tasks?: {
     build?: {
       inputs?: string[];
+      outputs?: string[];
+    };
+    "build:identity"?: {
+      cache?: boolean;
+      dependsOn?: string[];
     };
   };
 };
@@ -177,12 +182,13 @@ describe("tui dev script", () => {
     ).toBe(false);
   });
 
-  it("restarts the dev TUI only for runtime dist files", () => {
-    expect(shouldRestartForPath(undefined)).toBe(true);
-    expect(shouldRestartForPath("/tmp/station/apps/cli/dist/main.js")).toBe(true);
-    expect(shouldRestartForPath("/tmp/station/apps/cli/dist/package.json")).toBe(true);
+  it("restarts the dev TUI only after a verified build identity is published", () => {
+    expect(shouldRestartForPath(undefined)).toBe(false);
+    expect(shouldRestartForPath("/tmp/station/apps/cli/dist/main.js")).toBe(false);
+    expect(shouldRestartForPath("/tmp/station/apps/cli/dist/package.json")).toBe(false);
     expect(shouldRestartForPath("/tmp/station/apps/cli/dist/main.d.ts")).toBe(false);
     expect(shouldRestartForPath("/tmp/station/apps/cli/dist/main.js.map")).toBe(false);
+    expect(shouldRestartForPath("/tmp/station/packages/runtime/dist/station-build-id")).toBe(true);
   });
 
   it("resets terminal mouse reporting after TUI child exits", () => {
@@ -198,6 +204,9 @@ describe("tui dev script", () => {
     const turboConfig = JSON.parse(
       readFileSync(new URL("../../turbo.json", import.meta.url), "utf8"),
     ) as TurboConfig;
+    const cliPackage = JSON.parse(
+      readFileSync(new URL("../../apps/cli/package.json", import.meta.url), "utf8"),
+    ) as { scripts?: Record<string, string> };
 
     expect(turboConfig.tasks?.build?.inputs).toEqual(
       expect.arrayContaining([
@@ -209,5 +218,11 @@ describe("tui dev script", () => {
         "!**/*.test.tsx",
       ]),
     );
+    expect(turboConfig.tasks?.build?.outputs).toContain("!dist/station-build-id");
+    expect(turboConfig.tasks?.["build:identity"]).toMatchObject({
+      cache: false,
+      dependsOn: ["^build"],
+    });
+    expect(cliPackage.scripts?.["build:identity"]).toBe("node ../../scripts/build-identity.mjs");
   });
 });

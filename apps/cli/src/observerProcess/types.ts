@@ -20,7 +20,7 @@ export type ObserverStatus =
     };
 
 export type ObserverProcessDeps = {
-  /** Requested Station build; production defaults to the current executable build. */
+  /** Requested Observer build selector; production defaults to this executable's immutable selector. */
   buildVersion?: string;
   clientFactory?: (socketPath: string) => ReturnType<typeof createObserverClient>;
   spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;

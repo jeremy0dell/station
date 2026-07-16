@@ -240,7 +240,7 @@ No single layer owns all truth.
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, native-execution bindings, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
-| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
+| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. Its `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. It corroborates process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
@@ -273,9 +273,11 @@ Current startup proceeds in this order:
    low-level claim database beside the resolved socket and acquires `BEGIN
    IMMEDIATE` with that startup budget. An absent or stale probe keeps the claim
    for owned startup. A listening probe reads incumbent health and applies the
-   strict SemVer policy: exact or higher incumbents attach; a higher candidate
-   may replace a lower incumbent only after complete process attribution. Hard
-   contention, invalid ownership evidence, or claim I/O failure is fatal.
+   strict SemVer selector policy: exact builds or higher-version incumbents
+   attach; a deterministically elected same-version build or higher-version
+   candidate may replace an incumbent only after complete process attribution.
+   A losing or legacy same-version candidate refuses rather than attaching.
+   Hard contention, invalid ownership evidence, or claim I/O failure is fatal.
 4. CLI composition receives the resolved state directory and constructs the
    providers. Compiled composition materializes the Pi extension here; Observer
    code remains provider-neutral.
@@ -307,13 +309,18 @@ Current startup proceeds in this order:
     and pidfile cleanup finish while the claim is held, and the outer lifecycle
     `finally` releases it before exit.
 
-Version-aware replacement remains inside step 3 while the claim is held. The
+Version-and-build-aware replacement remains inside step 3 while the claim is held. The
 handoff use case revalidates `lsof`, pidfile, argv, and OS start token before
 controlled stop and before its single permitted SIGTERM. A stop receipt is not
 exit proof: successor startup requires both socket closure and exact incumbent
 death. Missing, invalid, conflicting, or wedged evidence returns
 `OBSERVER_HANDOFF_REFUSED`; automatic handoff never sends SIGKILL. Station Host
 is outside this lifecycle and continues to own live PTYs independently.
+
+After startup accepts an Observer, command, ingress, and Station clients pin
+that exact selector. Each later operation checks health and sends the request
+over the same socket connection, so replacement between readiness and mutation
+fails with `OBSERVER_BUILD_MISMATCH` instead of delegating work to new code.
 
 Composition must make lifecycle ownership obvious. Anything that owns a timer,
 fiber, watcher, queue, socket, child process, or durable handle must have a
@@ -491,7 +498,7 @@ from the diagnostic use case.
 | Concern | Current contract |
 | --- | --- |
 | Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
-| Observer build ordering | Exact builds attach. For different valid SemVer builds, higher precedence wins; at equal precedence the lexicographically greater exact build string wins so the CLI parent and Observer child agree despite having different process identities. Missing or invalid versions refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
+| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Source clients reverify the published identity before using it. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |

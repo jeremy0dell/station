@@ -22,6 +22,10 @@ import type { ObserverService, StationClientCommandCompletion } from "./types.js
 
 export type CreateObserverServiceOptions = {
   socketPath?: string;
+  /** Exact Observer selector accepted before this service began issuing operations. */
+  expectedBuildVersion?: string;
+  /** Revalidates source state and supplies the exact selector for each operation. */
+  expectedBuildVersionProvider?: () => string;
   timeoutMs?: number;
   reconcileTimeoutMs?: number;
   commandWaitTimeoutMs?: number;
@@ -253,6 +257,12 @@ function createClient(options: CreateObserverServiceOptions, timeoutMs: number):
   return createObserverClient({
     socketPath: options.socketPath,
     timeoutMs,
+    ...(options.expectedBuildVersion === undefined
+      ? {}
+      : { expectedBuildVersion: options.expectedBuildVersion }),
+    ...(options.expectedBuildVersionProvider === undefined
+      ? {}
+      : { expectedBuildVersionProvider: options.expectedBuildVersionProvider }),
     ...(options.requestId === undefined ? {} : { requestId: options.requestId }),
   });
 }

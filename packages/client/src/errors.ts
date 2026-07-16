@@ -3,11 +3,11 @@ import type { RuntimeSafeErrorFallback } from "@station/runtime";
 import { isObserverConnectError, observerConnectNotice } from "./connectionState.js";
 import type { ClientNotice } from "./types.js";
 
-// Schema and validation incoherence means the client and observer builds
-// disagree; retrying re-runs the identical exchange against the same
-// incompatible peer. Everything else — including unknown codes — is treated
-// as retryable so transient failures self-heal at max backoff.
+// Schema, validation, and build-identity incoherence cannot heal by retrying
+// the identical exchange against the same incompatible peer. Everything else
+// — including unknown codes — remains retryable so transient failures self-heal.
 const PERMANENT_OBSERVER_ERROR_CODES = new Set<SafeError["code"]>([
+  "OBSERVER_BUILD_MISMATCH",
   "PROTOCOL_SCHEMA_MISMATCH",
   "PROTOCOL_RESPONSE_VALIDATION_FAILED",
   "PROTOCOL_EVENT_VALIDATION_FAILED",

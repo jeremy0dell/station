@@ -130,6 +130,9 @@ async function prepareObserverForPopup(
     createObserverClient({
       socketPath: observer.paths.socketPath,
       timeoutMs: options.timeoutMs ?? 30_000,
+      ...(observer.health.version === undefined
+        ? {}
+        : { expectedBuildVersion: observer.health.version }),
     });
   void client.reconcile(POPUP_OPEN_RECONCILE_REASON).catch(() => undefined);
   return undefined;

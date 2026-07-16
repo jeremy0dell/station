@@ -79,6 +79,8 @@ export type CreateObserverApiOptions = {
   harnessIngressQueue?: HarnessIngressQueue;
   hookSpoolDir?: string;
   socketPath?: string;
+  /** Exact handoff selector; legacy callers fall back to the core snapshot version. */
+  observerBuildVersion?: string;
   stateDir?: string;
   diagnosticsDir?: string;
   logPaths?: string[];
@@ -94,7 +96,8 @@ export type CreateObserverApiOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires Observer use cases, durable adapters, ingress workers, scheduling, and lifecycle operations behind the application API.
+ * Wires Observer use cases, durable adapters, ingress workers, scheduling, and
+ * exact build publication behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -392,7 +395,7 @@ async function buildHealth(
     status: coreHealth.status,
     pid: snapshot.observer.pid,
     startedAt: coreHealth.startedAt,
-    version: snapshot.observer.version,
+    version: options.observerBuildVersion ?? snapshot.observer.version,
     uptimeMs: Math.max(
       0,
       Date.parse(toIsoTimestamp(clock.now())) - Date.parse(coreHealth.startedAt),

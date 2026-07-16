@@ -64,7 +64,14 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
 
   const initialBuild = spawnSync(
     "pnpm",
-    ["exec", "turbo", "run", "build", "--filter=@station/cli", "--output-logs=errors-only"],
+    [
+      "exec",
+      "turbo",
+      "run",
+      "build:identity",
+      "--filter=@station/cli",
+      "--output-logs=errors-only",
+    ],
     {
       cwd: repoRoot,
       stdio: "inherit",
@@ -93,7 +100,7 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
       "exec",
       "turbo",
       "watch",
-      "build",
+      "build:identity",
       "--filter=@station/cli",
       "--ui=stream",
       "--output-logs=errors-only",

@@ -7,7 +7,7 @@ import {
   type RuntimeTraceContext,
   runRuntimeBoundaryWithRetryAndTimeout,
   safeErrorFromUnknown,
-  stationBuildInfo,
+  stationObserverBuildVersion,
   systemClock,
 } from "@station/runtime";
 import {
@@ -79,7 +79,7 @@ export async function startObserver(
   const paths = options.paths ?? resolveObserverPaths(options.config);
   const timeoutMs = options.timeoutMs ?? 10_000;
   const clock = deps.clock ?? systemClock;
-  const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
+  const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const trace = createTraceContext({ operation: "cli.observer.start" });
   const existing = await getObserverStatus({ ...options, paths }, deps);
   if (existing.status === "running") {
@@ -182,7 +182,7 @@ export async function restartObserver(
 ): Promise<ObserverStatus> {
   const status = await getObserverStatus(options, deps);
   if (status.status === "running") {
-    const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
+    const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
     const classification = classifyObserverHealth(status.health, buildVersion);
     if (classification.action === "attach" && classification.reason === "incumbent-wins") {
       return {

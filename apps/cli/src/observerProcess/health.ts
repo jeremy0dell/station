@@ -2,9 +2,11 @@ import type { ObserverHealth, SafeError } from "@station/contracts";
 import { classifyObserverIncumbent } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
 import {
+  hasStationObserverBuildIdentityMarker,
+  parseStationObserverBuildVersion,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithRetryAndTimeout,
-  stationBuildInfo,
+  stationObserverBuildVersion,
 } from "@station/runtime";
 import type { ObserverProcessDeps, SpawnObserverInput } from "./types.js";
 
@@ -37,7 +39,7 @@ export async function waitForObserverHealth(
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverHealth> {
   const timeoutMs = options.timeoutMs ?? defaultObserverHealthTimeoutMs;
-  const buildVersion = options.buildVersion ?? deps.buildVersion ?? stationBuildInfo().version;
+  const buildVersion = options.buildVersion ?? deps.buildVersion ?? stationObserverBuildVersion();
   const retries = Math.max(1, Math.ceil(timeoutMs / observerHealthRetryIntervalMs));
   const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath);
   const result = await runRuntimeBoundaryWithRetryAndTimeout(
@@ -62,7 +64,7 @@ export async function waitForObserverHealth(
   return result.value;
 }
 
-/** Classifies one health response against the stable identity of this CLI process. */
+/** Classifies health against the immutable Observer build selector of this CLI process. */
 export function classifyObserverHealth(
   health: ObserverHealth,
   buildVersion: string,
@@ -86,7 +88,7 @@ export function observerHandoffRefusedError(
     tag: "ObserverStartupError",
     code: "OBSERVER_HANDOFF_REFUSED",
     message: "Observer build handoff was refused because ownership could not be changed safely.",
-    hint: `Running build: ${health.version ?? "unknown"}. Requested build: ${requestedVersion}. ${reason} Use an isolated observer socket/state directory or stop the incumbent explicitly.`,
+    hint: `Running build: ${formatObserverBuild(health.version)}. Requested build: ${formatObserverBuild(requestedVersion)}. ${reason} Run \`stn observer stop\` and retry, or use an isolated Observer socket/state directory.`,
   };
 }
 
@@ -97,8 +99,19 @@ export function observerHandoffPendingError(
   return {
     tag: "ObserverStartupError",
     code: "OBSERVER_HANDOFF_PENDING",
-    message: `Observer build ${requestedVersion} is waiting to replace build ${health.version ?? "unknown"}.`,
+    message: `Observer build ${formatObserverBuild(requestedVersion)} is waiting to replace build ${formatObserverBuild(health.version)}.`,
   };
+}
+
+function formatObserverBuild(buildVersion: string | undefined): string {
+  if (buildVersion === undefined) return "unknown (legacy identity)";
+  const parsed = parseStationObserverBuildVersion(buildVersion);
+  if (parsed.buildIdentity === undefined && hasStationObserverBuildIdentityMarker(buildVersion)) {
+    return `${parsed.version} (invalid build identity)`;
+  }
+  return parsed.buildIdentity === undefined
+    ? `${parsed.version} (legacy identity)`
+    : `${parsed.version} (build ${parsed.buildIdentity.slice(0, 12)})`;
 }
 
 function abortableObserverHealth(

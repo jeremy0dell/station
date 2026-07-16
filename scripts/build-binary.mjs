@@ -2,6 +2,7 @@
 import { cp, mkdir, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readBuildIdentity, verifyBuildIdentity } from "./build-identity.mjs";
 
 const REQUIRED_BUN_VERSION = "1.3.14";
 const SEMVER =
@@ -82,7 +83,17 @@ async function main() {
   const outputPath = join(outputDir, "stn");
   const piBundlePath = join(stationRoot, "dist", "piExtension.mjs");
 
+  await rm(outputPath, { force: true });
   await run("pnpm", ["build"], repoRoot);
+  let buildIdentity;
+  try {
+    buildIdentity = await readBuildIdentity(repoRoot);
+  } catch {
+    fail("Station source build did not publish a valid build identity.");
+  }
+  if (buildIdentity === undefined || !(await verifyBuildIdentity(buildIdentity, repoRoot))) {
+    fail("Station build inputs changed after the source build; rebuild from a stable checkout.");
+  }
   await run("bun", ["run", "link:station"], stationRoot);
   await run("bun", ["run", "build:ctty-helper"], stationRoot);
 
@@ -100,7 +111,6 @@ async function main() {
   );
 
   await mkdir(outputDir, { recursive: true });
-  await rm(outputPath, { force: true });
   await checkedBuild(
     {
       entrypoints: [join(stationRoot, "src", "bin", "stnMain.ts")],
@@ -114,10 +124,17 @@ async function main() {
       define: {
         STATION_BUILD_VERSION: JSON.stringify(version),
         STATION_BUILD_COMPILED: "true",
+        STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
       },
     },
     "Station binary compile",
   );
+  if (!(await verifyBuildIdentity(buildIdentity, repoRoot))) {
+    await rm(outputPath, { force: true });
+    fail(
+      "Station build inputs or published identity changed during binary compilation; rebuild from a stable checkout.",
+    );
+  }
 
   await replaceSymlink(join(outputDir, "stn-ingress"), "stn");
   await replaceSymlink(join(outputDir, "stn-tmux-popup"), "stn");

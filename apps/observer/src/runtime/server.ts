@@ -64,7 +64,7 @@ export async function probeObserverSocket(
 /**
  * ADAPTER
  *
- * Translates version-aware incumbent lifecycle requests into validated local
+ * Translates build-aware incumbent lifecycle requests into validated local
  * protocol calls and socket probes.
  */
 export function createObserverLifecycleClient(options: {

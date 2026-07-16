@@ -9,6 +9,10 @@ import type { StationClient } from "./types.js";
 
 export type CreateObserverStationClientOptions = {
   socketPath?: string;
+  /** Exact Observer selector accepted by the CLI before launching Station. */
+  expectedBuildVersion?: string;
+  /** Revalidates source state and supplies the exact selector for each operation. */
+  expectedBuildVersionProvider?: () => string;
   /** Test seam: inject a fake observer service instead of a socket. */
   service?: ObserverService;
   onAttentionNeeded?: (event: StationAttentionEvent) => void;
@@ -26,6 +30,12 @@ export function createObserverStationClient(
     options.service ??
     createObserverService({
       socketPath: requireSocketPath(options.socketPath),
+      ...(options.expectedBuildVersion === undefined
+        ? {}
+        : { expectedBuildVersion: options.expectedBuildVersion }),
+      ...(options.expectedBuildVersionProvider === undefined
+        ? {}
+        : { expectedBuildVersionProvider: options.expectedBuildVersionProvider }),
       clientLabel: "Station",
     });
   const runtime = createStationClientRuntime({

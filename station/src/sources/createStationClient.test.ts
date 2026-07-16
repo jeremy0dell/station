@@ -23,6 +23,15 @@ describe("createStationClient", () => {
     expect(client.state.getState().connection.state).toBe("idle");
   });
 
+  it("rejects an Observer selector without matching launcher build context", () => {
+    expect(() =>
+      createStationClient({
+        ...HOME_ONLY_ENV,
+        STATION_OBSERVER_BUILD_VERSION: `0.7.0+station.${"a".repeat(64)}`,
+      }),
+    ).toThrow(/incomplete client and Observer build context/u);
+  });
+
   it("uses the mock client when requested", () => {
     const client = createStationClient({ STATION_SOURCE: "mock" });
     const state = client.state.getState();

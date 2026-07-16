@@ -17,7 +17,12 @@
         "!**/*.spec.ts",
         "!**/*.spec.tsx"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/station-build-id"]
+    },
+    "build:identity": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^build"],

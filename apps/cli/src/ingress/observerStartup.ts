@@ -10,7 +10,7 @@ import {
   runRuntimeBoundaryWithRetry,
   runRuntimeBoundaryWithTimeout,
   safeErrorFromUnknown,
-  stationBuildInfo,
+  stationObserverBuildVersion,
   systemClock,
 } from "@station/runtime";
 import {
@@ -45,7 +45,7 @@ export type ProviderHookObserverStatus =
     };
 
 export type ProviderHookObserverStartupDeps = {
-  /** Requested Station build; production defaults to the current ingress executable build. */
+  /** Requested Observer build selector; production defaults to this ingress executable's immutable selector. */
   buildVersion?: string;
   clientFactory?: (
     socketPath: string,
@@ -125,7 +125,7 @@ export async function startProviderHookObserver(
   const timeoutMs = options.timeoutMs ?? 30_000;
   const startupDeadlineMs = options.startupDeadlineMs ?? Date.now() + timeoutMs;
   const clock = deps.clock ?? systemClock;
-  const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
+  const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const statusTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
   if (statusTimeoutMs === undefined) return startupTimedOutStatus(paths);
   const existing = await getProviderHookObserverStatus(
@@ -226,7 +226,7 @@ export async function waitForProviderHookObserverHealth(
   deps: ProviderHookObserverStartupDeps = {},
 ): Promise<ObserverHealth> {
   const timeoutMs = options.timeoutMs ?? defaultProviderHookHealthTimeoutMs;
-  const buildVersion = options.buildVersion ?? deps.buildVersion ?? stationBuildInfo().version;
+  const buildVersion = options.buildVersion ?? deps.buildVersion ?? stationObserverBuildVersion();
   const retries = Math.max(1, Math.ceil(timeoutMs / providerHookHealthRetryIntervalMs));
   const client = (deps.clientFactory ?? defaultClientFactory)(options.paths.socketPath, {
     timeoutMs: Math.min(timeoutMs, maximumProviderHookHealthRequestTimeoutMs),

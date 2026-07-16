@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, watch } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const restartDebounceMs = 500;
-const restartExtensions = new Set([".js", ".json", ".mjs"]);
+const buildIdentityFilename = "station-build-id";
 export const mouseReportingDisableSequence =
   "\u001B[?1000l\u001B[?1002l\u001B[?1003l\u001B[?1005l\u001B[?1006l\u001B[?1015l";
 
@@ -101,7 +101,7 @@ export function runWatchRunner(argv, env = process.env) {
 }
 
 export function shouldRestartForPath(path) {
-  return path === undefined || restartExtensions.has(extname(path));
+  return path !== undefined && basename(path) === buildIdentityFilename;
 }
 
 export function defaultWatchRoots() {
@@ -134,7 +134,7 @@ function watchTree(root, onChange) {
         return;
       }
       const path = filename === null ? undefined : join(directory, filename.toString());
-      if (!shouldRestartForPath(path)) {
+      if (!shouldRestartForPath(path) || !existsSync(path)) {
         return;
       }
       onChange();
