@@ -11,6 +11,42 @@ declare const Bun: {
 };
 
 describe("createPtyEnv", () => {
+  it("marks inherited and launch environments as Station-owned panes", () => {
+    const previousStationPane = process.env.STATION_PANE;
+    const previousTmux = process.env.TMUX;
+    const previousTmuxPane = process.env.TMUX_PANE;
+    try {
+      delete process.env.TMUX;
+      delete process.env.TMUX_PANE;
+      for (const inherited of ["0", "", undefined]) {
+        restoreEnv("STATION_PANE", inherited);
+        expect(createPtyEnv(undefined).STATION_PANE).toBe("1");
+      }
+
+      process.env.STATION_PANE = "inherited";
+      for (const launchStationPane of ["0", "", undefined]) {
+        expect(createPtyEnv({ STATION_PANE: launchStationPane }).STATION_PANE).toBe("1");
+      }
+
+      process.env.TMUX = "/tmp/tmux-501/origin,123,0";
+      process.env.TMUX_PANE = "%3";
+      expect(createPtyEnv(undefined).STATION_PANE).toBe(
+        JSON.stringify(["/tmp/tmux-501/origin,123,0", "%3"]),
+      );
+      expect(
+        createPtyEnv({
+          STATION_PANE: "0",
+          TMUX: "/tmp/tmux-501/launch,456,0",
+          TMUX_PANE: "%7",
+        }).STATION_PANE,
+      ).toBe(JSON.stringify(["/tmp/tmux-501/launch,456,0", "%7"]));
+    } finally {
+      restoreEnv("STATION_PANE", previousStationPane);
+      restoreEnv("TMUX", previousTmux);
+      restoreEnv("TMUX_PANE", previousTmuxPane);
+    }
+  });
+
   it("commits to color-capable defaults and strips color-suppressing vars", () => {
     const previousNoColor = process.env.NO_COLOR;
     const previousForceColor = process.env.FORCE_COLOR;

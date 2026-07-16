@@ -5,6 +5,7 @@ import { runCli } from "@station/cli";
 import {
   type ObserverProcessDeps,
   resolvePopupTmuxCommand,
+  runCliMain,
   runTuiCommand,
   type TuiCommandDeps,
 } from "@station/cli/internal";
@@ -16,6 +17,12 @@ import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const observerBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
+const nestedTuiDisabledError = {
+  tag: "TuiCommandError",
+  code: "NESTED_TUI_DISABLED",
+  message: "Nested Station is disabled.",
+  hint: "Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.",
+} as const;
 const tuiConfig: TuiConfig = {
   widgets: [
     {
@@ -100,6 +107,7 @@ function runningObserverDeps(
           }
           return Promise.resolve(emptySnapshot(reason));
         },
+        getSnapshot: async () => emptySnapshot("nested-snapshot").snapshot,
       }) as never,
     sleep: async () => undefined,
   };
@@ -389,6 +397,216 @@ describe("CLI tui command", () => {
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
       },
     ]);
+  });
+
+  it.each([
+    { label: "bare native launch", args: [], env: { STATION_PANE: "1" } },
+    { label: "explicit native launch", args: ["tui"], env: { STATION_PANE: "1" } },
+    {
+      label: "native launch from a Station workspace running inside tmux",
+      args: ["tui"],
+      env: {
+        STATION_PANE: JSON.stringify(["/tmp/tmux-501/default,123,0", "%4"]),
+        TMUX: "/tmp/tmux-501/default,123,0",
+        TMUX_PANE: "%4",
+      },
+    },
+    {
+      label: "direct popup renderer launch",
+      args: ["tui", "--popup"],
+      env: { STATION_PANE: "1" },
+    },
+  ])("blocks $label before Observer or renderer effects", async ({ args, env }) => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const health = vi.fn();
+    const reconcile = vi.fn();
+    const spawnObserver = vi.fn(async () => ({ pid: 1234, unref: () => undefined }));
+    const clientFactory = vi.fn(
+      () =>
+        ({
+          health,
+          reconcile,
+        }) as never,
+    );
+    const stationUiInstalled = vi.fn(async () => true);
+    const spawnRenderer = vi.fn(async () => ({ status: "exited" as const, code: 0 }));
+
+    await expect(
+      runCli(["--config", configPath, ...args], {
+        env,
+        observerDeps: { clientFactory, spawnObserver },
+        tuiDeps: { spawnRenderer, stationUiInstalled },
+      }),
+    ).rejects.toEqual(nestedTuiDisabledError);
+
+    expect(spawnObserver).not.toHaveBeenCalled();
+    expect(clientFactory).not.toHaveBeenCalled();
+    expect(health).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(stationUiInstalled).not.toHaveBeenCalled();
+    expect(spawnRenderer).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "different pane on the same tmux server",
+      currentTmux: "/tmp/tmux-501/station-origin,123,0",
+      currentPane: "%8",
+    },
+    {
+      label: "same-numbered pane on another tmux server",
+      currentTmux: "/tmp/tmux-501/later-server,456,0",
+      currentPane: "%0",
+    },
+  ])("ignores a Station marker copied into a $label", async ({ currentTmux, currentPane }) => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const launches: Array<{ entry: string }> = [];
+    const originTmux = "/tmp/tmux-501/station-origin,123,0";
+
+    await expect(
+      runCli(["--config", configPath, "tui"], {
+        env: {
+          STATION_PANE: JSON.stringify([originTmux, "%0"]),
+          TMUX: currentTmux,
+          TMUX_PANE: currentPane,
+        },
+        observerDeps: runningObserverDeps(),
+        tuiDeps: {
+          spawnRenderer: async ({ entry }) => {
+            launches.push({ entry });
+            return { status: "exited", code: 0 };
+          },
+        },
+      }),
+    ).resolves.toEqual({ code: 0, output: { status: "exited", code: 0 } });
+
+    expect(launches).toEqual([{ entry: "station" }]);
+  });
+
+  it("requires the override again at each nested native depth", async () => {
+    const fixture = await createTempState();
+    const spawnRenderer = vi.fn(async () => ({ status: "exited" as const, code: 0 }));
+    const runNested = (args: string[]) =>
+      runTuiCommand(
+        args,
+        { config: fixture.config },
+        {
+          env: { STATION_PANE: "1" },
+          observer: runningObserverDeps(),
+          spawnRenderer,
+        },
+      );
+
+    await expect(runNested(["--allow-nested"])).resolves.toEqual({
+      status: "exited",
+      code: 0,
+    });
+    await expect(runNested([])).rejects.toEqual(nestedTuiDisabledError);
+    await expect(runNested(["--allow-nested"])).resolves.toEqual({
+      status: "exited",
+      code: 0,
+    });
+    expect(spawnRenderer).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      label: "transient launcher child",
+      args: ["--popup"],
+      env: { STATION_PANE: "1", STATION_TUI_POPUP: "1" },
+      expectedPersistent: false,
+    },
+    {
+      label: "persistent launcher child",
+      args: ["--popup", "--persistent"],
+      env: { STATION_PANE: "1", STATION_TUI_POPUP: "1" },
+      expectedPersistent: true,
+    },
+    {
+      label: "direct popup with explicit override",
+      args: ["--popup", "--allow-nested"],
+      env: { STATION_PANE: "1" },
+      expectedPersistent: false,
+    },
+  ])("allows $label", async ({ args, env, expectedPersistent }) => {
+    const fixture = await createTempState();
+    const launches: Array<{ entry: string; env: Record<string, string> }> = [];
+
+    await expect(
+      runTuiCommand(
+        args,
+        { config: fixture.config },
+        {
+          env,
+          observer: runningObserverDeps(),
+          spawnRenderer: async (launch) => {
+            launches.push(launch);
+            return { status: "exited", code: 0 };
+          },
+        },
+      ),
+    ).resolves.toEqual({ status: "exited", code: 0 });
+
+    expect(launches).toHaveLength(1);
+    expect(launches[0]?.entry).toBe("dashboard");
+    expect(launches[0]?.env.STATION_TUI_POPUP).toBe("1");
+    expect(launches[0]?.env.STATION_TUI_PERSISTENT).toBe(expectedPersistent ? "1" : undefined);
+  });
+
+  it("keeps non-TUI routes and help available inside a Station pane", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const env = { STATION_PANE: "1" };
+
+    await expect(
+      runCli(["--config", configPath, "snapshot", "--json"], {
+        env,
+        observerDeps: runningObserverDeps(),
+      }),
+    ).resolves.toEqual({
+      code: 0,
+      output: emptySnapshot("nested-snapshot").snapshot,
+    });
+
+    for (const topic of ["doctor", "debug", "observer", "command", "setup"]) {
+      const result = await runCli([topic, "--help"], { env });
+      expect(result.code).toBe(0);
+      expect(result.output).toContain("Usage");
+    }
+
+    const tuiHelp = await runCli(["tui", "--help"], { env });
+    expect(tuiHelp).toMatchObject({ code: 0 });
+    expect(tuiHelp.output).toContain("--allow-nested");
+    await expect(runCli(["--help"], { env })).resolves.toMatchObject({ code: 0 });
+    await expect(runCli(["--version"], { env })).resolves.toMatchObject({ code: 0 });
+  });
+
+  it("prints the nested launch SafeError and exits one through the CLI process adapter", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      await runCliMain(["--config", configPath, "tui"], {
+        env: { STATION_PANE: "1" },
+      });
+
+      expect(stderrWrite).toHaveBeenCalledWith(
+        [
+          "Nested Station is disabled. (NESTED_TUI_DISABLED)",
+          "Hint: Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.",
+          "",
+        ].join("\n"),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+      stderrWrite.mockRestore();
+    }
   });
 
   it("signals popup mode to the renderer via env", async () => {
@@ -1083,6 +1301,7 @@ describe("CLI tui command", () => {
               },
             }) as never,
         },
+        env: { STATION_PANE: "1" },
         spawnRenderer: async ({ env }) => {
           envs.push(env);
           return { status: "exited", code: 0 };

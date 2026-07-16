@@ -17,6 +17,35 @@ Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to t
 - Inside tmux, `stn` opens the read-only dashboard in a tmux popup, since tmux owns the panes there.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
+## Nested Workspaces
+
+Station-owned PTYs carry a `STATION_PANE` marker bound to their current tmux
+server and pane, or `1` when Station itself is outside tmux. From that context,
+bare `stn` outside tmux and explicit `stn tui` refuse to open another native
+workspace:
+
+```text
+Nested Station is disabled. (NESTED_TUI_DISABLED)
+Hint: Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.
+```
+
+`stn tui --allow-nested` permits only that launch. PTYs created by the nested
+workspace are marked again, so another native workspace requires another
+explicit override. There is no persistent config setting for nesting.
+
+The policy targets only TUI entrypoints. CLI commands such as `snapshot`,
+`doctor`, `debug`, `observer`, `command`, and `setup` remain available in
+Station panes, as do help and version output. Bare `stn` inside tmux and
+explicit `stn popup` keep their popup behavior. Tmux launchers mark their
+`tui --popup` child, while a direct `stn tui --popup` still requires
+`--allow-nested`. The mock dashboard remains available without an override.
+
+The controlling-TTY single-instance guard is not sufficient here: each nested
+pane has its own child PTY, so the outer workspace is not a same-TTY rival. The
+tmux-context binding also prevents a server started from a Station shell or
+Observer descendant from copying the marker into unrelated later panes, even
+when different servers reuse the same pane id.
+
 Persistent popups use a strict child-process IPC channel between the Node CLI and the Bun
 dashboard renderer. The CLI composition root retains all terminal-provider authority; the
 renderer sends only provider-neutral focus-origin and dismiss intents. When the CLI marks that

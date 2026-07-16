@@ -300,6 +300,7 @@ describe("CLI popup command", () => {
           config: fixture.config,
           env: {
             TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_PANE: "1",
           },
           tuiCommand: "node stn tui --popup --persistent",
         },
@@ -324,6 +325,7 @@ describe("CLI popup command", () => {
         enterWorkbench: false,
         env: {
           TMUX: "/tmp/tmux-501/default,123,0",
+          STATION_PANE: "1",
         },
         tuiCommand: "node stn tui --popup --persistent",
       },
@@ -374,6 +376,7 @@ describe("CLI popup command", () => {
         popupDeps: {
           env: {
             TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_PANE: "1",
           },
           openTmuxPopup: async (options) => {
             calls.push(options);
@@ -392,6 +395,7 @@ describe("CLI popup command", () => {
       checkoutRoot: repoRoot,
       env: {
         TMUX: "/tmp/tmux-501/default,123,0",
+        STATION_PANE: "1",
       },
       preferRegisteredDevPopup: true,
     });
@@ -481,6 +485,7 @@ describe("CLI popup command", () => {
         popupDeps: {
           env: {
             TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_PANE: "1",
           },
           openTmuxPopup: async (options) => {
             calls.push(options);
