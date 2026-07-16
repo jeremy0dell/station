@@ -10,7 +10,9 @@ declare const STATION_BUILD_IDENTITY: string;
 const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
 const OBSERVER_BUILD_IDENTITY_MARKER = /\+(?:[0-9A-Za-z-]+\.)*station\./u;
 const OBSERVER_BUILD_IDENTITY_PATTERN = /^(.+)([+.])station\.([0-9a-f]{64})$/u;
-let verifiedSourceBuildIdentity: string | undefined;
+const verifiedSourceBuildIdentitySlot = Symbol.for(
+  "@station/runtime/verified-source-build-identity",
+);
 
 export type StationBuildInfo = {
   version: string;
@@ -19,7 +21,10 @@ export type StationBuildInfo = {
   buildIdentity: string;
 };
 
-/** Returns compiled identity or one source identity verified for this process lifetime. */
+/**
+ * Returns compiled identity or one source identity verified for the OS process lifetime,
+ * including Bun hot reloads that replace the module registry.
+ */
 export function stationBuildInfo(): StationBuildInfo {
   return {
     version: typeof STATION_BUILD_VERSION === "undefined" ? "0.7.0" : STATION_BUILD_VERSION,
@@ -74,8 +79,10 @@ export function isCompiledBinary(): boolean {
 }
 
 function sourceBuildIdentity(): string {
-  if (verifiedSourceBuildIdentity !== undefined) {
-    return verifiedSourceBuildIdentity;
+  const processSlots = globalThis as typeof globalThis & Record<symbol, string | undefined>;
+  const verifiedIdentity = processSlots[verifiedSourceBuildIdentitySlot];
+  if (verifiedIdentity !== undefined) {
+    return verifiedIdentity;
   }
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   const root = join(moduleDirectory, "..", "..", "..");
@@ -112,6 +119,6 @@ function sourceBuildIdentity(): string {
       { cause: error },
     );
   }
-  verifiedSourceBuildIdentity = identity;
-  return verifiedSourceBuildIdentity;
+  processSlots[verifiedSourceBuildIdentitySlot] = identity;
+  return identity;
 }

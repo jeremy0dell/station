@@ -18,6 +18,7 @@ Status: current living doc for development, test, and documentation workflow.
 | CLI/package-output watcher | `pnpm dev` / `pnpm station:tui-dev` | Isolated by default, not Bun HMR |
 | Isolated Station sandbox | `pnpm station:devbox` | Isolated observer, host, state, and supported hooks |
 | Isolated Station sandbox with UI HMR | `pnpm station:devbox dev` | Same devbox isolation, Bun renderer hot reload |
+| Isolated real tmux popup with UI HMR | `pnpm station:devbox tmux dev` | Private tmux server, Observer, config/state, and production popup CLI |
 
 Do not use `station:dev` as a catch-all name until it truthfully owns the UI,
 CLI/package, observer, provider, protocol, and host restart boundaries.
@@ -40,8 +41,69 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- `pnpm station:devbox tmux dev` starts a checkout-keyed private tmux server and isolated live Observer, then keeps the foreground command as the signal-cleanup owner. Attach with `pnpm station:devbox tmux attach`; inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
+
+### Private tmux popup devbox
+
+Install the root and Station dependencies, then build once before starting:
+
+```bash
+pnpm install
+pnpm build
+cd station && bun install && cd ..
+
+pnpm station:devbox tmux dev
+# another terminal:
+pnpm station:devbox tmux attach
+```
+
+The lane creates `/tmp/stn-dbx-<checkout-hash>` at mode `0700`, one private
+`tmux -L stn-dbx-<checkout-hash> -f /dev/null` server, an isolated live
+Observer, empty provider homes, a committed disposable Git project, and a
+strict minimal config. It never seeds real auth, Git, SSH, hooks, config, or
+default tmux state. `status` inspects only the recorded private manifest,
+server, sockets, and matching processes.
+
+Use `Ctrl-b Space` in the attached base session. The binding enters the built
+CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
+which retains the renderer-control IPC channel while the Bun renderer reloads
+in place. `dev` remains in the foreground so Ctrl-C, SIGHUP, or SIGTERM performs
+the same scoped cleanup as `stop`. Use `start` instead when automation needs the
+lane to return immediately.
+
+| Changed surface | Required action |
+| --- | --- |
+| Dashboard-imported `station/src/**` | Bun HMR only |
+| Linked `packages/*` output, CLI, Observer, providers, protocol, or tmux integration | `tmux stop` → `pnpm build` → `tmux dev` |
+| Station Host or PTY runtime | Full `tmux stop` / `tmux dev` |
+| Dependencies or Station package links | Stop, install/relink, then start |
+| Generated root/config/wrapper ownership | `tmux reset --yes` → `tmux dev` |
+
+There is intentionally no `tmux restart`: a rebuild boundary must replace the
+CLI, Observer, popup signature, and any optional Host coherently. Diagnostics
+and cleanup commands are:
+
+```bash
+pnpm station:devbox tmux status
+pnpm station:devbox tmux logs --follow
+pnpm station:devbox tmux stop
+pnpm station:devbox tmux reset --yes
+```
+
+The explicit real-lane smoke is excluded from `test:all` because it requires
+tmux, Bun, Python 3, PTY interaction, and a temporary source edit:
+
+```bash
+pnpm station:devbox:tmux:smoke
+```
+
+That smoke owns public grammar, generated-environment isolation, wrapper
+auditing, attach UX, live repaint, signal exits, and cleanup. The existing
+`popup-real.test.ts` remains the authority for production popup claims, input,
+dismiss/focus semantics, warm reuse, compiled binding behavior, and its own
+private fixture cleanup.
 
 ## Deterministic Gates
 
@@ -539,6 +601,7 @@ pnpm test:e2e
 pnpm test:e2e:real
 pnpm test:e2e:worktrunk:real
 STATION_REAL_TMUX=1 pnpm test:tmux-popup:real
+pnpm station:devbox:tmux:smoke
 pnpm test:e2e:claude:real
 pnpm test:e2e:codex:real
 pnpm test:e2e:cursor:real
@@ -555,6 +618,9 @@ Bun dependencies, Bun 1.3.14, Python 3, tmux, and these prerequisite builds:
 pnpm build
 pnpm build:binary -- --version 0.0.0-local
 ```
+
+`pnpm station:devbox:tmux:smoke` requires only the source build (`pnpm build`);
+the compiled popup lane additionally requires `pnpm build:binary`.
 
 Set `STATION_TMUX_BIN` when the tmux executable is not available as `tmux`. The lane
 creates a disposable Git project and isolates `HOME`, the XDG directories,
