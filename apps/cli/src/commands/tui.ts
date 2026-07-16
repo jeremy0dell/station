@@ -2,7 +2,12 @@ import { spawn } from "node:child_process";
 import type { StationConfig } from "@station/config";
 import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { isCompiledBinary, safeErrorFromUnknown, systemClock } from "@station/runtime";
+import {
+  isCompiledBinary,
+  safeErrorFromUnknown,
+  stationObserverBuildVersion,
+  systemClock,
+} from "@station/runtime";
 import { dismissTmuxPopup, resolveTmuxPopupFocusTarget } from "@station/tmux";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
@@ -40,6 +45,8 @@ export type RendererSpawnOptions = {
 
 export type TuiCommandDeps = {
   observer?: ObserverProcessDeps;
+  /** Supplies the caller selector once before Observer startup; tests can model build drift. */
+  buildVersion?: () => string;
   spawnRenderer?: (options: RendererSpawnOptions) => Promise<TuiRunResult>;
   spawnProcess?: typeof spawn;
   stationUiInstalled?: () => Promise<boolean>;
@@ -88,6 +95,12 @@ export async function runTuiCommand(
   }
 
   const paths = resolveObserverPaths(options.config);
+  const clientBuildVersion =
+    deps.buildVersion?.() ?? deps.observer?.buildVersion ?? stationObserverBuildVersion();
+  const observerDeps: ObserverProcessDeps = {
+    ...deps.observer,
+    buildVersion: clientBuildVersion,
+  };
   const observer = await startObserver(
     {
       ...options,
@@ -95,7 +108,7 @@ export async function runTuiCommand(
       onStartupProgress: (message) => process.stderr.write(`${message}\n`),
       ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
     },
-    deps.observer,
+    observerDeps,
   );
   if (observer.status !== "running") {
     return {
@@ -105,16 +118,22 @@ export async function runTuiCommand(
       observer,
     };
   }
+  const observerBuildVersion = observer.health.version;
+  if (observerBuildVersion === undefined) {
+    throw new Error("The running Observer did not report a build version.");
+  }
 
   const startupReconcile: {
     paths: ObserverPaths;
+    expectedBuildVersion: string;
     deps?: ObserverProcessDeps;
     timeoutMs?: number;
   } = {
     paths: observer.paths,
+    expectedBuildVersion: observerBuildVersion,
   };
   if (deps.observer !== undefined) {
-    startupReconcile.deps = deps.observer;
+    startupReconcile.deps = observerDeps;
   }
   if (parsed.timeoutMs !== undefined) {
     startupReconcile.timeoutMs = parsed.timeoutMs;
@@ -127,7 +146,11 @@ export async function runTuiCommand(
   // tmux popup we keep the read-only dashboard, since tmux owns the panes there.
   return runRenderer(
     deps,
-    buildRendererEnv(parsed, { STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath }),
+    buildRendererEnv(parsed, {
+      STATION_CLIENT_BUILD_VERSION: clientBuildVersion,
+      STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath,
+      STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+    }),
     parsed.popupMode ? "dashboard" : "station",
     parsed.persistentPopup,
     options.config?.terminal?.tmux?.command,
@@ -278,6 +301,7 @@ export function resolvePopupTmuxCommand(
 
 function scheduleReconcileBeforeTui(input: {
   paths: ObserverPaths;
+  expectedBuildVersion: string;
   deps?: ObserverProcessDeps;
   timeoutMs?: number;
 }): void {
@@ -306,6 +330,7 @@ function scheduleReconcileBeforeTui(input: {
 
 async function reconcileBeforeTui(input: {
   paths: ObserverPaths;
+  expectedBuildVersion: string;
   deps?: ObserverProcessDeps;
   timeoutMs?: number;
 }): Promise<void> {
@@ -314,6 +339,7 @@ async function reconcileBeforeTui(input: {
     createObserverClient({
       socketPath: input.paths.socketPath,
       timeoutMs: input.timeoutMs ?? 30_000,
+      expectedBuildVersion: input.expectedBuildVersion,
     });
   await client.reconcile(TUI_STARTUP_RECONCILE_REASON);
 }

@@ -13,7 +13,10 @@ import { createTempState } from "../../../../tests/support/temp-projects";
 import { deliverProviderHookWithSpooling } from "../../src/ingress/deliveryPolicy.js";
 
 const now = "2026-05-20T12:00:00.000Z";
-const buildVersion = "1.2.3";
+const buildVersion = `1.2.3+station.${"c".repeat(64)}`;
+const incumbentBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
+const replacementBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
+const crossVersionReplacement = `2.0.0+station.${"d".repeat(64)}`;
 
 describe("provider hook delivery policy", () => {
   it("forwards the finalized observer command unchanged to auto-start", async () => {
@@ -268,7 +271,7 @@ describe("provider hook delivery policy", () => {
     let runningVersion = "1.0.0";
     let deliveries = 0;
     const deps = {
-      buildVersion: "2.0.0",
+      buildVersion: crossVersionReplacement,
       clientFactory: () =>
         ({
           health: async () => healthyObserver(fixture, 12345, runningVersion),
@@ -276,7 +279,7 @@ describe("provider hook delivery policy", () => {
       spawnObserver: async () => {
         expect(deliveries).toBe(0);
         state.spawnCount += 1;
-        runningVersion = "2.0.0";
+        runningVersion = crossVersionReplacement;
         return { pid: 12345, unref: () => undefined };
       },
     };
@@ -294,18 +297,20 @@ describe("provider hook delivery policy", () => {
     expect(state.spooled).toBe(0);
   });
 
-  it("spools when a spawned replacement reports handoff refusal", async () => {
+  it("rejects instead of spooling when same-version replacement fails", async () => {
     const fixture = await createTempState();
     const state = { running: true, spawnCount: 0, spooled: 0 };
     let deliveries = 0;
     let healthCalls = 0;
     const deps = {
-      buildVersion: "2.0.0",
+      buildVersion: replacementBuildVersion,
       clientFactory: () =>
         ({
           health: async () => {
             healthCalls += 1;
-            if (healthCalls <= 2) return healthyObserver(fixture, 12345, "1.0.0");
+            if (healthCalls <= 2) {
+              return healthyObserver(fixture, 12345, incumbentBuildVersion);
+            }
             return { schemaVersion: STATION_SCHEMA_VERSION, status: "healthy" };
           },
         }) as never,
@@ -321,14 +326,16 @@ describe("provider hook delivery policy", () => {
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      status: "spooled",
+      accepted: false,
+      status: "rejected",
       error: { code: "OBSERVER_HANDOFF_REFUSED" },
     });
     expect(state.spawnCount).toBe(1);
     expect(deliveries).toBe(0);
+    expect(state.spooled).toBe(0);
   });
 
-  it("spools protocol mismatch without spawning a replacement", async () => {
+  it("rejects protocol mismatch without spawning or spooling", async () => {
     const fixture = await createTempState();
     const state = { running: true, spawnCount: 0, spooled: 0 };
     let deliveries = 0;
@@ -357,14 +364,16 @@ describe("provider hook delivery policy", () => {
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      status: "spooled",
+      accepted: false,
+      status: "rejected",
       error: { code: "PROTOCOL_SCHEMA_MISMATCH" },
     });
     expect(state.spawnCount).toBe(0);
     expect(deliveries).toBe(0);
+    expect(state.spooled).toBe(0);
   });
 
-  it("spools without cross-build delivery when auto-start is disabled", async () => {
+  it("rejects without cross-build delivery or spooling when auto-start is disabled", async () => {
     const fixture = await createTempState();
     const state = { running: true, spawnCount: 0, spooled: 0 };
     let deliveries = 0;
@@ -383,14 +392,15 @@ describe("provider hook delivery policy", () => {
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      status: "spooled",
+      accepted: false,
+      status: "rejected",
       error: { code: "OBSERVER_HANDOFF_REFUSED" },
     });
     expect(deliveries).toBe(0);
-    expect(state.spooled).toBe(1);
+    expect(state.spooled).toBe(0);
   });
 
-  it("spools legacy health without delivering or spawning", async () => {
+  it("rejects legacy health without delivering, spawning, or spooling", async () => {
     const fixture = await createTempState();
     const state = { running: true, spawnCount: 0, spooled: 0 };
     let deliveries = 0;
@@ -412,11 +422,41 @@ describe("provider hook delivery policy", () => {
     };
 
     await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
-      status: "spooled",
+      accepted: false,
+      status: "rejected",
       error: { code: "OBSERVER_HANDOFF_REFUSED" },
     });
     expect(deliveries).toBe(0);
     expect(state.spawnCount).toBe(0);
+    expect(state.spooled).toBe(0);
+  });
+
+  it("rejects a post-readiness build mismatch without spooling", async () => {
+    const fixture = await createTempState();
+    const state = { running: true, spawnCount: 0, spooled: 0 };
+    const deps = {
+      buildVersion,
+      clientFactory: () =>
+        ({
+          health: async () => healthyObserver(fixture),
+        }) as never,
+    };
+    const input = deliveryInput(fixture, "hook_build_changed", state, deps);
+    input.deliver = async () => ({
+      error: {
+        tag: "ProtocolError",
+        code: "OBSERVER_BUILD_MISMATCH",
+        message: "Observer build changed before delivery.",
+      },
+    });
+
+    await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
+      accepted: false,
+      status: "rejected",
+      error: { code: "OBSERVER_BUILD_MISMATCH" },
+    });
+    expect(state.spawnCount).toBe(0);
+    expect(state.spooled).toBe(0);
   });
 });
 

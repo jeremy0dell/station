@@ -1,3 +1,5 @@
+import type { SafeError } from "@station/contracts";
+import { stationObserverBuildVersion } from "@station/runtime";
 import { createMockStationClient } from "./mockStationClient.js";
 import { createObserverStationClient } from "./observerStationClient.js";
 import { resolveStationObserverSocketPath } from "./stationSocketPath.js";
@@ -14,8 +16,12 @@ export type CreateStationClientOptions = {
   onAttentionNeeded?: (event: StationAttentionEvent) => void;
 };
 
-// The only place that decides whether Station shows live or mock STATION state.
-// Downstream code receives one identity-free client boundary either way.
+/**
+ * COMPOSITION ROOT
+ *
+ * Chooses live or mock Station state and fixes the accepted Observer identity
+ * before downstream UI code receives an identity-free client boundary.
+ */
 export function createStationClient(
   env: Record<string, string | undefined> = process.env,
   options: CreateStationClientOptions = {},
@@ -26,12 +32,54 @@ export function createStationClient(
     return createMockStationClient(readScenarioName(env.STATION_SCENARIO));
   }
 
+  const localBuildVersion = stationObserverBuildVersion();
+  const launchedClientBuildVersion = readObserverBuildVersion(env.STATION_CLIENT_BUILD_VERSION);
+  const launchedObserverBuildVersion = readObserverBuildVersion(
+    env.STATION_OBSERVER_BUILD_VERSION,
+  );
+  if (
+    (launchedClientBuildVersion === undefined) !==
+    (launchedObserverBuildVersion === undefined)
+  ) {
+    throw incompleteBuildContextError();
+  }
+  if (
+    launchedClientBuildVersion !== undefined &&
+    launchedClientBuildVersion !== localBuildVersion
+  ) {
+    throw sourceBuildChangedError(launchedClientBuildVersion, localBuildVersion);
+  }
+  const acceptedBuildVersion = launchedObserverBuildVersion ?? localBuildVersion;
   return createObserverStationClient({
     socketPath: resolveStationObserverSocketPath(env),
+    expectedBuildVersion: acceptedBuildVersion,
     ...(options.onAttentionNeeded === undefined
       ? {}
       : { onAttentionNeeded: options.onAttentionNeeded }),
   });
+}
+
+function incompleteBuildContextError(): SafeError {
+  return {
+    tag: "ProtocolError",
+    code: "OBSERVER_BUILD_MISMATCH",
+    message: "Station received incomplete client and Observer build context from its launcher.",
+    hint: "Close and relaunch Station from the current CLI before issuing Observer operations.",
+  };
+}
+
+function sourceBuildChangedError(startedBuild: string, currentBuild: string): SafeError {
+  return {
+    tag: "ProtocolError",
+    code: "OBSERVER_BUILD_MISMATCH",
+    message: `Station source changed after launch: this client started as "${startedBuild}", but the checkout now identifies as "${currentBuild}".`,
+    hint: "Run pnpm build, then close and relaunch Station before issuing more Observer operations.",
+  };
+}
+
+function readObserverBuildVersion(value: string | undefined): string | undefined {
+  const buildVersion = value?.trim();
+  return buildVersion === "" ? undefined : buildVersion;
 }
 
 function readSourceName(value: string | undefined): StationSourceName {

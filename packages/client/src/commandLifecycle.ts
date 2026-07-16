@@ -35,6 +35,9 @@ export function mapCommandWaitError(
   if (isSafeError(error) && error.tag === "TimeoutError") {
     return timeoutErrorFallback("CLIENT_COMMAND_WAIT_TIMEOUT", copy.timeout);
   }
+  if (isSafeError(error) && error.code === "OBSERVER_BUILD_MISMATCH") {
+    return error;
+  }
   return observerErrorFallback("CLIENT_COMMAND_WAIT_FAILED", copy.failed);
 }
 

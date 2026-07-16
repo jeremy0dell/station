@@ -3,6 +3,7 @@ import type { ObserverApi } from "@station/contracts";
 import {
   connectUnixSocket,
   createObserverClient,
+  type ProtocolMethod,
   startProtocolServer,
   type UnixSocketServer,
 } from "@station/protocol";
@@ -22,6 +23,8 @@ export type StartObserverServerOptions = {
   api: ObserverApi;
   clock?: RuntimeClock;
   drainOnStart?: boolean;
+  /** Rejects application operations that were not admitted before shutdown. */
+  guardOperation?: () => void;
 };
 
 export type ObserverSocketProbe = "absent" | "stale" | "listening";
@@ -64,7 +67,7 @@ export async function probeObserverSocket(
 /**
  * ADAPTER
  *
- * Translates version-aware incumbent lifecycle requests into validated local
+ * Translates build-aware incumbent lifecycle requests into validated local
  * protocol calls and socket probes.
  */
 export function createObserverLifecycleClient(options: {
@@ -82,6 +85,7 @@ export function createObserverLifecycleClient(options: {
       createObserverClient({
         socketPath,
         timeoutMs: requestTimeout(request.timeoutMs),
+        expectedObserverIdentity: request.expectedObserver,
       }).stop(),
     socketListening: async (socketPath, request) =>
       (await probeObserverSocket(socketPath, {
@@ -90,6 +94,12 @@ export function createObserverLifecycleClient(options: {
   };
 }
 
+/**
+ * ADAPTER
+ *
+ * Owns the Observer protocol socket lifecycle and enforces the runtime's
+ * admission policy before application operations cross the transport boundary.
+ */
 export async function startObserverServer(
   options: StartObserverServerOptions,
 ): Promise<ObserverServer> {
@@ -104,7 +114,14 @@ export async function startObserverServer(
         message: "Observer protocol server could not start.",
       },
     },
-    () => startProtocolServer({ socketPath: options.socketPath, api: options.api }),
+    () =>
+      startProtocolServer({
+        socketPath: options.socketPath,
+        api: options.api,
+        ...(options.guardOperation === undefined
+          ? {}
+          : { requestGuard: lifecycleRequestGuard(options.guardOperation) }),
+      }),
   );
 
   if (!started.ok) {
@@ -119,6 +136,14 @@ export async function startObserverServer(
   return {
     socketPath: options.socketPath,
     close: () => closeObserverServer(server, clock),
+  };
+}
+
+function lifecycleRequestGuard(guardOperation: () => void): (method: ProtocolMethod) => void {
+  return (method) => {
+    if (method !== "observer.health" && method !== "observer.stop") {
+      guardOperation();
+    }
   };
 }
 

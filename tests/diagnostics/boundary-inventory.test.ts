@@ -74,10 +74,6 @@ const setTimeoutAllowlist = new Map([
     "Short debounce coalesces noisy Git ref watch events before requesting an observer-owned metadata reconcile.",
   ],
   [
-    "integrations/harness/opencode/src/pluginInstall.ts",
-    "Generated OpenCode plugin uses a short socket send timeout because it runs inside OpenCode, outside STATION runtime helpers.",
-  ],
-  [
     "packages/dashboard-core/src/widgets/useTopRowWidgets.ts",
     "Header widgets use a TUI-local minute-boundary timer for display text, not observer command timeout or retry plumbing.",
   ],

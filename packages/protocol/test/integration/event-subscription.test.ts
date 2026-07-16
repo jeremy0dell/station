@@ -62,6 +62,56 @@ describe("protocol event subscriptions", () => {
     await server.close();
   });
 
+  it("opens pinned subscriptions only for the matching Observer build", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const actualBuildVersion = `0.0.0+station.${"d".repeat(64)}`;
+    const expectedBuildVersion = `0.0.0+station.${"e".repeat(64)}`;
+    const event: StationEvent = {
+      type: "command.accepted",
+      commandId: "cmd_pinned",
+      command: { type: "observer.reconcile", payload: { reason: "pinned-subscription" } },
+    };
+    const baseApi = createFakeObserverApi();
+    const health = await baseApi.health();
+    let subscriptionCalls = 0;
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        health: async () => ({ ...health, version: actualBuildVersion }),
+        subscribe: () => {
+          subscriptionCalls += 1;
+          return stream([event]);
+        },
+      }),
+    });
+    const mismatchedClient = createObserverClient({
+      socketPath,
+      expectedBuildVersion,
+      requestId: ids("sub-mismatch"),
+    });
+    const mismatchedIterator = mismatchedClient.subscribe()[Symbol.asyncIterator]();
+
+    try {
+      await expect(mismatchedIterator.next()).rejects.toMatchObject({
+        code: "OBSERVER_BUILD_MISMATCH",
+      });
+      expect(subscriptionCalls).toBe(0);
+
+      const matchingClient = createObserverClient({
+        socketPath,
+        expectedBuildVersion: actualBuildVersion,
+        requestId: ids("sub-match"),
+      });
+      const matchingIterator = matchingClient.subscribe()[Symbol.asyncIterator]();
+      await expect(matchingIterator.next()).resolves.toEqual({ done: false, value: event });
+      expect(subscriptionCalls).toBe(1);
+      await matchingIterator.return?.();
+    } finally {
+      await mismatchedIterator.return?.();
+      await server.close();
+    }
+  });
+
   it("rejects retired hook event filters at the subscribe boundary", async () => {
     const { socketPath } = await createTempSocketPath();
     let observedFilter: EventFilter | undefined;

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getObserverStatus, restartObserver, startObserver } from "@station/cli";
+import { getObserverStatus, restartObserver, startObserver, stopObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,11 @@ import { fileExists } from "../../../../../tests/support/spool";
 import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const zeroBuildVersion = `0.0.0+station.${"a".repeat(64)}`;
+const losingBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
+const winningBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
+const exactOneBuildVersion = `1.0.0+station.${"a".repeat(64)}`;
+const exactTwoBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 
 describe("CLI observer process lifecycle", () => {
   it("maps stale sockets distinctly from stopped observers", async () => {
@@ -39,7 +44,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 200,
       },
       {
-        buildVersion: "0.0.0",
+        buildVersion: zeroBuildVersion,
         clock: { now: () => new Date(now) },
         spawnObserver: async (input): Promise<ChildProcessLike> => {
           spawnInput = input;
@@ -58,7 +63,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
-                version: "0.0.0",
+                version: zeroBuildVersion,
               };
             },
           }) as never,
@@ -90,7 +95,7 @@ describe("CLI observer process lifecycle", () => {
         timeoutMs: 200,
       },
       {
-        buildVersion: "0.0.0",
+        buildVersion: zeroBuildVersion,
         clock: { now: () => new Date(now) },
         spawnObserver: async (): Promise<ChildProcessLike> => {
           staleSocketPresentAtSpawn = await fileExists(fixture.socketPath);
@@ -108,7 +113,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 1234,
                 startedAt: now,
-                version: "0.0.0",
+                version: zeroBuildVersion,
               };
             },
           }) as never,
@@ -203,6 +208,7 @@ describe("CLI observer process lifecycle", () => {
           timeoutMs: 200,
         },
         {
+          buildVersion: zeroBuildVersion,
           clock: { now: () => new Date(now) },
           spawnObserver: async (): Promise<ChildProcessLike> => {
             spawned = true;
@@ -241,11 +247,11 @@ describe("CLI observer process lifecycle", () => {
     const fixture = await createTempState();
     let spawned = false;
 
-    for (const version of ["1.2.3", "2.0.0"]) {
+    for (const version of [losingBuildVersion, "2.0.0"]) {
       const result = await startObserver(
         { config: fixture.config },
         {
-          buildVersion: "1.2.3",
+          buildVersion: losingBuildVersion,
           spawnObserver: async () => {
             spawned = true;
             return { pid: 5678, unref: () => undefined };
@@ -269,6 +275,44 @@ describe("CLI observer process lifecycle", () => {
     expect(spawned).toBe(false);
   });
 
+  it("refuses without spawning when a same-version incumbent has the winning identity", async () => {
+    const fixture = await createTempState();
+    let spawned = false;
+
+    const result = await startObserver(
+      { config: fixture.config },
+      {
+        buildVersion: losingBuildVersion,
+        spawnObserver: async () => {
+          spawned = true;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.8.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: winningBuildVersion,
+              socketPath: fixture.socketPath,
+            }),
+          }) as never,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_HANDOFF_REFUSED",
+        hint: expect.stringMatching(
+          /Running build: 1\.2\.3 \(build b{12}\).*Requested build: 1\.2\.3 \(build a{12}\)/u,
+        ),
+      },
+    });
+    expect(spawned).toBe(false);
+  });
+
   it("refuses to restart a newer incumbent from a lower build", async () => {
     const fixture = await createTempState();
     let stops = 0;
@@ -276,7 +320,7 @@ describe("CLI observer process lifecycle", () => {
     const result = await restartObserver(
       { config: fixture.config },
       {
-        buildVersion: "1.0.0",
+        buildVersion: exactOneBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
           return { pid: 5678, unref: () => undefined };
@@ -315,14 +359,213 @@ describe("CLI observer process lifecycle", () => {
     let running = true;
     let stops = 0;
     let spawns = 0;
+    let stopExpectation: unknown;
     const result = await restartObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
-        buildVersion: "1.0.0",
+        buildVersion: exactOneBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
           running = true;
           return { pid: 1234, unref: () => undefined };
+        },
+        clientFactory: (_socketPath, options) => {
+          if (options?.expectedObserverIdentity !== undefined) {
+            stopExpectation = options.expectedObserverIdentity;
+          }
+          return {
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.8.0",
+                status: "healthy",
+                pid: 1234,
+                startedAt: now,
+                version: exactOneBuildVersion,
+                socketPath: fixture.socketPath,
+              };
+            },
+            stop: async () => {
+              stops += 1;
+              running = false;
+              return { schemaVersion: "0.8.0", stopped: true, at: now };
+            },
+          } as never;
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "running",
+      health: { version: exactOneBuildVersion },
+    });
+    expect(stops).toBe(1);
+    expect(spawns).toBe(1);
+    expect(stopExpectation).toEqual({
+      pid: 1234,
+      startedAt: now,
+      version: exactOneBuildVersion,
+      socketPath: fixture.socketPath,
+    });
+  });
+
+  it("waits through unhealthy shutdown until the endpoint stops listening", async () => {
+    const fixture = await createTempState();
+    const server = await listenUnixSocket({
+      socketPath: fixture.socketPath,
+      onConnection: () => undefined,
+    });
+    let stopping = false;
+    let observedUnhealthyShutdown = false;
+    let stopSettled = false;
+    let markUnhealthyObserved: () => void = () => undefined;
+    const unhealthyObserved = new Promise<void>((resolve) => {
+      markUnhealthyObserved = resolve;
+    });
+
+    const pending = stopObserver(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        clientFactory: () =>
+          ({
+            health: async () => {
+              if (!stopping) {
+                return {
+                  schemaVersion: "0.8.0",
+                  status: "healthy",
+                  pid: 1234,
+                  startedAt: now,
+                  version: exactOneBuildVersion,
+                  socketPath: fixture.socketPath,
+                };
+              }
+              observedUnhealthyShutdown = true;
+              markUnhealthyObserved();
+              throw {
+                tag: "TimeoutError",
+                code: "PROTOCOL_REQUEST_TIMEOUT",
+                message: "Observer health is gated during shutdown.",
+              };
+            },
+            stop: async () => {
+              stopping = true;
+              return { schemaVersion: "0.8.0", stopped: true, at: now };
+            },
+          }) as never,
+      },
+    ).finally(() => {
+      stopSettled = true;
+    });
+
+    try {
+      await unhealthyObserved;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(observedUnhealthyShutdown).toBe(true);
+      expect(stopSettled).toBe(false);
+
+      await server.close();
+      await expect(pending).resolves.toMatchObject({ stopped: true });
+    } finally {
+      await server.close().catch(() => undefined);
+    }
+  });
+
+  it("shares the caller timeout across guarded stop and endpoint convergence", async () => {
+    const fixture = await createTempState();
+    let running = true;
+    let guardedRequestTimeoutMs: number | undefined;
+    const startedAt = Date.now();
+
+    await expect(
+      stopObserver(
+        { config: fixture.config, timeoutMs: 2_000 },
+        {
+          clientFactory: (_socketPath, options) => {
+            if (options?.expectedObserverIdentity !== undefined) {
+              guardedRequestTimeoutMs = options.timeoutMs;
+            }
+            return {
+              health: async () => {
+                if (!running) throw new Error("stopped");
+                return {
+                  schemaVersion: "0.8.0",
+                  status: "healthy",
+                  pid: 1234,
+                  startedAt: now,
+                  version: exactOneBuildVersion,
+                  socketPath: fixture.socketPath,
+                };
+              },
+              stop: async () => {
+                await new Promise((resolve) => setTimeout(resolve, 700));
+                running = false;
+                return { schemaVersion: "0.8.0", stopped: true, at: now };
+              },
+            } as never;
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ stopped: true });
+
+    expect(guardedRequestTimeoutMs).toBeGreaterThan(700);
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+  });
+
+  it("stops legacy health with stable process identity but omitted version and socket", async () => {
+    const fixture = await createTempState();
+    let running = true;
+    let stopExpectation: unknown;
+
+    await expect(
+      stopObserver(
+        { config: fixture.config, timeoutMs: 500 },
+        {
+          clientFactory: (_socketPath, options) => {
+            if (options?.expectedObserverIdentity !== undefined) {
+              stopExpectation = options.expectedObserverIdentity;
+            }
+            return {
+              health: async () => {
+                if (!running) throw new Error("stopped");
+                return {
+                  schemaVersion: "0.8.0",
+                  status: "healthy",
+                  pid: 1234,
+                  startedAt: now,
+                };
+              },
+              stop: async () => {
+                running = false;
+                return { schemaVersion: "0.8.0", stopped: true, at: now };
+              },
+            } as never;
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ stopped: true });
+    expect(stopExpectation).toEqual({
+      pid: 1234,
+      startedAt: now,
+      socketPath: fixture.socketPath,
+    });
+  });
+
+  it("restarts a same-version legacy observer through its stable process identity", async () => {
+    const fixture = await createTempState();
+    let running = true;
+    let version = "1.0.0";
+    let stops = 0;
+    let spawns = 0;
+
+    const result = await restartObserver(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        buildVersion: exactOneBuildVersion,
+        spawnObserver: async () => {
+          spawns += 1;
+          running = true;
+          version = exactOneBuildVersion;
+          return { pid: 5678, unref: () => undefined };
         },
         clientFactory: () =>
           ({
@@ -331,10 +574,9 @@ describe("CLI observer process lifecycle", () => {
               return {
                 schemaVersion: "0.8.0",
                 status: "healthy",
-                pid: 1234,
+                pid: version === exactOneBuildVersion ? 5678 : 1234,
                 startedAt: now,
-                version: "1.0.0",
-                socketPath: fixture.socketPath,
+                version,
               };
             },
             stop: async () => {
@@ -346,9 +588,42 @@ describe("CLI observer process lifecycle", () => {
       },
     );
 
-    expect(result).toMatchObject({ status: "running", health: { version: "1.0.0" } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { pid: 5678, version: exactOneBuildVersion },
+    });
     expect(stops).toBe(1);
     expect(spawns).toBe(1);
+  });
+
+  it("refuses explicit stop when legacy health cannot pin a process", async () => {
+    const fixture = await createTempState();
+    let stops = 0;
+
+    await expect(
+      stopObserver(
+        { config: fixture.config },
+        {
+          clientFactory: () =>
+            ({
+              health: async () => ({
+                schemaVersion: "0.8.0",
+                status: "healthy",
+                startedAt: now,
+                version: "1.0.0",
+              }),
+              stop: async () => {
+                stops += 1;
+                return { schemaVersion: "0.8.0", stopped: true, at: now };
+              },
+            }) as never,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "OBSERVER_STOP_FAILED",
+      message: "Observer stop requires stable process identity from health.",
+    });
+    expect(stops).toBe(0);
   });
 
   it("routes a higher-build restart through child handoff without a parent stop", async () => {
@@ -360,10 +635,10 @@ describe("CLI observer process lifecycle", () => {
     const result = await restartObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
-        buildVersion: "2.0.0",
+        buildVersion: exactTwoBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
-          version = "2.0.0";
+          version = exactTwoBuildVersion;
           pid = 5678;
           return { pid, unref: () => undefined };
         },
@@ -385,7 +660,10 @@ describe("CLI observer process lifecycle", () => {
       },
     );
 
-    expect(result).toMatchObject({ status: "running", health: { pid: 5678, version: "2.0.0" } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { pid: 5678, version: exactTwoBuildVersion },
+    });
     expect(stops).toBe(0);
     expect(spawns).toBe(1);
   });
@@ -398,7 +676,7 @@ describe("CLI observer process lifecycle", () => {
     const result = await startObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
-        buildVersion: "2.0.0",
+        buildVersion: exactTwoBuildVersion,
         spawnObserver: async () => {
           spawned = true;
           return { pid: 5678, unref: () => undefined };
@@ -422,7 +700,7 @@ describe("CLI observer process lifecycle", () => {
                 status: "healthy",
                 pid: 5678,
                 startedAt: now,
-                version: "2.0.0",
+                version: exactTwoBuildVersion,
                 socketPath: fixture.socketPath,
               };
             },
@@ -432,7 +710,10 @@ describe("CLI observer process lifecycle", () => {
 
     expect(spawned).toBe(true);
     expect(healthAttempts).toBeGreaterThanOrEqual(3);
-    expect(result).toMatchObject({ status: "running", health: { version: "2.0.0", pid: 5678 } });
+    expect(result).toMatchObject({
+      status: "running",
+      health: { version: exactTwoBuildVersion, pid: 5678 },
+    });
   });
 
   it.each([
@@ -487,6 +768,7 @@ describe("CLI observer process lifecycle", () => {
           timeoutMs: 200,
         },
         {
+          buildVersion: zeroBuildVersion,
           clock: { now: () => new Date(now) },
           spawnObserver: async (): Promise<ChildProcessLike> => {
             spawned = true;

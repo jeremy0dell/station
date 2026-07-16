@@ -53,7 +53,7 @@ bun run dashboard                     # read-only dashboard renderer
 
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- The tmux popup runs the same read-only dashboard. Its close behavior and footer copy must match popup semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O` / header click toggles the STATION overlay; `Ctrl-Q` always exits Station.
+- The tmux popup runs the same read-only dashboard. Its close behavior and footer copy must match popup semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O` / header click toggles the STATION overlay; `Ctrl-Q` always exits Station. Persistent tmux sessions are signed by renderer command and build identity so an installed upgrade replaces, rather than reuses, a warm renderer pinned to an older Observer build.
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
 

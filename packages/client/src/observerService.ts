@@ -22,6 +22,8 @@ import type { ObserverService, StationClientCommandCompletion } from "./types.js
 
 export type CreateObserverServiceOptions = {
   socketPath?: string;
+  /** Exact Observer selector accepted before this service began issuing operations. */
+  expectedBuildVersion?: string;
   timeoutMs?: number;
   reconcileTimeoutMs?: number;
   commandWaitTimeoutMs?: number;
@@ -34,6 +36,11 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000;
 const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 35_000;
 
+/**
+ * ADAPTER
+ *
+ * Presents one build-pinned Observer protocol endpoint as the shared client service.
+ */
 export function createObserverService(options: CreateObserverServiceOptions): ObserverService {
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const reconcileTimeoutMs =
@@ -253,6 +260,9 @@ function createClient(options: CreateObserverServiceOptions, timeoutMs: number):
   return createObserverClient({
     socketPath: options.socketPath,
     timeoutMs,
+    ...(options.expectedBuildVersion === undefined
+      ? {}
+      : { expectedBuildVersion: options.expectedBuildVersion }),
     ...(options.requestId === undefined ? {} : { requestId: options.requestId }),
   });
 }

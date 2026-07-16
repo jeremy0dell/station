@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { createObserverStartupGate } from "../../src/runtime/main.js";
 
 describe("observer startup gate", () => {
+  it("admits operations only during the committed ready lifetime", () => {
+    const gate = createObserverStartupGate();
+
+    expect(() => gate.assertReadyForOperation()).toThrow(
+      expect.objectContaining({ code: "OBSERVER_NOT_READY" }),
+    );
+    gate.settleReady(() => ({ status: "released" }));
+    expect(() => gate.assertReadyForOperation()).not.toThrow();
+
+    gate.requestStop();
+    expect(() => gate.assertReadyForOperation()).toThrow(
+      expect.objectContaining({ code: "OBSERVER_STOPPING" }),
+    );
+  });
+
   it("keeps a pre-ready stop terminal while allowing shutdown to await startup settlement", async () => {
     const gate = createObserverStartupGate();
     let shutdownReleased = false;

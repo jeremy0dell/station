@@ -169,7 +169,7 @@ spool/hooks/
 {
   "pid": 12345,
   "osStartTime": "Sat Jul 11 10:42:03 2026",
-  "version": "0.7.0",
+  "version": "0.7.0+station.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "socketPath": "/resolved/socket/directory/observer.sock"
 }
 ```
@@ -182,13 +182,29 @@ process or unlink a socket from this file alone. Clean shutdown removes the
 file only when the Observer still owns the socket and every identity field
 matches its published value.
 
-`OBSERVER_HANDOFF_REFUSED` means automatic cross-version replacement could not
-prove or stop the incumbent safely. Read the running/requested versions in the
-error, inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
+The pidfile and health response use the exact Observer selector shown above;
+`stn --version` and `StationSnapshot.observer.version` remain the display
+version (`0.7.0` in this example).
+
+`OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
+could not proceed safely. Read the running/requested display versions and build
+IDs in the error. A same-version legacy or losing identified build with stable
+PID/start-time health can be stopped explicitly; missing process identity
+refuses rather than risking a successor. It must not attach to different code.
+Inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
 strict pidfile and `ps -ww -p <pid> -o lstart=,command=`, then retry only after
 resolving missing or conflicting evidence. Automatic handoff never uses
 SIGKILL; `stn observer reap --force` remains the explicit operator path for
 confirmed duplicates, not a generic response to a live wedged owner.
+
+`OBSERVER_BUILD_MISMATCH` means a client outlived the exact Observer selector
+it accepted at launch. The failed operation was not sent to the replacement.
+Close and relaunch that client, or use an isolated socket/state directory; do
+not retry the stale process in a loop.
+
+A missing, invalid, or checkout/output-mismatched `station-build-id` stops a
+source client before it can claim compatibility. Run `pnpm build`, then relaunch
+the client; a scoped `tsc` output is not an identified whole-repository build.
 
 ## Reading Evidence
 

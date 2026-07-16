@@ -11,10 +11,11 @@ import {
   resolveTmuxPopupFocusTarget,
 } from "../../src/popup";
 import { buildNormalPopupRoute, buildPopupActiveClaim } from "../../src/popup/fastProtocol";
+import { persistentPopupSignature } from "../../src/popup/persistentUi.js";
 import { tmuxCommandResult } from "../support/commands";
 
 const defaultCommand = "stn tui --popup --persistent";
-const defaultSignature = `v1:${defaultCommand}`;
+const defaultSignature = persistentPopupSignature(defaultCommand);
 const registrationNonce = "11".repeat(16);
 const actionNonce = "22".repeat(16);
 
@@ -43,6 +44,9 @@ describe("tmux popup", () => {
   });
 
   it("creates, reuses, and replaces the persistent UI by exact signature", async () => {
+    expect(persistentPopupSignature(defaultCommand, "build-a")).not.toBe(
+      persistentPopupSignature(defaultCommand, "build-b"),
+    );
     const missingCalls: ExternalCommandInput[] = [];
     await expect(
       ensurePersistentPopupSession({

@@ -449,6 +449,7 @@ Advanced development/demo overrides:
 | `STATION_NODE` | Station local PTY bridge | Node executable path/name; fallback is `node`. |
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
+| `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Development/testing override for `stn-ingress`; fallback is the PATH name `stn-ingress`. |
 | `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the read-only dashboard renderer. Development/testing only. |
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
 | `STATION_SHELL_AUTOCLOSE` | Native Station TUI | `1`/`true` or `0`/`false`; auto-close overlay when a `+sh` shell opens. |
@@ -489,12 +490,20 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_PROJECT_ID`, `STATION_WORKTREE_ID`, `STATION_WORKTREE_PATH`,
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
-`STATION_HOOK_SPOOL_DIR`, `STATION_TUI_POPUP`, `STATION_TUI_PERSISTENT`,
-`STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI sets
-`STATION_TUI_PERSISTENT=1` when the renderer requires its lifecycle-control IPC channel; it is not
-a standalone launch mode. Hook scripts and launched agents receive the other context variables so
-they can report back to the right observer/session. `STATION_STATE_DIR` is a hook-script fallback
-for `stn-ingress --state-dir`; it is **not** a global observer relocation knob. Use
+`STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_TUI_POPUP`, `STATION_TUI_PERSISTENT`,
+`STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
+build variables as a pair: the first identifies the renderer artifact and the
+second pins it to the exact Observer selector the CLI accepted. A directly
+launched source renderer falls back to its own verified built selector. The
+renderer fixes that selector when it creates its Observer client; each later
+operation checks the socket owner on the same connection without running Git or
+hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the
+renderer requires its lifecycle-control IPC channel; it is not a standalone
+launch mode. These variables are not hand-authored overrides. Hook scripts and
+launched agents receive the other context so they can report back to the right
+observer/session. `STATION_STATE_DIR` is a hook-script fallback for
+`stn-ingress --state-dir`; it is **not** a global observer relocation knob. Use
 `observer.state_dir` in config for isolation.
 
 ---

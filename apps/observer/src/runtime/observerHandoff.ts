@@ -5,7 +5,11 @@ import type {
   SafeError,
 } from "@station/contracts";
 import { TimestampSchema } from "@station/contracts";
-import { Effect } from "@station/runtime";
+import {
+  Effect,
+  hasStationObserverBuildIdentityMarker,
+  parseStationObserverBuildVersion,
+} from "@station/runtime";
 import { z } from "zod";
 import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 
@@ -64,6 +68,18 @@ export type ObserverLifecycleRequest = {
   timeoutMs: number;
 };
 
+export type ObserverExpectedProcessHealth = {
+  pid: number;
+  startedAt: string;
+  version: string;
+  socketPath: string;
+};
+
+export type ObserverStopRequest = ObserverLifecycleRequest & {
+  /** Process identity that must answer health on the same connection used for stop. */
+  expectedObserver: ObserverExpectedProcessHealth;
+};
+
 /**
  * DRIVEN PORT
  *
@@ -82,11 +98,11 @@ export interface ObserverProcessEvidenceSource {
  * DRIVEN PORT
  *
  * Exposes the incumbent's validated lifecycle operations while keeping NDJSON
- * transport mechanics outside version-aware handoff orchestration.
+ * transport mechanics outside build-aware handoff orchestration.
  */
 export interface ObserverIncumbentLifecycle {
   health(socketPath: string, request: ObserverLifecycleRequest): Promise<ObserverHealth>;
-  stop(socketPath: string, request: ObserverLifecycleRequest): Promise<ObserverStopReceipt>;
+  stop(socketPath: string, request: ObserverStopRequest): Promise<ObserverStopReceipt>;
   socketListening(socketPath: string, request: ObserverLifecycleRequest): Promise<boolean>;
 }
 
@@ -107,7 +123,8 @@ type ObserverHandoffDeps = {
 /**
  * POLICY
  *
- * Selects one stable Observer build winner without process or transport I/O.
+ * Selects one stable Observer build winner without process or transport I/O,
+ * refusing ambiguous same-version handoffs instead of silently reusing them.
  */
 export function classifyObserverIncumbent(input: {
   candidate: ObserverHandoffCandidate;
@@ -117,24 +134,62 @@ export function classifyObserverIncumbent(input: {
   if (!candidate.success) {
     return { action: "refuse", reason: "The candidate Observer identity is invalid." };
   }
-  const candidateVersion = SemVerSchema.safeParse(candidate.data.version);
+  const candidateBuild = parseStationObserverBuildVersion(candidate.data.version);
+  if (
+    candidateBuild.buildIdentity === undefined &&
+    hasStationObserverBuildIdentityMarker(candidate.data.version)
+  ) {
+    return { action: "refuse", reason: "The candidate Observer build identity is invalid." };
+  }
+  const candidateVersion = SemVerSchema.safeParse(candidateBuild.version);
   if (!candidateVersion.success) {
     return { action: "refuse", reason: "The candidate Observer version is not valid SemVer." };
   }
   if (input.incumbent.version === undefined) {
     return { action: "refuse", reason: "The incumbent Observer did not report a version." };
   }
-  const incumbentVersion = SemVerSchema.safeParse(input.incumbent.version);
+  const incumbentBuild = parseStationObserverBuildVersion(input.incumbent.version);
+  if (
+    incumbentBuild.buildIdentity === undefined &&
+    hasStationObserverBuildIdentityMarker(input.incumbent.version)
+  ) {
+    return { action: "refuse", reason: "The incumbent Observer build identity is invalid." };
+  }
+  const incumbentVersion = SemVerSchema.safeParse(incumbentBuild.version);
   if (!incumbentVersion.success) {
     return { action: "refuse", reason: "The incumbent Observer version is not valid SemVer." };
   }
-  if (candidateVersion.data.version === incumbentVersion.data.version) {
+  if (candidate.data.version === input.incumbent.version) {
+    if (candidateBuild.buildIdentity === undefined) {
+      return {
+        action: "refuse",
+        reason: "Same-version Observer reuse requires immutable build identity.",
+      };
+    }
     return { action: "attach", reason: "exact-build" };
+  }
+  if (candidateBuild.version === incumbentBuild.version) {
+    if (candidateBuild.buildIdentity === undefined || incumbentBuild.buildIdentity === undefined) {
+      return {
+        action: "refuse",
+        reason: "Same-version Observer handoff requires build identity from both contenders.",
+      };
+    }
+    const identityOrder = compareIdentifier(
+      candidateBuild.buildIdentity,
+      incumbentBuild.buildIdentity,
+    );
+    if (identityOrder <= 0) {
+      return {
+        action: "refuse",
+        reason: "A different build of this Station version already owns the Observer socket.",
+      };
+    }
   }
   const precedence = compareSemVer(candidateVersion.data, incumbentVersion.data);
   if (precedence < 0) return { action: "attach", reason: "incumbent-wins" };
   if (precedence === 0) {
-    // Exact build strings are stable across the CLI parent and Observer child;
+    // Display-version strings are stable across the CLI parent and Observer child;
     // their process timestamps and PIDs are not the same contender identity.
     const buildOrder = compareIdentifier(
       candidateVersion.data.version,
@@ -179,15 +234,19 @@ export async function negotiateObserverIncumbent(
     if (decision.action === "attach") return { action: "attach", health };
     if (decision.action === "refuse") throw handoffRefused(decision.reason);
 
-    const incumbent = await requireVerifiedIncumbent(input, health, deps);
+    const incumbent = (await requireVerifiedIncumbent(input, health, deps)).processIdentity;
     // The claim excludes another legitimate successor, but ownership evidence
     // is still refreshed immediately before asking this exact process to stop.
     const revalidatedHealth = await deps.lifecycle.health(input.socketPath, {
       timeoutMs: remainingHandoffMs(deadline, now),
     });
-    await requireVerifiedIncumbent(input, revalidatedHealth, deps);
+    const revalidatedIncumbent = await requireVerifiedIncumbent(input, revalidatedHealth, deps);
+    if (!observerProcessIdentitiesMatch(incumbent, revalidatedIncumbent.processIdentity)) {
+      throw handoffRefused("The incumbent Observer process changed during handoff.");
+    }
     await deps.lifecycle.stop(input.socketPath, {
       timeoutMs: remainingHandoffMs(deadline, now),
+      expectedObserver: revalidatedIncumbent.health,
     });
 
     if (await waitForExactExit(input.socketPath, incumbent, gracefulDeadline, deps, now, sleep)) {
@@ -224,7 +283,10 @@ async function requireVerifiedIncumbent(
   input: { socketPath: string; candidate: ObserverHandoffCandidate },
   health: ObserverHealth,
   deps: ObserverHandoffDeps,
-): Promise<ObserverProcessIdentity> {
+): Promise<{
+  processIdentity: ObserverProcessIdentity;
+  health: ObserverExpectedProcessHealth;
+}> {
   const decision = classifyObserverIncumbent({ candidate: input.candidate, incumbent: health });
   if (decision.action !== "replace") {
     throw handoffRefused(
@@ -252,7 +314,15 @@ async function requireVerifiedIncumbent(
     throw handoffRefused("The incumbent Observer pidfile did not corroborate socket ownership.");
   }
   await requireVerifiedProcessEvidence(input.socketPath, identity, deps);
-  return identity;
+  return {
+    processIdentity: identity,
+    health: {
+      pid: health.pid,
+      startedAt: health.startedAt,
+      version: health.version,
+      socketPath: health.socketPath,
+    },
+  };
 }
 
 async function requireVerifiedProcessEvidence(

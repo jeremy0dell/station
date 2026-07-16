@@ -1,5 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "futureFlags": {
+    "watchUsingTaskInputs": true
+  },
   "tasks": {
     "dev": {
       "cache": false,
@@ -17,7 +20,22 @@
         "!**/*.spec.ts",
         "!**/*.spec.tsx"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/station-build-id"]
+    },
+    "build:identity": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!test/**",
+        "!tests/**",
+        "!src/**/__tests__/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.spec.ts",
+        "!**/*.spec.tsx"
+      ],
+      "cache": false,
+      "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^build"],

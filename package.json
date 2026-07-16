@@ -16,7 +16,7 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "build": "turbo run build",
+    "build": "node scripts/build-identity.mjs",
     "build:binary": "bun scripts/build-binary.mjs",
     "setup:system": "scripts/setup/setup-system-dependencies.sh",
     "setup:system:check": "scripts/setup/setup-system-dependencies.sh --check",

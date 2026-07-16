@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, watch } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, watch } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const restartDebounceMs = 500;
-const restartExtensions = new Set([".js", ".json", ".mjs"]);
+const buildIdentityPath = join(repoRoot, "packages/runtime/dist/station-build-id");
+const buildIdentityPattern = /^[0-9a-f]{64}$/u;
 export const mouseReportingDisableSequence =
   "\u001B[?1000l\u001B[?1002l\u001B[?1003l\u001B[?1005l\u001B[?1006l\u001B[?1015l";
 
@@ -23,7 +24,10 @@ export function runWatchRunner(argv, env = process.env) {
   }
 
   const watchRoots = watchRootsFromEnv(env);
-  const watchers = watchRoots.flatMap((root) => watchTree(root, () => scheduleRestart(root)));
+  const shouldRestart = createBuildIdentityRestartProbe();
+  const watchers = watchRoots.flatMap((root) =>
+    watchTree(root, () => scheduleRestart(root), shouldRestart),
+  );
   let child = launchChild({ clear: false });
   let restartTimer;
   let restartPending = false;
@@ -100,8 +104,24 @@ export function runWatchRunner(argv, env = process.env) {
   }
 }
 
-export function shouldRestartForPath(path) {
-  return path === undefined || restartExtensions.has(extname(path));
+export function createBuildIdentityRestartProbe(path = buildIdentityPath) {
+  const resolvedPath = resolve(path);
+  let observedIdentity = readPublishedBuildIdentity(resolvedPath);
+  return (eventPath) => {
+    if (eventPath !== undefined && resolve(eventPath) !== resolvedPath) {
+      return false;
+    }
+    const publishedIdentity = readPublishedBuildIdentity(resolvedPath);
+    if (publishedIdentity === undefined) {
+      observedIdentity = undefined;
+      return false;
+    }
+    if (publishedIdentity === observedIdentity) {
+      return false;
+    }
+    observedIdentity = publishedIdentity;
+    return true;
+  };
 }
 
 export function defaultWatchRoots() {
@@ -124,7 +144,7 @@ function watchRootsFromEnv(env) {
     .filter((path) => path.length > 0);
 }
 
-function watchTree(root, onChange) {
+function watchTree(root, onChange, shouldRestart) {
   if (!existsSync(root)) {
     return [];
   }
@@ -134,7 +154,7 @@ function watchTree(root, onChange) {
         return;
       }
       const path = filename === null ? undefined : join(directory, filename.toString());
-      if (!shouldRestartForPath(path)) {
+      if (!shouldRestart(path)) {
         return;
       }
       onChange();
@@ -144,6 +164,15 @@ function watchTree(root, onChange) {
     });
     return watcher;
   });
+}
+
+function readPublishedBuildIdentity(path) {
+  try {
+    const identity = readFileSync(path, "utf8").trim();
+    return buildIdentityPattern.test(identity) ? identity : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function collectDirectories(root) {

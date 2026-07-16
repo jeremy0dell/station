@@ -29,6 +29,8 @@ import {
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
 const now = "2026-05-20T12:00:00.000Z";
+const observerDisplayVersion = "0.0.0";
+const observerBuildVersion = `${observerDisplayVersion}+station.${"a".repeat(64)}`;
 const persistenceFailure = {
   tag: "PersistenceError",
   code: "PERSISTENCE_TRANSACTION_FAILED",
@@ -77,7 +79,7 @@ describe("observer protocol server", () => {
       await expect(
         runObserverMain(
           ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "1000"],
-          { providerRegistryFactory, buildVersion: "0.0.0", incumbentLifecycle },
+          { providerRegistryFactory, buildVersion: observerBuildVersion, incumbentLifecycle },
         ),
       ).resolves.toBe(0);
       expect(providerRegistryFactory).not.toHaveBeenCalled();
@@ -111,7 +113,11 @@ describe("observer protocol server", () => {
     await expect(client.health()).resolves.toMatchObject({
       status: "healthy",
       socketPath,
+      version: observerBuildVersion,
       sqlite: degradedSqliteHealth,
+    });
+    await expect(client.getSnapshot()).resolves.toMatchObject({
+      observer: { version: observerDisplayVersion },
     });
     await expect(client.collectDiagnostics({ includeLogs: false })).resolves.toMatchObject({
       observerHealth: {
@@ -190,6 +196,7 @@ function createObserverFixture(socketPath: string) {
     providers,
     persistence,
     clock,
+    version: observerDisplayVersion,
   });
   const persistenceHealth: PersistenceHealthSource = {
     health: () => degradedSqliteHealth,
@@ -202,6 +209,7 @@ function createObserverFixture(socketPath: string) {
     eventBus,
     clock,
     socketPath,
+    observerBuildVersion,
   });
   registerObserverCommandHandlers({
     projectConfigWriter: createUnexpectedProjectConfigWriter(),

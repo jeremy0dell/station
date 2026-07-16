@@ -16,7 +16,7 @@ import { startProtocolServer, type UnixSocketServer } from "@station/protocol";
 import {
   environmentWithoutGitLocals,
   resolveExecutablePath,
-  stationBuildInfo,
+  stationObserverBuildVersion,
 } from "@station/runtime";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { mockObserverSnapshot } from "../../../../../station/src/sources/fixtures/mockObserverSnapshot.js";
@@ -1688,7 +1688,7 @@ function popupFocusObserver(focusCommands: StationCommand[]): ObserverApi {
       status: "healthy",
       pid: process.pid,
       startedAt: new Date(Date.now() - 1_000).toISOString(),
-      version: stationBuildInfo().version,
+      version: stationObserverBuildVersion(),
     }),
     stop: async () => ({
       schemaVersion: STATION_SCHEMA_VERSION,

@@ -71,7 +71,13 @@ export async function runCommandCommand(
   assertRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
-    createObserverClient({ socketPath: paths.socketPath, timeoutMs });
+    createObserverClient({
+      socketPath: paths.socketPath,
+      timeoutMs,
+      ...(status.health.version === undefined
+        ? {}
+        : { expectedBuildVersion: status.health.version }),
+    });
 
   if (parsed.action === "get") {
     return getCommand(client, parsed.commandId);

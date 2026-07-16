@@ -17,6 +17,7 @@ import {
   sendClaudeHookPayload,
   sendCodexHookPayload,
   sendCursorHookPayload,
+  sendOpenCodeHookPayload,
   sendPiHookPayload,
   sendWorktrunkHookEvent,
 } from "./sender.js";
@@ -48,6 +49,12 @@ type ParsedOptions = {
   rateLimitMs?: number;
 };
 
+/**
+ * ADAPTER
+ *
+ * Parses provider-owned CLI ingress payloads and delegates normalized delivery
+ * to the corresponding provider sender.
+ */
 export async function runProviderIngressCommand(
   argv = process.argv.slice(2),
   options: ProviderIngressCommandOptions = {},
@@ -123,6 +130,25 @@ export async function runProviderIngressCommand(
       hookInput.env = options.env;
     }
     return sendPiHookPayload(hookInput, deps);
+  }
+
+  if (provider === "opencode") {
+    if (event === undefined) {
+      throw new Error("Usage: stn-ingress [options] opencode <event>");
+    }
+    const payload = parseJsonPayload(stdin, "opencode", event, deps);
+    if (!payload.ok) {
+      return payload.receipt;
+    }
+    const hookInput: Parameters<typeof sendOpenCodeHookPayload>[0] = {
+      ...senderOptions,
+      eventType: event,
+      payload: payload.value,
+    };
+    if (options.env !== undefined) {
+      hookInput.env = options.env;
+    }
+    return sendOpenCodeHookPayload(hookInput, deps);
   }
 
   if (provider === "worktrunk") {

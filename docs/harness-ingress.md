@@ -34,6 +34,17 @@ export type HarnessIngressRule<Provider extends string, EventType extends string
 
 Provider integrations derive their forwarding allow-list from their local rules. Generated plugins must serialize the derived allow-list rather than maintaining independent copies.
 
+## Transport Ownership
+
+Generated first-party hook transports, including Pi and OpenCode, invoke
+`stn-ingress` instead of opening the Observer socket or writing spool records
+themselves. The CLI ingress path verifies the accepted Observer build, owns
+auto-start and offline spooling, and rejects known build, schema, or handoff
+incompatibility without putting the event into a spool that mismatched code can
+drain. Raw hook payloads normalize exactly once through the selected
+Observer-side provider adapter; an already-normalized `HarnessEventReport`
+bypasses that adapter.
+
 ## Rollout
 
 OpenCode is the first provider using a rule-derived ingress filter. Claude Code follows the same shape: `integrations/harness/claude/src/ingressRules.ts` is the single source of truth for both the installed hook event set (the generated `--settings` artifact registers only rule-listed events) and status projection (`statusFromClaudeHookEvent` is gated by rule presence, and `stn-ingress claude` drops unlisted event types with an `ignored` receipt). `SubagentStart`, `SubagentStop`, and `PostToolUseFailure` are deliberately absent from the Claude rules: `SubagentStop` fires after `Stop` at turn end and would flip a freshly idle row back to working. Codex and Pi must keep current behavior until each has provider-specific ingress rules and no-regression tests proving required events are still admitted.

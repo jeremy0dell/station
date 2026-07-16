@@ -16,6 +16,7 @@ import {
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
+import { isOpenCodeForwardedEventType } from "@station/opencode";
 import { createObserverClient } from "@station/protocol";
 import {
   pathIsSameOrInside,
@@ -52,6 +53,8 @@ export type ProviderHookSenderOptions = {
 
 type ProviderHookClientFactoryOptions = {
   timeoutMs: number;
+  /** Exact Observer selector accepted by delivery readiness. */
+  expectedBuildVersion?: string;
 };
 
 export type ProviderHookSenderDeps = ProviderHookObserverStartupDeps & {
@@ -93,6 +96,12 @@ export type SendPiHookInput = ProviderHookSenderOptions & {
   env?: NodeJS.ProcessEnv;
 };
 
+export type SendOpenCodeHookInput = ProviderHookSenderOptions & {
+  eventType: string;
+  payload: unknown;
+  env?: NodeJS.ProcessEnv;
+};
+
 const defaultHookId = () => `hook_${Date.now()}_${randomUUID()}`;
 const defaultDeliveryTimeoutMs = 2000;
 
@@ -111,6 +120,12 @@ export async function sendWorktrunkHookEvent(
   );
 }
 
+/**
+ * USE CASE
+ *
+ * Validates shared provider-hook ingress, pins delivery to the accepted
+ * Observer build, and applies the centralized delivery-or-spool policy.
+ */
 export async function sendProviderHookEvent(
   input: SendProviderHookEventInput,
   deps: ProviderHookSenderDeps = {},
@@ -135,11 +150,12 @@ export async function sendProviderHookEvent(
     startupTimeoutMs: input.startupTimeoutMs ?? 1500,
     rateLimitMs: input.rateLimitMs ?? 2000,
     deps,
-    deliver: () =>
+    deliver: (expectedBuildVersion) =>
       attemptHookDelivery(
         input.paths,
         event,
         input.deliveryTimeoutMs ?? defaultDeliveryTimeoutMs,
+        expectedBuildVersion,
         deps,
       ),
     spoolReceipt: (error) => spool(input.paths, event, error, deps),
@@ -296,14 +312,53 @@ export async function sendPiHookPayload(
   );
 }
 
+/**
+ * ADAPTER
+ *
+ * Translates compact OpenCode hook payloads into the shared provider ingress contract.
+ */
+export async function sendOpenCodeHookPayload(
+  input: SendOpenCodeHookInput,
+  deps: ProviderHookSenderDeps = {},
+): Promise<ProviderHookReceipt> {
+  const clock = deps.clock ?? systemClock;
+  const enrichedPayload = enrichStationHookIdentityPayload({
+    payload: input.payload,
+    env: input.env ?? process.env,
+  });
+  if (!hasStationOwnership(enrichedPayload) || !isOpenCodeForwardedEventType(input.eventType)) {
+    return ignoredProviderHookReceipt({
+      provider: "opencode",
+      event: input.eventType,
+      clock,
+      hookId: deps.hookId,
+    });
+  }
+
+  return sendProviderHookEvent(
+    {
+      ...input,
+      provider: "opencode",
+      kind: "harness",
+      event: input.eventType,
+      payload: enrichedPayload,
+    },
+    deps,
+  );
+}
+
 async function attemptHookDelivery(
   paths: ObserverPaths,
   event: ProviderHookEvent,
   timeoutMs: number,
+  expectedBuildVersion: string,
   deps: ProviderHookSenderDeps,
 ): Promise<ProviderDeliveryAttempt> {
-  const delivery = await deliverHook(paths, event, timeoutMs, deps);
-  if (delivery.ok && delivery.value.status === "ingested") {
+  const delivery = await deliverHook(paths, event, timeoutMs, expectedBuildVersion, deps);
+  if (
+    delivery.ok &&
+    (delivery.value.status === "ingested" || delivery.value.status === "rejected")
+  ) {
     return { receipt: delivery.value };
   }
   if (delivery.ok) {
@@ -320,6 +375,7 @@ async function deliverHook(
   paths: ObserverPaths,
   event: ProviderHookEvent,
   timeoutMs: number,
+  expectedBuildVersion: string,
   deps: ProviderHookSenderDeps,
 ) {
   return runRuntimeBoundaryWithTimeout(
@@ -341,9 +397,9 @@ async function deliverHook(
       },
     },
     async () => {
-      const client = observerClient(paths.socketPath, timeoutMs, deps);
+      const client = observerClient(paths.socketPath, timeoutMs, expectedBuildVersion, deps);
       const receipt = await client.ingestProviderHookEvent(event);
-      if (receipt.status !== "ingested") {
+      if (receipt.status !== "ingested" && receipt.status !== "rejected") {
         throw (
           receipt.error ??
           safeErrorFromUnknown(receipt, {
@@ -493,10 +549,11 @@ function jsonByteCount(value: unknown): number | null {
 function observerClient(
   socketPath: string,
   timeoutMs: number,
+  expectedBuildVersion: string,
   deps: ProviderHookSenderDeps,
 ): ReturnType<typeof createObserverClient> {
   return (
-    deps.clientFactory?.(socketPath, { timeoutMs }) ??
-    createObserverClient({ socketPath, timeoutMs })
+    deps.clientFactory?.(socketPath, { timeoutMs, expectedBuildVersion }) ??
+    createObserverClient({ socketPath, timeoutMs, expectedBuildVersion })
   );
 }
