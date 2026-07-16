@@ -22,20 +22,33 @@ export const TuiRendererDismissRequestSchema = z
 
 export type TuiRendererDismissRequest = z.infer<typeof TuiRendererDismissRequestSchema>;
 
-export const TuiRendererResolveFocusOriginRequestSchema = z
+export const TuiRendererDismissFocusTargetRequestSchema = z
   .object({
     ...frameShape,
-    type: z.literal("resolve-focus-origin"),
+    type: z.literal("dismiss-focus-target"),
+    focusRequestId: TuiRendererControlRequestIdSchema,
   })
   .strict();
 
-export type TuiRendererResolveFocusOriginRequest = z.infer<
-  typeof TuiRendererResolveFocusOriginRequestSchema
+export type TuiRendererDismissFocusTargetRequest = z.infer<
+  typeof TuiRendererDismissFocusTargetRequestSchema
+>;
+
+export const TuiRendererResolveFocusTargetRequestSchema = z
+  .object({
+    ...frameShape,
+    type: z.literal("resolve-focus-target"),
+  })
+  .strict();
+
+export type TuiRendererResolveFocusTargetRequest = z.infer<
+  typeof TuiRendererResolveFocusTargetRequestSchema
 >;
 
 export const TuiRendererControlRequestSchema = z.discriminatedUnion("type", [
   TuiRendererDismissRequestSchema,
-  TuiRendererResolveFocusOriginRequestSchema,
+  TuiRendererDismissFocusTargetRequestSchema,
+  TuiRendererResolveFocusTargetRequestSchema,
 ]);
 
 export type TuiRendererControlRequest = z.infer<typeof TuiRendererControlRequestSchema>;
@@ -49,15 +62,15 @@ export const TuiRendererDismissedResponseSchema = z
 
 export type TuiRendererDismissedResponse = z.infer<typeof TuiRendererDismissedResponseSchema>;
 
-export const TuiRendererFocusOriginResponseSchema = z
+export const TuiRendererFocusTargetResponseSchema = z
   .object({
     ...frameShape,
-    type: z.literal("focus-origin"),
+    type: z.literal("focus-target"),
     origin: TerminalFocusOriginSchema,
   })
   .strict();
 
-export type TuiRendererFocusOriginResponse = z.infer<typeof TuiRendererFocusOriginResponseSchema>;
+export type TuiRendererFocusTargetResponse = z.infer<typeof TuiRendererFocusTargetResponseSchema>;
 
 export const TuiRendererControlErrorResponseSchema = z
   .object({
@@ -71,7 +84,7 @@ export type TuiRendererControlErrorResponse = z.infer<typeof TuiRendererControlE
 
 export const TuiRendererControlResponseSchema = z.discriminatedUnion("type", [
   TuiRendererDismissedResponseSchema,
-  TuiRendererFocusOriginResponseSchema,
+  TuiRendererFocusTargetResponseSchema,
   TuiRendererControlErrorResponseSchema,
 ]);
 

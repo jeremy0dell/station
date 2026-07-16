@@ -344,6 +344,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       api: popupFocusObserver(focusCommands),
     });
     delete fixture.env.STATION_SOURCE;
+    delete fixture.env.STATION_TMUX_BIN;
     fixture.env.STATION_FOCUS_CLIENT_ID = "stale-startup-client";
 
     await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
@@ -451,7 +452,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
   }, 180_000);
 
-  it("compiled managed binding cold-starts, reuses the warm UI, and fails without entering view mode", async () => {
+  it("compiled managed binding honors dashboard dismissal, reuses the warm UI, and fails without entering view mode", async () => {
     const fixture = await createDashboardFixture(tmux, {
       height: "50%",
       position: "C",
@@ -523,17 +524,39 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(await tmuxSessionOption(fixture, "@station_popup_ui_lease")).toBe(route);
     expect(await tmuxGlobalOption(fixture, "@station_popup_ui_root")).toBe(installedRoot);
 
-    await triggerPopupBinding(coldAction.owner);
+    await coldAction.owner.write(Buffer.from([0x1b]));
     await waitForNestedClientGone(fixture);
     await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
 
     await writeFile(fixture.configPath, 'schema_version = "malformed"\n', "utf8");
     await triggerPopupBinding(coldAction.owner);
+    const qClient = await waitForNestedClient(fixture);
+    await waitForHiddenPaneContent(
+      fixture,
+      isDashboardContent,
+      "compiled dashboard did not reopen after Esc",
+    );
+    const qPane = await readPaneEvidence(fixture);
+    const qProcesses = await waitForDashboardProcessEvidence(fixture, qPane);
+    const qObserverPid = await recordObserverPid(fixture);
+    recordRuntimeEvidence(fixture, qClient, qPane, qProcesses);
+
+    expect(qPane.pid).toBe(firstPane.pid);
+    expect(qProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
+    expect(qObserverPid).toBe(firstObserverPid);
+    expect(qClient.columns).toBe(firstClient.columns);
+    expect(qClient.rows).toBe(firstClient.rows);
+
+    await coldAction.owner.write(Buffer.from("Q", "utf8"));
+    await waitForNestedClientGone(fixture);
+    await waitForGlobalOptionValue(fixture, "@station_popup_active_claim", "");
+
+    await triggerPopupBinding(coldAction.owner);
     const warmClient = await waitForNestedClient(fixture);
     await waitForHiddenPaneContent(
       fixture,
       isDashboardContent,
-      "compiled warm binding did not bypass malformed config",
+      "compiled warm binding did not bypass malformed config after Q",
     );
     const warmPane = await readPaneEvidence(fixture);
     const warmProcesses = await waitForDashboardProcessEvidence(fixture, warmPane);

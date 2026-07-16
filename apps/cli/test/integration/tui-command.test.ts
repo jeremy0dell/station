@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { runCli } from "@station/cli";
 import {
   type ObserverProcessDeps,
+  resolvePopupTmuxCommand,
   runTuiCommand,
   type TuiCommandDeps,
 } from "@station/cli/internal";
@@ -98,6 +99,13 @@ function runningObserverDeps(
 }
 
 describe("CLI tui command", () => {
+  it("prefers the configured popup command over the environment and default", () => {
+    expect(resolvePopupTmuxCommand("config-tmux", { STATION_TMUX_BIN: "env-tmux" })).toBe(
+      "config-tmux",
+    );
+    expect(resolvePopupTmuxCommand(undefined, { STATION_TMUX_BIN: "env-tmux" })).toBe("env-tmux");
+    expect(resolvePopupTmuxCommand(undefined, {})).toBe("tmux");
+  });
   it("launches the native first-run TUI without writing an implicit config", async () => {
     const fixture = await createTempState();
     const envs: Array<Record<string, string>> = [];
@@ -340,7 +348,10 @@ describe("CLI tui command", () => {
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
     expect(envs).toEqual([
-      { STATION_OBSERVER_SOCKET_PATH: fixture.socketPath, STATION_TUI_POPUP: "1" },
+      {
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+        STATION_TUI_POPUP: "1",
+      },
     ]);
   });
 
@@ -552,7 +563,11 @@ describe("CLI tui command", () => {
 
     expect(result).toEqual({ code: 0, output: { status: "exited", code: 0 } });
     expect(envs).toEqual([
-      { STATION_OBSERVER_SOCKET_PATH: fixture.socketPath, STATION_TUI_POPUP: "1" },
+      {
+        STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
+        STATION_TUI_PERSISTENT: "1",
+        STATION_TUI_POPUP: "1",
+      },
     ]);
   });
 
@@ -631,21 +646,21 @@ describe("CLI tui command", () => {
 
   it("routes correlated popup requests and resolves the current focus origin each time", async () => {
     const dismissPopup = vi.fn(async () => ({ dismissed: true }));
-    const resolveFocusOrigin = vi
+    const resolveFocusTarget = vi
       .fn()
-      .mockResolvedValueOnce({ provider: "tmux", clientId: "client-a" })
-      .mockResolvedValueOnce({ provider: "tmux", clientId: "client-b" });
+      .mockResolvedValueOnce(focusTarget("client-a"))
+      .mockResolvedValueOnce(focusTarget("client-b"));
     const persistent = await startPersistentRenderer({
-      popupControl: { dismissPopup, resolveFocusOrigin },
+      popupControl: { dismissPopup, resolveFocusTarget },
     });
 
     try {
-      persistent.child.emit("message", controlRequest("resolve-1", "resolve-focus-origin"));
+      persistent.child.emit("message", controlRequest("resolve-1", "resolve-focus-target"));
       await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(1));
       expect(persistent.child.sent[0]).toEqual({
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
         requestId: "resolve-1",
-        type: "focus-origin",
+        type: "focus-target",
         origin: { provider: "tmux", clientId: "client-a" },
       });
 
@@ -657,16 +672,96 @@ describe("CLI tui command", () => {
         type: "dismissed",
       });
 
-      persistent.child.emit("message", controlRequest("resolve-2", "resolve-focus-origin"));
+      persistent.child.emit("message", controlRequest("resolve-2", "resolve-focus-target"));
       await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(3));
       expect(persistent.child.sent[2]).toEqual({
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
         requestId: "resolve-2",
-        type: "focus-origin",
+        type: "focus-target",
         origin: { provider: "tmux", clientId: "client-b" },
       });
-      expect(resolveFocusOrigin).toHaveBeenCalledTimes(2);
+      expect(resolveFocusTarget).toHaveBeenCalledTimes(2);
       expect(dismissPopup).toHaveBeenCalledOnce();
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("does not let a late focus completion dismiss a newer popup target", async () => {
+    const dismissA = vi.fn(async () => ({ dismissed: true }));
+    const dismissB = vi.fn(async () => ({ dismissed: true }));
+    const resolveFocusTarget = vi
+      .fn()
+      .mockResolvedValueOnce(focusTarget("client-a", dismissA))
+      .mockResolvedValueOnce(focusTarget("client-b", dismissB));
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup: async () => ({ dismissed: true }),
+        resolveFocusTarget,
+      },
+    });
+
+    try {
+      persistent.child.emit("message", controlRequest("focus-a", "resolve-focus-target"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(1));
+      persistent.child.emit("message", controlRequest("focus-b", "resolve-focus-target"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
+
+      persistent.child.emit("message", {
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "dismiss-a",
+        type: "dismiss-focus-target",
+        focusRequestId: "focus-a",
+      });
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(3));
+      expect(persistent.child.sent[2]).toMatchObject({
+        requestId: "dismiss-a",
+        type: "error",
+        error: { code: "TUI_POPUP_FOCUS_TARGET_STALE" },
+      });
+      expect(dismissA).not.toHaveBeenCalled();
+      expect(dismissB).not.toHaveBeenCalled();
+
+      persistent.child.emit("message", {
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "dismiss-b",
+        type: "dismiss-focus-target",
+        focusRequestId: "focus-b",
+      });
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(4));
+      expect(persistent.child.sent[3]).toMatchObject({
+        requestId: "dismiss-b",
+        type: "dismissed",
+      });
+      expect(dismissB).toHaveBeenCalledOnce();
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("coalesces duplicate manual dismiss effects", async () => {
+    let finishDismiss = (_result: { dismissed: boolean }) => undefined;
+    const dismissal = new Promise<{ dismissed: boolean }>((resolve) => {
+      finishDismiss = resolve;
+    });
+    const dismissPopup = vi.fn(() => dismissal);
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup,
+        resolveFocusTarget: async () => focusTarget("client-a"),
+      },
+    });
+
+    try {
+      persistent.child.emit("message", controlRequest("dismiss-1", "dismiss"));
+      persistent.child.emit("message", controlRequest("dismiss-2", "dismiss"));
+      await vi.waitFor(() => expect(dismissPopup).toHaveBeenCalledOnce());
+      finishDismiss({ dismissed: true });
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
+      expect(persistent.child.sent).toEqual([
+        expect.objectContaining({ requestId: "dismiss-1", type: "dismissed" }),
+        expect.objectContaining({ requestId: "dismiss-2", type: "dismissed" }),
+      ]);
     } finally {
       await persistent.finish();
     }
@@ -675,8 +770,10 @@ describe("CLI tui command", () => {
   it("returns correlated SafeErrors without closing a valid control channel", async () => {
     const persistent = await startPersistentRenderer({
       popupControl: {
-        dismissPopup: async () => ({ dismissed: false }),
-        resolveFocusOrigin: async () => {
+        dismissPopup: async () => {
+          throw new Error("provider dismissal failed");
+        },
+        resolveFocusTarget: async () => {
           throw {
             tag: "TmuxProviderError",
             code: "TMUX_CLIENT_LOOKUP_FAILED",
@@ -696,12 +793,12 @@ describe("CLI tui command", () => {
         error: {
           tag: "TuiRendererControlError",
           code: "TUI_POPUP_DISMISS_FAILED",
-          message: "The tmux popup could not be dismissed.",
+          message: "The popup could not be dismissed.",
         },
       });
       expect(persistent.child.connected).toBe(true);
 
-      persistent.child.emit("message", controlRequest("resolve-failed", "resolve-focus-origin"));
+      persistent.child.emit("message", controlRequest("resolve-failed", "resolve-focus-target"));
       await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
       expect(persistent.child.sent[1]).toEqual({
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
@@ -721,9 +818,9 @@ describe("CLI tui command", () => {
 
   it("disconnects after a renderer response send failure and ignores later requests", async () => {
     const dismissPopup = vi.fn(async () => ({ dismissed: true }));
-    const resolveFocusOrigin = vi.fn(async () => ({ provider: "tmux", clientId: "client-a" }));
+    const resolveFocusTarget = vi.fn(async () => focusTarget("client-a"));
     const persistent = await startPersistentRenderer({
-      popupControl: { dismissPopup, resolveFocusOrigin },
+      popupControl: { dismissPopup, resolveFocusTarget },
       sendError: new Error("ipc write failed"),
     });
 
@@ -735,10 +832,10 @@ describe("CLI tui command", () => {
 
       persistent.child.emit(
         "message",
-        controlRequest("ignored-after-error", "resolve-focus-origin"),
+        controlRequest("ignored-after-error", "resolve-focus-target"),
       );
       await Promise.resolve();
-      expect(resolveFocusOrigin).not.toHaveBeenCalled();
+      expect(resolveFocusTarget).not.toHaveBeenCalled();
       expect(persistent.child.sent).toHaveLength(1);
     } finally {
       await persistent.finish();
@@ -747,9 +844,9 @@ describe("CLI tui command", () => {
 
   it("fails closed before acting on malformed renderer control frames", async () => {
     const dismissPopup = vi.fn(async () => ({ dismissed: true }));
-    const resolveFocusOrigin = vi.fn(async () => ({ provider: "tmux", clientId: "client-a" }));
+    const resolveFocusTarget = vi.fn(async () => focusTarget("client-a"));
     const persistent = await startPersistentRenderer({
-      popupControl: { dismissPopup, resolveFocusOrigin },
+      popupControl: { dismissPopup, resolveFocusTarget },
     });
 
     try {
@@ -760,33 +857,33 @@ describe("CLI tui command", () => {
       await vi.waitFor(() => expect(persistent.child.connected).toBe(false));
       expect(persistent.child.sent).toEqual([]);
       expect(dismissPopup).not.toHaveBeenCalled();
-      expect(resolveFocusOrigin).not.toHaveBeenCalled();
+      expect(resolveFocusTarget).not.toHaveBeenCalled();
     } finally {
       await persistent.finish();
     }
   });
 
   it("closes on duplicate in-flight correlation ids and ignores late adapter completion", async () => {
-    let completeResolution = (_origin: { provider: string; clientId: string }) => undefined;
-    const resolution = new Promise<{ provider: string; clientId: string }>((resolve) => {
+    let completeResolution = (_target: ReturnType<typeof focusTarget>) => undefined;
+    const resolution = new Promise<ReturnType<typeof focusTarget>>((resolve) => {
       completeResolution = resolve;
     });
-    const resolveFocusOrigin = vi.fn(() => resolution);
+    const resolveFocusTarget = vi.fn(() => resolution);
     const persistent = await startPersistentRenderer({
       popupControl: {
         dismissPopup: async () => ({ dismissed: true }),
-        resolveFocusOrigin,
+        resolveFocusTarget,
       },
     });
 
     try {
-      const request = controlRequest("duplicate", "resolve-focus-origin");
+      const request = controlRequest("duplicate", "resolve-focus-target");
       persistent.child.emit("message", request);
       persistent.child.emit("message", request);
       await vi.waitFor(() => expect(persistent.child.connected).toBe(false));
-      completeResolution({ provider: "tmux", clientId: "too-late" });
+      completeResolution(focusTarget("too-late"));
       await Promise.resolve();
-      expect(resolveFocusOrigin).toHaveBeenCalledOnce();
+      expect(resolveFocusTarget).toHaveBeenCalledOnce();
       expect(persistent.child.sent).toEqual([]);
     } finally {
       await persistent.finish();
@@ -795,24 +892,24 @@ describe("CLI tui command", () => {
 
   it("cleans up control listeners and ignores late adapter completion on child exit or disconnect", async () => {
     for (const childEvent of ["exit", "disconnect"] as const) {
-      let completeResolution = (_origin: { provider: string; clientId: string }) => undefined;
-      const resolution = new Promise<{ provider: string; clientId: string }>((resolve) => {
+      let completeResolution = (_target: ReturnType<typeof focusTarget>) => undefined;
+      const resolution = new Promise<ReturnType<typeof focusTarget>>((resolve) => {
         completeResolution = resolve;
       });
       const persistent = await startPersistentRenderer({
         popupControl: {
           dismissPopup: async () => ({ dismissed: true }),
-          resolveFocusOrigin: () => resolution,
+          resolveFocusTarget: () => resolution,
         },
       });
 
-      persistent.child.emit("message", controlRequest(childEvent, "resolve-focus-origin"));
+      persistent.child.emit("message", controlRequest(childEvent, "resolve-focus-target"));
       if (childEvent === "exit") {
         await persistent.finish();
       } else {
         persistent.child.disconnect();
       }
-      completeResolution({ provider: "tmux", clientId: "too-late" });
+      completeResolution(focusTarget("too-late"));
       await Promise.resolve();
 
       expect(persistent.child.listenerCount("message")).toBe(0);
@@ -1114,7 +1211,7 @@ async function startPersistentRenderer(
     options.popupControl ??
     ({
       dismissPopup: async () => ({ dismissed: true }),
-      resolveFocusOrigin: async () => ({ provider: "tmux", clientId: "client-a" }),
+      resolveFocusTarget: async () => focusTarget("client-a"),
     } satisfies NonNullable<TuiCommandDeps["popupControl"]>);
   const result = runTuiCommand(
     ["--popup", "--persistent"],
@@ -1149,7 +1246,17 @@ async function startPersistentRenderer(
 
 function controlRequest(
   requestId: string,
-  type: "dismiss" | "resolve-focus-origin",
-): { protocolVersion: 1; requestId: string; type: "dismiss" | "resolve-focus-origin" } {
+  type: "dismiss" | "resolve-focus-target",
+): { protocolVersion: 1; requestId: string; type: "dismiss" | "resolve-focus-target" } {
   return { protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION, requestId, type };
+}
+
+function focusTarget(
+  clientId: string,
+  dismissExact: () => Promise<{ dismissed: boolean }> = async () => ({ dismissed: true }),
+) {
+  return {
+    origin: { provider: "tmux", clientId },
+    dismissExact,
+  };
 }

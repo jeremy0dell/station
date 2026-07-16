@@ -7,9 +7,10 @@ import {
   type TuiRendererControlRequest,
   type TuiRendererControlResponse,
 } from "@station/contracts";
-import type { TuiStoreOptions } from "@station/dashboard-core";
+import type { TuiFocusTarget, TuiStoreOptions } from "@station/dashboard-core";
 
 export type RendererControlChannel = {
+  isConnected(): boolean;
   send(request: TuiRendererControlRequest): void;
   subscribe(handlers: {
     onMessage(message: unknown): void;
@@ -25,7 +26,7 @@ type PopupStoreOptions = Pick<
   | "onDismiss"
   | "onFocusSuccess"
   | "persistentPopup"
-  | "resolveFocusOrigin"
+  | "resolveFocusTarget"
 >;
 
 export type PopupRuntime = {
@@ -42,7 +43,7 @@ export function createPopupRuntime(
     return { storeOptions: {}, dispose: () => {} };
   }
 
-  if (channel === undefined) {
+  if (env.STATION_TUI_PERSISTENT !== "1") {
     const focusOrigin = focusOriginFromEnv(env);
     return {
       storeOptions: {
@@ -53,15 +54,24 @@ export function createPopupRuntime(
     };
   }
 
+  if (channel === undefined) {
+    onControlLoss();
+    return {
+      storeOptions: {
+        exitOnFocusSuccess: false,
+        persistentPopup: true,
+      },
+      dispose: () => {},
+    };
+  }
+
   const control = createRendererControlClient(channel, onControlLoss);
-  const dismiss = async (): Promise<void> => control.dismiss();
   return {
     storeOptions: {
       exitOnFocusSuccess: false,
       persistentPopup: true,
-      onDismiss: dismiss,
-      onFocusSuccess: dismiss,
-      resolveFocusOrigin: async () => control.resolveFocusOrigin(),
+      onDismiss: () => control.dismiss(),
+      resolveFocusTarget: () => control.resolveFocusTarget(),
     },
     dispose: control.dispose,
   };
@@ -73,6 +83,7 @@ export function createProcessRendererControlChannel(): RendererControlChannel | 
   }
 
   return {
+    isConnected: (): boolean => process.connected === true && typeof process.send === "function",
     send: (request): void => {
       if (process.connected !== true || process.send === undefined) {
         throw rendererControlError(
@@ -105,14 +116,19 @@ type PendingRequest =
       reject(error: SafeError): void;
     }
   | {
-      type: "resolve-focus-origin";
-      resolve(origin: TerminalFocusOrigin): void;
+      type: "dismiss-focus-target";
+      resolve(): void;
+      reject(error: SafeError): void;
+    }
+  | {
+      type: "resolve-focus-target";
+      resolve(target: TuiFocusTarget): void;
       reject(error: SafeError): void;
     };
 
 type RendererControlClient = {
   dismiss(): Promise<void>;
-  resolveFocusOrigin(): Promise<TerminalFocusOrigin>;
+  resolveFocusTarget(): Promise<TuiFocusTarget>;
   dispose(): void;
 };
 
@@ -123,6 +139,7 @@ function createRendererControlClient(
   const pending = new Map<string, PendingRequest>();
   let nextRequestId = 1;
   let closedError: SafeError | undefined;
+  let manualDismissEffect: Promise<void> | undefined;
 
   const unsubscribe = channel.subscribe({
     onMessage: (message) => {
@@ -149,6 +166,15 @@ function createRendererControlClient(
       );
     },
   });
+  if (!channel.isConnected()) {
+    loseControl(
+      rendererControlError(
+        "TUI_RENDERER_CONTROL_DISCONNECTED",
+        "The popup renderer control channel disconnected.",
+      ),
+      false,
+    );
+  }
 
   function newRequestId(): string {
     const requestId = `renderer-${nextRequestId}`;
@@ -193,14 +219,20 @@ function createRendererControlClient(
       request.reject(response.error);
       return;
     }
-    if (response.type === "dismissed" && request.type === "dismiss") {
+    if (
+      response.type === "dismissed" &&
+      (request.type === "dismiss" || request.type === "dismiss-focus-target")
+    ) {
       pending.delete(response.requestId);
       request.resolve();
       return;
     }
-    if (response.type === "focus-origin" && request.type === "resolve-focus-origin") {
+    if (response.type === "focus-target" && request.type === "resolve-focus-target") {
       pending.delete(response.requestId);
-      request.resolve(response.origin);
+      request.resolve({
+        origin: response.origin,
+        onFocusSuccess: () => dismissFocusTarget(response.requestId),
+      });
       return;
     }
 
@@ -235,30 +267,58 @@ function createRendererControlClient(
     return true;
   }
 
+  function requestManualDismiss(): Promise<void> {
+    const current = manualDismissEffect;
+    if (current !== undefined) {
+      return current;
+    }
+    const effect = new Promise<void>((resolve, reject) => {
+      const requestId = newRequestId();
+      send(
+        {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId,
+          type: "dismiss",
+        },
+        { type: "dismiss", resolve, reject },
+      );
+    });
+    manualDismissEffect = effect;
+    void effect.then(clearManualDismiss, clearManualDismiss);
+    return effect;
+  }
+
+  function clearManualDismiss(): void {
+    manualDismissEffect = undefined;
+  }
+
+  function dismissFocusTarget(focusRequestId: string): Promise<void> {
+    const requestId = newRequestId();
+    return new Promise<void>((resolve, reject) => {
+      send(
+        {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId,
+          type: "dismiss-focus-target",
+          focusRequestId,
+        },
+        { type: "dismiss-focus-target", resolve, reject },
+      );
+    });
+  }
+
   return {
-    dismiss: async (): Promise<void> => {
+    dismiss: requestManualDismiss,
+    resolveFocusTarget: async (): Promise<TuiFocusTarget> => {
       const requestId = newRequestId();
-      return new Promise<void>((resolve, reject) => {
+      return new Promise<TuiFocusTarget>((resolve, reject) => {
         send(
           {
             protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
             requestId,
-            type: "dismiss",
+            type: "resolve-focus-target",
           },
-          { type: "dismiss", resolve, reject },
-        );
-      });
-    },
-    resolveFocusOrigin: async (): Promise<TerminalFocusOrigin> => {
-      const requestId = newRequestId();
-      return new Promise<TerminalFocusOrigin>((resolve, reject) => {
-        send(
-          {
-            protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
-            requestId,
-            type: "resolve-focus-origin",
-          },
-          { type: "resolve-focus-origin", resolve, reject },
+          { type: "resolve-focus-target", resolve, reject },
         );
       });
     },

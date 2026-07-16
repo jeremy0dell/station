@@ -179,6 +179,37 @@ describe("TUI store", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1", "cmd_tui_1"]);
   });
 
+  it.each([
+    ["rejected", "The readiness acknowledgment was rejected."],
+    ["failed", "The readiness acknowledgment failed."],
+    ["thrown", "The readiness acknowledgment was unavailable."],
+  ] as const)("keeps the popup open when readiness acknowledgment is %s", async (failure, message) => {
+    const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
+    const service = new ReadinessFailureService(snapshot, failure);
+    let focusSuccessCount = 0;
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      resolveFocusTarget: async () => ({
+        origin: { provider: "fixture-terminal", clientId: "client-current" },
+        onFocusSuccess: async () => {
+          focusSuccessCount += 1;
+        },
+      }),
+    });
+
+    store.getState().handleKey({ input: "1" });
+
+    await waitFor(() => store.getState().toasts.some((entry) => entry.toast.message === message));
+    expect(focusSuccessCount).toBe(0);
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(service.dispatched.map((command) => command.type)).toEqual([
+      "terminal.focus",
+      "session.acknowledgeTurn",
+    ]);
+  });
+
   it("resolves current focus, completes focus and readiness, then dismisses", async () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const order: string[] = [];
@@ -187,12 +218,14 @@ describe("TUI store", () => {
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
-      resolveFocusOrigin: async () => {
+      resolveFocusTarget: async () => {
         order.push("resolve-origin");
-        return { provider: "tmux", clientId: "client-current" };
-      },
-      onFocusSuccess: async () => {
-        order.push("dismiss");
+        return {
+          origin: { provider: "fixture-terminal", clientId: "client-current" },
+          onFocusSuccess: async () => {
+            order.push("dismiss");
+          },
+        };
       },
     });
 
@@ -211,7 +244,7 @@ describe("TUI store", () => {
       type: "terminal.focus",
       payload: {
         sessionId: "ses_wt_web_idle",
-        origin: { provider: "tmux", clientId: "client-current" },
+        origin: { provider: "fixture-terminal", clientId: "client-current" },
       },
     });
   });
@@ -247,7 +280,7 @@ describe("TUI store", () => {
     expect(focusSuccessCount).toBe(0);
   });
 
-  it("leaves a persistent popup open when focus-origin resolution fails", async () => {
+  it("leaves a persistent popup open when focus-target resolution fails", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     let focusSuccessCount = 0;
@@ -255,7 +288,7 @@ describe("TUI store", () => {
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
-      resolveFocusOrigin: async () => {
+      resolveFocusTarget: async () => {
         throw {
           tag: "TuiRendererControlError",
           code: "TUI_POPUP_FOCUS_ORIGIN_UNAVAILABLE",
@@ -279,6 +312,39 @@ describe("TUI store", () => {
     expect(service.dispatched).toEqual([]);
     expect(focusSuccessCount).toBe(0);
     expect(store.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("does not exit after a target-scoped focus-success callback fails", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const service = new FakeTuiObserverService(snapshot);
+    const exitCodes: number[] = [];
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      exitOnFocusSuccess: true,
+      resolveFocusTarget: async () => ({
+        origin: { provider: "fixture-terminal", clientId: "client-current" },
+        onFocusSuccess: async () => {
+          throw {
+            tag: "TuiRendererControlError",
+            code: "TUI_POPUP_FOCUS_TARGET_STALE",
+            message: "The popup focus target changed before dismissal.",
+          } satisfies SafeError;
+        },
+      }),
+      onExit: (code) => exitCodes.push(code),
+    });
+
+    store.getState().handleKey({ input: "1" });
+
+    await waitFor(() =>
+      store
+        .getState()
+        .toasts.some(
+          (entry) => entry.toast.message === "The popup focus target changed before dismissal.",
+        ),
+    );
+    expect(exitCodes).toEqual([]);
   });
 
   it("leaves a persistent popup open and shows a toast when dismissal fails", async () => {
@@ -768,6 +834,58 @@ class OrderedFocusService extends FakeTuiObserverService {
       status: "succeeded" as const,
       commandId,
     };
+  }
+}
+
+class ReadinessFailureService extends FakeTuiObserverService {
+  constructor(
+    snapshot: StationSnapshot,
+    private readonly failure: "rejected" | "failed" | "thrown",
+  ) {
+    super(snapshot);
+  }
+
+  override async dispatch(command: StationCommand) {
+    this.dispatched.push(command);
+    if (command.type === "terminal.focus") {
+      return { accepted: true as const, commandId: "cmd_focus", status: "accepted" as const };
+    }
+    if (this.failure === "thrown") {
+      throw {
+        tag: "ObserverCommandError",
+        code: "READINESS_ACK_UNAVAILABLE",
+        message: "The readiness acknowledgment was unavailable.",
+      } satisfies SafeError;
+    }
+    if (this.failure === "rejected") {
+      return {
+        accepted: false as const,
+        commandId: "cmd_ack",
+        status: "rejected" as const,
+        error: {
+          tag: "ObserverCommandError",
+          code: "READINESS_ACK_REJECTED",
+          message: "The readiness acknowledgment was rejected.",
+        } satisfies SafeError,
+      };
+    }
+    return { accepted: true as const, commandId: "cmd_ack", status: "accepted" as const };
+  }
+
+  override async waitForCommandCompletion(commandId: string) {
+    this.waitedForCommandIds.push(commandId);
+    if (commandId === "cmd_ack" && this.failure === "failed") {
+      return {
+        status: "failed" as const,
+        commandId,
+        error: {
+          tag: "ObserverCommandError",
+          code: "READINESS_ACK_FAILED",
+          message: "The readiness acknowledgment failed.",
+        } satisfies SafeError,
+      };
+    }
+    return { status: "succeeded" as const, commandId };
   }
 }
 

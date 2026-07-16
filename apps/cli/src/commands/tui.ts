@@ -3,7 +3,7 @@ import type { StationConfig } from "@station/config";
 import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { isCompiledBinary, safeErrorFromUnknown, systemClock } from "@station/runtime";
-import { dismissTmuxPopup, resolveTmuxPopupFocusOrigin } from "@station/tmux";
+import { dismissTmuxPopup, resolveTmuxPopupFocusTarget } from "@station/tmux";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
@@ -83,6 +83,7 @@ export async function runTuiCommand(
       buildRendererEnv(parsed, { STATION_SOURCE: "mock" }),
       "dashboard",
       parsed.persistentPopup,
+      options.config?.terminal?.tmux?.command,
     );
   }
 
@@ -129,6 +130,7 @@ export async function runTuiCommand(
     buildRendererEnv(parsed, { STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath }),
     parsed.popupMode ? "dashboard" : "station",
     parsed.persistentPopup,
+    options.config?.terminal?.tmux?.command,
   );
 }
 
@@ -142,6 +144,9 @@ function buildRendererEnv(
   if (parsed.popupMode) {
     env.STATION_TUI_POPUP = "1";
   }
+  if (parsed.persistentPopup) {
+    env.STATION_TUI_PERSISTENT = "1";
+  }
   return env;
 }
 
@@ -150,9 +155,11 @@ function runRenderer(
   env: Record<string, string>,
   entry: RendererEntry,
   persistentPopup: boolean,
+  popupCommand: string | undefined,
 ): Promise<TuiRunResult> {
   return (
-    deps.spawnRenderer?.({ env, entry }) ?? spawnRenderer({ env, entry }, deps, persistentPopup)
+    deps.spawnRenderer?.({ env, entry }) ??
+    spawnRenderer({ env, entry }, deps, persistentPopup, popupCommand)
   );
 }
 
@@ -160,6 +167,7 @@ async function spawnRenderer(
   { env, entry }: RendererSpawnOptions,
   deps: TuiCommandDeps,
   persistentPopup: boolean,
+  popupCommand: string | undefined,
 ): Promise<TuiRunResult> {
   const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
   const override = process.env.STATION_DASHBOARD_COMMAND;
@@ -206,7 +214,10 @@ async function spawnRenderer(
           ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
         });
   const control = persistentPopup
-    ? attachTuiRendererControl(child, deps.popupControl ?? defaultPopupControl(deps.env))
+    ? attachTuiRendererControl(
+        child,
+        deps.popupControl ?? defaultPopupControl(deps.env, popupCommand),
+      )
     : undefined;
   return new Promise<TuiRunResult>((resolve) => {
     child.once("error", () => {
@@ -241,14 +252,28 @@ async function runStationLink(
   });
 }
 
-function defaultPopupControl(env: CliEnv | undefined): TuiRendererControlAdapters {
+function defaultPopupControl(
+  env: CliEnv | undefined,
+  command: string | undefined,
+): TuiRendererControlAdapters {
   const popupEnv = { ...(env ?? process.env) };
   // The startup client is a delivery hint; runtime requests must follow the current popup claim.
   delete popupEnv.STATION_FOCUS_CLIENT_ID;
-  return {
-    dismissPopup: () => dismissTmuxPopup({ env: popupEnv }),
-    resolveFocusOrigin: () => resolveTmuxPopupFocusOrigin({ env: popupEnv }),
+  const popupOptions = {
+    env: popupEnv,
+    command: resolvePopupTmuxCommand(command, popupEnv),
   };
+  return {
+    dismissPopup: () => dismissTmuxPopup(popupOptions),
+    resolveFocusTarget: () => resolveTmuxPopupFocusTarget(popupOptions),
+  };
+}
+
+export function resolvePopupTmuxCommand(
+  configuredCommand: string | undefined,
+  env: CliEnv = process.env,
+): string {
+  return configuredCommand ?? env.STATION_TMUX_BIN ?? "tmux";
 }
 
 function scheduleReconcileBeforeTui(input: {

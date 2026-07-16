@@ -1,5 +1,5 @@
 // Standalone OpenTUI dashboard renderer — the sole STATION dashboard UI after the
-// Ink TUI (apps/tui) was retired. The Node CLI (`stn tui` / the tmux popup)
+// Ink TUI (apps/tui) was retired. The Node CLI (`stn tui` / persistent popup)
 // starts the observer and spawns this entry under Bun for both fullscreen and
 // popup; it renders Station's dashboard view over the observer socket and
 // dispatches the same observer commands the Ink TUI did (no Station panes).

@@ -3,10 +3,7 @@ import {
   type TuiRendererControlRequest,
 } from "@station/contracts";
 import { describe, expect, it } from "bun:test";
-import {
-  createPopupRuntime,
-  type RendererControlChannel,
-} from "./popupRuntime.js";
+import { createPopupRuntime, type RendererControlChannel } from "./popupRuntime.js";
 
 describe("createPopupRuntime", () => {
   it("keeps fullscreen and transient popup exit behavior separate from persistent IPC", () => {
@@ -15,7 +12,7 @@ describe("createPopupRuntime", () => {
     const transient = createPopupRuntime(
       {
         STATION_TUI_POPUP: "1",
-        STATION_FOCUS_PROVIDER: "tmux",
+        STATION_FOCUS_PROVIDER: "fixture-terminal",
         STATION_FOCUS_CLIENT_ID: "client-startup",
       },
       undefined,
@@ -25,14 +22,36 @@ describe("createPopupRuntime", () => {
     expect(fullscreenChannel.subscribeCount).toBe(0);
     expect(transient.storeOptions).toEqual({
       exitOnFocusSuccess: true,
-      focusOrigin: { provider: "tmux", clientId: "client-startup" },
+      focusOrigin: { provider: "fixture-terminal", clientId: "client-startup" },
     });
   });
 
-  it("makes a popup persistent only when the CLI control channel is connected", async () => {
+  it("fails closed when a generated persistent renderer starts without live IPC", () => {
+    let missingControlLossCount = 0;
+    const missing = createPopupRuntime(persistentPopupEnv(), undefined, () => {
+      missingControlLossCount += 1;
+    });
+    expect(missingControlLossCount).toBe(1);
+    expect(missing.storeOptions).toMatchObject({
+      exitOnFocusSuccess: false,
+      persistentPopup: true,
+    });
+
+    const disconnectedChannel = new FakeRendererControlChannel();
+    disconnectedChannel.connected = false;
+    let disconnectedControlLossCount = 0;
+    createPopupRuntime(persistentPopupEnv(), disconnectedChannel, () => {
+      disconnectedControlLossCount += 1;
+    });
+    expect(disconnectedChannel.subscribeCount).toBe(1);
+    expect(disconnectedChannel.unsubscribeCount).toBe(1);
+    expect(disconnectedControlLossCount).toBe(1);
+  });
+
+  it("uses manual dismissal and an exact one-shot focus target separately", async () => {
     const channel = new FakeRendererControlChannel();
     let controlLossCount = 0;
-    const runtime = createPopupRuntime({ STATION_TUI_POPUP: "1" }, channel, () => {
+    const runtime = createPopupRuntime(persistentPopupEnv(), channel, () => {
       controlLossCount += 1;
     });
 
@@ -40,92 +59,86 @@ describe("createPopupRuntime", () => {
       exitOnFocusSuccess: false,
       persistentPopup: true,
     });
-    expect(runtime.storeOptions.focusOrigin).toBeUndefined();
 
     const dismiss = runtime.storeOptions.onDismiss?.();
-    expect(dismiss).toBeDefined();
-    const dismissRequest = channel.requests.at(-1);
-    expect(dismissRequest).toMatchObject({
-      protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
-      type: "dismiss",
-    });
-    channel.respond({
-      protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
-      requestId: requiredRequest(dismissRequest).requestId,
-      type: "dismissed",
-    });
+    const dismissRequest = requiredRequest(channel.requests.at(-1));
+    expect(dismissRequest.type).toBe("dismiss");
+    channel.respond(dismissedResponse(dismissRequest.requestId));
     await dismiss;
 
-    const focusSuccessDismiss = runtime.storeOptions.onFocusSuccess?.();
-    expect(focusSuccessDismiss).toBeDefined();
-    const focusSuccessRequest = requiredRequest(channel.requests.at(-1));
-    expect(focusSuccessRequest.type).toBe("dismiss");
+    const targetPromise = runtime.storeOptions.resolveFocusTarget?.();
+    const focusRequest = requiredRequest(channel.requests.at(-1));
+    expect(focusRequest.type).toBe("resolve-focus-target");
     channel.respond({
       protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
-      requestId: focusSuccessRequest.requestId,
-      type: "dismissed",
+      requestId: focusRequest.requestId,
+      type: "focus-target",
+      origin: { provider: "fixture-terminal", clientId: "client-current" },
     });
-    await focusSuccessDismiss;
+    const target = await targetPromise;
+    expect(target?.origin).toEqual({
+      provider: "fixture-terminal",
+      clientId: "client-current",
+    });
+
+    const focusDismiss = target?.onFocusSuccess?.();
+    const focusDismissRequest = requiredRequest(channel.requests.at(-1));
+    expect(focusDismissRequest).toMatchObject({
+      type: "dismiss-focus-target",
+      focusRequestId: focusRequest.requestId,
+    });
+    channel.respond(dismissedResponse(focusDismissRequest.requestId));
+    await focusDismiss;
     expect(controlLossCount).toBe(0);
   });
 
-  it("resolves the current focus origin for every request", async () => {
+  it("resolves a separately leased focus target for every request", async () => {
     const channel = new FakeRendererControlChannel();
-    const runtime = createPopupRuntime({ STATION_TUI_POPUP: "1" }, channel);
-    const resolveFocusOrigin = runtime.storeOptions.resolveFocusOrigin;
-    expect(resolveFocusOrigin).toBeDefined();
+    const runtime = createPopupRuntime(persistentPopupEnv(), channel);
+    const resolveFocusTarget = runtime.storeOptions.resolveFocusTarget;
 
-    const first = resolveFocusOrigin?.();
+    const first = resolveFocusTarget?.();
     const firstRequest = requiredRequest(channel.requests.at(-1));
     channel.respond({
       protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
       requestId: firstRequest.requestId,
-      type: "focus-origin",
-      origin: { provider: "tmux", clientId: "client-a" },
+      type: "focus-target",
+      origin: { provider: "fixture-terminal", clientId: "client-a" },
     });
-    await expect(first).resolves.toEqual({ provider: "tmux", clientId: "client-a" });
+    await expect(first).resolves.toMatchObject({
+      origin: { provider: "fixture-terminal", clientId: "client-a" },
+    });
 
-    const second = resolveFocusOrigin?.();
+    const second = resolveFocusTarget?.();
     const secondRequest = requiredRequest(channel.requests.at(-1));
     channel.respond({
       protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
       requestId: secondRequest.requestId,
-      type: "focus-origin",
-      origin: { provider: "tmux", clientId: "client-b" },
+      type: "focus-target",
+      origin: { provider: "fixture-terminal", clientId: "client-b" },
     });
-    await expect(second).resolves.toEqual({ provider: "tmux", clientId: "client-b" });
+    await expect(second).resolves.toMatchObject({
+      origin: { provider: "fixture-terminal", clientId: "client-b" },
+    });
     expect(secondRequest.requestId).not.toBe(firstRequest.requestId);
   });
 
-  it("correlates concurrent dismiss and focus-origin responses", async () => {
+  it("coalesces duplicate manual dismiss effects", async () => {
     const channel = new FakeRendererControlChannel();
-    const runtime = createPopupRuntime({ STATION_TUI_POPUP: "1" }, channel);
+    const runtime = createPopupRuntime(persistentPopupEnv(), channel);
 
-    const dismiss = runtime.storeOptions.onDismiss?.();
-    const focusOrigin = runtime.storeOptions.resolveFocusOrigin?.();
-    const dismissRequest = requiredRequest(channel.requests[0]);
-    const focusRequest = requiredRequest(channel.requests[1]);
+    const first = runtime.storeOptions.onDismiss?.();
+    const second = runtime.storeOptions.onDismiss?.();
 
-    channel.respond({
-      protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
-      requestId: focusRequest.requestId,
-      type: "focus-origin",
-      origin: { provider: "tmux", clientId: "client-current" },
-    });
-    channel.respond({
-      protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
-      requestId: dismissRequest.requestId,
-      type: "dismissed",
-    });
-
-    await expect(focusOrigin).resolves.toEqual({ provider: "tmux", clientId: "client-current" });
-    await expect(dismiss).resolves.toEqual(undefined);
+    expect(channel.requests).toHaveLength(1);
+    channel.respond(dismissedResponse(requiredRequest(channel.requests[0]).requestId));
+    await Promise.all([first, second]);
   });
 
   it("surfaces correlated parent errors without closing the channel", async () => {
     const channel = new FakeRendererControlChannel();
     let controlLossCount = 0;
-    const runtime = createPopupRuntime({ STATION_TUI_POPUP: "1" }, channel, () => {
+    const runtime = createPopupRuntime(persistentPopupEnv(), channel, () => {
       controlLossCount += 1;
     });
 
@@ -138,7 +151,7 @@ describe("createPopupRuntime", () => {
       error: {
         tag: "TuiRendererControlError",
         code: "TUI_POPUP_DISMISS_FAILED",
-        message: "The tmux popup could not be dismissed.",
+        message: "The popup could not be dismissed.",
       },
     });
 
@@ -158,18 +171,18 @@ describe("createPopupRuntime", () => {
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
         requestId: request.requestId,
         type: "dismissed",
-        command: "tmux kill-popup",
+        command: "provider-command",
       }),
       (request: TuiRendererControlRequest) => ({
         protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
         requestId: request.requestId,
-        type: "focus-origin",
-        origin: { provider: "tmux" },
+        type: "focus-target",
+        origin: { provider: "fixture-terminal" },
       }),
     ]) {
       const channel = new FakeRendererControlChannel();
       let controlLossCount = 0;
-      const runtime = createPopupRuntime({ STATION_TUI_POPUP: "1" }, channel, () => {
+      const runtime = createPopupRuntime(persistentPopupEnv(), channel, () => {
         controlLossCount += 1;
       });
       const dismiss = runtime.storeOptions.onDismiss?.();
@@ -177,9 +190,7 @@ describe("createPopupRuntime", () => {
 
       channel.respond(responseFor(request));
 
-      await expect(dismiss).rejects.toMatchObject({
-        tag: "TuiRendererControlError",
-      });
+      await expect(dismiss).rejects.toMatchObject({ tag: "TuiRendererControlError" });
       expect(channel.closeCount).toBe(1);
       expect(controlLossCount).toBe(1);
     }
@@ -189,14 +200,14 @@ describe("createPopupRuntime", () => {
     const disconnectedChannel = new FakeRendererControlChannel();
     let disconnectedControlLossCount = 0;
     const disconnected = createPopupRuntime(
-      { STATION_TUI_POPUP: "1" },
+      persistentPopupEnv(),
       disconnectedChannel,
       () => {
         disconnectedControlLossCount += 1;
       },
     );
     disconnectedChannel.disconnect();
-    const afterDisconnect = disconnected.storeOptions.resolveFocusOrigin?.();
+    const afterDisconnect = disconnected.storeOptions.resolveFocusTarget?.();
 
     await expect(afterDisconnect).rejects.toMatchObject({
       code: "TUI_RENDERER_CONTROL_DISCONNECTED",
@@ -206,7 +217,7 @@ describe("createPopupRuntime", () => {
 
     const disposedChannel = new FakeRendererControlChannel();
     let disposedControlLossCount = 0;
-    const disposed = createPopupRuntime({ STATION_TUI_POPUP: "1" }, disposedChannel, () => {
+    const disposed = createPopupRuntime(persistentPopupEnv(), disposedChannel, () => {
       disposedControlLossCount += 1;
     });
     const pendingDispose = disposed.storeOptions.onDismiss?.();
@@ -221,6 +232,21 @@ describe("createPopupRuntime", () => {
   });
 });
 
+function dismissedResponse(requestId: string) {
+  return {
+    protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+    requestId,
+    type: "dismissed" as const,
+  };
+}
+
+function persistentPopupEnv(): Record<string, string> {
+  return {
+    STATION_TUI_POPUP: "1",
+    STATION_TUI_PERSISTENT: "1",
+  };
+}
+
 function requiredRequest(
   request: TuiRendererControlRequest | undefined,
 ): TuiRendererControlRequest {
@@ -233,6 +259,7 @@ function requiredRequest(
 class FakeRendererControlChannel implements RendererControlChannel {
   readonly requests: TuiRendererControlRequest[] = [];
   closeCount = 0;
+  connected = true;
   subscribeCount = 0;
   unsubscribeCount = 0;
   private handlers:
@@ -241,6 +268,10 @@ class FakeRendererControlChannel implements RendererControlChannel {
         onDisconnect(): void;
       }
     | undefined;
+
+  isConnected(): boolean {
+    return this.connected;
+  }
 
   send(request: TuiRendererControlRequest): void {
     this.requests.push(request);
@@ -261,6 +292,7 @@ class FakeRendererControlChannel implements RendererControlChannel {
   }
 
   close(): void {
+    this.connected = false;
     this.closeCount += 1;
   }
 
@@ -277,6 +309,7 @@ class FakeRendererControlChannel implements RendererControlChannel {
     if (handlers === undefined) {
       throw new Error("Renderer control channel has no subscriber.");
     }
+    this.connected = false;
     handlers.onDisconnect();
   }
 }

@@ -21,12 +21,19 @@ describe("TUI renderer control schemas", () => {
     expect(
       TuiRendererControlRequestSchema.parse({
         ...frame,
-        type: "resolve-focus-origin",
+        type: "resolve-focus-target",
       }),
-    ).toEqual({ ...frame, type: "resolve-focus-origin" });
+    ).toEqual({ ...frame, type: "resolve-focus-target" });
+    expect(
+      TuiRendererControlRequestSchema.parse({
+        ...frame,
+        type: "dismiss-focus-target",
+        focusRequestId: "focus-request-1",
+      }),
+    ).toEqual({ ...frame, type: "dismiss-focus-target", focusRequestId: "focus-request-1" });
   });
 
-  it("parses dismissed, focus-origin, and error responses", () => {
+  it("parses dismissed, focus-target, and error responses", () => {
     expect(
       TuiRendererControlResponseSchema.parse({
         ...frame,
@@ -36,12 +43,12 @@ describe("TUI renderer control schemas", () => {
     expect(
       TuiRendererControlResponseSchema.parse({
         ...frame,
-        type: "focus-origin",
+        type: "focus-target",
         origin: { provider: "tmux", clientId: "client-2" },
       }),
     ).toEqual({
       ...frame,
-      type: "focus-origin",
+      type: "focus-target",
       origin: { provider: "tmux", clientId: "client-2" },
     });
     expect(
@@ -60,8 +67,14 @@ describe("TUI renderer control schemas", () => {
   it.each([
     { ...frame, type: "dismiss", command: "tmux kill-pane" },
     { ...frame, type: "dismiss", clientId: "client-2" },
-    { ...frame, type: "resolve-focus-origin", argv: ["-t", "client-2"] },
-    { ...frame, type: "resolve-focus-origin", payload: { clientId: "client-2" } },
+    { ...frame, type: "resolve-focus-target", argv: ["-t", "client-2"] },
+    { ...frame, type: "resolve-focus-target", payload: { clientId: "client-2" } },
+    {
+      ...frame,
+      type: "dismiss-focus-target",
+      focusRequestId: "focus-request-1",
+      claim: "v1.open.secret",
+    },
     { ...frame, type: "run-command" },
   ])("rejects unsupported or authority-bearing request %#", (request) => {
     expect(TuiRendererControlRequestSchema.safeParse(request).success).toBe(false);
@@ -78,11 +91,17 @@ describe("TUI renderer control schemas", () => {
 
   it.each([
     { ...frame, type: "dismissed", clientId: "client-2" },
-    { ...frame, type: "focus-origin" },
+    { ...frame, type: "focus-target" },
     {
       ...frame,
-      type: "focus-origin",
+      type: "focus-target",
       origin: { provider: "tmux", clientId: "client-2", command: "display-message" },
+    },
+    {
+      ...frame,
+      type: "focus-target",
+      origin: { provider: "tmux", clientId: "client-2" },
+      claim: "provider-private-claim",
     },
     { ...frame, type: "ok" },
     {

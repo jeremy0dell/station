@@ -10,7 +10,12 @@ import { safeErrorFromUnknown } from "@station/runtime";
 
 export type TuiRendererControlAdapters = {
   dismissPopup: () => Promise<{ dismissed: boolean }>;
-  resolveFocusOrigin: () => Promise<TerminalFocusOrigin | undefined>;
+  resolveFocusTarget: () => Promise<TuiRendererFocusTarget | undefined>;
+};
+
+export type TuiRendererFocusTarget = {
+  origin: TerminalFocusOrigin;
+  dismissExact: () => Promise<{ dismissed: boolean }>;
 };
 
 export type TuiRendererControlAttachment = {
@@ -30,6 +35,14 @@ export function attachTuiRendererControl(
 ): TuiRendererControlAttachment {
   let closed = false;
   const pendingRequestIds = new Set<string>();
+  let focusResolutionGeneration = 0;
+  let activeFocusTarget:
+    | {
+        requestId: string;
+        dismissExact: () => Promise<{ dismissed: boolean }>;
+      }
+    | undefined;
+  let manualDismissEffect: Promise<{ dismissed: boolean }> | undefined;
 
   const removeListeners = () => {
     child.off("message", onMessage);
@@ -40,6 +53,8 @@ export function attachTuiRendererControl(
   const close = (disconnect: boolean) => {
     if (closed) return;
     closed = true;
+    focusResolutionGeneration += 1;
+    activeFocusTarget = undefined;
     pendingRequestIds.clear();
     removeListeners();
     if (disconnect && child.connected) {
@@ -78,8 +93,10 @@ export function attachTuiRendererControl(
     pendingRequestIds.add(request.requestId);
     try {
       if (request.type === "dismiss") {
+        focusResolutionGeneration += 1;
+        activeFocusTarget = undefined;
         try {
-          const result = await adapters.dismissPopup();
+          const result = await coalescedManualDismiss();
           if (!result.dismissed) {
             sendError(request.requestId, undefined, popupDismissError);
             return;
@@ -95,20 +112,56 @@ export function attachTuiRendererControl(
         return;
       }
 
-      try {
-        const origin = await adapters.resolveFocusOrigin();
-        if (origin === undefined) {
-          sendError(request.requestId, undefined, focusOriginError);
+      if (request.type === "dismiss-focus-target") {
+        const focusTarget = activeFocusTarget;
+        if (focusTarget?.requestId !== request.focusRequestId) {
+          sendError(request.requestId, undefined, focusTargetStaleError);
           return;
         }
+        activeFocusTarget = undefined;
+        focusResolutionGeneration += 1;
+        try {
+          const result = await focusTarget.dismissExact();
+          if (!result.dismissed) {
+            sendError(request.requestId, undefined, focusTargetStaleError);
+            return;
+          }
+          send({
+            protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+            requestId: request.requestId,
+            type: "dismissed",
+          });
+        } catch (error) {
+          sendError(request.requestId, error, focusTargetStaleError);
+        }
+        return;
+      }
+
+      const generation = focusResolutionGeneration + 1;
+      focusResolutionGeneration = generation;
+      activeFocusTarget = undefined;
+      try {
+        const focusTarget = await adapters.resolveFocusTarget();
+        if (focusTarget === undefined) {
+          sendError(request.requestId, undefined, focusTargetUnavailableError);
+          return;
+        }
+        if (generation !== focusResolutionGeneration) {
+          sendError(request.requestId, undefined, focusTargetStaleError);
+          return;
+        }
+        activeFocusTarget = {
+          requestId: request.requestId,
+          dismissExact: focusTarget.dismissExact,
+        };
         send({
           protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
           requestId: request.requestId,
-          type: "focus-origin",
-          origin,
+          type: "focus-target",
+          origin: focusTarget.origin,
         });
       } catch (error) {
-        sendError(request.requestId, error, focusOriginError);
+        sendError(request.requestId, error, focusTargetUnavailableError);
       }
     } finally {
       pendingRequestIds.delete(request.requestId);
@@ -119,6 +172,22 @@ export function attachTuiRendererControl(
   }
   function onChildClosed(): void {
     close(false);
+  }
+
+  function coalescedManualDismiss(): Promise<{ dismissed: boolean }> {
+    const current = manualDismissEffect;
+    if (current !== undefined) {
+      return current;
+    }
+    const effect = adapters.dismissPopup();
+    manualDismissEffect = effect;
+    const clear = () => {
+      if (manualDismissEffect === effect) {
+        manualDismissEffect = undefined;
+      }
+    };
+    void effect.then(clear, clear);
+    return effect;
   }
 
   child.on("message", onMessage);
@@ -136,13 +205,19 @@ export function attachTuiRendererControl(
 const popupDismissError: SafeError = {
   tag: "TuiRendererControlError",
   code: "TUI_POPUP_DISMISS_FAILED",
-  message: "The tmux popup could not be dismissed.",
+  message: "The popup could not be dismissed.",
 };
 
-const focusOriginError: SafeError = {
+const focusTargetUnavailableError: SafeError = {
   tag: "TuiRendererControlError",
-  code: "TUI_POPUP_FOCUS_ORIGIN_UNAVAILABLE",
-  message: "The current tmux popup focus origin could not be resolved.",
+  code: "TUI_POPUP_FOCUS_TARGET_UNAVAILABLE",
+  message: "The current popup focus target could not be resolved.",
+};
+
+const focusTargetStaleError: SafeError = {
+  tag: "TuiRendererControlError",
+  code: "TUI_POPUP_FOCUS_TARGET_STALE",
+  message: "The popup focus target changed before dismissal.",
 };
 
 function controlSafeError(error: unknown, fallback: SafeError): SafeError {
