@@ -2,6 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+const removedPersistenceOption = ["--persist", "path"].join("-");
+
 describe("release readiness docs", () => {
   it("documents install, known issues, system dependencies, and deterministic versus real gates", async () => {
     const [readme, install, knownIssues, systemDependencies, testsReadme, localRealConfig] =
@@ -242,9 +244,13 @@ describe("release readiness docs", () => {
     );
 
     for (const [path, document] of documents) {
-      expect(document, path).toContain("--persist-path");
-      expect(document, path).toContain("explicit");
-      expect(document, path).toContain("login-shell profile");
+      expect(document, path).not.toContain(removedPersistenceOption);
+      expect(document, path).toMatch(/does not (?:read, create, or )?edit shell startup files/);
+      expect(document, path).toContain("chosen shell configuration");
+      expect(document, path).toContain("future shells");
+      expect(document, path).toContain("Absolute fallback");
+      expect(document, path).toContain("all three");
+      expect(document, path).toContain("physically");
       expect(document, path).toContain("From any directory");
       expect(document, path).toContain("zero-project");
       expect(document, path).toContain("Add your first project");
@@ -255,10 +261,19 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("stn doctor");
       expect(document, path).toContain("stn tui");
       expect(document, path).toContain("~/.config/station/config.toml");
-      expect(document, path).toContain("future login shells");
       expect(document, path).toContain("empty dashboard");
       expect(document, path).toContain("Create Session");
       expect(document, path).toContain("start the agent session");
+    }
+
+    const install = await read("docs/install.md");
+    expect(install).toContain("PATH uses `:` to separate entries");
+    expect(install).toMatch(
+      /before GitHub requests[^.]*temporary-directory creation[^.]*destination mutation/,
+    );
+
+    for (const path of ["docs/development.md", "docs/single-binary.md"]) {
+      expect(await read(path), path).not.toContain(removedPersistenceOption);
     }
   });
 
@@ -276,7 +291,8 @@ describe("release readiness docs", () => {
     expect(virtualBuddy.indexOf("**Add your first project**")).toBeLessThan(
       virtualBuddy.indexOf("press `N`"),
     );
-    expect(normalizedVirtualBuddy).toContain("exact idempotent future-shell PATH opt-in command");
+    expect(normalizedVirtualBuddy).toContain("one future-shell export");
+    expect(normalizedVirtualBuddy).toContain("shell configuration you choose");
     expect(normalizedVirtualBuddy).toContain("`tmux prefix + Space`");
     expect(normalizedVirtualBuddy).toContain("cold open");
     expect(normalizedVirtualBuddy).toContain("warm reopen");

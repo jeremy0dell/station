@@ -481,13 +481,14 @@ cross-filesystem `LICENSE` metadata may also remain. The deterministic
 assets and is part of `test:all`.
 
 After success, all three bare launchers are resolved physically. If every one
-points into the new install directory, the installer prints
+points into the new install directory, the installer prints only
 `Next: run stn setup`. Otherwise it names every missing or shadowed launcher,
-prints a safely shell-quoted current-shell block that prepends the directory,
-runs `hash -r`, and invokes `stn setup`, plus the absolute installed `stn`
-fallback. Profile persistence is explicit: `--persist-path` appends one
-idempotent login-profile entry, while an install without the flag leaves the
-profile unchanged and prints an exact opt-in command.
+prints one safely shell-quoted future-shell export for the user's chosen shell
+configuration, prints a current-shell block that prepends the directory, runs
+`hash -r`, and invokes `stn setup`, plus the absolute installed `stn` fallback.
+The future-shell export appears only when physical current-process resolution
+is incomplete. The installer never reads, selects, creates, or edits shell
+startup files.
 
 The first binary release is immutable `v0.7.0` and promotes only after all four
 native targets pass automated and manual acceptance. Published tags and assets
@@ -671,11 +672,15 @@ flow:
 
 1. Install in a clean default home with the directory missing from `PATH`,
    then with an older `stn` and one sibling launcher shadowing it → every
-   mismatch is named, the current-shell recovery block works, and an install
-   without `--persist-path` leaves the profile unchanged. Repeat with explicit
-   persistence into a Homebrew-only `.zprofile`; a fresh shell must resolve all
-   three launchers, and a second install must not duplicate the entry. With all
-   three physical resolutions correct, the short setup next step is printed.
+   mismatch is named, the one future-shell export and current-shell recovery
+   block both evaluate safely, and the absolute fallback works. Repeat with
+   startup files containing sentinel bytes, modes, and symlinks, plus custom
+   install directories containing spaces and apostrophes; two installs must
+   leave every startup path unchanged. Copy the export manually into a shell
+   configuration chosen by the user, then verify a fresh shell physically
+   resolves all three launchers. A normalized install path containing `:` must
+   fail before GitHub access or local mutation. With all three physical
+   resolutions correct, only the short setup next step is printed.
 2. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
 3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
