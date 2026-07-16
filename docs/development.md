@@ -107,10 +107,11 @@ pnpm smoke:install
 ```
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
-authenticated GitHub responses and temporary homes, including isolated zsh
-login-profile and minimal-PATH fresh-shell coverage, so it is deterministic and
-does not download a real release or modify the real profile. The single Ubuntu
-CI gate runs it once. On a heavily contended local host, run
+authenticated GitHub responses and temporary homes, including startup-file
+non-interaction, safely evaluated minimal-PATH guidance, physical launcher
+resolution, and normalized-colon preflight coverage. It is deterministic, does
+not download a real release, and does not read or modify real shell startup
+files. The single Ubuntu CI gate runs it once. On a heavily contended local host, run
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
@@ -450,9 +451,12 @@ then quit and reopen `stn tui` and confirm the session remains.
 If the compiled tmux binding was enabled, use `tmux prefix + Space` for the cold
 open, close the popup with the same chord, and use it again for a warm reopen.
 Confirm both opens are silent in the calling pane and the warm open reuses the
-existing `_station-ui` session. Finally confirm the installer did not edit a
-shell profile, run the exact idempotent future-shell PATH opt-in command it
-printed, open a new login shell, and verify `stn --version` still resolves.
+existing `_station-ui` session. Finally confirm the installer did not read or
+edit shell startup files. Copy the one future-shell export it printed into a
+shell configuration you choose,
+open a new login shell, and verify all three physical launcher resolutions and
+`stn --version`. The installer, not the user-facing PATH text alone, must have
+verified those launchers after installation.
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
@@ -461,17 +465,19 @@ manually verify the actual user experience, not a dashboard override:
 
 1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
    directory absent from `PATH`. Confirm all three missing launchers are named,
-   the profile is unchanged without `--persist-path`, the printed exact opt-in
-   command is idempotent, the current-shell block prepends the safely quoted
-   directory and runs `hash -r` plus `stn setup`, and the absolute `stn`
-   fallback works.
-2. Repeat with `--persist-path`, an existing zsh `.zprofile` containing only
-   Homebrew setup, and an older launcher shadowing the install. Confirm the
-   profile content and mode are preserved, one entry prepends the exact install
-   directory, a new login shell resolves all three launchers there, and a
-   second install adds no duplicate entry. With all three launchers already
-   resolving physically to the install directory, confirm the short
-   `Next: run stn setup` success message.
+   every shell startup file remains absent, the one future-shell export is
+   safely quoted for a user-chosen shell configuration, the current-shell block
+   runs `hash -r` plus `stn setup`, and the absolute `stn` fallback works.
+2. Repeat with existing zsh and bash startup files containing distinct sentinel
+   bytes and modes, startup-file symlinks, an older launcher shadowing the
+   install, and custom install directories containing spaces and apostrophes.
+   Confirm two installs leave every startup file, inode, mode, symlink, and
+   target unchanged. Copy the printed export manually into the file you choose,
+   open a new login shell, and physically verify all three launchers. Also
+   confirm a normalized install path containing `:` fails before any GitHub
+   request or installer-created path. With all three launchers already resolving
+   physically to the install directory, confirm the short `Next: run stn setup`
+   success message.
 3. With the installed binary's runtime `PATH` containing neither Node nor Bun,
    run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
    and connects to a healthy Observer.

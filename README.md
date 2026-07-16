@@ -61,11 +61,11 @@ gh auth login --hostname github.com
     repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  sh "$installer" --version "$tag" --persist-path
+  sh "$installer" --version "$tag"
 )
 ```
 
-The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to your login-shell profile. It does not infer a project from the install directory. In the same shell, make the default install available immediately, run guided setup, verify it, and launch the full workspace:
+The installer installs and physically verifies all three Station launchers, but it does not read, create, or edit shell startup files and does not infer a project from the install directory. If any launcher is missing or shadowed in the current process, it prints one safely quoted `export PATH=...` command for future shells; add that command to the shell configuration you choose. It also prints a current-shell recovery block ending in `stn setup` and an `Absolute fallback` using the installed `stn`. In the same shell, the default install can be made available explicitly before guided setup, verification, and launch:
 
 ```sh
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -78,13 +78,13 @@ stn doctor
 stn tui
 ```
 
-`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, and writes a valid zero-project `~/.config/station/config.toml`; it never adds the current directory implicitly. It can also add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell; `--persist-path` makes the same directory available to future login shells. Omit that flag to leave profiles unchanged and receive an exact opt-in command instead. If you chose a custom install directory, use the exact PATH block printed by the installer instead.
+`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, and writes a valid zero-project `~/.config/station/config.toml`; it never adds the current directory implicitly. It can also add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell. For future shells, place the installer's exact export in your chosen shell configuration yourself; the installer never chooses or edits that file. If you chose a custom install directory, use its printed PATH block or the printed absolute `stn setup` fallback instead.
 
 On the cold-boot welcome screen, press `Enter` or `Space` to open project view. On the empty dashboard, press `Enter` (or `A`) on **Add your first project**, choose a folder inside an existing Git repository, and confirm it. Station resolves nested selections to their Git root and will not add an ordinary non-Git folder. Then press `N`, review the project, generated session name, and agent in the **Create Session** dialog, and press `Enter` on **Create session** to start the agent session.
 
 `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
 
-The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. A useful default workflow additionally requires a Git repository, Worktrunk (`wt`), tmux, diffnav/git-delta, and one supported agent CLI; `stn setup` and `stn doctor` establish and verify those capabilities.
+The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. It checks all three physical launcher resolutions rather than relying on textual PATH membership. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. A useful default workflow additionally requires a Git repository, Worktrunk (`wt`), tmux, diffnav/git-delta, and one supported agent CLI; `stn setup` and `stn doctor` establish and verify those capabilities.
 
 `v0.7.0` is the first supported private-binary baseline. The installer code
 and artifacts always come from the same immutable tag. The latest-install

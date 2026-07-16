@@ -23,7 +23,7 @@ gh auth login --hostname github.com
     repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  sh "$installer" --version "$tag" --persist-path
+  sh "$installer" --version "$tag"
 )
 ```
 
@@ -37,7 +37,20 @@ The recipe never falls back to `main`. `gh` handles private-repository authentic
 
 ### Complete first-run setup
 
-The installer block installs the Station binaries and, with the explicit `--persist-path` consent above, adds the install directory to the supported login-shell profile. It does not infer a project from the install directory. Because profile changes apply to future login shells, the remaining handoff for the current shell is:
+The installer installs the Station artifacts and physically verifies all three bare launchers. It does not infer a project from the install directory, and it does not read, create, or edit shell startup files. Shell configuration placement is always user-owned:
+
+| Concern | Owner |
+| --- | --- |
+| Download and install artifacts | Station installer |
+| Verify all launcher paths physically resolve to the installed runtime | Station installer |
+| Detect current-process PATH mismatch | Station installer |
+| Print a current-shell recovery block | Station installer |
+| Print one future-shell export command | Station installer |
+| Choose a shell startup file | User |
+| Modify `.zprofile`, `.zshrc`, `.bash_profile`, `.bash_login`, `.bashrc`, `.profile`, or files under ZDOTDIR | Never the installer |
+| Run `stn setup` | User, with an absolute fallback supplied by the installer |
+
+For immediate availability in the current shell with the default install directory, run:
 
 ```bash
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
@@ -50,15 +63,15 @@ stn doctor
 stn tui
 ```
 
-If the installer reported a PATH mismatch, its printed current-shell block is the authoritative equivalent and already ends with `stn setup`. It is safe to run that block from `HOME`, Desktop, or another ordinary directory. If you used `--install-dir`, use its printed path instead of `~/.local/bin`.
+If any launcher is missing or physically resolves somewhere else, the installer names every mismatch. It then prints one safely quoted `export PATH=...` command to add to your chosen shell configuration for future shells, followed by the authoritative current-shell block ending in `stn setup` and an `Absolute fallback` that invokes the installed binary directly. It is safe to run the current-shell block from `HOME`, Desktop, or another ordinary directory. If you used `--install-dir`, use the exact printed commands instead of substituting `~/.local/bin`.
 
 Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes a valid zero-project `~/.config/station/config.toml`; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup never adopts its current directory or an ancestor repository. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
 
-The PATH assignment above affects only the current shell. `--persist-path` adds an idempotent entry to the login-shell profile selected from `SHELL` (`.zprofile` for zsh, the first existing bash login profile, or `.profile` for POSIX shells) while preserving existing content such as Homebrew setup. Omit the flag to leave profiles unchanged; unless the exact entry is already present, the installer prints the idempotent command you can run instead, even when its own shell temporarily resolves the launchers. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
+The PATH assignment above affects only the current shell. To make Station available in future shells, copy the installer's export into the shell configuration you choose; the installer never chooses or edits that file. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
 
 On the cold-boot welcome screen, press `Enter` or `Space` to open project view. On the empty dashboard, press `Enter` (or `A`) on **Add your first project**, choose a folder inside an existing Git repository, and confirm it. A nested folder resolves to its Git root; an ordinary non-Git folder cannot be added from this flow. Then press `N`, review the project, generated session name, and agent in the **Create Session** dialog, and press `Enter` on **Create session** to start the agent session.
 
-Pass `--install-dir PATH` to override the default `~/.local/bin`, and combine it with `--persist-path` to persist that exact custom directory; run `scripts/install.sh --help` from a checkout for the complete command surface.
+Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface. The normalized install directory cannot contain `:` because PATH uses `:` to separate entries. This validation happens before GitHub requests, temporary-directory creation, or destination mutation.
 
 The installer:
 
@@ -68,7 +81,7 @@ The installer:
 - stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
 - keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
 - removes `com.apple.quarantine` from the verified binary defensively on macOS; and
-- resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints a safely quoted current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and also prints the absolute installed `stn` path. Profile persistence occurs only with `--persist-path`; otherwise it prints an exact opt-in command and leaves the profile unchanged.
+- physically resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints one safely quoted future-shell export for the user's chosen shell configuration, prints a current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and prints an absolute installed `stn` fallback. If all three launchers already resolve to the installed runtime, it prints only `Next: run stn setup`.
 
 ### Concurrent and interrupted installs
 
@@ -191,8 +204,9 @@ Optional integrations can be added later.
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
 `pnpm smoke:install` exercises latest, explicit, and draft selection; strict
-authenticated API arguments; all four platform mappings; isolated-home login
-profile persistence, minimal-PATH fresh shells, PATH shadow behavior;
+authenticated API arguments; all four platform mappings; startup-file
+non-interaction, safely evaluated PATH guidance for spaces and apostrophes,
+normalized-colon preflight, and physical PATH shadow behavior;
 checksum/archive/probe failures; dual-lock concurrency and stale recovery;
 rollback and ambiguous commit points; continuous readers; HUP/INT/TERM/SIGKILL;
 and runner self-interruption against local fake release assets. Every child and
