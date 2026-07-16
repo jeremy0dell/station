@@ -7,6 +7,7 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
+import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   attentionAndFailuresSnapshot,
@@ -107,6 +108,44 @@ describe("dashboard golden frames", () => {
     const frame = setup.captureCharFrame();
     expect(frame).toContain("Loading observer snapshot...");
     expect(frame).toContain("Q/esc:close");
+  });
+
+  it("keeps dividers within the frame when loading resolves at 99x25", async () => {
+    const width = 99;
+    const height = 25;
+    const divider = "─".repeat(width - 1);
+    const { store, source } = makeStationTestStore({
+      snapshot: null,
+      connection: { state: "loading", since: Date.now() },
+      seedInitialSnapshot: false,
+    });
+    store.getState().start();
+    const setup = await testRender(<DashboardRoot store={store} columns={width} rows={height} />, {
+      width,
+      height,
+    });
+    teardowns.push(() => {
+      setup.renderer.destroy();
+    });
+    await setup.renderOnce();
+
+    const loadingLines = setup.captureCharFrame().split("\n").map((line) => line.trimEnd());
+    expect(loadingLines[height - 2]).toBe(divider);
+    expect(loadingLines[height - 1]).toBe("Q/esc:close");
+
+    await act(async () => {
+      source.setSnapshot(manyProjectsSnapshot());
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const liveLines = setup.captureCharFrame().split("\n").map((line) => line.trimEnd());
+    expect(liveLines[2]).toBe(divider);
+    expect(liveLines[3]).toContain("SESSION");
+    expect(liveLines[height - 2]).toBe(divider);
+    expect(liveLines[height - 1]).toMatch(/^↵ open/u);
+    expect(liveLines.filter((line) => line === divider)).toHaveLength(2);
+    expect(liveLines).not.toContain("─");
   });
 
   it("renders the waiting-for-observer state on cold reconnects", async () => {

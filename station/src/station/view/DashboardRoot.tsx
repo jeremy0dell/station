@@ -84,8 +84,9 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
   );
 
   if (loading || snapshot === undefined) {
+    // Keep both root branches padding-free because OpenTUI retains a removed inset during reconciliation.
     return (
-      <box width="100%" flexGrow={1} flexDirection="column" paddingRight={1}>
+      <box width="100%" flexGrow={1} flexDirection="column">
         <box flexDirection="column" flexGrow={1}>
           {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
             <text
