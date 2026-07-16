@@ -17,6 +17,14 @@ Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to t
 - Inside tmux, `stn` opens the read-only dashboard in a tmux popup, since tmux owns the panes there.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
+Persistent popups use a strict child-process IPC channel between the Node CLI and the Bun
+dashboard renderer. The CLI composition root retains all terminal-provider authority; the
+renderer sends only provider-neutral focus-origin and dismiss intents. When the CLI marks that
+channel as required, a renderer that starts without it or loses it exits instead of continuing
+without lifecycle control. Focus-success dismissal is scoped to the exact origin resolved for the
+operation and the provider-owned popup claim/lease, preventing a stale renderer from dismissing a
+replacement popup.
+
 You can also run the renderer directly during development:
 
 ```bash
@@ -29,6 +37,9 @@ bun run dashboard                     # read-only dashboard renderer
 ## Boundaries
 
 - Keep the Station UI provider-neutral. Do not import provider packages, read SQLite, run `wt`, run `tmux`, run `git` or `gh`, or parse raw provider payloads.
+- Keep terminal-provider mechanics behind CLI composition. The renderer-control contract carries
+  typed product intents, results, and normalized focus origins, never provider commands, arguments,
+  raw claims, or lease representations.
 - Render normalized contracts from `@station/contracts` and use `@station/protocol` through the Station service/source layer.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the Station state store, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const roots = ["apps", "packages", "integrations"];
 const providerNeutralSourceRoots = [
   "packages/contracts/src",
+  "packages/dashboard-core/src",
   "packages/observability/src",
   "packages/protocol/src",
   "packages/runtime/src",

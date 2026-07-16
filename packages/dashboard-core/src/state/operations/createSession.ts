@@ -1,10 +1,13 @@
-import type { CommandId, SafeError, StationCommand } from "@station/contracts";
+import type { CommandId, SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
 import type { TuiObserverService } from "../../services/types.js";
 import { bindPendingCreateSessionRow, removeCreateSessionLocalRow } from "../localRows.js";
 import type { TuiStore } from "../store.js";
-import { type CommandRuntimeOptions, prepareCommandForRuntime } from "./runtimeCommands.js";
+import {
+  type CommandRuntimeOptions,
+  prepareCreateSessionCommandForRuntime,
+} from "./runtimeCommands.js";
 import type { CreateSessionOperation } from "./types.js";
 
 export async function runCreateSessionOperation(
@@ -18,10 +21,8 @@ export async function runCreateSessionOperation(
   addSafeErrorToast: (error: SafeError) => void,
 ): Promise<void> {
   try {
-    const command = (await prepareCommandForRuntime(operation.command, runtime)) as Extract<
-      StationCommand,
-      { type: "session.create" }
-    >;
+    const prepared = await prepareCreateSessionCommandForRuntime(operation.command, runtime);
+    const command = prepared.command;
     const receipt = await service.dispatch(command);
     if (!receipt.accepted) {
       const safeError = receipt.error ?? {
@@ -40,6 +41,13 @@ export async function runCreateSessionOperation(
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "succeeded") {
       store.setState(removeCreateSessionLocalRow(store.getState(), operation.localId));
+      if (prepared.target?.onFocusSuccess !== undefined) {
+        try {
+          await prepared.target.onFocusSuccess();
+        } catch (error: unknown) {
+          addSafeErrorToast(toSafeError(error, { clientLabel: runtime.clientLabel }));
+        }
+      }
       return;
     }
 

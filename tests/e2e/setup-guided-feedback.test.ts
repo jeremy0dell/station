@@ -385,7 +385,7 @@ async function createFixture(input: {
         ]);
       } finally {
         await Promise.all([
-          rm(root, { recursive: true, force: true }),
+          rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }),
           rm(runtimeDir, { recursive: true, force: true }),
         ]);
       }

@@ -19,7 +19,7 @@ export const tuiCliCommand: CliCommandNode = {
     { name: "--popup", description: "Run in popup mode." },
     {
       name: "--persistent",
-      description: "Accepted for tmux-popup compatibility (no separate behavior).",
+      description: "Keep the dashboard alive when the outer popup is dismissed.",
     },
   ],
   examples: ["pnpm stn tui", "pnpm stn tui --popup --persistent"],

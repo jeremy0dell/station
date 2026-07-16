@@ -4,7 +4,12 @@ export type CommandRuntimeOptions = {
   clientLabel: string;
   persistentPopup: boolean;
   focusOrigin?: TerminalFocusOrigin;
-  resolveFocusOrigin?: () => Promise<TerminalFocusOrigin | undefined>;
+  resolveFocusTarget?: () => Promise<TuiFocusTarget | undefined>;
+};
+
+export type TuiFocusTarget = {
+  origin: TerminalFocusOrigin;
+  onFocusSuccess?: () => Promise<void>;
 };
 
 type CreateSessionCommand = Extract<StationCommand, { type: "session.create" }>;
@@ -12,22 +17,23 @@ type StartAgentCommand = Extract<StationCommand, { type: "session.startAgent" }>
 type ResumeAgentCommand = Extract<StationCommand, { type: "session.resumeAgent" }>;
 type RuntimeTerminalOptions = NonNullable<StartAgentCommand["payload"]["terminal"]>;
 
-async function prepareCreateSessionCommandForRuntime(
+export async function prepareCreateSessionCommandForRuntime(
   command: CreateSessionCommand,
   runtime: CommandRuntimeOptions,
-): Promise<CreateSessionCommand> {
+): Promise<{ command: CreateSessionCommand; target?: TuiFocusTarget }> {
   if (!shouldFocusSessionCommand(runtime)) {
-    return command;
+    return { command };
   }
 
-  const origin = await resolveFocusOrigin(runtime);
-  return {
+  const target = await resolveFocusTarget(runtime);
+  const prepared = {
     ...command,
     payload: {
       ...command.payload,
-      terminal: terminalWithRuntimeFocus(command.payload.terminal, origin),
+      terminal: terminalWithRuntimeFocus(command.payload.terminal, target?.origin),
     },
   };
+  return target === undefined ? { command: prepared } : { command: prepared, target };
 }
 
 async function prepareStartAgentCommandForRuntime(
@@ -38,7 +44,7 @@ async function prepareStartAgentCommandForRuntime(
     return command;
   }
 
-  const origin = await resolveFocusOrigin(runtime);
+  const origin = (await resolveFocusTarget(runtime))?.origin;
   return {
     ...command,
     payload: {
@@ -69,17 +75,20 @@ function shouldFocusSessionCommand(runtime: CommandRuntimeOptions): boolean {
   return (
     runtime.persistentPopup ||
     runtime.focusOrigin !== undefined ||
-    runtime.resolveFocusOrigin !== undefined
+    runtime.resolveFocusTarget !== undefined
   );
 }
 
-async function resolveFocusOrigin(
-  runtime: Pick<CommandRuntimeOptions, "focusOrigin" | "resolveFocusOrigin">,
-): Promise<TerminalFocusOrigin | undefined> {
-  if (runtime.resolveFocusOrigin === undefined) {
-    return runtime.focusOrigin;
+async function resolveFocusTarget(
+  runtime: Pick<CommandRuntimeOptions, "focusOrigin" | "resolveFocusTarget">,
+): Promise<TuiFocusTarget | undefined> {
+  if (runtime.resolveFocusTarget === undefined) {
+    return runtime.focusOrigin === undefined ? undefined : { origin: runtime.focusOrigin };
   }
-  return (await runtime.resolveFocusOrigin()) ?? runtime.focusOrigin;
+  return (
+    (await runtime.resolveFocusTarget()) ??
+    (runtime.focusOrigin === undefined ? undefined : { origin: runtime.focusOrigin })
+  );
 }
 
 export async function prepareCommandForRuntime(
@@ -87,7 +96,7 @@ export async function prepareCommandForRuntime(
   runtime: CommandRuntimeOptions,
 ): Promise<StationCommand> {
   if (command.type === "session.create") {
-    return prepareCreateSessionCommandForRuntime(command, runtime);
+    return (await prepareCreateSessionCommandForRuntime(command, runtime)).command;
   }
   if (command.type === "session.startAgent") {
     return prepareStartAgentCommandForRuntime(command, runtime);
@@ -98,19 +107,25 @@ export async function prepareCommandForRuntime(
   return command;
 }
 
-export async function withResolvedFocusOrigin(
+export async function prepareFocusCommandForRuntime(
   command: Extract<StationCommand, { type: "terminal.focus" }>,
-  runtime: Pick<CommandRuntimeOptions, "focusOrigin" | "resolveFocusOrigin">,
-): Promise<Extract<StationCommand, { type: "terminal.focus" }>> {
-  const origin = await resolveFocusOrigin(runtime);
-  if (origin === undefined) {
-    return command;
+  runtime: Pick<CommandRuntimeOptions, "focusOrigin" | "resolveFocusTarget">,
+): Promise<{
+  command: Extract<StationCommand, { type: "terminal.focus" }>;
+  target?: TuiFocusTarget;
+}> {
+  const target = await resolveFocusTarget(runtime);
+  if (target === undefined) {
+    return { command };
   }
   return {
-    type: "terminal.focus",
-    payload: {
-      ...command.payload,
-      origin,
+    command: {
+      type: "terminal.focus",
+      payload: {
+        ...command.payload,
+        origin: target.origin,
+      },
     },
+    target,
   };
 }
