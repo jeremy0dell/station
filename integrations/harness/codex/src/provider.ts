@@ -80,6 +80,8 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
     errorMessage: "The Codex harness provider failed to ingest an event.",
     normalize: (event, context) => normalizeCodexRawEvent(event, context),
   },
+  acceptsPersistedEvent: (observation) =>
+    observation.eventType !== "SubagentStop" && observation.rawEventType !== "SubagentStop",
   doctorChecks,
   hooksStatus,
   version: { latestPackage: "@openai/codex" },

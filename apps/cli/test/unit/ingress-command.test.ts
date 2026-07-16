@@ -358,6 +358,80 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
+  it("ignores delayed Codex SubagentStop before observer, startup, spool, or logging work", async () => {
+    const fixture = await createTempState();
+    let clientCalls = 0;
+    let healthCalls = 0;
+    let deliveryCalls = 0;
+    let startupCalls = 0;
+    let spoolCalls = 0;
+    let logCalls = 0;
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "codex"],
+      {
+        stdin: JSON.stringify({
+          ...codexPayload(),
+          hook_event_name: "SubagentStop",
+        }),
+        env: stationEnv(),
+      },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_codex_subagent_stop",
+        clientFactory: () => {
+          clientCalls += 1;
+          return {
+            health: async () => {
+              healthCalls += 1;
+              return healthyObserver(fixture);
+            },
+            ingestProviderHookEvent: async () => {
+              deliveryCalls += 1;
+              throw new Error("ignored Codex hooks must not be delivered");
+            },
+          } as never;
+        },
+        spawnObserver: async () => {
+          startupCalls += 1;
+          throw new Error("ignored Codex hooks must not start the observer");
+        },
+        writeSpool: async () => {
+          spoolCalls += 1;
+          throw new Error("ignored Codex hooks must not be spooled");
+        },
+        logger: {
+          log: async () => {
+            logCalls += 1;
+          },
+        },
+      },
+    );
+
+    expect(receipt).toMatchObject({
+      accepted: false,
+      status: "ignored",
+      provider: "codex",
+      event: "SubagentStop",
+    });
+    expect({
+      clientCalls,
+      healthCalls,
+      deliveryCalls,
+      startupCalls,
+      spoolCalls,
+      logCalls,
+    }).toEqual({
+      clientCalls: 0,
+      healthCalls: 0,
+      deliveryCalls: 0,
+      startupCalls: 0,
+      spoolCalls: 0,
+      logCalls: 0,
+    });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
   it("delivers raw Claude hook payloads through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

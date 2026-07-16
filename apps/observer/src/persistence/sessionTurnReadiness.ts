@@ -47,7 +47,7 @@ export function upsertSessionTurnReadiness(
   return row;
 }
 
-function readSessionTurnReadiness(
+export function readSessionTurnReadiness(
   database: SqlDatabase,
   sessionId: string,
 ): PersistedSessionTurnReadiness | undefined {

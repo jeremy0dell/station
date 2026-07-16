@@ -44,6 +44,11 @@ import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../../src/persistence/retention.js";
+import {
+  sessionHarnessExecutionEqual,
+  sessionTurnReadinessEqual,
+  turnReadinessWasAcknowledged,
+} from "../../src/persistence/sessionHarnessDerivedState.js";
 import { stripTerminalProviderData } from "../../src/persistence/terminalObservations.js";
 import type {
   CurrentProviderObservationKind,
@@ -364,6 +369,33 @@ export function createInMemoryObserverPersistence(
             compareAsc(left.sessionId, right.sessionId),
         ),
       ),
+
+    repairSessionHarnessDerivedState: (input) =>
+      transaction((draft) => {
+        const key = sessionHarnessExecutionKey(input);
+        const currentExecution = draft.sessionHarnessExecutions.get(key);
+        const requestedReadiness =
+          input.turnReadiness !== undefined &&
+          turnReadinessWasAcknowledged([...draft.commands.values()], input.turnReadiness)
+            ? undefined
+            : input.turnReadiness;
+        const currentReadiness = draft.turnReadiness.get(input.sessionId);
+        if (
+          sessionHarnessExecutionEqual(currentExecution, input.harnessExecution) &&
+          sessionTurnReadinessEqual(currentReadiness, requestedReadiness)
+        ) {
+          return { changed: false };
+        }
+        draft.sessionHarnessExecutions.delete(key);
+        if (input.harnessExecution !== undefined) {
+          draft.sessionHarnessExecutions.set(key, input.harnessExecution);
+        }
+        draft.turnReadiness.delete(input.sessionId);
+        if (requestedReadiness !== undefined) {
+          draft.turnReadiness.set(input.sessionId, requestedReadiness);
+        }
+        return { changed: true };
+      }),
 
     findRememberedHarnessProviderForWorktree: (input) =>
       transaction((draft) => findRememberedHarnessProviderForWorktree(draft, input)),

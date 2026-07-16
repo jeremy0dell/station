@@ -1,18 +1,117 @@
-import type { RawHarnessEvent } from "@station/contracts";
+import type { ObservedStatus, RawHarnessEvent } from "@station/contracts";
 import { HarnessEventObservationSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactCodexHookPayload } from "../../src/compaction";
 import { CodexHarnessProviderError } from "../../src/errors";
 import {
+  type CodexHookEvent,
+  CodexHookEventSchema,
   codexHookPayloadReportId,
   codexHookPayloadToHarnessEventReport,
   normalizeCodexRawEvent,
   parseCodexHookEvent,
 } from "../../src/events";
+import {
+  codexForwardedEventTypes,
+  codexIngressRuleForEventType,
+  codexIngressRules,
+} from "../../src/ingressRules";
 
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("Codex hook event parsing", () => {
+  it("derives a unique forwarded event set that excludes delayed SubagentStop", () => {
+    const subagentStop = {
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "SubagentStop",
+      model: "gpt-5.4-codex",
+      turn_id: "turn_1",
+      agent_transcript_path: null,
+      agent_id: "agent_1",
+      agent_type: "reviewer",
+      stop_hook_active: false,
+      last_assistant_message: null,
+    };
+
+    expect(codexIngressRules).toEqual([
+      {
+        provider: "codex",
+        eventType: "SessionStart",
+        statusIntents: ["starting"],
+        confidences: ["high"],
+      },
+      {
+        provider: "codex",
+        eventType: "UserPromptSubmit",
+        statusIntents: ["working"],
+        confidences: ["medium"],
+      },
+      {
+        provider: "codex",
+        eventType: "PreToolUse",
+        statusIntents: ["working", "needs_attention"],
+        confidences: ["medium", "high"],
+      },
+      {
+        provider: "codex",
+        eventType: "PermissionRequest",
+        statusIntents: ["needs_attention"],
+        confidences: ["high"],
+      },
+      {
+        provider: "codex",
+        eventType: "PostToolUse",
+        statusIntents: ["working"],
+        confidences: ["medium", "high"],
+      },
+      {
+        provider: "codex",
+        eventType: "PreCompact",
+        statusIntents: ["working"],
+        confidences: ["medium"],
+      },
+      {
+        provider: "codex",
+        eventType: "PostCompact",
+        statusIntents: ["working"],
+        confidences: ["medium"],
+      },
+      {
+        provider: "codex",
+        eventType: "SubagentStart",
+        statusIntents: ["working"],
+        confidences: ["medium"],
+      },
+      {
+        provider: "codex",
+        eventType: "Stop",
+        statusIntents: ["idle", "working"],
+        confidences: ["high", "medium"],
+      },
+    ]);
+    expect(new Set(codexForwardedEventTypes).size).toBe(codexIngressRules.length);
+    expect(codexForwardedEventTypes).not.toContain("SubagentStop");
+    expect(codexIngressRuleForEventType("SubagentStop")).toBeUndefined();
+    expect(new Set(codexForwardedEventTypes)).toEqual(new Set(Object.keys(CODEX_HOOK_FIXTURES)));
+    expect(CodexHookEventSchema.safeParse(subagentStop).success).toBe(false);
+    expect(
+      normalizeCodexRawEvent(
+        { provider: "codex", observedAt: now, event: subagentStop },
+        context(),
+      ),
+    ).toEqual([]);
+    expect(() => parseCodexHookEvent(subagentStop)).toThrowError(CodexHarnessProviderError);
+    expect(() =>
+      codexHookPayloadToHarnessEventReport({
+        reportId: "report_subagent_stop",
+        observedAt: now,
+        payload: subagentStop,
+      }),
+    ).toThrowError(CodexHarnessProviderError);
+  });
+
   it("strictly parses documented SessionStart events and normalizes them", () => {
     const raw: RawHarnessEvent = {
       provider: "codex",
@@ -117,6 +216,7 @@ describe("Codex hook event parsing", () => {
         attention: "question",
       },
     });
+    expectStatusAllowedByCodexIngressRule("PreToolUse", opened[0]?.status);
 
     const resolved = normalizeCodexRawEvent(hookEvent("PostToolUse"), context());
     expect(resolved[0]).toMatchObject({
@@ -127,6 +227,7 @@ describe("Codex hook event parsing", () => {
       },
     });
     expect(resolved[0]?.status?.attention).toBeUndefined();
+    expectStatusAllowedByCodexIngressRule("PostToolUse", resolved[0]?.status);
   });
 
   it("normalizes Codex app-server input requests through the harness ingest path", () => {
@@ -356,15 +457,6 @@ describe("Codex hook event parsing", () => {
         agent_id: "agent_1",
         agent_type: "reviewer",
       },
-      {
-        ...turn,
-        hook_event_name: "SubagentStop",
-        agent_transcript_path: null,
-        agent_id: "agent_1",
-        agent_type: "reviewer",
-        stop_hook_active: false,
-        last_assistant_message: "Reviewed.",
-      },
     ];
 
     expect(payloads.map((payload) => parseCodexHookEvent(payload).hook_event_name)).toEqual([
@@ -374,7 +466,6 @@ describe("Codex hook event parsing", () => {
       "PreCompact",
       "PostCompact",
       "SubagentStart",
-      "SubagentStop",
     ]);
   });
 
@@ -430,29 +521,13 @@ describe("Codex hook event parsing", () => {
         stop_hook_active: false,
         last_assistant_message: `Done with ${rawSecret}`,
       },
-      {
-        ...turn,
-        hook_event_name: "SubagentStop",
-        agent_transcript_path: null,
-        agent_id: "agent_1",
-        agent_type: "reviewer",
-        stop_hook_active: false,
-        last_assistant_message: `Reviewed ${rawSecret}`,
-      },
     ];
 
     const compactedPayloads = payloads.map((payload) => compactCodexHookPayload(payload));
 
     expect(
       compactedPayloads.map((result) => parseCodexHookEvent(result.payload).hook_event_name),
-    ).toEqual([
-      "UserPromptSubmit",
-      "PreToolUse",
-      "PermissionRequest",
-      "PostToolUse",
-      "Stop",
-      "SubagentStop",
-    ]);
+    ).toEqual(["UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop"]);
     expect(JSON.stringify(compactedPayloads)).not.toContain(rawSecret);
     expect(compactedPayloads).toEqual(
       expect.arrayContaining([
@@ -585,6 +660,7 @@ describe("Codex hook event parsing", () => {
         confidence: "medium",
       },
     });
+    expectStatusAllowedByCodexIngressRule("Stop", observations[0]?.status);
     // A Stop hook forcing continuation must not mark the turn complete (no ready marker).
     expect(observations[0]?.turn).toBeUndefined();
   });
@@ -599,7 +675,6 @@ describe("Codex hook event parsing", () => {
       ["PreCompact", "working", "medium"],
       ["PostCompact", "working", "medium"],
       ["SubagentStart", "working", "medium"],
-      ["SubagentStop", "working", "medium"],
       ["Stop", "idle", "high"],
     ] as const;
 
@@ -623,10 +698,10 @@ describe("Codex hook event parsing", () => {
       ["PreCompact", "none"],
       ["PostCompact", "none"],
       ["SubagentStart", "none"],
-      ["SubagentStop", "none"],
       ["Stop", "turn_completed"],
     ]);
     for (const report of reports) {
+      expectStatusAllowedByCodexIngressRule(report.eventType, report.status);
       expect(report.provider).toBe("codex");
       expect(report.kind).toBe("harness");
       expect(report.status?.source).toBe("harness_event");
@@ -698,100 +773,110 @@ function context() {
   };
 }
 
-function codexReportPayloads() {
-  const common = {
-    session_id: "codex_session_123",
-    transcript_path: null,
-    cwd: "/tmp/station/web/task",
-    model: "gpt-5.4-codex",
-    permission_mode: "default",
-    station_project_id: "web",
-    station_worktree_id: "wt_web_task",
-    station_session_id: "ses_web_task",
-    station_terminal_target_id: "tmux:station:@1:%2",
-  };
-  const turn = {
-    ...common,
-    turn_id: "turn_1",
-  };
+type CodexHookFixtures = {
+  [EventName in CodexHookEvent["hook_event_name"]]: Extract<
+    CodexHookEvent,
+    { hook_event_name: EventName }
+  >;
+};
 
-  return [
-    {
-      ...common,
-      hook_event_name: "SessionStart",
-      source: "startup",
+const commonCodexHookFields = {
+  session_id: "codex_session_123",
+  transcript_path: null,
+  cwd: "/tmp/station/web/task",
+  model: "gpt-5.4-codex",
+  permission_mode: "default",
+  station_project_id: "web",
+  station_worktree_id: "wt_web_task",
+  station_session_id: "ses_web_task",
+  station_terminal_target_id: "tmux:station:@1:%2",
+} as const;
+
+const turnCodexHookFields = {
+  ...commonCodexHookFields,
+  turn_id: "turn_1",
+} as const;
+
+const CODEX_HOOK_FIXTURES = {
+  SessionStart: {
+    ...commonCodexHookFields,
+    hook_event_name: "SessionStart",
+    source: "startup",
+  },
+  UserPromptSubmit: {
+    ...turnCodexHookFields,
+    hook_event_name: "UserPromptSubmit",
+    prompt: "Implement the plan.",
+  },
+  PreToolUse: {
+    ...turnCodexHookFields,
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: {
+      compacted: true,
+      originalBytes: 128,
     },
-    {
-      ...turn,
-      hook_event_name: "UserPromptSubmit",
-      prompt: "Implement the plan.",
+    tool_use_id: "call_pre",
+  },
+  PermissionRequest: {
+    ...turnCodexHookFields,
+    hook_event_name: "PermissionRequest",
+    tool_name: "Bash",
+    tool_input: {
+      compacted: true,
+      originalBytes: 256,
     },
-    {
-      ...turn,
-      hook_event_name: "PreToolUse",
-      tool_name: "Bash",
-      tool_input: {
-        compacted: true,
-        originalBytes: 128,
-      },
-      tool_use_id: "call_pre",
+  },
+  PostToolUse: {
+    ...turnCodexHookFields,
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash",
+    tool_input: {
+      compacted: true,
+      originalBytes: 128,
     },
-    {
-      ...turn,
-      hook_event_name: "PermissionRequest",
-      tool_name: "Bash",
-      tool_input: {
-        compacted: true,
-        originalBytes: 256,
-      },
+    tool_response: {
+      compacted: true,
+      originalBytes: 512,
     },
-    {
-      ...turn,
-      hook_event_name: "PostToolUse",
-      tool_name: "Bash",
-      tool_input: {
-        compacted: true,
-        originalBytes: 128,
-      },
-      tool_response: {
-        compacted: true,
-        originalBytes: 512,
-      },
-      tool_use_id: "call_post",
-    },
-    {
-      ...turn,
-      hook_event_name: "PreCompact",
-      trigger: "manual",
-    },
-    {
-      ...turn,
-      hook_event_name: "PostCompact",
-      trigger: "auto",
-    },
-    {
-      ...common,
-      hook_event_name: "SubagentStart",
-      turn_id: "turn_1",
-      agent_id: "agent_1",
-      agent_type: "reviewer",
-    },
-    {
-      ...common,
-      hook_event_name: "SubagentStop",
-      turn_id: "turn_1",
-      agent_transcript_path: null,
-      agent_id: "agent_1",
-      agent_type: "reviewer",
-      stop_hook_active: false,
-      last_assistant_message: null,
-    },
-    {
-      ...common,
-      hook_event_name: "Stop",
-      turn_id: "turn_1",
-      stop_hook_active: false,
-      last_assistant_message: null,
-    },
-  ];
+    tool_use_id: "call_post",
+  },
+  PreCompact: {
+    ...turnCodexHookFields,
+    hook_event_name: "PreCompact",
+    trigger: "manual",
+  },
+  PostCompact: {
+    ...turnCodexHookFields,
+    hook_event_name: "PostCompact",
+    trigger: "auto",
+  },
+  SubagentStart: {
+    ...commonCodexHookFields,
+    hook_event_name: "SubagentStart",
+    turn_id: "turn_1",
+    agent_id: "agent_1",
+    agent_type: "reviewer",
+  },
+  Stop: {
+    ...commonCodexHookFields,
+    hook_event_name: "Stop",
+    turn_id: "turn_1",
+    stop_hook_active: false,
+    last_assistant_message: null,
+  },
+} satisfies CodexHookFixtures;
+
+function codexReportPayloads(): CodexHookEvent[] {
+  return codexForwardedEventTypes.map((eventType) => CODEX_HOOK_FIXTURES[eventType]);
+}
+
+function expectStatusAllowedByCodexIngressRule(
+  eventType: string,
+  status: ObservedStatus | undefined,
+): void {
+  const rule = codexIngressRuleForEventType(eventType);
+  expect(rule).toBeDefined();
+  expect(rule?.statusIntents).toContain(status?.value);
+  expect(rule?.confidences).toContain(status?.confidence);
 }

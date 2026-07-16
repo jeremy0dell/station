@@ -2,6 +2,7 @@
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import {
+  commandLine,
   createHookSetupFileOps,
   expectedProviderHookScript,
   hookCommandsForEvents,
@@ -22,8 +23,11 @@ import {
 } from "./hooks/hookConfigEditor.js";
 import {
   CODEX_HOOK_EVENT_NAMES,
+  CODEX_OBSOLETE_HOOK_EVENT_NAMES,
   CODEX_STATION_PROFILE_NAME,
+  type CodexGeneratedHookEventName,
   type CodexHookEventName,
+  type CodexObsoleteHookEventName,
 } from "./hooks/hookConstants.js";
 import { CodexHookSetupError } from "./hooks/hookErrors.js";
 import {
@@ -57,7 +61,7 @@ export type CodexHookPlanOptions = {
 export type CodexGeneratedGlobalHookCleanup = {
   configPath: string;
   changed: boolean;
-  stale: CodexHookEventName[];
+  stale: CodexGeneratedHookEventName[];
   before: string;
   after: string;
   skipped?: boolean;
@@ -260,7 +264,17 @@ export async function doctorCodexHooks(
 ): Promise<CodexHookDoctorResult> {
   const plan = await planCodexHooks(options);
   const generatedGlobalInstalled = plan.generatedGlobalCleanup.stale.length > 0;
+  const obsoleteEvents = obsoleteGeneratedHookEvents(plan);
+  const obsoleteGeneratedInstalled = obsoleteEvents.length > 0;
+  const obsoleteRemediation = codexHookRemediationCommand(
+    options,
+    plan,
+    options.enabled === false ? "uninstall" : "install",
+  );
   if (options.enabled === false) {
+    const message = generatedGlobalInstalled
+      ? "Codex hooks are not requested in station config, but generated global Codex hooks remain in the base config."
+      : "Codex hooks are not requested in station config.";
     return {
       provider: "codex",
       configPath: plan.configPath,
@@ -268,14 +282,12 @@ export async function doctorCodexHooks(
       profileConfigPath: plan.profileConfigPath,
       baseConfigPath: plan.baseConfigPath,
       hookScriptPath: plan.hookScriptPath,
-      status: generatedGlobalInstalled ? "warn" : "ok",
+      status: generatedGlobalInstalled || obsoleteGeneratedInstalled ? "warn" : "ok",
       installed: false,
       missing: plan.missing,
       commands: plan.commands,
       generatedGlobalCleanup: plan.generatedGlobalCleanup,
-      message: generatedGlobalInstalled
-        ? "Codex hooks are not requested in station config, but generated global Codex hooks remain in the base config."
-        : "Codex hooks are not requested in station config.",
+      message: withObsoleteHookRemediation(message, obsoleteEvents, obsoleteRemediation),
     };
   }
 
@@ -287,12 +299,18 @@ export async function doctorCodexHooks(
     profileConfigPath: plan.profileConfigPath,
     baseConfigPath: plan.baseConfigPath,
     hookScriptPath: plan.hookScriptPath,
-    status: installed && !generatedGlobalInstalled ? "ok" : "warn",
+    status: installed && !generatedGlobalInstalled && !obsoleteGeneratedInstalled ? "ok" : "warn",
     installed,
     missing: plan.missing,
     commands: plan.commands,
     generatedGlobalCleanup: plan.generatedGlobalCleanup,
-    message: doctorMessage({ installed, generatedGlobalInstalled, plan }),
+    message: doctorMessage({
+      installed,
+      generatedGlobalInstalled,
+      obsoleteEvents,
+      obsoleteRemediation,
+      plan,
+    }),
   };
 }
 
@@ -366,20 +384,80 @@ function missingDescription(plan: CodexHookPlan): string {
 function doctorMessage(input: {
   installed: boolean;
   generatedGlobalInstalled: boolean;
+  obsoleteEvents: CodexObsoleteHookEventName[];
+  obsoleteRemediation: string;
   plan: CodexHookPlan;
 }): string {
   if (input.installed && input.generatedGlobalInstalled) {
-    return "Codex hooks are installed in the station profile, but generated global Codex hooks remain in the base config.";
+    return withObsoleteHookRemediation(
+      "Codex hooks are installed in the station profile, but generated global Codex hooks remain in the base config.",
+      input.obsoleteEvents,
+      input.obsoleteRemediation,
+    );
   }
   if (input.installed) {
-    return "Codex hooks are installed in the station profile.";
+    return withObsoleteHookRemediation(
+      "Codex hooks are installed in the station profile.",
+      input.obsoleteEvents,
+      input.obsoleteRemediation,
+    );
   }
 
   const missing = missingDescription(input.plan);
   if (input.generatedGlobalInstalled) {
-    return `Codex hooks are missing or stale in the station profile: ${missing}; generated global hooks remain in the base config.`;
+    return withObsoleteHookRemediation(
+      `Codex hooks are missing or stale in the station profile: ${missing}; generated global hooks remain in the base config.`,
+      input.obsoleteEvents,
+      input.obsoleteRemediation,
+    );
   }
-  return `Codex hooks are missing or stale in the station profile: ${missing}.`;
+  return withObsoleteHookRemediation(
+    `Codex hooks are missing or stale in the station profile: ${missing}.`,
+    input.obsoleteEvents,
+    input.obsoleteRemediation,
+  );
+}
+
+function obsoleteGeneratedHookEvents(plan: CodexHookPlan): CodexObsoleteHookEventName[] {
+  const profileEvents = generatedStationHookEvents(parseTomlDocument(plan.before), plan.commands);
+  const generatedEvents = new Set([...profileEvents, ...plan.generatedGlobalCleanup.stale]);
+  return CODEX_OBSOLETE_HOOK_EVENT_NAMES.filter((eventName) => generatedEvents.has(eventName));
+}
+
+function withObsoleteHookRemediation(
+  message: string,
+  obsoleteEvents: readonly CodexObsoleteHookEventName[],
+  remediation: string,
+): string {
+  if (obsoleteEvents.length === 0) {
+    return message;
+  }
+  return `${message} Obsolete generated Codex hook events remain: ${obsoleteEvents.join(", ")}. Run \`${remediation}\` to remove them.`;
+}
+
+function codexHookRemediationCommand(
+  options: CodexHookPlanOptions,
+  plan: CodexHookPlan,
+  action: "install" | "uninstall",
+): string {
+  const args = ["stn"];
+  if (options.stationConfigPath !== undefined) {
+    args.push("--config", options.stationConfigPath);
+  }
+  args.push(
+    "hooks",
+    action,
+    "codex",
+    "--yes",
+    "--codex-config",
+    plan.profileConfigPath,
+    "--hook-script",
+    plan.hookScriptPath,
+  );
+  if (options.hookBin !== undefined) {
+    args.push("--hook-bin", options.hookBin);
+  }
+  return commandLine(args);
 }
 
 function assignBackupPaths(

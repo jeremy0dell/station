@@ -1,6 +1,7 @@
 import type {
   ClientFeatureFlags,
   HarnessCapabilities,
+  HarnessEventObservation,
   HarnessProvider,
   HarnessRunObservation,
   HarnessStatusObservation,
@@ -22,12 +23,21 @@ import {
   safeErrorFromUnknown,
   toIsoTimestamp,
 } from "@station/runtime";
-import { bindHarnessRunsToSessionExecutions } from "../harnessExecutionIdentity.js";
+import {
+  bindHarnessRunsToSessionExecutions,
+  decideSessionHarnessExecution,
+  sessionHarnessExecutionEvidenceFromObservation,
+} from "../harnessExecutionIdentity.js";
+import { sessionTurnReadinessMutationFromHarnessObservation } from "../hooks/turnReadiness.js";
 import { staleChangeSummary, staleChecks, stalePullRequest } from "../metadata/stalePayloads.js";
 import type {
   EventJournal,
   ObservationStore,
+  PersistedProviderObservation,
+  PersistedSessionHarnessExecution,
+  PersistedSessionTurnReadiness,
   ReconcileStore,
+  SessionHarnessDerivedStateRepair,
   SessionStore,
   WorktreeMetadataStore,
 } from "../persistence/index.js";
@@ -118,6 +128,11 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     input.providerObservationRetentionDays ?? providerObservationRetentionDays();
   await input.read.logger?.info("Reconcile started.", { reason: input.reason });
   if (input.persistence !== undefined) {
+    await repairPersistedHarnessEventCompatibility({
+      persistence: input.persistence,
+      providers: input.providers,
+      now: started,
+    });
     await input.persistence.pruneExpiredProviderObservations(started);
   }
   const errors: SafeError[] = [];
@@ -161,9 +176,11 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   const finishedAt = toIsoTimestamp(input.read.clock.now());
   const harnessStatusInput: {
     persistence?: ObservationStore & SessionStore;
+    providers: ProviderRegistry;
     harnessRuns: ObserverHarnessRun[];
     now: string;
   } = {
+    providers: input.providers,
     harnessRuns: harnessResult.harnessRuns,
     now: finishedAt,
   };
@@ -693,6 +710,7 @@ async function classifyHarnessRuns(input: {
 
 async function harnessRunsWithPersistedEventStatus(input: {
   persistence?: ObservationStore & SessionStore;
+  providers: ProviderRegistry;
   harnessRuns: ObserverHarnessRun[];
   now: string;
 }): Promise<ObserverHarnessRun[]> {
@@ -700,13 +718,12 @@ async function harnessRunsWithPersistedEventStatus(input: {
     return input.harnessRuns;
   }
 
-  const [observations, bindings] = await Promise.all([
-    input.persistence.listProviderObservations({
-      entityKind: "harness_event",
-      now: input.now,
-    }),
-    input.persistence.listSessionHarnessExecutions(),
-  ]);
+  const persisted = await input.persistence.listProviderObservations({
+    entityKind: "harness_event",
+    now: input.now,
+  });
+  const { observations } = admitPersistedHarnessEvents(input.providers, persisted);
+  const bindings = await input.persistence.listSessionHarnessExecutions();
   const boundRuns = bindHarnessRunsToSessionExecutions({
     runs: input.harnessRuns.map((run) => run.run),
     bindings,
@@ -719,6 +736,165 @@ async function harnessRunsWithPersistedEventStatus(input: {
     runs: synthesizeExternalHarnessRuns({ runs: runsWithBindings, observations }),
     observations,
   });
+}
+
+async function repairPersistedHarnessEventCompatibility(input: {
+  persistence: ObservationStore & SessionStore;
+  providers: ProviderRegistry;
+  now: string;
+}): Promise<void> {
+  const [persisted, bindings, readiness] = await Promise.all([
+    input.persistence.listProviderObservations({
+      entityKind: "harness_event",
+      includeExpired: true,
+      now: input.now,
+    }),
+    input.persistence.listSessionHarnessExecutions(),
+    input.persistence.listSessionTurnReadiness(),
+  ]);
+  const { observations, rejectedBySession } = admitPersistedHarnessEvents(
+    input.providers,
+    persisted,
+  );
+  const currentObservations = observations.filter((observation) => !observation.expired);
+  for (const rejected of rejectedBySession.values()) {
+    const currentBinding = bindings.find(
+      (binding) =>
+        binding.provider === rejected.provider && binding.sessionId === rejected.sessionId,
+    );
+    const currentReadiness = readiness.find(
+      (candidate) => candidate.sessionId === rejected.sessionId,
+    );
+    if (
+      derivedStateSupersedesRejectedEvent({
+        binding: currentBinding,
+        readiness: currentReadiness,
+        rejectedAt: rejected.latestStatusUpdatedAt,
+      })
+    ) {
+      continue;
+    }
+    const replay = replayAcceptedSessionState({
+      observations: currentObservations,
+      provider: rejected.provider,
+      sessionId: rejected.sessionId,
+    });
+    const repair: SessionHarnessDerivedStateRepair = {
+      provider: rejected.provider,
+      sessionId: rejected.sessionId,
+    };
+    if (replay.harnessExecution !== undefined) {
+      repair.harnessExecution = replay.harnessExecution;
+    }
+    if (replay.turnReadiness !== undefined) {
+      repair.turnReadiness = replay.turnReadiness;
+    }
+    await input.persistence.repairSessionHarnessDerivedState(repair);
+  }
+}
+
+type RejectedPersistedSession = {
+  provider: string;
+  sessionId: string;
+  latestStatusUpdatedAt: string;
+};
+
+function admitPersistedHarnessEvents(
+  providers: ProviderRegistry,
+  observations: PersistedProviderObservation[],
+): {
+  observations: PersistedProviderObservation[];
+  rejectedBySession: Map<string, RejectedPersistedSession>;
+} {
+  const accepted: PersistedProviderObservation[] = [];
+  const rejectedBySession = new Map<string, RejectedPersistedSession>();
+  for (const observation of observations) {
+    if (observation.entityKind !== "harness_event") continue;
+    const provider = providers.harnesses.get(observation.provider);
+    if (provider?.acceptsPersistedEvent?.(observation.payload) !== false) {
+      accepted.push(observation);
+      continue;
+    }
+    const sessionId = observation.payload.sessionId;
+    if (sessionId === undefined) continue;
+    const key = `${observation.provider}\u0000${sessionId}`;
+    const latestStatusUpdatedAt = observation.payload.status?.updatedAt ?? observation.observedAt;
+    const current = rejectedBySession.get(key);
+    if (
+      current === undefined ||
+      Date.parse(latestStatusUpdatedAt) >= Date.parse(current.latestStatusUpdatedAt)
+    ) {
+      rejectedBySession.set(key, {
+        provider: observation.provider,
+        sessionId,
+        latestStatusUpdatedAt,
+      });
+    }
+  }
+  return { observations: accepted, rejectedBySession };
+}
+
+function derivedStateSupersedesRejectedEvent(input: {
+  binding: PersistedSessionHarnessExecution | undefined;
+  readiness: PersistedSessionTurnReadiness | undefined;
+  rejectedAt: string;
+}): boolean {
+  const rejectedAt = Date.parse(input.rejectedAt);
+  if (!Number.isFinite(rejectedAt)) return false;
+  return [input.binding?.statusUpdatedAt, input.readiness?.completedAt].some((value) => {
+    if (value === undefined) return false;
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) && timestamp > rejectedAt;
+  });
+}
+
+function replayAcceptedSessionState(input: {
+  observations: PersistedProviderObservation[];
+  provider: string;
+  sessionId: string;
+}): {
+  harnessExecution?: PersistedSessionHarnessExecution;
+  turnReadiness?: PersistedSessionTurnReadiness;
+} {
+  let harnessExecution: PersistedSessionHarnessExecution | undefined;
+  let turnReadiness: PersistedSessionTurnReadiness | undefined;
+  for (const observation of input.observations) {
+    if (
+      observation.entityKind !== "harness_event" ||
+      observation.provider !== input.provider ||
+      observation.payload.sessionId !== input.sessionId
+    ) {
+      continue;
+    }
+    const event: HarnessEventObservation = observation.payload;
+    const decision = decideSessionHarnessExecution({
+      current: harnessExecution,
+      evidence: sessionHarnessExecutionEvidenceFromObservation(event),
+    });
+    if (decision.binding !== undefined) {
+      harnessExecution = decision.binding;
+    }
+    if (!decision.mayDeriveState) continue;
+    const mutation = sessionTurnReadinessMutationFromHarnessObservation({
+      observation: event,
+      updatedAt: observation.observedAt,
+    });
+    if (mutation?.action === "upsert") {
+      turnReadiness = {
+        ...mutation.value,
+        createdAt: observation.observedAt,
+      };
+    } else if (mutation?.action === "delete") {
+      turnReadiness = undefined;
+    }
+  }
+  const replay: {
+    harnessExecution?: PersistedSessionHarnessExecution;
+    turnReadiness?: PersistedSessionTurnReadiness;
+  } = {};
+  if (harnessExecution !== undefined) replay.harnessExecution = harnessExecution;
+  if (turnReadiness !== undefined) replay.turnReadiness = turnReadiness;
+  return replay;
 }
 
 async function persistReconcileResult(input: {

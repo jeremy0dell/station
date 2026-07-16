@@ -7,6 +7,7 @@ import {
   createObserverCore,
   createObserverEventBus,
   createSqliteObserverPersistence,
+  type ObserverIdFactory,
   openObserverSqlite,
   type ProviderRegistry,
 } from "../../src/internal";
@@ -70,6 +71,7 @@ export type CreateTestObserverCoreInput = {
   clock: TestClock;
   /** Override the in-memory sqlite location (tests that persist under a state dir). */
   sqlitePath?: string;
+  idFactory?: ObserverIdFactory;
 };
 
 /**
@@ -85,7 +87,7 @@ export function createTestObserverCore(input: CreateTestObserverCoreInput) {
   const persistence = createSqliteObserverPersistence({
     sqlite,
     clock,
-    idFactory: createTestIdFactory(),
+    idFactory: input.idFactory ?? createTestIdFactory(),
   });
   const core = createObserverCore({ config, providers, persistence, clock });
   return { sqlite, persistence, core };

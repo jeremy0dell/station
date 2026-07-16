@@ -2,6 +2,8 @@ import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 import {
   CODEX_HOOK_EVENT_NAMES,
+  CODEX_OBSOLETE_HOOK_EVENT_NAMES,
+  type CodexGeneratedHookEventName,
   type CodexHookEventName,
   GENERATED_HOOK_SCRIPT_NAME,
   GENERATED_HOOK_STATUS_MESSAGE,
@@ -36,6 +38,14 @@ export function installCodexHookCommands(
   const next = cloneRecord(document);
   const hooksRecord = recordValue(next.hooks);
   const hooks = hooksRecord === undefined ? {} : cloneRecord(hooksRecord);
+  for (const eventName of CODEX_OBSOLETE_HOOK_EVENT_NAMES) {
+    const value = withoutGeneratedHookEntry(hooks[eventName], commands.SessionStart);
+    if (value === undefined) {
+      delete hooks[eventName];
+    } else {
+      hooks[eventName] = value;
+    }
+  }
   for (const eventName of CODEX_HOOK_EVENT_NAMES) {
     hooks[eventName] = withGeneratedHookEntry(hooks[eventName], eventName, commands[eventName]);
   }
@@ -55,6 +65,14 @@ export function removeGeneratedCodexHookCommands(
   const hooks = cloneRecord(hooksRecord);
   for (const eventName of CODEX_HOOK_EVENT_NAMES) {
     const value = withoutGeneratedHookEntry(hooks[eventName], commands[eventName]);
+    if (value === undefined) {
+      delete hooks[eventName];
+    } else {
+      hooks[eventName] = value;
+    }
+  }
+  for (const eventName of CODEX_OBSOLETE_HOOK_EVENT_NAMES) {
+    const value = withoutGeneratedHookEntry(hooks[eventName], commands.SessionStart);
     if (value === undefined) {
       delete hooks[eventName];
     } else {
@@ -94,16 +112,26 @@ export function documentContainsCommand(
 export function generatedStationHookEvents(
   document: Record<string, unknown>,
   commands: Record<CodexHookEventName, string>,
-): CodexHookEventName[] {
+): CodexGeneratedHookEventName[] {
   const hooks = recordValue(document.hooks);
   if (hooks === undefined) {
     return [];
   }
-  return CODEX_HOOK_EVENT_NAMES.filter((eventName) =>
+  const generated: CodexGeneratedHookEventName[] = CODEX_HOOK_EVENT_NAMES.filter((eventName) =>
     hookEntries(hooks[eventName]).some((entry) =>
       hookEntryContainsGeneratedStationHook(entry, commands[eventName]),
     ),
   );
+  for (const eventName of CODEX_OBSOLETE_HOOK_EVENT_NAMES) {
+    if (
+      hookEntries(hooks[eventName]).some((entry) =>
+        hookEntryContainsGeneratedStationHook(entry, commands.SessionStart),
+      )
+    ) {
+      generated.push(eventName);
+    }
+  }
+  return generated;
 }
 
 function withGeneratedHookEntry(
@@ -161,7 +189,6 @@ function matcherForEvent(eventName: CodexHookEventName): string | undefined {
   if (eventName === "PreCompact") return "manual|auto";
   if (eventName === "PostCompact") return "manual|auto";
   if (eventName === "SubagentStart") return ".*";
-  if (eventName === "SubagentStop") return ".*";
   return undefined;
 }
 

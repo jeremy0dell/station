@@ -17,7 +17,13 @@ import {
 import { z } from "zod";
 import { compactCodexHookPayload } from "./compaction.js";
 import { codexHookPayloadReportId, codexHookPayloadToHarnessEventReport } from "./events.js";
+import { isCodexForwardedEventType } from "./ingressRules.js";
 
+/**
+ * ADAPTER
+ *
+ * Normalizes Codex hook delivery into shared provider-event and harness-report contracts.
+ */
 export const codexHookAdapter: ProviderHookAdapter = {
   provider: "codex",
   kind: "harness",
@@ -34,6 +40,9 @@ const hookCwdProbeSchema = z.object({ cwd: z.string().min(1) }).loose();
 function decideCodexHookScope(event: ProviderHookEvent): ProviderHookScopeDecision {
   if (event.kind !== "harness") {
     return { action: "accept", reason: "not-required" };
+  }
+  if (!isCodexForwardedEventType(event.event)) {
+    return { action: "ignore", reason: "event-not-forwarded" };
   }
 
   const payload = parseStationHookIdentityPayload(event.payload);

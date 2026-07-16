@@ -47,7 +47,9 @@ bypasses that adapter.
 
 ## Rollout
 
-OpenCode is the first provider using a rule-derived ingress filter. Claude Code follows the same shape: `integrations/harness/claude/src/ingressRules.ts` is the single source of truth for both the installed hook event set (the generated `--settings` artifact registers only rule-listed events) and status projection (`statusFromClaudeHookEvent` is gated by rule presence, and `stn-ingress claude` drops unlisted event types with an `ignored` receipt). `SubagentStart`, `SubagentStop`, and `PostToolUseFailure` are deliberately absent from the Claude rules: `SubagentStop` fires after `Stop` at turn end and would flip a freshly idle row back to working. Codex and Pi must keep current behavior until each has provider-specific ingress rules and no-regression tests proving required events are still admitted.
+OpenCode is the first provider using a rule-derived ingress filter. Claude Code follows the same shape: `integrations/harness/claude/src/ingressRules.ts` is the single source of truth for both the installed hook event set (the generated `--settings` artifact registers only rule-listed events) and status projection (`statusFromClaudeHookEvent` is gated by rule presence, and `stn-ingress claude` drops unlisted event types with an `ignored` receipt). `SubagentStart`, `SubagentStop`, and `PostToolUseFailure` are deliberately absent from the Claude rules: `SubagentStop` fires after `Stop` at turn end and would flip a freshly idle row back to working.
+
+Codex also derives its installed hook inventory from `integrations/harness/codex/src/ingressRules.ts`. `stn-ingress codex` drops unlisted events before Observer health, startup, delivery, logging, or spool work, and the Observer-side Codex adapter repeats the rule lookup before identity checks, compaction, and normalization. `SubagentStop` is deliberately absent because it can arrive after the parent `Stop` and cannot assert parent liveness without a typed child roster. Pi must keep current behavior until it has provider-specific ingress rules and no-regression tests proving required events are still admitted.
 
 When adding a provider:
 

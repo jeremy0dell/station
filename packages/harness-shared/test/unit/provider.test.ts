@@ -144,6 +144,7 @@ describe("createTerminalBoundHarnessProvider", () => {
     expect("doctorChecks" in provider).toBe(false);
     expect("hooksStatus" in provider).toBe(false);
     expect("ingestEvent" in provider).toBe(false);
+    expect("acceptsPersistedEvent" in provider).toBe(false);
   });
 
   it("attaches optional interface methods the spec supplies", () => {
@@ -157,11 +158,13 @@ describe("createTerminalBoundHarnessProvider", () => {
           missing: [],
           message: "n/a",
         }),
+        acceptsPersistedEvent: () => false,
       }),
       {},
     );
     expect("doctorChecks" in provider).toBe(true);
     expect("hooksStatus" in provider).toBe(true);
+    expect(provider.acceptsPersistedEvent?.({ provider: "test", observedAt: now })).toBe(false);
   });
 });
 
