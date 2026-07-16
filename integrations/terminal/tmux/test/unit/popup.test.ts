@@ -8,12 +8,14 @@ import {
   openTmuxPopup,
   resolveRegisteredDevPopupUi,
   resolveTmuxPopupFocusOrigin,
+  resolveTmuxPopupFocusTarget,
 } from "../../src/popup";
 import { buildNormalPopupRoute, buildPopupActiveClaim } from "../../src/popup/fastProtocol";
+import { persistentPopupSignature } from "../../src/popup/persistentUi.js";
 import { tmuxCommandResult } from "../support/commands";
 
 const defaultCommand = "stn tui --popup --persistent";
-const defaultSignature = `v1:${defaultCommand}`;
+const defaultSignature = persistentPopupSignature(defaultCommand);
 const registrationNonce = "11".repeat(16);
 const actionNonce = "22".repeat(16);
 
@@ -42,6 +44,9 @@ describe("tmux popup", () => {
   });
 
   it("creates, reuses, and replaces the persistent UI by exact signature", async () => {
+    expect(persistentPopupSignature(defaultCommand, "build-a")).not.toBe(
+      persistentPopupSignature(defaultCommand, "build-b"),
+    );
     const missingCalls: ExternalCommandInput[] = [];
     await expect(
       ensurePersistentPopupSession({
@@ -227,6 +232,68 @@ describe("tmux popup", () => {
       clientId: "legacy-client",
       provider: "tmux",
     });
+
+    const legacyTarget = await resolveTmuxPopupFocusTarget({ runner: legacy.runner });
+    const replacement = buildPopupActiveClaim({
+      actionNonce: "88".repeat(16),
+      clientName: "/dev/ttys099",
+      clientPid: 9999,
+      registrationNonce,
+      state: "open",
+    });
+    legacy.globalOptions.set("@station_popup_active_claim", replacement);
+    await expect(legacyTarget?.dismissExact()).resolves.toEqual({ dismissed: false });
+    expect(legacy.globalOptions.get("@station_popup_active_claim")).toBe(replacement);
+  });
+
+  it("fails focus resolution closed for malformed or closing claims", async () => {
+    const malformed = createPopupTmux();
+    malformed.globalOptions.set("@station_popup_active_claim", "future.claim.format");
+    malformed.globalOptions.set("@station_popup_focus_client", "legacy-client");
+    await expect(
+      resolveTmuxPopupFocusOrigin({ runner: malformed.runner }),
+    ).resolves.toBeUndefined();
+
+    const closing = createPopupTmux();
+    closing.globalOptions.set(
+      "@station_popup_active_claim",
+      buildPopupActiveClaim({
+        actionNonce,
+        clientName: "/dev/ttys001",
+        clientPid: 1234,
+        registrationNonce,
+        state: "closing",
+      }),
+    );
+    closing.globalOptions.set("@station_popup_focus_client", "legacy-client");
+    await expect(resolveTmuxPopupFocusOrigin({ runner: closing.runner })).resolves.toBeUndefined();
+  });
+
+  it("binds focus dismissal to the exact claim and honors explicit command precedence", async () => {
+    const fake = createPopupTmux({ activeClaim: true, registered: true });
+    const target = await resolveTmuxPopupFocusTarget({
+      command: "config-tmux",
+      env: { STATION_TMUX_BIN: "env-tmux" },
+      runner: fake.runner,
+    });
+    expect(target?.origin).toEqual({ provider: "tmux", clientId: "/dev/ttys001" });
+    expect(fake.calls.every((call) => call.command === "config-tmux")).toBe(true);
+
+    const replacement = buildPopupActiveClaim({
+      actionNonce: "77".repeat(16),
+      clientName: "/dev/ttys099",
+      clientPid: 9999,
+      registrationNonce,
+      state: "open",
+    });
+    fake.globalOptions.set("@station_popup_active_claim", replacement);
+    fake.globalOptions.set("@station_popup_client", "/dev/ttys099");
+    fake.globalOptions.set("@station_popup_focus_client", "/dev/ttys099");
+
+    await expect(target?.dismissExact()).resolves.toEqual({ dismissed: false });
+    expect(fake.calls.every((call) => call.command === "config-tmux")).toBe(true);
+    expect(fake.globalOptions.get("@station_popup_active_claim")).toBe(replacement);
+    expect(fake.executedPopupActions).toEqual([]);
   });
 
   it("dismisses through a closing claim and exact compare-clear", async () => {
@@ -338,6 +405,16 @@ describe("tmux popup", () => {
     });
     expect(contended.calls.some((call) => call.args?.[0] === "display-popup")).toBe(false);
     expect(contended.globalOptions.has("@station_popup_active_claim")).toBe(true);
+
+    const transferred = createPopupTmux({
+      activeClaim: true,
+      replaceClaimBeforeClaimCas: replacement,
+    });
+    await expect(dismissTmuxPopup({ runner: transferred.runner })).resolves.toEqual({
+      dismissed: false,
+    });
+    expect(transferred.globalOptions.get("@station_popup_active_claim")).toBe(replacement);
+    expect(transferred.executedPopupActions).toEqual([]);
   });
 
   it("CAS-replaces malformed route state without an unconditional clear", async () => {
@@ -539,6 +616,7 @@ type PopupFakeOptions = {
   malformedRoute?: string;
   registered?: boolean;
   replaceClaimBeforeCleanup?: string;
+  replaceClaimBeforeClaimCas?: string;
   replaceClaimBeforeDisplay?: string;
   replaceClaimBeforeLegacyAction?: string;
   root?: string;
@@ -596,6 +674,7 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
 
   let concurrentRoutePending = options.concurrentRouteBeforeCommit;
   let replacementPending = options.replaceClaimBeforeCleanup;
+  let claimCasReplacementPending = options.replaceClaimBeforeClaimCas;
   let displayReplacementPending = options.replaceClaimBeforeDisplay;
   let legacyReplacementPending = options.replaceClaimBeforeLegacyAction;
   let claimCasMisses = options.claimCasMisses ?? 0;
@@ -656,6 +735,12 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
         return tmuxCommandResult(input);
       }
       if (command.startsWith("set-option -gq @station_popup_active_claim")) {
+        if (claimCasReplacementPending !== undefined) {
+          globalOptions.set("@station_popup_active_claim", claimCasReplacementPending);
+          globalOptions.set("@station_popup_client", "/dev/ttys099");
+          globalOptions.set("@station_popup_focus_client", "/dev/ttys099");
+          claimCasReplacementPending = undefined;
+        }
         if (claimCasMisses > 0) {
           claimCasMisses -= 1;
           return tmuxCommandResult(input);

@@ -1,3 +1,4 @@
+import { stationObserverBuildVersion } from "@station/runtime";
 import type { TmuxCommandInput } from "../command.js";
 import { buildPersistentPopupTuiCommand } from "./args.js";
 import {
@@ -205,8 +206,12 @@ async function enablePersistentPopupSessionMouse(
   });
 }
 
-export function persistentPopupSignature(tuiCommand: string): string {
-  return `v1:${tuiCommand}`;
+/** Identifies the exact renderer command and build allowed to own the persistent session. */
+export function persistentPopupSignature(
+  tuiCommand: string,
+  buildVersion = stationObserverBuildVersion(),
+): string {
+  return `v2:${buildVersion}:${tuiCommand}`;
 }
 
 export async function ensurePersistentPopupSession(

@@ -24,7 +24,11 @@ import {
   createTuiLocalOperationRunner,
   type TuiLocalOperationRunner,
 } from "./operations/localOperationRunner.js";
-import { prepareCommandForRuntime, withResolvedFocusOrigin } from "./operations/runtimeCommands.js";
+import {
+  prepareCommandForRuntime,
+  prepareFocusCommandForRuntime,
+  type TuiFocusTarget,
+} from "./operations/runtimeCommands.js";
 import { createInitialTuiState, replaceSnapshot } from "./screen.js";
 import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
@@ -58,7 +62,7 @@ export type TuiStoreOptions = {
   initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot" | "runtime">;
   exitOnFocusSuccess?: boolean;
   focusOrigin?: TerminalFocusOrigin;
-  resolveFocusOrigin?: () => Promise<TerminalFocusOrigin | undefined>;
+  resolveFocusTarget?: () => Promise<TuiFocusTarget | undefined>;
   onFocusSuccess?: () => Promise<void>;
   onDismiss?: () => Promise<void>;
   persistentPopup?: boolean;
@@ -116,7 +120,7 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         persistentPopup: runtime.persistentPopup,
         canDismissPopup: runtime.onDismiss !== undefined,
         exitOnFocusSuccess: runtime.exitOnFocusSuccess,
-        canResolveFocusOrigin: runtime.resolveFocusOrigin !== undefined,
+        canResolveFocusOrigin: runtime.resolveFocusTarget !== undefined,
         hasFocusSuccessCallback: runtime.onFocusSuccess !== undefined,
         ...(runtime.focusOrigin === undefined ? {} : { focusOrigin: runtime.focusOrigin }),
       },
@@ -196,7 +200,7 @@ type RuntimeOptions = {
   exitOnFocusSuccess: boolean;
   persistentPopup: boolean;
   focusOrigin?: TerminalFocusOrigin;
-  resolveFocusOrigin?: () => Promise<TerminalFocusOrigin | undefined>;
+  resolveFocusTarget?: () => Promise<TuiFocusTarget | undefined>;
   onFocusSuccess?: () => Promise<void>;
   onDismiss?: () => Promise<void>;
   onExit?: (code: number) => void;
@@ -211,8 +215,8 @@ function createRuntimeOptions(options: TuiStoreOptions): RuntimeOptions {
   if (options.focusOrigin !== undefined) {
     runtime.focusOrigin = options.focusOrigin;
   }
-  if (options.resolveFocusOrigin !== undefined) {
-    runtime.resolveFocusOrigin = options.resolveFocusOrigin;
+  if (options.resolveFocusTarget !== undefined) {
+    runtime.resolveFocusTarget = options.resolveFocusTarget;
   }
   if (options.onFocusSuccess !== undefined) {
     runtime.onFocusSuccess = options.onFocusSuccess;
@@ -340,7 +344,7 @@ function shouldUseFocusLifecycle(
   command: StationCommand,
   runtime: Pick<
     RuntimeOptions,
-    "exitOnFocusSuccess" | "persistentPopup" | "resolveFocusOrigin" | "onFocusSuccess"
+    "exitOnFocusSuccess" | "persistentPopup" | "resolveFocusTarget" | "onFocusSuccess"
   >,
   snapshot: StationSnapshot | undefined,
 ): command is Extract<StationCommand, { type: "terminal.focus" }> {
@@ -348,7 +352,7 @@ function shouldUseFocusLifecycle(
     command.type === "terminal.focus" &&
     (runtime.exitOnFocusSuccess ||
       runtime.persistentPopup ||
-      runtime.resolveFocusOrigin !== undefined ||
+      runtime.resolveFocusTarget !== undefined ||
       runtime.onFocusSuccess !== undefined ||
       turnReadinessForFocusCommand(snapshot, command) !== undefined)
   );
@@ -377,8 +381,11 @@ async function dispatchFocusWithLifecycle(
   runtime: RuntimeOptions,
 ): Promise<void> {
   let focusCommand: Extract<StationCommand, { type: "terminal.focus" }>;
+  let focusTarget: TuiFocusTarget | undefined;
   try {
-    focusCommand = await withResolvedFocusOrigin(command, runtime);
+    const prepared = await prepareFocusCommandForRuntime(command, runtime);
+    focusCommand = prepared.command;
+    focusTarget = prepared.target;
   } catch (error: unknown) {
     addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
     return;
@@ -389,6 +396,7 @@ async function dispatchFocusWithLifecycle(
     runtime.exitOnFocusSuccess ||
     runtime.persistentPopup ||
     runtime.onFocusSuccess !== undefined ||
+    focusTarget?.onFocusSuccess !== undefined ||
     turnReadiness !== undefined;
   if (!waitsForCompletion) {
     await dispatchCommand(store, service, focusCommand, runtime);
@@ -406,18 +414,27 @@ async function dispatchFocusWithLifecycle(
   }
 
   if (turnReadiness !== undefined) {
-    try {
-      await acknowledgeTurnReadiness(service, turnReadiness);
-    } catch (error: unknown) {
-      addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
+    const acknowledged = await dispatchCommandAndWaitForCompletion(
+      store,
+      service,
+      {
+        type: "session.acknowledgeTurn",
+        payload: turnReadiness,
+      },
+      runtime,
+    );
+    if (!acknowledged) {
+      return;
     }
   }
 
-  if (runtime.onFocusSuccess !== undefined) {
+  const onFocusSuccess = focusTarget?.onFocusSuccess ?? runtime.onFocusSuccess;
+  if (onFocusSuccess !== undefined) {
     try {
-      await runtime.onFocusSuccess();
+      await onFocusSuccess();
     } catch (error: unknown) {
       addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
+      return;
     }
   }
 
@@ -449,19 +466,6 @@ function turnReadinessForFocusCommand(
     sessionId: agent.sessionId,
     token: agent.turnReadiness.token,
   };
-}
-
-async function acknowledgeTurnReadiness(
-  service: TuiObserverService,
-  readiness: { sessionId: string; token: string },
-): Promise<void> {
-  const receipt = await service.dispatch({
-    type: "session.acknowledgeTurn",
-    payload: readiness,
-  });
-  if (receipt.accepted) {
-    await service.waitForCommandCompletion(receipt.commandId);
-  }
 }
 
 async function dismissPersistentPopup(
