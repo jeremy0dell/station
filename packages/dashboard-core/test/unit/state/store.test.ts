@@ -1,6 +1,7 @@
 import type {
   ProviderId,
   SafeError,
+  StationCommand,
   StationEvent,
   StationSnapshot,
   WorktreeRow,
@@ -178,6 +179,43 @@ describe("TUI store", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1", "cmd_tui_1"]);
   });
 
+  it("resolves current focus, completes focus and readiness, then dismisses", async () => {
+    const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
+    const order: string[] = [];
+    const service = new OrderedFocusService(snapshot, order);
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      resolveFocusOrigin: async () => {
+        order.push("resolve-origin");
+        return { provider: "tmux", clientId: "client-current" };
+      },
+      onFocusSuccess: async () => {
+        order.push("dismiss");
+      },
+    });
+
+    store.getState().handleKey({ input: "1" });
+
+    await waitFor(() => order.includes("dismiss"));
+    expect(order).toEqual([
+      "resolve-origin",
+      "dispatch:terminal.focus",
+      "wait:cmd_focus",
+      "dispatch:session.acknowledgeTurn",
+      "wait:cmd_ack",
+      "dismiss",
+    ]);
+    expect(service.dispatched[0]).toEqual({
+      type: "terminal.focus",
+      payload: {
+        sessionId: "ses_wt_web_idle",
+        origin: { provider: "tmux", clientId: "client-current" },
+      },
+    });
+  });
+
   it("does not acknowledge a ready turn when focus fails", async () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const service = new FakeTuiObserverService(snapshot);
@@ -190,7 +228,15 @@ describe("TUI store", () => {
         message: "The terminal could not be focused.",
       },
     };
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    let focusSuccessCount = 0;
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      onFocusSuccess: async () => {
+        focusSuccessCount += 1;
+      },
+    });
 
     store.getState().handleKey({ input: "1" });
 
@@ -198,6 +244,72 @@ describe("TUI store", () => {
     expect(service.dispatched).toEqual([
       { type: "terminal.focus", payload: { sessionId: "ses_wt_web_idle" } },
     ]);
+    expect(focusSuccessCount).toBe(0);
+  });
+
+  it("leaves a persistent popup open when focus-origin resolution fails", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const service = new FakeTuiObserverService(snapshot);
+    let focusSuccessCount = 0;
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      resolveFocusOrigin: async () => {
+        throw {
+          tag: "TuiRendererControlError",
+          code: "TUI_POPUP_FOCUS_ORIGIN_UNAVAILABLE",
+          message: "The current popup origin could not be resolved.",
+        } satisfies SafeError;
+      },
+      onFocusSuccess: async () => {
+        focusSuccessCount += 1;
+      },
+    });
+
+    store.getState().handleKey({ input: "1" });
+
+    await waitFor(() =>
+      store
+        .getState()
+        .toasts.some(
+          (entry) => entry.toast.message === "The current popup origin could not be resolved.",
+        ),
+    );
+    expect(service.dispatched).toEqual([]);
+    expect(focusSuccessCount).toBe(0);
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("leaves a persistent popup open and shows a toast when dismissal fails", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const service = new FakeTuiObserverService(snapshot);
+    const exitCodes: number[] = [];
+    const store = createTuiStore({
+      service,
+      initialSnapshot: snapshot,
+      persistentPopup: true,
+      onDismiss: async () => {
+        throw {
+          tag: "TuiRendererControlError",
+          code: "TUI_POPUP_DISMISS_FAILED",
+          message: "The popup could not be dismissed.",
+        } satisfies SafeError;
+      },
+      onExit: (code) => exitCodes.push(code),
+    });
+
+    const result = store.getState().handleKey({ input: "Q" });
+
+    expect(result).toEqual({ dismissPopup: true });
+    await waitFor(() =>
+      store
+        .getState()
+        .toasts.some((entry) => entry.toast.message === "The popup could not be dismissed."),
+    );
+    expect(exitCodes).toEqual([]);
+    expect(store.getState().snapshot).toBe(snapshot);
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("does not treat a retained no-agent session as completed start truth", async () => {
@@ -630,6 +742,33 @@ function snapshotWithProjectHarness(
         : project,
     ),
   };
+}
+
+class OrderedFocusService extends FakeTuiObserverService {
+  constructor(
+    snapshot: StationSnapshot,
+    private readonly order: string[],
+  ) {
+    super(snapshot);
+  }
+
+  override async dispatch(command: StationCommand) {
+    this.order.push(`dispatch:${command.type}`);
+    this.nextReceipt = {
+      commandId: command.type === "terminal.focus" ? "cmd_focus" : "cmd_ack",
+      accepted: true,
+      status: "accepted",
+    };
+    return super.dispatch(command);
+  }
+
+  override async waitForCommandCompletion(commandId: string) {
+    this.order.push(`wait:${commandId}`);
+    return {
+      status: "succeeded" as const,
+      commandId,
+    };
+  }
 }
 
 class SnapshotConnectFailingService extends FakeTuiObserverService {

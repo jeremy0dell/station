@@ -234,6 +234,46 @@ describe("tui keymap metadata", () => {
   });
 });
 
+describe("dashboard popup lifecycle keys", () => {
+  it("dismisses a persistent popup with Q or Esc without exiting", () => {
+    const state = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      runtime: { persistentPopup: true, canDismissPopup: true },
+    });
+
+    for (const key of [{ input: "Q" }, { input: "", escape: true }]) {
+      const transition = handleTuiKey(state, key, KEY_CONTEXT);
+      expect(transition.dismissPopup).toBe(true);
+      expect(transition.exitCode).toBeUndefined();
+      expect(transition.state).toBe(state);
+    }
+  });
+
+  it("keeps fullscreen and transient popup Q/Esc behavior unchanged", () => {
+    const states = [
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      createInitialTuiState({
+        initialSnapshot: createDashboardSnapshot(),
+        runtime: {
+          exitOnFocusSuccess: true,
+          focusOrigin: { provider: "tmux", clientId: "client-startup" },
+        },
+      }),
+    ];
+
+    for (const state of states) {
+      const quit = handleTuiKey(state, { input: "Q" }, KEY_CONTEXT);
+      expect(quit.exitCode).toBe(0);
+      expect(quit.dismissPopup).toBeUndefined();
+
+      const escapeKey = handleTuiKey(state, { input: "", escape: true }, KEY_CONTEXT);
+      expect(escapeKey.exitCode).toBeUndefined();
+      expect(escapeKey.dismissPopup).toBeUndefined();
+      expect(escapeKey.state).toBe(state);
+    }
+  });
+});
+
 describe("dashboard footer", () => {
   it("keeps the first-project action at wide and compact widths", () => {
     for (const columns of [120, 40]) {

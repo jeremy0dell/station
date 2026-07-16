@@ -5,52 +5,39 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import type { ProviderId, TerminalFocusOrigin } from "@station/contracts";
 import { createTuiStore } from "@station/dashboard-core";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
-
-function focusOriginFromEnv(
-  env: Record<string, string | undefined>,
-): TerminalFocusOrigin | undefined {
-  const provider = env.STATION_FOCUS_PROVIDER;
-  if (provider === undefined || provider.length === 0) {
-    return undefined;
-  }
-  const origin: TerminalFocusOrigin = { provider: provider as ProviderId };
-  const clientId = env.STATION_FOCUS_CLIENT_ID;
-  if (clientId !== undefined && clientId.length > 0) {
-    origin.clientId = clientId;
-  }
-  return origin;
-}
+import {
+  createPopupRuntime,
+  createProcessRendererControlChannel,
+} from "./popupRuntime.js";
 
 /** Callable entry for the read-only OpenTUI dashboard renderer. */
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
-  // In a tmux popup the launcher exports STATION_TUI_POPUP=1 plus the focus origin;
-  // the dashboard then exits as soon as a focus lands (closing the popup) and
-  // asks the observer to focus the originating tmux client.
-  const isPopup = env.STATION_TUI_POPUP === "1";
 
   let rendererForExit: { destroy(): void } | undefined;
   function exit(code: number): void {
     rendererForExit?.destroy();
     process.exit(code);
   }
+  const popupRuntime = createPopupRuntime(
+    env,
+    createProcessRendererControlChannel(),
+    () => exit(1),
+  );
 
   const client = createStationClient(env);
-  const focusOrigin = isPopup ? focusOriginFromEnv(env) : undefined;
   const store = createTuiStore({
     source: client.state,
     service: client.service,
     clientLabel: "station",
-    exitOnFocusSuccess: isPopup,
     onExit: exit,
-    ...(focusOrigin === undefined ? {} : { focusOrigin }),
+    ...popupRuntime.storeOptions,
   });
 
   // Attach the snapshot source first, then start the client runtime feeding it
@@ -78,6 +65,7 @@ export async function runDashboardMain(): Promise<void> {
   root.render(<FullscreenDashboard store={store} />);
 
   process.on("exit", () => {
+    popupRuntime.dispose();
     detachSource();
     void client.stop();
   });

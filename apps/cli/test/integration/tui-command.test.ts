@@ -2,8 +2,13 @@ import { EventEmitter } from "node:events";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
-import { type ObserverProcessDeps, runTuiCommand } from "@station/cli/internal";
+import {
+  type ObserverProcessDeps,
+  runTuiCommand,
+  type TuiCommandDeps,
+} from "@station/cli/internal";
 import type { TuiConfig } from "@station/config";
+import { TUI_RENDERER_CONTROL_PROTOCOL_VERSION } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
@@ -530,7 +535,7 @@ describe("CLI tui command", () => {
     );
   });
 
-  it("accepts --popup --persistent (no separate lifecycle) and signals popup mode", async () => {
+  it("accepts --popup --persistent without exposing renderer-owned tmux state", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const envs: Array<Record<string, string>> = [];
@@ -549,6 +554,272 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([
       { STATION_OBSERVER_SOCKET_PATH: fixture.socketPath, STATION_TUI_POPUP: "1" },
     ]);
+  });
+
+  it("opens an IPC channel only for the persistent compiled popup renderer", async () => {
+    const persistent = await startPersistentRenderer();
+
+    try {
+      expect(persistent.spawnProcess).toHaveBeenCalledWith(
+        "/opt/station/stn",
+        ["__dashboard"],
+        expect.objectContaining({
+          stdio: ["inherit", "inherit", "inherit", "ipc"],
+        }),
+      );
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("preserves the persistent source Bun renderer command with IPC", async () => {
+    const persistent = await startPersistentRenderer({ source: true });
+    const workspaceDir = resolveStationWorkspaceDir();
+
+    try {
+      expect(persistent.spawnProcess).toHaveBeenNthCalledWith(
+        1,
+        "bun",
+        ["run", "--silent", "--cwd", workspaceDir, "link:station"],
+        expect.objectContaining({ stdio: "inherit" }),
+      );
+      expect(persistent.spawnProcess).toHaveBeenNthCalledWith(
+        2,
+        "bun",
+        ["src/dashboardRenderer/main.tsx"],
+        expect.objectContaining({
+          cwd: workspaceDir,
+          stdio: ["inherit", "inherit", "inherit", "ipc"],
+        }),
+      );
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("does not spawn the persistent source renderer when station linking fails", async () => {
+    const persistent = await startPersistentRenderer({ source: true, linkExitCode: 23 });
+
+    expect(persistent.spawnProcess).toHaveBeenCalledOnce();
+    expect(persistent.spawnProcess).toHaveBeenCalledWith(
+      "bun",
+      ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), "link:station"],
+      expect.objectContaining({ stdio: "inherit" }),
+    );
+    await persistent.finish();
+  });
+
+  it("preserves the persistent dashboard shell override with IPC", async () => {
+    const previousOverride = process.env.STATION_DASHBOARD_COMMAND;
+    process.env.STATION_DASHBOARD_COMMAND = "custom-dashboard --flag";
+    const persistent = await startPersistentRenderer();
+
+    try {
+      expect(persistent.spawnProcess).toHaveBeenCalledWith(
+        "custom-dashboard --flag",
+        expect.objectContaining({
+          shell: true,
+          stdio: ["inherit", "inherit", "inherit", "ipc"],
+        }),
+      );
+    } finally {
+      await persistent.finish();
+      if (previousOverride === undefined) delete process.env.STATION_DASHBOARD_COMMAND;
+      else process.env.STATION_DASHBOARD_COMMAND = previousOverride;
+    }
+  });
+
+  it("routes correlated popup requests and resolves the current focus origin each time", async () => {
+    const dismissPopup = vi.fn(async () => ({ dismissed: true }));
+    const resolveFocusOrigin = vi
+      .fn()
+      .mockResolvedValueOnce({ provider: "tmux", clientId: "client-a" })
+      .mockResolvedValueOnce({ provider: "tmux", clientId: "client-b" });
+    const persistent = await startPersistentRenderer({
+      popupControl: { dismissPopup, resolveFocusOrigin },
+    });
+
+    try {
+      persistent.child.emit("message", controlRequest("resolve-1", "resolve-focus-origin"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(1));
+      expect(persistent.child.sent[0]).toEqual({
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "resolve-1",
+        type: "focus-origin",
+        origin: { provider: "tmux", clientId: "client-a" },
+      });
+
+      persistent.child.emit("message", controlRequest("dismiss-1", "dismiss"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
+      expect(persistent.child.sent[1]).toEqual({
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "dismiss-1",
+        type: "dismissed",
+      });
+
+      persistent.child.emit("message", controlRequest("resolve-2", "resolve-focus-origin"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(3));
+      expect(persistent.child.sent[2]).toEqual({
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "resolve-2",
+        type: "focus-origin",
+        origin: { provider: "tmux", clientId: "client-b" },
+      });
+      expect(resolveFocusOrigin).toHaveBeenCalledTimes(2);
+      expect(dismissPopup).toHaveBeenCalledOnce();
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("returns correlated SafeErrors without closing a valid control channel", async () => {
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup: async () => ({ dismissed: false }),
+        resolveFocusOrigin: async () => {
+          throw {
+            tag: "TmuxProviderError",
+            code: "TMUX_CLIENT_LOOKUP_FAILED",
+            message: "The active tmux client could not be read.",
+          };
+        },
+      },
+    });
+
+    try {
+      persistent.child.emit("message", controlRequest("dismiss-failed", "dismiss"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(1));
+      expect(persistent.child.sent[0]).toEqual({
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "dismiss-failed",
+        type: "error",
+        error: {
+          tag: "TuiRendererControlError",
+          code: "TUI_POPUP_DISMISS_FAILED",
+          message: "The tmux popup could not be dismissed.",
+        },
+      });
+      expect(persistent.child.connected).toBe(true);
+
+      persistent.child.emit("message", controlRequest("resolve-failed", "resolve-focus-origin"));
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
+      expect(persistent.child.sent[1]).toEqual({
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "resolve-failed",
+        type: "error",
+        error: {
+          tag: "TmuxProviderError",
+          code: "TMUX_CLIENT_LOOKUP_FAILED",
+          message: "The active tmux client could not be read.",
+        },
+      });
+      expect(persistent.child.connected).toBe(true);
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("disconnects after a renderer response send failure and ignores later requests", async () => {
+    const dismissPopup = vi.fn(async () => ({ dismissed: true }));
+    const resolveFocusOrigin = vi.fn(async () => ({ provider: "tmux", clientId: "client-a" }));
+    const persistent = await startPersistentRenderer({
+      popupControl: { dismissPopup, resolveFocusOrigin },
+      sendError: new Error("ipc write failed"),
+    });
+
+    try {
+      persistent.child.emit("message", controlRequest("dismiss-before-error", "dismiss"));
+      await vi.waitFor(() => expect(persistent.child.connected).toBe(false));
+      expect(dismissPopup).toHaveBeenCalledOnce();
+      expect(persistent.child.sent).toHaveLength(1);
+
+      persistent.child.emit(
+        "message",
+        controlRequest("ignored-after-error", "resolve-focus-origin"),
+      );
+      await Promise.resolve();
+      expect(resolveFocusOrigin).not.toHaveBeenCalled();
+      expect(persistent.child.sent).toHaveLength(1);
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("fails closed before acting on malformed renderer control frames", async () => {
+    const dismissPopup = vi.fn(async () => ({ dismissed: true }));
+    const resolveFocusOrigin = vi.fn(async () => ({ provider: "tmux", clientId: "client-a" }));
+    const persistent = await startPersistentRenderer({
+      popupControl: { dismissPopup, resolveFocusOrigin },
+    });
+
+    try {
+      persistent.child.emit("message", {
+        ...controlRequest("unsafe", "dismiss"),
+        command: "display-popup -C",
+      });
+      await vi.waitFor(() => expect(persistent.child.connected).toBe(false));
+      expect(persistent.child.sent).toEqual([]);
+      expect(dismissPopup).not.toHaveBeenCalled();
+      expect(resolveFocusOrigin).not.toHaveBeenCalled();
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("closes on duplicate in-flight correlation ids and ignores late adapter completion", async () => {
+    let completeResolution = (_origin: { provider: string; clientId: string }) => undefined;
+    const resolution = new Promise<{ provider: string; clientId: string }>((resolve) => {
+      completeResolution = resolve;
+    });
+    const resolveFocusOrigin = vi.fn(() => resolution);
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup: async () => ({ dismissed: true }),
+        resolveFocusOrigin,
+      },
+    });
+
+    try {
+      const request = controlRequest("duplicate", "resolve-focus-origin");
+      persistent.child.emit("message", request);
+      persistent.child.emit("message", request);
+      await vi.waitFor(() => expect(persistent.child.connected).toBe(false));
+      completeResolution({ provider: "tmux", clientId: "too-late" });
+      await Promise.resolve();
+      expect(resolveFocusOrigin).toHaveBeenCalledOnce();
+      expect(persistent.child.sent).toEqual([]);
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("cleans up control listeners and ignores late adapter completion on child exit or disconnect", async () => {
+    for (const childEvent of ["exit", "disconnect"] as const) {
+      let completeResolution = (_origin: { provider: string; clientId: string }) => undefined;
+      const resolution = new Promise<{ provider: string; clientId: string }>((resolve) => {
+        completeResolution = resolve;
+      });
+      const persistent = await startPersistentRenderer({
+        popupControl: {
+          dismissPopup: async () => ({ dismissed: true }),
+          resolveFocusOrigin: () => resolution,
+        },
+      });
+
+      persistent.child.emit("message", controlRequest(childEvent, "resolve-focus-origin"));
+      if (childEvent === "exit") {
+        await persistent.finish();
+      } else {
+        persistent.child.disconnect();
+      }
+      completeResolution({ provider: "tmux", clientId: "too-late" });
+      await Promise.resolve();
+
+      expect(persistent.child.listenerCount("message")).toBe(0);
+      expect(persistent.child.listenerCount("disconnect")).toBe(0);
+      expect(persistent.child.sent).toEqual([]);
+      if (childEvent === "disconnect") await persistent.finish();
+    }
   });
 
   it("does not block popup renderer startup on observer reconcile", async () => {
@@ -797,4 +1068,88 @@ async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise
     if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
     else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
   }
+}
+
+class FakeRendererChild extends EventEmitter {
+  connected = true;
+  readonly sent: unknown[] = [];
+
+  constructor(private readonly sendError: Error | null = null) {
+    super();
+  }
+
+  send(message: unknown, callback?: (error: Error | null) => void): boolean {
+    this.sent.push(message);
+    callback?.(this.sendError);
+    return this.sendError === null;
+  }
+
+  disconnect(): void {
+    if (!this.connected) return;
+    this.connected = false;
+    this.emit("disconnect");
+  }
+}
+
+async function startPersistentRenderer(
+  options: {
+    linkExitCode?: number;
+    popupControl?: NonNullable<TuiCommandDeps["popupControl"]>;
+    sendError?: Error;
+    source?: boolean;
+  } = {},
+) {
+  const fixture = await createTempState();
+  const child = new FakeRendererChild(options.sendError ?? null);
+  const linkChild = new EventEmitter();
+  const linkExitCode = options.linkExitCode ?? 0;
+  const spawnProcess = vi.fn(() => {
+    if (options.source === true && spawnProcess.mock.calls.length === 1) {
+      queueMicrotask(() => linkChild.emit("exit", linkExitCode));
+      return linkChild as never;
+    }
+    return child as never;
+  });
+  const popupControl =
+    options.popupControl ??
+    ({
+      dismissPopup: async () => ({ dismissed: true }),
+      resolveFocusOrigin: async () => ({ provider: "tmux", clientId: "client-a" }),
+    } satisfies NonNullable<TuiCommandDeps["popupControl"]>);
+  const result = runTuiCommand(
+    ["--popup", "--persistent"],
+    { config: fixture.config },
+    {
+      observer: runningObserverDeps(),
+      selfExecRuntime:
+        options.source === true
+          ? { compiled: false, execPath: "/unused/stn" }
+          : { compiled: true, execPath: "/opt/station/stn" },
+      stationUiInstalled: async () => true,
+      spawnProcess: spawnProcess as never,
+      popupControl,
+    },
+  );
+  const expectedSpawnCount = options.source === true && linkExitCode === 0 ? 2 : 1;
+  await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledTimes(expectedSpawnCount));
+
+  return {
+    child,
+    spawnProcess,
+    finish: async () => {
+      if (options.source === true && linkExitCode !== 0) {
+        await expect(result).resolves.toEqual({ status: "exited", code: linkExitCode });
+        return;
+      }
+      child.emit("exit", 0);
+      await expect(result).resolves.toEqual({ status: "exited", code: 0 });
+    },
+  };
+}
+
+function controlRequest(
+  requestId: string,
+  type: "dismiss" | "resolve-focus-origin",
+): { protocolVersion: 1; requestId: string; type: "dismiss" | "resolve-focus-origin" } {
+  return { protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION, requestId, type };
 }

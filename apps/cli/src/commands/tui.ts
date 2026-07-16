@@ -3,6 +3,7 @@ import type { StationConfig } from "@station/config";
 import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { isCompiledBinary, safeErrorFromUnknown, systemClock } from "@station/runtime";
+import { dismissTmuxPopup, resolveTmuxPopupFocusOrigin } from "@station/tmux";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
@@ -18,6 +19,9 @@ import {
   resolveStationWorkspaceDir,
   stationUiInstallHint,
 } from "../stationWorkspace.js";
+import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
+
+export type { TuiRendererControlAdapters } from "./tuiRendererControl.js";
 
 /** The renderer subprocess exited with this code (the CLI's `tui` result). */
 export type TuiRunResult = {
@@ -40,6 +44,7 @@ export type TuiCommandDeps = {
   spawnProcess?: typeof spawn;
   stationUiInstalled?: () => Promise<boolean>;
   selfExecRuntime?: SelfExecRuntime;
+  popupControl?: TuiRendererControlAdapters;
   env?: CliEnv;
 };
 
@@ -58,6 +63,11 @@ export type TuiCommandResult =
       observer: ObserverStatus;
     };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Owns Observer startup, renderer process selection, and persistent popup control wiring.
+ */
 export async function runTuiCommand(
   args: string[],
   options: TuiCommandOptions = {},
@@ -68,7 +78,12 @@ export async function runTuiCommand(
     // The Bun renderer carries its own mock source; the --fake-* counts are
     // accepted for back-compat but the mock uses its baseline scenario.
     // --dev-fake-dashboard previews the read-only dashboard with mock data.
-    return runRenderer(deps, buildRendererEnv(parsed, { STATION_SOURCE: "mock" }), "dashboard");
+    return runRenderer(
+      deps,
+      buildRendererEnv(parsed, { STATION_SOURCE: "mock" }),
+      "dashboard",
+      parsed.persistentPopup,
+    );
   }
 
   const paths = resolveObserverPaths(options.config);
@@ -113,13 +128,12 @@ export async function runTuiCommand(
     deps,
     buildRendererEnv(parsed, { STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath }),
     parsed.popupMode ? "dashboard" : "station",
+    parsed.persistentPopup,
   );
 }
 
-// Popup mode is signalled to the renderer via env. Any tmux focus origin
-// (STATION_FOCUS_PROVIDER / STATION_FOCUS_CLIENT_ID set by the tmux popup launcher) is
-// inherited through process.env; the tmux provider resolves the originating
-// client itself, so this command stays provider-agnostic.
+// Transient popups inherit their startup focus origin; persistent popups resolve
+// the current origin through the parent-owned control channel on every focus.
 function buildRendererEnv(
   parsed: ParsedTuiArgs,
   base: Record<string, string>,
@@ -135,13 +149,17 @@ function runRenderer(
   deps: TuiCommandDeps,
   env: Record<string, string>,
   entry: RendererEntry,
+  persistentPopup: boolean,
 ): Promise<TuiRunResult> {
-  return deps.spawnRenderer?.({ env, entry }) ?? spawnRenderer({ env, entry }, deps);
+  return (
+    deps.spawnRenderer?.({ env, entry }) ?? spawnRenderer({ env, entry }, deps, persistentPopup)
+  );
 }
 
 async function spawnRenderer(
   { env, entry }: RendererSpawnOptions,
   deps: TuiCommandDeps,
+  persistentPopup: boolean,
 ): Promise<TuiRunResult> {
   const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
   const override = process.env.STATION_DASHBOARD_COMMAND;
@@ -158,32 +176,79 @@ async function spawnRenderer(
   if (override === undefined) {
     process.stderr.write(`Launching STATION ${entry === "dashboard" ? "dashboard" : "TUI"}…\n`);
   }
-  const developmentArgv = [
-    "bun",
-    "run",
-    "--silent",
-    "--cwd",
-    resolveStationWorkspaceDir(),
-    entry,
-  ] as const;
-  const rendererArgv = selfExecArgv(
-    entry === "dashboard" ? "dashboard" : "tui",
-    developmentArgv,
-    deps.selfExecRuntime,
-  );
-  const [command, ...args] = rendererArgv;
   const spawnProcess = deps.spawnProcess ?? spawn;
+  const workspaceDir = resolveStationWorkspaceDir();
+  const sourcePersistentDashboard =
+    override === undefined && !compiled && persistentPopup && entry === "dashboard";
+  if (sourcePersistentDashboard) {
+    const linkResult = await runStationLink(spawnProcess, workspaceDir, childEnv);
+    if (linkResult.code !== 0) return linkResult;
+  }
+  const developmentArgv = ["bun", "run", "--silent", "--cwd", workspaceDir, entry] as const;
+  const rendererArgv = sourcePersistentDashboard
+    ? (["bun", "src/dashboardRenderer/main.tsx"] as const)
+    : selfExecArgv(
+        entry === "dashboard" ? "dashboard" : "tui",
+        developmentArgv,
+        deps.selfExecRuntime,
+      );
+  const [command, ...args] = rendererArgv;
   const child =
     override !== undefined
-      ? spawnProcess(override, { shell: true, stdio: "inherit", env: childEnv })
-      : spawnProcess(command, args, {
-          stdio: "inherit",
+      ? spawnProcess(override, {
+          shell: true,
+          stdio: persistentPopup ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
           env: childEnv,
+        })
+      : spawnProcess(command, args, {
+          stdio: persistentPopup ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+          env: childEnv,
+          ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
         });
+  const control = persistentPopup
+    ? attachTuiRendererControl(child, deps.popupControl ?? defaultPopupControl(deps.env))
+    : undefined;
   return new Promise<TuiRunResult>((resolve) => {
-    child.once("error", () => resolve({ status: "exited", code: 1 }));
-    child.once("exit", (code) => resolve({ status: "exited", code: code ?? 0 }));
+    child.once("error", () => {
+      control?.dispose();
+      resolve({ status: "exited", code: 1 });
+    });
+    child.once("exit", (code) => {
+      control?.dispose();
+      resolve({ status: "exited", code: code ?? 0 });
+    });
   });
+}
+
+async function runStationLink(
+  spawnProcess: typeof spawn,
+  workspaceDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<TuiRunResult> {
+  const child = spawnProcess("bun", ["run", "--silent", "--cwd", workspaceDir, "link:station"], {
+    stdio: "inherit",
+    env,
+  });
+  return new Promise<TuiRunResult>((resolve) => {
+    let settled = false;
+    const finish = (code: number) => {
+      if (settled) return;
+      settled = true;
+      resolve({ status: "exited", code });
+    };
+    child.once("error", () => finish(1));
+    child.once("exit", (code) => finish(code ?? 1));
+  });
+}
+
+function defaultPopupControl(env: CliEnv | undefined): TuiRendererControlAdapters {
+  const popupEnv = { ...(env ?? process.env) };
+  // The startup client is a delivery hint; runtime requests must follow the current popup claim.
+  delete popupEnv.STATION_FOCUS_CLIENT_ID;
+  return {
+    dismissPopup: () => dismissTmuxPopup({ env: popupEnv }),
+    resolveFocusOrigin: () => resolveTmuxPopupFocusOrigin({ env: popupEnv }),
+  };
 }
 
 function scheduleReconcileBeforeTui(input: {
