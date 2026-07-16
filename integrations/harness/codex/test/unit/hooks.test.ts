@@ -10,6 +10,7 @@ import {
   planCodexHooks,
   uninstallCodexHooks,
 } from "../../src/hooks";
+import { generatedStationHookEvents, parseTomlDocument } from "../../src/hooks/hookConfigEditor";
 
 describe("Codex hook setup", () => {
   it("plans hook config and generated script without writing files", async () => {
@@ -43,14 +44,42 @@ describe("Codex hook setup", () => {
       "PreCompact",
       "PostCompact",
       "SubagentStart",
-      "SubagentStop",
       "Stop",
     ]);
     expect(plan.commands.PreToolUse).toBe(hookScriptPath);
     expect(plan.after).toContain("[[hooks.PreToolUse]]");
+    expect(plan.after).not.toContain("[[hooks.SubagentStop]]");
     await expect(readFile(configPath, "utf8")).rejects.toThrow();
     await expect(readFile(baseConfigPath, "utf8")).rejects.toThrow();
     await expect(readFile(hookScriptPath, "utf8")).rejects.toThrow();
+  });
+
+  it("warns read-only about obsolete generated profile and base hooks with remediation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const codexHome = join(root, "codex-home");
+    const configPath = join(codexHome, "station.config.toml");
+    const baseConfigPath = join(codexHome, "config.toml");
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const env = { CODEX_HOME: codexHome };
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(configPath, codexConfigWithObsoleteHook(hookScriptPath), "utf8");
+    await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath, true), "utf8");
+    const profileBefore = await readFile(configPath, "utf8");
+    const baseBefore = await readFile(baseConfigPath, "utf8");
+
+    const doctor = await doctorCodexHooks({ hookScriptPath, enabled: true, env });
+
+    expect(doctor).toMatchObject({
+      status: "warn",
+      generatedGlobalCleanup: {
+        changed: true,
+        stale: ["PreToolUse", "SubagentStop"],
+      },
+    });
+    expect(doctor.message).toContain("SubagentStop");
+    expect(doctor.message).toContain("stn hooks install codex --yes");
+    await expect(readFile(configPath, "utf8")).resolves.toBe(profileBefore);
+    await expect(readFile(baseConfigPath, "utf8")).resolves.toBe(baseBefore);
   });
 
   it("installs into the station profile, cleans generated global entries, and preserves unrelated hooks", async () => {
@@ -61,8 +90,8 @@ describe("Codex hook setup", () => {
     const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
     const env = { CODEX_HOME: codexHome };
     await mkdir(codexHome, { recursive: true });
-    await writeFile(configPath, existingCodexConfig(), "utf8");
-    await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath), "utf8");
+    await writeFile(configPath, codexConfigWithObsoleteHook(hookScriptPath), "utf8");
+    await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath, true), "utf8");
 
     const installed = await installCodexHooks({
       hookScriptPath,
@@ -89,12 +118,21 @@ describe("Codex hook setup", () => {
     expect(installed.profileBackupPath).toBeDefined();
     expect(installed.baseBackupPath).toBeDefined();
     expect(installed.backupPaths).toHaveLength(2);
-    expect(installed.generatedGlobalCleanup.stale).toEqual(["PreToolUse"]);
+    expect(installed.generatedGlobalCleanup.stale).toEqual(["PreToolUse", "SubagentStop"]);
     expect(second.changed).toBe(false);
     expect(config).toContain("echo existing");
+    expect(config).toContain("echo user subagent stop");
     expect(config).toContain(hookScriptPath);
     expect(baseConfig).toContain("echo existing");
+    expect(baseConfig).toContain("echo user subagent stop");
     expect(baseConfig).not.toContain(hookScriptPath);
+    expect(baseConfig).not.toContain("Notify station");
+    expect(generatedStationHookEvents(parseTomlDocument(config), installed.commands)).not.toContain(
+      "SubagentStop",
+    );
+    expect(
+      generatedStationHookEvents(parseTomlDocument(baseConfig), installed.commands),
+    ).not.toContain("SubagentStop");
     expect(providerHookScriptRoutesByStationEnv(script, "codex")).toBe(true);
     expect(script).not.toContain("station-hook");
     expect(script).toContain("SOCKET_ARG=(--socket /tmp/station/run/observer.sock)");
@@ -213,7 +251,13 @@ describe("Codex hook setup", () => {
     await mkdir(codexHome, { recursive: true });
     await writeFile(configPath, existingCodexConfig(), "utf8");
     await installCodexHooks({ hookScriptPath, env });
-    await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath), "utf8");
+    const installedProfile = await readFile(configPath, "utf8");
+    await writeFile(
+      configPath,
+      `${installedProfile}\n${obsoleteSubagentStopHook(hookScriptPath)}`,
+      "utf8",
+    );
+    await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath, true), "utf8");
 
     const removed = await uninstallCodexHooks({ hookScriptPath, env });
     const config = await readFile(configPath, "utf8");
@@ -222,10 +266,17 @@ describe("Codex hook setup", () => {
     expect(removed.installed).toBe(false);
     expect(removed.scriptRemoved).toBe(true);
     expect(removed.generatedGlobalChanged).toBe(true);
+    expect(removed.profileBackupPath).toBeDefined();
+    expect(removed.baseBackupPath).toBeDefined();
+    expect(removed.backupPaths).toHaveLength(2);
     expect(config).toContain("echo existing");
+    expect(config).toContain("echo user subagent stop");
     expect(config).not.toContain(hookScriptPath);
     expect(baseConfig).toContain("echo existing");
+    expect(baseConfig).toContain("echo user subagent stop");
     expect(baseConfig).not.toContain(hookScriptPath);
+    expect(config).not.toContain("Notify station");
+    expect(baseConfig).not.toContain("Notify station");
     await expect(access(hookScriptPath)).rejects.toThrow();
   });
 
@@ -364,8 +415,12 @@ function existingCodexConfig(): string {
   ].join("\n");
 }
 
-function generatedGlobalCodexConfig(hookScriptPath: string): string {
-  return [
+function codexConfigWithObsoleteHook(hookScriptPath: string): string {
+  return `${existingCodexConfig()}\n${obsoleteSubagentStopHook(hookScriptPath)}`;
+}
+
+function generatedGlobalCodexConfig(hookScriptPath: string, includeObsolete = false): string {
+  const lines = [
     "[features]",
     "hooks = true",
     "",
@@ -381,6 +436,29 @@ function generatedGlobalCodexConfig(hookScriptPath: string): string {
     "[[hooks.PreToolUse.hooks]]",
     'type = "command"',
     `command = ${JSON.stringify(hookScriptPath)}`,
+    "timeout = 30",
+    'statusMessage = "Notify station"',
+    "",
+  ];
+  if (includeObsolete) {
+    lines.push(obsoleteSubagentStopHook("/legacy/state/hooks/station-codex-hook.sh"));
+  }
+  return lines.join("\n");
+}
+
+function obsoleteSubagentStopHook(generatedCommand: string): string {
+  return [
+    "[[hooks.SubagentStop]]",
+    'matcher = ".*"',
+    'owner = "user"',
+    "[[hooks.SubagentStop.hooks]]",
+    'type = "command"',
+    'command = "echo user subagent stop"',
+    "timeout = 10",
+    "",
+    "[[hooks.SubagentStop.hooks]]",
+    'type = "command"',
+    `command = ${JSON.stringify(generatedCommand)}`,
     "timeout = 30",
     'statusMessage = "Notify station"',
     "",

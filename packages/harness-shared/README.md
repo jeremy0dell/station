@@ -31,8 +31,8 @@ to the factory, which assembles the uniform interface methods.
 
 The spec carries only what differs between harnesses: the command (env var + fallback),
 `baseCapabilities`, the health probe args + diagnostics, `buildLaunch`/`classifyRun`/`normalize`,
-and optional `doctorChecks`/`hooksStatus` callbacks. Optional interface methods are attached only
-when the spec supplies them, so callers can feature-detect with `'doctorChecks' in provider`.
+and optional `doctorChecks`/`hooksStatus`/`acceptsPersistedEvent` callbacks. Optional interface
+methods are attached only when the spec supplies them, so callers can feature-detect them.
 
 ## Runtime event flow
 

@@ -47,6 +47,22 @@ export function listSessionHarnessExecutions(
   ).map(sessionHarnessExecutionFromRow);
 }
 
+export function replaceSessionHarnessExecution(
+  database: SqlDatabase,
+  input: {
+    provider: string;
+    sessionId: string;
+    harnessExecution?: PersistedSessionHarnessExecution;
+  },
+): void {
+  database
+    .prepare("DELETE FROM session_harness_executions WHERE provider = ? AND session_id = ?")
+    .run(input.provider, input.sessionId);
+  if (input.harnessExecution !== undefined) {
+    upsertSessionHarnessExecution(database, input.harnessExecution);
+  }
+}
+
 function upsertSessionHarnessExecution(
   database: SqlDatabase,
   binding: PersistedSessionHarnessExecution,

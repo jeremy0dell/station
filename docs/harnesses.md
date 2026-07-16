@@ -49,7 +49,7 @@ Coverage: full. `PermissionRequest` and `Notification` drive **needs attention**
 
 ### Codex (Full)
 
-Events (`integrations/harness/codex/src/hooks/hookConstants.ts`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SubagentStart`, `SubagentStop`, `Stop`.
+Events (`integrations/harness/codex/src/ingressRules.ts`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SubagentStart`, `Stop`.
 
 Hooks: a dedicated `station` profile (`station.config.toml`) under `~/.codex` calls `station-codex-hook.sh`.
 

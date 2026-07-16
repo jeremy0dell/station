@@ -15,6 +15,7 @@ import {
 } from "./observations.js";
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "./ports.js";
 import { providerObservationRetentionDays } from "./retention.js";
+import * as sessionHarnessDerivedState from "./sessionHarnessDerivedState.js";
 import * as sessionHarnessExecutionStore from "./sessionHarnessExecutions.js";
 import * as sessionRecoveryHandleStore from "./sessionRecoveryHandles.js";
 import * as sessionTurnReadinessStore from "./sessionTurnReadiness.js";
@@ -277,6 +278,43 @@ export function createSqliteObserverPersistence(
 
     listSessionHarnessExecutions: () =>
       transaction(sessionHarnessExecutionStore.listSessionHarnessExecutions),
+
+    repairSessionHarnessDerivedState: (input) =>
+      transaction((database) => {
+        const currentExecution = sessionHarnessExecutionStore.getSessionHarnessExecution(
+          database,
+          input,
+        );
+        const requestedReadiness =
+          input.turnReadiness !== undefined &&
+          sessionHarnessDerivedState.turnReadinessWasAcknowledged(
+            commandStore.listCommands(database),
+            input.turnReadiness,
+          )
+            ? undefined
+            : input.turnReadiness;
+        const currentReadiness = sessionTurnReadinessStore.readSessionTurnReadiness(
+          database,
+          input.sessionId,
+        );
+        if (
+          sessionHarnessDerivedState.sessionHarnessExecutionEqual(
+            currentExecution,
+            input.harnessExecution,
+          ) &&
+          sessionHarnessDerivedState.sessionTurnReadinessEqual(currentReadiness, requestedReadiness)
+        ) {
+          return { changed: false };
+        }
+        sessionHarnessExecutionStore.replaceSessionHarnessExecution(database, input);
+        sessionTurnReadinessStore.deleteSessionTurnReadiness(database, {
+          sessionId: input.sessionId,
+        });
+        if (requestedReadiness !== undefined) {
+          sessionTurnReadinessStore.upsertSessionTurnReadiness(database, requestedReadiness);
+        }
+        return { changed: true };
+      }),
 
     findRememberedHarnessProviderForWorktree: (input) =>
       transaction((database) =>

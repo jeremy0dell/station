@@ -21,8 +21,10 @@ import {
   isCodexAppServerMessage,
 } from "./appServer/index.js";
 import { codexHarnessError } from "./errors.js";
+import { isCodexForwardedEventType } from "./ingressRules.js";
 
 const nonEmptyStringSchema = z.string().min(1);
+const hookEventNameProbeSchema = z.object({ hook_event_name: nonEmptyStringSchema }).loose();
 const USER_INPUT_TOOL = "request_user_input";
 const nullableStringSchema = z.string().nullable();
 const permissionModeSchema = z
@@ -126,19 +128,6 @@ const SubagentStartEventSchema = z
   })
   .strict();
 
-const SubagentStopEventSchema = z
-  .object({
-    ...commonFields,
-    hook_event_name: z.literal("SubagentStop"),
-    turn_id: nonEmptyStringSchema,
-    agent_transcript_path: nullableStringSchema,
-    agent_id: nonEmptyStringSchema,
-    agent_type: nonEmptyStringSchema,
-    stop_hook_active: z.boolean(),
-    last_assistant_message: nullableStringSchema,
-  })
-  .strict();
-
 const StopEventSchema = z
   .object({
     ...commonFields,
@@ -158,7 +147,6 @@ export const CodexHookEventSchema = z.discriminatedUnion("hook_event_name", [
   PreCompactEventSchema,
   PostCompactEventSchema,
   SubagentStartEventSchema,
-  SubagentStopEventSchema,
   StopEventSchema,
 ]);
 
@@ -194,6 +182,10 @@ export function normalizeCodexRawEvent(
   context: HarnessEventContext,
 ): HarnessEventObservation[] {
   const observedAt = raw.observedAt ?? new Date().toISOString();
+  const eventNameProbe = hookEventNameProbeSchema.safeParse(raw.event);
+  if (eventNameProbe.success && !isCodexForwardedEventType(eventNameProbe.data.hook_event_name)) {
+    return [];
+  }
   const hookEvent = CodexHookEventSchema.safeParse(raw.event);
   if (!hookEvent.success) {
     if (isCodexAppServerMessage(raw.event)) {
@@ -299,15 +291,6 @@ export function statusFromCodexHookEvent(
       value: "idle",
       confidence: "high",
       reason: "Codex turn completed.",
-      source: "harness_event",
-      updatedAt: observedAt,
-    };
-  }
-  if (event.hook_event_name === "SubagentStop") {
-    return {
-      value: "working",
-      confidence: "medium",
-      reason: `Codex subagent ${event.agent_type} stopped.`,
       source: "harness_event",
       updatedAt: observedAt,
     };
@@ -423,9 +406,6 @@ function providerDataFromCodexEvent(event: CodexHookEvent): Record<string, unkno
   }
   if ("agent_type" in event && event.agent_type !== undefined) {
     providerData.agentType = event.agent_type;
-  }
-  if ("agent_transcript_path" in event) {
-    providerData.agentTranscriptPath = event.agent_transcript_path;
   }
   if ("trigger" in event) {
     providerData.trigger = event.trigger;

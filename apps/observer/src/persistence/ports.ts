@@ -28,6 +28,7 @@ import type {
   ProviderObservationKind,
   ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
+  SessionHarnessDerivedStateRepair,
   SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
@@ -145,6 +146,10 @@ export interface SessionStore {
     sessionId: string;
   }): Promise<PersistedSessionHarnessExecution | undefined>;
   listSessionHarnessExecutions(): Promise<PersistedSessionHarnessExecution[]>;
+  /** Idempotently replaces binding and readiness derived from superseded persisted events. */
+  repairSessionHarnessDerivedState(
+    input: SessionHarnessDerivedStateRepair,
+  ): Promise<{ changed: boolean }>;
   findRememberedHarnessProviderForWorktree(input: {
     projectId: string;
     worktreeId: string;

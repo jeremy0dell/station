@@ -5,18 +5,23 @@ import { codexHookAdapter } from "../../src/hookAdapter";
 
 const receivedAt = "2026-05-21T12:00:00.000Z";
 
-function hookEvent(payload: unknown): ProviderHookEvent {
+function hookEvent(payload: unknown, event = "PreToolUse"): ProviderHookEvent {
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     provider: "codex",
     kind: "harness",
-    event: "PreToolUse",
+    event,
     receivedAt,
     payload,
   };
 }
 
 describe("codex hook scope decision", () => {
+  it("checks event admission before station identity", () => {
+    const decision = codexHookAdapter.decideScope?.(hookEvent({}, "SubagentStop"));
+    expect(decision).toEqual({ action: "ignore", reason: "event-not-forwarded" });
+  });
+
   it("accepts station-launched sessions by env identity", () => {
     const decision = codexHookAdapter.decideScope?.(
       hookEvent({

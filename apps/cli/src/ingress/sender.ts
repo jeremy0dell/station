@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isClaudeForwardedEventType } from "@station/claude";
+import { isCodexForwardedEventType } from "@station/codex";
 import type { ObserverPaths } from "@station/config";
 import type {
   ProviderHookEvent,
@@ -217,6 +218,11 @@ export async function sendClaudeHookPayload(
   );
 }
 
+/**
+ * ADAPTER
+ *
+ * Translates Codex hook stdin into the shared provider ingress contract.
+ */
 export async function sendCodexHookPayload(
   input: SendCodexHookInput,
   deps: ProviderHookSenderDeps = {},
@@ -227,6 +233,14 @@ export async function sendCodexHookPayload(
     env: input.env ?? process.env,
   });
   const eventName = parseProviderHookEventName(enrichedPayload) ?? "unknown";
+  if (!isCodexForwardedEventType(eventName)) {
+    return ignoredProviderHookReceipt({
+      provider: "codex",
+      event: eventName,
+      clock,
+      hookId: deps.hookId,
+    });
+  }
   if (
     !hasStationOwnership(enrichedPayload) &&
     !hasCorrelatableCwd(enrichedPayload, input.projectRoots)
