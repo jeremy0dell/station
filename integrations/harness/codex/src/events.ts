@@ -472,7 +472,7 @@ function providerDataFromCodexEvent(event: CodexHookEvent): CodexHookProviderDat
   if (event.station_terminal_target_id !== undefined) {
     providerData.stationTerminalTargetId = event.station_terminal_target_id;
   }
-  return CodexHookProviderDataSchema.parse(providerData);
+  return providerData;
 }
 
 export function codexStationIdentityCwdMismatch(

@@ -69,12 +69,7 @@ const fixtureUrl = (path: string) =>
   new URL(`../../../../tests/contract-fixtures/${path}`, import.meta.url);
 
 async function loadJson(path: string): Promise<unknown> {
-  const contents = await readFile(fixtureUrl(path), "utf8");
-  try {
-    return JSON.parse(contents);
-  } catch (cause) {
-    throw new Error(`Contract fixture ${path} is not valid JSON.`, { cause });
-  }
+  return JSON.parse(await readFile(fixtureUrl(path), "utf8"));
 }
 
 function expectParses(schema: ZodType, value: unknown, label: string) {

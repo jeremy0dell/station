@@ -1,26 +1,26 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import {
+  codexHookAdapter,
+  codexHookPayloadToHarnessEventReport,
+  compactCodexHookPayload,
+  createCodexHarnessProvider,
+} from "@station/codex";
+import type { StationConfig } from "@station/config";
 import {
   type HarnessEventReport,
   ObserverEventHookInvocationSchema,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
 import { createFakeExternalCommandRunner, type ExternalCommandInput } from "@station/runtime";
-import { describe, expect, it } from "vitest";
-import {
-  codexHookAdapter,
-  codexHookPayloadToHarnessEventReport,
-  compactCodexHookPayload,
-  createCodexHarnessProvider,
-} from "../../../../integrations/harness/codex/src/index.js";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
   FakeTerminalProvider,
   FakeWorktreeProvider,
-} from "../../../../packages/testing/src/index.js";
+} from "@station/testing";
+import { describe, expect, it } from "vitest";
 import {
   createObserverCore,
   type createObserverEventBus,
@@ -35,7 +35,7 @@ describe("observer reconcile with Codex harness", () => {
   it("observes a tmux-bound Codex target as a provider-neutral harness run", async () => {
     const provider = createCodexHarnessProvider({
       now: () => new Date(now),
-      runner: async (input: ExternalCommandInput) => ({
+      runner: async (input) => ({
         command: input.command,
         args: input.args ?? [],
         stdout: "Logged in with ChatGPT\n",
@@ -221,11 +221,12 @@ describe("observer reconcile with Codex harness", () => {
     sqlite.close();
   });
 
-  it("keeps the scoped owner authoritative across inherited background activity and admits a later scoped execution", async () => {
+  it("keeps the scoped owner authoritative across background activity decay and admits a later scoped execution", async () => {
+    let currentTime = now;
     const { sqlite, persistence, eventBus, core, api } = createTestObserver({
       config,
       providers: codexProviders(),
-      clock: { now: () => new Date(now) },
+      clock: { now: () => new Date(currentTime) },
     });
 
     try {
@@ -338,23 +339,52 @@ describe("observer reconcile with Codex harness", () => {
         ]),
       );
 
-      await reportAndReconcile(
+      currentTime = "2026-05-21T12:16:05.000Z";
+      const decayedSnapshot = await core.reconcile("background-busy-status-decay");
+      expect(decayedSnapshot.rows[0]?.agent).toMatchObject({
+        state: "idle",
+        updatedAt: "2026-05-21T12:00:03.000Z",
+        turnReadiness: { token: "report_owner_a_idle" },
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({ nativeSessionId: "native_a", state: "idle" }),
+      ]);
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_owner_a_idle" }),
+      ]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({ target: { kind: "native-session", id: "native_a" } }),
+      ]);
+
+      const resumed = await reportAndReconcile(
         api,
         eventBus,
         codexLifecycleReport({
           reportId: "report_owner_a_resumed",
           nativeSessionId: "native_a",
           event: "PreToolUse",
-          observedAt: "2026-05-21T12:00:05.000Z",
+          observedAt: "2026-05-21T12:16:06.000Z",
         }),
       );
+      const workingEventIndex = resumed.events.findIndex(
+        (event) => event.type === "worktree.agentStateChanged" && event.agent?.state === "working",
+      );
+      const reconcileEventIndex = resumed.events.findIndex(
+        (event) => event.type === "observer.reconciled",
+      );
+      expect(workingEventIndex).toBeGreaterThanOrEqual(0);
+      expect(workingEventIndex).toBeLessThan(reconcileEventIndex);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
-        updatedAt: "2026-05-21T12:00:05.000Z",
+        updatedAt: "2026-05-21T12:16:06.000Z",
       });
       expect(core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
       await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
         expect.objectContaining({ nativeSessionId: "native_a", state: "working" }),
+      ]);
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({ target: { kind: "native-session", id: "native_a" } }),
       ]);
 
       await reportAndReconcile(
@@ -364,7 +394,7 @@ describe("observer reconcile with Codex harness", () => {
           reportId: "report_owner_a_final_idle",
           nativeSessionId: "native_a",
           event: "Stop",
-          observedAt: "2026-05-21T12:00:06.000Z",
+          observedAt: "2026-05-21T12:16:07.000Z",
         }),
       );
       await reportAndReconcile(
@@ -374,12 +404,12 @@ describe("observer reconcile with Codex harness", () => {
           reportId: "report_scoped_c_working",
           nativeSessionId: "native_c",
           event: "PreToolUse",
-          observedAt: "2026-05-21T12:00:07.000Z",
+          observedAt: "2026-05-21T12:16:08.000Z",
         }),
       );
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
-        updatedAt: "2026-05-21T12:00:07.000Z",
+        updatedAt: "2026-05-21T12:16:08.000Z",
       });
       await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
         expect.objectContaining({ nativeSessionId: "native_c", state: "working" }),
@@ -490,7 +520,7 @@ describe("observer reconcile with Codex harness", () => {
       expect(
         foreignStop.events.filter(
           (event) =>
-            (event.type === "worktree.agentStateChanged" && event.agent?.state === "idle") ||
+            (event.type === "worktree.agentStateChanged" && event.agent.state === "idle") ||
             (event.type === "session.updated" && event.patch.status?.value === "idle"),
         ),
       ).toEqual([]);
@@ -1478,18 +1508,7 @@ function codexRawHookEvent(input: {
 
 function parseNotificationReportId(stdin: string | undefined): string | undefined {
   if (stdin === undefined) throw new Error("Expected notification invocation stdin.");
-  let input: unknown;
-  try {
-    input = JSON.parse(stdin);
-  } catch (cause) {
-    throw new Error("Expected notification invocation JSON.", { cause });
-  }
-  const invocation = ObserverEventHookInvocationSchema.safeParse(input);
-  if (!invocation.success) throw new Error("Expected a valid notification invocation.");
-  if (invocation.data.event.type !== "worktree.agentStateChanged") {
-    throw new Error("Expected an agent-state notification invocation.");
-  }
-  return invocation.data.event.reportId;
+  return ObserverEventHookInvocationSchema.parse(JSON.parse(stdin)).event.reportId;
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {
@@ -1504,7 +1523,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {}): ProviderRegistry {
   const codex = createCodexHarnessProvider({
     now: () => new Date(now),
-    runner: async (input: ExternalCommandInput) => ({
+    runner: async (input) => ({
       command: input.command,
       args: input.args ?? [],
       stdout: "Logged in with ChatGPT\n",
@@ -1559,19 +1578,16 @@ function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {})
 function prefixedIds(prefix: string) {
   let command = 0;
   let event = 0;
-  let error = 0;
   let observation = 0;
   return {
     commandId: () => `${prefix}_cmd_${++command}`,
     eventId: () => `${prefix}_evt_${++event}`,
-    errorId: () => `${prefix}_err_${++error}`,
     observationId: () => `${prefix}_obs_${++observation}`,
   };
 }
 
 const config: StationConfig = {
   schemaVersion: 1,
-  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
