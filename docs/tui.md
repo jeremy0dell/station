@@ -14,7 +14,10 @@ Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, ru
 Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to the Bun renderer (dual-runtime, accepted for alpha):
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
-- Inside tmux, `stn` opens the read-only dashboard in a tmux popup, since tmux owns the panes there.
+- Inside tmux, `stn` opens the read-only dashboard in a tmux popup, since
+  tmux owns the panes there. Selecting a native Station session shows that it
+  runs in another terminal, dispatches no focus command, and keeps the popup
+  open.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
 ## Nested Workspaces
@@ -87,6 +90,10 @@ bun run dashboard                     # read-only dashboard renderer
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
   search, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
+- `terminal.focusable` describes external dashboard control, not native Station
+  interaction. Native row activation resolves an advertised managed attachment
+  and creates or reveals the local pane without dispatching `terminal.focus`;
+  no attachment leaves the overlay open with an actionable notice.
 
 ## Surface Rules
 

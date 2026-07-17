@@ -164,9 +164,11 @@ The split is allowed because both pieces are outer wiring. Application modules
 must not compensate for it by selecting concrete adapters at runtime.
 
 The Station terminal adapter may use Station Host when CLI composition enables
-host-backed terminals. Observer application code knows only the injected
-`ManagedTerminalLifecycle` and its opaque managed-terminal attachment; Station
-resolves that attachment to host socket and PTY mechanics at its own boundary.
+host-backed terminals. Host backing supplies process lifecycle, close, and opaque
+attachment identity, but not external presentation control: native targets remain
+non-focusable from dashboards. Observer application code knows only the injected
+`ManagedTerminalLifecycle`; Station resolves its attachment to host socket and PTY
+mechanics at its own boundary and selects or reveals the session locally.
 
 ## Port, Actor, And Adapter Map
 
@@ -181,7 +183,7 @@ ownership even where current ownership is still a deviation.
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
-| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Station owns host attachment resolution. |
+| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
 | Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing and compatibility admission for observations persisted by earlier builds. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |

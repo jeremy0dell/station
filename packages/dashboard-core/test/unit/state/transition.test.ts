@@ -249,24 +249,28 @@ describe("TUI screen transitions", () => {
     ]);
   });
 
-  it("shows a notice instead of dispatching focus when the agent's terminal is not focusable", () => {
+  it("keeps the dashboard active when a native session is not externally focusable", () => {
     const base = createCommandSnapshot("idle");
     const snapshot = {
       ...base,
       sessions: base.sessions.map((session) =>
         session.terminal === undefined
           ? session
-          : { ...session, terminal: { ...session.terminal, focusable: false } },
+          : {
+              ...session,
+              terminal: { ...session.terminal, provider: "native", focusable: false },
+            },
       ),
     };
     const transition = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
       input: "1",
     });
 
-    // A Station-hosted (non-focusable) agent must not spam a focus the provider
-    // can only reject: no command is dispatched, just a one-time info notice.
     expect(transition.commands).toBeUndefined();
+    expect(transition.operations).toBeUndefined();
+    expect(transition.state.screen).toEqual({ name: "dashboard" });
     expect(transition.state.toasts.at(-1)?.toast).toMatchObject({ kind: "info" });
+    expect(transition.state.toasts.at(-1)?.toast.message).toContain('"native" terminal');
     expect(transition.state.toasts.at(-1)?.toast.message).toContain("can't be focused");
   });
 

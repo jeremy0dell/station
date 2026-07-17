@@ -1210,9 +1210,6 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     };
   }
 
-  // A snapshot whose ROW_ID is Station-hosted (terminal.provider "native")
-  // rather than the fixture's tmux, so externalTerminalProviderForWorktree
-  // returns undefined and the existing-session path focuses instead of warning.
   function stationHostedSnapshot(
     terminalOverrides: Partial<NonNullable<WorktreeRow["terminal"]>> = {},
   ): StationSnapshot {
@@ -1233,6 +1230,29 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
           ...session,
           terminal: { ...session.terminal, provider: "native", ...terminalOverrides },
         };
+      }),
+    };
+  }
+
+  function liveAgentWithoutTerminalSnapshot(): StationSnapshot {
+    const snapshot = manyProjectsSnapshot();
+    return {
+      ...snapshot,
+      rows: snapshot.rows.map((row): WorktreeRow => {
+        if (row.id !== WORKTREE_ID) {
+          return row;
+        }
+        const next = { ...row };
+        delete next.terminal;
+        return next;
+      }),
+      sessions: snapshot.sessions.map((session) => {
+        if (session.id !== ROW_ID) {
+          return session;
+        }
+        const next = { ...session };
+        delete next.terminal;
+        return next;
       }),
     };
   }
@@ -1409,44 +1429,42 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
-  it("focuses the existing session for a focusable Station-hosted worktree and closes the overlay", async () => {
-    // The live agent here is Station-hosted (terminal.provider "native"), so
-    // externalTerminalProviderForWorktree returns undefined: instead of warning,
-    // Station dispatches a terminal.focus, waits for it, then lands on the pane.
-    const { store, dispatch, settle, observerService } = agentHarness(
-      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      stationHostedSnapshot({ focusable: true }),
+  it("attaches a non-focusable native session from its slot key and acknowledges readiness", async () => {
+    const attachment = {
+      kind: "managed-terminal",
+      terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
+    } as const;
+    const resolutions: unknown[] = [];
+    const scripted = createScriptedTerminal();
+    const { store, pressKey, settle, observerService, stationViewStore } = agentHarness(
+      {
+        kind: "existing-session",
+        sessionId: "ses_wt_station_idle",
+        harnessProvider: "codex",
+        attachment,
+      },
+      withTurnReadiness(stationHostedSnapshot({ focusable: false })),
+      {
+        resolve: async (candidate) => {
+          resolutions.push(candidate);
+          return () => scripted.terminal;
+        },
+      },
     );
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    dispatch({ kind: "row", rowId: ROW_ID });
+    expect(pressKey(slotKeyFor(stationViewStore))).toBe(true);
     await settle();
 
+    expect(resolutions).toEqual([attachment]);
     expect(observerService.dispatched).toEqual([
-      { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
-    ]);
-    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-  });
-
-  it("acknowledges a ready turn after focusing an existing Station-hosted session", async () => {
-    const { store, dispatch, settle, observerService } = agentHarness(
-      { kind: "existing-session", sessionId: "ses_wt_station_idle", harnessProvider: "codex" },
-      withTurnReadiness(stationHostedSnapshot({ focusable: true })),
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.dispatched).toEqual([
-      { type: "terminal.focus", payload: { sessionId: "ses_wt_station_idle" } },
       {
         type: "session.acknowledgeTurn",
         payload: { sessionId: "ses_wt_station_idle", token: "report_station_ready" },
       },
     ]);
-    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1", "cmd_tui_1"]);
+    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    expect(selectStationOverlayVisible(store.getState())).toBe(false);
   });
 
   it("toasts for an existing Station-hosted worktree with no attachable host PTY", async () => {
@@ -1560,14 +1578,14 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     } as const;
     const resolutions: unknown[] = [];
     const scripted = createScriptedTerminal();
-    const { store, dispatch, settle } = agentHarness(
+    const { store, calls, dispatch, settle, observerService } = agentHarness(
       {
         kind: "existing-session",
         sessionId: "ses_live",
         harnessProvider: "codex",
         attachment,
       },
-      stationHostedSnapshot({ focusable: true }),
+      stationHostedSnapshot({ focusable: false }),
       {
         resolve: async (candidate) => {
           resolutions.push(candidate);
@@ -1581,6 +1599,11 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     await settle();
 
     expect(resolutions).toEqual([attachment]);
+    expect(calls).toEqual([
+      `ensure:${AGENT_PANE_ID}:${CWD}::`,
+      `createPane:${AGENT_PANE_ID}:primary-agent`,
+      `setPrimaryAgent:${AGENT_PANE_ID}:ses_live:${attachment.terminalTargetId}`,
+    ]);
     expect(
       store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.agentIdentity,
     ).toEqual({
@@ -1588,6 +1611,8 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       terminalTargetId: attachment.terminalTargetId,
       harnessProvider: "codex",
     });
+    expect(observerService.dispatched).toEqual([]);
+    expect(selectStationOverlayVisible(store.getState())).toBe(false);
   });
 
   it("toasts attachment resolution failures without creating or locally spawning a pane", async () => {
@@ -1695,21 +1720,23 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   it("toasts and keeps the overlay open when focusing an existing session is rejected", async () => {
     const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      stationHostedSnapshot({ focusable: true }),
+      liveAgentWithoutTerminalSnapshot(),
     );
     observerService.nextReceipt = {
       commandId: "cmd_tui_1",
       accepted: false,
       status: "rejected",
-      error: { tag: "ClientObserverError", code: "STATION_FOCUS_REJECTED", message: "Focus was rejected." },
+      error: {
+        tag: "ClientObserverError",
+        code: "STATION_FOCUS_REJECTED",
+        message: "Focus was rejected.",
+      },
     };
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
     dispatch({ kind: "row", rowId: ROW_ID });
     await settle();
 
-    // The focus is dispatched but rejected, so focusExistingSession returns false and
-    // the land-on-pane tail never runs: error toast, overlay stays open.
     expect(observerService.dispatched).toEqual([
       { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
     ]);
@@ -1723,12 +1750,16 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   it("toasts and keeps the overlay open when the focus command completion fails", async () => {
     const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      stationHostedSnapshot({ focusable: true }),
+      liveAgentWithoutTerminalSnapshot(),
     );
     observerService.nextCompletion = {
       status: "failed",
       commandId: "cmd_tui_1",
-      error: { tag: "ClientObserverError", code: "STATION_FOCUS_FAILED", message: "Focus never completed." },
+      error: {
+        tag: "ClientObserverError",
+        code: "STATION_FOCUS_FAILED",
+        message: "Focus never completed.",
+      },
     };
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
@@ -1746,10 +1777,14 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   it("toasts and keeps the overlay open when the focus dispatch throws", async () => {
     const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      stationHostedSnapshot({ focusable: true }),
+      liveAgentWithoutTerminalSnapshot(),
     );
     observerService.dispatch = async () => {
-      throw { tag: "ClientObserverError", code: "STATION_FOCUS_THREW", message: "Observer is gone." };
+      throw {
+        tag: "ClientObserverError",
+        code: "STATION_FOCUS_THREW",
+        message: "Observer is gone.",
+      };
     };
     store.actions.openOverlay(STATION_OVERLAY_ID);
 

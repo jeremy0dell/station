@@ -38,10 +38,10 @@ const DEFAULT_ROWS = 24;
 export type StationTerminalProviderOptions = {
   clock?: RuntimeClock;
   /**
-   * When present (the `stationPersistentAgents` flag is on), the provider is
-   * host-backed: it spawns into / focuses / closes / lists the standalone
-   * station-station-host. Absent ⇒ the Station UI owns the PTY locally and focus/close
-   * throw, capabilities stay false.
+   * When present (the `stationPersistentAgents` flag is on), Station Host supplies
+   * spawn, list, close, and attachment lifecycle. Native Station still owns
+   * presentation, so external focus remains unsupported. Without Host, the Station
+   * UI owns the PTY locally and close is unsupported too.
    */
   host?: StationHostController;
 };
@@ -50,8 +50,8 @@ export type StationTerminalProviderOptions = {
  * ADAPTER
  *
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
- * mode uses `host.list` as liveness truth and exposes only opaque target identity
- * for Station-side attachment resolution.
+ * mode supplies process lifecycle and opaque attachment identity. Native
+ * presentation remains locally owned by Station and is never externally focusable.
  */
 export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
@@ -60,7 +60,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly #host: StationHostController | undefined;
   readonly #targets = new Map<TerminalTargetId, TerminalTargetObservation>();
   // Targets backed by a host PTY (spawned via launchProcess or rebuilt from
-  // host.list). listTargets drops ONLY these when their PTY is gone; a UI-hosted
+  // host.list). listTargets drops ONLY these when their process is gone; a UI-hosted
   // fallback target (host was unavailable at launch) is kept until releaseTarget.
   readonly #hostBackedTargets = new Set<string>();
 
@@ -73,8 +73,8 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     const hostBacked = this.#host !== undefined;
     return {
       canOpenWorkspace: true,
-      // Observer-side focus/close are real only when a host owns the PTY.
-      canFocusTarget: hostBacked,
+      // Host backing grants lifecycle cleanup and attachment, not presentation control.
+      canFocusTarget: false,
       canCloseTarget: hostBacked,
       canCaptureOutput: false,
       canSendInput: false,
@@ -151,9 +151,9 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     for (const entry of live) {
       // Aux PTYs are owned by the Station UI (splits / [+sh] shells). They must
       // never enter reconcile: #rebuildObservation stamps every rebuilt entry
-      // `main-agent`, which would mint phantom sessions/runs and rank them for
-      // focus/close. Excluding them here is the single chokepoint — every other
-      // host.list consumer reads the observations this produces, not host.list.
+      // `main-agent`, which would mint phantom sessions/runs and expose them for
+      // lifecycle cleanup. Excluding them here is the single chokepoint — every
+      // other host.list consumer reads the observations this produces, not host.list.
       if (!entry.alive || entry.kind === "aux" || aliveById.has(entry.terminalTargetId)) {
         continue;
       }
@@ -264,10 +264,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   }
 
   async focusTarget(targetId: TerminalTargetId): Promise<void> {
-    if (this.#host === undefined) {
-      throw this.#hostedError(targetId, "focus");
-    }
-    await this.#host.client().focus(await this.#requirePtyId(targetId));
+    throw this.#hostedError(targetId, "focus");
   }
 
   async closeTarget(targetId: TerminalTargetId): Promise<void> {
@@ -324,7 +321,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       id: entry.terminalTargetId as TerminalTargetId,
       provider: this.id,
       state: "open",
-      focusable: true,
+      focusable: false,
       closeable: true,
       confidence: "high",
       reason: "Rehydrated from station-host liveness after reconnect.",
@@ -347,13 +344,18 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   ): StationTerminalProviderError {
     const target = this.#targets.get(targetId);
     const options: ConstructorParameters<typeof StationTerminalProviderError>[2] = {
-      hint: `This agent is hosted by the Station UI; ${action} it from Station instead.`,
+      hint:
+        action === "focus"
+          ? "Open native Station and select the session there."
+          : "This agent is hosted by the Station UI; close it from Station instead.",
     };
     if (target?.worktreeId !== undefined) options.worktreeId = target.worktreeId;
     if (target?.sessionId !== undefined) options.sessionId = target.sessionId;
     return new StationTerminalProviderError(
       "TERMINAL_STATION_HOSTED",
-      `The station terminal provider cannot ${action} an externally-hosted target.`,
+      action === "focus"
+        ? "Native Station sessions cannot be focused from an external dashboard."
+        : "The station terminal provider cannot close an externally-hosted target.",
       options,
     );
   }
