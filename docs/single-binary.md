@@ -48,13 +48,13 @@ Non-goals:
 Pinned so the release job, install script, and acceptance suite agree.
 
 | Axis | Policy |
-|------|--------|
+| ------ | -------- |
 | Targets | `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`. No Windows. |
 | Build runners | Native per target (no cross-compile — only the host-matching `@opentui/core-*` optional dep installs). Use *currently available* GitHub-hosted labels resolved at implementation time; do **not** hard-code `macos-13` (F9 — Intel macOS labels are being retired). Pin exact labels in the workflow with a comment naming the check date. |
 | macOS floor | Match the oldest OS the chosen Intel/arm runners image supports; state it in release notes. |
 | Linux floor | glibc only for v1.1 (bun's default). Declare the built-against glibc version (the runner's) as the floor; musl is a later target, not silently implied. |
 | CPU | x64 uses Bun's explicit `-baseline` targets for older SSE4.2-era CPUs; arm64 = Apple/ARMv8. |
-| Artifact | `stn-v{ver}-{darwin|linux}-{arm64|x64}.tar.gz`. **Manifest below is exhaustive.** |
+| Artifact | `stn-v{ver}-{platform}-{arch}.tar.gz`, using the target values above. **Manifest below is exhaustive.** |
 
 **Artifact manifest** (every file the binary needs on disk that
 `bun build --compile` does *not* embed — F8):
