@@ -377,8 +377,9 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForPaneContent(
       fixture,
       firstPopup,
-      isAcceptanceDashboardContent,
-      "deterministic real dashboard did not render",
+      (content) =>
+        isAcceptanceDashboardContent(content) && content.includes("20 agents · 1 open PR"),
+      "deterministic real dashboard did not render configured widgets",
     );
     const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, firstPopup, process.pid);
     const popupAttach = await waitForPopupAttachRecord(fixture);
@@ -388,7 +389,21 @@ describeRealTmux("real tmux dev popup routing", () => {
 
     const baseline = await captureStableFrame(fixture);
     assertStructuralDashboardFrame(baseline);
+    assertConfiguredWidgetChrome(baseline.lines[0] ?? "", "20 agents · 1 open PR");
     expect(baseline).toEqual(await readExpectedDashboardFrame());
+
+    await fixture.ptyClient.write(Buffer.from("W", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) =>
+        content.includes("[on ] fleet") &&
+        content.includes("[on ] open PRs") &&
+        !content.includes("no widgets yet"),
+      "widget settings did not receive the configured standalone widget definitions",
+    );
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
+    await waitForExactFrame(fixture, baseline);
 
     await fixture.ptyClient.write(Buffer.from("?", "utf8"));
     await waitForPaneContent(
@@ -414,6 +429,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       await resizeDashboardSurface(fixture, dimensions);
       const resized = await captureStableFrame(fixture);
       assertStructuralDashboardFrame(resized);
+      assertConfiguredWidgetChrome(resized.lines[0] ?? "", "20 agents · 1 open PR");
       expectDashboardRuntimeUnchanged(
         firstRuntime,
         await currentDashboardRuntimeEvidence(fixture, firstPopup, process.pid),
@@ -428,9 +444,12 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForPaneContent(
       fixture,
       secondPopup,
-      isAcceptanceDashboardContent,
-      "dashboard did not render after outer-input dismissal and reopen",
+      (content) =>
+        isAcceptanceDashboardContent(content) && content.includes("20 agents · 1 open PR"),
+      "dashboard did not render configured widgets after outer-input dismissal and reopen",
     );
+    const reopenedFrame = await captureStableFrame(fixture);
+    assertConfiguredWidgetChrome(reopenedFrame.lines[0] ?? "", "20 agents · 1 open PR");
     const reopened = await currentDashboardRuntimeEvidence(fixture, secondPopup, process.pid);
     expect(reopened.panePid).toBe(firstRuntime.panePid);
     expect(reopened.cliPid).toBe(firstRuntime.cliPid);
@@ -698,6 +717,9 @@ describeRealTmux("real tmux dev popup routing", () => {
         `${geometry.label} dashboard frame did not converge`,
       );
       assertDashboardFrameGeometry(content, geometry.pane, geometry.label);
+      if (geometry.pane.columns === 80 || geometry.pane.columns === 99) {
+        assertConfiguredWidgetChrome(dashboardFrameLines(content)[0] ?? "");
+      }
 
       const processes = await waitForDashboardProcessEvidence(fixture, pane);
       recordRuntimeEvidence(fixture, nestedClient, pane, processes);
@@ -2586,6 +2608,16 @@ function framesEqual(left: CapturedFrame, right: CapturedFrame): boolean {
 function assertStructuralDashboardFrame(frame: CapturedFrame): void {
   expect(frame.lines).toHaveLength(frame.rows);
   expect(frame.lines.at(-1)).toContain("? help");
+}
+
+function assertConfiguredWidgetChrome(titleRow: string, expectedWidgets?: string): void {
+  expect(titleRow).toContain("station · overview");
+  expect(titleRow).toContain("[+]");
+  if (expectedWidgets === undefined) {
+    expect(titleRow).toMatch(/\d+ agents? · \d+ open PRs?/u);
+  } else {
+    expect(titleRow).toContain(expectedWidgets);
+  }
 }
 
 async function waitForDashboardRuntimeEvidence(

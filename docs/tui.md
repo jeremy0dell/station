@@ -12,6 +12,10 @@ Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, ru
 - `station/src/dashboardRenderer/main.tsx` — the standalone observer-backed dashboard (live
   observer data and commands, no panes).
 
+Both entry points load `[tui].widgets` from the runtime config and render the same
+configured-widget title chrome; widget settings update that shared config when a
+config path is available.
+
 Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to the Bun renderer (dual-runtime, accepted for alpha):
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).

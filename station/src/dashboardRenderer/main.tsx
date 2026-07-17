@@ -6,6 +6,11 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { createTuiStore } from "@station/dashboard-core";
+import {
+  loadStationTuiConfig,
+  startWidgetConfigWrites,
+  type WidgetConfigWrites,
+} from "../config/tuiConfig.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
@@ -31,7 +36,8 @@ function dashboardHotSlots(): DashboardHotSlots {
 
 /**
  * Callable entry for the interactive observer-backed dashboard without native Station panes.
- * Source HMR recreates renderer/client resources while preserving the Bun process and parent IPC.
+ * Configured widgets seed the live store and share the config-write subscription;
+ * normal process exits await widget durability before releasing renderer resources.
  */
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
@@ -41,10 +47,27 @@ export async function runDashboardMain(): Promise<void> {
   hotSlots.__stationDashboardHotDispose?.();
   hotSlots.__stationDashboardHotRenderer?.destroy();
 
+  const tuiConfig = await loadStationTuiConfig({ env });
+  // Print config degradation before OpenTUI takes over the terminal.
+  if (tuiConfig.warning !== undefined) {
+    console.error(`[station] ${tuiConfig.warning}`);
+  }
+
   let disposeResources = (): void => {};
+  let widgetConfigWrites: WidgetConfigWrites | undefined;
+  let exiting = false;
   function exit(code: number): void {
-    disposeResources();
-    process.exit(code);
+    if (exiting) {
+      return;
+    }
+    exiting = true;
+    void (async () => {
+      if (widgetConfigWrites !== undefined) {
+        await widgetConfigWrites.dispose();
+      }
+      disposeResources();
+      process.exit(code);
+    })();
   }
   const popupRuntime = createPopupRuntime(
     env,
@@ -58,6 +81,10 @@ export async function runDashboardMain(): Promise<void> {
     service: client.service,
     clientLabel: "station",
     onExit: exit,
+    initialState: {
+      widgets: tuiConfig.config?.widgets ?? [],
+      widgetsPersisted: tuiConfig.configPath !== undefined,
+    },
     ...popupRuntime.storeOptions,
   });
   const mouseEffects: DashboardMouseEffects = {
@@ -79,6 +106,9 @@ export async function runDashboardMain(): Promise<void> {
     },
     openUrl: openExternalUrl,
   };
+  if (tuiConfig.configPath !== undefined) {
+    widgetConfigWrites = startWidgetConfigWrites(store, tuiConfig.configPath);
+  }
 
   // Attach the snapshot source first, then start the client runtime feeding it
   // (the order Station's lifecycle uses), so the first frame already sees the
@@ -97,6 +127,7 @@ export async function runDashboardMain(): Promise<void> {
     disposed = true;
     root?.unmount();
     popupRuntime.dispose();
+    void widgetConfigWrites?.dispose();
     detachSource();
     void client.stop();
     renderer?.destroy();
