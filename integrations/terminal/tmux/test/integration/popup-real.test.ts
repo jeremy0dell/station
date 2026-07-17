@@ -11,6 +11,9 @@ import {
   STATION_SCHEMA_VERSION,
   type StationCommand,
   type StationEvent,
+  type StationSnapshot,
+  StationSnapshotSchema,
+  type TerminalTargetId,
 } from "@station/contracts";
 import { startProtocolServer, type UnixSocketServer } from "@station/protocol";
 import {
@@ -19,10 +22,13 @@ import {
   stationObserverBuildVersion,
 } from "@station/runtime";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { mockObserverSnapshot } from "../../../../../station/src/sources/fixtures/mockObserverSnapshot.js";
 import { buildManagedFastPopupRunShellCommand, openTmuxPopup } from "../../src/popup";
 import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
+import { TmuxProvider } from "../../src/provider";
 import { shellQuote } from "../../src/shell";
+import { buildTmuxTargetId } from "../../src/topology";
 
 const execFileAsync = promisify(execFile);
 const runRealTmux = process.env.STATION_REAL_TMUX === "1";
@@ -32,7 +38,14 @@ const builtCliPath = join(checkoutRoot, "apps/cli/dist/main.js");
 const builtBinaryPath = join(checkoutRoot, "station/dist/bin/stn");
 const persistentUiSessionName = "_station-ui";
 const rendererEntry = "src/dashboardRenderer/main.tsx";
+const realDashboardFrameUrl = new URL(
+  "../fixtures/real-dashboard-99x25.frame.json",
+  import.meta.url,
+);
 const outputTailBytes = 64 * 1024;
+const popupBorderColumns = 2;
+const popupBorderRows = 2;
+const nestedTmuxStatusRows = 1;
 const ptyBridgeScript = `
 import fcntl
 import os
@@ -42,9 +55,11 @@ import struct
 import sys
 import termios
 
+control_fd = 3
 rows = int(sys.argv[1])
 columns = int(sys.argv[2])
 winsize = struct.pack("HHHH", rows, columns, 0, 0)
+os.set_inheritable(control_fd, False)
 pid, fd = pty.fork()
 if pid == 0:
     fcntl.ioctl(sys.stdin.fileno(), termios.TIOCSWINSZ, winsize)
@@ -52,13 +67,34 @@ if pid == 0:
     os.execvp(sys.argv[3], sys.argv[3:])
 
 fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+control_buffer = b""
+control_open = True
 while True:
-    readable, _, _ = select.select([sys.stdin.buffer, fd], [], [])
+    inputs = [sys.stdin.buffer, fd]
+    if control_open:
+        inputs.append(control_fd)
+    readable, _, _ = select.select(inputs, [], [])
     if sys.stdin.buffer in readable:
         data = os.read(sys.stdin.fileno(), 4096)
         if not data:
             break
         os.write(fd, data)
+    if control_open and control_fd in readable:
+        data = os.read(control_fd, 4096)
+        if not data:
+            control_open = False
+        else:
+            control_buffer += data
+            while b"\\n" in control_buffer:
+                line, control_buffer = control_buffer.split(b"\\n", 1)
+                parts = line.decode("ascii").split()
+                if len(parts) != 3 or parts[0] != "resize":
+                    raise ValueError("invalid PTY control command")
+                next_rows = int(parts[1])
+                next_columns = int(parts[2])
+                if next_rows <= 0 or next_columns <= 0:
+                    raise ValueError("PTY dimensions must be positive")
+                fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", next_rows, next_columns, 0, 0))
     if fd in readable:
         try:
             data = os.read(fd, 4096)
@@ -96,6 +132,7 @@ type TrackedChild = {
 type TmuxPtyClient = TrackedChild & {
   clientName: string;
   close(): Promise<void>;
+  resize(rows: number, columns: number): Promise<void>;
   write(bytes: Uint8Array): Promise<void>;
 };
 
@@ -103,6 +140,7 @@ type MarkerFixture = {
   ptyClient?: TmuxPtyClient;
   root: string;
   wrapper: string;
+  wrapperLogPath: string;
 };
 
 type DashboardFixture = {
@@ -123,6 +161,7 @@ type DashboardFixture = {
   rendererPids: Set<number>;
   root: string;
   wrapper: string;
+  wrapperLogPath: string;
 };
 
 type Dimensions = {
@@ -166,6 +205,41 @@ type DashboardProcessEvidence = {
   renderer: RendererEvidence;
 };
 
+type DashboardRuntimeEvidence = {
+  cliPid: number;
+  nestedClientPid: number;
+  observerPid: number;
+  panePid: number;
+  popupCliPid: number;
+  rendererPid: number;
+  tmuxServerPid: number;
+};
+
+type CapturedFrame = Dimensions & {
+  lines: string[];
+};
+
+const CapturedFrameSchema = z
+  .object({
+    columns: z.number().int().positive(),
+    rows: z.number().int().positive(),
+    lines: z.array(z.string()),
+  })
+  .strict()
+  .refine((frame) => frame.lines.length === frame.rows, {
+    message: "captured frame line count must equal its row count",
+  })
+  .refine((frame) => frame.lines.every((line) => line.length === frame.columns), {
+    message: "captured frame lines must equal its column count",
+  });
+
+type TmuxClientTarget = {
+  clientName: string;
+  paneId: string;
+  sessionName: string;
+  windowId: string;
+};
+
 describeRealTmux("real tmux dev popup routing", () => {
   let cleanup: (() => Promise<void>) | undefined;
   let tmux: string;
@@ -195,13 +269,15 @@ describeRealTmux("real tmux dev popup routing", () => {
 
   it("plain popup routing attaches the registered dev UI and reuses its process", async () => {
     const root = await makeCheckoutTempRoot();
+    const wrapperLogPath = join(root, "tmux-wrapper.log");
     const wrapper = await writeTmuxWrapper({
       root,
       tmux,
       label: `stn-popup-${process.pid}-${Date.now()}`,
       attachLogPath: join(root, "attach.log"),
+      wrapperLogPath,
     });
-    const fixture: MarkerFixture = { root, wrapper };
+    const fixture: MarkerFixture = { root, wrapper, wrapperLogPath };
     cleanup = () => cleanupMarkerFixture(fixture);
 
     const baseSession = "base";
@@ -259,78 +335,93 @@ describeRealTmux("real tmux dev popup routing", () => {
     await expect(readFile(normalMarker, "utf8")).resolves.toBe("start\n");
   }, 60_000);
 
-  it("built dashboard renders through the outer popup, accepts input, exposes geometry, and reuses its renderer", async () => {
-    const fixture = await createDashboardFixture(tmux);
+  it("renders an exact real dashboard and routes outer keyboard and resize without replacing the renderer", async () => {
+    const fixture = await createDashboardFixture(tmux, {
+      height: "100%",
+      position: "C",
+      width: "100%",
+    });
     cleanup = () => cleanupDashboardFixture(fixture);
+    const snapshot = deterministicDashboardSnapshot(fixture.projectRoot);
+    fixture.observerServer = await startProtocolServer({
+      socketPath: fixture.observerSocketPath,
+      api: deterministicPopupObserver(snapshot),
+    });
+    delete fixture.env.STATION_SOURCE;
 
     await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    await tmuxExec(fixture.wrapper, ["set-option", "-g", "mouse", "on"], fixture.env);
     fixture.ptyClient = await startTmuxPtyClient({
       tmux: fixture.wrapper,
       sessionName: "base",
       env: fixture.env,
+      initialDimensions: outerDimensionsForDashboard({ rows: 40, columns: 120 }),
     });
 
     const firstPopup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
-    const firstDashboard = await waitForPaneContent(
+    await waitForPaneContent(
       fixture,
       firstPopup,
-      isDashboardContent,
-      "real dashboard did not render",
+      isAcceptanceDashboardContent,
+      "deterministic real dashboard did not render",
     );
-    expect(firstDashboard).toContain("Station snapshot mock");
-
-    const firstClient = await waitForNestedClient(fixture);
-    const firstPane = await readPaneEvidence(fixture);
-    const firstProcesses = await waitForDashboardProcessEvidence(fixture, firstPane);
-    const firstRenderer = firstProcesses.renderer;
+    const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, firstPopup, process.pid);
     const popupAttach = await waitForPopupAttachRecord(fixture);
-    await recordObserverPid(fixture);
-    recordRuntimeEvidence(fixture, firstClient, firstPane, firstProcesses);
-    assertPositiveDimensions({
-      popup: popupAttach,
-      nestedClient: firstClient,
-      pane: firstPane,
-      renderer: firstRenderer,
-    });
-    expect(firstRenderer.tty).toBe(firstPane.tty);
+    expect(popupAttach).toMatchObject({ rows: 41, columns: 120 });
+    await expectConvergedDashboardDimensions(fixture, { rows: 40, columns: 120 });
+    await resizeDashboardSurface(fixture, { rows: 25, columns: 99 });
+
+    const baseline = await captureStableFrame(fixture);
+    assertStructuralDashboardFrame(baseline);
+    expect(baseline).toEqual(await readExpectedDashboardFrame());
 
     await fixture.ptyClient.write(Buffer.from("?", "utf8"));
     await waitForPaneContent(
       fixture,
       firstPopup,
       (content) => content.includes("station help"),
-      "printable input did not open station help",
+      "outer keyboard input did not open station help",
     );
     await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForPaneContent(
       fixture,
       firstPopup,
-      (content) => isDashboardContent(content) && !content.includes("station help"),
+      (content) => isAcceptanceDashboardContent(content) && !content.includes("station help"),
       "Esc did not return from station help to the dashboard",
     );
+    await waitForExactFrame(fixture, baseline);
 
-    await closeOuterPopup(fixture);
-    await expectSuccessfulExit(firstPopup, 10_000);
+    for (const dimensions of [
+      { rows: 24, columns: 80 },
+      { rows: 25, columns: 99 },
+      { rows: 40, columns: 120 },
+    ]) {
+      await resizeDashboardSurface(fixture, dimensions);
+      const resized = await captureStableFrame(fixture);
+      assertStructuralDashboardFrame(resized);
+      expectDashboardRuntimeUnchanged(
+        firstRuntime,
+        await currentDashboardRuntimeEvidence(fixture, firstPopup, process.pid),
+      );
+    }
+
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForNestedClientGone(fixture);
+    await expectSuccessfulExit(firstPopup, 10_000);
 
     const secondPopup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
-    const secondClient = await waitForNestedClient(fixture);
     await waitForPaneContent(
       fixture,
       secondPopup,
-      isDashboardContent,
-      "dashboard did not render after reopening the popup",
+      isAcceptanceDashboardContent,
+      "dashboard did not render after outer-input dismissal and reopen",
     );
-    const secondPane = await readPaneEvidence(fixture);
-    const secondProcesses = await waitForDashboardProcessEvidence(fixture, secondPane);
-    const secondRenderer = secondProcesses.renderer;
-    recordRuntimeEvidence(fixture, secondClient, secondPane, secondProcesses);
-
-    expect(secondPane.pid).toBe(firstPane.pid);
-    expect(secondRenderer.pid).toBe(firstRenderer.pid);
-    expect(secondRenderer.tty).toBe(secondPane.tty);
-    expect(secondClient.columns).toBe(firstClient.columns);
-    expect(secondClient.rows).toBe(firstClient.rows);
+    const reopened = await currentDashboardRuntimeEvidence(fixture, secondPopup, process.pid);
+    expect(reopened.panePid).toBe(firstRuntime.panePid);
+    expect(reopened.cliPid).toBe(firstRuntime.cliPid);
+    expect(reopened.rendererPid).toBe(firstRuntime.rendererPid);
+    expect(reopened.observerPid).toBe(firstRuntime.observerPid);
+    await assertWrapperAudit(fixture);
     await assertPathMissing(
       fixture.bareTmuxLogPath,
       "a child invoked bare tmux instead of the private wrapper",
@@ -418,7 +509,7 @@ describeRealTmux("real tmux dev popup routing", () => {
         tmux: fixture.wrapper,
         sessionName: "base",
         env: fixture.env,
-        dimensions: geometry.outer,
+        initialDimensions: geometry.outer,
       });
       expect(await readOuterClientDimensions(fixture, fixture.ptyClient.clientName)).toEqual(
         geometry.outer,
@@ -591,6 +682,92 @@ describeRealTmux("real tmux dev popup routing", () => {
       "a child invoked bare tmux instead of the private wrapper",
     );
   }, 180_000);
+
+  it("shows truthful tmux and native Station focus outcomes while preserving the warm renderer", async () => {
+    const fixture = await createDashboardFixture(tmux);
+    cleanup = () => cleanupDashboardFixture(fixture);
+    const focusCommands: StationCommand[] = [];
+    const snapshot = deterministicDashboardSnapshot(fixture.projectRoot);
+    delete fixture.env.STATION_SOURCE;
+
+    await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    const destination = await createTmuxFocusDestination(fixture);
+    fixture.observerServer = await startProtocolServer({
+      socketPath: fixture.observerSocketPath,
+      api: focusOutcomeObserver({
+        snapshot,
+        focusCommands,
+        targetId: destination.targetId,
+        tmuxCommand: fixture.wrapper,
+      }),
+    });
+    fixture.ptyClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base",
+      env: fixture.env,
+    });
+
+    const tmuxPopup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
+    await waitForPaneContent(
+      fixture,
+      tmuxPopup,
+      isAcceptanceDashboardContent,
+      "focus dashboard did not render",
+    );
+    const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, tmuxPopup, process.pid);
+
+    await fixture.ptyClient.write(Buffer.from("1", "utf8"));
+    await waitForNestedClientGone(fixture);
+    await expectSuccessfulExit(tmuxPopup, 10_000);
+    const visibleTarget = await waitForTmuxClientTarget(fixture, destination);
+    expect(visibleTarget).toEqual({
+      clientName: fixture.ptyClient.clientName,
+      paneId: destination.paneId,
+      sessionName: destination.sessionName,
+      windowId: destination.windowId,
+    });
+    expect(await captureTmuxPane(fixture, destination.sessionName)).toContain(
+      "STATION PRIVATE FOCUS TARGET",
+    );
+    expect(focusCommands).toHaveLength(1);
+    expect(focusCommands[0]).toMatchObject({
+      type: "terminal.focus",
+      payload: {
+        sessionId: "ses_popup_tmux",
+        origin: { provider: "tmux", clientId: fixture.ptyClient.clientName },
+      },
+    });
+
+    const nativePopup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
+    await waitForPaneContent(
+      fixture,
+      nativePopup,
+      isAcceptanceDashboardContent,
+      "focus dashboard did not reopen",
+    );
+    const reopenedRuntime = await currentDashboardRuntimeEvidence(
+      fixture,
+      nativePopup,
+      process.pid,
+    );
+    expect(reopenedRuntime.panePid).toBe(firstRuntime.panePid);
+    expect(reopenedRuntime.cliPid).toBe(firstRuntime.cliPid);
+    expect(reopenedRuntime.rendererPid).toBe(firstRuntime.rendererPid);
+    expect(reopenedRuntime.observerPid).toBe(firstRuntime.observerPid);
+
+    await fixture.ptyClient.write(Buffer.from("2", "utf8"));
+    const nativeMessage = 'This agent runs in the "native" terminal and';
+    const nativeFrame = await waitForPaneContent(
+      fixture,
+      nativePopup,
+      (content) => content.includes(nativeMessage),
+      "native Station focus refusal was not rendered",
+    );
+    expect(nativeFrame).toContain(nativeMessage);
+    expect((await waitForNestedClient(fixture)).pid).toBe(reopenedRuntime.nestedClientPid);
+    expect(focusCommands).toHaveLength(1);
+    await assertWrapperAudit(fixture);
+  }, 120_000);
 
   it("compiled managed binding honors dashboard dismissal, reuses the warm UI, and fails without entering view mode", async () => {
     const fixture = await createDashboardFixture(tmux, {
@@ -800,6 +977,7 @@ async function createDashboardFixture(
     const projectRoot = join(root, "project");
     const home = join(root, "home");
     const xdgConfig = join(root, "xdg-config");
+    const xdgData = join(root, "xdg-data");
     const xdgState = join(root, "xdg-state");
     const runtime = join(root, "r");
     const state = join(root, "state");
@@ -815,6 +993,7 @@ async function createDashboardFixture(
       mkdir(projectRoot, { recursive: true }),
       mkdir(home, { recursive: true }),
       mkdir(xdgConfig, { recursive: true }),
+      mkdir(xdgData, { recursive: true }),
       mkdir(xdgState, { recursive: true }),
       mkdir(runtime, { recursive: true }),
       mkdir(state, { recursive: true }),
@@ -829,11 +1008,13 @@ async function createDashboardFixture(
     });
 
     const attachLogPath = join(root, "attach.log");
+    const wrapperLogPath = join(root, "tmux-wrapper.log");
     const wrapper = await writeTmuxWrapper({
       root,
       tmux,
       label: `stn-real-${process.pid}-${Date.now()}`,
       attachLogPath,
+      wrapperLogPath,
     });
     const bareTmuxLogPath = join(root, "bare-tmux.log");
     const shimDir = await writeFailingTmuxShim(root, bareTmuxLogPath);
@@ -850,6 +1031,7 @@ async function createDashboardFixture(
       root,
       home,
       xdgConfig,
+      xdgData,
       xdgState,
       runtime,
       temp,
@@ -876,6 +1058,7 @@ async function createDashboardFixture(
       rendererPids: new Set<number>(),
       root,
       wrapper,
+      wrapperLogPath,
     };
   } catch (error) {
     await rm(root, { recursive: true, force: true });
@@ -894,14 +1077,20 @@ function dashboardFixtureEnv(input: {
   temp: string;
   wrapper: string;
   xdgConfig: string;
+  xdgData: string;
   xdgState: string;
 }): NodeJS.ProcessEnv {
   const env = environmentWithoutGitLocals();
   for (const key of [
     "TMUX",
     "STATION_DASHBOARD_COMMAND",
+    "STATION_FOCUS_CLIENT_ID",
+    "STATION_FOCUS_PROVIDER",
     "STATION_SCENARIO",
+    "STATION_SOURCE",
     "STATION_TUI_COMMAND",
+    "STATION_TUI_PERSISTENT",
+    "STATION_TUI_POPUP",
     "STATION_TUI_SESSION_NAME",
   ]) {
     delete env[key];
@@ -912,6 +1101,7 @@ function dashboardFixtureEnv(input: {
     HOME: input.home,
     TMPDIR: input.temp,
     XDG_CONFIG_HOME: input.xdgConfig,
+    XDG_DATA_HOME: input.xdgData,
     XDG_RUNTIME_DIR: input.runtime,
     XDG_STATE_HOME: input.xdgState,
     STATION_CONFIG_PATH: input.configPath,
@@ -925,6 +1115,7 @@ function dashboardFixtureEnv(input: {
     STATION_CURSOR_HOME: input.providerHomes.cursor,
     OPENCODE_CONFIG_DIR: input.providerHomes.opencode,
     TERM: "xterm-256color",
+    TZ: "UTC",
   };
 }
 
@@ -958,6 +1149,12 @@ async function writeDashboardConfig(input: {
       `popup_width = ${JSON.stringify(input.geometry.width)}`,
       `popup_height = ${JSON.stringify(input.geometry.height)}`,
       `popup_position = ${JSON.stringify(input.geometry.position)}`,
+      "",
+      "[[tui.widgets]]",
+      'type = "fleet"',
+      "",
+      "[[tui.widgets]]",
+      'type = "prs"',
       "",
       "[repository.github]",
       "enabled = false",
@@ -997,6 +1194,7 @@ async function writeTmuxWrapper(input: {
   label: string;
   root: string;
   tmux: string;
+  wrapperLogPath: string;
 }): Promise<string> {
   const wrapper = join(input.root, "tmux-wrapper.sh");
   const tmuxTemp = join(input.root, "tmux-tmp");
@@ -1007,9 +1205,22 @@ async function writeTmuxWrapper(input: {
       "#!/bin/sh",
       `export TMUX_TMPDIR=${shellQuote(tmuxTemp)}`,
       "record_attach=0",
+      "seen_command=0",
+      "forbidden_global=0",
       'for arg in "$@"; do',
+      '  if [ "$seen_command" -eq 0 ]; then',
+      '    case "$arg" in',
+      "      -L|-S|-f|-L?*|-S?*|-f?*) forbidden_global=1 ;;",
+      "      -*) ;;",
+      "      *) seen_command=1 ;;",
+      "    esac",
+      "  fi",
       '  if [ "$arg" = "attach-session" ]; then record_attach=1; fi',
       "done",
+      'if [ "$forbidden_global" -ne 0 ]; then',
+      '  printf "caller-supplied tmux server/config flags are forbidden\\n" >&2',
+      "  exit 98",
+      "fi",
       'if [ "$record_attach" -eq 1 ]; then',
       '  size="$(stty size 2>/dev/null || true)"',
       '  tty_name="$(tty 2>/dev/null || true)"',
@@ -1021,6 +1232,11 @@ async function writeTmuxWrapper(input: {
     "utf8",
   );
   await chmod(wrapper, 0o755);
+  await writeFile(
+    input.wrapperLogPath,
+    `${input.tmux}\t-L\t${input.label}\t-f\t/dev/null\t--wrapper\n`,
+    "utf8",
+  );
   return wrapper;
 }
 
@@ -1061,19 +1277,19 @@ async function openAndCloseRegisteredPopup(input: {
 }
 
 async function startTmuxPtyClient(input: {
-  dimensions?: Dimensions;
   env?: NodeJS.ProcessEnv;
+  initialDimensions?: Dimensions;
   sessionName: string;
   tmux: string;
 }): Promise<TmuxPtyClient> {
-  const dimensions = input.dimensions ?? { columns: 120, rows: 40 };
+  const initialDimensions = input.initialDimensions ?? { rows: 40, columns: 120 };
   const child = spawn(
     "python3",
     [
       "-c",
       ptyBridgeScript,
-      String(dimensions.rows),
-      String(dimensions.columns),
+      String(initialDimensions.rows),
+      String(initialDimensions.columns),
       input.tmux,
       "attach-session",
       "-t",
@@ -1084,9 +1300,14 @@ async function startTmuxPtyClient(input: {
         ...(input.env ?? process.env),
         TERM: "xterm-256color",
       },
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe", "pipe"],
     },
   );
+  const control = child.stdio[3];
+  if (control === null || !("write" in control)) {
+    child.kill("SIGTERM");
+    throw new Error("outer tmux PTY control pipe was not created");
+  }
   const tracked = trackChild(child, "outer tmux PTY client");
   try {
     const clientName = await waitForTmuxClient({
@@ -1106,6 +1327,7 @@ async function startTmuxPtyClient(input: {
           detachError = error;
         }
         child.stdin?.end();
+        control.end();
         const result = await withTimeout(
           tracked.exit,
           5_000,
@@ -1118,10 +1340,21 @@ async function startTmuxPtyClient(input: {
           throw detachError;
         }
       },
+      resize: async (rows, columns) => {
+        if (!Number.isInteger(rows) || rows <= 0 || !Number.isInteger(columns) || columns <= 0) {
+          throw new Error(`invalid outer PTY dimensions: ${columns}x${rows}`);
+        }
+        await writeStreamInput(
+          control,
+          Buffer.from(`resize ${rows} ${columns}\n`, "ascii"),
+          "outer tmux PTY control pipe",
+        );
+      },
       write: (bytes) => writeChildInput(child, bytes),
     };
   } catch (error) {
     child.stdin?.end();
+    control.end();
     child.kill("SIGTERM");
     await withTimeout(tracked.exit, 2_000, "failed PTY client did not exit").catch(() => undefined);
     throw error;
@@ -1194,15 +1427,29 @@ function createOutputTail(): OutputTail {
 
 async function writeChildInput(child: ChildProcess, bytes: Uint8Array): Promise<void> {
   const stdin = child.stdin;
-  if (stdin === null || stdin.destroyed) {
+  if (stdin === null) {
     throw new Error("outer tmux PTY stdin is closed");
   }
-  if (stdin.write(bytes)) {
+  await writeStreamInput(stdin, bytes, "outer tmux PTY stdin");
+}
+
+async function writeStreamInput(
+  stream: NodeJS.WritableStream,
+  bytes: Uint8Array,
+  label: string,
+): Promise<void> {
+  if (
+    ("destroyed" in stream && stream.destroyed === true) ||
+    ("writableEnded" in stream && stream.writableEnded === true)
+  ) {
+    throw new Error(`${label} is closed`);
+  }
+  if (stream.write(bytes)) {
     return;
   }
   await new Promise<void>((resolveDrain, reject) => {
-    stdin.once("drain", resolveDrain);
-    stdin.once("error", reject);
+    stream.once("drain", resolveDrain);
+    stream.once("error", reject);
   });
 }
 
@@ -1223,7 +1470,7 @@ async function waitForPaneContent(
     }
     content = await tmuxExec(
       fixture.wrapper,
-      ["capture-pane", "-p", "-t", persistentUiSessionName],
+      ["capture-pane", "-p", "-N", "-t", persistentUiSessionName],
       fixture.env,
     ).catch(() => "");
     if (predicate(content)) {
@@ -1246,7 +1493,7 @@ async function waitForHiddenPaneContent(
   while (Date.now() < deadline) {
     content = await tmuxExec(
       fixture.wrapper,
-      ["capture-pane", "-p", "-t", persistentUiSessionName],
+      ["capture-pane", "-p", "-N", "-t", persistentUiSessionName],
       fixture.env,
     ).catch(() => "");
     if (predicate(content)) {
@@ -1273,6 +1520,7 @@ async function fixtureDiagnostics(fixture: DashboardFixture): Promise<string> {
   const paths = [
     fixture.attachLogPath,
     fixture.bareTmuxLogPath,
+    fixture.wrapperLogPath,
     join(fixture.root, "state/logs/observer.jsonl"),
     join(fixture.root, "state/logs/cli.jsonl"),
     join(fixture.root, "state/logs/tui.jsonl"),
@@ -1280,10 +1528,38 @@ async function fixtureDiagnostics(fixture: DashboardFixture): Promise<string> {
   const files = await Promise.all(
     paths.map(async (path) => {
       const text = await readFile(path, "utf8").catch(() => "<absent>");
-      return `${path}:\n${text.slice(-8_000)}`;
+      const limit = path === fixture.wrapperLogPath ? 32_000 : 8_000;
+      return `${path}:\n${text.slice(-limit)}`;
     }),
   );
-  return `\nPrivate tmux panes:\n${sessions}\nFixture evidence:\n${files.join("\n")}`;
+  const routeEvidence = await tmuxExec(
+    fixture.wrapper,
+    [
+      "display-message",
+      "-p",
+      "-t",
+      `${persistentUiSessionName}:`,
+      [
+        "route=#{@station_popup_ui_route}",
+        "lease=#{@station_popup_ui_lease}",
+        "claim=#{@station_popup_active_claim}",
+        "signature=#{@station_popup_ui_signature}",
+        "session=#{@station_popup_ui_session_name}",
+        "expected=#{@station_popup_ui_expected_signature}",
+        "root=#{@station_popup_ui_root}",
+        "client=#{@station_popup_client}",
+        "focus=#{@station_popup_focus_client}",
+        "devSession=#{@station_tui_dev_session_name}",
+        "devCommand=#{@station_tui_dev_command}",
+        "devOwner=#{@station_tui_dev_owner}",
+        "devRoot=#{@station_tui_dev_root}",
+      ].join("\n"),
+    ],
+    fixture.env,
+  ).catch(() => "<unavailable>");
+  const outerOutput =
+    fixture.ptyClient === undefined ? "<absent>" : trackedOutput(fixture.ptyClient);
+  return `\nPrivate tmux panes:\n${sessions}\nFast-route evidence:\n${routeEvidence}\nOuter PTY tail:${outerOutput}\nFixture evidence:\n${files.join("\n")}`;
 }
 
 function isDashboardContent(content: string): boolean {
@@ -1292,6 +1568,10 @@ function isDashboardContent(content: string): boolean {
     content.includes("Station snapshot mock") &&
     content.includes("? help")
   );
+}
+
+function isAcceptanceDashboardContent(content: string): boolean {
+  return content.includes("01 Private tmux destination") && content.includes("? help");
 }
 
 async function waitForPopupAttachRecord(
@@ -1346,7 +1626,7 @@ async function waitForNestedClient(fixture: DashboardFixture): Promise<NestedCli
     }
     await delay(100);
   }
-  throw new Error("nested popup tmux client did not attach");
+  throw new Error(`nested popup tmux client did not attach${await fixtureDiagnostics(fixture)}`);
 }
 
 async function waitForNestedClientReplacement(
@@ -1683,13 +1963,6 @@ async function recordObserverPid(fixture: DashboardFixture): Promise<number> {
   throw new Error(`observer identity did not appear at ${identityPath}`);
 }
 
-function assertPositiveDimensions(evidence: Record<string, Dimensions>): void {
-  for (const [label, dimensions] of Object.entries(evidence)) {
-    expect(dimensions.columns, `${label} columns`).toBeGreaterThan(0);
-    expect(dimensions.rows, `${label} rows`).toBeGreaterThan(0);
-  }
-}
-
 async function triggerPopupBinding(client: TmuxPtyClient): Promise<void> {
   await client.write(Buffer.from([0x02]));
   await delay(25);
@@ -1899,17 +2172,518 @@ async function cleanupDashboardFixture(fixture: DashboardFixture): Promise<void>
       fixture.bareTmuxLogPath,
       "a child invoked bare tmux instead of the private wrapper",
     );
+    await assertWrapperAudit(fixture);
   });
-  await cleanupStep(failures, "remove fixture root", async () => {
-    await rm(fixture.root, { recursive: true, force: true });
-    await assertPathMissing(fixture.root, "fixture root still exists after removal");
-  });
+  if (failures.length === 0) {
+    await cleanupStep(failures, "remove fixture root", async () => {
+      await rm(fixture.root, { recursive: true, force: true });
+      await assertPathMissing(fixture.root, "fixture root still exists after removal");
+    });
+  }
   if (failures.length > 0) {
     throw new AggregateError(
       failures,
-      `real dashboard popup cleanup failed: ${failures.map((error) => error.message).join("; ")}`,
+      `real dashboard popup cleanup failed; retained ${fixture.root}: ${failures.map((error) => error.message).join("; ")}`,
     );
   }
+}
+
+function outerDimensionsForDashboard(dimensions: Dimensions): Dimensions {
+  return {
+    rows: dimensions.rows + popupBorderRows + nestedTmuxStatusRows,
+    columns: dimensions.columns + popupBorderColumns,
+  };
+}
+
+async function resizeDashboardSurface(
+  fixture: DashboardFixture,
+  dimensions: Dimensions,
+): Promise<void> {
+  if (fixture.ptyClient === undefined) {
+    throw new Error("outer tmux PTY client is not attached");
+  }
+  const outer = outerDimensionsForDashboard(dimensions);
+  await fixture.ptyClient.resize(outer.rows, outer.columns);
+  await expectConvergedDashboardDimensions(fixture, dimensions);
+}
+
+async function expectConvergedDashboardDimensions(
+  fixture: DashboardFixture,
+  expected: Dimensions,
+): Promise<void> {
+  if (fixture.ptyClient === undefined) {
+    throw new Error("outer tmux PTY client is not attached");
+  }
+  const clientName = fixture.ptyClient.clientName;
+  const deadline = Date.now() + 10_000;
+  let last = "no dimension evidence";
+  while (Date.now() < deadline) {
+    try {
+      const nestedClient = await readNestedClient(fixture);
+      const pane = await readPaneEvidence(fixture);
+      const processes = await waitForDashboardProcessEvidence(fixture, pane);
+      const outer = await readOuterClientDimensions(fixture, clientName);
+      last = JSON.stringify({ outer, nestedClient, pane, renderer: processes.renderer });
+      const expectedOuter = outerDimensionsForDashboard(expected);
+      if (
+        outer.rows === expectedOuter.rows &&
+        outer.columns === expectedOuter.columns &&
+        nestedClient?.rows === expected.rows + nestedTmuxStatusRows &&
+        nestedClient.columns === expected.columns &&
+        pane.rows === expected.rows &&
+        pane.columns === expected.columns &&
+        processes.renderer.rows === expected.rows &&
+        processes.renderer.columns === expected.columns
+      ) {
+        return;
+      }
+    } catch (error) {
+      last = errorMessage(error);
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `outer, nested-client, pane, and renderer dimensions did not converge to ${expected.columns}x${expected.rows}; last evidence: ${last}${await fixtureDiagnostics(fixture)}`,
+  );
+}
+
+async function readExpectedDashboardFrame(): Promise<CapturedFrame> {
+  const encoded = await readFile(realDashboardFrameUrl, "utf8");
+  return CapturedFrameSchema.parse(JSON.parse(encoded));
+}
+
+async function captureFrame(fixture: DashboardFixture): Promise<CapturedFrame> {
+  const pane = await readPaneEvidence(fixture);
+  const output = await tmuxExec(
+    fixture.wrapper,
+    ["capture-pane", "-p", "-N", "-t", persistentUiSessionName],
+    fixture.env,
+  );
+  const serializedLines = output.endsWith("\n") ? output.slice(0, -1) : output;
+  const lines = serializedLines.split("\n");
+  if (lines.length !== pane.rows) {
+    throw new Error(
+      `captured ${lines.length} rows from a ${pane.columns}x${pane.rows} pane${await fixtureDiagnostics(fixture)}`,
+    );
+  }
+  return { columns: pane.columns, rows: pane.rows, lines };
+}
+
+async function captureStableFrame(fixture: DashboardFixture): Promise<CapturedFrame> {
+  const deadline = Date.now() + 10_000;
+  let previous: CapturedFrame | undefined;
+  while (Date.now() < deadline) {
+    const current = await captureFrame(fixture);
+    if (previous !== undefined && framesEqual(previous, current)) {
+      return current;
+    }
+    previous = current;
+    await delay(100);
+  }
+  throw new Error(
+    `dashboard did not produce two identical consecutive frames${await fixtureDiagnostics(fixture)}`,
+  );
+}
+
+async function waitForExactFrame(
+  fixture: DashboardFixture,
+  expected: CapturedFrame,
+): Promise<CapturedFrame> {
+  const deadline = Date.now() + 10_000;
+  let previous: CapturedFrame | undefined;
+  while (Date.now() < deadline) {
+    const current = await captureFrame(fixture);
+    if (
+      framesEqual(current, expected) &&
+      previous !== undefined &&
+      framesEqual(previous, current)
+    ) {
+      return current;
+    }
+    previous = current;
+    await delay(100);
+  }
+  throw new Error(
+    `dashboard did not restore the exact baseline frame${await fixtureDiagnostics(fixture)}`,
+  );
+}
+
+function framesEqual(left: CapturedFrame, right: CapturedFrame): boolean {
+  return (
+    left.columns === right.columns &&
+    left.rows === right.rows &&
+    left.lines.length === right.lines.length &&
+    left.lines.every((line, index) => line === right.lines[index])
+  );
+}
+
+function assertStructuralDashboardFrame(frame: CapturedFrame): void {
+  expect(frame.lines).toHaveLength(frame.rows);
+  expect(frame.lines.at(-1)).toContain("? help");
+}
+
+async function waitForDashboardRuntimeEvidence(
+  fixture: DashboardFixture,
+  popup: TrackedChild,
+  observerPid: number,
+): Promise<DashboardRuntimeEvidence> {
+  const deadline = Date.now() + 10_000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      return await currentDashboardRuntimeEvidence(fixture, popup, observerPid);
+    } catch (error) {
+      lastError = error;
+      await delay(100);
+    }
+  }
+  throw new Error(`dashboard runtime evidence did not converge: ${errorMessage(lastError)}`);
+}
+
+async function currentDashboardRuntimeEvidence(
+  fixture: DashboardFixture,
+  popup: TrackedChild,
+  observerPid: number,
+): Promise<DashboardRuntimeEvidence> {
+  const nestedClient = await waitForNestedClient(fixture);
+  const pane = await readPaneEvidence(fixture);
+  const processes = await waitForDashboardProcessEvidence(fixture, pane);
+  recordRuntimeEvidence(fixture, nestedClient, pane, processes);
+  const popupCliPid = popup.child.pid;
+  if (popupCliPid === undefined) {
+    throw new Error("popup CLI has no process id");
+  }
+  return {
+    cliPid: processes.cli.pid,
+    nestedClientPid: nestedClient.pid,
+    observerPid,
+    panePid: pane.pid,
+    popupCliPid,
+    rendererPid: processes.renderer.pid,
+    tmuxServerPid: await tmuxServerPid(fixture),
+  };
+}
+
+function expectDashboardRuntimeUnchanged(
+  expected: DashboardRuntimeEvidence,
+  actual: DashboardRuntimeEvidence,
+): void {
+  expect(actual).toEqual(expected);
+  for (const pid of Object.values(actual)) {
+    expect(processExists(pid), `recorded runtime process ${pid} is not alive`).toBe(true);
+  }
+}
+
+async function tmuxServerPid(fixture: DashboardFixture): Promise<number> {
+  const output = await tmuxExec(fixture.wrapper, ["display-message", "-p", "#{pid}"], fixture.env);
+  return positiveInteger(output.trim(), "private tmux server pid");
+}
+
+async function createTmuxFocusDestination(fixture: DashboardFixture): Promise<{
+  paneId: string;
+  sessionName: string;
+  targetId: TerminalTargetId;
+  windowId: string;
+}> {
+  const sessionName = "station-focus-target";
+  await tmuxExec(
+    fixture.wrapper,
+    [
+      "new-session",
+      "-d",
+      "-s",
+      sessionName,
+      "-n",
+      "visible-focus-target",
+      "sh",
+      "-c",
+      "printf 'STATION PRIVATE FOCUS TARGET\\n'; exec sleep 300",
+    ],
+    fixture.env,
+  );
+  const output = await tmuxExec(
+    fixture.wrapper,
+    [
+      "display-message",
+      "-p",
+      "-t",
+      `${sessionName}:0.0`,
+      "#{session_name}\t#{window_id}\t#{pane_id}",
+    ],
+    fixture.env,
+  );
+  const [observedSession, windowId, paneId] = output.trim().split("\t");
+  if (observedSession !== sessionName || windowId === undefined || paneId === undefined) {
+    throw new Error(`invalid private focus destination evidence: ${output}`);
+  }
+  return {
+    paneId,
+    sessionName,
+    targetId: buildTmuxTargetId({ sessionId: sessionName, windowId, paneId }),
+    windowId,
+  };
+}
+
+async function waitForTmuxClientTarget(
+  fixture: DashboardFixture,
+  expected: { paneId: string; sessionName: string; windowId: string },
+): Promise<TmuxClientTarget> {
+  if (fixture.ptyClient === undefined) {
+    throw new Error("outer tmux PTY client is not attached");
+  }
+  const deadline = Date.now() + 10_000;
+  let last = "";
+  while (Date.now() < deadline) {
+    const output = await tmuxExec(
+      fixture.wrapper,
+      ["list-clients", "-F", "#{client_name}\t#{session_name}\t#{window_id}\t#{pane_id}"],
+      fixture.env,
+    );
+    last = output;
+    for (const line of output.trim().split("\n")) {
+      const [clientName, sessionName, windowId, paneId] = line.split("\t");
+      if (
+        clientName === fixture.ptyClient.clientName &&
+        sessionName === expected.sessionName &&
+        windowId === expected.windowId &&
+        paneId === expected.paneId
+      ) {
+        return { clientName, sessionName, windowId, paneId };
+      }
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `outer client did not visibly switch to the private target; last clients:\n${last}`,
+  );
+}
+
+async function assertWrapperAudit(
+  fixture: Pick<DashboardFixture, "wrapperLogPath">,
+): Promise<void> {
+  const lines = nonEmptyLines(await readFile(fixture.wrapperLogPath, "utf8"));
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    expect(line).toMatch(/^[^\t]+\t-L\t[^\t]+\t-f\t\/dev\/null\t--wrapper$/);
+  }
+}
+
+function deterministicDashboardSnapshot(projectRoot: string): StationSnapshot {
+  const templateSession = mockObserverSnapshot.sessions[0];
+  const templateRow = mockObserverSnapshot.rows[0];
+  const sessionCount = 20;
+  const rows = Array.from({ length: sessionCount }, (_, index) => {
+    const sequence = String(index + 1).padStart(2, "0");
+    const sessionId =
+      index === 0 ? "ses_popup_tmux" : index === 1 ? "ses_popup_native" : `ses_popup_${sequence}`;
+    const worktreeId = `wt_popup_${sequence}`;
+    const provider = index === 1 ? "native" : "tmux";
+    const title =
+      index === 0
+        ? "01 Private tmux destination"
+        : index === 1
+          ? "02 Native Station session"
+          : `${sequence} Scroll fixture session`;
+    const terminal = {
+      ...templateSession.terminal,
+      provider,
+      focusable: index !== 1,
+      reason:
+        index === 1
+          ? "Station-hosted terminals are not externally focusable."
+          : "Private tmux target is focusable from the popup client.",
+    };
+    const worktree = {
+      state: "exists" as const,
+      source: "worktrunk" as const,
+      dirty: false,
+      ahead: 0,
+      behind: 0,
+      ...(index === 0
+        ? {
+            pr: {
+              number: 169,
+              state: "draft" as const,
+              baseRef: "main",
+              headRef: "popup-acceptance",
+            },
+          }
+        : {}),
+    };
+    return {
+      ...templateRow,
+      id: worktreeId,
+      projectId: "popup-real",
+      projectLabel: "POPUP ACCEPTANCE",
+      branch: `popup-${sequence}`,
+      path: join(projectRoot, `popup-${sequence}`),
+      worktree,
+      terminal,
+      agent: {
+        ...templateRow.agent,
+        state: "idle" as const,
+        runId: `run_popup_${sequence}`,
+        sessionId,
+        reason: "Deterministic popup acceptance session is idle.",
+      },
+      display: {
+        statusLabel: "idle" as const,
+        sortPriority: 40,
+        alert: false,
+        reason: "Deterministic popup acceptance session is idle.",
+      },
+      __session: {
+        ...templateSession,
+        id: sessionId,
+        projectId: "popup-real",
+        worktreeId,
+        harness: {
+          ...templateSession.harness,
+          runId: `run_popup_${sequence}`,
+        },
+        terminal,
+        status: {
+          value: "idle" as const,
+          confidence: "high" as const,
+          reason: "Deterministic popup acceptance session is idle.",
+          source: "harness_event" as const,
+          updatedAt: "2026-06-11T12:00:00.000Z",
+        },
+        title,
+        tags: ["popup-acceptance", provider],
+      },
+    };
+  });
+  const sessions = rows.map((row) => row.__session);
+  const snapshotRows = rows.map(({ __session: _session, ...row }) => row);
+  return StationSnapshotSchema.parse({
+    ...mockObserverSnapshot,
+    generatedAt: "2026-06-11T12:00:00.000Z",
+    observer: {
+      pid: 4242,
+      startedAt: "2026-06-11T11:55:00.000Z",
+      version: "0.0.0-popup-acceptance",
+      healthy: true,
+    },
+    providerHealth: {
+      tmux: mockObserverSnapshot.providerHealth.tmux,
+      native: {
+        providerId: "native",
+        providerType: "terminal",
+        status: "healthy",
+        lastCheckedAt: "2026-06-11T12:00:00.000Z",
+      },
+      codex: mockObserverSnapshot.providerHealth.codex,
+    },
+    projects: [
+      {
+        ...mockObserverSnapshot.projects[0],
+        id: "popup-real",
+        label: "POPUP ACCEPTANCE",
+        root: projectRoot,
+        counts: {
+          sessions: sessionCount,
+          worktrees: sessionCount,
+          agents: sessionCount,
+          working: 0,
+          idle: sessionCount,
+          attention: 0,
+          unknown: 0,
+        },
+      },
+    ],
+    rows: snapshotRows,
+    sessions,
+    counts: {
+      projects: 1,
+      sessions: sessionCount,
+      worktrees: sessionCount,
+      agents: sessionCount,
+      working: 0,
+      idle: sessionCount,
+      attention: 0,
+      unknown: 0,
+    },
+    alerts: [],
+  });
+}
+
+function deterministicPopupObserver(snapshot: StationSnapshot): ObserverApi {
+  return snapshotObserver(snapshot, async () => undefined);
+}
+
+function focusOutcomeObserver(input: {
+  focusCommands: StationCommand[];
+  snapshot: StationSnapshot;
+  targetId: TerminalTargetId;
+  tmuxCommand: string;
+}): ObserverApi {
+  const provider = new TmuxProvider({ command: input.tmuxCommand });
+  return snapshotObserver(input.snapshot, async (command) => {
+    if (command.type !== "terminal.focus") {
+      return;
+    }
+    input.focusCommands.push(command);
+    if (command.payload.sessionId !== "ses_popup_tmux") {
+      throw new Error(`unexpected focus command for ${command.payload.sessionId ?? "<missing>"}`);
+    }
+    await provider.focusTarget(input.targetId, {
+      ...(command.payload.origin === undefined ? {} : { origin: command.payload.origin }),
+    });
+  });
+}
+
+function snapshotObserver(
+  snapshot: StationSnapshot,
+  onDispatch: (command: StationCommand) => Promise<void>,
+): ObserverApi {
+  const records = new Map<CommandId, CommandRecord>();
+  let commandCounter = 0;
+  return {
+    health: async () => ({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      status: "healthy",
+      pid: process.pid,
+      startedAt: "2026-06-11T11:55:00.000Z",
+      version: stationObserverBuildVersion(),
+    }),
+    stop: async () => ({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      stopped: true,
+      at: "2026-06-11T12:00:00.000Z",
+    }),
+    getSnapshot: async () => snapshot,
+    subscribe: () => neverStationEvents(),
+    dispatch: async (command) => {
+      await onDispatch(command);
+      commandCounter += 1;
+      const commandId = `cmd_popup_acceptance_${commandCounter}` as CommandId;
+      const now = "2026-06-11T12:00:00.000Z";
+      records.set(commandId, {
+        id: commandId,
+        type: command.type,
+        command,
+        status: "succeeded",
+        createdAt: now,
+        startedAt: now,
+        finishedAt: now,
+      });
+      return { commandId, accepted: true, status: "accepted" };
+    },
+    getCommand: async (commandId) => records.get(commandId),
+    reconcile: async (reason = "manual") => ({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      reason,
+      reconciledAt: "2026-06-11T12:00:00.000Z",
+      snapshot,
+    }),
+    ingestProviderHookEvent: async () => unsupportedObserverCall("ingestProviderHookEvent"),
+    reportHarnessEvent: async () => unsupportedObserverCall("reportHarnessEvent"),
+    prepareExternalLaunch: async () => unsupportedObserverCall("prepareExternalLaunch"),
+    reportExternalExit: async () => unsupportedObserverCall("reportExternalExit"),
+    runDoctor: async () => unsupportedObserverCall("runDoctor"),
+    collectDiagnostics: async () => unsupportedObserverCall("collectDiagnostics"),
+  };
 }
 
 function popupFocusObserver(focusCommands: StationCommand[]): ObserverApi {
@@ -2002,13 +2776,16 @@ async function cleanupMarkerFixture(fixture: MarkerFixture): Promise<void> {
     if (await privateTmuxServerExists(fixture.wrapper)) {
       throw new Error("marker fixture tmux server still exists");
     }
+    await assertWrapperAudit(fixture);
   });
-  await cleanupStep(failures, "remove marker fixture root", async () => {
-    await rm(fixture.root, { recursive: true, force: true });
-    await assertPathMissing(fixture.root, "marker fixture root still exists after removal");
-  });
+  if (failures.length === 0) {
+    await cleanupStep(failures, "remove marker fixture root", async () => {
+      await rm(fixture.root, { recursive: true, force: true });
+      await assertPathMissing(fixture.root, "marker fixture root still exists after removal");
+    });
+  }
   if (failures.length > 0) {
-    throw new AggregateError(failures, "marker popup cleanup failed");
+    throw new AggregateError(failures, `marker popup cleanup failed; retained ${fixture.root}`);
   }
 }
 

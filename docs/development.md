@@ -100,10 +100,16 @@ pnpm station:devbox:tmux:smoke
 ```
 
 That smoke owns public grammar, generated-environment isolation, wrapper
-auditing, attach UX, live repaint, signal exits, and cleanup. The existing
-`popup-real.test.ts` remains the authority for production popup claims, input,
-dismiss/focus semantics, warm reuse, compiled binding behavior, and its own
-private fixture cleanup.
+auditing, attach UX, live repaint, signal exits, and cleanup.
+`STATION_REAL_TMUX=1 pnpm test:tmux-popup:real` is the exact production-popup
+acceptance lane: it owns popup claims, keyboard input through an attached outer PTY,
+terminal-driven resize propagation, rendered focus outcomes, warm reuse,
+compiled binding behavior, and its own private fixture cleanup. The canonical
+99×25 capture is checked against
+`integrations/terminal/tmux/test/fixtures/real-dashboard-99x25.frame.json`.
+Full-frame captures use the private wrapper and preserve trailing cells;
+assertions wait for two identical captures rather than accepting an
+intermediate repaint.
 
 ## Deterministic Gates
 
@@ -616,11 +622,14 @@ Bun dependencies, Bun 1.3.14, Python 3, tmux, and these prerequisite builds:
 
 ```bash
 pnpm build
-pnpm build:binary -- --version 0.0.0-local
+pnpm build:binary -- --version "$(node -p 'require("./package.json").version')"
 ```
 
-`pnpm station:devbox:tmux:smoke` requires only the source build (`pnpm build`);
-the compiled popup lane additionally requires `pnpm build:binary`.
+The compiled acceptance artifact must use the checkout's package display
+version so its managed-binding signature matches the source-side fast-path
+builder. `pnpm station:devbox:tmux:smoke` requires only the source build
+(`pnpm build`); the compiled popup lane additionally requires
+`pnpm build:binary`.
 
 Set `STATION_TMUX_BIN` when the tmux executable is not available as `tmux`. The lane
 creates a disposable Git project and isolates `HOME`, the XDG directories,
@@ -630,9 +639,11 @@ and OpenCode homes. It addresses tmux only through a private
 verifies that its recorded processes and temporary root are gone, and remains
 excluded from ordinary PR and `main` CI.
 
-The lane also exercises the compiled generated binding. Warm reopen must retain
-the hidden session, renderer, and Observer PIDs even with an invalid config.
-Fast-path and fallback failures must produce no pane output, leave
+The lane also exercises the compiled generated binding. Its deterministic
+dashboard source connects through the normal Observer protocol socket and uses
+a strictly parsed snapshot; it is never injected into the renderer store. Warm
+reopen must retain the hidden session, renderer, and Observer PIDs even with an
+invalid config. Fast-path and fallback failures must produce no pane output, leave
 `#{pane_in_mode}` at `0`, and return control without an Escape dismissal. Use
 direct `stn popup` when detailed failure output is needed.
 

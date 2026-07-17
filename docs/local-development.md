@@ -250,18 +250,29 @@ process command, and start-time evidence before escalating. If ownership cannot
 be proven gone, cleanup retains the root and wrapper as evidence instead of
 using `pkill` or broad/default-server operations.
 
-Manual HMR check:
+Manual popup acceptance and HMR check:
 
-1. Open the popup with `Ctrl-b Space` and record `tmux status`.
-2. Add a harmless visible label in
-   `station/src/dashboardRenderer/FullscreenDashboard.tsx`.
-3. Confirm the open popup repaints and the reported server, base pane, hidden
-   CLI, Bun renderer, Observer, nested client, and optional Host PIDs are stable.
-4. Revert the label and confirm it disappears.
-5. Press Esc, reopen with `Ctrl-b Space`, and confirm the hidden CLI/renderer
+1. Open the popup with `Ctrl-b Space`, record `tmux status`, and confirm every
+   printed path is under `/tmp/stn-dbx-<checkout-hash>` with `/dev/null` as the
+   tmux config.
+2. At the 99×25 dashboard surface, inspect the complete frame and confirm the
+   footer occupies the final row. The automated lane compares every cell with
+   `integrations/terminal/tmux/test/fixtures/real-dashboard-99x25.frame.json`.
+3. Exercise `?` and Esc; verify help opens and returns to the baseline frame.
+   Resize the outer terminal through narrow, canonical, and wide sizes and
+   confirm the popup repaints without replacing its owners.
+4. Focus a private-tmux session and confirm the invoking client visibly switches
+   to its destination window and pane. Select a non-focusable native session and
+   confirm the popup remains open with an explanatory notice rather than closing
+   silently.
+5. Add a harmless visible label in
+   `station/src/dashboardRenderer/FullscreenDashboard.tsx`. Confirm the open
+   popup repaints while the reported server, base pane, hidden CLI, Bun renderer,
+   Observer, nested client, and optional Host PIDs remain stable; then revert it.
+6. Press Esc, reopen with `Ctrl-b Space`, and confirm the hidden CLI/renderer
    and Observer are reused.
-6. Detach and stop the lane; `status` should report stopped and the private root
-   and sockets should be absent.
+7. Detach and stop the lane; `status` should report stopped, the private root and
+   sockets should be absent, and the failing bare-tmux audit log should not exist.
 
 The opt-in automated version is `pnpm station:devbox:tmux:smoke`. It temporarily
 edits that component in place, restores its exact bytes in `finally`, audits

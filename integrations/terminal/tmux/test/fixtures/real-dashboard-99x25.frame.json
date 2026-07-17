@@ -1,0 +1,31 @@
+{
+  "columns": 99,
+  "rows": 25,
+  "lines": [
+    "                                                                                                   ",
+    "FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 20 idle        1 project · 20 sessions · 20 agents ",
+    "────────────────────────────────────────────────────────────────────────────────────────────────── ",
+    "       SESSION                                   AGENT     STATUS                        DIFF · PR ",
+    "▼ POPUP ACCEPTANCE  20 sessions · 20 agents                            [shell] [quick session] [▾] ",
+    " [1] ○ 01 Private tmux destination               codex     idle                               #169 ",
+    " [2] ○ 02 Native Station session                 codex     idle                                    ",
+    " [3] ○ 03 Scroll fixture session                 codex     idle                                    ",
+    " [4] ○ 04 Scroll fixture session                 codex     idle                                    ",
+    " [5] ○ 05 Scroll fixture session                 codex     idle                                    ",
+    " [6] ○ 06 Scroll fixture session                 codex     idle                                    ",
+    " [7] ○ 07 Scroll fixture session                 codex     idle                                    ",
+    " [8] ○ 08 Scroll fixture session                 codex     idle                                    ",
+    " [9] ○ 09 Scroll fixture session                 codex     idle                                    ",
+    " [a] ○ 10 Scroll fixture session                 codex     idle                                    ",
+    " [b] ○ 11 Scroll fixture session                 codex     idle                                    ",
+    " [c] ○ 12 Scroll fixture session                 codex     idle                                    ",
+    " [d] ○ 13 Scroll fixture session                 codex     idle                                    ",
+    " [e] ○ 14 Scroll fixture session                 codex     idle                                    ",
+    " [f] ○ 15 Scroll fixture session                 codex     idle                                    ",
+    " [g] ○ 16 Scroll fixture session                 codex     idle                                    ",
+    " [h] ○ 17 Scroll fixture session                 codex     idle                                    ",
+    "▼ 3 below · showing 17 of 20                                                                       ",
+    "────────────────────────────────────────────────────────────────────────────────────────────────── ",
+    "↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                     "
+  ]
+}
