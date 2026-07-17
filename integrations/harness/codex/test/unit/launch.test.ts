@@ -57,6 +57,15 @@ describe("buildCodexLaunchPlan", () => {
     expect(JSON.stringify(plan.providerData)).not.toContain("Review the task.");
   });
 
+  it("stamps the resolved managed-worktree root for hook identity corroboration", () => {
+    const input = request();
+    input.project.worktrunk.managedRoot = "/tmp/station/web/.worktrees";
+
+    expect(buildCodexLaunchPlan(input).env).toMatchObject({
+      STATION_WORKTREE_MANAGED_ROOT: "/tmp/station/web/.worktrees",
+    });
+  });
+
   it("lets request options override provider defaults without setting absent option fields", () => {
     const base = request();
     if (base.terminalTarget === undefined) {

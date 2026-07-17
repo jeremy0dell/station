@@ -337,6 +337,46 @@ describe("Codex hook event parsing", () => {
     expect(report.diagnostics?.correlationIssue).toBeUndefined();
   });
 
+  it("withholds inherited STATION identity across a nested managed-worktree boundary", () => {
+    const payload = {
+      ...CODEX_HOOK_FIXTURES.PreToolUse,
+      cwd: "/tmp/station/web/.worktrees/feature/src",
+      station_worktree_path: "/tmp/station/web",
+      station_worktree_managed_root: "/tmp/station/web/.worktrees",
+    };
+    const compacted = compactCodexHookPayload(payload);
+    const observations = normalizeCodexRawEvent(
+      { provider: "codex", observedAt: now, event: compacted.payload },
+      context(),
+    );
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: "report_nested_managed_worktree",
+      observedAt: now,
+      payload: compacted.payload,
+    });
+
+    expect(observations[0]).toMatchObject({
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/station/web/.worktrees/feature/src",
+      diagnostics: {
+        correlationIssue: "station_identity_cwd_mismatch",
+      },
+      providerData: {
+        stationWorktreePath: "/tmp/station/web",
+        stationWorktreeManagedRoot: "/tmp/station/web/.worktrees",
+      },
+    });
+    expect(observations[0]).not.toHaveProperty("worktreeId");
+    expect(observations[0]).not.toHaveProperty("sessionId");
+    expect(report.correlation).toEqual({
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/station/web/.worktrees/feature/src",
+    });
+    expect(report.diagnostics).toMatchObject({
+      correlationIssue: "station_identity_cwd_mismatch",
+    });
+  });
+
   it("withholds inherited STATION identity when cwd contradicts the stamped worktree", () => {
     const payload = {
       ...CODEX_HOOK_FIXTURES.PreToolUse,

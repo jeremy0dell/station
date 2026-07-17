@@ -41,7 +41,7 @@ In `integrations/harness/<name>/src`:
   user-blocking state, strongest available `correlation` ids, deterministic
   `reportId`/`coalesceKey` from native ids.
 - Corroborate Station IDs inherited from the process environment with
-  provider-origin evidence already present in the payload. When they
+  provider-origin evidence and any required Station launch context. When they
   contradict, retain native identity and origin diagnostics, withhold Station
   correlation, and set the typed `diagnostics.correlationIssue` rather than
   guessing from provider-specific paths.

@@ -47,8 +47,9 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
   worktree IDs route evidence to a run but do not identify the provider-native
   execution within that run. Station IDs inherited through the process
   environment are strong only after provider-origin evidence corroborates
-  them; Codex requires its observed cwd to be the stamped worktree path or a
-  descendant when both paths are available.
+  them; Codex requires its observed cwd to be the stamped worktree path or an
+  ordinary descendant without crossing into the configured managed-worktree
+  root when that launch context is available.
 - `diagnostics.correlationIssue` — optional provider-normalized,
   machine-readable evidence explaining why identity was withheld. The current
   value is `station_identity_cwd_mismatch`; core records and logs it but does

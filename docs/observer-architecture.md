@@ -471,8 +471,9 @@ unbound session, and a later active execution may bind only after explicit
 `idle` or `exited` evidence from the prior execution.
 
 Harness adapters own the authority to corroborate inherited Station identity
-against provider-origin evidence. A contradiction remains durable diagnostic
-evidence with provider-native identity, but the adapter withholds Station
+against provider-origin evidence and provider-required Station launch context.
+A contradiction remains durable diagnostic evidence with provider-native
+identity, but the adapter withholds Station
 session, worktree, terminal, and run correlation before Observer policy sees the
 report. The same adapter may reject recognizable observations persisted by an
 earlier build; reconcile excludes those observations and repairs the affected

@@ -27,7 +27,7 @@ import { isCodexForwardedEventType } from "./ingressRules.js";
  * ADAPTER
  *
  * Normalizes Codex hook delivery into shared provider-event and harness-report contracts.
- * Inherited Station identity is authoritative only when Codex cwd corroborates the stamped worktree.
+ * Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.
  */
 export const codexHookAdapter: ProviderHookAdapter = {
   provider: "codex",
@@ -55,7 +55,11 @@ function decideCodexHookScope(event: ProviderHookEvent): ProviderHookScopeDecisi
   const stationIdentityCorroborated =
     payload?.station_worktree_path === undefined ||
     (cwdProbe.success &&
-      !codexStationIdentityCwdMismatch(cwdProbe.data.cwd, payload.station_worktree_path));
+      !codexStationIdentityCwdMismatch(
+        cwdProbe.data.cwd,
+        payload.station_worktree_path,
+        payload.station_worktree_managed_root,
+      ));
   if (
     stationIdentityCorroborated &&
     payload?.station_session_id !== undefined &&

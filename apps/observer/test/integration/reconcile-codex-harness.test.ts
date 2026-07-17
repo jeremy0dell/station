@@ -221,6 +221,88 @@ describe("observer reconcile with Codex harness", () => {
     sqlite.close();
   });
 
+  it("keeps a parent owner when inherited identity crosses into a nested managed worktree", async () => {
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config: nestedManagedConfig,
+      providers: nestedManagedCodexProviders(),
+      clock: { now: () => new Date(now) },
+    });
+
+    try {
+      await core.reconcile("initial-nested-managed-worktree-context");
+      await reportAndReconcile(
+        api,
+        eventBus,
+        nestedManagedCodexReport({
+          reportId: "report_parent_working",
+          nativeSessionId: "native_parent",
+          event: "PreToolUse",
+          cwd: "/tmp/station/web",
+          observedAt: "2026-05-21T12:00:01.000Z",
+        }),
+      );
+      await reportAndReconcile(
+        api,
+        eventBus,
+        nestedManagedCodexReport({
+          reportId: "report_parent_idle",
+          nativeSessionId: "native_parent",
+          event: "Stop",
+          cwd: "/tmp/station/web",
+          observedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      );
+
+      const nestedReport = nestedManagedCodexReport({
+        reportId: "report_nested_working",
+        nativeSessionId: "native_nested",
+        event: "PreToolUse",
+        cwd: "/tmp/station/web/.worktrees/feature",
+        observedAt: "2026-05-21T12:00:03.000Z",
+      });
+      expect(nestedReport.correlation).toEqual({
+        nativeSessionId: "native_nested",
+        cwd: "/tmp/station/web/.worktrees/feature",
+      });
+      expect(nestedReport.diagnostics).toMatchObject({
+        correlationIssue: "station_identity_cwd_mismatch",
+      });
+      await reportAndReconcile(api, eventBus, nestedReport);
+
+      const parent = core.getSnapshot().rows.find((row) => row.id === "wt_main");
+      expect(parent?.agent).toMatchObject({
+        state: "idle",
+        sessionId: "ses_main",
+        updatedAt: "2026-05-21T12:00:02.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          sessionId: "ses_main",
+          nativeSessionId: "native_parent",
+          state: "idle",
+        }),
+      ]);
+      await expect(
+        persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              reportId: "report_nested_working",
+              worktreeId: "wt_feature",
+              nativeSessionId: "native_nested",
+              diagnostics: expect.objectContaining({
+                correlationIssue: "station_identity_cwd_mismatch",
+              }),
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("keeps the scoped owner authoritative across background activity decay and admits a later scoped execution", async () => {
     let currentTime = now;
     const { sqlite, persistence, eventBus, core, api } = createTestObserver({
@@ -1385,6 +1467,50 @@ function codexBackgroundReport(input: {
   });
 }
 
+function nestedManagedCodexReport(input: {
+  reportId: string;
+  nativeSessionId: string;
+  event: "PreToolUse" | "Stop";
+  cwd: string;
+  observedAt: string;
+}): HarnessEventReport {
+  const common = {
+    session_id: input.nativeSessionId,
+    transcript_path: null,
+    cwd: input.cwd,
+    model: "gpt-5.4-codex",
+    permission_mode: "default" as const,
+    turn_id: "turn_nested",
+    station_project_id: "web",
+    station_worktree_id: "wt_main",
+    station_worktree_path: "/tmp/station/web",
+    station_worktree_managed_root: "/tmp/station/web/.worktrees",
+    station_session_id: "ses_main",
+    station_terminal_provider: "tmux",
+    station_terminal_target_id: "tmux:station:@1:%2",
+  };
+  const payload =
+    input.event === "PreToolUse"
+      ? {
+          ...common,
+          hook_event_name: "PreToolUse" as const,
+          tool_name: "Bash",
+          tool_input: { command: "pnpm test" },
+          tool_use_id: `call_${input.reportId}`,
+        }
+      : {
+          ...common,
+          hook_event_name: "Stop" as const,
+          stop_hook_active: false,
+          last_assistant_message: "Done.",
+        };
+  return codexHookPayloadToHarnessEventReport({
+    reportId: input.reportId,
+    observedAt: input.observedAt,
+    payload,
+  });
+}
+
 function codexLifecycleReport(input: {
   reportId: string;
   nativeSessionId: string;
@@ -1575,6 +1701,51 @@ function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {})
   });
 }
 
+function nestedManagedCodexProviders(): ProviderRegistry {
+  const providers = codexProviders();
+  return new ProviderRegistry({
+    worktree: new FakeWorktreeProvider({
+      now,
+      worktrees: [
+        createFakeWorktree({
+          id: "wt_main",
+          projectId: "web",
+          branch: "main",
+          path: "/tmp/station/web",
+          now,
+        }),
+        createFakeWorktree({
+          id: "wt_feature",
+          projectId: "web",
+          branch: "feature",
+          path: "/tmp/station/web/.worktrees/feature",
+          now,
+        }),
+      ],
+    }),
+    terminal: new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "tmux:station:@1:%2",
+          provider: "tmux",
+          projectId: "web",
+          worktreeId: "wt_main",
+          sessionId: "ses_main",
+          now,
+          harnessBinding: {
+            role: "main-agent",
+            harnessProvider: "codex",
+            currentCommand: "codex",
+          },
+        }),
+      ],
+    }),
+    harnesses: [...providers.harnesses.values()],
+    hookAdapters: [...providers.hookAdapters.values()],
+  });
+}
+
 function prefixedIds(prefix: string) {
   let command = 0;
   let event = 0;
@@ -1609,4 +1780,15 @@ const config: StationConfig = {
       },
     },
   ],
+};
+
+const nestedManagedConfig: StationConfig = {
+  ...config,
+  projects: config.projects.map((project) => ({
+    ...project,
+    worktrunk: {
+      ...project.worktrunk,
+      managedRoot: "/tmp/station/web/.worktrees",
+    },
+  })),
 };

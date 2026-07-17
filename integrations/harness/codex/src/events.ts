@@ -52,6 +52,7 @@ const CodexHookProviderDataSchema = z
     stationProjectId: nonEmptyStringSchema.optional(),
     stationWorktreeId: nonEmptyStringSchema.optional(),
     stationWorktreePath: nonEmptyStringSchema.optional(),
+    stationWorktreeManagedRoot: nonEmptyStringSchema.optional(),
     stationSessionId: nonEmptyStringSchema.optional(),
     stationTerminalProvider: nonEmptyStringSchema.optional(),
     stationTerminalTargetId: nonEmptyStringSchema.optional(),
@@ -69,6 +70,7 @@ const commonFields = {
   station_project_id: nonEmptyStringSchema.optional(),
   station_worktree_id: nonEmptyStringSchema.optional(),
   station_worktree_path: nonEmptyStringSchema.optional(),
+  station_worktree_managed_root: nonEmptyStringSchema.optional(),
   station_session_id: nonEmptyStringSchema.optional(),
   station_terminal_provider: nonEmptyStringSchema.optional(),
   station_terminal_target_id: nonEmptyStringSchema.optional(),
@@ -230,6 +232,7 @@ export function normalizeCodexRawEvent(
   const stationIdentityCwdMismatch = codexStationIdentityCwdMismatch(
     event.cwd,
     event.station_worktree_path,
+    event.station_worktree_managed_root,
   );
   const correlation = stationIdentityCwdMismatch
     ? { cwd: event.cwd }
@@ -282,7 +285,13 @@ export function codexHookPayloadToHarnessEventReport(
     report.correlation = correlation;
   }
   const diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
-  if (codexStationIdentityCwdMismatch(event.cwd, event.station_worktree_path)) {
+  if (
+    codexStationIdentityCwdMismatch(
+      event.cwd,
+      event.station_worktree_path,
+      event.station_worktree_managed_root,
+    )
+  ) {
     diagnostics.correlationIssue = "station_identity_cwd_mismatch";
   }
   report.diagnostics = diagnostics;
@@ -463,6 +472,9 @@ function providerDataFromCodexEvent(event: CodexHookEvent): CodexHookProviderDat
   if (event.station_worktree_path !== undefined) {
     providerData.stationWorktreePath = event.station_worktree_path;
   }
+  if (event.station_worktree_managed_root !== undefined) {
+    providerData.stationWorktreeManagedRoot = event.station_worktree_managed_root;
+  }
   if (event.station_session_id !== undefined) {
     providerData.stationSessionId = event.station_session_id;
   }
@@ -478,8 +490,16 @@ function providerDataFromCodexEvent(event: CodexHookEvent): CodexHookProviderDat
 export function codexStationIdentityCwdMismatch(
   cwd: string,
   stationWorktreePath: string | undefined,
+  stationWorktreeManagedRoot: string | undefined,
 ): boolean {
-  return stationWorktreePath !== undefined && !observedPathIsSameOrInside(cwd, stationWorktreePath);
+  if (stationWorktreePath === undefined) return false;
+  if (!observedPathIsSameOrInside(cwd, stationWorktreePath)) return true;
+  if (stationWorktreeManagedRoot === undefined) return false;
+  // A parent checkout contains its nested managed root lexically, but it does not own child worktrees.
+  return (
+    !observedPathIsSameOrInside(stationWorktreePath, stationWorktreeManagedRoot) &&
+    observedPathIsSameOrInside(cwd, stationWorktreeManagedRoot)
+  );
 }
 
 /**
@@ -495,13 +515,20 @@ export function acceptsCodexPersistedEvent(observation: HarnessEventObservation)
   return !codexStationIdentityCwdMismatch(
     providerData.data.cwd,
     providerData.data.stationWorktreePath,
+    providerData.data.stationWorktreeManagedRoot,
   );
 }
 
 function reportCorrelationFromCodexEvent(
   event: CodexHookEvent,
 ): HarnessEventReport["correlation"] | undefined {
-  if (codexStationIdentityCwdMismatch(event.cwd, event.station_worktree_path)) {
+  if (
+    codexStationIdentityCwdMismatch(
+      event.cwd,
+      event.station_worktree_path,
+      event.station_worktree_managed_root,
+    )
+  ) {
     return reportCorrelation({
       cwd: event.cwd,
       nativeSessionId: event.session_id,
