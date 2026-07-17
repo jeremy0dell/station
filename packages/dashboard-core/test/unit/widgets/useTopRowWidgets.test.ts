@@ -1,75 +1,92 @@
 import type { TuiWidgetConfig } from "@station/config";
 import { describe, expect, it, vi } from "vitest";
-import type { WeatherClient, WeatherCurrentConditions } from "../../../src/widgets/types.js";
 import {
   createUseTopRowWidgets,
-  refreshWeatherWidget,
+  refreshPolledWidget,
   type TopRowWidgetHookRuntime,
 } from "../../../src/widgets/useTopRowWidgets.js";
 
-const CONFIG = { type: "weather", city: "Austin", label: "ATX" } as const;
-const ENTRY = { id: "weather:0", config: CONFIG };
-const CONDITIONS: WeatherCurrentConditions = { temperature: 72, weatherCode: 0, isDay: true };
+const ENTRY = {
+  id: "weather:0",
+  cacheKey: "weather:austin",
+  refreshIntervalMs: 15 * 60_000,
+  loading: { text: "ATX · --° ⏳" },
+  error: { text: "ATX · --° 🫥" },
+  load: async () => ({ text: "ATX · 72° ☀️" }),
+};
 
-function client(impl: WeatherClient["getCurrentWeather"]): WeatherClient {
-  return { getCurrentWeather: impl };
-}
-
-describe("refreshWeatherWidget", () => {
+describe("refreshPolledWidget", () => {
   it("serves a fresh cache entry without calling the client", async () => {
-    const cache = new Map([["austin:fahrenheit", { conditions: CONDITIONS, fetchedAtMs: 1_000 }]]);
-    const getCurrentWeather = vi.fn();
-    const texts: string[] = [];
-    await refreshWeatherWidget(ENTRY, {
-      cancelled: () => false,
-      cache,
-      nowMs: () => 1_000 + 60_000, // within the 15-minute default TTL
-      weatherClient: client(getCurrentWeather),
-      setText: (text) => texts.push(text),
-    });
-    expect(getCurrentWeather).not.toHaveBeenCalled();
-    expect(texts).toEqual(["ATX · 72° ☀️"]);
+    const cachedView = { text: "ATX · 70° ☀️" };
+    const cache = new Map([[ENTRY.cacheKey, { view: cachedView, fetchedAtMs: 1_000 }]]);
+    const load = vi.fn();
+    const views: Array<{ id: string; text: string }> = [];
+
+    await refreshPolledWidget(
+      { ...ENTRY, load },
+      {
+        cancelled: () => false,
+        cache,
+        nowMs: () => 1_000 + 60_000,
+        setView: (id, view) => views.push({ id, text: view.text }),
+      },
+    );
+
+    expect(load).not.toHaveBeenCalled();
+    expect(views).toEqual([{ id: ENTRY.id, text: cachedView.text }]);
   });
 
   it("refetches and re-caches once the entry is older than the refresh interval", async () => {
-    const cache = new Map([["austin:fahrenheit", { conditions: CONDITIONS, fetchedAtMs: 0 }]]);
-    const fresh: WeatherCurrentConditions = { temperature: 50, weatherCode: 3, isDay: false };
-    const getCurrentWeather = vi.fn().mockResolvedValue(fresh);
-    const texts: string[] = [];
-    await refreshWeatherWidget(ENTRY, {
-      cancelled: () => false,
-      cache,
-      nowMs: () => 16 * 60_000, // past the 15-minute default TTL
-      weatherClient: client(getCurrentWeather),
-      setText: (text) => texts.push(text),
-    });
-    expect(getCurrentWeather).toHaveBeenCalledTimes(1);
-    expect(cache.get("austin:fahrenheit")?.conditions).toEqual(fresh);
-    expect(texts.at(-1)).toBe("ATX · 50° ☁️");
+    const staleView = { text: "ATX · 72° ☀️" };
+    const freshView = { text: "ATX · 50° ☁️" };
+    const cache = new Map([[ENTRY.cacheKey, { view: staleView, fetchedAtMs: 0 }]]);
+    const load = vi.fn().mockResolvedValue(freshView);
+    const views: string[] = [];
+
+    await refreshPolledWidget(
+      { ...ENTRY, load },
+      {
+        cancelled: () => false,
+        cache,
+        nowMs: () => 16 * 60_000,
+        setView: (_id, view) => views.push(view.text),
+      },
+    );
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(cache.get(ENTRY.cacheKey)?.view).toEqual(freshView);
+    expect(views).toEqual([freshView.text]);
   });
 
-  it("renders the error glyph when the client rejects", async () => {
-    const texts: string[] = [];
-    await refreshWeatherWidget(ENTRY, {
-      cancelled: () => false,
-      cache: new Map(),
-      nowMs: () => 0,
-      weatherClient: client(() => Promise.reject(new Error("boom"))),
-      setText: (text) => texts.push(text),
-    });
-    expect(texts).toEqual(["ATX · --° 🫥"]);
+  it("renders the entry's local error when loading rejects", async () => {
+    const views: string[] = [];
+
+    await refreshPolledWidget(
+      { ...ENTRY, load: () => Promise.reject(new Error("boom")) },
+      {
+        cancelled: () => false,
+        cache: new Map(),
+        nowMs: () => 0,
+        setView: (_id, view) => views.push(view.text),
+      },
+    );
+
+    expect(views).toEqual([ENTRY.error.text]);
   });
 
   it("suppresses output when cancelled after the fetch resolves", async () => {
-    const texts: string[] = [];
-    await refreshWeatherWidget(ENTRY, {
+    const cache = new Map();
+    const views: string[] = [];
+
+    await refreshPolledWidget(ENTRY, {
       cancelled: () => true,
-      cache: new Map(),
+      cache,
       nowMs: () => 0,
-      weatherClient: client(() => Promise.resolve(CONDITIONS)),
-      setText: (text) => texts.push(text),
+      setView: (_id, view) => views.push(view.text),
     });
-    expect(texts).toEqual([]);
+
+    expect(cache.size).toBe(0);
+    expect(views).toEqual([]);
   });
 });
 
@@ -105,6 +122,28 @@ describe("useTopRowWidgets config mapping", () => {
     expect(views).toEqual([
       { id: "fleet:0", text: "", data: "fleet" },
       { id: "prs:1", text: "", data: "prs" },
+    ]);
+  });
+
+  it("keeps an AQI widget in configured order with its loading view", () => {
+    const views = renderOnce(
+      [{ type: "time" }, { type: "aqi", city: "Austin", label: "ATX" }, { type: "moon" }],
+      noon,
+    );
+    expect(views[1]).toEqual({
+      id: "aqi:1",
+      text: "ATX · AQI -- ⏳",
+      compact: "ATX AQI -- ⏳",
+      attribution: {
+        label: "Open-Meteo/CAMS",
+        url: "https://open-meteo.com/",
+      },
+    });
+  });
+
+  it("keeps weather's original loading text without a compact form", () => {
+    expect(renderOnce([{ type: "weather", city: "Austin", label: "ATX" }], noon)).toEqual([
+      { id: "weather:0", text: "ATX · --° ⏳" },
     ]);
   });
 

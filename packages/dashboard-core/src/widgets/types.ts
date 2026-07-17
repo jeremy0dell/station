@@ -24,6 +24,15 @@ export type WeatherCurrentConditions = {
 
 export type WeatherTemperatureUnit = "fahrenheit" | "celsius";
 
+export type AirQualityCurrentConditions = {
+  /** Consolidated U.S. Air Quality Index. */
+  aqi: number;
+};
+
+export type AirQualityClient = {
+  getCurrentAirQuality(city: string): Promise<AirQualityCurrentConditions>;
+};
+
 export type WeatherClient = {
   getCurrentWeather(
     city: string,
@@ -32,5 +41,6 @@ export type WeatherClient = {
 };
 
 export type TopRowWidgetRuntimeDeps = TimeWidgetRuntime & {
+  airQualityClient?: AirQualityClient;
   weatherClient?: WeatherClient;
 };

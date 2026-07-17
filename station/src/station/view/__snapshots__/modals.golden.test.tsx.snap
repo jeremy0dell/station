@@ -654,7 +654,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [2] - docs-cleanup                       codex     no agent
  [3] ○ pty-buffe┌──────────────────────────────────────────────┐          #73 ✓
  [4] + session-r│ add widget                                   │
- [5] ⠋ station-o│ weather and tz require config.toml           │ +412 -96 #76 …
+ [5] ⠋ station-o│ widgets with settings require config.toml    │ +412 -96 #76 …
                 │ ▸ time                                       │
 ▼ observer  3 se│   fleet                                      │  [sh] [qs] [▾]
  [6] x batch-exp│   open PRs                                   │           #8 ✓

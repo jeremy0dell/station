@@ -2,15 +2,19 @@ import type { TuiWeatherWidgetConfig } from "@station/config";
 import type { WeatherCurrentConditions } from "./types.js";
 import { WEATHER_ERROR_EMOJI, WEATHER_LOADING_EMOJI, weatherEmoji } from "./weatherEmoji.js";
 
-export function weatherLabel(config: TuiWeatherWidgetConfig): string {
-  if (config.label !== undefined) {
-    return config.label;
+export function locationLabel(city: string, label: string | undefined): string {
+  if (label !== undefined) {
+    return label;
   }
-  const derived = Array.from(config.city.matchAll(/[a-z0-9]/gi))
+  const derived = Array.from(city.matchAll(/[a-z0-9]/gi))
     .slice(0, 3)
     .map((match) => match[0].toUpperCase())
     .join("");
   return derived.length > 0 ? derived : "???";
+}
+
+export function weatherLabel(config: TuiWeatherWidgetConfig): string {
+  return locationLabel(config.city, config.label);
 }
 
 export function renderWeatherLoading(config: TuiWeatherWidgetConfig): string {

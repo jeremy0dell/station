@@ -1,15 +1,16 @@
-import type { TuiWeatherWidgetConfig, TuiWidgetConfig } from "@station/config";
+import type { TuiWidgetConfig } from "@station/config";
+import type { TopRowWidgetText } from "../components/Dashboard/content.js";
+import {
+  renderAirQualityError,
+  renderAirQualityLoading,
+  renderAirQualitySuccess,
+} from "./airQuality.js";
 import { formatMoonWidget } from "./moon.js";
 import { formatTimeWidget, millisecondsUntilNextMinute } from "./time.js";
 import { formatTimezoneWidget } from "./timezone.js";
-import type {
-  TopRowWidgetRuntimeDeps,
-  TopRowWidgetView,
-  WeatherCurrentConditions,
-  WeatherTemperatureUnit,
-} from "./types.js";
+import type { TopRowWidgetRuntimeDeps, TopRowWidgetView } from "./types.js";
 import { renderWeatherError, renderWeatherLoading, renderWeatherSuccess } from "./weather.js";
-import { defaultWeatherClient } from "./weatherClient.js";
+import { defaultAirQualityClient, defaultWeatherClient } from "./weatherClient.js";
 
 type SetStateAction<T> = T | ((previous: T) => T);
 
@@ -21,17 +22,27 @@ export type TopRowWidgetHookRuntime = {
   useState<T>(initialValue: T | (() => T)): [T, (action: SetStateAction<T>) => void];
 };
 
-type WeatherWidgetEntry = {
+type PolledWidgetEntry = {
   id: string;
-  config: TuiWeatherWidgetConfig;
+  cacheKey: string;
+  refreshIntervalMs: number;
+  loading: TopRowWidgetText;
+  error: TopRowWidgetText;
+  load: () => Promise<TopRowWidgetText>;
 };
 
-type WeatherCacheEntry = {
-  conditions: WeatherCurrentConditions;
+type PolledWidgetCacheEntry = {
+  view: TopRowWidgetText;
   fetchedAtMs: number;
 };
 
-const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
+type PolledWidgetClients = {
+  airQualityClient: NonNullable<TopRowWidgetRuntimeDeps["airQualityClient"]>;
+  weatherClient: NonNullable<TopRowWidgetRuntimeDeps["weatherClient"]>;
+};
+
+const DEFAULT_AIR_QUALITY_REFRESH_INTERVAL_MINUTES = 60;
+const DEFAULT_WEATHER_REFRESH_INTERVAL_MINUTES = 15;
 
 // Hooks are injected rather than imported so dashboard-core stays React-free
 // (no react dependency); each consuming app wires in its own React.
@@ -42,17 +53,26 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
   ): TopRowWidgetView[] {
     const now = deps.now ?? defaultNow;
     const [currentMinute, setCurrentMinute] = hooks.useState(() => now());
+    const airQualityClient = deps.airQualityClient ?? defaultAirQualityClient;
     const weatherClient = deps.weatherClient ?? defaultWeatherClient;
-    const weatherCache = hooks.useRef(new Map<string, WeatherCacheEntry>());
-    const [weatherTexts, setWeatherTexts] = hooks.useState<Record<string, string>>({});
-    const setWeatherText = hooks.useCallback((id: string, text: string) => {
-      setWeatherTexts((previous) => {
-        if (previous[id] === text) {
+    const polledWidgetCache = hooks.useRef(new Map<string, PolledWidgetCacheEntry>());
+    const [polledWidgetViews, setPolledWidgetViews] = hooks.useState<
+      Record<string, TopRowWidgetText>
+    >({});
+    const setPolledWidgetView = hooks.useCallback((id: string, view: TopRowWidgetText) => {
+      setPolledWidgetViews((previous) => {
+        const current = previous[id];
+        if (
+          current?.text === view.text &&
+          current.compact === view.compact &&
+          current.attribution?.label === view.attribution?.label &&
+          current.attribution?.url === view.attribution?.url
+        ) {
           return previous;
         }
         return {
           ...previous,
-          [id]: text,
+          [id]: view,
         };
       });
     }, []);
@@ -69,13 +89,19 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
     const needsClock = activeWidgets.some(
       ({ widget }) => widget.type === "time" || widget.type === "tz" || widget.type === "moon",
     );
-    const weatherEntries = hooks.useMemo(
-      () =>
-        activeWidgets.flatMap(({ widget, index }): WeatherWidgetEntry[] =>
-          widget.type === "weather" ? [{ id: `weather:${index}`, config: widget }] : [],
-        ),
-      [activeWidgets],
-    );
+    const polledWidgetEntries = hooks.useMemo(() => {
+      const entries: PolledWidgetEntry[] = [];
+      for (const { widget, index } of activeWidgets) {
+        const entry = createPolledWidgetEntry(widget, index, {
+          airQualityClient,
+          weatherClient,
+        });
+        if (entry !== undefined) {
+          entries.push(entry);
+        }
+      }
+      return entries;
+    }, [activeWidgets, airQualityClient, weatherClient]);
 
     hooks.useEffect(() => {
       if (!needsClock) {
@@ -99,41 +125,33 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
     }, [needsClock, now]);
 
     hooks.useEffect(() => {
-      if (weatherEntries.length === 0) {
-        setWeatherTexts({});
+      if (polledWidgetEntries.length === 0) {
+        setPolledWidgetViews({});
         return;
       }
 
       let cancelled = false;
       const intervals: Array<ReturnType<typeof setInterval>> = [];
 
-      setWeatherTexts((previous) => {
-        const next: Record<string, string> = {};
-        for (const entry of weatherEntries) {
-          next[entry.id] = previous[entry.id] ?? renderWeatherLoading(entry.config);
+      setPolledWidgetViews((previous) => {
+        const next: Record<string, TopRowWidgetText> = {};
+        for (const entry of polledWidgetEntries) {
+          next[entry.id] = previous[entry.id] ?? entry.loading;
         }
         return next;
       });
 
-      for (const entry of weatherEntries) {
-        void refreshWeatherWidget(entry, {
-          cancelled: () => cancelled,
-          cache: weatherCache.current,
-          nowMs: () => now().getTime(),
-          weatherClient,
-          setText: (text) => setWeatherText(entry.id, text),
-        });
-
-        const interval = setInterval(() => {
-          void refreshWeatherWidget(entry, {
+      for (const entry of polledWidgetEntries) {
+        const refresh = () => {
+          void refreshPolledWidget(entry, {
             cancelled: () => cancelled,
-            cache: weatherCache.current,
+            cache: polledWidgetCache.current,
             nowMs: () => now().getTime(),
-            weatherClient,
-            setText: (text) => setWeatherText(entry.id, text),
+            setView: setPolledWidgetView,
           });
-        }, refreshIntervalMs(entry.config));
-        intervals.push(interval);
+        };
+        refresh();
+        intervals.push(setInterval(refresh, entry.refreshIntervalMs));
       }
 
       return () => {
@@ -142,7 +160,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
           clearInterval(interval);
         }
       };
-    }, [weatherEntries, weatherClient, now, setWeatherText]);
+    }, [now, polledWidgetEntries, setPolledWidgetView]);
 
     return hooks.useMemo(
       () =>
@@ -157,7 +175,14 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
               const id = `weather:${index}`;
               return {
                 id,
-                text: weatherTexts[id] ?? renderWeatherLoading(widget),
+                ...(polledWidgetViews[id] ?? { text: renderWeatherLoading(widget) }),
+              };
+            }
+            case "aqi": {
+              const id = `aqi:${index}`;
+              return {
+                id,
+                ...(polledWidgetViews[id] ?? renderAirQualityLoading(widget)),
               };
             }
             case "tz":
@@ -174,57 +199,86 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
           const exhaustive: never = widget;
           return exhaustive;
         }),
-      [activeWidgets, currentMinute, weatherTexts],
+      [activeWidgets, currentMinute, polledWidgetViews],
     );
   };
 }
 
-export async function refreshWeatherWidget(
-  entry: WeatherWidgetEntry,
+function createPolledWidgetEntry(
+  widget: TuiWidgetConfig,
+  index: number,
+  clients: PolledWidgetClients,
+): PolledWidgetEntry | undefined {
+  switch (widget.type) {
+    case "weather": {
+      const unit = widget.temperatureUnit ?? "fahrenheit";
+      return {
+        id: `weather:${index}`,
+        cacheKey: JSON.stringify([
+          "weather",
+          widget.city.trim().toLowerCase(),
+          unit,
+          widget.label ?? null,
+        ]),
+        refreshIntervalMs:
+          (widget.refreshIntervalMinutes ?? DEFAULT_WEATHER_REFRESH_INTERVAL_MINUTES) * 60_000,
+        loading: { text: renderWeatherLoading(widget) },
+        error: { text: renderWeatherError(widget) },
+        load: async () => {
+          const conditions = await clients.weatherClient.getCurrentWeather(widget.city, unit);
+          return { text: renderWeatherSuccess(widget, conditions) };
+        },
+      };
+    }
+    case "aqi":
+      return {
+        id: `aqi:${index}`,
+        cacheKey: JSON.stringify(["aqi", widget.city.trim().toLowerCase(), widget.label ?? null]),
+        refreshIntervalMs:
+          (widget.refreshIntervalMinutes ?? DEFAULT_AIR_QUALITY_REFRESH_INTERVAL_MINUTES) * 60_000,
+        loading: renderAirQualityLoading(widget),
+        error: renderAirQualityError(widget),
+        load: async () => {
+          const conditions = await clients.airQualityClient.getCurrentAirQuality(widget.city);
+          return renderAirQualitySuccess(widget, conditions);
+        },
+      };
+    default:
+      return undefined;
+  }
+}
+
+export async function refreshPolledWidget(
+  entry: PolledWidgetEntry,
   runtime: {
     cancelled: () => boolean;
-    cache: Map<string, WeatherCacheEntry>;
+    cache: Map<string, PolledWidgetCacheEntry>;
     nowMs: () => number;
-    weatherClient: NonNullable<TopRowWidgetRuntimeDeps["weatherClient"]>;
-    setText: (text: string) => void;
+    setView: (id: string, view: TopRowWidgetText) => void;
   },
 ): Promise<void> {
-  const unit = temperatureUnit(entry.config);
-  const cacheKey = weatherCacheKey(entry.config.city, unit);
-  const cached = runtime.cache.get(cacheKey);
-  const fetchedAtMs = runtime.nowMs();
-  if (cached !== undefined && fetchedAtMs - cached.fetchedAtMs < refreshIntervalMs(entry.config)) {
-    runtime.setText(renderWeatherSuccess(entry.config, cached.conditions));
+  const cached = runtime.cache.get(entry.cacheKey);
+  const checkedAtMs = runtime.nowMs();
+  if (cached !== undefined && checkedAtMs - cached.fetchedAtMs < entry.refreshIntervalMs) {
+    runtime.setView(entry.id, cached.view);
     return;
   }
 
   try {
-    const conditions = await runtime.weatherClient.getCurrentWeather(entry.config.city, unit);
+    const view = await entry.load();
     if (runtime.cancelled()) {
       return;
     }
-    runtime.cache.set(cacheKey, {
-      conditions,
+    runtime.cache.set(entry.cacheKey, {
+      view,
       fetchedAtMs: runtime.nowMs(),
     });
-    runtime.setText(renderWeatherSuccess(entry.config, conditions));
+    runtime.setView(entry.id, view);
   } catch {
     if (!runtime.cancelled()) {
-      runtime.setText(renderWeatherError(entry.config));
+      runtime.setView(entry.id, entry.error);
     }
   }
-}
-
-function refreshIntervalMs(config: TuiWeatherWidgetConfig): number {
-  return (config.refreshIntervalMinutes ?? DEFAULT_REFRESH_INTERVAL_MINUTES) * 60_000;
-}
-
-function temperatureUnit(config: TuiWeatherWidgetConfig): WeatherTemperatureUnit {
-  return config.temperatureUnit ?? "fahrenheit";
-}
-
-function weatherCacheKey(city: string, unit: WeatherTemperatureUnit): string {
-  return `${city.trim().toLowerCase()}:${unit}`;
 }
 
 function defaultNow(): Date {

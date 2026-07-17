@@ -229,7 +229,7 @@ const CASES: ModalCase[] = [
     name: "widget settings picker",
     keys: [{ input: "W" }, { input: "a" }],
     trimSnapshotTrailingWhitespace: true,
-    expect: ["add widget", "weather and tz require config.toml", "time", "fleet", "open PRs", "moon", "↵ add   esc back"],
+    expect: ["add widget", "widgets with settings require config.toml", "time", "fleet", "open PRs", "moon", "↵ add   esc back"],
   },
 ];
 

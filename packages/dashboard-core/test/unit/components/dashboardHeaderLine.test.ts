@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { fleetCountsLabel, headerStrip } from "../../../src/components/Dashboard/content.js";
+import {
+  fleetCountsLabel,
+  headerStrip,
+  headerStripLayout,
+} from "../../../src/components/Dashboard/content.js";
 
 const WIDGETS = [
   { text: "NYC 08:00 · TYO 21:00", compact: "NYC 08:00" },
@@ -36,6 +40,30 @@ describe("headerStrip", () => {
       "observer reconnecting · display-only snapshot · NYC 08:00 · TYO 21:00 · 🌕 full moon",
     );
     expect(headerStrip({ widgets: WIDGETS, status, maxWidth: 24 })).toBe("observer reconnecting");
+  });
+
+  it("keeps attribution with the selected widget and includes it in the width budget", () => {
+    const attribution = { label: "source", url: "https://example.com/" };
+    const widgets = [{ text: "AQI", compact: "A", attribution }];
+
+    expect(headerStrip({ widgets, maxWidth: 10 })).toBe("AQI source");
+    expect(headerStripLayout({ widgets, maxWidth: 8 })).toEqual({
+      text: "A source",
+      statusText: "",
+      widgets: [{ text: "A", attribution }],
+    });
+    expect(headerStrip({ widgets, maxWidth: 3 })).toBe("");
+  });
+
+  it("shows identical attribution once across multiple widgets", () => {
+    const attribution = { label: "source", url: "https://example.com/" };
+    const widgets = [
+      { text: "AQI 10", attribution },
+      { text: "AQI 20", attribution },
+    ];
+
+    expect(headerStrip({ widgets, maxWidth: 40 })).toBe("AQI 10 source · AQI 20");
+    expect(headerStrip({ widgets, maxWidth: 13 })).toBe("AQI 10 source");
   });
 });
 

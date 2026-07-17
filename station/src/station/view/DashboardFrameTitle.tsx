@@ -1,10 +1,10 @@
 import { TextAttributes } from "@opentui/core";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import stringWidth from "string-width";
 import {
-  headerStrip,
+  headerStripLayout,
   observerHeaderStatusForConnection,
   selectFleetSummary,
   type TuiStore,
@@ -55,12 +55,12 @@ export function DashboardFrameTitle({
   const affordance = ` ${WIDGET_SETTINGS_AFFORDANCE} `;
   const stripBudget =
     frame.width - 2 * EDGE - stringWidth(title) - stringWidth(affordance) - 2;
-  const strip = headerStrip({
+  const strip = headerStripLayout({
     widgets: resolveTopRowWidgets(topRowWidgets, snapshot),
     ...(status === undefined ? {} : { status }),
     maxWidth: Math.max(0, stripBudget),
   });
-  const right = strip.length > 0 ? ` ${strip}${affordance}` : affordance;
+  const right = strip.text.length > 0 ? ` ${strip.text}${affordance}` : affordance;
   const rightLeft = frame.left + frame.width - EDGE - stringWidth(right);
 
   return (
@@ -84,8 +84,26 @@ export function DashboardFrameTitle({
         zIndex={zIndex}
         flexDirection="row"
       >
-        {strip.length > 0 ? (
-          <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>{` ${strip}`}</text>
+        {strip.text.length > 0 ? (
+          <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>
+            {" "}
+            {strip.statusText}
+            {strip.statusText.length > 0 && strip.widgets.length > 0 ? " · " : null}
+            {strip.widgets.map((widget, index) => (
+              <Fragment key={`${index}:${widget.text}`}>
+                {index > 0 ? " · " : null}
+                {widget.text}
+                {widget.attribution === undefined ? null : (
+                  <>
+                    {" "}
+                    <a href={widget.attribution.url} attributes={TextAttributes.UNDERLINE}>
+                      {widget.attribution.label}
+                    </a>
+                  </>
+                )}
+              </Fragment>
+            ))}
+          </text>
         ) : null}
         <text
           fg={hover ? STATION_COLORS.cyan : STATION_COLORS.gray}

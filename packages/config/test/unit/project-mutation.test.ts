@@ -446,6 +446,12 @@ describe("TUI widget config mutation", () => {
       homeDir: tempDir,
       widgets: [
         { type: "time", timeFormat: "24h" },
+        {
+          type: "aqi",
+          city: "Los Angeles, CA",
+          label: "LA",
+          refreshIntervalMinutes: 60,
+        },
         { type: "fleet" },
         { type: "prs", enabled: false },
         { type: "moon" },
@@ -455,11 +461,20 @@ describe("TUI widget config mutation", () => {
     expect(result.status).toBe("updated");
     const source = await readFile(configPath, "utf8");
     expect(source).toContain('[[tui.widgets]]\ntype = "time"\ntime_format = "24h"');
+    expect(source).toContain(
+      '[[tui.widgets]]\ntype = "aqi"\ncity = "Los Angeles, CA"\nlabel = "LA"\nrefresh_interval_minutes = 60',
+    );
     expect(source).toContain('[[tui.widgets]]\ntype = "prs"\nenabled = false');
 
     const loaded = await loadConfig({ configPath, homeDir: tempDir });
     expect(loaded.config.tui?.widgets).toEqual([
       { type: "time", timeFormat: "24h" },
+      {
+        type: "aqi",
+        city: "Los Angeles, CA",
+        label: "LA",
+        refreshIntervalMinutes: 60,
+      },
       { type: "fleet" },
       { type: "prs", enabled: false },
       { type: "moon" },
