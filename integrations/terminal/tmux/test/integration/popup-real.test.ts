@@ -42,12 +42,14 @@ import struct
 import sys
 import termios
 
-winsize = struct.pack("HHHH", 40, 120, 0, 0)
+rows = int(sys.argv[1])
+columns = int(sys.argv[2])
+winsize = struct.pack("HHHH", rows, columns, 0, 0)
 pid, fd = pty.fork()
 if pid == 0:
     fcntl.ioctl(sys.stdin.fileno(), termios.TIOCSWINSZ, winsize)
     os.environ.setdefault("TERM", "xterm-256color")
-    os.execvp(sys.argv[1], sys.argv[1:])
+    os.execvp(sys.argv[3], sys.argv[3:])
 
 fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
 while True:
@@ -334,6 +336,144 @@ describeRealTmux("real tmux dev popup routing", () => {
       "a child invoked bare tmux instead of the private wrapper",
     );
   }, 120_000);
+
+  it("keeps live dashboard dividers within 60 percent popups across geometry changes", async () => {
+    const fixture = await createDashboardFixture(tmux, {
+      height: "60%",
+      position: "C",
+      width: "60%",
+    });
+    cleanup = () => cleanupDashboardFixture(fixture);
+    fixture.observerServer = await startProtocolServer({
+      socketPath: fixture.observerSocketPath,
+      api: popupFocusObserver([]),
+    });
+    delete fixture.env.STATION_SOURCE;
+
+    await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+
+    const geometryMatrix: ReadonlyArray<{
+      label: string;
+      outer: Dimensions;
+      nested: Dimensions;
+      pane: Dimensions;
+    }> = [
+      {
+        label: "cold issue geometry",
+        outer: { columns: 169, rows: 47 },
+        nested: { columns: 99, rows: 26 },
+        pane: { columns: 99, rows: 25 },
+      },
+      {
+        label: "tiny fallback",
+        outer: { columns: 70, rows: 25 },
+        nested: { columns: 40, rows: 13 },
+        pane: { columns: 40, rows: 12 },
+      },
+      {
+        label: "supported minimum",
+        outer: { columns: 104, rows: 32 },
+        nested: { columns: 60, rows: 17 },
+        pane: { columns: 60, rows: 16 },
+      },
+      {
+        label: "standard terminal",
+        outer: { columns: 137, rows: 45 },
+        nested: { columns: 80, rows: 25 },
+        pane: { columns: 80, rows: 24 },
+      },
+      {
+        label: "percentage round down",
+        outer: { columns: 168, rows: 47 },
+        nested: { columns: 98, rows: 26 },
+        pane: { columns: 98, rows: 25 },
+      },
+      {
+        label: "above issue geometry",
+        outer: { columns: 170, rows: 47 },
+        nested: { columns: 100, rows: 26 },
+        pane: { columns: 100, rows: 25 },
+      },
+      {
+        label: "large terminal",
+        outer: { columns: 204, rows: 72 },
+        nested: { columns: 120, rows: 41 },
+        pane: { columns: 120, rows: 40 },
+      },
+      {
+        label: "return to issue geometry",
+        outer: { columns: 169, rows: 47 },
+        nested: { columns: 99, rows: 26 },
+        pane: { columns: 99, rows: 25 },
+      },
+    ];
+
+    let hiddenPanePid: number | undefined;
+    let hiddenCliPid: number | undefined;
+    let rendererPid: number | undefined;
+
+    for (const geometry of geometryMatrix) {
+      const attachRecordIndex = await popupAttachRecordCount(fixture);
+      fixture.ptyClient = await startTmuxPtyClient({
+        tmux: fixture.wrapper,
+        sessionName: "base",
+        env: fixture.env,
+        dimensions: geometry.outer,
+      });
+      expect(await readOuterClientDimensions(fixture, fixture.ptyClient.clientName)).toEqual(
+        geometry.outer,
+      );
+
+      const popup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
+      const nestedClient = await waitForNestedClient(fixture);
+      expect(
+        { columns: nestedClient.columns, rows: nestedClient.rows },
+        `${geometry.label} nested client geometry`,
+      ).toEqual(geometry.nested);
+      const popupAttach = await waitForPopupAttachRecord(fixture, attachRecordIndex);
+      expect(
+        { columns: popupAttach.columns, rows: popupAttach.rows },
+        `${geometry.label} popup PTY geometry`,
+      ).toEqual(geometry.nested);
+
+      const pane = await waitForPaneDimensions(fixture, geometry.pane);
+      expect(nestedClient.rows, `${geometry.label} hidden status row`).toBe(pane.rows + 1);
+      const content = await waitForPaneContent(
+        fixture,
+        popup,
+        (candidate) => dashboardFrameMatchesGeometry(candidate, geometry.pane),
+        `${geometry.label} dashboard frame did not converge`,
+      );
+      assertDashboardFrameGeometry(content, geometry.pane, geometry.label);
+
+      const processes = await waitForDashboardProcessEvidence(fixture, pane);
+      recordRuntimeEvidence(fixture, nestedClient, pane, processes);
+      expect(
+        { columns: processes.renderer.columns, rows: processes.renderer.rows },
+        `${geometry.label} renderer geometry`,
+      ).toEqual(geometry.pane);
+      expect(processes.renderer.tty).toBe(pane.tty);
+
+      hiddenPanePid ??= pane.pid;
+      hiddenCliPid ??= processes.cli.pid;
+      rendererPid ??= processes.renderer.pid;
+      expect(pane.pid, `${geometry.label} hidden pane reuse`).toBe(hiddenPanePid);
+      expect(processes.cli.pid, `${geometry.label} hidden CLI reuse`).toBe(hiddenCliPid);
+      expect(processes.renderer.pid, `${geometry.label} renderer reuse`).toBe(rendererPid);
+
+      await closeOuterPopup(fixture);
+      await expectSuccessfulExit(popup, 10_000);
+      await waitForNestedClientGone(fixture);
+      const outerClient = fixture.ptyClient;
+      await outerClient.close();
+      fixture.ptyClient = undefined;
+    }
+
+    await assertPathMissing(
+      fixture.bareTmuxLogPath,
+      "a child invoked bare tmux instead of the private wrapper",
+    );
+  }, 240_000);
 
   it("persistent dashboard dismisses with Esc and Q, preserves its renderer, and resolves the current focus client", async () => {
     const fixture = await createDashboardFixture(tmux);
@@ -921,13 +1061,24 @@ async function openAndCloseRegisteredPopup(input: {
 }
 
 async function startTmuxPtyClient(input: {
+  dimensions?: Dimensions;
   env?: NodeJS.ProcessEnv;
   sessionName: string;
   tmux: string;
 }): Promise<TmuxPtyClient> {
+  const dimensions = input.dimensions ?? { columns: 120, rows: 40 };
   const child = spawn(
     "python3",
-    ["-c", ptyBridgeScript, input.tmux, "attach-session", "-t", input.sessionName],
+    [
+      "-c",
+      ptyBridgeScript,
+      String(dimensions.rows),
+      String(dimensions.columns),
+      input.tmux,
+      "attach-session",
+      "-t",
+      input.sessionName,
+    ],
     {
       env: {
         ...(input.env ?? process.env),
@@ -1143,19 +1294,28 @@ function isDashboardContent(content: string): boolean {
   );
 }
 
-async function waitForPopupAttachRecord(fixture: DashboardFixture): Promise<AttachRecord> {
+async function waitForPopupAttachRecord(
+  fixture: DashboardFixture,
+  recordIndex = 0,
+): Promise<AttachRecord> {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const records = await readAttachRecords(fixture.attachLogPath);
-    const record = records.find((candidate) =>
+    const records = (await readAttachRecords(fixture.attachLogPath)).filter((candidate) =>
       candidate.args.includes(`attach-session -t ${persistentUiSessionName}`),
     );
+    const record = records[recordIndex];
     if (record !== undefined) {
       return record;
     }
     await delay(100);
   }
   throw new Error("popup wrapper did not record nested attach-session PTY geometry");
+}
+
+async function popupAttachRecordCount(fixture: DashboardFixture): Promise<number> {
+  return (await readAttachRecords(fixture.attachLogPath)).filter((candidate) =>
+    candidate.args.includes(`attach-session -t ${persistentUiSessionName}`),
+  ).length;
 }
 
 async function readAttachRecords(path: string): Promise<AttachRecord[]> {
@@ -1260,6 +1420,79 @@ async function waitForNestedClientGone(fixture: DashboardFixture): Promise<void>
     await delay(100);
   }
   throw new Error("nested popup tmux client remained attached after closing the popup");
+}
+
+async function readOuterClientDimensions(
+  fixture: DashboardFixture,
+  clientName: string,
+): Promise<Dimensions> {
+  const output = await tmuxExec(
+    fixture.wrapper,
+    ["list-clients", "-F", "#{client_name}\t#{client_width}\t#{client_height}"],
+    fixture.env,
+  );
+  const record = nonEmptyLines(output)
+    .map((line) => line.split("\t"))
+    .find(([name]) => name === clientName);
+  return {
+    columns: positiveInteger(record?.[1], "outer client columns"),
+    rows: positiveInteger(record?.[2], "outer client rows"),
+  };
+}
+
+async function waitForPaneDimensions(
+  fixture: DashboardFixture,
+  expected: Dimensions,
+): Promise<PaneEvidence> {
+  const deadline = Date.now() + 10_000;
+  let pane: PaneEvidence | undefined;
+  while (Date.now() < deadline) {
+    pane = await readPaneEvidence(fixture);
+    if (pane.columns === expected.columns && pane.rows === expected.rows) {
+      return pane;
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `hidden pane did not reach ${expected.columns}x${expected.rows}; last geometry was ${pane?.columns ?? "?"}x${pane?.rows ?? "?"}`,
+  );
+}
+
+function dashboardFrameLines(content: string): string[] {
+  return content
+    .replace(/\n$/u, "")
+    .split("\n")
+    .map((line) => line.trimEnd());
+}
+
+function dashboardFrameMatchesGeometry(content: string, dimensions: Dimensions): boolean {
+  const lines = dashboardFrameLines(content);
+  const divider = "─".repeat(dimensions.columns - 1);
+  return (
+    lines[2] === divider &&
+    lines[3]?.includes("SESSION") === true &&
+    lines[dimensions.rows - 2] === divider &&
+    lines[dimensions.rows - 1]?.startsWith("↵ open") === true &&
+    !lines.includes("─")
+  );
+}
+
+function assertDashboardFrameGeometry(
+  content: string,
+  dimensions: Dimensions,
+  label: string,
+): void {
+  const lines = dashboardFrameLines(content);
+  const divider = "─".repeat(dimensions.columns - 1);
+  expect(lines[2], `${label} top divider`).toBe(divider);
+  expect(lines[3], `${label} column header`).toContain("SESSION");
+  expect(lines[dimensions.rows - 2], `${label} bottom divider`).toBe(divider);
+  expect(lines[dimensions.rows - 1], `${label} footer`).toMatch(/^↵ open/u);
+  expect(
+    lines.filter((line) => line === divider),
+    `${label} divider rows`,
+  ).toHaveLength(2);
+  expect(lines, `${label} wrapped divider cell`).not.toContain("─");
 }
 
 async function readPaneEvidence(fixture: DashboardFixture): Promise<PaneEvidence> {
