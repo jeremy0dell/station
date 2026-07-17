@@ -6,7 +6,7 @@
     "FLEET  ● 0 ready  ⠿ 0 working  ! 0 needs you  ○ 20 idle        1 project · 20 sessions · 20 agents ",
     "────────────────────────────────────────────────────────────────────────────────────────────────── ",
     "       SESSION                                   AGENT     STATUS                        DIFF · PR ",
-    "▼ POPUP ACCEPTANCE  20 sessions · 20 agents                                                        ",
+    "▼ POPUP ACCEPTANCE  20 sessions · 20 agents                            [shell] [quick session] [▾] ",
     " [1] ○ 01 Private tmux destination               codex     idle                               #169 ",
     " [2] ○ 02 Native Station session                 codex     idle                                    ",
     " [3] ○ 03 Scroll fixture session                 codex     idle                                    ",

@@ -31,6 +31,7 @@ type PopupStoreOptions = Pick<
 
 export type PopupRuntime = {
   storeOptions: PopupStoreOptions;
+  openShell?: (cwd: string) => Promise<void>;
   dispose(): void;
 };
 
@@ -45,12 +46,18 @@ export function createPopupRuntime(
 
   if (env.STATION_TUI_PERSISTENT !== "1") {
     const focusOrigin = focusOriginFromEnv(env);
+    const storeOptions: PopupStoreOptions = {
+      exitOnFocusSuccess: true,
+      ...(focusOrigin === undefined ? {} : { focusOrigin }),
+    };
+    if (env.STATION_TUI_POPUP !== "1" || channel === undefined) {
+      return { storeOptions, dispose: () => {} };
+    }
+    const control = createRendererControlClient(channel, onControlLoss);
     return {
-      storeOptions: {
-        exitOnFocusSuccess: true,
-        ...(focusOrigin === undefined ? {} : { focusOrigin }),
-      },
-      dispose: () => {},
+      storeOptions,
+      openShell: control.openShell,
+      dispose: control.dispose,
     };
   }
 
@@ -73,6 +80,7 @@ export function createPopupRuntime(
       onDismiss: () => control.dismiss(),
       resolveFocusTarget: () => control.resolveFocusTarget(),
     },
+    openShell: control.openShell,
     dispose: control.dispose,
   };
 }
@@ -124,10 +132,16 @@ type PendingRequest =
       type: "resolve-focus-target";
       resolve(target: TuiFocusTarget): void;
       reject(error: SafeError): void;
+    }
+  | {
+      type: "open-shell";
+      resolve(): void;
+      reject(error: SafeError): void;
     };
 
 type RendererControlClient = {
   dismiss(): Promise<void>;
+  openShell(cwd: string): Promise<void>;
   resolveFocusTarget(): Promise<TuiFocusTarget>;
   dispose(): void;
 };
@@ -227,6 +241,11 @@ function createRendererControlClient(
       request.resolve();
       return;
     }
+    if (response.type === "shell-opened" && request.type === "open-shell") {
+      pending.delete(response.requestId);
+      request.resolve();
+      return;
+    }
     if (response.type === "focus-target" && request.type === "resolve-focus-target") {
       pending.delete(response.requestId);
       request.resolve({
@@ -309,6 +328,20 @@ function createRendererControlClient(
 
   return {
     dismiss: requestManualDismiss,
+    openShell: (cwd): Promise<void> => {
+      const requestId = newRequestId();
+      return new Promise<void>((resolve, reject) => {
+        send(
+          {
+            protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+            requestId,
+            type: "open-shell",
+            cwd,
+          },
+          { type: "open-shell", resolve, reject },
+        );
+      });
+    },
     resolveFocusTarget: async (): Promise<TuiFocusTarget> => {
       const requestId = newRequestId();
       return new Promise<TuiFocusTarget>((resolve, reject) => {

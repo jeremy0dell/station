@@ -4,9 +4,11 @@ import {
   focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
+  openProjectDefaultAgentPicker,
   openWidgetSettings,
   scrollDashboard,
   selectAddProjectRow,
+  selectDashboardSessionRow,
   selectDashboardViewport,
   widgetSettingsAddFromPicker,
   widgetSettingsOpenPicker,
@@ -27,6 +29,11 @@ import {
 } from "../station/input/stationKeymap.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 
+export type DashboardMouseEffects = {
+  openShell(target: { cwd: string }): void;
+  openUrl(url: string): void;
+};
+
 const ROW_INTERACTIVE_MODES: ReadonlySet<StationInputMode> = new Set([
   "dashboard",
   "removeChooseSlot",
@@ -36,14 +43,6 @@ const ROW_INTERACTIVE_MODES: ReadonlySet<StationInputMode> = new Set([
 const SHEET_CHOICE_MODES: ReadonlySet<string> = new Set(Object.keys(LIST_REGISTRY));
 const SCROLL_PAGE_ROWS = 5;
 const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
-const LINK_MESSAGE = "Opening links is not supported in the standalone dashboard.";
-const DEFENSIVE_NOOP_TARGETS: ReadonlySet<StationMouseTarget["kind"]> = new Set([
-  "openShellForRow",
-  "openShellForProject",
-  "quickSessionForProject",
-  "showDefaultAgentPickerForProject",
-  "body",
-]);
 const NAMED_BINDING_KEYS: Record<
   Extract<StationBinding["pattern"], { kind: "named" }>["named"],
   TuiKey
@@ -58,11 +57,12 @@ const NAMED_BINDING_KEYS: Record<
   right: { input: "", rightArrow: true },
 };
 
-/** Translates standalone semantic targets into dashboard transitions without native pane outcomes. */
+/** Translates standalone semantic targets into shared dashboard actions and renderer effects. */
 export function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
   store: StoreApi<TuiStore>,
+  effects: DashboardMouseEffects,
 ): void {
   const mode = deriveStationMode(store.getState());
   const scrollDirection = wheelDirection(event);
@@ -76,7 +76,7 @@ export function routeDashboardMouse(
     return;
   }
 
-  if (routeSurfaceClick(target, store, mode)) {
+  if (routeSurfaceClick(target, store, mode, effects)) {
     return;
   }
   if (routeModalClick(target, store, mode)) {
@@ -89,10 +89,8 @@ function routeSurfaceClick(
   target: StationMouseTarget,
   store: StoreApi<TuiStore>,
   mode: StationInputMode,
+  effects: DashboardMouseEffects,
 ): boolean {
-  if (DEFENSIVE_NOOP_TARGETS.has(target.kind)) {
-    return true;
-  }
   switch (target.kind) {
     case "row":
       activateRowInMode(store, target.rowId, mode);
@@ -101,7 +99,23 @@ function routeSurfaceClick(
       toggleProjectInMode(store, target.projectId, mode);
       return true;
     case "link":
-      interceptLinkInMode(store, mode);
+      openLinkInMode(target.url, mode, effects);
+      return true;
+    case "openShellForRow":
+      openRowShellInMode(store, target.rowId, mode, effects);
+      return true;
+    case "openShellForProject":
+      openProjectShellInMode(store, target.projectId, mode, effects);
+      return true;
+    case "quickSessionForProject":
+      if (mode === "dashboard") {
+        store.getState().createQuickSession(target.projectId);
+      }
+      return true;
+    case "showDefaultAgentPickerForProject":
+      if (mode === "dashboard") {
+        store.setState(openProjectDefaultAgentPicker(store.getState(), target.projectId));
+      }
       return true;
     case "scrollIndicator":
       pageInMode(store, target.direction, mode);
@@ -111,6 +125,8 @@ function routeSurfaceClick(
       return true;
     case "toast":
       store.getState().dismissToasts();
+      return true;
+    case "body":
       return true;
     default:
       return false;
@@ -137,10 +153,46 @@ function toggleProjectInMode(
   }
 }
 
-function interceptLinkInMode(store: StoreApi<TuiStore>, mode: StationInputMode): void {
+function openLinkInMode(
+  url: string,
+  mode: StationInputMode,
+  effects: DashboardMouseEffects,
+): void {
   if (mode === "dashboard") {
-    showNotice(store, LINK_MESSAGE);
+    effects.openUrl(url);
   }
+}
+
+function openRowShellInMode(
+  store: StoreApi<TuiStore>,
+  rowId: string,
+  mode: StationInputMode,
+  effects: DashboardMouseEffects,
+): void {
+  if (mode !== "dashboard") return;
+  const snapshot = store.getState().snapshot;
+  if (snapshot === undefined) return;
+  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
+  if (sessionRow === undefined) {
+    showNotice(store, STALE_TARGET_MESSAGE);
+    return;
+  }
+  effects.openShell({ cwd: sessionRow.worktree.path });
+}
+
+function openProjectShellInMode(
+  store: StoreApi<TuiStore>,
+  projectId: string,
+  mode: StationInputMode,
+  effects: DashboardMouseEffects,
+): void {
+  if (mode !== "dashboard") return;
+  const project = store.getState().snapshot?.projects.find((candidate) => candidate.id === projectId);
+  if (project === undefined) {
+    showNotice(store, STALE_TARGET_MESSAGE);
+    return;
+  }
+  effects.openShell({ cwd: project.root });
 }
 
 function pageInMode(

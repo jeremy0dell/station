@@ -10,6 +10,7 @@ import { safeErrorFromUnknown } from "@station/runtime";
 
 export type TuiRendererControlAdapters = {
   dismissPopup: () => Promise<{ dismissed: boolean }>;
+  openShell?: (cwd: string) => Promise<{ opened: boolean }>;
   resolveFocusTarget: () => Promise<TuiRendererFocusTarget | undefined>;
 };
 
@@ -112,6 +113,24 @@ export function attachTuiRendererControl(
         return;
       }
 
+      if (request.type === "open-shell") {
+        try {
+          const result = await adapters.openShell?.(request.cwd);
+          if (result?.opened !== true) {
+            sendError(request.requestId, undefined, popupShellError);
+            return;
+          }
+          send({
+            protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+            requestId: request.requestId,
+            type: "shell-opened",
+          });
+        } catch (error) {
+          sendError(request.requestId, error, popupShellError);
+        }
+        return;
+      }
+
       if (request.type === "dismiss-focus-target") {
         const focusTarget = activeFocusTarget;
         if (focusTarget?.requestId !== request.focusRequestId) {
@@ -206,6 +225,12 @@ const popupDismissError: SafeError = {
   tag: "TuiRendererControlError",
   code: "TUI_POPUP_DISMISS_FAILED",
   message: "The popup could not be dismissed.",
+};
+
+const popupShellError: SafeError = {
+  tag: "TuiRendererControlError",
+  code: "TUI_POPUP_SHELL_FAILED",
+  message: "The popup could not open the requested shell.",
 };
 
 const focusTargetUnavailableError: SafeError = {

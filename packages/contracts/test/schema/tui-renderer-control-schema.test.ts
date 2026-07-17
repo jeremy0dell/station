@@ -31,15 +31,28 @@ describe("TUI renderer control schemas", () => {
         focusRequestId: "focus-request-1",
       }),
     ).toEqual({ ...frame, type: "dismiss-focus-target", focusRequestId: "focus-request-1" });
+    expect(
+      TuiRendererControlRequestSchema.parse({
+        ...frame,
+        type: "open-shell",
+        cwd: "/repo/station",
+      }),
+    ).toEqual({ ...frame, type: "open-shell", cwd: "/repo/station" });
   });
 
-  it("parses dismissed, focus-target, and error responses", () => {
+  it("parses dismissed, shell-opened, focus-target, and error responses", () => {
     expect(
       TuiRendererControlResponseSchema.parse({
         ...frame,
         type: "dismissed",
       }),
     ).toEqual({ ...frame, type: "dismissed" });
+    expect(
+      TuiRendererControlResponseSchema.parse({
+        ...frame,
+        type: "shell-opened",
+      }),
+    ).toEqual({ ...frame, type: "shell-opened" });
     expect(
       TuiRendererControlResponseSchema.parse({
         ...frame,
@@ -75,6 +88,8 @@ describe("TUI renderer control schemas", () => {
       focusRequestId: "focus-request-1",
       claim: "v1.open.secret",
     },
+    { ...frame, type: "open-shell", cwd: "" },
+    { ...frame, type: "open-shell", cwd: "/repo", command: "zsh" },
     { ...frame, type: "run-command" },
   ])("rejects unsupported or authority-bearing request %#", (request) => {
     expect(TuiRendererControlRequestSchema.safeParse(request).success).toBe(false);
@@ -91,6 +106,7 @@ describe("TUI renderer control schemas", () => {
 
   it.each([
     { ...frame, type: "dismissed", clientId: "client-2" },
+    { ...frame, type: "shell-opened", cwd: "/repo" },
     { ...frame, type: "focus-target" },
     {
       ...frame,

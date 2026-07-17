@@ -269,6 +269,29 @@ describe("tmux popup", () => {
     await expect(resolveTmuxPopupFocusOrigin({ runner: closing.runner })).resolves.toBeUndefined();
   });
 
+  it("opens or focuses one cwd-bound shell window for the exact popup client", async () => {
+    const fake = createPopupTmux({ activeClaim: true, registered: true });
+    const target = await resolveTmuxPopupFocusTarget({ runner: fake.runner });
+    if (target === undefined) throw new Error("popup target missing");
+
+    await expect(target.openShell("/repo/station")).resolves.toEqual({ opened: true });
+    await expect(target.openShell("/repo/station")).resolves.toEqual({ opened: true });
+    await expect(target.dismissExact()).resolves.toEqual({ dismissed: true });
+
+    expect(fake.calls.filter((call) => call.args?.[0] === "new-window")).toHaveLength(1);
+    expect(fake.calls.filter((call) => call.args?.[0] === "select-window")).toHaveLength(1);
+    expect(fake.calls.find((call) => call.args?.[0] === "new-window")?.args).toEqual([
+      "new-window",
+      "-P",
+      "-F",
+      "#{window_id}",
+      "-c",
+      "/repo/station",
+      "-t",
+      "outer:",
+    ]);
+  });
+
   it("binds focus dismissal to the exact claim and honors explicit command precedence", async () => {
     const fake = createPopupTmux({ activeClaim: true, registered: true });
     const target = await resolveTmuxPopupFocusTarget({
@@ -637,6 +660,8 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
   const globalOptions = new Map<string, string>();
   const sessionOptions = new Map<string, string>();
   const sessionSignatures = new Map([["_station-ui", defaultSignature]]);
+  const shellWindows = new Map<string, string>();
+  let nextShellWindowId = 42;
   if (options.registered === true) {
     globalOptions.set("@station_popup_ui_route", route);
     globalOptions.set("@station_popup_ui_session_name", "_station-ui");
@@ -688,6 +713,9 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     ) {
       return tmuxCommandResult(input, `${clientPid}\t${clientName}\touter\n`);
     }
+    if (args[0] === "list-clients" && args.includes("#{client_name}\t#{client_session}")) {
+      return tmuxCommandResult(input, "/dev/ttys999\t_station-ui\n/dev/ttys001\touter\n");
+    }
     if (args[0] === "display-message" && args.includes("#{client_name}")) {
       return tmuxCommandResult(input, `${clientName}\n`);
     }
@@ -703,6 +731,21 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
         ? globalOptions.get(optionName)
         : sessionOptions.get(optionName);
       return tmuxCommandResult(input, value === undefined ? "" : `${value}\n`);
+    }
+    if (args[0] === "list-windows" && args.includes("#{window_id}\t#{@station_shell_cwd}")) {
+      const lines = [...shellWindows].map(([windowId, cwd]) => `${windowId}\t${cwd}`).join("\n");
+      return tmuxCommandResult(input, lines.length === 0 ? "" : `${lines}\n`);
+    }
+    if (args[0] === "new-window") {
+      const windowId = `@${nextShellWindowId}`;
+      nextShellWindowId += 1;
+      return tmuxCommandResult(input, `${windowId}\n`);
+    }
+    if (args[0] === "set-option" && args.includes("@station_shell_cwd")) {
+      const windowId = args[args.indexOf("-t") + 1];
+      const cwd = args.at(-1);
+      if (windowId !== undefined && cwd !== undefined) shellWindows.set(windowId, cwd);
+      return tmuxCommandResult(input);
     }
     if (args[0] === "set-option") {
       applySetOption(args, globalOptions, sessionOptions, sessionSignatures);

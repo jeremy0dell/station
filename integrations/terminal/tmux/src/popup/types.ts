@@ -20,6 +20,7 @@ export type TmuxPopupOptions = {
 
 export type TmuxPopupResult = { opened: true } | { opened: false; closed: true };
 export type TmuxPopupDismissResult = { dismissed: true } | { dismissed: false };
+export type TmuxPopupShellResult = { opened: true } | { opened: false };
 export type TmuxPersistentPopupSessionResult = { sessionName: string; created: boolean };
 export type TmuxRegisteredDevPopupUi = {
   command: string;
@@ -77,6 +78,7 @@ export type TmuxPopupFocusTarget = {
     provider: "tmux";
     clientId: string;
   };
+  openShell: (cwd: string) => Promise<TmuxPopupShellResult>;
   dismissExact: () => Promise<TmuxPopupDismissResult>;
 };
 

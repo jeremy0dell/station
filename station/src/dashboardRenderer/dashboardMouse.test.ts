@@ -10,9 +10,13 @@ import {
 } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
 import type { StationMouseEvent } from "../input/mouse.js";
+import type { StationMouseTarget } from "../station/input/stationMouse.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { routeDashboardMouse } from "./dashboardMouse.js";
+import {
+  type DashboardMouseEffects,
+  routeDashboardMouse as routeDashboardMouseWithEffects,
+} from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -25,6 +29,11 @@ const LEFT_DOWN: StationMouseEvent = {
 const LEFT_UP: StationMouseEvent = { ...LEFT_DOWN, type: "up" };
 const RIGHT_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "right", rawButton: 2 };
 const MIDDLE_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "middle", rawButton: 1 };
+const TEST_EFFECTS: DashboardMouseEffects = {
+  openShell: () => {},
+  openUrl: () => {},
+};
+
 const SCROLL_DOWN: StationMouseEvent = {
   ...LEFT_DOWN,
   type: "scroll",
@@ -32,6 +41,15 @@ const SCROLL_DOWN: StationMouseEvent = {
   rawButton: 5,
   scrollDirection: "down",
 };
+
+function routeDashboardMouse(
+  target: StationMouseTarget,
+  event: StationMouseEvent,
+  store: StoreApi<TuiStore>,
+  effects: DashboardMouseEffects = TEST_EFFECTS,
+): void {
+  routeDashboardMouseWithEffects(target, event, store, effects);
+}
 
 function makeStore(snapshot?: StationSnapshot): StoreApi<TuiStore> {
   return makeStationTestStore({
@@ -224,21 +242,68 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().screen).toEqual({ name: "help" });
   });
 
-  it("ignores mouse-up, right, middle, unsupported native targets, and modal background actions", () => {
+  it("routes project shell, quick-session, and agent-picker actions", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 14 });
+    const store = fixture.store;
+    const openedShells: string[] = [];
+    const effects = {
+      openShell: ({ cwd }: { cwd: string }) => openedShells.push(cwd),
+      openUrl: () => {},
+    };
+
+    routeDashboardMouse(
+      { kind: "openShellForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+      effects,
+    );
+    routeDashboardMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      store,
+      effects,
+    );
+    expect(openedShells).toEqual([
+      "/Users/example/Developer/station",
+      "/Users/example/.worktrees/station/pty-buffer",
+    ]);
+
+    routeDashboardMouse(
+      { kind: "quickSessionForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+      effects,
+    );
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    expect(fixture.service.dispatched.find((command) => command.type === "session.create")).toMatchObject({
+      payload: {
+        projectId: "station",
+        harness: { provider: "codex" },
+        terminal: { provider: "tmux" },
+      },
+    });
+
+    routeDashboardMouse(
+      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+      effects,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "projectDefaultAgent",
+      projectId: "station",
+    });
+  });
+
+  it("ignores mouse-up, right, middle, and modal background actions", () => {
     const store = makeStore();
     const before = store.getState();
 
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, LEFT_UP, store);
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, RIGHT_DOWN, store);
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, MIDDLE_DOWN, store);
-    routeDashboardMouse({ kind: "openShellForRow", rowId: "ses_wt_station_idle" }, LEFT_DOWN, store);
-    routeDashboardMouse({ kind: "openShellForProject", projectId: "station" }, LEFT_DOWN, store);
-    routeDashboardMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store);
-    routeDashboardMouse(
-      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
-      LEFT_DOWN,
-      store,
-    );
     expect(store.getState().screen).toEqual(before.screen);
     expect(store.getState().collapsedProjectIds).toEqual(before.collapsedProjectIds);
 
@@ -254,22 +319,28 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().collapsedProjectIds.size).toBe(0);
   });
 
-  it("intercepts links and keeps repeated link and stale-target feedback bounded", () => {
+  it("opens links through the renderer effect and keeps stale-target feedback bounded", () => {
     const store = makeStore();
+    const openedUrls: string[] = [];
+    const effects = {
+      openShell: () => {},
+      openUrl: (url: string) => openedUrls.push(url),
+    };
 
     for (let index = 0; index < 10; index += 1) {
       routeDashboardMouse(
         { kind: "link", url: "https://github.com/example/station/pull/12" },
         LEFT_DOWN,
         store,
+        effects,
       );
-      routeDashboardMouse({ kind: "row", rowId: `stale-${index}` }, LEFT_DOWN, store);
+      routeDashboardMouse({ kind: "row", rowId: `stale-${index}` }, LEFT_DOWN, store, effects);
     }
 
+    expect(openedUrls).toEqual(
+      Array.from({ length: 10 }, () => "https://github.com/example/station/pull/12"),
+    );
     expect(store.getState().toasts.length).toBeLessThanOrEqual(3);
-    expect(store.getState().toasts.some((entry) =>
-      entry.toast.message === "Opening links is not supported in the standalone dashboard."
-    )).toBe(true);
     expect(store.getState().toasts.some((entry) =>
       entry.toast.message === "That dashboard item is no longer available."
     )).toBe(true);

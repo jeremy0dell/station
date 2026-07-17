@@ -31,7 +31,7 @@ import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
 import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
 import { playStationAttentionSound } from "./sources/attentionSound.js";
 import { createStationClient } from "./sources/createStationClient.js";
-import { resolveOpenUrlCommand } from "./openUrl.js";
+import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
@@ -71,23 +71,6 @@ function spawnClipboard(command: ClipboardCommand, text: string): void {
     child.stdin?.end(text);
   } catch {
     // ignore: clipboard CLI not present
-  }
-}
-
-function openExternalUrl(rawUrl: string): void {
-  const command = resolveOpenUrlCommand(process.platform, rawUrl);
-  if (command === undefined) {
-    return;
-  }
-  try {
-    const child = spawn(command.command, command.args, {
-      stdio: "ignore",
-      detached: true,
-    });
-    child.on("error", () => {});
-    child.unref();
-  } catch {
-    // ignore: no platform opener available
   }
 }
 

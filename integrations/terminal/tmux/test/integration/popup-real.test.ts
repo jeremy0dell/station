@@ -521,6 +521,71 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForNestedClientGone(fixture);
   }, 120_000);
 
+  it("opens and reuses the project shell from an outer SGR click", async () => {
+    const fixture = await createDashboardFixture(tmux, {
+      height: "40",
+      position: "C",
+      width: "120",
+    });
+    cleanup = () => cleanupDashboardFixture(fixture);
+    fixture.observerServer = await startProtocolServer({
+      socketPath: fixture.observerSocketPath,
+      api: deterministicPopupObserver(deterministicDashboardSnapshot(fixture.projectRoot)),
+    });
+    delete fixture.env.STATION_SOURCE;
+
+    await tmuxExec(
+      fixture.wrapper,
+      ["new-session", "-d", "-s", "base", "-c", fixture.projectRoot, "sleep 300"],
+      fixture.env,
+    );
+    await tmuxExec(fixture.wrapper, ["set-option", "-g", "mouse", "on"], fixture.env);
+    fixture.ptyClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base",
+      env: fixture.env,
+      initialDimensions: { rows: 50, columns: 140 },
+    });
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const popup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
+      const dashboard = await waitForPaneContent(
+        fixture,
+        popup,
+        isAcceptanceDashboardContent,
+        "dashboard did not render for project shell activation",
+      );
+      const nestedClient = await waitForNestedClient(fixture);
+      const outerDimensions = await readOuterClientDimensions(
+        fixture,
+        fixture.ptyClient.clientName,
+      );
+      const shellCell = paneCell(dashboard, "[shell]");
+      const shellOuter = centeredPopupOuterCell(outerDimensions, nestedClient, {
+        col: shellCell.col + Math.floor("[shell]".length / 2),
+        row: shellCell.row,
+      });
+      await writeSgrClick(fixture.ptyClient, shellOuter);
+      await waitForNestedClientGone(fixture).catch(async (error) => {
+        throw new Error(`${errorMessage(error)}${await fixtureDiagnostics(fixture)}`, {
+          cause: error,
+        });
+      });
+      await expectSuccessfulExit(popup, 10_000);
+
+      const windows = await tmuxExec(
+        fixture.wrapper,
+        ["list-windows", "-a", "-F", "#{session_name}\t#{window_id}\t#{@station_shell_cwd}"],
+        fixture.env,
+      );
+      const projectShellWindows = windows
+        .trim()
+        .split("\n")
+        .filter((line) => line.startsWith("base\t") && line.endsWith(`\t${fixture.projectRoot}`));
+      expect(projectShellWindows, `tmux windows:\n${windows}`).toHaveLength(1);
+    }
+  }, 120_000);
+
   it("keeps live dashboard dividers within 60 percent popups across geometry changes", async () => {
     const fixture = await createDashboardFixture(tmux, {
       height: "60%",

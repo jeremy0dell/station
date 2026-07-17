@@ -41,6 +41,7 @@ export * from "./state/screens/addProjectScreen.js";
 export * from "./state/screens/fork.js";
 export * from "./state/screens/projectDefaultAgent.js";
 export * from "./state/screens/projectSettings.js";
+export * from "./state/screens/quickSession.js";
 export * from "./state/screens/removeWorktree.js";
 export * from "./state/screens/sessionRows.js";
 export * from "./state/screens/widgetSettings.js";

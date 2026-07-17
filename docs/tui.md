@@ -118,24 +118,33 @@ Pending rows remain inert; stale targets show bounded, deduplicated feedback. Pr
 toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
 modal surfaces intercept background clicks and scrolling.
 
-Standalone rendering omits Station-native project actions: project/header shell actions, quick
-session, the default-agent header picker, and the empty-project add-session shortcut. Their defensive
-mouse targets are no-ops if encountered. Link cells intercept clicks and report that external link
-opening is unsupported instead of activating the containing row.
+Native and standalone rendering expose the same project actions. Quick-session
+intent resolves the same project and default harness before terminal-specific
+execution: native Station hosts the session in a Station pane, while the
+standalone dashboard dispatches the configured terminal default. The
+empty-project button uses that same quick-session intent, and the agent-picker
+uses the shared project-default screen transition. Link cells use the same
+validated platform opener. Shell actions delegate only their terminal effect:
+native Station opens or focuses a Station pane, while a tmux popup sends a
+strict renderer-control request to its CLI parent. The tmux adapter opens or
+focuses one cwd-bound shell window in the exact invoking client session, then
+dismisses that popup claim.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`
 removed while tmux remains only a fixed-size PTY/capture envelope. An attached client writes raw
-SGR motion and down/up bytes, and the test proves visible native-only actions, hover, one collapse
-or expansion per click, and a real Codex row launch reflected by the Observer. It never uses
+SGR motion and down/up bytes, and the test proves project actions, hover, one collapse or expansion
+per click, and a real Codex row launch reflected by the Observer. It never uses
 `tmux send-keys` or OpenTUI `mockMouse` for mouse assertions.
 
 The real tmux-popup boundary remains an acceptance-test responsibility, not dashboard routing
 logic. `integrations/terminal/tmux/test/integration/popup-real.test.ts` sends outer-client SGR
 motion, primary down/up, repeated clicks, and wheel input through a centered popup and verifies
-hover, one action per complete click, deliberate repeated toggles, and scrolling. Production tmux
-input forwarding remains unchanged unless that real characterization fails before input reaches
-the renderer.
+hover, one action per complete click, deliberate repeated toggles, and
+scrolling. It also clicks the project shell action twice, proving exact popup
+dismissal and one reused cwd-bound window in the invoking client session.
+Production tmux input forwarding remains unchanged unless that real
+characterization fails before input reaches the renderer.
 
 ## Code Organization
 

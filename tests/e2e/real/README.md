@@ -43,7 +43,7 @@ The popup navigation test is part of the local real E2E lane. It creates a real 
 
 `real-native-tui-mouse.test.ts` runs bare `stn` with tmux context removed; tmux is only the
 fixed-size PTY and capture envelope. The test sends raw SGR bytes through an attached client
-(no `tmux send-keys` and no OpenTUI `mockMouse`), then proves native-only rendering, hover,
+(no `tmux send-keys` and no OpenTUI `mockMouse`), then proves native renderer selection, hover,
 exactly-once collapse/expand clicks, and a visible row activation that launches real Codex and
 changes the Observer snapshot. Run it alone with:
 

@@ -2,9 +2,14 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import type { DashboardMouseEffects } from "./dashboardMouse.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 
 const SURFACE = { width: 80, height: 24 };
+const TEST_EFFECTS: DashboardMouseEffects = {
+  openShell: () => {},
+  openUrl: () => {},
+};
 const teardowns: Array<() => void> = [];
 
 afterEach(() => {
@@ -63,20 +68,59 @@ describe("FullscreenDashboard mouse composition", () => {
     expect(fixture.store.getState().scrollOffset).toBe(1);
   });
 
-  it("does not render Station-native project actions", async () => {
-    const size = { width: 80, height: 40 };
+  it("renders and routes the same project actions as native Station", async () => {
+    const size = { width: 120, height: 40 };
     const fixture = makeStationTestStore({ terminalRows: size.height });
-    const setup = await render(fixture.store, size);
+    const openedShells: string[] = [];
+    const setup = await render(fixture.store, size, {
+      openShell: ({ cwd }) => openedShells.push(cwd),
+      openUrl: () => {},
+    });
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("▼ station");
     expect(frame).toContain("no sessions yet");
-    expect(frame).not.toContain("[shell]");
-    expect(frame).not.toContain("[sh]");
-    expect(frame).not.toContain("[quick session]");
-    expect(frame).not.toContain("[qs]");
-    expect(frame).not.toContain("[▾]");
-    expect(frame).not.toContain("[ + add session ]");
+    expect(frame).toContain("[shell]");
+    expect(frame).toContain("[quick session]");
+    expect(frame).toContain("[▾]");
+    expect(frame).toContain("[ + add session ]");
+
+    const shell = cellFor(frame, "[shell]");
+    const quickSession = cellFor(frame, "[quick session]");
+    const agentPicker = cellFor(frame, "[▾]");
+    await setup.mockMouse.click(shell.col, shell.row, MouseButtons.LEFT);
+    await setup.mockMouse.click(quickSession.col, quickSession.row, MouseButtons.LEFT);
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    await setup.mockMouse.click(agentPicker.col, agentPicker.row, MouseButtons.LEFT);
+
+    expect(openedShells).toEqual(["/Users/example/Developer/station"]);
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "projectDefaultAgent",
+      projectId: "station",
+    });
+  });
+
+  it("routes the empty-project add-session button and pull-request links", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestStore({ terminalRows: size.height });
+    const openedUrls: string[] = [];
+    const setup = await render(fixture.store, size, {
+      openShell: () => {},
+      openUrl: (url) => openedUrls.push(url),
+    });
+    const frame = setup.captureCharFrame();
+    const addSession = cellFor(frame, "[ + add session ]");
+    const pullRequest = cellFor(frame, "#73");
+
+    await setup.mockMouse.click(addSession.col, addSession.row, MouseButtons.LEFT);
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    await setup.mockMouse.click(pullRequest.col, pullRequest.row, MouseButtons.LEFT);
+
+    expect(openedUrls).toEqual(["https://github.com/example/station/pull/73"]);
   });
 
   it("keeps the dashboard open with its existing toast when a clicked command is rejected", async () => {
@@ -110,8 +154,9 @@ describe("FullscreenDashboard mouse composition", () => {
 async function render(
   store: ReturnType<typeof makeStationTestStore>["store"],
   size: { width: number; height: number } = SURFACE,
+  effects: DashboardMouseEffects = TEST_EFFECTS,
 ) {
-  const setup = await testRender(<FullscreenDashboard store={store} />, size);
+  const setup = await testRender(<FullscreenDashboard store={store} effects={effects} />, size);
   await setup.flush();
   teardowns.push(() => setup.renderer.destroy());
   return setup;

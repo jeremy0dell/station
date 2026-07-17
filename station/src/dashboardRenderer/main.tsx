@@ -7,8 +7,10 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { createTuiStore } from "@station/dashboard-core";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
+import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
+import type { DashboardMouseEffects } from "./dashboardMouse.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 import {
@@ -58,6 +60,25 @@ export async function runDashboardMain(): Promise<void> {
     onExit: exit,
     ...popupRuntime.storeOptions,
   });
+  const mouseEffects: DashboardMouseEffects = {
+    openShell: ({ cwd }) => {
+      const openShell = popupRuntime.openShell;
+      if (openShell === undefined) {
+        store.getState().pushToast({
+          kind: "error",
+          message: "Opening a shell is unavailable outside native Station or a tmux popup.",
+        });
+        return;
+      }
+      void openShell(cwd).catch(() => {
+        store.getState().pushToast({
+          kind: "error",
+          message: "The tmux popup could not open the requested shell.",
+        });
+      });
+    },
+    openUrl: openExternalUrl,
+  };
 
   // Attach the snapshot source first, then start the client runtime feeding it
   // (the order Station's lifecycle uses), so the first frame already sees the
@@ -108,7 +129,7 @@ export async function runDashboardMain(): Promise<void> {
 
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
-    nextRoot.render(<FullscreenDashboard store={store} />);
+    nextRoot.render(<FullscreenDashboard store={store} effects={mouseEffects} />);
     process.on("exit", onProcessExit);
 
     if (import.meta.hot) {

@@ -6,7 +6,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
 import { StationMouseProvider, type StationMouseDispatch } from "../station/view/stationMouseContext.js";
-import { routeDashboardMouse } from "./dashboardMouse.js";
+import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMouse.js";
 
 /**
  * The standalone dashboard, rendered to fill the terminal. This is the
@@ -15,25 +15,26 @@ import { routeDashboardMouse } from "./dashboardMouse.js";
  * screen (the CLI `tui`/`popup` surface that replaced the retired Ink UI).
  *
  * Mouse targets route through the standalone dashboard adapter, which reuses
- * keyboard/core transitions while excluding native pane-only outcomes.
+ * shared dashboard actions and delegates terminal effects to its environment.
  */
-export function FullscreenDashboard({ store }: { store: StoreApi<TuiStore> }) {
+export function FullscreenDashboard({
+  store,
+  effects,
+}: {
+  store: StoreApi<TuiStore>;
+  effects: DashboardMouseEffects;
+}) {
   const { width, height } = useTerminalDimensions();
   const dispatch = useCallback<StationMouseDispatch>(
     (target, event: MouseEvent) => {
-      routeDashboardMouse(target, normalizeStationMouseEvent(event), store);
+      routeDashboardMouse(target, normalizeStationMouseEvent(event), store, effects);
     },
-    [store],
+    [effects, store],
   );
   return (
     <StationMouseProvider value={dispatch}>
       <box width={width} height={height} flexDirection="column">
-        <DashboardRoot
-          store={store}
-          columns={width}
-          rows={height}
-          showNativeProjectActions={false}
-        />
+        <DashboardRoot store={store} columns={width} rows={height} />
       </box>
     </StationMouseProvider>
   );
