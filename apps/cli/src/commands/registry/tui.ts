@@ -14,15 +14,19 @@ export const tuiCliCommand: CliCommandNode = {
   requiresConfig: true,
   run: runTuiCliCommand,
   handleConfigError: handleTuiConfigError,
-  usage: ["stn tui [--popup] [--persistent]"],
+  usage: ["stn tui [--popup] [--persistent] [--allow-nested]"],
   options: [
     { name: "--popup", description: "Run in popup mode." },
     {
       name: "--persistent",
-      description: "Accepted for tmux-popup compatibility (no separate behavior).",
+      description: "Keep the dashboard alive when the outer popup is dismissed.",
+    },
+    {
+      name: "--allow-nested",
+      description: "Allow this TUI launch from a Station-owned pane.",
     },
   ],
-  examples: ["pnpm stn tui", "pnpm stn tui --popup --persistent"],
+  examples: ["pnpm stn tui", "pnpm stn tui --popup --persistent", "pnpm stn tui --allow-nested"],
 };
 
 async function handleTuiConfigError(error: unknown, context: CliCommandConfigErrorContext) {

@@ -224,6 +224,13 @@ export type PersistedSessionTurnReadiness = {
   updatedAt: string;
 };
 
+export type SessionHarnessDerivedStateRepair = {
+  provider: ProviderId;
+  sessionId: string;
+  harnessExecution?: PersistedSessionHarnessExecution;
+  turnReadiness?: PersistedSessionTurnReadiness;
+};
+
 export type ListSessionRecoveryHandlesOptions = {
   projectId?: string;
   worktreeId?: string;

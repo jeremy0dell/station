@@ -109,9 +109,7 @@ export type StationClientReconnectOptions = {
   maxDelayMs?: number;
 };
 
-export type StationClientRuntimeOptions = {
-  socketPath?: string;
-  service?: ObserverService;
+type StationClientRuntimeSharedOptions = {
   initialSnapshot?: StationSnapshot;
   requestTimeoutMs?: number;
   commandWaitTimeoutMs?: number;
@@ -120,6 +118,23 @@ export type StationClientRuntimeOptions = {
   reconnect?: StationClientReconnectOptions;
   hooks?: StationClientRuntimeHooks;
 };
+
+type StationClientRuntimeServiceOptions = {
+  /** Injected service boundary for tests and composed clients that already own transport setup. */
+  service: ObserverService;
+  socketPath?: never;
+  expectedBuildVersion?: never;
+};
+
+type StationClientRuntimeSocketOptions = {
+  service?: never;
+  socketPath: string;
+  /** Exact Observer selector already accepted before opening this socket-backed runtime. */
+  expectedBuildVersion: string;
+};
+
+export type StationClientRuntimeOptions = StationClientRuntimeSharedOptions &
+  (StationClientRuntimeServiceOptions | StationClientRuntimeSocketOptions);
 
 export type StationClientRuntime = {
   start(): void;

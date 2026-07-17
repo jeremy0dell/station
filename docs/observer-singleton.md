@@ -77,7 +77,7 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 | 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
 | 3d-a / #135 | The Observer child holds `BEGIN IMMEDIATE` on `dirname(resolvedSocket)/observer.claim.sqlite` across probe, stale reclaim, bind, pidfile publication, seeded watcher setup, and ready commitment. CLI and provider-hook clients only attach or spawn; health opens after synchronous claim release. |
 | 3d-b prerequisite | Hook spool replay uses stable ingress identity, completes derived observations and report recovery state idempotently after primary dedupe, and unlinks records only after direct durable processing. Automatic handoff may now request graceful shutdown without turning process-memory queue acceptance into data loss. |
-| 3d-b / #137 | Startup compares strict SemVer build identity under the child-held claim. Exact or higher incumbents attach; at equal precedence the lexicographically greater exact build string wins so parent and child agree; a winning candidate replaces an incumbent only after `lsof`, health, pidfile, argv, and OS-start-token evidence agree, graceful stop plus at most one revalidated SIGTERM completes, and both socket closure and exact process death are observed. Missing, invalid, conflicting, or wedged ownership refuses without SIGKILL. |
+| 3d-b / #137 | Startup compares a strict SemVer Observer selector under the child-held claim. The display version is extended with reserved terminal `station.<sha256>` build metadata, so an exact identified selector reuses the incumbent while materially different builds of the same display version cannot silently attach. A deterministic identity ordering elects one replacement candidate; the loser refuses. Cross-version ordering is unchanged. A winning candidate replaces an incumbent only after `lsof`, health, pidfile, argv, and OS-start-token evidence agree, graceful stop plus at most one revalidated SIGTERM completes, and both socket closure and exact process death are observed. Missing legacy identity at the same display version, invalid, conflicting, or wedged ownership refuses without SIGKILL. |
 | 3e | `hook-autostart.lock` remains a state-directory rate limiter for provider-hook spawn attempts only. Every spawned child still enters the socket-relative 3d-a claim, so lock-path divergence under XDG or explicit socket configuration cannot create a second ownership authority. |
 
 Together these **stop the bleeding**: `reap` clears duplicates on demand, the
@@ -113,11 +113,14 @@ Boot sequence while holding `C`:
    deletion. Do not revive either rejected stale-path deletion scheme.
 2. **Probe and negotiate** the resolved socket as `absent`, `stale`, or
    `listening`. For a listening socket, compare strict SemVer health while still
-   holding `C`: exact or higher incumbents attach and the child exits 0; a
-   winning higher candidate replaces a lower incumbent only through verified
-   graceful handoff; incomplete, conflicting, or wedged evidence refuses. The
+   holding `C`: an exact identified selector or a higher-version incumbent attaches and
+   the child exits 0; an elected same-version candidate or higher-version
+   candidate replaces an incumbent only through verified graceful handoff;
+   same-version legacy, losing, incomplete, conflicting, or wedged evidence refuses. The
    original 3d-a contract stopped at attach, while 3d-b extends this branch
-   without adding client-side ownership mutation.
+   without adding client-side ownership mutation. The controlled stop request
+   pins the revalidated process health and performs its final health check plus
+   stop on one connection, so a socket replacement fails closed.
 3. For `absent` or `stale`, **bind or reclaim** through the existing claimed
    bind path, capture socket identity, publish and fsync the socket-specific
    pidfile, arm the seeded ownership watcher, and commit readiness.
@@ -125,6 +128,15 @@ Boot sequence while holding `C`:
    reconcile follows outside the claim. A pre-ready stop or startup failure
    retains the claim through socket and pidfile cleanup, then releases it from
    the outer lifecycle cleanup path.
+
+After stop begins, lifecycle admission rejects new command, ingress, snapshot,
+diagnostic, and subscription operations before API routing. Health and repeated
+stop remain lifecycle-only; health stays gated while shutdown converges.
+Explicit CLI stop/restart pins PID and start time before sending stop on the same
+connection; legacy health may omit build version or socket path, but missing
+process identity refuses. The stop receipt is only acceptance: CLI success waits
+until the endpoint is no longer listening, including through an unhealthy
+shutdown transition.
 
 Supporting:
 - Normal CLI and provider-hook children receive the caller's bounded startup

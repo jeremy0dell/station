@@ -18,6 +18,7 @@ Status: current living doc for development, test, and documentation workflow.
 | CLI/package-output watcher | `pnpm dev` / `pnpm station:tui-dev` | Isolated by default, not Bun HMR |
 | Isolated Station sandbox | `pnpm station:devbox` | Isolated observer, host, state, and supported hooks |
 | Isolated Station sandbox with UI HMR | `pnpm station:devbox dev` | Same devbox isolation, Bun renderer hot reload |
+| Isolated real tmux popup with UI HMR | `pnpm station:devbox tmux dev` | Private tmux server, Observer, config/state, and production popup CLI |
 
 Do not use `station:dev` as a catch-all name until it truthfully owns the UI,
 CLI/package, observer, provider, protocol, and host restart boundaries.
@@ -38,10 +39,77 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
   `pnpm build` does not create the installed artifact ownership used by the
   binding.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
-- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
+- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- `pnpm station:devbox tmux dev` starts a checkout-keyed private tmux server and isolated live Observer, then keeps the foreground command as the signal-cleanup owner. Attach with `pnpm station:devbox tmux attach`; inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
+
+### Private tmux popup devbox
+
+Install the root and Station dependencies, then build once before starting:
+
+```bash
+pnpm install
+pnpm build
+cd station && bun install && cd ..
+
+pnpm station:devbox tmux dev
+# another terminal:
+pnpm station:devbox tmux attach
+```
+
+The lane creates `/tmp/stn-dbx-<checkout-hash>` at mode `0700`, one private
+`tmux -L stn-dbx-<checkout-hash> -f /dev/null` server, an isolated live
+Observer, empty provider homes, a committed disposable Git project, and a
+strict minimal config. It never seeds real auth, Git, SSH, hooks, config, or
+default tmux state. `status` inspects only the recorded private manifest,
+server, sockets, and matching processes.
+
+Use `Ctrl-b Space` in the attached base session. The binding enters the built
+CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
+which retains the renderer-control IPC channel while the Bun renderer reloads
+in place. `dev` remains in the foreground so Ctrl-C, SIGHUP, or SIGTERM performs
+the same scoped cleanup as `stop`. Use `start` instead when automation needs the
+lane to return immediately.
+
+| Changed surface | Required action |
+| --- | --- |
+| Dashboard-imported `station/src/**` | Bun HMR only |
+| Linked `packages/*` output, CLI, Observer, providers, protocol, or tmux integration | `tmux stop` → `pnpm build` → `tmux dev` |
+| Station Host or PTY runtime | Full `tmux stop` / `tmux dev` |
+| Dependencies or Station package links | Stop, install/relink, then start |
+| Generated root/config/wrapper ownership | `tmux reset --yes` → `tmux dev` |
+
+There is intentionally no `tmux restart`: a rebuild boundary must replace the
+CLI, Observer, popup signature, and any optional Host coherently. Diagnostics
+and cleanup commands are:
+
+```bash
+pnpm station:devbox tmux status
+pnpm station:devbox tmux logs --follow
+pnpm station:devbox tmux stop
+pnpm station:devbox tmux reset --yes
+```
+
+The explicit real-lane smoke is excluded from `test:all` because it requires
+tmux, Bun, Python 3, PTY interaction, and a temporary source edit:
+
+```bash
+pnpm station:devbox:tmux:smoke
+```
+
+That smoke owns public grammar, generated-environment isolation, wrapper
+auditing, attach UX, live repaint, signal exits, and cleanup.
+`STATION_REAL_TMUX=1 pnpm test:tmux-popup:real` is the exact production-popup
+acceptance lane: it owns popup claims, keyboard input through an attached outer PTY,
+terminal-driven resize propagation, rendered focus outcomes, warm reuse,
+compiled binding behavior, and its own private fixture cleanup. The canonical
+99×25 capture is checked against
+`integrations/terminal/tmux/test/fixtures/real-dashboard-99x25.frame.json`.
+Full-frame captures use the private wrapper and preserve trailing cells;
+assertions wait for two identical captures rather than accepting an
+intermediate repaint.
 
 ## Deterministic Gates
 
@@ -49,6 +117,20 @@ Git-backed fixtures and child processes must clear Git's repository-local enviro
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`
 are inherited. Remove linked worktrees and other Git-created resources through Git before deleting
 their directories.
+
+`pnpm build` computes one immutable Observer build identity from the current
+Git `HEAD`, the sorted production inputs from tracked plus untracked-nonignored
+working-tree contents, and the resulting production package `dist` contents.
+Test trees and TypeScript test/spec files are excluded to match Turbo's
+production build inputs. It rebuilds, verifies the inputs did not move, then
+atomically publishes `packages/runtime/dist/station-build-id`. Source
+CLI/Observer output and a binary compiled from that output therefore share an
+identity; rebuilding unchanged inputs and outputs reuses it. A source process
+verifies both halves before first adopting the sidecar, then reuses that
+verified identity without further Git or hash I/O for its lifetime. That first
+verification prevents a scoped compile, cache restore, source edit, or failed
+build from silently claiming an older identity. Run `pnpm build` again; do not
+copy or retain this sidecar across a failed or different build.
 
 The deterministic local gate is:
 
@@ -93,10 +175,11 @@ pnpm smoke:install
 ```
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
-authenticated GitHub responses and temporary homes, including isolated zsh
-login-profile and minimal-PATH fresh-shell coverage, so it is deterministic and
-does not download a real release or modify the real profile. The single Ubuntu
-CI gate runs it once. On a heavily contended local host, run
+authenticated GitHub responses and temporary homes, including startup-file
+non-interaction, safely evaluated minimal-PATH guidance, physical launcher
+resolution, and normalized-colon preflight coverage. It is deterministic, does
+not download a real release, and does not read or modify real shell startup
+files. The single Ubuntu CI gate runs it once. On a heavily contended local host, run
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
@@ -112,11 +195,15 @@ gate and the hosted `standard-ci` job run these checks.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
-claim-held no-side-effect behavior, pidfile publication, version-aware graceful
-handoff and refusal, and clean restart while the persistent claim remains. The
-compiled binary smoke also proves source/compiled ordering and Station Host PTY
-continuity across Observer replacement. Run both after `pnpm build` when
-changing startup, socket ownership, pidfiles, or claim lifecycle behavior.
+claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
+same-version build-identity handoff and refusal, cross-version graceful handoff,
+and clean restart while the persistent claim remains. The compiled binary smoke
+also builds a second artifact from one production-source change in an isolated
+detached worktree, queries both exact selectors, proves lower-to-higher
+same-version replacement and post-handoff mutation refusal, then proves
+source/compiled ordering and Station Host PTY continuity across both Observer
+replacements. Run both after `pnpm build` when changing startup, socket
+ownership, pidfiles, or claim lifecycle behavior.
 
 For focused Station PTY work, run both implementations explicitly:
 
@@ -161,8 +248,12 @@ baseline target for older CPU compatibility. The smoke runs the binary with a
 child `PATH` that contains neither Node nor Bun and covers Observer self-spawn,
 ingress and popup argv0 dispatch, packaged assets, hostile working-directory
 configuration, and a real host-backed Bun PTY.
-The `0.0.0-local` build identity also exercises cross-version Observer handoff
-and verifies that the same live Host PTY survives it.
+The `0.0.0-local` display version exercises cross-version Observer handoff. The
+smoke first builds two independently stamped binaries at that display version,
+runs the lower identity as incumbent, replaces it with the higher identity, and
+verifies that a later mutating command from the loser is refused without
+changing the Observer, Station Host, or live PTY. It requires a committed clean
+checkout so the detached-worktree artifact has one controlled source delta.
 
 To inspect the UX manually after the smoke:
 
@@ -428,9 +519,12 @@ then quit and reopen `stn tui` and confirm the session remains.
 If the compiled tmux binding was enabled, use `tmux prefix + Space` for the cold
 open, close the popup with the same chord, and use it again for a warm reopen.
 Confirm both opens are silent in the calling pane and the warm open reuses the
-existing `_station-ui` session. Finally confirm the installer did not edit a
-shell profile, run the exact idempotent future-shell PATH opt-in command it
-printed, open a new login shell, and verify `stn --version` still resolves.
+existing `_station-ui` session. Finally confirm the installer did not read or
+edit shell startup files. Copy the one future-shell export it printed into a
+shell configuration you choose,
+open a new login shell, and verify all three physical launcher resolutions and
+`stn --version`. The installer, not the user-facing PATH text alone, must have
+verified those launchers after installation.
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
@@ -439,17 +533,19 @@ manually verify the actual user experience, not a dashboard override:
 
 1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
    directory absent from `PATH`. Confirm all three missing launchers are named,
-   the profile is unchanged without `--persist-path`, the printed exact opt-in
-   command is idempotent, the current-shell block prepends the safely quoted
-   directory and runs `hash -r` plus `stn setup`, and the absolute `stn`
-   fallback works.
-2. Repeat with `--persist-path`, an existing zsh `.zprofile` containing only
-   Homebrew setup, and an older launcher shadowing the install. Confirm the
-   profile content and mode are preserved, one entry prepends the exact install
-   directory, a new login shell resolves all three launchers there, and a
-   second install adds no duplicate entry. With all three launchers already
-   resolving physically to the install directory, confirm the short
-   `Next: run stn setup` success message.
+   every shell startup file remains absent, the one future-shell export is
+   safely quoted for a user-chosen shell configuration, the current-shell block
+   runs `hash -r` plus `stn setup`, and the absolute `stn` fallback works.
+2. Repeat with existing zsh and bash startup files containing distinct sentinel
+   bytes and modes, startup-file symlinks, an older launcher shadowing the
+   install, and custom install directories containing spaces and apostrophes.
+   Confirm two installs leave every startup file, inode, mode, symlink, and
+   target unchanged. Copy the printed export manually into the file you choose,
+   open a new login shell, and physically verify all three launchers. Also
+   confirm a normalized install path containing `:` fails before any GitHub
+   request or installer-created path. With all three launchers already resolving
+   physically to the install directory, confirm the short `Next: run stn setup`
+   success message.
 3. With the installed binary's runtime `PATH` containing neither Node nor Bun,
    run bare `stn` outside tmux. Confirm the real OpenTUI first-run screen draws
    and connects to a healthy Observer.
@@ -511,6 +607,7 @@ pnpm test:e2e
 pnpm test:e2e:real
 pnpm test:e2e:worktrunk:real
 STATION_REAL_TMUX=1 pnpm test:tmux-popup:real
+pnpm station:devbox:tmux:smoke
 pnpm test:e2e:claude:real
 pnpm test:e2e:codex:real
 pnpm test:e2e:cursor:real
@@ -525,8 +622,14 @@ Bun dependencies, Bun 1.3.14, Python 3, tmux, and these prerequisite builds:
 
 ```bash
 pnpm build
-pnpm build:binary -- --version 0.0.0-local
+pnpm build:binary -- --version "$(node -p 'require("./package.json").version')"
 ```
+
+The compiled acceptance artifact must use the checkout's package display
+version so its managed-binding signature matches the source-side fast-path
+builder. `pnpm station:devbox:tmux:smoke` requires only the source build
+(`pnpm build`); the compiled popup lane additionally requires
+`pnpm build:binary`.
 
 Set `STATION_TMUX_BIN` when the tmux executable is not available as `tmux`. The lane
 creates a disposable Git project and isolates `HOME`, the XDG directories,
@@ -536,9 +639,11 @@ and OpenCode homes. It addresses tmux only through a private
 verifies that its recorded processes and temporary root are gone, and remains
 excluded from ordinary PR and `main` CI.
 
-The lane also exercises the compiled generated binding. Warm reopen must retain
-the hidden session, renderer, and Observer PIDs even with an invalid config.
-Fast-path and fallback failures must produce no pane output, leave
+The lane also exercises the compiled generated binding. Its deterministic
+dashboard source connects through the normal Observer protocol socket and uses
+a strictly parsed snapshot; it is never injected into the renderer store. Warm
+reopen must retain the hidden session, renderer, and Observer PIDs even with an
+invalid config. Fast-path and fallback failures must produce no pane output, leave
 `#{pane_in_mode}` at `0`, and return control without an Escape dismissal. Use
 direct `stn popup` when detailed failure output is needed.
 

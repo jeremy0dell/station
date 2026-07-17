@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-22T12:00:00.000Z";
+const incumbentBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
+const replacementBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
 
 describe("CLI command dispatch/get", () => {
   it("dispatches typed command JSON from stdin through the observer protocol", async () => {
@@ -205,6 +207,48 @@ describe("CLI command dispatch/get", () => {
         },
       ),
     ).rejects.toThrow("Observer did not become healthy before the startup timeout.");
+  });
+
+  it("never dispatches a mutation through a losing same-version Observer", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("same-version-build-handoff");
+    let spawned = false;
+    let dispatches = 0;
+
+    await expect(
+      runCommandCommand(
+        ["dispatch", "--stdin"],
+        { config: fixture.config, stdin: JSON.stringify(command) },
+        {
+          buildVersion: replacementBuildVersion,
+          spawnObserver: async () => {
+            spawned = true;
+            return { pid: 5678, unref: () => undefined };
+          },
+          clientFactory: () =>
+            ({
+              health: async () =>
+                spawned
+                  ? { schemaVersion: "0.8.0", status: "healthy" }
+                  : {
+                      schemaVersion: "0.8.0",
+                      status: "healthy",
+                      pid: 1234,
+                      startedAt: now,
+                      version: incumbentBuildVersion,
+                      socketPath: fixture.socketPath,
+                    },
+              dispatch: async () => {
+                dispatches += 1;
+                return receipt("cmd_must_not_dispatch");
+              },
+            }) as never,
+        },
+      ),
+    ).rejects.toThrow(/OBSERVER_HANDOFF_REFUSED/u);
+
+    expect(spawned).toBe(true);
+    expect(dispatches).toBe(0);
   });
 });
 

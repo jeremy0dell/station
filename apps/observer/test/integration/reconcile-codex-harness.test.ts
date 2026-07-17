@@ -1,10 +1,18 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  codexHookAdapter,
   codexHookPayloadToHarnessEventReport,
   compactCodexHookPayload,
   createCodexHarnessProvider,
 } from "@station/codex";
 import type { StationConfig } from "@station/config";
-import { ObserverEventHookInvocationSchema } from "@station/contracts";
+import {
+  type HarnessEventReport,
+  ObserverEventHookInvocationSchema,
+  STATION_SCHEMA_VERSION,
+} from "@station/contracts";
 import { createFakeExternalCommandRunner, type ExternalCommandInput } from "@station/runtime";
 import {
   createFakeTerminalTarget,
@@ -261,21 +269,21 @@ describe("observer reconcile with Codex harness", () => {
     try {
       await core.reconcile("initial-native-codex-context");
 
-      const subagentStop = await reportAndReconcile(
+      const activeEvidence = await reportAndReconcile(
         api,
         eventBus,
         codexLifecycleReport({
-          reportId: "report_native_a_subagent_stop",
+          reportId: "report_native_a_working",
           nativeSessionId: "native_a",
-          event: "SubagentStop",
+          event: "PreToolUse",
           observedAt: "2026-05-21T12:00:01.000Z",
         }),
       );
       await waitFor(() => reconcileProbeCalls.length === 1);
-      expect(subagentStop.receipt).toMatchObject({ projected: false });
+      expect(activeEvidence.receipt).toMatchObject({ projected: false });
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
-        reason: "Codex subagent reviewer stopped.",
+        reason: "Codex is about to use Bash.",
         updatedAt: "2026-05-21T12:00:01.000Z",
       });
       await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
@@ -309,7 +317,7 @@ describe("observer reconcile with Codex harness", () => {
       ).toEqual([]);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
         state: "working",
-        reason: "Codex subagent reviewer stopped.",
+        reason: "Codex is about to use Bash.",
         updatedAt: "2026-05-21T12:00:01.000Z",
       });
       expect(core.getSnapshot().sessions[0]?.status).toMatchObject({
@@ -444,6 +452,351 @@ describe("observer reconcile with Codex harness", () => {
       sqlite.close();
     }
   });
+
+  it("keeps a parent Stop ready when a delayed raw SubagentStop reaches the Codex adapter", async () => {
+    const clock = { now: () => new Date(now) };
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock,
+    });
+    const stateChangeCalls: ExternalCommandInput[] = [];
+    const notificationCalls: ExternalCommandInput[] = [];
+    const eventHooks = createObserverEventHookRuntime({
+      hooks: [
+        {
+          id: "state-probe",
+          events: ["worktree.agentStateChanged", "session.updated"],
+          command: "state-probe-bin",
+        },
+        {
+          id: "notify-agent-state",
+          events: ["worktree.agentStateChanged"],
+          command: "notify-bin",
+          args: ["agent-state"],
+          timeoutMs: 1000,
+          filter: {
+            agentState: "idle",
+            harness: "codex",
+          },
+        },
+      ],
+      eventBus,
+      commandRunner: createFakeExternalCommandRunner((input) => {
+        if (input.command === "state-probe-bin") {
+          stateChangeCalls.push(input);
+        } else if (input.command === "notify-bin") {
+          notificationCalls.push(input);
+        }
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+        };
+      }),
+    });
+
+    try {
+      await core.reconcile("initial-delayed-subagent-stop-context");
+
+      const working = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: "hook_parent_working",
+          nativeSessionId: "native_parent",
+          event: "PreToolUse",
+          receivedAt: "2026-05-21T12:00:01.000Z",
+        }),
+      );
+      expect(working.receipt).toMatchObject({ accepted: true, status: "ingested" });
+      await waitFor(() => stateChangeCalls.length === 2);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        updatedAt: "2026-05-21T12:00:01.000Z",
+      });
+
+      const stopped = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: "hook_parent_stop",
+          nativeSessionId: "native_parent",
+          event: "Stop",
+          receivedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      );
+      expect(stopped.receipt).toMatchObject({ accepted: true, status: "ingested" });
+      await waitFor(() => stateChangeCalls.length === 4 && notificationCalls.length === 1);
+
+      const readyAgent = core.getSnapshot().rows[0]?.agent;
+      expect(readyAgent).toMatchObject({
+        state: "idle",
+        turnReadiness: {
+          state: "ready_to_read",
+        },
+      });
+      const readinessToken = readyAgent?.turnReadiness?.token;
+      expect(readinessToken).toBe("codex:native_parent:Stop:turn_1");
+      expect(parseNotificationReportId(notificationCalls[0]?.stdin)).toBe(readinessToken);
+
+      const stateChangeCount = stateChangeCalls.length;
+      const notificationCount = notificationCalls.length;
+      const queueBefore = (await api.health()).harnessIngressQueue;
+      const reportedBefore = await persistence.listEvents({ type: "harness.eventReported" });
+      const observationsBefore = await persistence.listProviderObservations({
+        entityKind: "harness_event",
+      });
+      const executionsBefore = await persistence.listSessionHarnessExecutions();
+      const reconcileEventsBefore = await persistence.listEvents({ type: "observer.reconciled" });
+
+      const delayed = await api.ingestProviderHookEvent(
+        codexRawHookEvent({
+          hookId: "hook_delayed_subagent_stop",
+          nativeSessionId: "native_parent",
+          event: "SubagentStop",
+          receivedAt: "2026-05-21T12:00:03.000Z",
+        }),
+      );
+
+      expect(delayed).toMatchObject({
+        accepted: false,
+        status: "ignored",
+        event: "SubagentStop",
+      });
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        turnReadiness: {
+          state: "ready_to_read",
+          token: readinessToken,
+        },
+      });
+      expect(stateChangeCalls).toHaveLength(stateChangeCount);
+      expect(notificationCalls).toHaveLength(notificationCount);
+      await expect(api.health()).resolves.toMatchObject({
+        harnessIngressQueue: queueBefore,
+      });
+      await expect(persistence.listEvents({ type: "harness.eventReported" })).resolves.toEqual(
+        reportedBefore,
+      );
+      await expect(
+        persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual(observationsBefore);
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual(executionsBefore);
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: readinessToken }),
+      ]);
+      await expect(persistence.listEvents({ type: "observer.reconciled" })).resolves.toEqual(
+        reconcileEventsBefore,
+      );
+      await expect(persistence.listEvents({ type: "providerHook.ingested" })).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: expect.objectContaining({
+              hookId: "hook_delayed_subagent_stop",
+              event: "SubagentStop",
+            }),
+          }),
+        ]),
+      );
+
+      await api.reconcile("explicit-after-delayed-subagent-stop");
+
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        turnReadiness: {
+          state: "ready_to_read",
+          token: readinessToken,
+        },
+      });
+      expect(stateChangeCalls).toHaveLength(stateChangeCount);
+      expect(notificationCalls).toHaveLength(notificationCount);
+      await expect(api.health()).resolves.toMatchObject({
+        harnessIngressQueue: queueBefore,
+      });
+      await expect(persistence.listEvents({ type: "harness.eventReported" })).resolves.toEqual(
+        reportedBefore,
+      );
+      await expect(
+        persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual(observationsBefore);
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual(executionsBefore);
+      await expect(persistence.listEvents({ type: "observer.reconciled" })).resolves.toHaveLength(
+        reconcileEventsBefore.length + 1,
+      );
+      expect(notificationCalls.map((call) => parseNotificationReportId(call.stdin))).toEqual([
+        readinessToken,
+      ]);
+    } finally {
+      await eventHooks.shutdown();
+      sqlite.close();
+    }
+  });
+
+  it("repairs legacy persisted SubagentStop state after an upgrade", async () => {
+    const fixture = await persistLegacySubagentStopSequence();
+    const clock = { now: () => new Date(now) };
+
+    const upgraded = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock,
+      sqlitePath: fixture.sqlitePath,
+    });
+    try {
+      await upgraded.core.reconcile("first-reconcile-after-upgrade");
+
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        reason: "Codex turn completed.",
+        turnReadiness: {
+          state: "ready_to_read",
+          token: "report_legacy_stop",
+        },
+      });
+      await expect(upgraded.persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_legacy_stop" }),
+      ]);
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_legacy",
+          state: "idle",
+          statusUpdatedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      ]);
+
+      await reportAndReconcile(
+        upgraded.api,
+        upgraded.eventBus,
+        codexLifecycleReport({
+          reportId: "report_replacement_working",
+          nativeSessionId: "native_replacement",
+          event: "PreToolUse",
+          observedAt: "2026-05-21T12:00:04.000Z",
+        }),
+      );
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        reason: "Codex is about to use Bash.",
+      });
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_replacement",
+          state: "working",
+        }),
+      ]);
+    } finally {
+      upgraded.sqlite.close();
+      await fixture.remove();
+    }
+  });
+
+  it("does not restore legacy readiness that the user already acknowledged", async () => {
+    const fixture = await persistLegacySubagentStopSequence({ acknowledge: true });
+    const upgraded = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(now) },
+      sqlitePath: fixture.sqlitePath,
+    });
+    try {
+      await upgraded.core.reconcile("first-reconcile-after-acknowledged-upgrade");
+
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        reason: "Codex turn completed.",
+      });
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
+      await expect(upgraded.persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_legacy",
+          state: "idle",
+        }),
+      ]);
+    } finally {
+      upgraded.sqlite.close();
+      await fixture.remove();
+    }
+  });
+
+  it("clears expired legacy binding corruption before pruning its evidence", async () => {
+    const fixture = await persistLegacySubagentStopSequence();
+    const upgraded = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date("2026-07-01T12:00:00.000Z") },
+      sqlitePath: fixture.sqlitePath,
+    });
+    try {
+      await upgraded.core.reconcile("first-reconcile-after-expired-upgrade");
+
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "unknown",
+      });
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([]);
+      await expect(upgraded.persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+      await expect(
+        upgraded.persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual([]);
+
+      await reportAndReconcile(
+        upgraded.api,
+        upgraded.eventBus,
+        codexLifecycleReport({
+          reportId: "report_after_expired_repair",
+          nativeSessionId: "native_after_expiry",
+          event: "PreToolUse",
+          observedAt: "2026-07-01T12:00:01.000Z",
+        }),
+      );
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        reason: "Codex is about to use Bash.",
+      });
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_after_expiry",
+          state: "working",
+        }),
+      ]);
+    } finally {
+      upgraded.sqlite.close();
+      await fixture.remove();
+    }
+  });
+
+  it("preserves newer derived state when an older rejected observation expires", async () => {
+    const fixture = await persistLegacySubagentStopSequence({ laterStop: true });
+    const upgraded = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date("2026-07-01T12:00:00.000Z") },
+      sqlitePath: fixture.sqlitePath,
+    });
+    try {
+      await upgraded.core.reconcile("expired-rejected-event-with-newer-state");
+
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_legacy",
+          state: "idle",
+          statusUpdatedAt: "2026-05-21T12:00:04.000Z",
+        }),
+      ]);
+      await expect(upgraded.persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_legacy_later_stop" }),
+      ]);
+      await expect(
+        upgraded.persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual([]);
+    } finally {
+      upgraded.sqlite.close();
+      await fixture.remove();
+    }
+  });
 });
 
 function nextObserverReconciled(eventBus: ReturnType<typeof createObserverEventBus>) {
@@ -459,7 +812,7 @@ function nextObserverReconciled(eventBus: ReturnType<typeof createObserverEventB
 async function reportAndReconcile(
   api: ReturnType<typeof createTestObserver>["api"],
   eventBus: ReturnType<typeof createObserverEventBus>,
-  report: ReturnType<typeof codexHookPayloadToHarnessEventReport>,
+  report: HarnessEventReport,
 ) {
   const eventIterator = eventBus.subscribe()[Symbol.asyncIterator]();
   const receipt = await api.reportHarnessEvent(report);
@@ -475,10 +828,163 @@ async function reportAndReconcile(
   return { receipt, events };
 }
 
+function legacySubagentStopReport(input: {
+  reportId: string;
+  nativeSessionId: string;
+  observedAt: string;
+}): HarnessEventReport {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    reportId: input.reportId,
+    provider: "codex",
+    kind: "harness",
+    eventType: "SubagentStop",
+    observedAt: input.observedAt,
+    status: {
+      value: "working",
+      confidence: "medium",
+      reason: "Codex subagent reviewer stopped.",
+      source: "harness_event",
+      updatedAt: input.observedAt,
+    },
+    correlation: {
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      terminalTargetId: "tmux:station:@1:%2",
+      nativeSessionId: input.nativeSessionId,
+      cwd: "/tmp/station/web/task",
+    },
+    diagnostics: {
+      rawEventType: "SubagentStop",
+    },
+    providerData: {
+      codexSessionId: input.nativeSessionId,
+      hookEventName: "SubagentStop",
+      codexTurnId: "turn_1",
+      agentId: "agent_reviewer",
+      agentType: "reviewer",
+    },
+  };
+}
+
+async function persistLegacySubagentStopSequence(
+  options: { acknowledge?: boolean; laterStop?: boolean } = {},
+): Promise<{ sqlitePath: string; remove: () => Promise<void> }> {
+  const root = await mkdtemp(join(tmpdir(), "station-codex-upgrade-"));
+  const sqlitePath = join(root, "observer.sqlite");
+  const legacy = createTestObserver({
+    config,
+    providers: codexProviders({ acceptLegacyPersistedEvents: true }),
+    clock: { now: () => new Date(now) },
+    sqlitePath,
+    idFactory: prefixedIds("legacy"),
+  });
+
+  await legacy.core.reconcile("legacy-before-upgrade");
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    codexLifecycleReport({
+      reportId: "report_legacy_working",
+      nativeSessionId: "native_legacy",
+      event: "PreToolUse",
+      observedAt: "2026-05-21T12:00:01.000Z",
+    }),
+  );
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    codexLifecycleReport({
+      reportId: "report_legacy_stop",
+      nativeSessionId: "native_legacy",
+      event: "Stop",
+      observedAt: "2026-05-21T12:00:02.000Z",
+    }),
+  );
+  if (options.acknowledge === true) {
+    await legacy.persistence.recordCommandAccepted({
+      commandId: "legacy_cmd_acknowledge",
+      command: {
+        type: "session.acknowledgeTurn",
+        payload: {
+          sessionId: "ses_web_task",
+          token: "report_legacy_stop",
+        },
+      },
+      createdAt: "2026-05-21T12:00:02.500Z",
+    });
+    await legacy.persistence.markCommandStarted(
+      "legacy_cmd_acknowledge",
+      "2026-05-21T12:00:02.500Z",
+    );
+    await legacy.persistence.deleteSessionTurnReadiness({
+      sessionId: "ses_web_task",
+      token: "report_legacy_stop",
+    });
+    await legacy.persistence.markCommandSucceeded(
+      "legacy_cmd_acknowledge",
+      "2026-05-21T12:00:02.500Z",
+    );
+  }
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    legacySubagentStopReport({
+      reportId: "report_legacy_subagent_stop",
+      nativeSessionId: "native_legacy",
+      observedAt: "2026-05-21T12:00:03.000Z",
+    }),
+  );
+  if (options.laterStop === true) {
+    await reportAndReconcile(
+      legacy.api,
+      legacy.eventBus,
+      codexLifecycleReport({
+        reportId: "report_legacy_later_stop",
+        nativeSessionId: "native_legacy",
+        event: "Stop",
+        observedAt: "2026-05-21T12:00:04.000Z",
+      }),
+    );
+  }
+
+  expect(legacy.core.getSnapshot().rows[0]?.agent).toMatchObject(
+    options.laterStop === true
+      ? {
+          state: "idle",
+          reason: "Codex turn completed.",
+          turnReadiness: { token: "report_legacy_later_stop" },
+        }
+      : {
+          state: "working",
+          reason: "Codex subagent reviewer stopped.",
+        },
+  );
+  await expect(legacy.persistence.listSessionTurnReadiness()).resolves.toEqual(
+    options.laterStop === true
+      ? [expect.objectContaining({ token: "report_legacy_later_stop" })]
+      : [],
+  );
+  await expect(legacy.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+    expect.objectContaining({
+      nativeSessionId: "native_legacy",
+      state: options.laterStop === true ? "idle" : "working",
+      statusUpdatedAt:
+        options.laterStop === true ? "2026-05-21T12:00:04.000Z" : "2026-05-21T12:00:03.000Z",
+    }),
+  ]);
+  legacy.sqlite.close();
+  return {
+    sqlitePath,
+    remove: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
 function codexLifecycleReport(input: {
   reportId: string;
   nativeSessionId: string;
-  event: "PreToolUse" | "SubagentStop" | "Stop";
+  event: "PreToolUse" | "Stop";
   stopHookActive?: boolean;
   observedAt: string;
 }) {
@@ -505,8 +1011,75 @@ function codexLifecycleReport(input: {
           tool_input: { command: "pnpm test" },
           tool_use_id: `call_${input.reportId}`,
         }
-      : input.event === "SubagentStop"
+      : {
+          ...common,
+          hook_event_name: "Stop",
+          stop_hook_active: input.stopHookActive ?? false,
+          last_assistant_message: "Done.",
+        };
+  return codexHookPayloadToHarnessEventReport({
+    reportId: input.reportId,
+    observedAt: input.observedAt,
+    payload,
+  });
+}
+
+async function ingestRawHookAndWaitForReconcile(
+  api: ReturnType<typeof createTestObserver>["api"],
+  eventBus: ReturnType<typeof createObserverEventBus>,
+  event: ReturnType<typeof codexRawHookEvent>,
+) {
+  const eventIterator = eventBus.subscribe()[Symbol.asyncIterator]();
+  const receipt = await api.ingestProviderHookEvent(event);
+  expect(receipt).toMatchObject({ accepted: true, status: "ingested" });
+  const events = [];
+  while (true) {
+    const next = await eventIterator.next();
+    if (next.done) throw new Error("Event subscription ended before reconcile.");
+    events.push(next.value);
+    if (next.value.type === "observer.reconciled") break;
+  }
+  await eventIterator.return?.();
+  return { receipt, events };
+}
+
+function codexRawHookEvent(input: {
+  hookId: string;
+  nativeSessionId: string;
+  event: "PreToolUse" | "Stop" | "SubagentStop";
+  receivedAt: string;
+}) {
+  const common = {
+    session_id: input.nativeSessionId,
+    transcript_path: null,
+    cwd: "/tmp/station/web/task",
+    model: "gpt-5.4-codex",
+    permission_mode: "default",
+    turn_id: "turn_1",
+    station_project_id: "web",
+    station_worktree_id: "wt_web_task",
+    station_worktree_path: "/tmp/station/web/task",
+    station_session_id: "ses_web_task",
+    station_terminal_provider: "tmux",
+    station_terminal_target_id: "tmux:station:@1:%2",
+  };
+  const payload =
+    input.event === "PreToolUse"
+      ? {
+          ...common,
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "pnpm test" },
+          tool_use_id: `call_${input.hookId}`,
+        }
+      : input.event === "Stop"
         ? {
+            ...common,
+            hook_event_name: "Stop",
+            stop_hook_active: false,
+            last_assistant_message: "Done.",
+          }
+        : {
             ...common,
             hook_event_name: "SubagentStop",
             agent_transcript_path: null,
@@ -514,18 +1087,19 @@ function codexLifecycleReport(input: {
             agent_type: "reviewer",
             stop_hook_active: false,
             last_assistant_message: "Reviewed.",
-          }
-        : {
-            ...common,
-            hook_event_name: "Stop",
-            stop_hook_active: input.stopHookActive ?? false,
-            last_assistant_message: "Done.",
           };
-  return codexHookPayloadToHarnessEventReport({
-    reportId: input.reportId,
-    observedAt: input.observedAt,
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    hookId: input.hookId,
+    provider: "codex",
+    kind: "harness" as const,
+    event: input.event,
+    receivedAt: input.receivedAt,
+    projectId: "web",
+    worktreeId: "wt_web_task",
+    sessionId: "ses_web_task",
     payload,
-  });
+  };
 }
 
 function parseNotificationReportId(stdin: string | undefined): string | undefined {
@@ -542,7 +1116,20 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   throw new Error("Timed out waiting for condition.");
 }
 
-function codexProviders(): ProviderRegistry {
+function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {}): ProviderRegistry {
+  const codex = createCodexHarnessProvider({
+    now: () => new Date(now),
+    runner: async (input) => ({
+      command: input.command,
+      args: input.args ?? [],
+      stdout: "Logged in with ChatGPT\n",
+      stderr: "",
+      exitCode: 0,
+    }),
+  });
+  if (options.acceptLegacyPersistedEvents === true) {
+    delete codex.acceptsPersistedEvent;
+  }
   return new ProviderRegistry({
     worktree: new FakeWorktreeProvider({
       now,
@@ -579,19 +1166,20 @@ function codexProviders(): ProviderRegistry {
         }),
       ],
     }),
-    harnesses: [
-      createCodexHarnessProvider({
-        now: () => new Date(now),
-        runner: async (input) => ({
-          command: input.command,
-          args: input.args ?? [],
-          stdout: "Logged in with ChatGPT\n",
-          stderr: "",
-          exitCode: 0,
-        }),
-      }),
-    ],
+    harnesses: [codex],
+    hookAdapters: [codexHookAdapter],
   });
+}
+
+function prefixedIds(prefix: string) {
+  let command = 0;
+  let event = 0;
+  let observation = 0;
+  return {
+    commandId: () => `${prefix}_cmd_${++command}`,
+    eventId: () => `${prefix}_evt_${++event}`,
+    observationId: () => `${prefix}_obs_${++observation}`,
+  };
 }
 
 const config: StationConfig = {

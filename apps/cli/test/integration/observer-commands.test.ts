@@ -4,13 +4,16 @@ import { describe, expect, it } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const zeroBuildVersion = `0.0.0+station.${"0".repeat(64)}`;
+const requestedBuildIdentity = "a".repeat(64);
+const requestedBuildVersion = `1.2.3+station.${requestedBuildIdentity}`;
 
 describe("CLI observer commands", () => {
   it("starts, reports status, stops, and restarts through injected process/protocol boundaries", async () => {
     const fixture = await createTempState();
     let running = false;
     const deps = {
-      buildVersion: "0.0.0",
+      buildVersion: zeroBuildVersion,
       spawnObserver: async () => {
         running = true;
         return { pid: 1234, unref: () => undefined };
@@ -26,7 +29,8 @@ describe("CLI observer commands", () => {
               status: "healthy",
               pid: 1234,
               startedAt: now,
-              version: "0.0.0",
+              version: zeroBuildVersion,
+              socketPath: fixture.socketPath,
             };
           },
           stop: async () => {
@@ -56,7 +60,7 @@ describe("CLI observer commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     let running = false;
     const deps = {
-      buildVersion: "0.0.0",
+      buildVersion: zeroBuildVersion,
       spawnObserver: async () => {
         running = true;
         return { pid: 1234, unref: () => undefined };
@@ -72,7 +76,8 @@ describe("CLI observer commands", () => {
               status: "healthy",
               pid: 1234,
               startedAt: now,
-              version: "0.0.0",
+              version: zeroBuildVersion,
+              socketPath: fixture.socketPath,
             };
           },
           stop: async () => {
@@ -132,12 +137,16 @@ describe("CLI observer commands", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const observerDeps = {
-      buildVersion: "1.2.3",
+      buildVersion: requestedBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
             schemaVersion: "0.8.0",
             status: "healthy",
+            pid: 1234,
+            startedAt: now,
+            version: "1.2.3",
+            socketPath: fixture.socketPath,
           }),
         }) as never,
     };
@@ -152,7 +161,9 @@ describe("CLI observer commands", () => {
         status: "unhealthy",
         error: {
           code: "OBSERVER_HANDOFF_REFUSED",
-          hint: expect.stringContaining("Requested build: 1.2.3"),
+          hint: expect.stringMatching(
+            /Running build: 1\.2\.3 \(legacy identity\).*Requested build: 1\.2\.3 \(build a{12}\).*`stn observer stop`/u,
+          ),
         },
       },
     });

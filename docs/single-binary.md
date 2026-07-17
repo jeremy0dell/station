@@ -143,8 +143,12 @@ stn (bun build --compile, per platform, no ambient env)
   virtual compiled module path and filesystem root `/` are never accepted as
   popup ownership.
 - **Runtime-mode seam** `packages/runtime/src/buildInfo.ts`: build-time
-  defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` behind `typeof`
-  guards; dev tsc reports `{ version: "0.7.0", compiled: false }`.
+  defines `STATION_BUILD_VERSION` / `STATION_BUILD_COMPILED` /
+  `STATION_BUILD_IDENTITY` behind `typeof` guards. Source output reads the
+  atomically published `station-build-id` sidecar and reverifies its repository
+  inputs plus production package outputs; compiled and source output from the
+  same whole-repository build therefore produce the same Observer selector while
+  retaining `{ version: "0.7.0", compiled: false }` display semantics.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -236,9 +240,10 @@ and that migrations run identically — the observer's `openObserverSqlite`
 already applies `PRAGMA journal_mode = WAL` and migrations, so the driver
 only needs to guarantee both `exec` and `prepare().run()` semantics match.
 
-Feed `stationBuildInfo().version` into `createObserverCore` (fixes the
-hardcoded `"0.0.0"` in `reconcile/core.ts`), surfacing a real version in
-observer health. `stn --version`.
+Feed `stationBuildInfo().version` into snapshot and `stn --version` display.
+Source processes verify that build info at most once, while Observer health and
+pidfile ownership publish `stationObserverBuildVersion()` so handoff also proves
+immutable build identity.
 
 **Tests:** vitest driver-mapping units (node); a bun-lane test (`bun test`)
 for the bun driver asserting `run().changes`, `get()`-no-row `undefined`,
@@ -316,8 +321,8 @@ source POSIX launcher unchanged.
 **Status: implemented.** `station/src/bin/stnMain.ts` composes
 `dispatchSelfExec` with lazy route imports; `scripts/build-binary.mjs` and
 `build:binary` build one native artifact with Bun 1.3.14. The compile command
-carries **both** ambient-config disable flags (F1), version/compiled defines,
-and the native target mapping; x64 selects Bun's `-baseline` targets.
+carries **both** ambient-config disable flags (F1), version/compiled/build-
+identity defines, and the native target mapping; x64 selects Bun's `-baseline` targets.
 `link-station-packages.sh` links the CLI and Observer applications.
 
 A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
@@ -345,9 +350,14 @@ trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
 **detached self-spawn** check (folds in S5). A stateful fake tmux proves that a
 warm binding bypasses malformed config while keeping renderer and Observer PIDs
-stable, and that a failed fallback is silent and returns zero. The native PTY test also proves the
-unset compiled selector launches a payload through the extracted helper on the
-current platform. `observerReap.ts` and the same-TTY UI
+stable and that a failed fallback is silent and returns zero. From a committed
+clean checkout, the smoke also builds an isolated detached-worktree binary with
+one production-source delta at the same display version, queries both immutable
+selectors, runs the lower identity as incumbent, proves higher-identity handoff,
+then refuses a losing artifact's mutating command without recording it or
+touching the replacement Observer, Station Host, or live PTY. The native PTY
+test also proves the unset compiled selector launches a payload through the
+extracted helper on the current platform. `observerReap.ts` and the same-TTY UI
 reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
@@ -471,13 +481,14 @@ cross-filesystem `LICENSE` metadata may also remain. The deterministic
 assets and is part of `test:all`.
 
 After success, all three bare launchers are resolved physically. If every one
-points into the new install directory, the installer prints
+points into the new install directory, the installer prints only
 `Next: run stn setup`. Otherwise it names every missing or shadowed launcher,
-prints a safely shell-quoted current-shell block that prepends the directory,
-runs `hash -r`, and invokes `stn setup`, plus the absolute installed `stn`
-fallback. Profile persistence is explicit: `--persist-path` appends one
-idempotent login-profile entry, while an install without the flag leaves the
-profile unchanged and prints an exact opt-in command.
+prints one safely shell-quoted future-shell export for the user's chosen shell
+configuration, prints a current-shell block that prepends the directory, runs
+`hash -r`, and invokes `stn setup`, plus the absolute installed `stn` fallback.
+The future-shell export appears only when physical current-process resolution
+is incomplete. The installer never reads, selects, creates, or edits shell
+startup files.
 
 The first binary release is immutable `v0.7.0` and promotes only after all four
 native targets pass automated and manual acceptance. Published tags and assets
@@ -572,8 +583,11 @@ untouched.
 **Status: implemented.** Same-version config activation uses B-config. Renderer exit code 86 =
 "restart observer" on a `halted` + `PROTOCOL_SCHEMA_MISMATCH` state → the
 CLI parent restarts once and respawns the renderer. Singleton 3d-b supplies
-cross-version Observer ordering: higher valid SemVer replaces lower only after
-verified graceful handoff, while lower callers reuse the higher incumbent.
+Observer ordering: exact immutable builds reuse; different builds at one
+display version elect one verified replacement winner and refuse the loser;
+same-version reuse refuses any missing legacy identity; and higher valid
+SemVer replaces lower only after verified graceful handoff while lower-version
+callers reuse the higher incumbent.
 
 ### B-host — station-host upgrade behavior (F7 — was undefined)
 
@@ -658,11 +672,15 @@ flow:
 
 1. Install in a clean default home with the directory missing from `PATH`,
    then with an older `stn` and one sibling launcher shadowing it → every
-   mismatch is named, the current-shell recovery block works, and an install
-   without `--persist-path` leaves the profile unchanged. Repeat with explicit
-   persistence into a Homebrew-only `.zprofile`; a fresh shell must resolve all
-   three launchers, and a second install must not duplicate the entry. With all
-   three physical resolutions correct, the short setup next step is printed.
+   mismatch is named, the one future-shell export and current-shell recovery
+   block both evaluate safely, and the absolute fallback works. Repeat with
+   startup files containing sentinel bytes, modes, and symlinks, plus custom
+   install directories containing spaces and apostrophes; two installs must
+   leave every startup path unchanged. Copy the export manually into a shell
+   configuration chosen by the user, then verify a fresh shell physically
+   resolves all three launchers. A normalized install path containing `:` must
+   fail before GitHub access or local mutation. With all three physical
+   resolutions correct, only the short setup next step is printed.
 2. Launch bare `stn` outside tmux in a sanitized, isolated env → real
    OpenTUI renderer draws, observer connects, first-run screen shows.
 3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).

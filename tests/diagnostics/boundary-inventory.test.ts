@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const roots = ["apps", "packages", "integrations"];
 const providerNeutralSourceRoots = [
   "packages/contracts/src",
+  "packages/dashboard-core/src",
   "packages/observability/src",
   "packages/protocol/src",
   "packages/runtime/src",
@@ -71,10 +72,6 @@ const setTimeoutAllowlist = new Map([
   [
     "apps/observer/src/metadata/gitRefInvalidation.ts",
     "Short debounce coalesces noisy Git ref watch events before requesting an observer-owned metadata reconcile.",
-  ],
-  [
-    "integrations/harness/opencode/src/pluginInstall.ts",
-    "Generated OpenCode plugin uses a short socket send timeout because it runs inside OpenCode, outside STATION runtime helpers.",
   ],
   [
     "packages/dashboard-core/src/widgets/useTopRowWidgets.ts",

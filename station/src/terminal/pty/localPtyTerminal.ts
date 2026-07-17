@@ -419,6 +419,12 @@ export function createPtyEnv(
   delete nextEnv.NO_COLOR;
   delete nextEnv.FORCE_COLOR;
 
+  // Bind ownership to the full tmux context so different servers may safely reuse pane ids.
+  nextEnv.STATION_PANE =
+    nextEnv.TMUX !== undefined && nextEnv.TMUX_PANE !== undefined
+      ? JSON.stringify([nextEnv.TMUX, nextEnv.TMUX_PANE])
+      : "1";
+
   return nextEnv;
 }
 

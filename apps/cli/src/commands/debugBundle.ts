@@ -35,7 +35,15 @@ export async function runDebugBundleCommand(
   const paths = resolveObserverPaths(options.config);
   const status = await startObserver({ ...options, paths }, deps);
   assertRunning(status);
-  const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath);
+  const client =
+    deps.clientFactory?.(paths.socketPath) ??
+    createObserverClient({
+      socketPath: paths.socketPath,
+      timeoutMs: diagnosticCollectionTimeoutMs,
+      ...(status.health.version === undefined
+        ? {}
+        : { expectedBuildVersion: status.health.version }),
+    });
   const collected = await runRuntimeBoundaryWithTimeout(
     {
       operation: "cli.debugBundle.collectDiagnostics",
@@ -157,8 +165,4 @@ function assertRunning(
   if (status.status !== "running") {
     throw new Error(observerStatusErrorMessage(status));
   }
-}
-
-function defaultClientFactory(socketPath: string) {
-  return createObserverClient({ socketPath, timeoutMs: diagnosticCollectionTimeoutMs });
 }

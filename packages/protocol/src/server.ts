@@ -34,6 +34,8 @@ export type ProtocolServerOptions = {
   socketPath: string;
   api: ObserverApi;
   requestTimeoutMs?: number;
+  /** Synchronous lifecycle admission check run immediately before API routing. */
+  requestGuard?: (method: ProtocolMethod) => void;
 };
 
 /**
@@ -51,6 +53,7 @@ export async function startProtocolServer(
         connection,
         options.api,
         options.requestTimeoutMs ?? defaultRequestTimeoutMs,
+        options.requestGuard,
       ),
   });
 }
@@ -59,6 +62,7 @@ async function handleConnection(
   connection: NdjsonConnection,
   api: ObserverApi,
   requestTimeoutMs: number,
+  requestGuard: ((method: ProtocolMethod) => void) | undefined,
 ): Promise<void> {
   try {
     for await (const message of connection.messages()) {
@@ -67,7 +71,7 @@ async function handleConnection(
         connection.send(errorResponse(requestId(message), "Invalid protocol request."));
         continue;
       }
-      await routeRequest(connection, api, request.data, requestTimeoutMs);
+      await routeRequest(connection, api, request.data, requestTimeoutMs, requestGuard);
     }
   } catch {
     connection.close();
@@ -79,7 +83,14 @@ async function routeRequest(
   api: ObserverApi,
   request: ProtocolRequest,
   requestTimeoutMs: number,
+  requestGuard: ((method: ProtocolMethod) => void) | undefined,
 ): Promise<void> {
+  try {
+    requestGuard?.(request.method);
+  } catch (error) {
+    connection.send(errorResponse(request.id, "Observer is not accepting this operation.", error));
+    return;
+  }
   if (request.method === "events.subscribe") {
     await routeSubscriptionRequest(connection, api, request);
     return;

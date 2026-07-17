@@ -101,7 +101,13 @@ export async function runObserveCommand(
 
   const client =
     observerDeps.clientFactory?.(paths.socketPath) ??
-    createObserverClient({ socketPath: paths.socketPath, timeoutMs });
+    createObserverClient({
+      socketPath: paths.socketPath,
+      timeoutMs,
+      ...(status.health.version === undefined
+        ? {}
+        : { expectedBuildVersion: status.health.version }),
+    });
   const context = createObserveSnapshotContext();
   const writer = deps.writeStdout ?? defaultWriteStdout;
   if (parsed.pane) {

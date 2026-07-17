@@ -164,9 +164,11 @@ The split is allowed because both pieces are outer wiring. Application modules
 must not compensate for it by selecting concrete adapters at runtime.
 
 The Station terminal adapter may use Station Host when CLI composition enables
-host-backed terminals. Observer application code knows only the injected
-`ManagedTerminalLifecycle` and its opaque managed-terminal attachment; Station
-resolves that attachment to host socket and PTY mechanics at its own boundary.
+host-backed terminals. Host backing supplies process lifecycle, close, and opaque
+attachment identity, but not external presentation control: native targets remain
+non-focusable from dashboards. Observer application code knows only the injected
+`ManagedTerminalLifecycle`; Station resolves its attachment to host socket and PTY
+mechanics at its own boundary and selects or reveals the session locally.
 
 ## Port, Actor, And Adapter Map
 
@@ -181,8 +183,8 @@ ownership even where current ownership is still a deviation.
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
-| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Station owns host attachment resolution. |
-| Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing. |
+| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
+| Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing and compatibility admission for observations persisted by earlier builds. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
@@ -240,7 +242,7 @@ No single layer owns all truth.
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, native-execution bindings, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
-| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. It corroborates process identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
+| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. Its `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. It corroborates process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
@@ -273,9 +275,11 @@ Current startup proceeds in this order:
    low-level claim database beside the resolved socket and acquires `BEGIN
    IMMEDIATE` with that startup budget. An absent or stale probe keeps the claim
    for owned startup. A listening probe reads incumbent health and applies the
-   strict SemVer policy: exact or higher incumbents attach; a higher candidate
-   may replace a lower incumbent only after complete process attribution. Hard
-   contention, invalid ownership evidence, or claim I/O failure is fatal.
+   strict SemVer selector policy: exact builds or higher-version incumbents
+   attach; a deterministically elected same-version build or higher-version
+   candidate may replace an incumbent only after complete process attribution.
+   A losing or legacy same-version candidate refuses rather than attaching.
+   Hard contention, invalid ownership evidence, or claim I/O failure is fatal.
 4. CLI composition receives the resolved state directory and constructs the
    providers. Compiled composition materializes the Pi extension here; Observer
    code remains provider-neutral.
@@ -307,13 +311,26 @@ Current startup proceeds in this order:
     and pidfile cleanup finish while the claim is held, and the outer lifecycle
     `finally` releases it before exit.
 
-Version-aware replacement remains inside step 3 while the claim is held. The
+Version-and-build-aware replacement remains inside step 3 while the claim is held. The
 handoff use case revalidates `lsof`, pidfile, argv, and OS start token before
-controlled stop and before its single permitted SIGTERM. A stop receipt is not
-exit proof: successor startup requires both socket closure and exact incumbent
-death. Missing, invalid, conflicting, or wedged evidence returns
+controlled stop and before its single permitted SIGTERM. Controlled stop binds
+the revalidated health identity to a health-plus-stop exchange on one connection,
+so a replacement cannot be stopped through the earlier incumbent's authorization.
+A stop receipt is not exit proof: successor startup requires both socket closure
+and exact incumbent death. Missing, invalid, conflicting, or wedged evidence returns
 `OBSERVER_HANDOFF_REFUSED`; automatic handoff never sends SIGKILL. Station Host
 is outside this lifecycle and continues to own live PTYs independently.
+
+After startup accepts an Observer, command, ingress, and Station clients pin
+that exact selector. Each later operation checks health and sends the request
+over the same socket connection, so replacement between readiness and mutation
+fails with `OBSERVER_BUILD_MISMATCH` instead of delegating work to new code.
+The exported Station client runtime therefore accepts either an injected service
+or a socket plus the already-accepted build selector; unpinned socket-backed
+construction refuses before any connection attempt.
+Once stop begins, the server routes only lifecycle health and idempotent stop
+traffic; health remains gated by shutdown state, while application operations
+fail with `OBSERVER_STOPPING` before API routing.
 
 Composition must make lifecycle ownership obvious. Anything that owns a timer,
 fiber, watcher, queue, socket, child process, or durable handle must have a
@@ -323,6 +340,12 @@ defined startup failure path and shutdown owner.
 
 The current API stop path drains harness ingress and metadata watchers, then
 schedules process shutdown. Process shutdown disables health responses first.
+The explicit CLI stop/restart path pins PID and start time, plus version and
+socket when reported, before sending stop on the same connection. Legacy health
+may omit version or socket, but missing PID/start time refuses. A stop receipt
+does not complete the CLI operation while the endpoint remains live; shutdown-
+gated or otherwise unhealthy responses keep polling until the socket closes or
+the bounded stop timeout fails.
 If the process still owns the socket, it conditionally removes only an exact
 matching process identity and syncs the socket directory before the protocol
 server releases the socket. A displaced process marks ownership lost before
@@ -413,11 +436,14 @@ already-normalized HarnessEventReport -> strict validation ---+
     -> schedule reconcile for fresh provider-backed graph truth
 ```
 
-`stn-ingress` performs delivery and writes the offline spool when the Observer
-cannot be reached. Hooks delivered as raw `ProviderHookEvent`s are normalized
-Observer-side through injected provider hook adapters. Integrations that
-already own a typed report path, including Pi, normalize once in that adapter
-and submit a `HarnessEventReport`; the Observer does not normalize it again.
+`stn-ingress` owns build-aware delivery and writes the offline spool when a
+compatible Observer cannot be reached for an ordinary transport failure. Known
+build, schema, and handoff incompatibility is rejected instead of entering the
+shared spool, where a mismatched incumbent could otherwise drain it. Shipped
+Pi and OpenCode transports invoke `stn-ingress`; hooks delivered as raw
+`ProviderHookEvent`s are normalized Observer-side through the selected injected
+provider adapter exactly once. Integrations that submit an already-normalized
+`HarnessEventReport` bypass provider normalization in the Observer.
 
 The harness queue acknowledges accepted online work before durable processing
 or reconcile. Queue acceptance is process-memory acceptance, not a durability
@@ -491,12 +517,13 @@ from the diagnostic use case.
 | Concern | Current contract |
 | --- | --- |
 | Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
-| Observer build ordering | Exact builds attach. For different valid SemVer builds, higher precedence wins; at equal precedence the lexicographically greater exact build string wins so the CLI parent and Observer child agree despite having different process identities. Missing or invalid versions refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
+| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
+| Persisted harness compatibility | A harness adapter may reject observations accepted by an earlier build. Reconcile excludes only those provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
-| Harness ingress | One worker processes a bounded pending map. New reports can replace pending work for the same key; a full map rejects unrelated work with a backpressure error. |
+| Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |

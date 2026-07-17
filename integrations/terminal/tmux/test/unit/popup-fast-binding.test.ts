@@ -10,10 +10,13 @@ import {
   parseNormalPopupRoute,
   parsePopupActiveClaim,
 } from "../../src/popup/fastProtocol";
+import { persistentPopupSignature } from "../../src/popup/persistentUi.js";
 
 const registrationNonce = "11".repeat(16);
 const actionNonce = "22".repeat(16);
-const signature = "v1:'/opt/station/bin/stn' --config '/tmp/missing.toml' tui --popup --persistent";
+const signature = persistentPopupSignature(
+  "'/opt/station/bin/stn' --config '/tmp/missing.toml' tui --popup --persistent",
+);
 const fixtureRoots = new Set<string>();
 
 afterEach(async () => {
@@ -405,13 +408,15 @@ exit \${FAKE_FALLBACK_EXIT:-0}
 }
 
 function fixturePopupSignature(installedRoot: string, configPath: string | undefined): string {
-  return `v1:${[
-    shellLiteral(join(installedRoot, "stn")),
-    ...(configPath === undefined ? [] : ["--config", shellLiteral(configPath)]),
-    "tui",
-    "--popup",
-    "--persistent",
-  ].join(" ")}`;
+  return persistentPopupSignature(
+    [
+      shellLiteral(join(installedRoot, "stn")),
+      ...(configPath === undefined ? [] : ["--config", shellLiteral(configPath)]),
+      "tui",
+      "--popup",
+      "--persistent",
+    ].join(" "),
+  );
 }
 
 function popupClaim(state: "closing" | "open", clientPid: number, clientName: string): string {

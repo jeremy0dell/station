@@ -1,13 +1,12 @@
 # Nightly real-agent smoke: launch real Claude Code through real tmux and capture
 # its hooks end-to-end (the version-skew tripwire). This is intentionally a
-# standalone scheduled workflow — NOT part of PR/`main` CI and NOT the
-# tend-generated nightly — so a real-agent or upstream-CLI change never blocks a
-# PR. It runs only the opt-in `tests/agent/real/claude/**` lane, which itself
+# standalone scheduled workflow — NOT part of PR/`main` CI — so a real-agent or
+# upstream-CLI change never blocks a PR. It runs only the opt-in
+# `tests/agent/real/claude/**` lane, which itself
 # skips unless STATION_REAL_CLAUDE=1.
 name: nightly-agent-smoke
 on:
   schedule:
-    # Offset from tend-nightly (06:17) to avoid contending for the runner.
     - cron: "47 7 * * *"
   workflow_dispatch:
 

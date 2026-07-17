@@ -43,7 +43,13 @@ export async function runDoctorCommand(
   assertRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
-    createObserverClient({ socketPath: paths.socketPath, timeoutMs });
+    createObserverClient({
+      socketPath: paths.socketPath,
+      timeoutMs,
+      ...(status.health.version === undefined
+        ? {}
+        : { expectedBuildVersion: status.health.version }),
+    });
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: "cli.doctor.run",

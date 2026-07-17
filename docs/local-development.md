@@ -72,10 +72,9 @@ terminal = "noop-terminal"
 
 The `native` terminal provider is always registered separately, so host-backed
 Station launches still work. The exception is when you are specifically testing
-the **classic tmux integration** — then you *want* the tmux provider and you
-accept seeing your real tmux agents (tmux state is inherently global; the only
-way to fully isolate it is a separate tmux server via a custom `STATION_TMUX_BIN`/
-socket, which is rarely worth it).
+the **classic tmux integration**. Do not point an isolated Observer at the
+default tmux server: use the private tmux devbox in §2a, which supplies a
+checkout-keyed wrapper/socket and never enumerates or mutates default tmux.
 
 ---
 
@@ -173,6 +172,112 @@ bun run host:list       # inspect it (defaults to this worktree's host)
 
 These use their own worktree-local state under `station/.dev-state`
 and touch nothing global.
+
+---
+
+## 2a. Private tmux popup devbox (+ live dashboard reload)
+
+Use this lane when the surface under test is the real tmux popup rather than
+the native Station workspace:
+
+```bash
+# prerequisites for this checkout
+pnpm build
+cd station && bun install && cd ..
+
+# terminal A: start/reuse and remain the cleanup owner
+pnpm station:devbox tmux dev
+
+# terminal B: attach an ordinary client to the private base session
+pnpm station:devbox tmux attach
+# inside it: Ctrl-b Space opens/toggles the production Station popup
+```
+
+`tmux dev` prints the checkout identity, disposable root, exact tmux binary,
+private label/socket/wrapper, `/dev/null` config, Station config/state/socket
+paths, base and `_station-ui` sessions, discovered CLI/renderer/Observer/Host
+owners, and the exact attach/log/stop commands. `tmux start` creates the same
+HMR-enabled lane but returns immediately.
+
+The disposable root is `/tmp/stn-dbx-<checkout-hash>` and contains:
+
+- isolated `HOME`, XDG, runtime, temp, config, state, layout, log, spool, and
+  diagnostics paths;
+- empty Codex, Claude, Cursor, and OpenCode homes—no copied or linked auth,
+  config, Git, or SSH material;
+- a committed disposable Git project;
+- one recorded wrapper that always executes the resolved tmux binary with the
+  private `-L` label and `-f /dev/null`;
+- a failing bare-`tmux` shim, so a child cannot silently reach default tmux.
+
+The generated config uses `noop-worktree`, `tmux`, and `noop-harness`, disables
+GitHub metadata and hook auto-start, and points at the isolated live Observer.
+The popup binding invokes the built CLI's `popup` command. Its long-lived hidden
+CLI owns renderer-control IPC; only the Bun dashboard child is overridden with
+`bun --hot --no-clear-screen src/dashboardRenderer/main.tsx`.
+
+During an edit reachable from the dashboard under `station/src/**`, the tmux
+server, attached base client, `_station-ui` pane/CLI parent, Bun PID, IPC
+channel, Observer, visible nested client, and optional Host remain stable.
+React/OpenTUI renderer resources, the dashboard store, Station client/source,
+and popup listeners are disposed and recreated inside that Bun process.
+
+Changes outside that source-only boundary need a coherent restart:
+
+```bash
+pnpm station:devbox tmux stop
+pnpm build
+pnpm station:devbox tmux dev
+```
+
+Use a full stop/start for package output, CLI, Observer, provider, protocol,
+tmux integration, Host, PTY, dependency, or Station-link changes. There is no
+`tmux restart` command because those processes and the popup build signature
+must move together.
+
+Inspect or clean up without touching global Station/default tmux:
+
+```bash
+pnpm station:devbox tmux status
+pnpm station:devbox tmux logs --follow
+pnpm station:devbox tmux stop
+pnpm station:devbox tmux reset --yes
+```
+
+`status` is private/read-only. `stop`, Ctrl-C, SIGHUP, and SIGTERM kill only the
+recorded private server, then validate Observer/Host socket, pidfile, `lsof`,
+process command, and start-time evidence before escalating. If ownership cannot
+be proven gone, cleanup retains the root and wrapper as evidence instead of
+using `pkill` or broad/default-server operations.
+
+Manual popup acceptance and HMR check:
+
+1. Open the popup with `Ctrl-b Space`, record `tmux status`, and confirm every
+   printed path is under `/tmp/stn-dbx-<checkout-hash>` with `/dev/null` as the
+   tmux config.
+2. At the 99×25 dashboard surface, inspect the complete frame and confirm the
+   footer occupies the final row. The automated lane compares every cell with
+   `integrations/terminal/tmux/test/fixtures/real-dashboard-99x25.frame.json`.
+3. Exercise `?` and Esc; verify help opens and returns to the baseline frame.
+   Resize the outer terminal through narrow, canonical, and wide sizes and
+   confirm the popup repaints without replacing its owners.
+4. Focus a private-tmux session and confirm the invoking client visibly switches
+   to its destination window and pane. Select a non-focusable native session and
+   confirm the popup remains open with an explanatory notice rather than closing
+   silently.
+5. Add a harmless visible label in
+   `station/src/dashboardRenderer/FullscreenDashboard.tsx`. Confirm the open
+   popup repaints while the reported server, base pane, hidden CLI, Bun renderer,
+   Observer, nested client, and optional Host PIDs remain stable; then revert it.
+6. Press Esc, reopen with `Ctrl-b Space`, and confirm the hidden CLI/renderer
+   and Observer are reused.
+7. Detach and stop the lane; `status` should report stopped, the private root and
+   sockets should be absent, and the failing bare-tmux audit log should not exist.
+
+The opt-in automated version is `pnpm station:devbox:tmux:smoke`. It temporarily
+edits that component in place, restores its exact bytes in `finally`, audits
+every wrapper call, and verifies startup rollback plus SIGINT/SIGHUP/SIGTERM
+cleanup.
 
 ---
 

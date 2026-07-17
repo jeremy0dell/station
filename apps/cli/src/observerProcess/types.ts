@@ -2,7 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import type { StationConfig } from "@station/config";
 import type { ObserverHealth, SafeError } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
-import type { createObserverClient } from "@station/protocol";
+import type { CreateObserverClientOptions, createObserverClient } from "@station/protocol";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverPaths } from "../paths.js";
 
@@ -20,9 +20,12 @@ export type ObserverStatus =
     };
 
 export type ObserverProcessDeps = {
-  /** Requested Station build; production defaults to the current executable build. */
+  /** Requested Observer build selector; production defaults to this executable's immutable selector. */
   buildVersion?: string;
-  clientFactory?: (socketPath: string) => ReturnType<typeof createObserverClient>;
+  clientFactory?: (
+    socketPath: string,
+    options?: Pick<CreateObserverClientOptions, "expectedObserverIdentity" | "timeoutMs">,
+  ) => ReturnType<typeof createObserverClient>;
   spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;
   clock?: RuntimeClock;
   sleep?: (ms: number) => Promise<void>;

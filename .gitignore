@@ -5,6 +5,7 @@ coverage/
 .pnpm-store/
 pnpm-lock.*.yaml
 .DS_Store
+*.bun-build
 .worktrees/
 *.tsbuildinfo
 

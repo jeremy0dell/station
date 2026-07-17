@@ -74,6 +74,7 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
   ) => HarnessLaunchPlan | Promise<HarnessLaunchPlan>;
   classifyRun: (run: HarnessRunObservation) => HarnessStatusObservation;
   ingestEvent?: HarnessIngestSpec;
+  acceptsPersistedEvent?: (observation: HarnessEventObservation) => boolean;
   doctorChecks?: (
     options: TOpts,
     context?: ProviderDoctorContext,
@@ -106,6 +107,9 @@ export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessPr
   const ingest = spec.ingestEvent;
   if (ingest) {
     provider.ingestEvent = (event, context) => harnessIngest(ingest, spec.id, event, context);
+  }
+  if (spec.acceptsPersistedEvent !== undefined) {
+    provider.acceptsPersistedEvent = spec.acceptsPersistedEvent;
   }
   const doctorChecks = spec.doctorChecks;
   if (doctorChecks) {

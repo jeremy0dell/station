@@ -16,3 +16,4 @@ export * from "./recoveryBreadcrumbs.js";
 export * from "./snapshot.js";
 export * from "./terminalIntents.js";
 export * from "./terminalTargets.js";
+export * from "./tuiRendererControl.js";

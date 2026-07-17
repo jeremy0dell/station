@@ -6,12 +6,7 @@ export type StationTerminalProviderErrorCode =
   | "TERMINAL_STATION_HOSTED"
   | "TERMINAL_TARGET_MISSING";
 
-/**
- * SafeError raised by the native (Station) terminal provider when it is not host-backed:
- * the provider owns no terminal of its own (the PTY lives in the Station UI), so
- * observer-side focus/close cannot drive it. When a host is attached, those
- * operations are real host-backed calls instead.
- */
+/** Native focus remains Station-owned; Host backing adds lifecycle close but not external focus. */
 export class StationTerminalProviderError extends Error implements SafeError {
   readonly tag = "TerminalProviderError";
   readonly provider = STATION_TERMINAL_PROVIDER_ID;

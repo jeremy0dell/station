@@ -3,7 +3,7 @@ import {
   compactClaudeHookPayload,
   createClaudeHarnessProvider,
 } from "@station/claude";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
 import { HOST_PROTOCOL_VERSION, type HostListEntry, type StationHostClient } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
@@ -18,8 +18,13 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
-import { createObserverCore, ProviderRegistry } from "../../src/internal";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createObserverCore,
+  ProviderRegistry,
+  registerObserverCommandHandlers,
+} from "../../src/internal";
+import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter";
 import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-06-11T12:00:00.000Z";
@@ -125,44 +130,101 @@ describe("observer reconcile with a station-hosted target", () => {
     );
   });
 
-  it("re-derives the one station session from host.list after losing in-memory targets", async () => {
-    // Observer-restart proxy: the provider's #targets are empty, but the host
-    // still owns the PTY. listTargets must rebuild the single target from
-    // host.list (cwd === harnessBinding.worktreePath) so reconcile derives exactly
-    // one session — never a duplicate, never zero.
+  it("keeps a host-backed session non-focusable before and after provider reconstruction", async () => {
+    const client = fakeHostClient({
+      list: async () => [
+        hostListEntry({
+          ptyId: "pty-1",
+          worktree: stationWorktree,
+          sessionId: "ses_station",
+          pid: 99,
+        }),
+      ],
+    });
+    const station = hostBackedStation(client);
+    await station.openWorkspace({
+      project,
+      worktree: stationWorktree,
+      harness: "claude",
+      layout: "agent-shell",
+      sessionId: "ses_station",
+    });
+
+    const core = createObserverCore({ config, providers: providers(station), clock });
+    const snapshot = await core.reconcile("station-host-backed");
+    const stationSession = snapshot.sessions.find((session) => session.id === "ses_station");
+    expect(stationSession).toMatchObject({
+      worktreeId: "wt_web_station",
+      terminal: { provider: "native", closeable: true },
+    });
+    expect(stationSession?.terminal?.focusable).toBeUndefined();
+
+    // Observer-restart proxy: a fresh provider has no in-memory targets and must
+    // rebuild the same non-focusable projection from host.list.
+    const rebuiltStation = hostBackedStation(client);
+    const rebuiltCore = createObserverCore({
+      config,
+      providers: providers(rebuiltStation),
+      clock,
+    });
+    const rebuiltSnapshot = await rebuiltCore.reconcile("station-provider-reconstructed");
+    const rebuiltSession = rebuiltSnapshot.sessions.find((session) => session.id === "ses_station");
+    expect(rebuiltSession).toMatchObject({
+      worktreeId: "wt_web_station",
+      terminal: { provider: "native", closeable: true },
+    });
+    expect(rebuiltSession?.terminal?.focusable).toBeUndefined();
+  });
+
+  it("fails a direct native focus command without calling Station Host focus", async () => {
+    const focus = vi.fn(async () => undefined);
     const station = hostBackedStation(
       fakeHostClient({
         list: async () => [
-          {
+          hostListEntry({
             ptyId: "pty-1",
-            terminalTargetId: stationTargetId("wt_web_station"),
-            worktreeId: "wt_web_station",
-            projectId: "web",
+            worktree: stationWorktree,
             sessionId: "ses_station",
-            worktreePath: "/tmp/station/web/station",
-            harnessProvider: "claude",
             pid: 99,
-            alive: true,
-            cols: 80,
-            rows: 24,
-          },
+          }),
         ],
+        focus,
       }),
     );
+    const registry = providers(station);
+    const { sqlite, persistence, eventBus, core, api, commandQueue } = createTestObserver({
+      config,
+      providers: registry,
+      clock,
+    });
+    registerObserverCommandHandlers({
+      projectConfigWriter: createUnexpectedProjectConfigWriter(),
+      queue: commandQueue,
+      core,
+      providers: registry,
+      projects: config.projects,
+      persistence,
+      eventBus,
+      clock,
+    });
+    await core.reconcile("station-direct-focus");
 
-    const core = createObserverCore({ config, providers: providers(station), clock });
-    const snapshot = await core.reconcile("station-restart");
+    const receipt = await api.dispatch({
+      type: "terminal.focus",
+      payload: { sessionId: "ses_station" },
+    });
+    await commandQueue.drain();
 
-    const stationSessions = snapshot.sessions.filter(
-      (session) => session.worktreeId === "wt_web_station",
-    );
-    expect(stationSessions.map((session) => session.id)).toEqual(["ses_station"]);
-    expect(snapshot.rows.find((row) => row.id === "wt_web_station")?.terminal?.provider).toBe(
-      "native",
-    );
-    expect(snapshot.rows.find((row) => row.id === "wt_web_station")?.terminal?.focusable).toBe(
-      true,
-    );
+    await expect(api.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        code: "TERMINAL_STATION_HOSTED",
+        message: "Native Station sessions cannot be focused from an external dashboard.",
+        hint: "Open native Station and select the session there.",
+      },
+    });
+    expect(focus).not.toHaveBeenCalled();
+    sqlite.close();
   });
 
   it("keeps host-backed Station fallback targets live but not dashboard-focusable", async () => {
@@ -420,6 +482,7 @@ function hostListEntry(input: {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

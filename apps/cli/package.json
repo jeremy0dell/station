@@ -39,6 +39,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:identity": "node ../../scripts/build-identity.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

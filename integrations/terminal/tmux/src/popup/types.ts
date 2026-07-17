@@ -72,6 +72,14 @@ export type TmuxPopupDismissOptions = {
   timeoutMs?: number;
 };
 
+export type TmuxPopupFocusTarget = {
+  origin: {
+    provider: "tmux";
+    clientId: string;
+  };
+  dismissExact: () => Promise<TmuxPopupDismissResult>;
+};
+
 export type TmuxPopupFocusOriginOptions = {
   command?: string;
   env?: NodeJS.ProcessEnv;

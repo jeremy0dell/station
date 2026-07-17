@@ -34,6 +34,12 @@ type RefreshFlightOutcome =
   | { status: "connectFailure"; error: SafeError; raw: unknown }
   | { status: "failure"; error: SafeError; raw: unknown; permanent: boolean };
 
+/**
+ * USE CASE
+ *
+ * Maintains one live Observer projection through either an injected service or
+ * a socket transport pinned to the build selector already accepted by its caller.
+ */
 export function createStationClientRuntime(
   options: StationClientRuntimeOptions,
 ): StationClientRuntime {
@@ -447,8 +453,14 @@ function resolveService(options: StationClientRuntimeOptions): ObserverService {
   if (options.socketPath === undefined) {
     throw new Error("createStationClientRuntime requires service or socketPath.");
   }
+  if (options.expectedBuildVersion === undefined) {
+    throw new Error(
+      "createStationClientRuntime socketPath requires an accepted Observer build selector.",
+    );
+  }
   return createObserverService({
     socketPath: options.socketPath,
+    expectedBuildVersion: options.expectedBuildVersion,
     ...(options.requestTimeoutMs === undefined ? {} : { timeoutMs: options.requestTimeoutMs }),
     ...(options.reconcileTimeoutMs === undefined
       ? {}

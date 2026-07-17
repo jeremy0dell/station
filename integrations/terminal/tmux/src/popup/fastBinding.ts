@@ -17,6 +17,7 @@ import {
   registeredPopupSessionNameOption,
 } from "./constants.js";
 import { popupProtocolSha256 } from "./fastProtocol.js";
+import { persistentPopupSignature } from "./persistentUi.js";
 
 export type BuildManagedFastPopupRunShellCommandOptions = {
   configPath?: string;
@@ -95,7 +96,7 @@ function expectedPersistentPopupSignature(options: {
     "--popup",
     "--persistent",
   ].join(" ");
-  return `v1:${command}`;
+  return persistentPopupSignature(command);
 }
 
 /**
@@ -333,7 +334,7 @@ try_fast_popup() {
   [ -n "$route" ] && [ "$lease" = "$route" ] || return 1
   [ "$session_signature" = "$registered_signature" ] || return 1
   [ "\${#registered_signature}" -le 4096 ] || return 1
-  case "$registered_signature" in v1:*) ;; *) return 1 ;; esac
+  case "$registered_signature" in v2:*) ;; *) return 1 ;; esac
   registered_signature_sha=$(sha256_value "$registered_signature") || return 1
   [ "$registered_signature_sha" = "$expected_signature_sha" ] || return 1
   parse_route || return 1

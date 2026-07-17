@@ -1,56 +1,62 @@
 // Standalone OpenTUI dashboard renderer — the sole STATION dashboard UI after the
-// Ink TUI (apps/tui) was retired. The Node CLI (`stn tui` / the tmux popup)
+// Ink TUI (apps/tui) was retired. The Node CLI (`stn tui` / persistent popup)
 // starts the observer and spawns this entry under Bun for both fullscreen and
 // popup; it renders Station's dashboard view over the observer socket and
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import type { ProviderId, TerminalFocusOrigin } from "@station/contracts";
 import { createTuiStore } from "@station/dashboard-core";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
+import {
+  createPopupRuntime,
+  createProcessRendererControlChannel,
+} from "./popupRuntime.js";
 
-function focusOriginFromEnv(
-  env: Record<string, string | undefined>,
-): TerminalFocusOrigin | undefined {
-  const provider = env.STATION_FOCUS_PROVIDER;
-  if (provider === undefined || provider.length === 0) {
-    return undefined;
-  }
-  const origin: TerminalFocusOrigin = { provider: provider as ProviderId };
-  const clientId = env.STATION_FOCUS_CLIENT_ID;
-  if (clientId !== undefined && clientId.length > 0) {
-    origin.clientId = clientId;
-  }
-  return origin;
+type DashboardHotRenderer = { destroy(): void };
+type DashboardHotRoot = { unmount(): void };
+type DashboardHotSlots = typeof globalThis & {
+  __stationDashboardHotDispose?: () => void;
+  __stationDashboardHotRenderer?: DashboardHotRenderer;
+};
+
+function dashboardHotSlots(): DashboardHotSlots {
+  return globalThis as DashboardHotSlots;
 }
 
-/** Callable entry for the read-only OpenTUI dashboard renderer. */
+/**
+ * Callable entry for the read-only OpenTUI dashboard renderer.
+ * Source HMR recreates renderer/client resources while preserving the Bun process and parent IPC.
+ */
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
-  // In a tmux popup the launcher exports STATION_TUI_POPUP=1 plus the focus origin;
-  // the dashboard then exits as soon as a focus lands (closing the popup) and
-  // asks the observer to focus the originating tmux client.
-  const isPopup = env.STATION_TUI_POPUP === "1";
+  const hotSlots = dashboardHotSlots();
 
-  let rendererForExit: { destroy(): void } | undefined;
+  // The prior OpenTUI owner must release process-global stdin synchronously before replacement.
+  hotSlots.__stationDashboardHotDispose?.();
+  hotSlots.__stationDashboardHotRenderer?.destroy();
+
+  let disposeResources = (): void => {};
   function exit(code: number): void {
-    rendererForExit?.destroy();
+    disposeResources();
     process.exit(code);
   }
+  const popupRuntime = createPopupRuntime(
+    env,
+    createProcessRendererControlChannel(),
+    () => exit(1),
+  );
 
   const client = createStationClient(env);
-  const focusOrigin = isPopup ? focusOriginFromEnv(env) : undefined;
   const store = createTuiStore({
     source: client.state,
     service: client.service,
     clientLabel: "station",
-    exitOnFocusSuccess: isPopup,
     onExit: exit,
-    ...(focusOrigin === undefined ? {} : { focusOrigin }),
+    ...popupRuntime.storeOptions,
   });
 
   // Attach the snapshot source first, then start the client runtime feeding it
@@ -59,28 +65,60 @@ export async function runDashboardMain(): Promise<void> {
   const detachSource = store.getState().start();
   client.start();
 
-  const renderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    prependInputHandlers: [createDashboardSequenceHandler(store)],
-    useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
-  });
-  rendererForExit = renderer;
-  // OpenTUI routes paste around the sequence handlers; forward it as sanitized
-  // text so a paste into search / the new-session name lands as input.
-  renderer.keyInput.on("paste", (event) => {
-    const text = sanitizePastedText(new TextDecoder().decode(event.bytes));
-    if (text.length > 0) {
-      store.getState().handleKey({ input: text });
+  let disposed = false;
+  let renderer: DashboardHotRenderer | undefined;
+  let root: DashboardHotRoot | undefined;
+  const onProcessExit = (): void => disposeResources();
+  disposeResources = (): void => {
+    if (disposed) {
+      return;
     }
-  });
-
-  const root = createRoot(renderer);
-  root.render(<FullscreenDashboard store={store} />);
-
-  process.on("exit", () => {
+    disposed = true;
+    root?.unmount();
+    popupRuntime.dispose();
     detachSource();
     void client.stop();
-  });
+    renderer?.destroy();
+    process.off("exit", onProcessExit);
+    if (hotSlots.__stationDashboardHotDispose === disposeResources) {
+      delete hotSlots.__stationDashboardHotDispose;
+    }
+    if (hotSlots.__stationDashboardHotRenderer === renderer) {
+      delete hotSlots.__stationDashboardHotRenderer;
+    }
+  };
+
+  try {
+    const nextRenderer = await createCliRenderer({
+      exitOnCtrlC: false,
+      prependInputHandlers: [createDashboardSequenceHandler(store)],
+      useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
+    });
+    renderer = nextRenderer;
+    hotSlots.__stationDashboardHotRenderer = nextRenderer;
+    hotSlots.__stationDashboardHotDispose = disposeResources;
+    // OpenTUI routes paste around the sequence handlers; forward it as sanitized
+    // text so a paste into search / the new-session name lands as input.
+    nextRenderer.keyInput.on("paste", (event) => {
+      const text = sanitizePastedText(new TextDecoder().decode(event.bytes));
+      if (text.length > 0) {
+        store.getState().handleKey({ input: text });
+      }
+    });
+
+    const nextRoot = createRoot(nextRenderer);
+    root = nextRoot;
+    nextRoot.render(<FullscreenDashboard store={store} />);
+    process.on("exit", onProcessExit);
+
+    if (import.meta.hot) {
+      import.meta.hot.accept();
+      import.meta.hot.dispose(disposeResources);
+    }
+  } catch (error) {
+    disposeResources();
+    throw error;
+  }
 }
 
 if (import.meta.main) {

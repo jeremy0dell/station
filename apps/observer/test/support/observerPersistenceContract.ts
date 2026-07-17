@@ -1524,6 +1524,69 @@ export function observerPersistenceContract(
         });
       });
 
+      it("atomically repairs derived harness state without restoring acknowledged readiness", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          const repaired = {
+            provider: "codex",
+            sessionId: "ses_repair",
+            harnessExecution: {
+              provider: "codex",
+              sessionId: "ses_repair",
+              nativeSessionId: "native_repair",
+              state: "idle" as const,
+              statusUpdatedAt: later,
+            },
+            turnReadiness: {
+              sessionId: "ses_repair",
+              projectId: "web",
+              worktreeId: "wt_repair",
+              token: "report_repair_stop",
+              completedAt: later,
+              createdAt: later,
+              updatedAt: later,
+            },
+          };
+
+          await expect(persistence.repairSessionHarnessDerivedState(repaired)).resolves.toEqual({
+            changed: true,
+          });
+          await expect(persistence.repairSessionHarnessDerivedState(repaired)).resolves.toEqual({
+            changed: false,
+          });
+          await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+            repaired.harnessExecution,
+          ]);
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+            repaired.turnReadiness,
+          ]);
+
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_ack_repair",
+            command: {
+              type: "session.acknowledgeTurn",
+              payload: {
+                sessionId: repaired.sessionId,
+                token: repaired.turnReadiness.token,
+              },
+            },
+            createdAt: later,
+          });
+          await persistence.markCommandStarted("cmd_ack_repair", later);
+          await persistence.markCommandSucceeded("cmd_ack_repair", latest);
+
+          await expect(persistence.repairSessionHarnessDerivedState(repaired)).resolves.toEqual({
+            changed: true,
+          });
+          await expect(persistence.repairSessionHarnessDerivedState(repaired)).resolves.toEqual({
+            changed: false,
+          });
+          await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+            repaired.harnessExecution,
+          ]);
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+        });
+      });
+
       it("orders sessions by ID and preserves seeded and renamed titles", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.seedSessionTitle({

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   BuildHarnessLaunchRequest,
+  HarnessEventObservation,
   HarnessRunObservation,
   RawHarnessEvent,
 } from "@station/contracts";
@@ -34,6 +35,25 @@ describe("CodexHarnessProvider", () => {
   it("advertises resume only when configured", () => {
     expect(createCodexHarnessProvider().capabilities().canResume).toBe(false);
     expect(createCodexHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
+  });
+
+  it("rejects only legacy SubagentStop observations during persisted replay", () => {
+    const accepts = createCodexHarnessProvider().acceptsPersistedEvent;
+    const observation = (eventType: string): HarnessEventObservation => ({
+      provider: "codex",
+      eventType,
+      observedAt: now,
+    });
+
+    expect(accepts?.(observation("SubagentStop"))).toBe(false);
+    expect(accepts?.(observation("Stop"))).toBe(true);
+    expect(
+      accepts?.({
+        provider: "codex",
+        rawEventType: "thread/status/changed",
+        observedAt: now,
+      }),
+    ).toBe(true);
   });
 
   it("hooksStatus reports requested:false / installed:false when hooks are not enabled", async () => {

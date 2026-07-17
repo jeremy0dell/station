@@ -2,7 +2,14 @@ import { spawn } from "node:child_process";
 import type { StationConfig } from "@station/config";
 import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { isCompiledBinary, safeErrorFromUnknown, systemClock } from "@station/runtime";
+import {
+  isCompiledBinary,
+  type RuntimeSafeError,
+  safeErrorFromUnknown,
+  stationObserverBuildVersion,
+  systemClock,
+} from "@station/runtime";
+import { dismissTmuxPopup, resolveTmuxPopupFocusTarget } from "@station/tmux";
 import { parsePositiveIntegerOption } from "../args.js";
 import type { CliEnv } from "../env.js";
 import {
@@ -18,6 +25,9 @@ import {
   resolveStationWorkspaceDir,
   stationUiInstallHint,
 } from "../stationWorkspace.js";
+import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
+
+export type { TuiRendererControlAdapters } from "./tuiRendererControl.js";
 
 /** The renderer subprocess exited with this code (the CLI's `tui` result). */
 export type TuiRunResult = {
@@ -36,10 +46,13 @@ export type RendererSpawnOptions = {
 
 export type TuiCommandDeps = {
   observer?: ObserverProcessDeps;
+  /** Supplies the caller selector once before Observer startup; tests can model build drift. */
+  buildVersion?: () => string;
   spawnRenderer?: (options: RendererSpawnOptions) => Promise<TuiRunResult>;
   spawnProcess?: typeof spawn;
   stationUiInstalled?: () => Promise<boolean>;
   selfExecRuntime?: SelfExecRuntime;
+  popupControl?: TuiRendererControlAdapters;
   env?: CliEnv;
 };
 
@@ -58,20 +71,59 @@ export type TuiCommandResult =
       observer: ObserverStatus;
     };
 
+const nestedTuiDisabledError = {
+  tag: "TuiCommandError",
+  code: "NESTED_TUI_DISABLED",
+  message: "Nested Station is disabled.",
+  hint: "Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.",
+} satisfies RuntimeSafeError;
+
+/**
+ * COMPOSITION ROOT
+ *
+ * Owns Observer startup, renderer process selection, and persistent popup control wiring.
+ */
 export async function runTuiCommand(
   args: string[],
   options: TuiCommandOptions = {},
   deps: TuiCommandDeps = {},
 ): Promise<TuiCommandResult> {
   const parsed = parseTuiArgs(args, options.timeoutMs);
+  const env = deps.env ?? process.env;
+  const stationPaneMarker =
+    env.TMUX !== undefined && env.TMUX_PANE !== undefined
+      ? JSON.stringify([env.TMUX, env.TMUX_PANE])
+      : "1";
+  // Only the incoming launcher marker exempts popup mode; buildRendererEnv stamps the child later for routing.
+  const popupLauncherChild = parsed.popupMode && env.STATION_TUI_POPUP === "1";
+  if (
+    env.STATION_PANE === stationPaneMarker &&
+    !parsed.allowNested &&
+    !parsed.devFakeDashboard &&
+    !popupLauncherChild
+  ) {
+    throw nestedTuiDisabledError;
+  }
   if (parsed.devFakeDashboard) {
     // The Bun renderer carries its own mock source; the --fake-* counts are
     // accepted for back-compat but the mock uses its baseline scenario.
     // --dev-fake-dashboard previews the read-only dashboard with mock data.
-    return runRenderer(deps, buildRendererEnv(parsed, { STATION_SOURCE: "mock" }), "dashboard");
+    return runRenderer(
+      deps,
+      buildRendererEnv(parsed, { STATION_SOURCE: "mock" }),
+      "dashboard",
+      parsed.persistentPopup,
+      options.config?.terminal?.tmux?.command,
+    );
   }
 
   const paths = resolveObserverPaths(options.config);
+  const clientBuildVersion =
+    deps.buildVersion?.() ?? deps.observer?.buildVersion ?? stationObserverBuildVersion();
+  const observerDeps: ObserverProcessDeps = {
+    ...deps.observer,
+    buildVersion: clientBuildVersion,
+  };
   const observer = await startObserver(
     {
       ...options,
@@ -79,7 +131,7 @@ export async function runTuiCommand(
       onStartupProgress: (message) => process.stderr.write(`${message}\n`),
       ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
     },
-    deps.observer,
+    observerDeps,
   );
   if (observer.status !== "running") {
     return {
@@ -89,16 +141,22 @@ export async function runTuiCommand(
       observer,
     };
   }
+  const observerBuildVersion = observer.health.version;
+  if (observerBuildVersion === undefined) {
+    throw new Error("The running Observer did not report a build version.");
+  }
 
   const startupReconcile: {
     paths: ObserverPaths;
+    expectedBuildVersion: string;
     deps?: ObserverProcessDeps;
     timeoutMs?: number;
   } = {
     paths: observer.paths,
+    expectedBuildVersion: observerBuildVersion,
   };
   if (deps.observer !== undefined) {
-    startupReconcile.deps = deps.observer;
+    startupReconcile.deps = observerDeps;
   }
   if (parsed.timeoutMs !== undefined) {
     startupReconcile.timeoutMs = parsed.timeoutMs;
@@ -111,15 +169,19 @@ export async function runTuiCommand(
   // tmux popup we keep the read-only dashboard, since tmux owns the panes there.
   return runRenderer(
     deps,
-    buildRendererEnv(parsed, { STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath }),
+    buildRendererEnv(parsed, {
+      STATION_CLIENT_BUILD_VERSION: clientBuildVersion,
+      STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath,
+      STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+    }),
     parsed.popupMode ? "dashboard" : "station",
+    parsed.persistentPopup,
+    options.config?.terminal?.tmux?.command,
   );
 }
 
-// Popup mode is signalled to the renderer via env. Any tmux focus origin
-// (STATION_FOCUS_PROVIDER / STATION_FOCUS_CLIENT_ID set by the tmux popup launcher) is
-// inherited through process.env; the tmux provider resolves the originating
-// client itself, so this command stays provider-agnostic.
+// Transient popups inherit their startup focus origin; persistent popups resolve
+// the current origin through the parent-owned control channel on every focus.
 function buildRendererEnv(
   parsed: ParsedTuiArgs,
   base: Record<string, string>,
@@ -128,6 +190,9 @@ function buildRendererEnv(
   if (parsed.popupMode) {
     env.STATION_TUI_POPUP = "1";
   }
+  if (parsed.persistentPopup) {
+    env.STATION_TUI_PERSISTENT = "1";
+  }
   return env;
 }
 
@@ -135,13 +200,20 @@ function runRenderer(
   deps: TuiCommandDeps,
   env: Record<string, string>,
   entry: RendererEntry,
+  persistentPopup: boolean,
+  popupCommand: string | undefined,
 ): Promise<TuiRunResult> {
-  return deps.spawnRenderer?.({ env, entry }) ?? spawnRenderer({ env, entry }, deps);
+  return (
+    deps.spawnRenderer?.({ env, entry }) ??
+    spawnRenderer({ env, entry }, deps, persistentPopup, popupCommand)
+  );
 }
 
 async function spawnRenderer(
   { env, entry }: RendererSpawnOptions,
   deps: TuiCommandDeps,
+  persistentPopup: boolean,
+  popupCommand: string | undefined,
 ): Promise<TuiRunResult> {
   const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
   const override = process.env.STATION_DASHBOARD_COMMAND;
@@ -158,36 +230,101 @@ async function spawnRenderer(
   if (override === undefined) {
     process.stderr.write(`Launching STATION ${entry === "dashboard" ? "dashboard" : "TUI"}…\n`);
   }
-  const developmentArgv = [
-    "bun",
-    "run",
-    "--silent",
-    "--cwd",
-    resolveStationWorkspaceDir(),
-    entry,
-  ] as const;
-  const rendererArgv = selfExecArgv(
-    entry === "dashboard" ? "dashboard" : "tui",
-    developmentArgv,
-    deps.selfExecRuntime,
-  );
-  const [command, ...args] = rendererArgv;
   const spawnProcess = deps.spawnProcess ?? spawn;
+  const workspaceDir = resolveStationWorkspaceDir();
+  const sourcePersistentDashboard =
+    override === undefined && !compiled && persistentPopup && entry === "dashboard";
+  if (sourcePersistentDashboard) {
+    const linkResult = await runStationLink(spawnProcess, workspaceDir, childEnv);
+    if (linkResult.code !== 0) return linkResult;
+  }
+  const developmentArgv = ["bun", "run", "--silent", "--cwd", workspaceDir, entry] as const;
+  const rendererArgv = sourcePersistentDashboard
+    ? (["bun", "src/dashboardRenderer/main.tsx"] as const)
+    : selfExecArgv(
+        entry === "dashboard" ? "dashboard" : "tui",
+        developmentArgv,
+        deps.selfExecRuntime,
+      );
+  const [command, ...args] = rendererArgv;
   const child =
     override !== undefined
-      ? spawnProcess(override, { shell: true, stdio: "inherit", env: childEnv })
-      : spawnProcess(command, args, {
-          stdio: "inherit",
+      ? spawnProcess(override, {
+          shell: true,
+          stdio: persistentPopup ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
           env: childEnv,
+        })
+      : spawnProcess(command, args, {
+          stdio: persistentPopup ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+          env: childEnv,
+          ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
         });
+  const control = persistentPopup
+    ? attachTuiRendererControl(
+        child,
+        deps.popupControl ?? defaultPopupControl(deps.env, popupCommand),
+      )
+    : undefined;
   return new Promise<TuiRunResult>((resolve) => {
-    child.once("error", () => resolve({ status: "exited", code: 1 }));
-    child.once("exit", (code) => resolve({ status: "exited", code: code ?? 0 }));
+    child.once("error", () => {
+      control?.dispose();
+      resolve({ status: "exited", code: 1 });
+    });
+    child.once("exit", (code) => {
+      control?.dispose();
+      resolve({ status: "exited", code: code ?? 0 });
+    });
   });
+}
+
+async function runStationLink(
+  spawnProcess: typeof spawn,
+  workspaceDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<TuiRunResult> {
+  const child = spawnProcess("bun", ["run", "--silent", "--cwd", workspaceDir, "link:station"], {
+    stdio: "inherit",
+    env,
+  });
+  return new Promise<TuiRunResult>((resolve) => {
+    let settled = false;
+    const finish = (code: number) => {
+      if (settled) return;
+      settled = true;
+      resolve({ status: "exited", code });
+    };
+    child.once("error", () => finish(1));
+    child.once("exit", (code) => finish(code ?? 1));
+  });
+}
+
+function defaultPopupControl(
+  env: CliEnv | undefined,
+  command: string | undefined,
+): TuiRendererControlAdapters {
+  const popupEnv = { ...(env ?? process.env) };
+  // The startup client is a delivery hint; runtime requests must follow the current popup claim.
+  delete popupEnv.STATION_FOCUS_CLIENT_ID;
+  const popupOptions = {
+    env: popupEnv,
+    command: resolvePopupTmuxCommand(command, popupEnv),
+  };
+  return {
+    dismissPopup: () => dismissTmuxPopup(popupOptions),
+    resolveFocusTarget: () => resolveTmuxPopupFocusTarget(popupOptions),
+  };
+}
+
+export function resolvePopupTmuxCommand(
+  configuredCommand: string | undefined,
+  env: CliEnv = process.env,
+): string {
+  return configuredCommand ?? env.STATION_TMUX_BIN ?? "tmux";
 }
 
 function scheduleReconcileBeforeTui(input: {
   paths: ObserverPaths;
+  expectedBuildVersion: string;
   deps?: ObserverProcessDeps;
   timeoutMs?: number;
 }): void {
@@ -216,6 +353,7 @@ function scheduleReconcileBeforeTui(input: {
 
 async function reconcileBeforeTui(input: {
   paths: ObserverPaths;
+  expectedBuildVersion: string;
   deps?: ObserverProcessDeps;
   timeoutMs?: number;
 }): Promise<void> {
@@ -224,11 +362,13 @@ async function reconcileBeforeTui(input: {
     createObserverClient({
       socketPath: input.paths.socketPath,
       timeoutMs: input.timeoutMs ?? 30_000,
+      expectedBuildVersion: input.expectedBuildVersion,
     });
   await client.reconcile(TUI_STARTUP_RECONCILE_REASON);
 }
 
 type ParsedTuiArgs = {
+  allowNested: boolean;
   devFakeDashboard: boolean;
   fakeProjects: number;
   fakeWorktreesPerProject: number;
@@ -245,7 +385,7 @@ function parseTuiArgs(args: string[], timeoutMs: number | undefined): ParsedTuiA
     "--fake-worktrees-per-project",
   );
   const remainingArgs = fakeWorktreesPerProject.args;
-  const knownFlags = new Set(["--popup", "--persistent", "--dev-fake-dashboard"]);
+  const knownFlags = new Set(["--allow-nested", "--popup", "--persistent", "--dev-fake-dashboard"]);
   const unknown = remainingArgs.find((arg) => !knownFlags.has(arg));
   if (unknown !== undefined) {
     throw new Error(`Unknown tui option: ${unknown}`);
@@ -264,6 +404,7 @@ function parseTuiArgs(args: string[], timeoutMs: number | undefined): ParsedTuiA
   }
 
   const result: ParsedTuiArgs = {
+    allowNested: remainingArgs.includes("--allow-nested"),
     devFakeDashboard,
     fakeProjects: fakeProjects.value ?? 4,
     fakeWorktreesPerProject: fakeWorktreesPerProject.value ?? 24,

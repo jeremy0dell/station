@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const observerBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
 const repoRoot = realpathSync(fileURLToPath(new URL("../../../../", import.meta.url))).replace(
   /\/$/,
   "",
@@ -25,6 +26,7 @@ describe("CLI popup command", () => {
     const lifecycle: string[] = [];
     let running = false;
     const observerDeps: ObserverProcessDeps = {
+      buildVersion: observerBuildVersion,
       spawnObserver: async () => {
         lifecycle.push("observer-spawn");
         running = true;
@@ -39,7 +41,7 @@ describe("CLI popup command", () => {
               status: "healthy",
               pid: 1234,
               startedAt: now,
-              version: "0.7.0",
+              version: observerBuildVersion,
             };
           },
           reconcile: async () => emptySnapshot("popup-open"),
@@ -96,6 +98,7 @@ describe("CLI popup command", () => {
         },
         {
           observer: {
+            buildVersion: observerBuildVersion,
             spawnObserver: async () => {
               spawned = true;
               markSpawned();
@@ -111,7 +114,7 @@ describe("CLI popup command", () => {
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
-                    version: "0.7.0",
+                    version: observerBuildVersion,
                   };
                 },
                 reconcile: async () => emptySnapshot("popup-open"),
@@ -170,6 +173,7 @@ describe("CLI popup command", () => {
           },
           {
             observer: {
+              buildVersion: observerBuildVersion,
               spawnObserver: async () => {
                 throw new Error("observer should not spawn for a warm attachment");
               },
@@ -180,7 +184,7 @@ describe("CLI popup command", () => {
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
-                    version: "0.7.0",
+                    version: observerBuildVersion,
                   }),
                   reconcile: async () => emptySnapshot("popup-open"),
                 }) as never,
@@ -296,6 +300,7 @@ describe("CLI popup command", () => {
           config: fixture.config,
           env: {
             TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_PANE: "1",
           },
           tuiCommand: "node stn tui --popup --persistent",
         },
@@ -320,6 +325,7 @@ describe("CLI popup command", () => {
         enterWorkbench: false,
         env: {
           TMUX: "/tmp/tmux-501/default,123,0",
+          STATION_PANE: "1",
         },
         tuiCommand: "node stn tui --popup --persistent",
       },
@@ -370,6 +376,7 @@ describe("CLI popup command", () => {
         popupDeps: {
           env: {
             TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_PANE: "1",
           },
           openTmuxPopup: async (options) => {
             calls.push(options);
@@ -388,6 +395,7 @@ describe("CLI popup command", () => {
       checkoutRoot: repoRoot,
       env: {
         TMUX: "/tmp/tmux-501/default,123,0",
+        STATION_PANE: "1",
       },
       preferRegisteredDevPopup: true,
     });
@@ -477,6 +485,7 @@ describe("CLI popup command", () => {
         popupDeps: {
           env: {
             TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_PANE: "1",
           },
           openTmuxPopup: async (options) => {
             calls.push(options);
@@ -626,7 +635,7 @@ async function expectWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<
 
 function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
   return {
-    buildVersion: "0.0.0",
+    buildVersion: observerBuildVersion,
     clientFactory: () =>
       ({
         health: async () => ({
@@ -634,7 +643,7 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
           status: "healthy",
           pid: 1234,
           startedAt: now,
-          version: "0.7.0",
+          version: observerBuildVersion,
         }),
         reconcile: async (reason: string) => {
           reconciles.push(reason);
@@ -690,7 +699,7 @@ async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise
 
 function nonCompletingReconcileObserverDeps(reconciles: string[]): ObserverProcessDeps {
   return {
-    buildVersion: "0.0.0",
+    buildVersion: observerBuildVersion,
     clientFactory: () =>
       ({
         health: async () => ({
@@ -698,7 +707,7 @@ function nonCompletingReconcileObserverDeps(reconciles: string[]): ObserverProce
           status: "healthy",
           pid: 1234,
           startedAt: now,
-          version: "0.7.0",
+          version: observerBuildVersion,
         }),
         reconcile: (reason: string) => {
           reconciles.push(reason);

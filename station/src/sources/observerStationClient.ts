@@ -9,12 +9,16 @@ import type { StationClient } from "./types.js";
 
 export type CreateObserverStationClientOptions = {
   socketPath?: string;
+  /** Exact Observer selector accepted by the CLI before launching Station. */
+  expectedBuildVersion?: string;
   /** Test seam: inject a fake observer service instead of a socket. */
   service?: ObserverService;
   onAttentionNeeded?: (event: StationAttentionEvent) => void;
 };
 
 /**
+ * COMPOSITION ROOT
+ *
  * One shared ObserverService feeds runtime state and command dispatch. Snapshot
  * and reconcile operations must go through the runtime-backed bridge, or the
  * next incremental event can overwrite the side-loaded state.
@@ -26,6 +30,9 @@ export function createObserverStationClient(
     options.service ??
     createObserverService({
       socketPath: requireSocketPath(options.socketPath),
+      ...(options.expectedBuildVersion === undefined
+        ? {}
+        : { expectedBuildVersion: options.expectedBuildVersion }),
       clientLabel: "Station",
     });
   const runtime = createStationClientRuntime({

@@ -8,9 +8,19 @@ import {
   loadConfig,
   type StationConfig,
 } from "@station/config";
-import type { ObserverApi, ObserverProcessIdentity, ObserverStopReceipt } from "@station/contracts";
+import type {
+  ObserverApi,
+  ObserverProcessIdentity,
+  ObserverStopReceipt,
+  SafeError,
+} from "@station/contracts";
 import { componentLogPath } from "@station/observability";
-import { stationBuildInfo, systemClock, toIsoTimestamp } from "@station/runtime";
+import {
+  parseStationObserverBuildVersion,
+  stationObserverBuildVersion,
+  systemClock,
+  toIsoTimestamp,
+} from "@station/runtime";
 import { createCommandQueue } from "../commands/queue.js";
 import { registerObserverCommandHandlers } from "../commands/router.js";
 import { createFeatureFlagEvaluator } from "../features/evaluator.js";
@@ -78,7 +88,7 @@ export type ObserverProviderRegistryFactory = (
 
 export type RunObserverMainDeps = {
   providerRegistryFactory: ObserverProviderRegistryFactory;
-  /** Candidate build used for deterministic handoff tests; defaults to the running executable. */
+  /** Exact Observer build selector; defaults to the running artifact selector. */
   buildVersion?: string;
   incumbentLifecycle?: ObserverIncumbentLifecycle;
   processEvidence?: ObserverProcessEvidenceSource;
@@ -92,7 +102,7 @@ export type RunObserverMainDeps = {
  * Claims boot ownership before negotiating an incumbent or constructing
  * adapters, then constructs logging and project-config adapters once and passes
  * only their application ports inward. It owns socket and pidfile publication
- * and releases the boot claim before publishing health.
+ * and releases the boot claim before publishing exact build health.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -115,7 +125,7 @@ export async function runObserverMain(
     homeDir,
   );
   const socketPath = resolveObserverSocketPath(options.socketPath, config, stateDir, homeDir);
-  const buildVersion = deps.buildVersion ?? stationBuildInfo().version;
+  const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const handoffNow = deps.handoffNow ?? Date.now;
   const startupDeadline = handoffNow() + options.startupTimeoutMs;
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -192,6 +202,7 @@ async function runClaimedObserverRuntime(input: {
   deps: RunObserverMainDeps;
 }): Promise<number> {
   const { options, loadedConfig, stateDir, socketPath, buildVersion, homeDir, claim, deps } = input;
+  const observerVersion = parseStationObserverBuildVersion(buildVersion).version;
   const config = loadedConfig.config;
   const spoolDir = providerIngressSpoolDir(stateDir);
   const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir };
@@ -228,7 +239,7 @@ async function runClaimedObserverRuntime(input: {
     clock: systemClock,
     logger,
     featureFlags,
-    version: buildVersion,
+    version: observerVersion,
   });
   registerObserverCommandHandlers({
     queue: commandQueue,
@@ -336,6 +347,7 @@ async function runClaimedObserverRuntime(input: {
     eventBus,
     hookSpoolDir: spoolDir,
     socketPath,
+    observerBuildVersion: buildVersion,
     stateDir,
     diagnosticsDir: join(stateDir, "diagnostics"),
     logPaths: [componentLogPath(stateDir, "observer"), componentLogPath(stateDir, "hook")],
@@ -369,6 +381,7 @@ async function runClaimedObserverRuntime(input: {
       api,
       clock: systemClock,
       drainOnStart: false,
+      guardOperation: startupGate.assertReadyForOperation,
     });
     ownsSocket = true;
     const boundIdentity = await readSocketIdentity(socketPath);
@@ -535,6 +548,7 @@ function resolvePath(input: string, homeDir: string): string {
 
 type ObserverStartupGate = {
   requestStop(): void;
+  assertReadyForOperation(): void;
   settleReady(releaseClaim: () => ObserverBootClaimReleaseResult): ObserverStartupCommit;
   settleFailed(): void;
   waitUntilSettled(): Promise<void>;
@@ -565,6 +579,17 @@ export function createObserverStartupGate(): ObserverStartupGate {
       if (state === "stopping" || state === "failed") return;
       if (state === "ready") ready = pending();
       state = "stopping";
+    },
+    assertReadyForOperation: () => {
+      if (state === "ready") return;
+      throw {
+        tag: "ObserverLifecycleError",
+        code: state === "starting" ? "OBSERVER_NOT_READY" : "OBSERVER_STOPPING",
+        message:
+          state === "starting"
+            ? "Observer is not ready to accept operations."
+            : "Observer is stopping and cannot accept new operations.",
+      } satisfies SafeError;
     },
     settleReady: (releaseClaim) => {
       if (state !== "starting") {

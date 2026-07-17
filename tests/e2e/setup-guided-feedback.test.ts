@@ -257,10 +257,16 @@ async function createFixture(input: {
   await mkdir(repo, { recursive: true });
   await mkdir(bin, { recursive: true });
   await mkdir(launcherBin, { recursive: true });
+  const gitPath = spawnSync("/bin/sh", ["-c", "command -v git"], {
+    encoding: "utf8",
+  }).stdout.trim();
   await writeShim(
     bin,
     "git",
     [
+      'if [ "$1" = "-C" ]; then',
+      `  exec ${shellQuote(gitPath)} "$@"`,
+      "fi",
       'if [ "$1 $2" = "rev-parse --show-toplevel" ]; then',
       `  echo ${shellQuote(repo)}`,
       "  exit 0",
@@ -385,7 +391,7 @@ async function createFixture(input: {
         ]);
       } finally {
         await Promise.all([
-          rm(root, { recursive: true, force: true }),
+          rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }),
           rm(runtimeDir, { recursive: true, force: true }),
         ]);
       }

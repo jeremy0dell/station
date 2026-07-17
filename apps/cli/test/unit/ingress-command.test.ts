@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ObserverHealth, ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
+import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { createStaleSocketFile } from "../../../../tests/support/sockets";
 import {
@@ -67,7 +68,7 @@ describe("provider hook ingress command", () => {
         "--observer-entry",
         observerEntry,
         "--startup-timeout-ms",
-        "500",
+        "2000",
         "worktrunk",
         "post-create",
       ],
@@ -357,6 +358,80 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
+  it("ignores delayed Codex SubagentStop before observer, startup, spool, or logging work", async () => {
+    const fixture = await createTempState();
+    let clientCalls = 0;
+    let healthCalls = 0;
+    let deliveryCalls = 0;
+    let startupCalls = 0;
+    let spoolCalls = 0;
+    let logCalls = 0;
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "codex"],
+      {
+        stdin: JSON.stringify({
+          ...codexPayload(),
+          hook_event_name: "SubagentStop",
+        }),
+        env: stationEnv(),
+      },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_codex_subagent_stop",
+        clientFactory: () => {
+          clientCalls += 1;
+          return {
+            health: async () => {
+              healthCalls += 1;
+              return healthyObserver(fixture);
+            },
+            ingestProviderHookEvent: async () => {
+              deliveryCalls += 1;
+              throw new Error("ignored Codex hooks must not be delivered");
+            },
+          } as never;
+        },
+        spawnObserver: async () => {
+          startupCalls += 1;
+          throw new Error("ignored Codex hooks must not start the observer");
+        },
+        writeSpool: async () => {
+          spoolCalls += 1;
+          throw new Error("ignored Codex hooks must not be spooled");
+        },
+        logger: {
+          log: async () => {
+            logCalls += 1;
+          },
+        },
+      },
+    );
+
+    expect(receipt).toMatchObject({
+      accepted: false,
+      status: "ignored",
+      provider: "codex",
+      event: "SubagentStop",
+    });
+    expect({
+      clientCalls,
+      healthCalls,
+      deliveryCalls,
+      startupCalls,
+      spoolCalls,
+      logCalls,
+    }).toEqual({
+      clientCalls: 0,
+      healthCalls: 0,
+      deliveryCalls: 0,
+      startupCalls: 0,
+      spoolCalls: 0,
+      logCalls: 0,
+    });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
   it("delivers raw Claude hook payloads through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -586,10 +661,164 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
+  it("delivers compact OpenCode payloads through build-aware provider ingress", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const buildVersion = `0.8.0+station.${"a".repeat(64)}`;
+    let observedEvent: ProviderHookEvent | undefined;
+
+    const receipt = await runProviderIngressCommand(
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--config",
+        configPath,
+        "opencode",
+        "session.idle",
+      ],
+      {
+        stdin: JSON.stringify({
+          event_type: "session.idle",
+          observed_at: now,
+          opencode_session_id: "opencode_session_1",
+        }),
+        env: stationEnv(),
+      },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_opencode_1",
+        buildVersion,
+        clientFactory: () => {
+          const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
+            observedEvent = event;
+            return {
+              schemaVersion: "0.8.0",
+              hookId: event.hookId ?? "hook_opencode_1",
+              provider: event.provider,
+              event: event.event,
+              accepted: true,
+              status: "ingested",
+              receivedAt: event.receivedAt,
+              reconciled: false,
+            };
+          };
+          return {
+            health: async () => ({
+              schemaVersion: "0.8.0",
+              status: "healthy",
+              pid: 12345,
+              startedAt: now,
+              version: buildVersion,
+              socketPath: fixture.socketPath,
+              stateDir: fixture.stateDir,
+            }),
+            ingestProviderHookEvent: ingest,
+            ingestHookEvent: ingest,
+          } as never;
+        },
+      },
+    );
+
+    expect(receipt.status).toBe("ingested");
+    expect(observedEvent).toMatchObject({
+      hookId: "hook_opencode_1",
+      provider: "opencode",
+      kind: "harness",
+      event: "session.idle",
+      payload: {
+        event_type: "session.idle",
+        observed_at: now,
+        opencode_session_id: "opencode_session_1",
+        station_project_id: "web",
+        station_worktree_id: "wt_web_task",
+        station_session_id: "ses_web_task",
+      },
+    });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it("returns online provider payload rejections without retrying, starting, or spooling", async () => {
+    const fixture = await createTempState();
+    const buildVersion = `0.8.0+station.${"b".repeat(64)}`;
+    let healthCalls = 0;
+    let deliveryCalls = 0;
+    let startCalls = 0;
+    let spoolCalls = 0;
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "pi", "agent_end"],
+      {
+        stdin: JSON.stringify({ event_type: "agent_end" }),
+        env: stationEnv(),
+      },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_pi_invalid",
+        buildVersion,
+        clientFactory: () =>
+          ({
+            health: async () => {
+              healthCalls += 1;
+              return {
+                schemaVersion: "0.8.0",
+                status: "healthy",
+                pid: 12345,
+                startedAt: now,
+                version: buildVersion,
+                socketPath: fixture.socketPath,
+                stateDir: fixture.stateDir,
+              } satisfies ObserverHealth;
+            },
+            ingestProviderHookEvent: async (
+              event: ProviderHookEvent,
+            ): Promise<ProviderHookReceipt> => {
+              deliveryCalls += 1;
+              return {
+                schemaVersion: "0.8.0",
+                hookId: event.hookId ?? "hook_pi_invalid",
+                provider: event.provider,
+                event: event.event,
+                accepted: false,
+                status: "rejected",
+                receivedAt: event.receivedAt,
+                error: {
+                  tag: "HookPayloadError",
+                  code: "HOOK_REPORT_INVALID",
+                  message: "Provider hook payload could not be normalized.",
+                  provider: event.provider,
+                },
+              };
+            },
+          }) as never,
+        spawnObserver: async () => {
+          startCalls += 1;
+          throw new Error("online payload rejection must not start an observer");
+        },
+        writeSpool: async () => {
+          spoolCalls += 1;
+          throw new Error("online payload rejection must not be spooled");
+        },
+      },
+    );
+
+    expect(receipt).toMatchObject({
+      status: "rejected",
+      error: { code: "HOOK_REPORT_INVALID" },
+    });
+    expect(healthCalls).toBe(1);
+    expect(deliveryCalls).toBe(1);
+    expect(startCalls).toBe(0);
+    expect(spoolCalls).toBe(0);
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
   it("passes the delivery timeout to the observer protocol client", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     let observedTimeoutMs: number | undefined;
+    let observedBuildVersion: string | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -612,6 +841,7 @@ describe("provider hook ingress command", () => {
         hookId: () => "report_codex_timeout",
         clientFactory: (_socketPath, options) => {
           observedTimeoutMs = options.timeoutMs;
+          observedBuildVersion = options.expectedBuildVersion;
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => ({
             schemaVersion: "0.8.0",
             hookId: event.hookId ?? "hook_timeout_1",
@@ -633,6 +863,7 @@ describe("provider hook ingress command", () => {
 
     expect(receipt.status).toBe("ingested");
     expect(observedTimeoutMs).toBe(4321);
+    expect(observedBuildVersion).toBe(stationObserverBuildVersion());
   });
 
   it("spools raw Codex hook events when online delivery is unavailable", async () => {
@@ -771,7 +1002,7 @@ function healthyObserver(paths: { socketPath: string; stateDir: string }): Obser
     status: "healthy",
     pid: 12345,
     startedAt: now,
-    version: "0.7.0",
+    version: stationObserverBuildVersion(),
     socketPath: paths.socketPath,
     stateDir: paths.stateDir,
   };

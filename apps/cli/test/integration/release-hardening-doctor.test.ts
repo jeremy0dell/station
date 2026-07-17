@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -76,6 +76,9 @@ describe("CLI release doctor", () => {
     const configPath = await writeReleaseDoctorConfig(root);
     const emptyBin = join(root, "no-bun-bin");
     await mkdir(emptyBin, { recursive: true });
+    const gitPath = (await execFileAsync("/bin/sh", ["-c", "command -v git"])).stdout.trim();
+    // Source build verification still needs Git while this fixture hides Bun.
+    await symlink(gitPath, join(emptyBin, "git"));
 
     const savedPath = process.env.PATH;
     const savedOverride = process.env.STATION_DASHBOARD_COMMAND;

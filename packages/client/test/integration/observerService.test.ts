@@ -1,4 +1,4 @@
-import { createObserverService } from "@station/client";
+import { createObserverService, createStationClientRuntime } from "@station/client";
 import type {
   CommandId,
   CommandRecord,
@@ -53,6 +53,75 @@ describe("observer client service", () => {
     expect(commands).toHaveLength(1);
 
     await server.close();
+  });
+
+  it("pins service operations to the accepted Observer build", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const actualBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
+    const expectedBuildVersion = `0.7.0+station.${"b".repeat(64)}`;
+    let dispatchCalls = 0;
+    const server = await startProtocolServer({
+      socketPath,
+      api: fakeApi({
+        health: async () => ({ ...fakeHealth(), version: actualBuildVersion }),
+        dispatch: async () => {
+          dispatchCalls += 1;
+          return { commandId: "cmd_wrong_build", accepted: true, status: "accepted" };
+        },
+      }),
+    });
+    const service = createObserverService({
+      socketPath,
+      expectedBuildVersion,
+      requestId: ids("build-pin"),
+    });
+
+    try {
+      await expect(
+        service.dispatch({ type: "observer.reconcile", payload: { reason: "must-not-run" } }),
+      ).rejects.toMatchObject({ code: "OBSERVER_BUILD_MISMATCH" });
+      expect(dispatchCalls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("requires an accepted build selector for socket-backed client runtimes", () => {
+    expect(() =>
+      createStationClientRuntime({ socketPath: "/tmp/station-test.sock" } as never),
+    ).toThrow("socketPath requires an accepted Observer build selector");
+  });
+
+  it("forwards the accepted build selector from a socket-backed client runtime", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const actualBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
+    const expectedBuildVersion = `0.7.0+station.${"b".repeat(64)}`;
+    let snapshotCalls = 0;
+    const server = await startProtocolServer({
+      socketPath,
+      api: fakeApi({
+        health: async () => ({ ...fakeHealth(), version: actualBuildVersion }),
+        getSnapshot: async () => {
+          snapshotCalls += 1;
+          return createCommandSnapshot("idle");
+        },
+      }),
+    });
+    const runtime = createStationClientRuntime({
+      socketPath,
+      expectedBuildVersion,
+      requestTimeoutMs: 500,
+    });
+
+    try {
+      await expect(runtime.refresh()).rejects.toMatchObject({
+        code: "OBSERVER_BUILD_MISMATCH",
+      });
+      expect(snapshotCalls).toBe(0);
+    } finally {
+      await runtime.stop();
+      await server.close();
+    }
   });
 
   it("prepares external launches and reports external exits through the protocol", async () => {
@@ -334,6 +403,24 @@ describe("observer client service", () => {
     await expect(service.waitForCommandCompletion("cmd_closed")).rejects.toMatchObject({
       code: "CLIENT_COMMAND_WAIT_FAILED",
     });
+  });
+
+  it("preserves an Observer build mismatch while waiting for command completion", async () => {
+    const mismatch = {
+      tag: "ProtocolError" as const,
+      code: "OBSERVER_BUILD_MISMATCH",
+      message: "Observer build mismatch: expected caller-build, received incumbent-build.",
+      hint: "Close and relaunch this client.",
+    };
+    const service = createObserverService({
+      client: fakeClient({
+        waitForCommand: async () => {
+          throw mismatch;
+        },
+      }),
+    });
+
+    await expect(service.waitForCommandCompletion("cmd_replaced")).rejects.toEqual(mismatch);
   });
 
   it("times out while waiting for command completion", async () => {

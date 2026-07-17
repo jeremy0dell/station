@@ -40,6 +40,7 @@ const tempDir = join(root, "tmp");
 const ghLogsDir = join(root, "gh-logs");
 const stableTag = "v1.2.3";
 const rollbackTag = "v1.2.3-rc.1";
+const removedPersistenceOption = ["--persist", "path"].join("-");
 const activeChildren = new Set();
 const childTimeoutMs = 30_000 * timeoutScale;
 const markerTimeoutMs = 10_000 * timeoutScale;
@@ -82,7 +83,7 @@ try {
     prepareFixtures();
     await scenarioPlatformInstalls();
     await scenarioDefaultHomeAndPathResolution();
-    await scenarioFutureShellPathPersistence();
+    await scenarioPathGuidanceAndStartupFileNonOwnership();
     await scenarioExplicitRollbackAndDraft();
     await scenarioStrictGhFlows();
     await scenarioAuthenticatedReleaseValidation();
@@ -188,18 +189,9 @@ function prepareFixtures() {
 }
 
 function scenarioPlatformInstalls() {
-  const shellWithoutShell = join(root, "shell-without-shell");
-  writeExecutable(
-    shellWithoutShell,
-    '#!/bin/sh\ninstaller=$1\nshift\nunset SHELL\n. "$installer"\n',
-  );
-  for (const [index, platform] of platforms.entries()) {
+  for (const platform of platforms) {
     const installDir = join(root, `install-${platform.target}`);
-    const result = runInstaller({
-      installDir,
-      platform,
-      childShell: index === 0 ? shellWithoutShell : "/bin/sh",
-    });
+    const result = runInstaller({ installDir, platform });
     assertSuccess(result, `${platform.target} latest install`);
     assertInstalled({ installDir, tag: stableTag, target: platform.target });
     assertPathRecovery(result, installDir, ["stn", "stn-ingress", "stn-tmux-popup"]);
@@ -226,9 +218,34 @@ function scenarioDefaultHomeAndPathResolution() {
     target: "linux-x64",
   });
   assertPathRecovery(defaultInstall, defaultInstallDir, ["stn", "stn-ingress", "stn-tmux-popup"]);
-  for (const profile of [".profile", ".bashrc", ".zprofile", ".zshrc"]) {
-    assert(!existsSync(join(cleanHome, profile)), `installer leaves ${profile} absent`);
+  for (const startupFile of [
+    ".zprofile",
+    ".zshrc",
+    ".bash_profile",
+    ".bash_login",
+    ".bashrc",
+    ".profile",
+  ]) {
+    assert(!existsSync(join(cleanHome, startupFile)), `installer leaves ${startupFile} absent`);
   }
+
+  const partialPathDir = join(root, "partial-launcher-path");
+  const partialPathInstall = join(root, "partial-launcher-bin");
+  makeDirectory(partialPathDir);
+  symlinkSync(join(partialPathInstall, "stn"), join(partialPathDir, "stn"));
+  symlinkSync(join(partialPathInstall, "stn-ingress"), join(partialPathDir, "stn-ingress"));
+  const partialPath = runInstaller({
+    installDir: partialPathInstall,
+    platform: linuxX64(),
+    pathEntries: [partialPathDir, fakeBinDir, "/usr/bin", "/bin"],
+  });
+  assertSuccess(partialPath, "one missing launcher");
+  assertPathRecovery(
+    partialPath,
+    partialPathInstall,
+    ["stn-tmux-popup"],
+    [partialPathDir, fakeBinDir, "/usr/bin", "/bin"],
+  );
 
   const shadowedStnDir = join(root, "shadowed-stn-path");
   const shadowedStnInstall = join(root, "shadowed-stn-bin");
@@ -274,319 +291,139 @@ function scenarioDefaultHomeAndPathResolution() {
   );
 
   const correctInstallDir = join(root, "correct-path-bin");
-  const correctPathHome = join(root, "correct-path-home");
-  makeDirectory(correctPathHome);
   const correctPath = runInstaller({
     installDir: correctInstallDir,
     platform: linuxX64(),
-    home: correctPathHome,
     pathEntries: [correctInstallDir, fakeBinDir, "/usr/bin", "/bin"],
-    environment: { SHELL: "/bin/zsh" },
   });
   assertSuccess(correctPath, "all launchers on correct PATH");
   assertIncludes(correctPath.stdout, "Next: run stn setup", "correct PATH next step");
-  assertNotIncludes(correctPath.stdout, "hash -r", "correct PATH omits recovery block");
-  assertIncludes(
-    correctPath.stdout,
-    "Future-shell PATH was not changed",
-    "temporary correct PATH still receives future-shell guidance",
-  );
-  assert(!existsSync(join(correctPathHome, ".zprofile")), "correct PATH leaves profile absent");
+  assertNotIncludes(correctPath.stdout, "PATH mismatch:", "correct PATH mismatch omission");
+  assertNotIncludes(correctPath.stdout, "future shells", "correct PATH future guidance omission");
+  assertNotIncludes(correctPath.stdout, "hash -r", "correct PATH recovery omission");
+  assertNotIncludes(correctPath.stdout, "Absolute fallback:", "correct PATH fallback omission");
 }
 
-function scenarioFutureShellPathPersistence() {
-  const installDir = join(root, "Station's custom bin");
-  const zsh = join(fakeBinDir, "zsh");
-  const shadowDir = join(root, "future-shell-shadow-bin");
-  const currentPath = [shadowDir, fakeBinDir, "/usr/bin", "/bin"];
-  const homebrewProfile = [
-    "# Homebrew shell environment",
-    'export HOMEBREW_PREFIX="/opt/homebrew"',
-    "",
-  ].join("\n");
-  const expectedEntry = `export PATH=${shellWord(installDir)}\${PATH:+":$PATH"}`;
-  makeDirectory(shadowDir);
-  for (const launcher of ["stn", "stn-ingress", "stn-tmux-popup"]) {
-    writeExecutable(join(shadowDir, launcher), "#!/bin/sh\nexit 99\n");
-  }
-
-  const consentHome = join(root, "future-shell-consent-home");
-  const consentProfile = join(consentHome, ".zprofile");
-  makeDirectory(consentHome);
-  writeText(consentProfile, homebrewProfile, 0o640);
-  const profileBefore = statSync(consentProfile);
-  const consent = runInstaller({
-    installDir,
-    platform: linuxX64(),
-    home: consentHome,
-    pathEntries: currentPath,
-    extraArguments: ["--persist-path"],
-    environment: { SHELL: zsh },
-  });
-  assertSuccess(consent, "explicit future-shell PATH persistence");
-  assertIncludes(
-    consent.stdout,
-    "Added Station to future zsh login shells",
-    "explicit persistence confirmation",
-  );
-  const persistedProfile = readFileSync(consentProfile, "utf8");
-  assert(persistedProfile.startsWith(homebrewProfile), "persistence preserves Homebrew setup");
-  assertEqual(
-    countExactLines(persistedProfile, expectedEntry),
-    1,
-    "explicit persistence adds one exact PATH entry",
-  );
-  const profileAfter = statSync(consentProfile);
-  assertEqual(profileAfter.ino, profileBefore.ino, "persistence appends to the existing profile");
-  assertEqual(
-    profileAfter.mode & 0o777,
-    profileBefore.mode & 0o777,
-    "persistence preserves profile mode",
-  );
-  assertFutureShellLauncherResolution({
-    home: consentHome,
-    installDir,
-    profile: consentProfile,
-    shadowDir,
-  });
-
-  const idempotent = runInstaller({
-    installDir,
-    platform: linuxX64(),
-    home: consentHome,
-    pathEntries: currentPath,
-    extraArguments: ["--persist-path"],
-    environment: { SHELL: zsh },
-  });
-  assertSuccess(idempotent, "idempotent future-shell PATH persistence");
-  assertIncludes(
-    idempotent.stdout,
-    "Future-shell PATH is already configured",
-    "idempotent persistence confirmation",
-  );
-  assertEqual(
-    readFileSync(consentProfile, "utf8"),
-    persistedProfile,
-    "repeated persistence leaves profile byte-identical",
-  );
-
-  const noConsentHome = join(root, "future-shell-no-consent-home");
-  const noConsentProfile = join(noConsentHome, ".zprofile");
-  makeDirectory(noConsentHome);
-  writeText(noConsentProfile, homebrewProfile, 0o600);
-  const noConsent = runInstaller({
-    installDir,
-    platform: linuxX64(),
-    home: noConsentHome,
-    pathEntries: currentPath,
-    environment: { SHELL: zsh },
-  });
-  assertSuccess(noConsent, "future-shell PATH without consent");
-  assertEqual(
-    readFileSync(noConsentProfile, "utf8"),
-    homebrewProfile,
-    "no-flag install leaves profile unchanged",
-  );
-  const persistenceCommand = extractPathPersistenceCommand(noConsent.stdout);
-  const commandResult = spawnSync(
-    "/bin/sh",
-    ["-c", persistenceCommand],
-    syncOptions({ env: { HOME: noConsentHome, PATH: "/usr/bin:/bin" } }),
-  );
-  assertSuccess(commandResult, "printed future-shell PATH command");
-  assertEqual(
-    countExactLines(readFileSync(noConsentProfile, "utf8"), expectedEntry),
-    1,
-    "printed command adds one exact PATH entry",
-  );
-  assertFutureShellLauncherResolution({
-    home: noConsentHome,
-    installDir,
-    profile: noConsentProfile,
-    shadowDir,
-  });
-
-  const missingProfileHome = join(root, "future-shell-missing-profile-home");
-  const missingProfile = join(missingProfileHome, ".zprofile");
-  const missingProfileInstall = join(root, "future-shell-missing-profile-bin");
-  makeDirectory(missingProfileHome);
-  const created = runInstaller({
-    installDir: missingProfileInstall,
-    platform: linuxX64(),
-    home: missingProfileHome,
-    extraArguments: ["--persist-path"],
-    environment: { SHELL: zsh },
-  });
-  assertSuccess(created, "future-shell PATH creates a missing zprofile");
-  assertEqual(
-    readFileSync(missingProfile, "utf8"),
-    `export PATH=${shellWord(missingProfileInstall)}\${PATH:+":$PATH"}\n`,
-    "new zprofile contains only the exact PATH entry",
-  );
-  assertMode(missingProfile, 0o600, "new zprofile mode");
-
-  const partialAppendShell = join(root, "partial-profile-append-shell");
-  writeExecutable(
-    partialAppendShell,
-    `#!/bin/sh
-printf() {
-  if [ "\${FAKE_PROFILE_APPEND_MODE:-}" != '' ] && [ "\${2-}" = "$FAKE_PROFILE_ENTRY" ]; then
-    command printf '\\n%.20s' "$2"
-    if [ "$FAKE_PROFILE_APPEND_MODE" = signal ]; then
-      kill -TERM "$$"
-      return 0
-    fi
-    return 1
-  fi
-  command printf "$@"
-}
-installer=$1
-shift
-. "$installer"
-`,
-  );
-  for (const [mode, expectedStatus] of [
-    ["failure", 1],
-    ["signal", 143],
-  ]) {
-    const partialHome = join(root, `future-shell-partial-${mode}-home`);
-    const partialProfile = join(partialHome, ".zprofile");
-    const originalProfile = `# profile before ${mode}\n`;
-    makeDirectory(partialHome);
-    writeText(partialProfile, originalProfile, 0o640);
-    const partial = runInstaller({
-      installDir,
+function scenarioPathGuidanceAndStartupFileNonOwnership() {
+  const startupHome = join(root, "startup-files-home");
+  const startupTargets = join(startupHome, "startup-targets");
+  const hostileZdotDir = join(startupHome, "hostile-zdotdir");
+  makeDirectory(startupTargets);
+  makeDirectory(hostileZdotDir);
+  writeText(join(startupHome, ".zprofile"), "# zprofile sentinel\n", 0o600);
+  writeText(join(startupHome, ".bash_profile"), "# bash profile sentinel\n", 0o640);
+  writeText(join(startupHome, ".bashrc"), "# bashrc sentinel\n", 0o400);
+  writeText(join(startupTargets, "zshrc"), "# linked zshrc sentinel\n", 0o440);
+  writeText(join(startupTargets, "profile"), "# linked profile sentinel\n", 0o600);
+  writeText(join(hostileZdotDir, ".zprofile"), "# hostile ZDOTDIR sentinel\n", 0o400);
+  symlinkSync("startup-targets/zshrc", join(startupHome, ".zshrc"));
+  symlinkSync("startup-targets/missing-bash-login", join(startupHome, ".bash_login"));
+  symlinkSync("startup-targets/profile", join(startupHome, ".profile"));
+  const startupPaths = [
+    ...[".zprofile", ".zshrc", ".bash_profile", ".bash_login", ".bashrc", ".profile"].map((name) =>
+      join(startupHome, name),
+    ),
+    join(startupTargets, "zshrc"),
+    join(startupTargets, "profile"),
+    join(hostileZdotDir, ".zprofile"),
+  ];
+  const startupBefore = snapshotPaths(startupPaths);
+  const shellProbeMarker = join(root, "startup-shell-probe.marker");
+  const shellProbeDir = join(root, "startup-shell-probe-bin");
+  const shellProbe = join(shellProbeDir, "zsh");
+  makeDirectory(shellProbeDir);
+  writeExecutable(shellProbe, '#!/bin/sh\n: > "$PROFILE_PROBE_MARKER"\nexit 42\n');
+  const startupInstallDir = join(root, "startup-files-bin");
+  for (const iteration of [1, 2]) {
+    const result = runInstaller({
+      installDir: startupInstallDir,
       platform: linuxX64(),
-      home: partialHome,
-      childShell: partialAppendShell,
-      extraArguments: ["--persist-path"],
+      home: startupHome,
       environment: {
-        FAKE_PROFILE_APPEND_MODE: mode,
-        FAKE_PROFILE_ENTRY: expectedEntry,
-        SHELL: zsh,
+        PROFILE_PROBE_MARKER: shellProbeMarker,
+        SHELL: shellProbe,
+        ...(iteration === 2 ? { ZDOTDIR: hostileZdotDir } : {}),
       },
     });
-    assertExactStatus(partial, expectedStatus, `partial profile ${mode}`);
+    assertSuccess(result, `startup-file non-ownership install ${iteration}`);
+    assertPathRecovery(result, startupInstallDir, ["stn", "stn-ingress", "stn-tmux-popup"]);
     assertEqual(
-      readFileSync(partialProfile, "utf8"),
-      originalProfile,
-      `partial profile ${mode} restores the original bytes`,
+      snapshotPaths(startupPaths),
+      startupBefore,
+      `startup files remain identical after install ${iteration}`,
+    );
+    assert(
+      !existsSync(shellProbeMarker),
+      `installer does not execute the login shell on install ${iteration}`,
     );
   }
 
-  const customZdotHome = join(root, "future-shell-custom-zdot-home");
-  const customZdotDir = join(customZdotHome, "custom-zdotdir");
-  const customZdotProfile = join(customZdotDir, ".zprofile");
-  makeDirectory(customZdotDir);
-  writeText(
-    join(customZdotHome, ".zshenv"),
-    `[ "\${FAKE_ZSH_LOGIN:-}" != 1 ] || ZDOTDIR="$HOME/custom-zdotdir"\n`,
-    0o600,
-  );
-  writeText(customZdotProfile, "# custom zprofile\n", 0o600);
-  const customZdot = runInstaller({
-    installDir,
-    platform: linuxX64(),
-    home: customZdotHome,
-    extraArguments: ["--persist-path"],
-    environment: { SHELL: zsh },
-  });
-  assertFailure(customZdot, "non-exported ZDOTDIR", "non-exported zsh ZDOTDIR");
-  assertEqual(ghCalls(customZdot), [], "non-exported zsh ZDOTDIR makes no gh calls");
-  assert(
-    !existsSync(join(customZdotHome, ".zprofile")),
-    "non-exported ZDOTDIR leaves HOME profile absent",
-  );
-  assertEqual(
-    readFileSync(customZdotProfile, "utf8"),
-    "# custom zprofile\n",
-    "non-exported ZDOTDIR leaves the effective profile unchanged",
-  );
+  for (const [label, installDir] of [
+    ["space", join(root, "Station custom bin")],
+    ["apostrophe", join(root, "Station's-bin")],
+    ["space and apostrophe", join(root, "Station's custom bin")],
+  ]) {
+    const result = runInstaller({ installDir, platform: linuxX64() });
+    assertSuccess(result, `${label} install directory`);
+    assertPathRecovery(result, installDir, ["stn", "stn-ingress", "stn-tmux-popup"]);
+    if (installDir.includes("'")) {
+      assertIncludes(result.stdout, "'\\''", `${label} install directory apostrophe quoting`);
+    }
+    assertNoInstallerResidue(installDir, dataDir);
+  }
 
-  const colonHome = join(root, "future-shell-colon-home");
-  const colonProfile = join(colonHome, ".zprofile");
-  const colonProfileBefore = "# colon profile\n";
-  makeDirectory(colonHome);
-  writeText(colonProfile, colonProfileBefore, 0o600);
+  const colonCwd = join(root, "normalized:colon-cwd");
+  const colonDataHome = join(root, "normalized-colon-data");
+  const colonInstallDir = join(colonCwd, "relative-bin");
+  makeDirectory(colonCwd);
   const colon = runInstaller({
-    installDir: join(root, "future-shell:colon-bin"),
+    installDir: "relative-bin",
     platform: linuxX64(),
-    home: colonHome,
-    extraArguments: ["--persist-path"],
-    environment: { SHELL: zsh },
+    cwd: colonCwd,
+    dataHome: colonDataHome,
   });
-  assertFailure(colon, "without colons or line breaks", "colon in persisted install directory");
-  assertEqual(ghCalls(colon), [], "colon in persisted install directory makes no gh calls");
-  assertEqual(
-    readFileSync(colonProfile, "utf8"),
-    colonProfileBefore,
-    "colon in persisted install directory leaves the profile unchanged",
+  assertFailure(colon, "install directory cannot contain ':'", "normalized colon preflight");
+  assertIncludes(colon.stderr, "PATH uses ':' to separate entries", "normalized colon rationale");
+  assertEqual(ghCalls(colon), [], "normalized colon preflight makes no gh calls");
+  assert(
+    !existsSync(colonInstallDir),
+    "normalized colon preflight does not create install directory",
   );
-
-  const legacyHome = join(root, "future-shell-legacy-home");
-  const legacyProfile = join(legacyHome, ".zprofile");
-  const legacyEntry = 'export PATH="$HOME/.local/bin:$PATH"\n';
-  makeDirectory(legacyHome);
-  writeText(legacyProfile, legacyEntry, 0o600);
-  const legacy = runInstaller({
-    platform: linuxX64(),
-    home: legacyHome,
-    omitInstallDir: true,
-    extraArguments: ["--persist-path"],
-    environment: { SHELL: zsh },
-  });
-  assertSuccess(legacy, "legacy documented PATH persistence");
-  assertIncludes(
-    legacy.stdout,
-    "Future-shell PATH is already configured",
-    "legacy documented PATH recognition",
-  );
-  assertEqual(
-    readFileSync(legacyProfile, "utf8"),
-    legacyEntry,
-    "legacy documented PATH entry remains byte-identical",
-  );
+  assert(!existsSync(colonDataHome), "normalized colon preflight does not create data directory");
+  assertNoInstallerResidue(colonInstallDir, colonDataHome);
 }
 
-function shellWord(value) {
+function snapshotPaths(paths) {
+  return paths.map((path) => {
+    let status;
+    try {
+      status = lstatSync(path);
+    } catch {
+      return { exists: false, path };
+    }
+    if (status.isSymbolicLink()) {
+      return {
+        exists: true,
+        inode: status.ino,
+        mode: status.mode & 0o7777,
+        path,
+        target: readlinkSync(path),
+        type: "symlink",
+      };
+    }
+    return {
+      bytes: readFileSync(path, "base64"),
+      exists: true,
+      inode: status.ino,
+      mode: status.mode & 0o7777,
+      path,
+      type: "file",
+    };
+  });
+}
+
+function expectedShellWord(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function countExactLines(value, expected) {
-  return value.split("\n").filter((line) => line === expected).length;
-}
-
-function extractPathPersistenceCommand(stdout) {
-  const marker = ", run:\n  ";
-  const commandStart = stdout.indexOf(marker);
-  assert(commandStart >= 0, "no-flag install prints a future-shell PATH command");
-  const lineStart = commandStart + marker.length;
-  const lineEnd = stdout.indexOf("\n", lineStart);
-  assert(lineEnd > lineStart, "future-shell PATH command occupies one line");
-  const command = stdout.slice(lineStart, lineEnd);
-  assert(command.startsWith("if ! grep -F -x -q "), "future-shell PATH command is idempotent");
-  return command;
-}
-
-function assertFutureShellLauncherResolution({ home, installDir, profile, shadowDir }) {
-  const result = spawnSync(
-    "/bin/sh",
-    [
-      "-c",
-      '. "$1"; for launcher in stn stn-ingress stn-tmux-popup; do command -v "$launcher" || exit; done',
-      "station-future-shell",
-      profile,
-    ],
-    syncOptions({ env: { HOME: home, PATH: `${shadowDir}:/usr/bin:/bin` } }),
-  );
-  assertSuccess(result, "minimal-PATH future shell launcher resolution");
-  assertEqual(
-    result.stdout,
-    `${["stn", "stn-ingress", "stn-tmux-popup"]
-      .map((launcher) => join(installDir, launcher))
-      .join("\n")}\n`,
-    "future shell prepends installed launchers ahead of shadows",
-  );
 }
 
 function scenarioExplicitRollbackAndDraft() {
@@ -887,11 +724,7 @@ function scenarioCliParsing() {
       "--install-dir may be specified only once",
       "duplicate install-dir flag",
     ],
-    [
-      ["--persist-path", "--persist-path"],
-      "--persist-path may be specified only once",
-      "duplicate persist-path flag",
-    ],
+    [[removedPersistenceOption], "unknown option", "removed persistence flag"],
     [["--install-dir", ""], "non-empty path", "empty install-dir path"],
     [["--unknown"], "unknown option", "unknown option"],
   ];
@@ -905,6 +738,7 @@ function scenarioCliParsing() {
     assertFailure(result, expected, label);
     assertEqual(ghCalls(result), [], `${label} makes no gh calls`);
   }
+  assert(!existsSync(installDir), "CLI parsing failures do not create the install directory");
 }
 
 function scenarioHostileUmaskModes() {
@@ -2264,7 +2098,7 @@ function scenarioHelp() {
   const help = spawnSync("/bin/sh", [installer, "--help"], syncOptions());
   assertSuccess(help, "installer help");
   assertIncludes(help.stdout, "--install-dir", "installer help options");
-  assertIncludes(help.stdout, "--persist-path", "installer persistence help option");
+  assertNotIncludes(help.stdout, removedPersistenceOption, "installer removed persistence option");
 }
 
 function linuxX64() {
@@ -2447,19 +2281,6 @@ fi
 }
 
 function writeFakeCommands() {
-  writeExecutable(
-    join(fakeBinDir, "zsh"),
-    `#!/bin/sh
-set -eu
-[ "\${1:-}" = -l ] || exit 2
-FAKE_ZSH_LOGIN=1
-shift
-[ "\${1:-}" = -c ] || exit 2
-[ ! -f "$HOME/.zshenv" ] || . "$HOME/.zshenv"
-shift
-eval "$1"
-`,
-  );
   writeExecutable(
     join(fakeBinDir, "uname"),
     [
@@ -3167,17 +2988,53 @@ function assertPathRecovery(
       assertNotIncludes(result.stdout, `PATH mismatch: ${launcher} `, `${launcher} PATH match`);
     }
   }
-  assertIncludes(result.stdout, "export PATH", "PATH recovery export");
-  assertIncludes(result.stdout, "hash -r", "PATH recovery command cache reset");
-  assertIncludes(result.stdout, "stn setup", "PATH recovery setup command");
-  assertIncludes(result.stdout, "Absolute fallback:", "PATH recovery absolute fallback");
 
-  const blockStart = result.stdout.indexOf("  PATH=");
-  const blockEnd = result.stdout.indexOf("Absolute fallback:", blockStart);
-  assert(blockStart >= 0 && blockEnd > blockStart, "PATH recovery block boundaries");
-  const recoveryBlock = result.stdout
-    .slice(blockStart + 2, blockEnd)
-    .replace(/\n {2}(export PATH|hash -r|stn setup)\n/g, "\n$1\n");
+  const initialPathText = initialPath.join(":");
+  const quotedInstallDir = expectedShellWord(installDir);
+  const futureHeading =
+    "To use Station in future shells, add this command to your chosen shell configuration:\n  ";
+  const futureStart = result.stdout.indexOf(futureHeading);
+  const currentHeading = "Run this block in the current shell, then continue setup:\n";
+  const currentStart = result.stdout.indexOf(currentHeading, futureStart);
+  assert(futureStart >= 0 && currentStart > futureStart, "future-shell guidance boundaries");
+  assertEqual(
+    result.stdout.lastIndexOf(futureHeading),
+    futureStart,
+    "one future-shell guidance command",
+  );
+  const futureCommand = result.stdout
+    .slice(futureStart + futureHeading.length, currentStart)
+    .replace(/\n\n$/, "");
+  assertEqual(
+    futureCommand,
+    `export PATH=${quotedInstallDir}\${PATH:+":$PATH"}`,
+    "future-shell export command",
+  );
+  const futureEvaluation = spawnSync(
+    "/bin/sh",
+    ["-c", `${futureCommand}\nprintf '%s\\n' "$PATH"`],
+    syncOptions({ env: { HOME: homeDir, PATH: initialPathText } }),
+  );
+  assertSuccess(futureEvaluation, "future-shell export execution");
+  assertEqual(
+    futureEvaluation.stdout,
+    `${installDir}:${initialPathText}\n`,
+    "future-shell export prepends the exact install directory",
+  );
+
+  const fallbackMarker = "Absolute fallback: ";
+  const blockStart = currentStart + currentHeading.length;
+  const blockEnd = result.stdout.indexOf(fallbackMarker, blockStart);
+  assert(blockEnd > blockStart, "current-shell recovery block boundaries");
+  const printedRecoveryBlock = result.stdout.slice(blockStart, blockEnd);
+  assertEqual(
+    printedRecoveryBlock,
+    `  PATH=${quotedInstallDir}\${PATH:+":$PATH"}\n  export PATH\n  hash -r\n  stn setup\n`,
+    "current-shell recovery block",
+  );
+  const recoveryBlock = printedRecoveryBlock
+    .replace(/^ {2}PATH=/, "PATH=")
+    .replace(/\n {2}(export PATH|hash -r|stn setup)(?=\n|$)/g, "\n$1");
   const reportDir = join(root, `path-recovery-${++invocationCount}`);
   makeDirectory(reportDir);
   const verification = spawnSync(
@@ -3189,7 +3046,7 @@ function assertPathRecovery(
     syncOptions({
       env: {
         HOME: homeDir,
-        PATH: initialPath.join(":"),
+        PATH: initialPathText,
         PATH_REPORT_DIR: reportDir,
       },
     }),
@@ -3203,11 +3060,16 @@ function assertPathRecovery(
     );
   }
 
-  const fallbackCommand = result.stdout.slice(blockEnd + "Absolute fallback:".length).trim();
+  const fallbackCommand = result.stdout.slice(blockEnd + fallbackMarker.length).trim();
+  assertEqual(
+    fallbackCommand,
+    `${expectedShellWord(join(installDir, "stn"))} setup`,
+    "absolute PATH fallback command",
+  );
   const fallback = spawnSync(
     "/bin/sh",
     ["-c", fallbackCommand],
-    syncOptions({ env: { HOME: homeDir, PATH: initialPath.join(":") } }),
+    syncOptions({ env: { HOME: homeDir, PATH: initialPathText } }),
   );
   assertSuccess(fallback, "absolute PATH fallback execution");
 }

@@ -80,8 +80,9 @@ describe("client SafeError mapping", () => {
 });
 
 describe("retryable-versus-permanent observer error classification", () => {
-  it("classifies schema and validation incoherence as permanent", () => {
+  it("classifies build, schema, and validation incoherence as permanent", () => {
     const permanentCodes = [
+      "OBSERVER_BUILD_MISMATCH",
       "PROTOCOL_SCHEMA_MISMATCH",
       "PROTOCOL_RESPONSE_VALIDATION_FAILED",
       "PROTOCOL_EVENT_VALIDATION_FAILED",

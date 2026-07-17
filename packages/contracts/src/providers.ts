@@ -448,6 +448,12 @@ export type HarnessVersionInfo = {
   latestVersion?: string;
 };
 
+/**
+ * DRIVEN PORT
+ *
+ * Supplies harness launch, discovery, status, ingress, and persisted-event compatibility policy
+ * without exposing provider-native payloads to Observer application code.
+ */
 export interface HarnessProvider {
   id: ProviderId;
   capabilities(): HarnessCapabilities;
@@ -476,6 +482,11 @@ export interface HarnessProvider {
     event: RawHarnessEvent,
     context: HarnessEventContext,
   ): Promise<HarnessEventObservation[]>;
+  /**
+   * Pure compatibility policy for durable event observations written by earlier builds.
+   * Omit when every previously accepted observation remains valid.
+   */
+  acceptsPersistedEvent?(observation: HarnessEventObservation): boolean;
   stop?(request: HarnessStopRequest): Promise<HarnessStopResult>;
 }
 

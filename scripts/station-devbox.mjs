@@ -4,7 +4,7 @@
 // the whole sandbox lifecycle is one command from any checkout/worktree root.
 // Repo root is resolved from THIS script's own location, so a worktree root
 // targets its own .dev-state, never the main checkout's.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,23 +23,33 @@ const HOST_SOCK = join(SOCKET_DIR, "station-host.sock");
 const LOG_DIR = join(DS, "observer", "logs");
 const STATION_DIR = join(repoRoot, "station");
 const ISOLATED_SCRIPT = join(repoRoot, "station", "scripts", "station-isolated.sh");
+const TMUX_DEVBOX_SCRIPT = join(repoRoot, "scripts", "station-tmux-devbox.mjs");
 
 const handlers = { start, dev, restart, status, logs, stop, reset, help };
 
 const [rawVerb = "start", ...rest] = process.argv.slice(2);
 const verb =
   rawVerb === "-h" || rawVerb === "--help" ? "help" : rawVerb === "--hot" ? "dev" : rawVerb;
-const handler = handlers[verb];
-if (handler === undefined) {
-  process.stderr.write(`Unknown station:devbox command: ${verb}\n\n`);
-  help();
-  process.exit(1);
-}
-try {
-  handler(rest);
-} catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
+if (verb === "tmux") {
+  try {
+    process.exitCode = await delegateTmux(rest);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
+} else {
+  const handler = handlers[verb];
+  if (handler === undefined) {
+    process.stderr.write(`Unknown station:devbox command: ${verb}\n\n`);
+    help();
+    process.exit(1);
+  }
+  try {
+    handler(rest);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
 }
 
 function start() {
@@ -139,9 +149,39 @@ function help() {
       "  logs [--follow]  tail the isolated observer/host/cli logs",
       "  stop             stop the isolated observer + host (preserves .dev-state for reattach)",
       "  reset --yes      stop, then delete .dev-state for this checkout",
+      "  tmux ...         private checkout-keyed tmux popup devbox (run `tmux help`)",
       "",
     ].join("\n"),
   );
+}
+
+async function delegateTmux(args) {
+  const child = spawn(process.execPath, [TMUX_DEVBOX_SCRIPT, ...args], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  const signalHandlers = new Map();
+  for (const signal of ["SIGINT", "SIGHUP", "SIGTERM"]) {
+    const handler = () => child.kill(signal);
+    signalHandlers.set(signal, handler);
+    process.on(signal, handler);
+  }
+  try {
+    return await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        if (code !== null) {
+          resolve(code);
+          return;
+        }
+        resolve(signal === "SIGHUP" ? 129 : signal === "SIGINT" ? 130 : 143);
+      });
+    });
+  } finally {
+    for (const [signal, handler] of signalHandlers) {
+      process.off(signal, handler);
+    }
+  }
 }
 
 function run(command, args, options = {}) {

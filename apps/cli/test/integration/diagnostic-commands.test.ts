@@ -9,12 +9,14 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const observerBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
 
 describe("CLI diagnostic commands", () => {
   it("routes doctor through the observer diagnostics API", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const deps = {
+      buildVersion: observerBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
@@ -22,7 +24,7 @@ describe("CLI diagnostic commands", () => {
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           }),
           runDoctor: async () => doctorReport(fixture.stateDir),
         }) as never,
@@ -137,6 +139,7 @@ describe("CLI diagnostic commands", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const deps = {
+      buildVersion: observerBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
@@ -144,7 +147,7 @@ describe("CLI diagnostic commands", () => {
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           }),
           collectDiagnostics: async () => diagnosticSnapshot(),
         }) as never,
@@ -171,6 +174,7 @@ describe("CLI diagnostic commands", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const deps = {
+      buildVersion: observerBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
@@ -178,7 +182,7 @@ describe("CLI diagnostic commands", () => {
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           }),
           collectDiagnostics: async () => {
             await sleep(1100);
@@ -207,6 +211,7 @@ describe("CLI diagnostic commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     let collectedOptions: unknown;
     const deps = {
+      buildVersion: observerBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
@@ -214,7 +219,7 @@ describe("CLI diagnostic commands", () => {
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           }),
           collectDiagnostics: async (options: unknown) => {
             collectedOptions = options;
@@ -269,6 +274,7 @@ describe("CLI diagnostic commands", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const deps = {
+      buildVersion: observerBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
@@ -276,7 +282,7 @@ describe("CLI diagnostic commands", () => {
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           }),
           collectDiagnostics: async () => diagnosticSnapshot(),
         }) as never,
@@ -309,6 +315,7 @@ describe("CLI diagnostic commands", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const deps = {
+      buildVersion: observerBuildVersion,
       clientFactory: () =>
         ({
           health: async () => ({
@@ -316,7 +323,7 @@ describe("CLI diagnostic commands", () => {
             status: "healthy",
             pid: 1234,
             startedAt: now,
-            version: "0.7.0",
+            version: observerBuildVersion,
           }),
           collectDiagnostics: async () => failedWorktrunkDiagnosticSnapshot(),
         }) as never,
@@ -671,7 +678,7 @@ function doctorReport(stateDir: string): DoctorReport {
       status: "healthy",
       pid: 1234,
       startedAt: now,
-      version: "0.7.0",
+      version: observerBuildVersion,
     },
     config: { projectCount: 0, diagnostics: [] },
     providers: {},
@@ -702,7 +709,7 @@ function diagnosticSnapshot(): DiagnosticSnapshot {
       status: "healthy",
       pid: 1234,
       startedAt: now,
-      version: "0.7.0",
+      version: observerBuildVersion,
     },
     snapshot: {
       schemaVersion: "0.8.0",

@@ -7,7 +7,8 @@ import type {
   ProviderHookReceipt,
   SafeError,
 } from "@station/contracts";
-import { safeErrorFromUnknown, stationBuildInfo, systemClock } from "@station/runtime";
+import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import { safeErrorFromUnknown, stationObserverBuildVersion, systemClock } from "@station/runtime";
 import { classifyObserverHealth, observerHandoffRefusedError } from "../observerProcess/health.js";
 import {
   getProviderHookObserverStatus,
@@ -31,12 +32,18 @@ type ReceiptRecorder = (input: {
 
 const autoStartLockName = "hook-autostart.lock";
 const minimumAutoStartLockStaleMs = 5000;
+const nonSpoolableErrorCodes = new Set([
+  "OBSERVER_BUILD_MISMATCH",
+  "OBSERVER_HANDOFF_PENDING",
+  "OBSERVER_HANDOFF_REFUSED",
+  "PROTOCOL_SCHEMA_MISMATCH",
+]);
 
 /**
  * USE CASE
  *
  * Gates provider-hook delivery on Observer build compatibility, negotiates an
- * allowed replacement before retrying, and spools whenever safe delivery cannot be proven.
+ * allowed replacement before retrying, spools offline events, and rejects known incompatibility.
  */
 export async function deliverProviderHookWithSpooling(input: {
   paths: ObserverPaths;
@@ -48,17 +55,18 @@ export async function deliverProviderHookWithSpooling(input: {
   configPath?: string;
   observerCommand?: ProviderHookObserverCommand;
   deps: ProviderHookObserverStartupDeps;
-  deliver: () => Promise<ProviderDeliveryAttempt>;
+  /** Sends only through a client pinned to the selector proven by readiness. */
+  deliver: (expectedBuildVersion: string) => Promise<ProviderDeliveryAttempt>;
   spoolReceipt: (error: SafeError | undefined) => Promise<ProviderHookReceipt>;
   recordReceipt?: ReceiptRecorder;
 }): Promise<ProviderHookReceipt> {
   const startupDeadlineMs = Date.now() + input.startupTimeoutMs;
   const readiness = await prepareObserverForDelivery(input, startupDeadlineMs);
   if (!readiness.ok) {
-    return recordReceipt(input, await input.spoolReceipt(readiness.error));
+    return settleUndelivered(input, readiness.error);
   }
 
-  const firstDelivery = await input.deliver();
+  const firstDelivery = await input.deliver(readiness.buildVersion);
   if (firstDelivery.receipt !== undefined) {
     return recordReceipt(input, firstDelivery.receipt);
   }
@@ -78,16 +86,38 @@ export async function deliverProviderHookWithSpooling(input: {
     }
     const startResult = await maybeStartObserver(startupInput);
     if (startResult.ok) {
-      const retryDelivery = await input.deliver();
+      const retryDelivery = await input.deliver(startResult.buildVersion);
       if (retryDelivery.receipt !== undefined) {
         return recordReceipt(input, retryDelivery.receipt);
       }
-      return recordReceipt(input, await input.spoolReceipt(retryDelivery.error));
+      return settleUndelivered(input, retryDelivery.error);
     }
-    return recordReceipt(input, await input.spoolReceipt(startResult.error));
+    return settleUndelivered(input, startResult.error);
   }
 
-  return recordReceipt(input, await input.spoolReceipt(firstDelivery.error));
+  return settleUndelivered(input, firstDelivery.error);
+}
+
+async function settleUndelivered(
+  input: Parameters<typeof deliverProviderHookWithSpooling>[0],
+  error: SafeError | undefined,
+): Promise<ProviderHookReceipt> {
+  if (error?.code !== undefined && nonSpoolableErrorCodes.has(error.code)) {
+    return recordReceipt(
+      input,
+      ProviderHookReceiptSchema.parse({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: input.event.hookId ?? `hook_rejected_${Date.now()}`,
+        provider: input.event.provider,
+        event: input.event.event,
+        accepted: false,
+        status: "rejected",
+        receivedAt: input.event.receivedAt,
+        error,
+      }),
+    );
+  }
+  return recordReceipt(input, await input.spoolReceipt(error));
 }
 
 async function prepareObserverForDelivery(
@@ -101,7 +131,7 @@ async function prepareObserverForDelivery(
     deps: ProviderHookObserverStartupDeps;
   },
   startupDeadlineMs: number,
-): Promise<{ ok: true } | { ok: false; error: SafeError }> {
+): Promise<{ ok: true; buildVersion: string } | { ok: false; error: SafeError }> {
   const statusTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
   if (statusTimeoutMs === undefined) return providerHookStartupTimedOut();
   const statusOptions: Parameters<typeof getProviderHookObserverStatus>[0] = {
@@ -114,10 +144,20 @@ async function prepareObserverForDelivery(
   }
   const status = await getProviderHookObserverStatus(statusOptions, input.deps);
   if (status.status === "running") {
-    const buildVersion = input.deps.buildVersion ?? stationBuildInfo().version;
+    const buildVersion = input.deps.buildVersion ?? stationObserverBuildVersion();
     const classification = classifyObserverHealth(status.health, buildVersion);
     if (classification.action === "attach") {
-      return { ok: true };
+      if (status.health.version !== undefined) {
+        return { ok: true, buildVersion: status.health.version };
+      }
+      return {
+        ok: false,
+        error: observerHandoffRefusedError(
+          status.health,
+          buildVersion,
+          "The running Observer did not report a build version.",
+        ),
+      };
     }
     if (classification.action === "refuse" || !input.autoStart) {
       return {
@@ -222,7 +262,17 @@ async function maybeStartObserver(input: {
     }
     const started = await startProviderHookObserver(startupOptions, input.deps);
     if (started.status === "running") {
-      return { ok: true as const };
+      if (started.health.version !== undefined) {
+        return { ok: true as const, buildVersion: started.health.version };
+      }
+      return {
+        ok: false as const,
+        error: observerHandoffRefusedError(
+          started.health,
+          input.deps.buildVersion ?? stationObserverBuildVersion(),
+          "The running Observer did not report a build version.",
+        ),
+      };
     }
     return {
       ok: false as const,
@@ -325,14 +375,17 @@ async function waitForContendedAutoStart(input: {
   deps: ProviderHookObserverStartupDeps;
 }) {
   try {
-    await waitForProviderHookObserverHealth(
+    const health = await waitForProviderHookObserverHealth(
       {
         paths: input.paths,
         timeoutMs: input.timeoutMs,
       },
       input.deps,
     );
-    return { ok: true as const };
+    if (health.version === undefined) {
+      throw new Error("The running Observer did not report a build version.");
+    }
+    return { ok: true as const, buildVersion: health.version };
   } catch (error) {
     return {
       ok: false as const,
