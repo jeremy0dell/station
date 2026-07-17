@@ -9,7 +9,8 @@ Station is the terminal UI client. It renders observer snapshots and events, own
 Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, running on its own Bun lane outside the root pnpm workspace (see `station/README.md`). There are two Bun entry points:
 
 - `station/src/main.tsx` — the native Station workspace: real PTY-backed panes with host-backed persistence.
-- `station/src/dashboardRenderer/main.tsx` — the read-only dashboard (live observer data, no panes).
+- `station/src/dashboardRenderer/main.tsx` — the standalone observer-backed dashboard (live
+  observer data and commands, no panes).
 
 Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to the Bun renderer (dual-runtime, accepted for alpha):
 
@@ -45,6 +46,28 @@ bun run dashboard                     # read-only dashboard renderer
 - The tmux popup runs the same read-only dashboard. Its close behavior and footer copy must match popup semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O` / header click toggles the STATION overlay; `Ctrl-Q` always exits Station.
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
+
+## Standalone Dashboard Mouse
+
+The fullscreen and tmux-popup dashboard routes primary-button clicks through its own thin adapter
+into the same dashboard-core and keyboard transitions used by standalone keyboard input. Session
+rows are resolved by their exact current row ID before their visible slot key is dispatched, so
+observer-backed focus, start, resume, and picker behavior stays on the existing command path.
+Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header clicks
+toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
+modal surfaces intercept background clicks and scrolling.
+
+Standalone rendering omits Station-native project actions: project/header shell actions, quick
+session, the default-agent header picker, and the empty-project add-session shortcut. Their defensive
+mouse targets are no-ops if encountered. Link cells intercept clicks and report that external link
+opening is unsupported instead of activating the containing row.
+
+The tmux boundary is an acceptance-test responsibility, not dashboard routing logic.
+`integrations/terminal/tmux/test/integration/popup-real.test.ts` sends outer-client SGR motion,
+primary down/up, repeated clicks, and wheel input through a centered popup and verifies hover, one
+action per complete click, deliberate repeated toggles, and scrolling. Production tmux input
+forwarding remains unchanged unless that real characterization fails before input reaches the
+renderer.
 
 ## Code Organization
 

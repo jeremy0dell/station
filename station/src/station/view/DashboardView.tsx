@@ -59,10 +59,26 @@ const QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT = ` ${QUICK_SESSION_AFFORDANCE_LABE
 // Below this terminal width the header affordances switch to compact labels.
 const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
 
+function projectActionLayout(columns: number, visible: boolean) {
+  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
+  if (!visible) {
+    return { compact, shellWidth: 0, quickSessionWidth: 0 };
+  }
+  return {
+    compact,
+    shellWidth: compact ? SHELL_AFFORDANCE_WIDTH_COMPACT : SHELL_AFFORDANCE_WIDTH,
+    quickSessionWidth: compact
+      ? QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT
+      : QUICK_SESSION_AFFORDANCE_WIDTH,
+  };
+}
+
 export type DashboardViewProps = {
   snapshot: StationSnapshot;
   viewState: TuiViewState;
   columns?: number;
+  /** Whether project rows render Station-native shell, quick-session, and agent actions. */
+  showNativeProjectActions?: boolean;
 };
 
 const QUIT_HINT = QUIT_HINT_CLOSE;
@@ -71,6 +87,7 @@ export function DashboardView({
   snapshot,
   viewState,
   columns = 80,
+  showNativeProjectActions = true,
 }: DashboardViewProps) {
   const dispatch = useStationMouse();
   const viewport = selectDashboardViewport(snapshot, viewState);
@@ -110,6 +127,7 @@ export function DashboardView({
           items={viewport.visibleItems}
           layoutByItem={layoutByItem}
           focusedRowId={viewState.focusedRowId}
+          showNativeProjectActions={showNativeProjectActions}
         />
       )}
       <ScrollIndicatorRow direction="below" overflow={viewport.sessionOverflow} />
@@ -266,11 +284,13 @@ function DashboardBody({
   items,
   layoutByItem,
   focusedRowId,
+  showNativeProjectActions,
 }: {
   columns: number;
   items: readonly DashboardViewportItem[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
   focusedRowId?: SessionId | undefined;
+  showNativeProjectActions: boolean;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -281,6 +301,7 @@ function DashboardBody({
           item={item}
           layout={layoutByItem.get(item.id)}
           focusedRowId={focusedRowId}
+          showNativeProjectActions={showNativeProjectActions}
         />
       ))}
     </box>
@@ -292,22 +313,31 @@ function DashboardViewportRow({
   item,
   layout,
   focusedRowId,
+  showNativeProjectActions,
 }: {
   columns: number;
   item: DashboardViewportItem;
   layout: RowGridLayout | undefined;
   focusedRowId?: SessionId | undefined;
+  showNativeProjectActions: boolean;
 }) {
   switch (item.type) {
     case "projectGap":
       return <box height={1} />;
     case "projectHeader":
-      return <ProjectHeaderLine columns={columns} project={item.project} collapsed={item.collapsed} />;
+      return (
+        <ProjectHeaderLine
+          columns={columns}
+          project={item.project}
+          collapsed={item.collapsed}
+          showNativeProjectActions={showNativeProjectActions}
+        />
+      );
     case "emptyProject":
       return (
         <box flexDirection="row" height={1}>
           <text fg={STATION_COLORS.gray}>{emptyProjectLabel()}</text>
-          <EmptySessionButton projectId={item.project.id} />
+          {showNativeProjectActions ? <EmptySessionButton projectId={item.project.id} /> : null}
         </box>
       );
     case "session":
@@ -321,7 +351,13 @@ function DashboardViewportRow({
           <Segments segments={layout.segments} />
         </text>
       );
+    default:
+      return assertNeverViewportItem(item);
   }
+}
+
+function assertNeverViewportItem(_item: never): never {
+  throw new Error("Unsupported dashboard viewport item.");
 }
 
 function SessionRowLine({
@@ -461,16 +497,19 @@ function ProjectHeaderLine({
   columns,
   project,
   collapsed,
+  showNativeProjectActions,
 }: {
   columns: number;
   project: ProjectView;
   collapsed: boolean;
+  showNativeProjectActions: boolean;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useState(false);
-  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
-  const shellWidth = compact ? SHELL_AFFORDANCE_WIDTH_COMPACT : SHELL_AFFORDANCE_WIDTH;
-  const quickSessionWidth = compact ? QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT : QUICK_SESSION_AFFORDANCE_WIDTH;
+  const { compact, shellWidth, quickSessionWidth } = projectActionLayout(
+    columns,
+    showNativeProjectActions,
+  );
   return (
     <box
       flexDirection="row"
@@ -491,12 +530,16 @@ function ProjectHeaderLine({
           width={Math.max(1, columns - shellWidth - quickSessionWidth)}
         />
       </text>
-      <ShellAffordance
-        target={{ kind: "openShellForProject", projectId: project.id }}
-        onHoverChange={setHover}
-        compact={compact}
-      />
-      <QuickSessionAffordance projectId={project.id} compact={compact} />
+      {showNativeProjectActions ? (
+        <>
+          <ShellAffordance
+            target={{ kind: "openShellForProject", projectId: project.id }}
+            onHoverChange={setHover}
+            compact={compact}
+          />
+          <QuickSessionAffordance projectId={project.id} compact={compact} />
+        </>
+      ) : null}
     </box>
   );
 }

@@ -19,6 +19,9 @@ const builtBinaryPath = join(checkoutRoot, "station/dist/bin/stn");
 const persistentUiSessionName = "_station-ui";
 const rendererEntry = "src/dashboardRenderer/main.tsx";
 const outputTailBytes = 64 * 1024;
+const outerClientColumns = 120;
+const outerClientRows = 40;
+const outerStatusRows = 1;
 const ptyBridgeScript = `
 import fcntl
 import os
@@ -28,7 +31,7 @@ import struct
 import sys
 import termios
 
-winsize = struct.pack("HHHH", 40, 120, 0, 0)
+winsize = struct.pack("HHHH", ${outerClientRows}, ${outerClientColumns}, 0, 0)
 pid, fd = pty.fork()
 if pid == 0:
     fcntl.ioctl(sys.stdin.fileno(), termios.TIOCSWINSZ, winsize)
@@ -244,9 +247,12 @@ describeRealTmux("real tmux dev popup routing", () => {
 
   it("built dashboard renders through the outer popup, accepts input, exposes geometry, and reuses its renderer", async () => {
     const fixture = await createDashboardFixture(tmux);
+    fixture.env.STATION_SCENARIO = "many-projects";
     cleanup = () => cleanupDashboardFixture(fixture);
 
     await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    // The outer client must be in mouse mode before it can forward raw SGR input into the popup.
+    await tmuxExec(fixture.wrapper, ["set-option", "-t", "base", "mouse", "on"], fixture.env);
     fixture.ptyClient = await startTmuxPtyClient({
       tmux: fixture.wrapper,
       sessionName: "base",
@@ -260,7 +266,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       isDashboardContent,
       "real dashboard did not render",
     );
-    expect(firstDashboard).toContain("Station snapshot mock");
+    expect(firstDashboard).toContain("station-overlay");
 
     const firstClient = await waitForNestedClient(fixture);
     const firstPane = await readPaneEvidence(fixture);
@@ -276,6 +282,55 @@ describeRealTmux("real tmux dev popup routing", () => {
       renderer: firstRenderer,
     });
     expect(firstRenderer.tty).toBe(firstPane.tty);
+
+    const headerCell = paneCell(firstDashboard, "▼ station");
+    const headerOuter = centeredPopupOuterCell(firstClient, headerCell);
+    const headerStyleBefore = await captureHiddenStyledLine(fixture, "▼ station");
+    await fixture.ptyClient.write(sgrMouse(35, headerOuter));
+    await waitForHiddenStyledLine(
+      fixture,
+      "▼ station",
+      (line) => line !== headerStyleBefore,
+      "outer SGR motion did not reach project-header hover",
+    );
+
+    await writeSgrClick(fixture.ptyClient, headerOuter);
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => content.includes("▶ station") && !content.includes("station-overlay"),
+      "one outer SGR down/up click did not collapse exactly once",
+    );
+    await writeSgrClick(fixture.ptyClient, headerOuter);
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => content.includes("▼ station") && content.includes("station-overlay"),
+      "the first deliberate repeated click did not expand the project",
+    );
+    await writeSgrClick(fixture.ptyClient, headerOuter);
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => content.includes("▶ station") && !content.includes("station-overlay"),
+      "the second deliberate repeated click did not collapse the project",
+    );
+    await writeSgrClick(fixture.ptyClient, headerOuter);
+    const expandedDashboard = await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => content.includes("▼ station") && content.includes("docs-cleanup"),
+      "project did not re-expand before the wheel characterization",
+    );
+    const childCell = paneCell(expandedDashboard, "docs-cleanup");
+    const childOuter = centeredPopupOuterCell(firstClient, childCell);
+    await fixture.ptyClient.write(sgrMouse(65, childOuter));
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => !content.includes("▼ station") && content.includes("docs-cleanup"),
+      "outer SGR wheel input over a child row did not change visible content",
+    );
 
     await fixture.ptyClient.write(Buffer.from("?", "utf8"));
     await waitForPaneContent(
@@ -440,11 +495,11 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(outputAfterFailure).not.toContain("station-popup-binding");
 
     const stillAttached = await waitForNestedClient(fixture);
+    const stillPane = await readPaneEvidence(fixture);
+    const stillProcesses = await waitForDashboardProcessEvidence(fixture, transferredPane);
     expect(stillAttached.pid).toBe(transferredClient.pid);
-    expect((await readPaneEvidence(fixture)).pid).toBe(firstPane.pid);
-    expect((await waitForDashboardProcessEvidence(fixture, transferredPane)).renderer.pid).toBe(
-      firstProcesses.renderer.pid,
-    );
+    expect(stillPane.pid).toBe(firstPane.pid);
+    expect(stillProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
     expect(await recordObserverPid(fixture)).toBe(firstObserverPid);
 
     await crossClient.write(Buffer.from("?", "utf8"));
@@ -462,11 +517,11 @@ describeRealTmux("real tmux dev popup routing", () => {
 
     await Promise.all(outerClients.map(triggerPopupBinding));
     const competingAction = await waitForCoherentActivePopup(fixture, outerClients);
+    const competingPane = await readPaneEvidence(fixture);
+    const competingProcesses = await waitForDashboardProcessEvidence(fixture, transferredPane);
     expect(competingAction.nestedClient.pid).not.toBe(transferredClient.pid);
-    expect((await readPaneEvidence(fixture)).pid).toBe(firstPane.pid);
-    expect((await waitForDashboardProcessEvidence(fixture, transferredPane)).renderer.pid).toBe(
-      firstProcesses.renderer.pid,
-    );
+    expect(competingPane.pid).toBe(firstPane.pid);
+    expect(competingProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
     expect(await recordObserverPid(fixture)).toBe(firstObserverPid);
     expect(await tmuxPaneInMode(fixture, "base")).toBe("0");
     expect(await tmuxPaneInMode(fixture, "base-cross")).toBe("0");
@@ -954,6 +1009,80 @@ async function waitForHiddenPaneContent(
   );
 }
 
+async function captureHiddenStyledLine(fixture: DashboardFixture, needle: string): Promise<string> {
+  const content = await tmuxExec(
+    fixture.wrapper,
+    ["capture-pane", "-e", "-p", "-t", persistentUiSessionName],
+    fixture.env,
+  );
+  const line = content.split("\n").find((candidate) => candidate.includes(needle));
+  if (line === undefined) {
+    throw new Error(`hidden pane does not contain ${JSON.stringify(needle)}`);
+  }
+  return line;
+}
+
+async function waitForHiddenStyledLine(
+  fixture: DashboardFixture,
+  needle: string,
+  predicate: (line: string) => boolean,
+  failureMessage: string,
+): Promise<string> {
+  const deadline = Date.now() + 10_000;
+  let line = "";
+  while (Date.now() < deadline) {
+    line = await captureHiddenStyledLine(fixture, needle).catch(() => "");
+    if (line !== "" && predicate(line)) {
+      return line;
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `${failureMessage}\nLast styled line:\n${line}${await fixtureDiagnostics(fixture)}`,
+  );
+}
+
+function paneCell(content: string, needle: string): { col: number; row: number } {
+  const lines = content.split("\n");
+  const row = lines.findIndex((line) => line.includes(needle));
+  const col = row < 0 ? -1 : (lines[row]?.indexOf(needle) ?? -1);
+  if (row < 0 || col < 0) {
+    throw new Error(`pane does not contain ${JSON.stringify(needle)}`);
+  }
+  return { col, row };
+}
+
+function centeredPopupOuterCell(
+  client: Dimensions,
+  cell: { col: number; row: number },
+): { column: number; row: number } {
+  // Inner dimensions exclude the border, and vertical centering excludes the outer status row.
+  const popupWidth = client.columns + 2;
+  const popupHeight = client.rows + 2;
+  const contentLeft = Math.floor((outerClientColumns - popupWidth) / 2) + 1;
+  const contentTop = Math.floor((outerClientRows - outerStatusRows - popupHeight) / 2) + 1;
+  return {
+    column: contentLeft + cell.col + 1,
+    row: contentTop + cell.row + 1,
+  };
+}
+
+function sgrMouse(
+  code: number,
+  cell: { column: number; row: number },
+  final: "M" | "m" = "M",
+): Uint8Array {
+  return Buffer.from(`\u001b[<${code};${cell.column};${cell.row}${final}`, "utf8");
+}
+
+async function writeSgrClick(
+  client: TmuxPtyClient,
+  cell: { column: number; row: number },
+): Promise<void> {
+  await client.write(sgrMouse(0, cell));
+  await client.write(sgrMouse(0, cell, "m"));
+}
+
 async function fixtureDiagnostics(fixture: DashboardFixture): Promise<string> {
   const sessions = await tmuxExec(
     fixture.wrapper,
@@ -982,11 +1111,7 @@ async function fixtureDiagnostics(fixture: DashboardFixture): Promise<string> {
 }
 
 function isDashboardContent(content: string): boolean {
-  return (
-    content.includes("FLEET") &&
-    content.includes("Station snapshot mock") &&
-    content.includes("? help")
-  );
+  return content.includes("FLEET") && content.includes("? help");
 }
 
 async function waitForPopupAttachRecord(fixture: DashboardFixture): Promise<AttachRecord> {
@@ -1286,10 +1411,12 @@ async function recordObserverPid(fixture: DashboardFixture): Promise<number> {
   while (Date.now() < deadline) {
     const serialized = await readFile(identityPath, "utf8").catch(() => undefined);
     if (serialized !== undefined) {
-      const identity = ObserverProcessIdentitySchema.parse(JSON.parse(serialized));
-      expect(identity.socketPath).toBe(fixture.observerSocketPath);
-      fixture.observerPids.add(identity.pid);
-      return identity.pid;
+      const identity = parseObserverProcessIdentity(serialized);
+      if (identity !== undefined) {
+        expect(identity.socketPath).toBe(fixture.observerSocketPath);
+        fixture.observerPids.add(identity.pid);
+        return identity.pid;
+      }
     }
     await delay(100);
   }
@@ -1477,7 +1604,7 @@ async function cleanupDashboardFixture(fixture: DashboardFixture): Promise<void>
           return;
         }
         processFailures.push(new Error(`fixture process ${pid} did not exit without a signal`));
-        await terminateRecordedPid(pid);
+        return terminateRecordedPid(pid);
       }),
     );
     if (processFailures.length > 0) {
@@ -1545,9 +1672,18 @@ async function recordObserverPidIfPresent(fixture: DashboardFixture): Promise<vo
   if (serialized === undefined) {
     return;
   }
-  const identity = ObserverProcessIdentitySchema.parse(JSON.parse(serialized));
-  if (identity.socketPath === fixture.observerSocketPath) {
+  const identity = parseObserverProcessIdentity(serialized);
+  if (identity?.socketPath === fixture.observerSocketPath) {
     fixture.observerPids.add(identity.pid);
+  }
+}
+
+function parseObserverProcessIdentity(serialized: string) {
+  try {
+    const result = ObserverProcessIdentitySchema.safeParse(JSON.parse(serialized));
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
   }
 }
 
