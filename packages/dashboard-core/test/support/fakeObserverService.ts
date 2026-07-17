@@ -1,4 +1,8 @@
 import type {
+  AgentPrepareExternalLaunchParams,
+  AgentPrepareExternalLaunchResult,
+  AgentReportExternalExitParams,
+  AgentReportExternalExitResult,
   CommandReceipt,
   StationCommand,
   StationEvent,
@@ -70,6 +74,18 @@ export class FakeTuiObserverService implements TuiObserverService {
   async waitForCommandCompletion(commandId: string): Promise<TuiCommandCompletion> {
     this.waitedForCommandIds.push(commandId);
     return this.nextCompletion;
+  }
+
+  async prepareExternalLaunch(
+    _params: AgentPrepareExternalLaunchParams,
+  ): Promise<AgentPrepareExternalLaunchResult> {
+    throw new Error("FakeTuiObserverService.prepareExternalLaunch is not configured.");
+  }
+
+  async reportExternalExit(
+    _params: AgentReportExternalExitParams,
+  ): Promise<AgentReportExternalExitResult> {
+    throw new Error("FakeTuiObserverService.reportExternalExit is not configured.");
   }
 
   async reconcile(reason?: string): Promise<StationSnapshot> {

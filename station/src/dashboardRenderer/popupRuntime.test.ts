@@ -6,16 +6,17 @@ import { describe, expect, it } from "bun:test";
 import { createPopupRuntime, type RendererControlChannel } from "./popupRuntime.js";
 
 describe("createPopupRuntime", () => {
-  it("keeps fullscreen and transient popup exit behavior separate from persistent IPC", () => {
+  it("keeps fullscreen behavior separate while transient popups use parent IPC", () => {
     const fullscreenChannel = new FakeRendererControlChannel();
     const fullscreen = createPopupRuntime({}, fullscreenChannel);
+    const transientChannel = new FakeRendererControlChannel();
     const transient = createPopupRuntime(
       {
         STATION_TUI_POPUP: "1",
         STATION_FOCUS_PROVIDER: "fixture-terminal",
         STATION_FOCUS_CLIENT_ID: "client-startup",
       },
-      undefined,
+      transientChannel,
     );
 
     expect(fullscreen.storeOptions).toEqual({});
@@ -24,6 +25,8 @@ describe("createPopupRuntime", () => {
       exitOnFocusSuccess: true,
       focusOrigin: { provider: "fixture-terminal", clientId: "client-startup" },
     });
+    expect(transientChannel.subscribeCount).toBe(1);
+    expect(transient.openShell).toBeDefined();
   });
 
   it("fails closed when a generated persistent renderer starts without live IPC", () => {
@@ -46,6 +49,27 @@ describe("createPopupRuntime", () => {
     expect(disconnectedChannel.subscribeCount).toBe(1);
     expect(disconnectedChannel.unsubscribeCount).toBe(1);
     expect(disconnectedControlLossCount).toBe(1);
+  });
+
+  it("opens a shell through the parent using only its validated working directory", async () => {
+    const channel = new FakeRendererControlChannel();
+    const runtime = createPopupRuntime(persistentPopupEnv(), channel);
+
+    const opened = runtime.openShell?.("/repo/station");
+    const request = requiredRequest(channel.requests.at(-1));
+    expect(request).toEqual({
+      protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+      requestId: request.requestId,
+      type: "open-shell",
+      cwd: "/repo/station",
+    });
+    channel.respond({
+      protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+      requestId: request.requestId,
+      type: "shell-opened",
+    });
+
+    await opened;
   });
 
   it("uses manual dismissal and an exact one-shot focus target separately", async () => {

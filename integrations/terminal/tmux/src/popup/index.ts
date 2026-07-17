@@ -29,6 +29,7 @@ import {
   registerFastPopupUi,
   resolvePersistentPopupUi,
 } from "./persistentUi.js";
+import { openPopupShellForClient } from "./shell.js";
 import {
   clearActivePopupClaimIfCurrent,
   clearLegacyFocusIfUnclaimed,
@@ -66,6 +67,7 @@ export type {
   TmuxPopupFocusTarget,
   TmuxPopupOptions,
   TmuxPopupResult,
+  TmuxPopupShellResult,
   TmuxRegisteredDevPopupUi,
 } from "./types.js";
 
@@ -781,6 +783,8 @@ export async function resolveTmuxPopupFocusTarget(
         provider: "tmux",
         clientId: claimState.claim.clientName,
       },
+      openShell: (cwd) =>
+        openPopupShellForClient(options, command, claimState.claim.clientName, cwd),
       dismissExact: () => dismissTmuxPopupWithExpectedClaim(exactDismissOptions, claimState.raw),
     };
   }
@@ -792,6 +796,7 @@ export async function resolveTmuxPopupFocusTarget(
   const legacyDismissOptions = popupDismissOptions(options, command);
   return {
     origin: { provider: "tmux", clientId },
+    openShell: (cwd) => openPopupShellForClient(options, command, clientId, cwd),
     dismissExact: () => dismissLegacyTmuxPopupForClient(legacyDismissOptions, clientId),
   };
 }

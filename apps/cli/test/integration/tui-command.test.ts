@@ -257,8 +257,8 @@ describe("CLI tui command", () => {
   it("reports slow observer startup before opening the native renderer", async () => {
     const fixture = await createTempState();
     let spawned = false;
-    let markSpawned = () => undefined;
-    let releaseHealth = () => undefined;
+    let markSpawned: () => void = () => {};
+    let releaseHealth: () => void = () => {};
     const observerSpawned = new Promise<void>((resolve) => {
       markSpawned = resolve;
     });
@@ -853,19 +853,20 @@ describe("CLI tui command", () => {
     ]);
   });
 
-  it("opens an IPC channel only for the persistent compiled popup renderer", async () => {
-    const persistent = await startPersistentRenderer();
-
-    try {
-      expect(persistent.spawnProcess).toHaveBeenCalledWith(
-        "/opt/station/stn",
-        ["__dashboard"],
-        expect.objectContaining({
-          stdio: ["inherit", "inherit", "inherit", "ipc"],
-        }),
-      );
-    } finally {
-      await persistent.finish();
+  it("opens an IPC channel for persistent and transient compiled popup renderers", async () => {
+    for (const persistentPopup of [true, false]) {
+      const popup = await startPersistentRenderer({ persistentPopup });
+      try {
+        expect(popup.spawnProcess).toHaveBeenCalledWith(
+          "/opt/station/stn",
+          ["__dashboard"],
+          expect.objectContaining({
+            stdio: ["inherit", "inherit", "inherit", "ipc"],
+          }),
+        );
+      } finally {
+        await popup.finish();
+      }
     }
   });
 
@@ -969,6 +970,85 @@ describe("CLI tui command", () => {
     }
   });
 
+  it("routes a validated shell request through popup control", async () => {
+    const openShell = vi.fn(async () => ({ opened: true }));
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup: async () => ({ dismissed: true }),
+        openShell,
+        resolveFocusTarget: async () => focusTarget("client-a"),
+      },
+    });
+
+    try {
+      persistent.child.emit("message", {
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "shell-1",
+        type: "open-shell",
+        cwd: "/repo/station",
+      });
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(1));
+      expect(openShell).toHaveBeenCalledWith("/repo/station");
+      expect(persistent.child.sent[0]).toEqual({
+        protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+        requestId: "shell-1",
+        type: "shell-opened",
+      });
+    } finally {
+      await persistent.finish();
+    }
+  });
+
+  it("coalesces concurrent shell requests for one cwd through exact dismissal", async () => {
+    let finishOpen: (result: { opened: boolean }) => void = () => {};
+    const opening = new Promise<{ opened: boolean }>((resolve) => {
+      finishOpen = resolve;
+    });
+    let exactDismissals = 0;
+    const openShell = vi.fn(async () => {
+      const result = await opening;
+      exactDismissals += 1;
+      return result;
+    });
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup: async () => ({ dismissed: true }),
+        openShell,
+        resolveFocusTarget: async () => focusTarget("client-a"),
+      },
+    });
+
+    try {
+      for (const requestId of ["shell-a", "shell-b"]) {
+        persistent.child.emit("message", {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId,
+          type: "open-shell",
+          cwd: "/repo/station",
+        });
+      }
+      await vi.waitFor(() => expect(openShell).toHaveBeenCalledTimes(1));
+      finishOpen({ opened: true });
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
+
+      expect(exactDismissals).toBe(1);
+      expect(persistent.child.sent).toEqual([
+        {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId: "shell-a",
+          type: "shell-opened",
+        },
+        {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId: "shell-b",
+          type: "shell-opened",
+        },
+      ]);
+    } finally {
+      await persistent.finish();
+    }
+  });
+
   it("does not let a late focus completion dismiss a newer popup target", async () => {
     const dismissA = vi.fn(async () => ({ dismissed: true }));
     const dismissB = vi.fn(async () => ({ dismissed: true }));
@@ -1022,7 +1102,7 @@ describe("CLI tui command", () => {
   });
 
   it("coalesces duplicate manual dismiss effects", async () => {
-    let finishDismiss = (_result: { dismissed: boolean }) => undefined;
+    let finishDismiss: (_result: { dismissed: boolean }) => void = () => {};
     const dismissal = new Promise<{ dismissed: boolean }>((resolve) => {
       finishDismiss = resolve;
     });
@@ -1146,7 +1226,7 @@ describe("CLI tui command", () => {
   });
 
   it("closes on duplicate in-flight correlation ids and ignores late adapter completion", async () => {
-    let completeResolution = (_target: ReturnType<typeof focusTarget>) => undefined;
+    let completeResolution: (_target: ReturnType<typeof focusTarget>) => void = () => {};
     const resolution = new Promise<ReturnType<typeof focusTarget>>((resolve) => {
       completeResolution = resolve;
     });
@@ -1174,7 +1254,7 @@ describe("CLI tui command", () => {
 
   it("cleans up control listeners and ignores late adapter completion on child exit or disconnect", async () => {
     for (const childEvent of ["exit", "disconnect"] as const) {
-      let completeResolution = (_target: ReturnType<typeof focusTarget>) => undefined;
+      let completeResolution: (_target: ReturnType<typeof focusTarget>) => void = () => {};
       const resolution = new Promise<ReturnType<typeof focusTarget>>((resolve) => {
         completeResolution = resolve;
       });
@@ -1481,6 +1561,7 @@ async function startPersistentRenderer(
   options: {
     linkExitCode?: number;
     popupControl?: NonNullable<TuiCommandDeps["popupControl"]>;
+    persistentPopup?: boolean;
     sendError?: Error;
     source?: boolean;
   } = {},
@@ -1503,7 +1584,7 @@ async function startPersistentRenderer(
       resolveFocusTarget: async () => focusTarget("client-a"),
     } satisfies NonNullable<TuiCommandDeps["popupControl"]>);
   const result = runTuiCommand(
-    ["--popup", "--persistent"],
+    options.persistentPopup === false ? ["--popup"] : ["--popup", "--persistent"],
     { config: fixture.config },
     {
       observer: runningObserverDeps(),

@@ -45,10 +45,21 @@ export type TuiRendererResolveFocusTargetRequest = z.infer<
   typeof TuiRendererResolveFocusTargetRequestSchema
 >;
 
+export const TuiRendererOpenShellRequestSchema = z
+  .object({
+    ...frameShape,
+    type: z.literal("open-shell"),
+    cwd: z.string().min(1).max(4096),
+  })
+  .strict();
+
+export type TuiRendererOpenShellRequest = z.infer<typeof TuiRendererOpenShellRequestSchema>;
+
 export const TuiRendererControlRequestSchema = z.discriminatedUnion("type", [
   TuiRendererDismissRequestSchema,
   TuiRendererDismissFocusTargetRequestSchema,
   TuiRendererResolveFocusTargetRequestSchema,
+  TuiRendererOpenShellRequestSchema,
 ]);
 
 export type TuiRendererControlRequest = z.infer<typeof TuiRendererControlRequestSchema>;
@@ -61,6 +72,15 @@ export const TuiRendererDismissedResponseSchema = z
   .strict();
 
 export type TuiRendererDismissedResponse = z.infer<typeof TuiRendererDismissedResponseSchema>;
+
+export const TuiRendererShellOpenedResponseSchema = z
+  .object({
+    ...frameShape,
+    type: z.literal("shell-opened"),
+  })
+  .strict();
+
+export type TuiRendererShellOpenedResponse = z.infer<typeof TuiRendererShellOpenedResponseSchema>;
 
 export const TuiRendererFocusTargetResponseSchema = z
   .object({
@@ -84,6 +104,7 @@ export type TuiRendererControlErrorResponse = z.infer<typeof TuiRendererControlE
 
 export const TuiRendererControlResponseSchema = z.discriminatedUnion("type", [
   TuiRendererDismissedResponseSchema,
+  TuiRendererShellOpenedResponseSchema,
   TuiRendererFocusTargetResponseSchema,
   TuiRendererControlErrorResponseSchema,
 ]);

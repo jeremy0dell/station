@@ -232,6 +232,7 @@ async function spawnRenderer(
   }
   const spawnProcess = deps.spawnProcess ?? spawn;
   const workspaceDir = resolveStationWorkspaceDir();
+  const popupRenderer = env.STATION_TUI_POPUP === "1";
   const sourcePersistentDashboard =
     override === undefined && !compiled && persistentPopup && entry === "dashboard";
   if (sourcePersistentDashboard) {
@@ -251,15 +252,15 @@ async function spawnRenderer(
     override !== undefined
       ? spawnProcess(override, {
           shell: true,
-          stdio: persistentPopup ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+          stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
           env: childEnv,
         })
       : spawnProcess(command, args, {
-          stdio: persistentPopup ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+          stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
           env: childEnv,
           ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
         });
-  const control = persistentPopup
+  const control = popupRenderer
     ? attachTuiRendererControl(
         child,
         deps.popupControl ?? defaultPopupControl(deps.env, popupCommand),
@@ -311,6 +312,14 @@ function defaultPopupControl(
   };
   return {
     dismissPopup: () => dismissTmuxPopup(popupOptions),
+    openShell: async (cwd) => {
+      const target = await resolveTmuxPopupFocusTarget(popupOptions);
+      if (target === undefined) return { opened: false };
+      const shell = await target.openShell(cwd);
+      if (!shell.opened) return shell;
+      const dismissed = await target.dismissExact();
+      return { opened: dismissed.dismissed };
+    },
     resolveFocusTarget: () => resolveTmuxPopupFocusTarget(popupOptions),
   };
 }

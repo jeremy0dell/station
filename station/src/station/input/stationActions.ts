@@ -12,12 +12,11 @@ import type { StoreApi } from "zustand/vanilla";
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
   choiceValueByKey,
-  createNewSessionNameToken,
   newSessionIntentForInput,
   focusProjectSettingsItem as focusProjectSettingsItemState,
-  generatedSessionBranch,
   openProjectDefaultAgentPicker,
   openWidgetSettings as openWidgetSettingsState,
+  resolveQuickSessionIntent,
   selectAddProjectRow as selectAddProjectRowState,
   selectDashboardItems,
   selectDashboardSessionRow,
@@ -362,20 +361,13 @@ export function resolveQuickSessionSubmit(
   store: StoreApi<TuiStore>,
   projectId: string,
 ): QuickSessionSubmitTarget {
-  const snapshot = store.getState().snapshot;
-  if (snapshot === undefined) {
-    return { kind: "none" };
-  }
-  const project = snapshot.projects.find((candidate) => candidate.id === projectId);
-  if (project === undefined || project.health.status === "unavailable") {
-    return { kind: "none" };
-  }
-  const branch = generatedSessionBranch(project.id, createNewSessionNameToken());
+  const intent = resolveQuickSessionIntent(store.getState(), projectId);
+  if (intent === undefined) return { kind: "none" };
   return {
     kind: "submit",
-    projectId: project.id,
-    branch,
-    harness: project.defaults.harness,
+    projectId: intent.projectId,
+    branch: intent.branch,
+    harness: intent.harnessProvider,
   };
 }
 

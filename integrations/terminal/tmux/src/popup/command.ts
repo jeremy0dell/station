@@ -57,6 +57,16 @@ function parseTmuxClientIdentity(value: string): TmuxClientIdentity | undefined 
   return { name, pid, sessionName };
 }
 
+function parseTmuxClientSessionId(value: string, clientId: string): string | undefined {
+  for (const line of value.split("\n")) {
+    const [name, sessionId, ...rest] = line.split("\t");
+    if (rest.length === 0 && name === clientId && /^\$[0-9]+$/.test(sessionId ?? "")) {
+      return sessionId;
+    }
+  }
+  return undefined;
+}
+
 export function popupCommandInput(
   options: TmuxPopupCommandInputOptions,
   command: string,
@@ -174,6 +184,25 @@ export async function hasTmuxSession(input: TmuxCommandInput, sessionId: string)
   } catch {
     return false;
   }
+}
+
+/**
+ * Resolves the exact session ID attached to a tmux client from one coherent client listing.
+ *
+ * Session IDs avoid reinterpreting valid user-controlled session names, and `display-message -c`
+ * does not reliably scope client fields while a nested popup client is active.
+ */
+export async function resolveTmuxClientSessionId(
+  input: TmuxCommandInput,
+  clientId: string,
+): Promise<string | undefined> {
+  const value = await resolveTmuxOption(input, {
+    args: ["list-clients", "-F", "#{client_name}\t#{session_id}"],
+    operation: "provider.tmux.popup.resolveClientSessionId",
+    message: "tmux failed to resolve the station popup client session ID.",
+    timeoutMessage: "tmux popup client session ID lookup timed out.",
+  });
+  return value === undefined ? undefined : parseTmuxClientSessionId(value, clientId);
 }
 
 export async function resolveCurrentTmuxClientId(

@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 export type OpenUrlCommand = {
   command: string;
   args: string[];
@@ -7,6 +9,21 @@ export type OpenUrlCommand = {
  * Snapshot URLs are untrusted: open only http(s), never through a shell. Windows
  * uses rundll32 FileProtocolHandler so cmd metacharacters cannot be re-parsed.
  */
+export function openExternalUrl(rawUrl: string): void {
+  const command = resolveOpenUrlCommand(process.platform, rawUrl);
+  if (command === undefined) return;
+  try {
+    const child = spawn(command.command, command.args, {
+      stdio: "ignore",
+      detached: true,
+    });
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    // Best-effort: no platform opener is available.
+  }
+}
+
 export function resolveOpenUrlCommand(
   platform: string,
   rawUrl: string,

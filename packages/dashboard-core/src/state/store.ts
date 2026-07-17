@@ -30,6 +30,7 @@ import {
   type TuiFocusTarget,
 } from "./operations/runtimeCommands.js";
 import { createInitialTuiState, replaceSnapshot } from "./screen.js";
+import { submitQuickSession } from "./screens/quickSession.js";
 import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
 import { handleTuiKey, type TuiTransition } from "./transition.js";
@@ -43,6 +44,8 @@ export type TuiHandleKeyResult = {
 export type TuiStore = TuiState & {
   start(): () => void;
   handleKey(key: TuiKey): TuiHandleKeyResult;
+  /** Create a project session immediately with its configured default harness. */
+  createQuickSession(projectId: string): void;
   setTerminalRows(rows: number): void;
   /** Synchronize row focus from a canonical observer session identity. */
   focusDashboardSession(sessionId: SessionId): void;
@@ -156,6 +159,18 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         result.exitCode = transition.exitCode;
       }
       return result;
+    },
+    createQuickSession: (projectId): void => {
+      const transition = submitQuickSession(get(), projectId);
+      set(transition.state);
+      void applyTransitionEffects(
+        store,
+        options.service,
+        clientRuntime,
+        runtime,
+        operations,
+        transition,
+      );
     },
     setTerminalRows: (rows): void => {
       set(clampDashboardStateScroll({ ...get(), terminalRows: rows }));

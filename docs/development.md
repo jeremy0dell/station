@@ -614,6 +614,7 @@ pnpm test:e2e:cursor:real
 pnpm test:e2e:pi:real
 pnpm test:e2e:opencode:real
 pnpm test:e2e:real:local
+pnpm test:e2e:real:local tests/e2e/real/real-native-tui-mouse.test.ts
 pnpm test:e2e:real:codex-hooks
 ```
 

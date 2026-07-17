@@ -9,15 +9,16 @@ Station is the terminal UI client. It renders observer snapshots and events, own
 Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, running on its own Bun lane outside the root pnpm workspace (see `station/README.md`). There are two Bun entry points:
 
 - `station/src/main.tsx` — the native Station workspace: real PTY-backed panes with host-backed persistence.
-- `station/src/dashboardRenderer/main.tsx` — the read-only dashboard (live observer data, no panes).
+- `station/src/dashboardRenderer/main.tsx` — the standalone observer-backed dashboard (live
+  observer data and commands, no panes).
 
 Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to the Bun renderer (dual-runtime, accepted for alpha):
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
-- Inside tmux, `stn` opens the read-only dashboard in a tmux popup, since
-  tmux owns the panes there. Selecting a native Station session shows that it
-  runs in another terminal, dispatches no focus command, and keeps the popup
-  open.
+- Inside tmux, `stn` opens the interactive observer-backed dashboard in a
+  tmux popup without native Station panes. Selecting a native Station session
+  shows that it runs in another terminal, dispatches no focus command, and
+  keeps the popup open.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
 ## Nested Workspaces
@@ -73,7 +74,7 @@ You can also run the renderer directly during development:
 cd station
 bun run station                       # native workspace, live observer
 STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
-bun run dashboard                     # read-only dashboard renderer
+bun run dashboard                     # interactive dashboard renderer without native panes
 ```
 
 ## Boundaries
@@ -99,9 +100,57 @@ bun run dashboard                     # read-only dashboard renderer
 
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- The tmux popup runs the same read-only dashboard. Its close behavior and footer copy must match popup semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O` / header click toggles the STATION overlay; `Ctrl-Q` always exits Station. Persistent tmux sessions are signed by renderer command and build identity so an installed upgrade replaces, rather than reuses, a warm renderer pinned to an older Observer build.
+- The tmux popup runs the same interactive observer-backed dashboard without
+  native Station panes. Its close behavior and footer copy must match popup
+  semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O`
+  / header click toggles the STATION overlay; `Ctrl-Q` always exits Station.
+  Persistent tmux sessions are signed by renderer command and build identity
+  so an installed upgrade replaces, rather than reuses, a warm renderer pinned
+  to an older Observer build.
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
+
+## Mouse Coverage Boundaries
+
+OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hover styling, modal
+interception, and equivalence with keyboard transitions. They do not prove terminal mouse-mode
+negotiation, SGR parsing, PTY delivery, or tmux forwarding.
+
+The fullscreen and tmux-popup dashboard routes primary-button clicks through its own thin adapter
+into the same dashboard-core and keyboard transitions used by standalone keyboard input. Session
+rows are resolved by their exact current row ID before their visible slot key is dispatched, so
+observer-backed focus, start, resume, and picker behavior stays on the existing command path.
+Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header clicks
+toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
+modal surfaces intercept background clicks and scrolling.
+
+Native and standalone rendering expose the same project actions. Quick-session
+intent resolves the same project and default harness before terminal-specific
+execution: native Station hosts the session in a Station pane, while the
+standalone dashboard dispatches the configured terminal default. The
+empty-project button uses that same quick-session intent, and the agent-picker
+uses the shared project-default screen transition. Link cells use the same
+validated platform opener. Shell actions delegate only their terminal effect:
+native Station opens or focuses a Station pane, while a tmux popup sends a
+strict renderer-control request to its CLI parent. The tmux adapter opens or
+focuses one cwd-bound shell window in the exact invoking client session, then
+dismisses that popup claim.
+
+Real native mouse acceptance lives in
+`tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`
+removed while tmux remains only a fixed-size PTY/capture envelope. An attached client writes raw
+SGR motion and down/up bytes, and the test proves project actions, hover, one collapse or expansion
+per click, and a real Codex row launch reflected by the Observer. It never uses
+`tmux send-keys` or OpenTUI `mockMouse` for mouse assertions.
+
+The real tmux-popup boundary remains an acceptance-test responsibility, not dashboard routing
+logic. `integrations/terminal/tmux/test/integration/popup-real.test.ts` sends outer-client SGR
+motion, primary down/up, repeated clicks, and wheel input through a centered popup and verifies
+hover, one action per complete click, deliberate repeated toggles, and
+scrolling. It also clicks the project shell action twice, proving exact popup
+dismissal and one reused cwd-bound window in the invoking client session.
+Production tmux input forwarding remains unchanged unless that real
+characterization fails before input reaches the renderer.
 
 ## Code Organization
 

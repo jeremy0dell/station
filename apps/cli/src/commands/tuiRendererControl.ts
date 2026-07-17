@@ -10,6 +10,8 @@ import { safeErrorFromUnknown } from "@station/runtime";
 
 export type TuiRendererControlAdapters = {
   dismissPopup: () => Promise<{ dismissed: boolean }>;
+  /** Opens the shell and completes any exact popup dismissal owned by the adapter. */
+  openShell?: (cwd: string) => Promise<{ opened: boolean }>;
   resolveFocusTarget: () => Promise<TuiRendererFocusTarget | undefined>;
 };
 
@@ -27,7 +29,7 @@ export type TuiRendererControlAttachment = {
  *
  * Translates strict renderer IPC requests into CLI-owned popup capabilities.
  *
- * Malformed or duplicate in-flight requests close the channel before any popup action runs.
+ * Malformed or duplicate in-flight IDs close the channel; same-cwd shell effects coalesce.
  */
 export function attachTuiRendererControl(
   child: ChildProcess,
@@ -43,6 +45,7 @@ export function attachTuiRendererControl(
       }
     | undefined;
   let manualDismissEffect: Promise<{ dismissed: boolean }> | undefined;
+  const shellOpenEffects = new Map<string, Promise<{ opened: boolean }>>();
 
   const removeListeners = () => {
     child.off("message", onMessage);
@@ -56,6 +59,7 @@ export function attachTuiRendererControl(
     focusResolutionGeneration += 1;
     activeFocusTarget = undefined;
     pendingRequestIds.clear();
+    shellOpenEffects.clear();
     removeListeners();
     if (disconnect && child.connected) {
       child.disconnect();
@@ -108,6 +112,24 @@ export function attachTuiRendererControl(
           });
         } catch (error) {
           sendError(request.requestId, error, popupDismissError);
+        }
+        return;
+      }
+
+      if (request.type === "open-shell") {
+        try {
+          const result = await coalescedShellOpen(request.cwd);
+          if (result?.opened !== true) {
+            sendError(request.requestId, undefined, popupShellError);
+            return;
+          }
+          send({
+            protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+            requestId: request.requestId,
+            type: "shell-opened",
+          });
+        } catch (error) {
+          sendError(request.requestId, error, popupShellError);
         }
         return;
       }
@@ -174,6 +196,18 @@ export function attachTuiRendererControl(
     close(false);
   }
 
+  function coalescedShellOpen(cwd: string): Promise<{ opened: boolean }> {
+    const current = shellOpenEffects.get(cwd);
+    if (current !== undefined) return current;
+    const effect = Promise.resolve().then(() => adapters.openShell?.(cwd) ?? { opened: false });
+    shellOpenEffects.set(cwd, effect);
+    const clear = () => {
+      if (shellOpenEffects.get(cwd) === effect) shellOpenEffects.delete(cwd);
+    };
+    void effect.then(clear, clear);
+    return effect;
+  }
+
   function coalescedManualDismiss(): Promise<{ dismissed: boolean }> {
     const current = manualDismissEffect;
     if (current !== undefined) {
@@ -206,6 +240,12 @@ const popupDismissError: SafeError = {
   tag: "TuiRendererControlError",
   code: "TUI_POPUP_DISMISS_FAILED",
   message: "The popup could not be dismissed.",
+};
+
+const popupShellError: SafeError = {
+  tag: "TuiRendererControlError",
+  code: "TUI_POPUP_SHELL_FAILED",
+  message: "The popup could not open the requested shell.",
 };
 
 const focusTargetUnavailableError: SafeError = {
