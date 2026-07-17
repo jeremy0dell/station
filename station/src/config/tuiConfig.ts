@@ -141,24 +141,80 @@ function rebaseWidgetChange(
     return change.after;
   }
 
-  // A stale store may safely replay over widgets another surface only appended.
-  // Any removal, toggle, or reorder of its base fails closed instead of being overwritten.
-  const remoteAdditions: TuiWidgetConfig[] = [];
-  let baseIndex = 0;
-  for (const widget of latest) {
-    const expected = change.before[baseIndex];
-    if (expected !== undefined && isDeepStrictEqual(widget, expected)) {
-      baseIndex += 1;
-    } else {
-      remoteAdditions.push(widget);
+  const basePositions = findWidgetPositions(change.before, latest);
+  if (basePositions === undefined) {
+    throw staleWidgetConfigError();
+  }
+
+  // Widget settings emits one append, removal, toggle, or adjacent swap per transition.
+  // Rebase non-order edits onto the durable order; a stale reorder is ambiguous and fails closed.
+  if (
+    change.after.length === change.before.length + 1 &&
+    isDeepStrictEqual(change.after.slice(0, -1), change.before)
+  ) {
+    const added = change.after.at(-1);
+    if (added !== undefined) {
+      return [...latest, added];
     }
   }
-  if (baseIndex !== change.before.length) {
-    throw new Error(
-      "Widget config changed in another Station surface; reopen widget settings and retry this edit.",
+
+  if (change.after.length === change.before.length) {
+    const changed = change.before.flatMap((widget, index) =>
+      isDeepStrictEqual(widget, change.after[index]) ? [] : [index],
     );
+    const changedIndex = changed.length === 1 ? changed[0] : undefined;
+    if (changedIndex !== undefined) {
+      const latestIndex = basePositions[changedIndex];
+      const replacement = change.after[changedIndex];
+      if (latestIndex === undefined || replacement === undefined) {
+        throw staleWidgetConfigError();
+      }
+      const result = [...latest];
+      result[latestIndex] = replacement;
+      return result;
+    }
+    throw staleWidgetConfigError();
   }
-  return [...change.after, ...remoteAdditions];
+
+  if (change.after.length === change.before.length - 1) {
+    const removedIndex = change.before.findIndex((_, index) =>
+      isDeepStrictEqual(
+        change.before.filter((__, candidate) => candidate !== index),
+        change.after,
+      ),
+    );
+    if (removedIndex !== -1) {
+      const removeAt = basePositions[removedIndex];
+      return latest.filter((_, index) => index !== removeAt);
+    }
+  }
+
+  throw staleWidgetConfigError();
+}
+
+function findWidgetPositions(
+  widgets: readonly TuiWidgetConfig[],
+  latest: readonly TuiWidgetConfig[],
+): number[] | undefined {
+  const positions: number[] = [];
+  let latestIndex = 0;
+  for (const widget of widgets) {
+    while (latestIndex < latest.length && !isDeepStrictEqual(latest[latestIndex], widget)) {
+      latestIndex += 1;
+    }
+    if (latestIndex === latest.length) {
+      return undefined;
+    }
+    positions.push(latestIndex);
+    latestIndex += 1;
+  }
+  return positions;
+}
+
+function staleWidgetConfigError(): Error {
+  return new Error(
+    "Widget config changed in another Station surface; reopen widget settings and retry this edit.",
+  );
 }
 
 async function withWidgetConfigLock<T>(configPath: string, action: () => Promise<T>): Promise<T> {

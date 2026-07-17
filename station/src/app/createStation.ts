@@ -65,6 +65,7 @@ export function createStation(options: CreateStationOptions): Station {
     layoutWriter,
     tuiConfigPath: options.tuiConfigPath,
   });
+  let shutdownStarted = false;
 
   // Input runtime; its shutdown tears down this composition, then exits the app.
   const stationInput = createInputRuntime(options, {
@@ -74,8 +75,11 @@ export function createStation(options: CreateStationOptions): Station {
     observerService: stationClient.service,
     automations,
     onShutdown: () => {
-      lifecycle.disposeForShutdown();
-      options.shutdown();
+      if (shutdownStarted) {
+        return;
+      }
+      shutdownStarted = true;
+      void lifecycle.disposeForShutdown().then(() => options.shutdown());
     },
   });
 
@@ -95,7 +99,9 @@ export function createStation(options: CreateStationOptions): Station {
     stationViewStore,
     stationInput,
     start: lifecycle.start,
-    dispose: lifecycle.disposeForShutdown,
+    dispose: () => {
+      void lifecycle.disposeForShutdown();
+    },
     disposeForShutdown: lifecycle.disposeForShutdown,
     disposeForHotReload: lifecycle.disposeForHotReload,
   };
@@ -220,10 +226,11 @@ function createLifecycle(deps: {
   let detachLayoutWriter: (() => void) | undefined;
   let widgetConfigWrites: WidgetConfigWrites | undefined;
   let disposed = false;
+  let pendingWidgetWrites: Promise<void> | undefined;
 
-  const disposeInternal = (disposeTerminals: boolean): void => {
+  const disposeInternal = (disposeTerminals: boolean): Promise<void> => {
     if (disposed) {
-      return;
+      return pendingWidgetWrites ?? Promise.resolve();
     }
     disposed = true;
     detachOverlayRowFocus?.();
@@ -236,7 +243,7 @@ function createLifecycle(deps: {
     detachSessionReconcile = undefined;
     detachLayoutWriter?.();
     detachLayoutWriter = undefined;
-    void widgetConfigWrites?.dispose();
+    pendingWidgetWrites = widgetConfigWrites?.dispose() ?? Promise.resolve();
     widgetConfigWrites = undefined;
     // Real shutdown flushes pending layout synchronously (process.exit follows);
     // an HMR teardown just drops the timer — the reused store/registry keep it.
@@ -255,6 +262,7 @@ function createLifecycle(deps: {
     if (disposeTerminals) {
       registry.disposeAll();
     }
+    return pendingWidgetWrites;
   };
 
   return {
@@ -283,8 +291,10 @@ function createLifecycle(deps: {
       detachOverlayRowFocus = createOverlayRowFocusReconciler(store, stationViewStore);
       stationClient.start();
     },
-    disposeForShutdown: (): void => disposeInternal(true),
-    disposeForHotReload: (): void => disposeInternal(false),
+    disposeForShutdown: (): Promise<void> => disposeInternal(true),
+    disposeForHotReload: (): void => {
+      void disposeInternal(false);
+    },
   };
 }
 

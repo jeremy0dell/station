@@ -8,6 +8,9 @@ import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { createStation } from "../app/createStation.js";
+import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";
+import { createStationStore } from "../state/store.js";
 import { loadStationTuiConfig, startWidgetConfigWrites } from "./tuiConfig.js";
 
 describe("loadStationTuiConfig", () => {
@@ -185,6 +188,40 @@ root = "${projectRoot}"
     ]);
   });
 
+  it("flushes the native Station input flow before its shutdown callback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
+    dirs.push(dir);
+    const configPath = await writeWidgetTestConfig(dir);
+    const source = new FakeStationSource(manyProjectsSnapshot());
+    let resolveShutdown: (() => void) | undefined;
+    const shutdown = new Promise<void>((resolve) => {
+      resolveShutdown = resolve;
+    });
+    const composition = createStation({
+      store: createStationStore(),
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service: new FakeTuiObserverService(manyProjectsSnapshot()),
+        start: () => source.start(),
+        stop: () => source.stop(),
+      },
+      tuiConfig: { widgets: [{ type: "time" }] },
+      tuiConfigPath: configPath,
+      shutdown: () => resolveShutdown?.(),
+    });
+    composition.start();
+
+    composition.stationViewStore.getState().handleKey({ input: "W" });
+    composition.stationViewStore.getState().handleKey({ input: " " });
+    composition.stationInput.handleSequence("\x11");
+
+    await shutdown;
+    expect((await loadStationTuiConfig({ path: configPath })).config?.widgets).toEqual([
+      { type: "time", enabled: false },
+    ]);
+  });
+
   it("rebases independent additions and fails closed after a conflicting edit", async () => {
     const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
     dirs.push(dir);
@@ -219,8 +256,8 @@ root = "${projectRoot}"
 
     expect((await loadStationTuiConfig({ path: configPath })).config?.widgets).toEqual([
       { type: "time" },
-      { type: "fleet" },
       { type: "moon" },
+      { type: "fleet" },
     ]);
 
     nativeStore.getState().handleKey({ input: "", escape: true });
