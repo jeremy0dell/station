@@ -66,7 +66,7 @@ describe("StationTerminalProvider", () => {
     expect(provider.id).toBe("native");
     expect(provider.capabilities()).toMatchObject({
       canOpenWorkspace: true,
-      // No host injected: focus/close cannot be driven observer-side.
+      // Native presentation is never externally focusable; without Host, close is unavailable too.
       canFocusTarget: false,
       canCloseTarget: false,
       canCaptureOutput: false,
@@ -175,6 +175,8 @@ describe("StationTerminalProvider", () => {
       tag: "TerminalProviderError",
       code: "TERMINAL_STATION_HOSTED",
       provider: "native",
+      message: "Native Station sessions cannot be focused from an external dashboard.",
+      hint: "Open native Station and select the session there.",
       worktreeId: "wt_web_feature",
       sessionId: "ses_web_feature",
     });
@@ -268,13 +270,16 @@ const launchPlan = {
 };
 
 describe("StationTerminalProvider (host-backed)", () => {
-  it("flips focus/close capabilities on when a host is injected", () => {
+  it("enables host-backed close without advertising external focus", () => {
     const provider = hostBackedProvider(fakeHostClient());
-    expect(provider.capabilities()).toMatchObject({ canFocusTarget: true, canCloseTarget: true });
+    expect(provider.capabilities()).toMatchObject({ canFocusTarget: false, canCloseTarget: true });
   });
 
   it("launchProcess spawns into the host and reports started", async () => {
-    const spawn = vi.fn(async () => ({ ptyId: "pty-1", pid: 99 }));
+    const spawn = vi.fn(async (_input: Parameters<StationHostClient["spawn"]>[0]) => ({
+      ptyId: "pty-1",
+      pid: 99,
+    }));
     const provider = hostBackedProvider(fakeHostClient({ spawn }));
     const opened = await provider.openWorkspace(openRequest());
     const result = await provider.launchProcess({
@@ -416,7 +421,7 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toEqual([]);
   });
 
-  it("marks UI-hosted fallback targets non-focusable until a host PTY is live", async () => {
+  it("changes only closeability when a UI-hosted target gains a live host PTY", async () => {
     let live: HostListEntry[] = [];
     const provider = hostBackedProvider(fakeHostClient({ list: async () => live }));
     await provider.openWorkspace(openRequest());
@@ -427,7 +432,7 @@ describe("StationTerminalProvider (host-backed)", () => {
 
     live = [liveEntry()];
     await expect(provider.listTargets()).resolves.toMatchObject([
-      { id: stationTargetId(worktree.id), focusable: true, closeable: true },
+      { id: stationTargetId(worktree.id), focusable: false, closeable: true },
     ]);
   });
 
@@ -506,7 +511,7 @@ describe("StationTerminalProvider (host-backed)", () => {
       id: stationTargetId(worktree.id),
       provider: "native",
       state: "open",
-      focusable: true,
+      focusable: false,
       closeable: true,
       worktreeId: worktree.id,
       sessionId: "ses_web_feature",
@@ -601,15 +606,25 @@ describe("StationTerminalProvider (host-backed)", () => {
     });
   });
 
-  it("focus/close resolve the host PTY id and drive the host", async () => {
+  it("rejects host-backed focus without calling the host focus protocol", async () => {
     const focus = vi.fn(async () => undefined);
+    const provider = hostBackedProvider(fakeHostClient({ list: async () => [liveEntry()], focus }));
+    await provider.listTargets();
+
+    await expect(provider.focusTarget(stationTargetId(worktree.id))).rejects.toMatchObject({
+      code: "TERMINAL_STATION_HOSTED",
+      message: "Native Station sessions cannot be focused from an external dashboard.",
+      hint: "Open native Station and select the session there.",
+    });
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it("closeTarget resolves the host PTY id and drives host cleanup", async () => {
     const close = vi.fn(async () => ({ closed: true }));
-    const provider = hostBackedProvider(
-      fakeHostClient({ list: async () => [liveEntry()], focus, close }),
-    );
-    await provider.focusTarget(stationTargetId(worktree.id));
+    const provider = hostBackedProvider(fakeHostClient({ list: async () => [liveEntry()], close }));
+
     await provider.closeTarget(stationTargetId(worktree.id));
-    expect(focus).toHaveBeenCalledWith("pty-1");
+
     expect(close).toHaveBeenCalledWith("pty-1");
   });
 

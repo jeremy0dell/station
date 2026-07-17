@@ -738,6 +738,12 @@ describeRealTmux("real tmux dev popup routing", () => {
       },
     });
 
+    await tmuxExec(
+      fixture.wrapper,
+      ["switch-client", "-c", fixture.ptyClient.clientName, "-t", "base"],
+      fixture.env,
+    );
+
     const nativePopup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
     await waitForPaneContent(
       fixture,
@@ -766,6 +772,19 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(nativeFrame).toContain(nativeMessage);
     expect((await waitForNestedClient(fixture)).pid).toBe(reopenedRuntime.nestedClientPid);
     expect(focusCommands).toHaveLength(1);
+
+    await fixture.ptyClient.write(Buffer.from("1", "utf8"));
+    await waitForNestedClientGone(fixture);
+    await expectSuccessfulExit(nativePopup, 10_000);
+    expect(await waitForTmuxClientTarget(fixture, destination)).toEqual(visibleTarget);
+    expect(focusCommands).toHaveLength(2);
+    expect(focusCommands[1]).toMatchObject({
+      type: "terminal.focus",
+      payload: {
+        sessionId: "ses_popup_tmux",
+        origin: { provider: "tmux", clientId: fixture.ptyClient.clientName },
+      },
+    });
     await assertWrapperAudit(fixture);
   }, 120_000);
 
