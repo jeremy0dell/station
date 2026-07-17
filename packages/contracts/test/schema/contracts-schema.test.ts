@@ -69,7 +69,12 @@ const fixtureUrl = (path: string) =>
   new URL(`../../../../tests/contract-fixtures/${path}`, import.meta.url);
 
 async function loadJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(fixtureUrl(path), "utf8"));
+  const contents = await readFile(fixtureUrl(path), "utf8");
+  try {
+    return JSON.parse(contents);
+  } catch (cause) {
+    throw new Error(`Contract fixture ${path} is not valid JSON.`, { cause });
+  }
 }
 
 function expectParses(schema: ZodType, value: unknown, label: string) {
@@ -1143,6 +1148,7 @@ describe("contract schemas", () => {
       },
       diagnostics: {
         rawEventType: "PreToolUse",
+        correlationIssue: "station_identity_cwd_mismatch",
         payloadBytes: 400,
         compactedBytes: 180,
         compacted: true,
@@ -1155,6 +1161,17 @@ describe("contract schemas", () => {
     };
 
     expectParses(HarnessEventReportSchema, harnessReport, "harness event report");
+    expectFails(
+      HarnessEventReportSchema,
+      {
+        ...harnessReport,
+        diagnostics: {
+          ...(harnessReport.diagnostics as Record<string, unknown>),
+          correlationIssue: "unknown_correlation_issue",
+        },
+      },
+      "harness event report rejects unknown correlation issue",
+    );
     expectParses(
       HarnessEventReportSchema,
       {

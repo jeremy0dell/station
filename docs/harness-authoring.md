@@ -10,8 +10,8 @@ section of `docs/debugging.md`.
 Decide how events reach Station and what identity each transport carries:
 
 | Transport | Mechanism | Identity strength |
-|---|---|---|
-| hook | harness spawns `stn-ingress` with JSON on stdin | strong (session env) |
+| --- | --- | --- |
+| hook | harness spawns `stn-ingress` with JSON on stdin | strong only when provider origin evidence corroborates inherited session env |
 | stream | app-server / JSON-RPC subscription in the provider | strong (native ids) |
 | file | native session/log tailing inside the observer | weak unless ids are parsed from content/filename |
 | poll | process table / status endpoint | run-level only |
@@ -40,6 +40,11 @@ In `integrations/harness/<name>/src`:
 - Map to `HarnessEventReport`: `status` with `attention` kind for every
   user-blocking state, strongest available `correlation` ids, deterministic
   `reportId`/`coalesceKey` from native ids.
+- Corroborate Station IDs inherited from the process environment with
+  provider-origin evidence already present in the payload. When they
+  contradict, retain native identity and origin diagnostics, withhold Station
+  correlation, and set the typed `diagnostics.correlationIssue` rather than
+  guessing from provider-specific paths.
 - A tool call that *is* a user request must map to `needs_attention`, not tool
   activity.
 - Never leak provider vocabulary past the boundary: core reads contract
