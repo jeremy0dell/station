@@ -999,6 +999,56 @@ describe("CLI tui command", () => {
     }
   });
 
+  it("coalesces concurrent shell requests for one cwd through exact dismissal", async () => {
+    let finishOpen: (result: { opened: boolean }) => void = () => {};
+    const opening = new Promise<{ opened: boolean }>((resolve) => {
+      finishOpen = resolve;
+    });
+    let exactDismissals = 0;
+    const openShell = vi.fn(async () => {
+      const result = await opening;
+      exactDismissals += 1;
+      return result;
+    });
+    const persistent = await startPersistentRenderer({
+      popupControl: {
+        dismissPopup: async () => ({ dismissed: true }),
+        openShell,
+        resolveFocusTarget: async () => focusTarget("client-a"),
+      },
+    });
+
+    try {
+      for (const requestId of ["shell-a", "shell-b"]) {
+        persistent.child.emit("message", {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId,
+          type: "open-shell",
+          cwd: "/repo/station",
+        });
+      }
+      await vi.waitFor(() => expect(openShell).toHaveBeenCalledTimes(1));
+      finishOpen({ opened: true });
+      await vi.waitFor(() => expect(persistent.child.sent).toHaveLength(2));
+
+      expect(exactDismissals).toBe(1);
+      expect(persistent.child.sent).toEqual([
+        {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId: "shell-a",
+          type: "shell-opened",
+        },
+        {
+          protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
+          requestId: "shell-b",
+          type: "shell-opened",
+        },
+      ]);
+    } finally {
+      await persistent.finish();
+    }
+  });
+
   it("does not let a late focus completion dismiss a newer popup target", async () => {
     const dismissA = vi.fn(async () => ({ dismissed: true }));
     const dismissB = vi.fn(async () => ({ dismissed: true }));

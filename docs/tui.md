@@ -15,10 +15,10 @@ Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, ru
 Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to the Bun renderer (dual-runtime, accepted for alpha):
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
-- Inside tmux, `stn` opens the read-only dashboard in a tmux popup, since
-  tmux owns the panes there. Selecting a native Station session shows that it
-  runs in another terminal, dispatches no focus command, and keeps the popup
-  open.
+- Inside tmux, `stn` opens the interactive observer-backed dashboard in a
+  tmux popup without native Station panes. Selecting a native Station session
+  shows that it runs in another terminal, dispatches no focus command, and
+  keeps the popup open.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
 ## Nested Workspaces
@@ -74,7 +74,7 @@ You can also run the renderer directly during development:
 cd station
 bun run station                       # native workspace, live observer
 STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
-bun run dashboard                     # read-only dashboard renderer
+bun run dashboard                     # interactive dashboard renderer without native panes
 ```
 
 ## Boundaries
@@ -100,7 +100,13 @@ bun run dashboard                     # read-only dashboard renderer
 
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- The tmux popup runs the same read-only dashboard. Its close behavior and footer copy must match popup semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O` / header click toggles the STATION overlay; `Ctrl-Q` always exits Station. Persistent tmux sessions are signed by renderer command and build identity so an installed upgrade replaces, rather than reuses, a warm renderer pinned to an older Observer build.
+- The tmux popup runs the same interactive observer-backed dashboard without
+  native Station panes. Its close behavior and footer copy must match popup
+  semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O`
+  / header click toggles the STATION overlay; `Ctrl-Q` always exits Station.
+  Persistent tmux sessions are signed by renderer command and build identity
+  so an installed upgrade replaces, rather than reuses, a warm renderer pinned
+  to an older Observer build.
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
 

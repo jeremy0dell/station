@@ -1,10 +1,17 @@
 import { runExternalCommand, runRuntimeBoundaryWithRetry } from "@station/runtime";
 import { tmuxProviderErrorFromUnknown } from "../errors.js";
-import { popupCommandInput, resolveTmuxClientSession } from "./command.js";
+import { popupCommandInput, resolveTmuxClientSessionId } from "./command.js";
 import type { TmuxPopupFocusOriginOptions, TmuxPopupShellResult } from "./types.js";
 
 const popupShellCwdOption = "@station_shell_cwd";
-const safeTmuxCommandTokenPattern = /^[A-Za-z0-9_@%+=,./:-]+$/;
+const tmuxWindowIdPattern = /^@[0-9]+$/;
+const shellOpenQueues = new Map<string, Promise<void>>();
+
+function removeTerminalRecordDelimiter(output: string): string {
+  if (output.endsWith("\r\n")) return output.slice(0, -2);
+  if (output.endsWith("\n")) return output.slice(0, -1);
+  return output;
+}
 
 async function runPopupShellCommand(
   options: TmuxPopupFocusOriginOptions,
@@ -41,32 +48,36 @@ async function runPopupShellCommand(
       message: "tmux failed to open the requested shell.",
     });
   }
-  return result.value.stdout.trim();
+  return removeTerminalRecordDelimiter(result.value.stdout);
 }
 
-/** Opens or reuses a cwd-bound shell window in the exact popup client's tmux session. */
-export async function openPopupShellForClient(
+async function serializeShellOpen<T>(key: string, effect: () => Promise<T>): Promise<T> {
+  const predecessor = shellOpenQueues.get(key) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = predecessor.then(() => current);
+  shellOpenQueues.set(key, tail);
+  await predecessor;
+  try {
+    return await effect();
+  } finally {
+    release?.();
+    if (shellOpenQueues.get(key) === tail) shellOpenQueues.delete(key);
+  }
+}
+
+async function openOrReuseShellWindow(
   options: TmuxPopupFocusOriginOptions,
   command: string,
-  clientId: string,
+  sessionId: string,
   cwd: string,
 ): Promise<TmuxPopupShellResult> {
-  const invalidCwdCharacters = [0, 9, 10, 13].map((code) => String.fromCharCode(code));
-  if (cwd.length === 0 || invalidCwdCharacters.some((character) => cwd.includes(character))) {
-    throw tmuxProviderErrorFromUnknown(new Error("invalid shell working directory"), {
-      code: "TERMINAL_OPEN_FAILED",
-      message: "tmux could not open the requested shell working directory.",
-    });
-  }
-  const sessionName = await resolveTmuxClientSession(popupCommandInput(options, command), clientId);
-  if (sessionName === undefined || !safeTmuxCommandTokenPattern.test(sessionName)) {
-    return { opened: false };
-  }
-
   const windows = await runPopupShellCommand(
     options,
     command,
-    ["list-windows", "-t", sessionName, "-F", `#{window_id}\t#{${popupShellCwdOption}}`],
+    ["list-windows", "-t", sessionId, "-F", `#{window_id}\t#{${popupShellCwdOption}}`],
     "provider.tmux.popup.listShellWindows",
   );
   const existingWindowId = windows
@@ -77,7 +88,7 @@ export async function openPopupShellForClient(
         ? line.slice(0, separator)
         : undefined;
     })
-    .find((windowId) => windowId !== undefined && safeTmuxCommandTokenPattern.test(windowId));
+    .find((windowId) => windowId !== undefined && tmuxWindowIdPattern.test(windowId));
   if (existingWindowId !== undefined) {
     await runPopupShellCommand(
       options,
@@ -91,10 +102,10 @@ export async function openPopupShellForClient(
   const windowId = await runPopupShellCommand(
     options,
     command,
-    ["new-window", "-P", "-F", "#{window_id}", "-c", cwd, "-t", `${sessionName}:`],
+    ["new-window", "-P", "-F", "#{window_id}", "-c", cwd, "-t", `${sessionId}:`],
     "provider.tmux.popup.openShellWindow",
   );
-  if (!safeTmuxCommandTokenPattern.test(windowId)) {
+  if (!tmuxWindowIdPattern.test(windowId)) {
     return { opened: false };
   }
   try {
@@ -114,4 +125,31 @@ export async function openPopupShellForClient(
     throw error;
   }
   return { opened: true };
+}
+
+/**
+ * Opens or reuses a cwd-bound shell window in the exact popup client's tmux session.
+ * Concurrent requests for the same session and cwd serialize the list-create critical section.
+ */
+export async function openPopupShellForClient(
+  options: TmuxPopupFocusOriginOptions,
+  command: string,
+  clientId: string,
+  cwd: string,
+): Promise<TmuxPopupShellResult> {
+  const invalidCwdCharacters = [0, 9, 10, 13].map((code) => String.fromCharCode(code));
+  if (cwd.length === 0 || invalidCwdCharacters.some((character) => cwd.includes(character))) {
+    throw tmuxProviderErrorFromUnknown(new Error("invalid shell working directory"), {
+      code: "TERMINAL_OPEN_FAILED",
+      message: "tmux could not open the requested shell working directory.",
+    });
+  }
+  const sessionId = await resolveTmuxClientSessionId(popupCommandInput(options, command), clientId);
+  if (sessionId === undefined) {
+    return { opened: false };
+  }
+
+  return serializeShellOpen(`${command}\0${sessionId}\0${cwd}`, () =>
+    openOrReuseShellWindow(options, command, sessionId, cwd),
+  );
 }

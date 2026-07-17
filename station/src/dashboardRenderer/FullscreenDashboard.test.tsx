@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import type { DashboardMouseEffects } from "./dashboardMouse.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
@@ -10,11 +11,11 @@ const TEST_EFFECTS: DashboardMouseEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
-const teardowns: Array<() => void> = [];
+const teardowns: Array<() => Promise<void>> = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const teardown of teardowns.splice(0)) {
-    teardown();
+    await teardown();
   }
 });
 
@@ -24,13 +25,16 @@ describe("FullscreenDashboard mouse composition", () => {
     const setup = await render(fixture.store);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
-    await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
-    await waitFor(() =>
-      fixture.service.dispatched.some(
-        (command) =>
-          command.type === "session.startAgent" && command.payload.worktreeId === "wt_station_none",
-      ),
-    );
+    await actOn(async () => {
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await waitFor(() =>
+        fixture.service.dispatched.some(
+          (command) =>
+            command.type === "session.startAgent" &&
+            command.payload.worktreeId === "wt_station_none",
+        ),
+      );
+    });
 
     expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
@@ -40,7 +44,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const setup = await render(fixture.store);
     const header = cellFor(setup.captureCharFrame(), "▼ station");
 
-    await setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT);
+    await actOn(() => setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT));
 
     expect([...fixture.store.getState().collapsedProjectIds]).toEqual(["station"]);
   });
@@ -49,10 +53,11 @@ describe("FullscreenDashboard mouse composition", () => {
     const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
     const setup = await render(fixture.store);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
-    fixture.store.getState().handleKey({ input: "H" });
-    await setup.flush();
-
-    await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+    });
 
     expect(fixture.store.getState().screen).toEqual({ name: "help" });
     expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
@@ -63,7 +68,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const setup = await render(fixture.store, { width: 80, height: 12 });
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
-    await setup.mockMouse.scroll(row.col, row.row, "down");
+    await actOn(() => setup.mockMouse.scroll(row.col, row.row, "down"));
 
     expect(fixture.store.getState().scrollOffset).toBe(1);
   });
@@ -88,12 +93,14 @@ describe("FullscreenDashboard mouse composition", () => {
     const shell = cellFor(frame, "[shell]");
     const quickSession = cellFor(frame, "[quick session]");
     const agentPicker = cellFor(frame, "[▾]");
-    await setup.mockMouse.click(shell.col, shell.row, MouseButtons.LEFT);
-    await setup.mockMouse.click(quickSession.col, quickSession.row, MouseButtons.LEFT);
-    await waitFor(() =>
-      fixture.service.dispatched.some((command) => command.type === "session.create"),
-    );
-    await setup.mockMouse.click(agentPicker.col, agentPicker.row, MouseButtons.LEFT);
+    await actOn(async () => {
+      await setup.mockMouse.click(shell.col, shell.row, MouseButtons.LEFT);
+      await setup.mockMouse.click(quickSession.col, quickSession.row, MouseButtons.LEFT);
+      await waitFor(() =>
+        fixture.service.dispatched.some((command) => command.type === "session.create"),
+      );
+      await setup.mockMouse.click(agentPicker.col, agentPicker.row, MouseButtons.LEFT);
+    });
 
     expect(openedShells).toEqual(["/Users/example/Developer/station"]);
     expect(fixture.store.getState().screen).toMatchObject({
@@ -114,11 +121,13 @@ describe("FullscreenDashboard mouse composition", () => {
     const addSession = cellFor(frame, "[ + add session ]");
     const pullRequest = cellFor(frame, "#73");
 
-    await setup.mockMouse.click(addSession.col, addSession.row, MouseButtons.LEFT);
-    await waitFor(() =>
-      fixture.service.dispatched.some((command) => command.type === "session.create"),
-    );
-    await setup.mockMouse.click(pullRequest.col, pullRequest.row, MouseButtons.LEFT);
+    await actOn(async () => {
+      await setup.mockMouse.click(addSession.col, addSession.row, MouseButtons.LEFT);
+      await waitFor(() =>
+        fixture.service.dispatched.some((command) => command.type === "session.create"),
+      );
+      await setup.mockMouse.click(pullRequest.col, pullRequest.row, MouseButtons.LEFT);
+    });
 
     expect(openedUrls).toEqual(["https://github.com/example/station/pull/73"]);
   });
@@ -138,12 +147,16 @@ describe("FullscreenDashboard mouse composition", () => {
     const setup = await render(fixture.store);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
-    await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
-    await waitFor(() =>
-      fixture.store
-        .getState()
-        .toasts.some((entry) => entry.toast.message === "The test observer rejected this command."),
-    );
+    await actOn(async () => {
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await waitFor(() =>
+        fixture.store
+          .getState()
+          .toasts.some(
+            (entry) => entry.toast.message === "The test observer rejected this command.",
+          ),
+      );
+    });
     await setup.flush();
 
     expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
@@ -158,8 +171,19 @@ async function render(
 ) {
   const setup = await testRender(<FullscreenDashboard store={store} effects={effects} />, size);
   await setup.flush();
-  teardowns.push(() => setup.renderer.destroy());
+  teardowns.push(() =>
+    actOn(async () => {
+      setup.renderer.destroy();
+      await Promise.resolve();
+    }),
+  );
   return setup;
+}
+
+async function actOn(action: () => void | Promise<void>): Promise<void> {
+  await act(async () => {
+    await action();
+  });
 }
 
 function cellFor(frame: string, needle: string): { col: number; row: number } {

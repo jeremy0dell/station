@@ -33,6 +33,31 @@ const TEST_EFFECTS: DashboardMouseEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
+const DASHBOARD_MOUSE_TARGET_KINDS = {
+  addProjectRow: true,
+  body: true,
+  footerHint: true,
+  link: true,
+  openShellForProject: true,
+  openShellForRow: true,
+  projectHeader: true,
+  projectSettingsConfirmRemove: true,
+  projectSettingsItem: true,
+  quickSessionForProject: true,
+  row: true,
+  scrollIndicator: true,
+  sheetBackdrop: true,
+  sheetButton: true,
+  sheetChoice: true,
+  sheetSubmit: true,
+  showDefaultAgentPickerForProject: true,
+  toast: true,
+  widgetSettingsAdd: true,
+  widgetSettingsOpen: true,
+  widgetSettingsPickerChoice: true,
+  widgetSettingsRemove: true,
+  widgetSettingsRow: true,
+} satisfies Record<StationMouseTarget["kind"], true>;
 
 const SCROLL_DOWN: StationMouseEvent = {
   ...LEFT_DOWN,
@@ -78,6 +103,10 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("routeDashboardMouse", () => {
+  it("keeps the standalone target vocabulary compile-time exhaustive", () => {
+    expect(Object.values(DASHBOARD_MOUSE_TARGET_KINDS).every(Boolean)).toBe(true);
+  });
+
   it("activates the exact current row through its keyboard slot", () => {
     const clicked = makeStore();
     const keyed = makeStore();

@@ -521,7 +521,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForNestedClientGone(fixture);
   }, 120_000);
 
-  it("opens and reuses the project shell from an outer SGR click", async () => {
+  it("opens and reuses the project shell from a spaced tmux session", async () => {
     const fixture = await createDashboardFixture(tmux, {
       height: "40",
       position: "C",
@@ -534,15 +534,16 @@ describeRealTmux("real tmux dev popup routing", () => {
     });
     delete fixture.env.STATION_SOURCE;
 
+    const sessionName = "base shell session";
     await tmuxExec(
       fixture.wrapper,
-      ["new-session", "-d", "-s", "base", "-c", fixture.projectRoot, "sleep 300"],
+      ["new-session", "-d", "-s", sessionName, "-c", fixture.projectRoot, "sleep 300"],
       fixture.env,
     );
     await tmuxExec(fixture.wrapper, ["set-option", "-g", "mouse", "on"], fixture.env);
     fixture.ptyClient = await startTmuxPtyClient({
       tmux: fixture.wrapper,
-      sessionName: "base",
+      sessionName,
       env: fixture.env,
       initialDimensions: { rows: 50, columns: 140 },
     });
@@ -581,7 +582,10 @@ describeRealTmux("real tmux dev popup routing", () => {
       const projectShellWindows = windows
         .trim()
         .split("\n")
-        .filter((line) => line.startsWith("base\t") && line.endsWith(`\t${fixture.projectRoot}`));
+        .filter(
+          (line) =>
+            line.startsWith(`${sessionName}\t`) && line.endsWith(`\t${fixture.projectRoot}`),
+        );
       expect(projectShellWindows, `tmux windows:\n${windows}`).toHaveLength(1);
     }
   }, 120_000);

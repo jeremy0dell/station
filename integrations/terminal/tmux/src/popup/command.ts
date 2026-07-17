@@ -57,11 +57,11 @@ function parseTmuxClientIdentity(value: string): TmuxClientIdentity | undefined 
   return { name, pid, sessionName };
 }
 
-function parseTmuxClientSession(value: string, clientId: string): string | undefined {
+function parseTmuxClientSessionId(value: string, clientId: string): string | undefined {
   for (const line of value.split("\n")) {
-    const [name, sessionName, ...rest] = line.split("\t");
-    if (rest.length === 0 && name === clientId && sessionName !== undefined) {
-      return sessionName.length > 0 ? sessionName : undefined;
+    const [name, sessionId, ...rest] = line.split("\t");
+    if (rest.length === 0 && name === clientId && /^\$[0-9]+$/.test(sessionId ?? "")) {
+      return sessionId;
     }
   }
   return undefined;
@@ -187,22 +187,22 @@ export async function hasTmuxSession(input: TmuxCommandInput, sessionId: string)
 }
 
 /**
- * Resolves the session attached to an exact tmux client from one coherent client listing.
+ * Resolves the exact session ID attached to a tmux client from one coherent client listing.
  *
- * `display-message -c` does not reliably scope client format fields while a nested popup client is
- * active, so callers must select the requested client row explicitly.
+ * Session IDs avoid reinterpreting valid user-controlled session names, and `display-message -c`
+ * does not reliably scope client fields while a nested popup client is active.
  */
-export async function resolveTmuxClientSession(
+export async function resolveTmuxClientSessionId(
   input: TmuxCommandInput,
   clientId: string,
 ): Promise<string | undefined> {
   const value = await resolveTmuxOption(input, {
-    args: ["list-clients", "-F", "#{client_name}\t#{client_session}"],
-    operation: "provider.tmux.popup.resolveClientSession",
-    message: "tmux failed to resolve the station popup client session.",
-    timeoutMessage: "tmux popup client session lookup timed out.",
+    args: ["list-clients", "-F", "#{client_name}\t#{session_id}"],
+    operation: "provider.tmux.popup.resolveClientSessionId",
+    message: "tmux failed to resolve the station popup client session ID.",
+    timeoutMessage: "tmux popup client session ID lookup timed out.",
   });
-  return value === undefined ? undefined : parseTmuxClientSession(value, clientId);
+  return value === undefined ? undefined : parseTmuxClientSessionId(value, clientId);
 }
 
 export async function resolveCurrentTmuxClientId(

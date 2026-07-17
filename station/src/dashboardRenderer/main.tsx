@@ -30,7 +30,7 @@ function dashboardHotSlots(): DashboardHotSlots {
 }
 
 /**
- * Callable entry for the read-only OpenTUI dashboard renderer.
+ * Callable entry for the interactive observer-backed dashboard without native Station panes.
  * Source HMR recreates renderer/client resources while preserving the Bun process and parent IPC.
  */
 export async function runDashboardMain(): Promise<void> {
