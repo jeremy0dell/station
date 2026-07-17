@@ -104,7 +104,11 @@ bun run dashboard                     # read-only dashboard renderer
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
 
-## Standalone Dashboard Mouse
+## Mouse Coverage Boundaries
+
+OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hover styling, modal
+interception, and equivalence with keyboard transitions. They do not prove terminal mouse-mode
+negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
 The fullscreen and tmux-popup dashboard routes primary-button clicks through its own thin adapter
 into the same dashboard-core and keyboard transitions used by standalone keyboard input. Session
@@ -119,12 +123,19 @@ session, the default-agent header picker, and the empty-project add-session shor
 mouse targets are no-ops if encountered. Link cells intercept clicks and report that external link
 opening is unsupported instead of activating the containing row.
 
-The tmux boundary is an acceptance-test responsibility, not dashboard routing logic.
-`integrations/terminal/tmux/test/integration/popup-real.test.ts` sends outer-client SGR motion,
-primary down/up, repeated clicks, and wheel input through a centered popup and verifies hover, one
-action per complete click, deliberate repeated toggles, and scrolling. Production tmux input
-forwarding remains unchanged unless that real characterization fails before input reaches the
-renderer.
+Real native mouse acceptance lives in
+`tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`
+removed while tmux remains only a fixed-size PTY/capture envelope. An attached client writes raw
+SGR motion and down/up bytes, and the test proves visible native-only actions, hover, one collapse
+or expansion per click, and a real Codex row launch reflected by the Observer. It never uses
+`tmux send-keys` or OpenTUI `mockMouse` for mouse assertions.
+
+The real tmux-popup boundary remains an acceptance-test responsibility, not dashboard routing
+logic. `integrations/terminal/tmux/test/integration/popup-real.test.ts` sends outer-client SGR
+motion, primary down/up, repeated clicks, and wheel input through a centered popup and verifies
+hover, one action per complete click, deliberate repeated toggles, and scrolling. Production tmux
+input forwarding remains unchanged unless that real characterization fails before input reaches
+the renderer.
 
 ## Code Organization
 

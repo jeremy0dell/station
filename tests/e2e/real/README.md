@@ -6,9 +6,16 @@ It is intentionally excluded from `pnpm test:e2e` and `pnpm test:all`.
 
 ## Prerequisites
 
+The native mouse scenario additionally requires Bun 1.3.14, the `station/` Bun dependencies,
+Python 3, and tmux. It drives a real authenticated Codex launch.
+
 ```bash
+pnpm install
+cd station && bun install && cd ..
 pnpm build
 pnpm setup:system:check
+python3 --version
+tmux -V
 codex login status
 ```
 
@@ -34,9 +41,19 @@ pnpm test:e2e:real:codex-hooks:keep-temp
 
 The popup navigation test is part of the local real E2E lane. It creates a real Worktrunk worktree, starts a real Codex agent in the tmux workbench, opens the station TUI in a real tmux popup over that agent pane, injects a numeric activation key through the popup TTY, and verifies tmux lands back on the same primary agent pane after the popup exits.
 
+`real-native-tui-mouse.test.ts` runs bare `stn` with tmux context removed; tmux is only the
+fixed-size PTY and capture envelope. The test sends raw SGR bytes through an attached client
+(no `tmux send-keys` and no OpenTUI `mockMouse`), then proves native-only rendering, hover,
+exactly-once collapse/expand clicks, and a visible row activation that launches real Codex and
+changes the Observer snapshot. Run it alone with:
+
+```bash
+pnpm test:e2e:real:local tests/e2e/real/real-native-tui-mouse.test.ts
+```
+
 ## Isolation
 
-Each test uses a temporary local clone of this repository, a temporary station config, a temporary Worktrunk config, a unique tmux workbench session, a unique observer socket, and a temporary SQLite state directory.
+Each test uses a temporary local clone of this repository, a temporary station config, a temporary Worktrunk config, unique private tmux sessions, a unique observer socket, and a temporary SQLite state directory. The native mouse test also owns its attached PTY client and native Station process.
 
 The active checkout is never passed to Worktrunk as the project root. Cleanup kills the unique tmux sessions, stops the observer, removes created Worktrunk branches/worktrees where possible, and removes the temp clone.
 
