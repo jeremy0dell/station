@@ -447,7 +447,7 @@ function EmptySessionButton({ projectId }: { projectId: string }) {
     <text
       flexShrink={0}
       fg={hover ? STATION_COLORS.background : STATION_COLORS.cyan}
-      {...(hover ? { backgroundColor: STATION_COLORS.cyan } : {})}
+      {...(hover ? { bg: STATION_COLORS.cyan } : {})}
       {...stationMouseProps(dispatch, { kind: "quickSessionForProject", projectId })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}

@@ -14,7 +14,6 @@ import {
   externalAgentSnapshot,
   manyProjectsSnapshot,
   noProjectsSnapshot,
-  scenarioState,
 } from "../fixtures/scenarios.js";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
@@ -334,6 +333,44 @@ describe("dashboard golden frames", () => {
     // button) and no slot cell.
     expect(frame).toContain("no sessions yet · ");
     expect(frame).toContain("[ + add session ]");
+  });
+
+  it("keeps the empty-project add-session action readable on hover", async () => {
+    const setup = await renderDashboard({ width: 120, height: 40, snapshot: manyProjectsSnapshot() });
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("[ + add session ]"));
+    const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
+    expect(row).toBeGreaterThan(0);
+    expect(col).toBeGreaterThan(0);
+
+    const ordinarySpan = spanAtFrameCell(setup.captureSpans(), row, col);
+    const ordinaryForeground = spanHex(ordinarySpan);
+    const ordinaryBackground = spanBgHex(ordinarySpan);
+    expect(ordinaryForeground).toBe(STATION_COLORS.cyan);
+    expect(ordinaryForeground).not.toBe(ordinaryBackground);
+
+    await act(async () => {
+      await setup.mockMouse.moveTo(col, row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+
+    const hoveredSpan = spanAtFrameCell(setup.captureSpans(), row, col);
+    const hoveredForeground = spanHex(hoveredSpan);
+    const hoveredBackground = spanBgHex(hoveredSpan);
+    expect(hoveredForeground).toBe(STATION_COLORS.background);
+    expect(hoveredBackground).toBe(STATION_COLORS.cyan);
+    expect(hoveredForeground).not.toBe(hoveredBackground);
+
+    await act(async () => {
+      await setup.mockMouse.moveTo(0, 0);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+
+    const restoredSpan = spanAtFrameCell(setup.captureSpans(), row, col);
+    expect(spanHex(restoredSpan)).toBe(ordinaryForeground);
+    expect(spanBgHex(restoredSpan)).toBe(ordinaryBackground);
   });
 
   it("renders the focus cursor and jumps it to the next session needing you", async () => {
