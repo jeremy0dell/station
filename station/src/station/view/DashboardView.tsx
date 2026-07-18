@@ -3,7 +3,6 @@
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes } from "@opentui/core";
 import type { ProjectView, SessionId, StationSnapshot } from "@station/contracts";
-import { useState } from "react";
 import {
   dashboardFooterLabel,
   fleetCountsLabel,
@@ -33,7 +32,11 @@ import type { StationMouseTarget } from "../input/stationMouse.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { STATION_COLORS } from "./theme.js";
-import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+import {
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+} from "./stationMouseContext.js";
 
 const HOVER_BG = STATION_COLORS.hoverBackground;
 
@@ -334,7 +337,7 @@ function SessionRowLine({
   focused?: boolean;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   // Persistent cursor fill sits under the transient hover fill.
   const background = hover
     ? { backgroundColor: HOVER_BG }
@@ -372,7 +375,7 @@ function ShellAffordance({
   compact?: boolean;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const label = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
   return (
     // flexShrink={0}: content grows/clips first, affordance width is never clipped.
@@ -409,8 +412,8 @@ function QuickSessionAffordance({
   compact?: boolean;
 }) {
   const dispatch = useStationMouse();
-  const [quickHover, setQuickHover] = useState(false);
-  const [pickerHover, setPickerHover] = useState(false);
+  const [quickHover, setQuickHover] = useStationHoverState();
+  const [pickerHover, setPickerHover] = useStationHoverState();
   const sessionLabel = compact ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT : QUICK_SESSION_AFFORDANCE_LABEL;
   return (
     <>
@@ -442,7 +445,7 @@ const EMPTY_SESSION_BUTTON_LABEL = "[ + add session ]";
 // for the project — the same command as the project header's [quick session].
 function EmptySessionButton({ projectId }: { projectId: string }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   return (
     <text
       flexShrink={0}
@@ -467,7 +470,7 @@ function ProjectHeaderLine({
   collapsed: boolean;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
   const shellWidth = compact ? SHELL_AFFORDANCE_WIDTH_COMPACT : SHELL_AFFORDANCE_WIDTH;
   const quickSessionWidth = compact ? QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT : QUICK_SESSION_AFFORDANCE_WIDTH;

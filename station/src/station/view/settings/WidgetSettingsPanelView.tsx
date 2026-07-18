@@ -1,5 +1,4 @@
 import { TextAttributes } from "@opentui/core";
-import { useState } from "react";
 import type { WidgetSettingsFocus } from "@station/dashboard-core";
 import {
   widgetSettingsPanelLayout,
@@ -10,7 +9,11 @@ import {
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { fit } from "../sheets/parts.js";
 import { STATION_COLORS } from "../theme.js";
-import { stationMouseProps, useStationMouse } from "../stationMouseContext.js";
+import {
+  stationMouseProps,
+  useStationHoverState,
+  useStationMouse,
+} from "../stationMouseContext.js";
 
 const UNSELECTABLE_TEXT = { selectable: false } as const;
 
@@ -101,7 +104,7 @@ function PanelLine({
   focus: WidgetSettingsFocus;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   if (line.kind === "empty") {
     return (
       <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background} {...UNSELECTABLE_TEXT}>
@@ -174,7 +177,7 @@ function PanelLine({
 // Its own element so the click hits only the remove action, never row-toggle.
 function RemoveMark({ index, rowHovered }: { index: number; rowHovered: boolean }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   return (
     <text
       fg={hover ? STATION_COLORS.red : rowHovered ? STATION_COLORS.gray : STATION_COLORS.hairline}

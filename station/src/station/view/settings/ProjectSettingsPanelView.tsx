@@ -18,11 +18,14 @@ import {
   type TuiScreen,
   type TuiSelectionState,
 } from "@station/dashboard-core";
-import { useState } from "react";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
 import { fit, SheetLine } from "../sheets/parts.js";
-import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import {
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+} from "../stationMouseContext.js";
 import { STATION_COLORS } from "../theme.js";
 
 type ProjectSettingsScreen = Extract<TuiScreen, { name: "projectSettings" }>;
@@ -136,7 +139,7 @@ function SettingsItemRow({
   width: number;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   return (
     <text
       fg={active ? STATION_COLORS.cyan : STATION_COLORS.foreground}
@@ -256,7 +259,7 @@ function RemoveDetail({
 // narrow pane while the highlight still hugs the visible text.
 function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const hot = armed && hover;
   const label = "[ Remove project (R) ]".slice(0, Math.max(0, width - 1));
   return (

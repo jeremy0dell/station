@@ -462,7 +462,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
   }, 120_000);
 
-  it("uses button-only tracking without opening tmux's popup menu", async () => {
+  it("uses click-only tracking without opening tmux's popup menu or latching hover", async () => {
     const fixture = await createDashboardFixture(tmux);
     fixture.env.STATION_SCENARIO = "many-projects";
     cleanup = () => cleanupDashboardFixture(fixture);
@@ -487,11 +487,20 @@ describeRealTmux("real tmux dev popup routing", () => {
     const outerDimensions = await readOuterClientDimensions(fixture, fixture.ptyClient.clientName);
     const headerCell = paneCell(dashboard, "▼ station");
     const headerOuter = centeredPopupOuterCell(outerDimensions, nestedClient, headerCell);
-    const mouseAllFlag = await tmuxExec(
+    const blankOuter = centeredPopupOuterCell(outerDimensions, nestedClient, { col: 0, row: 0 });
+    const headerStyleBefore = await captureHiddenStyledLine(fixture, headerCell.row);
+    const mouseFlags = await tmuxExec(
       fixture.wrapper,
-      ["display-message", "-p", "-t", persistentUiSessionName, "#{mouse_all_flag}"],
+      [
+        "display-message",
+        "-p",
+        "-t",
+        persistentUiSessionName,
+        "#{mouse_standard_flag}:#{mouse_button_flag}:#{mouse_all_flag}:#{mouse_sgr_flag}",
+      ],
       fixture.env,
     );
+    const [, , mouseAllFlag] = mouseFlags.trim().split(":");
     const clientOutput: Buffer[] = [];
     const captureClientOutput = (chunk: Buffer): void => {
       clientOutput.push(chunk);
@@ -503,13 +512,25 @@ describeRealTmux("real tmux dev popup routing", () => {
     };
     fixture.ptyClient.child.stdout?.on("data", captureClientOutput);
     try {
-      if (mouseAllFlag.trim() === "1") {
+      if (mouseAllFlag === "1") {
         // A terminal only reports motion when requested; SGR 34 reaches tmux's 3.7 menu branch.
         await fixture.ptyClient.write(sgrMouse(34, { column: 1, row: 1 }));
         await delay(500);
       }
       expectNoTmuxPopupMenu();
-      expect(mouseAllFlag.trim(), "popup renderer requested all-motion mouse tracking").toBe("0");
+      expect(mouseFlags.trim(), "popup renderer did not request click-only SGR tracking").toBe(
+        "1:0:0:1",
+      );
+
+      await fixture.ptyClient.write(sgrMouse(1, blankOuter));
+      await fixture.ptyClient.write(sgrMouse(33, headerOuter));
+      await fixture.ptyClient.write(sgrMouse(1, headerOuter, "m"));
+      await fixture.ptyClient.write(sgrMouse(35, blankOuter));
+      await delay(500);
+      expect(
+        await captureHiddenStyledLine(fixture, headerCell.row),
+        "a button drag left the project-header hover style latched",
+      ).toBe(headerStyleBefore);
 
       await writeSgrClick(fixture.ptyClient, headerOuter);
       await waitForPaneContent(
@@ -518,6 +539,10 @@ describeRealTmux("real tmux dev popup routing", () => {
         (content) => content.includes("▶ station") && !content.includes("station-overlay"),
         "one outer SGR down/up click did not collapse exactly once",
       );
+      expect(
+        (await captureHiddenStyledLine(fixture, headerCell.row)).replace("▶", "▼"),
+        "a deliberate click left the project-header hover style latched",
+      ).toBe(headerStyleBefore);
       await writeSgrClick(fixture.ptyClient, headerOuter);
       await waitForPaneContent(
         fixture,
@@ -1725,6 +1750,19 @@ async function waitForHiddenPaneContent(
   throw new Error(
     `${failureMessage}\nLast hidden pane:\n${content.slice(-8_000)}${await fixtureDiagnostics(fixture)}`,
   );
+}
+
+async function captureHiddenStyledLine(fixture: DashboardFixture, row: number): Promise<string> {
+  const content = await tmuxExec(
+    fixture.wrapper,
+    ["capture-pane", "-e", "-p", "-N", "-t", persistentUiSessionName],
+    fixture.env,
+  );
+  const line = content.split("\n")[row];
+  if (line === undefined) {
+    throw new Error(`hidden pane does not contain row ${row}`);
+  }
+  return line;
 }
 
 function paneCell(content: string, needle: string): { col: number; row: number } {

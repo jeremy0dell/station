@@ -5,7 +5,11 @@ import { useHoverPointer } from "../../useHoverPointer.js";
 import { type StationMouseTarget } from "../input/stationMouse.js";
 import { rowColorToHex } from "./theme.js";
 import { Throbber } from "./Throbber.js";
-import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+import {
+  useStationHoverEnabled,
+  useStationMouse,
+  stationMouseProps,
+} from "./stationMouseContext.js";
 
 type TextRowSegment = Extract<RowSegment, { kind: "text" }>;
 type SegmentLink = {
@@ -47,7 +51,7 @@ export function SegmentLinkTargets({ segments }: { segments: readonly RowSegment
 
 function SegmentLinkTarget({ link }: { link: SegmentLink }) {
   const dispatch = useStationMouse();
-  const pointerProps = useHoverPointer();
+  const pointerProps = useHoverPointer({ enabled: useStationHoverEnabled() });
   const { left, segment, url, width } = link;
   const attributes = textSegmentAttributes(segment);
   const fg = rowColorToHex(segment.color);
