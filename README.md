@@ -9,10 +9,11 @@
 Station gives every agent an isolated Git worktree, keeps its terminal session alive, and shows all active projects and sessions in one terminal workspace. Bring Claude Code, Codex, Cursor, OpenCode, or Pi; Station coordinates the surrounding work without replacing the harness.
 
 <p align="center">
-  <img width="1728" height="1048" alt="image" src="https://github.com/user-attachments/assets/358c6c52-800f-496a-ada0-c8c291c8c33f" />
+  <img width="1728" height="1048" alt="Station terminal workspace showing multiple agent panes and a toggleable dashboard" src="https://github.com/user-attachments/assets/358c6c52-800f-496a-ada0-c8c291c8c33f" />
   <br>
-  <em>Terminal multi-plexing with a toggleable dashboard</em>
-  <img width="1030" height="613" alt="image" src="https://github.com/user-attachments/assets/fe73f04d-bb05-461d-ae01-92e10d42b929" />
+  <em>Terminal multiplexing with a toggleable dashboard.</em>
+  <br><br>
+  <img width="1030" height="613" alt="Station dashboard listing projects, worktrees, and live agent sessions" src="https://github.com/user-attachments/assets/fe73f04d-bb05-461d-ae01-92e10d42b929" />
   <br>
   <em>One live view of every project, worktree, and agent session.</em>
 </p>
@@ -26,7 +27,7 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
 - **Built-in diagnostics** provide health checks, trace lookup, and redacted debug bundles.
 
 <p align="center">
-  <img width="1728" height="1047" alt="image" src="https://github.com/user-attachments/assets/6aaa96da-4827-4216-b994-4cfb2b0fb29f" />
+  <img width="1728" height="1047" alt="Station diff view showing an agent transcript beside its working-tree changes" src="https://github.com/user-attachments/assets/6aaa96da-4827-4216-b994-4cfb2b0fb29f" />
   <br>
   <em>Follow an agent and review its changes without leaving the terminal.</em>
 </p>
