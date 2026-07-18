@@ -313,21 +313,22 @@ identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
 workflow never publishes the draft automatically.
 
-The initial immutable binary baseline is `v0.7.0`:
+The initial immutable binary candidate is `v0.7.1-rc.1`; the earlier `v0.7.0`
+candidate remained unpublished:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.7.0`, then create and push
-   `v0.7.0`.
+   with `package.json` and runtime reporting at `0.7.1-rc.1`, then create and
+   push `v0.7.1-rc.1`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.7.0-attempt-*` artifact.
+   `accepted-release-candidate-0.7.1-rc.1-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
 4. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.7.0`, and the manual-acceptance confirmation. It rechecks the successful
+   `v0.7.1-rc.1`, and the manual-acceptance confirmation. It rechecks the successful
    run SHA, immutable candidate manifest, tag commit, release ID, asset IDs, and
    all archive hashes immediately before publishing that exact draft.
-5. Treat cross-version immutable rollback as a gate for the second binary
-   release. `v0.7.0` has no prior binary artifact to reinstall.
+5. Treat cross-version immutable rollback as a gate for the second published
+   binary release. This candidate has no prior binary artifact to reinstall.
 
 Published tags and assets are immutable. Once two binary releases exist,
 recovery may explicitly reinstall the prior version, but the release line moves
@@ -437,7 +438,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.0
+  tag=v0.7.1-rc.1
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -576,7 +577,7 @@ manually verify the actual user experience, not a dashboard override:
    live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
-   B, repeatedly reinstall the draft. Terminal A may print only `0.7.0`: never
+   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.1`: never
    command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat this with two versions when preparing the

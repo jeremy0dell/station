@@ -52,7 +52,7 @@ gh auth login --hostname github.com
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.0
+  tag=v0.7.1-rc.1
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
   gh api --method GET \
@@ -86,12 +86,13 @@ On the cold-boot welcome screen, press `Enter` or `Space` to open project view. 
 
 The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. It checks all three physical launcher resolutions rather than relying on textual PATH membership. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. A useful default workflow additionally requires a Git repository, Worktrunk (`wt`), tmux, diffnav/git-delta, and one supported agent CLI; `stn setup` and `stn doctor` establish and verify those capabilities.
 
-`v0.7.0` is the first supported private-binary baseline. The installer code
-and artifacts always come from the same immutable tag. The latest-install
-recipe resolves the current stable tag before fetching and invoking its
-installer. Immutable rollback begins with the second binary release because
-`v0.7.0` has no earlier binary artifact. See [Install](docs/install.md) for the
-recipe, version pinning, PATH recovery, custom install directories, and the
+`v0.7.1-rc.1` is the first supported private-binary candidate; the earlier
+`v0.7.0` candidate remained unpublished. The installer code and artifacts
+always come from the same immutable tag. The latest-install recipe resolves the
+current stable tag before fetching and invoking its installer. Immutable
+rollback begins with the second published binary release because there is no
+earlier published binary artifact. See [Install](docs/install.md) for the recipe,
+version pinning, PATH recovery, custom install directories, and the
 supported-platform and recovery contracts.
 
 ### Development checkout
