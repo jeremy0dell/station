@@ -140,10 +140,14 @@ export async function runDashboardMain(): Promise<void> {
     }
   };
 
+  // tmux 3.7 misreads buttonless SGR motion outside a popup as button 3.
+  // Re-enable popup movement once Station requires a tmux release containing
+  // tmux/tmux@ad6832e, which removes the popup menu.
+  const enableMouseMovement = env.STATION_TUI_POPUP !== "1";
+
   try {
     const nextRenderer = await createCliRenderer({
-      // Tmux 3.7 treats buttonless SGR motion outside a popup as its button-3 menu.
-      enableMouseMovement: env.STATION_TUI_POPUP !== "1",
+      enableMouseMovement,
       exitOnCtrlC: false,
       prependInputHandlers: [createDashboardSequenceHandler(store)],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
