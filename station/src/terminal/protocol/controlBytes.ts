@@ -9,6 +9,16 @@ export const ControlByte = {
   Csi: "\x1b[",
 } as const;
 
+export const CsiFinal = {
+  /** ED — Erase in Display (CSI Ps J). */
+  EraseInDisplay: "J",
+} as const;
+
+export const EraseInDisplayMode = {
+  /** ED2 — erase the entire display. */
+  EntireDisplay: 2,
+} as const;
+
 /** Regex-source escapes of the same bytes, for patterns built via `new RegExp`. */
 export const ControlBytePattern = {
   /** ESC (0x1b) as regex source. */
