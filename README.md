@@ -9,7 +9,7 @@
 Station gives every agent an isolated Git worktree, keeps its terminal session alive, and shows all active projects and sessions in one terminal workspace. Bring Claude Code, Codex, Cursor, OpenCode, or Pi; Station coordinates the surrounding work without replacing the harness.
 
 <p align="center">
-  <img src="./station/assets/screenshots/fleet-overview.png" alt="Station TUI listing projects, worktrees, and live agent sessions, with a session-create dialog open" width="820">
+  <img width="1029" height="607" alt="image" src="https://github.com/user-attachments/assets/16deac8a-c591-40c9-af23-b993d5107070" />
   <br>
   <em>One live view of every project, worktree, and agent session.</em>
 </p>
@@ -23,7 +23,7 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
 - **Built-in diagnostics** provide health checks, trace lookup, and redacted debug bundles.
 
 <p align="center">
-  <img src="./station/assets/screenshots/agent-session-diff.png" alt="Split view showing an agent transcript and its live working-tree diff" width="880">
+  <img width="1728" height="1047" alt="image" src="https://github.com/user-attachments/assets/6aaa96da-4827-4216-b994-4cfb2b0fb29f" />
   <br>
   <em>Follow an agent and review its changes without leaving the terminal.</em>
 </p>
