@@ -25,7 +25,7 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.1 and validate setup on this machine.
+Install Station private preview candidate v0.7.1-rc.2 and validate setup on this machine.
 
 Use the private GitHub repository jeremy0dell/station through GitHub CLI.
 
@@ -35,7 +35,7 @@ Safety and scope:
   extract, or print credentials. If authentication or repository access fails,
   stop and ask me to run `gh auth login --hostname github.com` myself.
 - Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.1`, read `docs/install.md` from that same tag with authenticated
+  `v0.7.1-rc.2`, read `docs/install.md` from that same tag with authenticated
   `gh api`, and follow its temporary-file installer procedure. If that release
   is not published yet, stop instead of falling back to another ref.
 - Never fetch installer code from `main` and never pipe network output directly
@@ -86,7 +86,7 @@ From any directory, run:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.1
+  tag=v0.7.1-rc.2
   # After the first stable release, use:
   # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
   installer="$(mktemp)"
@@ -101,13 +101,14 @@ From any directory, run:
 )
 ```
 
-`v0.7.1-rc.1` is the first supported private-binary candidate; the earlier
-`v0.7.0` candidate remained unpublished. Run this recipe after the candidate is
-published. Keep the fixed assignment for an exact prerelease install. After the
-first stable release, use the commented assignment to resolve the latest stable
-tag while still fetching installer code and artifacts from that same immutable
-tag. The recipe never falls back to `main`, never prints GitHub credentials,
-and never pipes network output directly into a shell.
+`v0.7.1-rc.2` is the current private-binary candidate; the earlier
+`v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished. Run this recipe
+after the candidate is published. Keep the fixed assignment for an exact
+prerelease install. After the first stable release, use the commented assignment
+to resolve the latest stable tag while still fetching installer code and
+artifacts from that same immutable tag. The recipe never falls back to `main`,
+never prints GitHub credentials, and never pipes network output directly into a
+shell.
 
 The installer selects the matching platform archive, verifies it against
 `SHA256SUMS`, and installs these launchers in `~/.local/bin` by default:
@@ -150,16 +151,16 @@ shells. The installer does not read, create, or edit shell startup files.
 
 ## Install an Exact Version
 
-To install or return to an immutable release such as `v0.7.1-rc.1`, use the
+To install or return to an immutable release such as `v0.7.1-rc.2`, use the
 same recipe with this assignment instead of the latest-release lookup:
 
 ```bash
-tag=v0.7.1-rc.1
+tag=v0.7.1-rc.2
 ```
 
 The installer code and artifacts still come from that same tag. The earlier
-`v0.7.0` candidate remained unpublished, so rollback to an earlier binary starts
-with the second published version.
+`v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished, so rollback to an
+earlier binary starts with the second published version.
 
 ## Use a Custom Install Directory
 
