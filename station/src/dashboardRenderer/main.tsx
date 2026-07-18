@@ -140,7 +140,7 @@ export async function runDashboardMain(): Promise<void> {
     }
   };
 
-  // tmux 3.7 misreads buttonless SGR motion outside a popup as button 3.
+  // tmux 3.7 can open its button-3 menu while Station reports mouse movement.
   // Re-enable popup movement once Station requires a tmux release containing
   // tmux/tmux@ad6832e, which removes the popup menu.
   const enableMouseMovement = env.STATION_TUI_POPUP !== "1";

@@ -462,7 +462,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
   }, 120_000);
 
-  it("uses button-only tracking while forwarding outer clicks and wheel input exactly once", async () => {
+  it("uses button-only tracking without opening tmux's popup menu", async () => {
     const fixture = await createDashboardFixture(tmux);
     fixture.env.STATION_SCENARIO = "many-projects";
     cleanup = () => cleanupDashboardFixture(fixture);
@@ -492,45 +492,66 @@ describeRealTmux("real tmux dev popup routing", () => {
       ["display-message", "-p", "-t", persistentUiSessionName, "#{mouse_all_flag}"],
       fixture.env,
     );
-    expect(mouseAllFlag.trim(), "popup renderer requested all-motion mouse tracking").toBe("0");
+    const clientOutput: Buffer[] = [];
+    const captureClientOutput = (chunk: Buffer): void => {
+      clientOutput.push(chunk);
+    };
+    const expectNoTmuxPopupMenu = (): void => {
+      const output = Buffer.concat(clientOutput).toString("utf8");
+      expect(output, "mouse input opened tmux's popup menu").not.toContain("Fill Space");
+      expect(output, "mouse input opened tmux's popup menu").not.toContain("To Horizontal Pane");
+    };
+    fixture.ptyClient.child.stdout?.on("data", captureClientOutput);
+    try {
+      if (mouseAllFlag.trim() === "1") {
+        // A terminal only reports motion when requested; SGR 34 reaches tmux's 3.7 menu branch.
+        await fixture.ptyClient.write(sgrMouse(34, { column: 1, row: 1 }));
+        await delay(500);
+      }
+      expectNoTmuxPopupMenu();
+      expect(mouseAllFlag.trim(), "popup renderer requested all-motion mouse tracking").toBe("0");
 
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▶ station") && !content.includes("station-overlay"),
-      "one outer SGR down/up click did not collapse exactly once",
-    );
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▼ station") && content.includes("station-overlay"),
-      "the first deliberate repeated click did not expand the project",
-    );
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▶ station") && !content.includes("station-overlay"),
-      "the second deliberate repeated click did not collapse the project",
-    );
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    const expandedDashboard = await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▼ station") && content.includes("docs-cleanup"),
-      "project did not re-expand before the wheel characterization",
-    );
-    const childCell = paneCell(expandedDashboard, "docs-cleanup");
-    const childOuter = centeredPopupOuterCell(outerDimensions, nestedClient, childCell);
-    await fixture.ptyClient.write(sgrMouse(65, childOuter));
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => !content.includes("▼ station") && content.includes("docs-cleanup"),
-      "outer SGR wheel input over a child row did not change visible content",
-    );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▶ station") && !content.includes("station-overlay"),
+        "one outer SGR down/up click did not collapse exactly once",
+      );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▼ station") && content.includes("station-overlay"),
+        "the first deliberate repeated click did not expand the project",
+      );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▶ station") && !content.includes("station-overlay"),
+        "the second deliberate repeated click did not collapse the project",
+      );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      const expandedDashboard = await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▼ station") && content.includes("docs-cleanup"),
+        "project did not re-expand before the wheel characterization",
+      );
+      const childCell = paneCell(expandedDashboard, "docs-cleanup");
+      const childOuter = centeredPopupOuterCell(outerDimensions, nestedClient, childCell);
+      await fixture.ptyClient.write(sgrMouse(65, childOuter));
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => !content.includes("▼ station") && content.includes("docs-cleanup"),
+        "outer SGR wheel input over a child row did not change visible content",
+      );
+      expectNoTmuxPopupMenu();
+    } finally {
+      fixture.ptyClient.child.stdout?.off("data", captureClientOutput);
+    }
 
     await closeOuterPopup(fixture);
     await expectSuccessfulExit(popup, 10_000);
