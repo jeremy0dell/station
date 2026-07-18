@@ -13,7 +13,7 @@ It usually starts simple: one AI coding agent in one terminal window. Then you o
 station untangles this. It gives each agent its own isolated copy of the repo (a *worktree*, which station sets up and manages for you), so your agents stop colliding. Every session shows up in one live view, so you can see what each one is doing at a glance. And your sessions keep running even after you close your terminal: reattach later and your panes are right where you left them.
 
 <p align="center">
-  <img src="./station/assets/screenshots/fleet-overview.png" alt="Station TUI listing projects, worktrees, and live agent sessions, with a session-create dialog open" width="820">
+  <img width="1036" height="614" alt="image" src="https://github.com/user-attachments/assets/33ce128d-4727-4b35-b33d-d8635b697cd8" />
   <br>
   <em>One live view of every project, worktree, and agent session. A new session is a keypress away.</em>
 </p>
@@ -160,7 +160,7 @@ The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the 
 **The Station workspace**: the terminal UI is the OpenTUI renderer in `station/` (on the Bun lane). It connects to the observer, refreshes from live events and snapshots, and shows a provider-neutral view of projects, worktrees, sessions, terminal targets, and agent status. `stn` (no subcommand) starts the observer and launches the native Station workspace: real PTY panes with host-backed persistence, so closing your terminal doesn't stop your agents; reattach and the panes are still running. (Inside an existing tmux session it opens as a read-only dashboard popup instead.) A mock-data dashboard preview is available for development via `--dev-fake-dashboard`.
 
 <p align="center">
-  <img src="./station/assets/screenshots/diff-navigator.png" alt="Station's diff navigator showing a filterable file list and inline add/remove hunks for a session's changes" width="880">
+  <img width="1728" height="1046" alt="image" src="https://github.com/user-attachments/assets/a5f9fb92-ee8c-420b-9fb2-20722af77934" />
   <br>
   <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
 </p>
