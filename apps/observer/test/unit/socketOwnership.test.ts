@@ -48,11 +48,14 @@ describe("watchSocketOwnership", () => {
     dir = await mkdtemp(join(tmpdir(), "stn-ownership-"));
     const socketPath = join(dir, "observer.sock");
     await writeFile(socketPath, "");
+    const identity = await readSocketIdentity(socketPath);
+    if (identity === undefined) throw new Error("expected a socket identity");
 
     let lost = false;
     const watch = watchSocketOwnership({
       socketPath,
       intervalMs: 20,
+      expectedIdentity: identity,
       onLost: () => {
         lost = true;
       },
