@@ -462,7 +462,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
   }, 120_000);
 
-  it("forwards outer SGR hover, deliberate clicks, and wheel input exactly once", async () => {
+  it("uses button-only tracking while forwarding outer clicks and wheel input exactly once", async () => {
     const fixture = await createDashboardFixture(tmux);
     fixture.env.STATION_SCENARIO = "many-projects";
     cleanup = () => cleanupDashboardFixture(fixture);
@@ -487,15 +487,12 @@ describeRealTmux("real tmux dev popup routing", () => {
     const outerDimensions = await readOuterClientDimensions(fixture, fixture.ptyClient.clientName);
     const headerCell = paneCell(dashboard, "▼ station");
     const headerOuter = centeredPopupOuterCell(outerDimensions, nestedClient, headerCell);
-    const headerStyleBefore = await captureHiddenStyledLine(fixture, "▼ station");
-
-    await fixture.ptyClient.write(sgrMouse(35, headerOuter));
-    await waitForHiddenStyledLine(
-      fixture,
-      "▼ station",
-      (line) => line !== headerStyleBefore,
-      "outer SGR motion did not reach project-header hover",
+    const mouseAllFlag = await tmuxExec(
+      fixture.wrapper,
+      ["display-message", "-p", "-t", persistentUiSessionName, "#{mouse_all_flag}"],
+      fixture.env,
     );
+    expect(mouseAllFlag.trim(), "popup renderer requested all-motion mouse tracking").toBe("0");
 
     await writeSgrClick(fixture.ptyClient, headerOuter);
     await waitForPaneContent(
@@ -1706,39 +1703,6 @@ async function waitForHiddenPaneContent(
   }
   throw new Error(
     `${failureMessage}\nLast hidden pane:\n${content.slice(-8_000)}${await fixtureDiagnostics(fixture)}`,
-  );
-}
-
-async function captureHiddenStyledLine(fixture: DashboardFixture, needle: string): Promise<string> {
-  const content = await tmuxExec(
-    fixture.wrapper,
-    ["capture-pane", "-e", "-p", "-N", "-t", persistentUiSessionName],
-    fixture.env,
-  );
-  const line = content.split("\n").find((candidate) => candidate.includes(needle));
-  if (line === undefined) {
-    throw new Error(`hidden pane does not contain ${JSON.stringify(needle)}`);
-  }
-  return line;
-}
-
-async function waitForHiddenStyledLine(
-  fixture: DashboardFixture,
-  needle: string,
-  predicate: (line: string) => boolean,
-  failureMessage: string,
-): Promise<string> {
-  const deadline = Date.now() + 10_000;
-  let line = "";
-  while (Date.now() < deadline) {
-    line = await captureHiddenStyledLine(fixture, needle).catch(() => "");
-    if (line !== "" && predicate(line)) {
-      return line;
-    }
-    await delay(100);
-  }
-  throw new Error(
-    `${failureMessage}\nLast styled line:\n${line}${await fixtureDiagnostics(fixture)}`,
   );
 }
 
