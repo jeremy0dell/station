@@ -462,7 +462,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
   }, 120_000);
 
-  it("forwards outer SGR hover, deliberate clicks, and wheel input exactly once", async () => {
+  it("uses click-only tracking without opening tmux's popup menu or latching hover", async () => {
     const fixture = await createDashboardFixture(tmux);
     fixture.env.STATION_SCENARIO = "many-projects";
     cleanup = () => cleanupDashboardFixture(fixture);
@@ -487,53 +487,96 @@ describeRealTmux("real tmux dev popup routing", () => {
     const outerDimensions = await readOuterClientDimensions(fixture, fixture.ptyClient.clientName);
     const headerCell = paneCell(dashboard, "▼ station");
     const headerOuter = centeredPopupOuterCell(outerDimensions, nestedClient, headerCell);
-    const headerStyleBefore = await captureHiddenStyledLine(fixture, "▼ station");
+    const blankOuter = centeredPopupOuterCell(outerDimensions, nestedClient, { col: 0, row: 0 });
+    const headerStyleBefore = await captureHiddenStyledLine(fixture, headerCell.row);
+    const mouseFlags = await tmuxExec(
+      fixture.wrapper,
+      [
+        "display-message",
+        "-p",
+        "-t",
+        persistentUiSessionName,
+        "#{mouse_standard_flag}:#{mouse_button_flag}:#{mouse_all_flag}:#{mouse_sgr_flag}",
+      ],
+      fixture.env,
+    );
+    const [, , mouseAllFlag] = mouseFlags.trim().split(":");
+    const clientOutput: Buffer[] = [];
+    const captureClientOutput = (chunk: Buffer): void => {
+      clientOutput.push(chunk);
+    };
+    const expectNoTmuxPopupMenu = (): void => {
+      const output = Buffer.concat(clientOutput).toString("utf8");
+      expect(output, "mouse input opened tmux's popup menu").not.toContain("Fill Space");
+      expect(output, "mouse input opened tmux's popup menu").not.toContain("To Horizontal Pane");
+    };
+    fixture.ptyClient.child.stdout?.on("data", captureClientOutput);
+    try {
+      if (mouseAllFlag === "1") {
+        // A terminal only reports motion when requested; SGR 34 reaches tmux's 3.7 menu branch.
+        await fixture.ptyClient.write(sgrMouse(34, { column: 1, row: 1 }));
+        await delay(500);
+      }
+      expectNoTmuxPopupMenu();
+      expect(mouseFlags.trim(), "popup renderer did not request click-only SGR tracking").toBe(
+        "1:0:0:1",
+      );
 
-    await fixture.ptyClient.write(sgrMouse(35, headerOuter));
-    await waitForHiddenStyledLine(
-      fixture,
-      "▼ station",
-      (line) => line !== headerStyleBefore,
-      "outer SGR motion did not reach project-header hover",
-    );
+      await fixture.ptyClient.write(sgrMouse(1, blankOuter));
+      await fixture.ptyClient.write(sgrMouse(33, headerOuter));
+      await fixture.ptyClient.write(sgrMouse(1, headerOuter, "m"));
+      await fixture.ptyClient.write(sgrMouse(35, blankOuter));
+      await delay(500);
+      expect(
+        await captureHiddenStyledLine(fixture, headerCell.row),
+        "a button drag left the project-header hover style latched",
+      ).toBe(headerStyleBefore);
 
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▶ station") && !content.includes("station-overlay"),
-      "one outer SGR down/up click did not collapse exactly once",
-    );
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▼ station") && content.includes("station-overlay"),
-      "the first deliberate repeated click did not expand the project",
-    );
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▶ station") && !content.includes("station-overlay"),
-      "the second deliberate repeated click did not collapse the project",
-    );
-    await writeSgrClick(fixture.ptyClient, headerOuter);
-    const expandedDashboard = await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => content.includes("▼ station") && content.includes("docs-cleanup"),
-      "project did not re-expand before the wheel characterization",
-    );
-    const childCell = paneCell(expandedDashboard, "docs-cleanup");
-    const childOuter = centeredPopupOuterCell(outerDimensions, nestedClient, childCell);
-    await fixture.ptyClient.write(sgrMouse(65, childOuter));
-    await waitForPaneContent(
-      fixture,
-      popup,
-      (content) => !content.includes("▼ station") && content.includes("docs-cleanup"),
-      "outer SGR wheel input over a child row did not change visible content",
-    );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▶ station") && !content.includes("station-overlay"),
+        "one outer SGR down/up click did not collapse exactly once",
+      );
+      expect(
+        (await captureHiddenStyledLine(fixture, headerCell.row)).replace("▶", "▼"),
+        "a deliberate click left the project-header hover style latched",
+      ).toBe(headerStyleBefore);
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▼ station") && content.includes("station-overlay"),
+        "the first deliberate repeated click did not expand the project",
+      );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▶ station") && !content.includes("station-overlay"),
+        "the second deliberate repeated click did not collapse the project",
+      );
+      await writeSgrClick(fixture.ptyClient, headerOuter);
+      const expandedDashboard = await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => content.includes("▼ station") && content.includes("docs-cleanup"),
+        "project did not re-expand before the wheel characterization",
+      );
+      const childCell = paneCell(expandedDashboard, "docs-cleanup");
+      const childOuter = centeredPopupOuterCell(outerDimensions, nestedClient, childCell);
+      await fixture.ptyClient.write(sgrMouse(65, childOuter));
+      await waitForPaneContent(
+        fixture,
+        popup,
+        (content) => !content.includes("▼ station") && content.includes("docs-cleanup"),
+        "outer SGR wheel input over a child row did not change visible content",
+      );
+      expectNoTmuxPopupMenu();
+    } finally {
+      fixture.ptyClient.child.stdout?.off("data", captureClientOutput);
+    }
 
     await closeOuterPopup(fixture);
     await expectSuccessfulExit(popup, 10_000);
@@ -1709,37 +1752,17 @@ async function waitForHiddenPaneContent(
   );
 }
 
-async function captureHiddenStyledLine(fixture: DashboardFixture, needle: string): Promise<string> {
+async function captureHiddenStyledLine(fixture: DashboardFixture, row: number): Promise<string> {
   const content = await tmuxExec(
     fixture.wrapper,
     ["capture-pane", "-e", "-p", "-N", "-t", persistentUiSessionName],
     fixture.env,
   );
-  const line = content.split("\n").find((candidate) => candidate.includes(needle));
+  const line = content.split("\n")[row];
   if (line === undefined) {
-    throw new Error(`hidden pane does not contain ${JSON.stringify(needle)}`);
+    throw new Error(`hidden pane does not contain row ${row}`);
   }
   return line;
-}
-
-async function waitForHiddenStyledLine(
-  fixture: DashboardFixture,
-  needle: string,
-  predicate: (line: string) => boolean,
-  failureMessage: string,
-): Promise<string> {
-  const deadline = Date.now() + 10_000;
-  let line = "";
-  while (Date.now() < deadline) {
-    line = await captureHiddenStyledLine(fixture, needle).catch(() => "");
-    if (line !== "" && predicate(line)) {
-      return line;
-    }
-    await delay(100);
-  }
-  throw new Error(
-    `${failureMessage}\nLast styled line:\n${line}${await fixtureDiagnostics(fixture)}`,
-  );
 }
 
 function paneCell(content: string, needle: string): { col: number; row: number } {

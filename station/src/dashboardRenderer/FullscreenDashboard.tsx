@@ -8,7 +8,11 @@ import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
-import { StationMouseProvider, type StationMouseDispatch } from "../station/view/stationMouseContext.js";
+import {
+  StationHoverProvider,
+  StationMouseProvider,
+  type StationMouseDispatch,
+} from "../station/view/stationMouseContext.js";
 import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMouse.js";
 
 /**
@@ -24,9 +28,11 @@ import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMous
 export function FullscreenDashboard({
   store,
   effects,
+  hoverEnabled = true,
 }: {
   store: StoreApi<TuiStore>;
   effects: DashboardMouseEffects;
+  hoverEnabled?: boolean;
 }) {
   const { width, height } = useTerminalDimensions();
   const widgets = useStore(store, (state) => state.widgets);
@@ -38,16 +44,18 @@ export function FullscreenDashboard({
     [effects, store],
   );
   return (
-    <StationMouseProvider value={dispatch}>
-      <box width={width} height={height} flexDirection="column">
-        <DashboardRoot store={store} columns={width} rows={height} />
-        <DashboardFrameTitle
-          store={store}
-          frame={{ left: 0, top: 0, width }}
-          topRowWidgets={topRowWidgets}
-          zIndex={1}
-        />
-      </box>
-    </StationMouseProvider>
+    <StationHoverProvider value={hoverEnabled}>
+      <StationMouseProvider value={dispatch}>
+        <box width={width} height={height} flexDirection="column">
+          <DashboardRoot store={store} columns={width} rows={height} />
+          <DashboardFrameTitle
+            store={store}
+            frame={{ left: 0, top: 0, width }}
+            topRowWidgets={topRowWidgets}
+            zIndex={1}
+          />
+        </box>
+      </StationMouseProvider>
+    </StationHoverProvider>
   );
 }

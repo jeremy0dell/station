@@ -3,9 +3,13 @@
 // single-line rows. Ink's dimColor becomes the DIM attribute; named colors
 // come from the theme.
 import { TextAttributes } from "@opentui/core";
-import { isValidElement, type ReactNode, useState } from "react";
+import { isValidElement, type ReactNode } from "react";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
-import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import {
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+} from "../stationMouseContext.js";
 import { Throbber } from "../Throbber.js";
 import { STATION_COLORS } from "../theme.js";
 
@@ -107,7 +111,7 @@ export function SheetChoiceLine({
   note?: string | undefined;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const focused = hover || selected;
   // The marker reuses the prefix's leading margin column so the key/label
   // columns stay aligned and the row width is unchanged whether or not it is set.
@@ -173,7 +177,7 @@ export function SheetButton({
   mouseTarget: StationMouseTarget;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const color = BUTTON_TONE_COLORS[tone];
   return (
     <text
@@ -294,7 +298,7 @@ export function SheetPickerLine({
   mouseTarget?: StationMouseTarget;
 }) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const prefix = selected ? " > " : "   ";
   const detailText = detail.length === 0 ? "" : ` ${detail}`;
   const maxDetailWidth = Math.max(0, width - prefix.length - 10);

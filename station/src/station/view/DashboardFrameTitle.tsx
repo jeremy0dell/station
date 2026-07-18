@@ -1,5 +1,4 @@
 import { TextAttributes } from "@opentui/core";
-import { useState } from "react";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import stringWidth from "string-width";
@@ -12,7 +11,11 @@ import {
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { STATION_COLORS } from "./theme.js";
-import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
+import {
+  stationMouseProps,
+  useStationHoverState,
+  useStationMouse,
+} from "./stationMouseContext.js";
 
 const PRODUCT_LABEL = "station";
 const OVERVIEW_SUBTITLE = "· overview";
@@ -40,7 +43,7 @@ export function DashboardFrameTitle({
   zIndex,
 }: DashboardFrameTitleProps) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useState(false);
+  const [hover, setHover] = useStationHoverState();
   const snapshot = useStore(store, (state) => state.snapshot);
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
 

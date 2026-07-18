@@ -140,13 +140,24 @@ export async function runDashboardMain(): Promise<void> {
     }
   };
 
+  // tmux 3.7 can open its button-3 menu while Station reports mouse movement.
+  // Re-enable popup movement once Station requires a tmux release containing
+  // tmux/tmux@ad6832e, which removes the popup menu.
+  const popupRenderer = env.STATION_TUI_POPUP === "1";
+  const enableMouseMovement = !popupRenderer;
+
   try {
     const nextRenderer = await createCliRenderer({
+      enableMouseMovement,
       exitOnCtrlC: false,
       prependInputHandlers: [createDashboardSequenceHandler(store)],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;
+    if (popupRenderer) {
+      // OpenTUI keeps 1002 drag tracking on when 1003 movement is off; popups need click-only 1000 + 1006.
+      process.stdout.write("\u001b[?1002l\u001b[?1000h");
+    }
     hotSlots.__stationDashboardHotRenderer = nextRenderer;
     hotSlots.__stationDashboardHotDispose = disposeResources;
     // OpenTUI routes paste around the sequence handlers; forward it as sanitized
@@ -160,7 +171,13 @@ export async function runDashboardMain(): Promise<void> {
 
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
-    nextRoot.render(<FullscreenDashboard store={store} effects={mouseEffects} />);
+    nextRoot.render(
+      <FullscreenDashboard
+        store={store}
+        effects={mouseEffects}
+        hoverEnabled={!popupRenderer}
+      />,
+    );
     process.on("exit", onProcessExit);
 
     if (import.meta.hot) {

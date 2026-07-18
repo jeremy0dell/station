@@ -19,6 +19,7 @@ function syncPointer(renderer: ReturnType<typeof useRenderer>): void {
 }
 
 type HoverPointerOptions = {
+  enabled?: boolean | undefined;
   onHoverChange?: ((hover: boolean) => void) | undefined;
 };
 
@@ -37,6 +38,9 @@ export function useHoverPointer(options: HoverPointerOptions = {}) {
   }, []);
 
   const activate = useCallback(() => {
+    if (options.enabled === false) {
+      return;
+    }
     clearLeaveTimer();
     hoveredRegions.add(region.current);
     if (!hovered.current) {
@@ -44,7 +48,7 @@ export function useHoverPointer(options: HoverPointerOptions = {}) {
       options.onHoverChange?.(true);
     }
     syncPointer(renderer);
-  }, [clearLeaveTimer, options.onHoverChange, renderer]);
+  }, [clearLeaveTimer, options.enabled, options.onHoverChange, renderer]);
 
   const deactivate = useCallback(() => {
     clearLeaveTimer();

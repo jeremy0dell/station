@@ -19,7 +19,7 @@ import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 import { STATION_COLORS } from "./theme.js";
-import { StationMouseProvider } from "./stationMouseContext.js";
+import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.fg === undefined ? undefined : rgbToHex(span.fg);
@@ -58,6 +58,7 @@ describe("dashboard golden frames", () => {
     snapshot?: StationSnapshot;
     connection?: StationClientConnectionState;
     dispatchMouse?: (target: StationMouseTarget) => void;
+    hoverEnabled?: boolean;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
       snapshot: input.snapshot ?? null,
@@ -72,14 +73,18 @@ describe("dashboard golden frames", () => {
         rows={input.height}
       />
     );
-    const setup = await testRender(
+    const mouseDashboard =
       input.dispatchMouse === undefined ? (
         dashboard
       ) : (
         <StationMouseProvider value={(target) => input.dispatchMouse?.(target)}>
           {dashboard}
         </StationMouseProvider>
-      ),
+      );
+    const setup = await testRender(
+      <StationHoverProvider value={input.hoverEnabled ?? true}>
+        {mouseDashboard}
+      </StationHoverProvider>,
       { width: input.width, height: input.height },
     );
     teardowns.push(() => {
@@ -419,5 +424,31 @@ describe("dashboard golden frames", () => {
 
     const spans = setup.captureSpans();
     expect(spanBgHex(spanAtFrameCell(spans, row, 78))).toBe(STATION_COLORS.hoverBackground);
+  });
+
+  it("suppresses popup hover styling without removing click targets", async () => {
+    let clicked: StationMouseTarget | undefined;
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+      hoverEnabled: false,
+      dispatchMouse: (target) => {
+        clicked = target;
+      },
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("docs-cleanup"));
+    const col = Math.max(0, lines[row]?.indexOf("docs-cleanup") ?? 0);
+
+    await setup.mockMouse.moveTo(col, row);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, 78))).not.toBe(
+      STATION_COLORS.hoverBackground,
+    );
+    await setup.mockMouse.click(col, row, MouseButtons.LEFT);
+    expect(clicked).toMatchObject({ kind: "row" });
   });
 });
