@@ -7,9 +7,7 @@ import {
   type TerminalCorruptionKind,
   writePaneEvidenceDump,
 } from "../diagnostics.js";
-import type { StationTerminalSize } from "../types.js";
-import { buildVisibleRows, type VtRow } from "./rows.js";
-import { type StationVtTheme, stationVtTheme } from "./theme.js";
+import { CsiFinal, EraseInDisplayMode } from "../protocol/controlBytes.js";
 import { DecMode } from "../protocol/decset.js";
 import {
   MouseEncoding,
@@ -17,6 +15,9 @@ import {
   type MouseEncodingValue,
   type MouseTrackingValue,
 } from "../protocol/mouse.js";
+import type { StationTerminalSize } from "../types.js";
+import { buildVisibleRows, type VtRow } from "./rows.js";
+import { type StationVtTheme, stationVtTheme } from "./theme.js";
 
 const DEFAULT_FLUSH_INTERVAL_MS = 33;
 const SYNC_OUTPUT_HOLD_MAX_MS = 1000;
@@ -282,6 +283,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   };
   // Lines scrolled up from the live bottom (0 = at the bottom).
   let scrollOffset = 0;
+  let normalBufferIsSynchronizedFrame = false;
   let kittyKeyboardFlags = 0;
   // The most recent OSC 0/2 title; mirrors xterm's onTitleChange so the pane
   // border can show it without reaching into the engine.
@@ -415,16 +417,33 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
+  terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) => {
+    const isNormalBufferFullScreenErase =
+      params[0] === EraseInDisplayMode.EntireDisplay &&
+      terminal.buffer.active.type === "normal";
+    const isSynchronizedFullScreenErase =
+      isNormalBufferFullScreenErase && terminal.modes.synchronizedOutputMode;
+    // Archive the transition into an app-owned screen, not its subsequent repaint frames.
+    // xterm consults this option only for ED2; flush restores it after parsing.
+    terminal.options.scrollOnEraseInDisplay =
+      isSynchronizedFullScreenErase && !normalBufferIsSynchronizedFrame;
+    if (isNormalBufferFullScreenErase) {
+      normalBufferIsSynchronizedFrame = isSynchronizedFullScreenErase;
+    }
+    return false;
+  });
   // RIS and DECSTR both restore a visible cursor; without these a `reset`
   // after a cursor-hiding app leaves the pane cursorless forever. RIS also
   // clears mouse modes (xterm resets the flavor; clear our SGR bit to match).
   terminal.parser.registerEscHandler({ final: "c" }, () => {
     cursorVisible = true;
     sgrMouse = false;
+    normalBufferIsSynchronizedFrame = false;
     return false;
   });
   terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
     cursorVisible = true;
+    normalBufferIsSynchronizedFrame = false;
     return false;
   });
   terminal.parser.registerCsiHandler({ prefix: ">", final: "u" }, (params) => {
@@ -526,9 +545,11 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     // observed off would reuse a stale (already-expired) deadline and tear; a
     // genuinely stuck frame just re-holds ~1s at a time.
     syncHoldUntil = undefined;
+    terminal.options.scrollOnEraseInDisplay = false;
     lastFlushAt = Date.now();
     applyScrollOnOutput();
     clampScrollOffset();
+    reanchorScroll();
     notifyListeners();
     scanForEscapeFragments();
   };

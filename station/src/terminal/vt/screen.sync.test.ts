@@ -19,6 +19,8 @@ const esuPlusRestB = "\x1b[?2026l" + "\r\n" + frameBRows.slice(2).join("\r\n");
 
 const gridText = (screen: StationVtScreen): string[] =>
   Array.from({ length: SIZE.rows }, (_, index) => screen.rowText(index));
+const renderedText = (screen: StationVtScreen): string[] =>
+  screen.buildRows().map((row) => row.spans.map((span) => span.text).join("").trimEnd());
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -27,6 +29,13 @@ const feedAndFlush = async (screen: StationVtScreen, data: string): Promise<void
   screen.feed(data);
   await screen.whenIdle();
   await waitFor(() => screen.getVersion() > before);
+};
+
+const synchronizedRedraw = async (screen: StationVtScreen, rows: string[]): Promise<void> => {
+  await feedAndFlush(
+    screen,
+    `\x1b[?2026h\x1b[2J\x1b[H${rows.join("\r\n")}\x1b[?2026l`,
+  );
 };
 
 describe("synchronized output (DECSET 2026)", () => {
@@ -109,6 +118,94 @@ describe("synchronized output (DECSET 2026)", () => {
       expect(snapshot.syncActive).toBe(false);
       expect(snapshot.rows).toEqual(frameBRows);
     }
+  });
+
+  it("retains the replaced normal-buffer frame in scrollback", async () => {
+    const screen = track(createStationVtScreen({ size: SIZE, flushIntervalMs: 1 }));
+    await feedAndFlush(screen, frameA);
+
+    await feedAndFlush(screen, "\x1b[?2026h\x1b[2J\x1b[Hreplacement\x1b[?2026l");
+
+    expect(screen.bufferStats().baseY).toBe(SIZE.rows);
+    expect(screen.scrollBy(100)).toBe(true);
+    expect(Array.from({ length: SIZE.rows }, (_, row) => screen.viewRowText(row).trimEnd())).toEqual(
+      frameARows,
+    );
+  });
+
+  it("preserves anchored rows across a synchronized full-screen redraw", async () => {
+    const screen = track(createStationVtScreen({ size: SIZE, flushIntervalMs: 1 }));
+    await feedAndFlush(
+      screen,
+      Array.from({ length: 10 }, (_, index) => `L${index}`).join("\r\n"),
+    );
+    screen.scrollBy(2);
+
+    // Split BSU from the ED2 frame to pin mode tracking across PTY chunk boundaries.
+    screen.feed("\x1b[?2026h");
+    await screen.whenIdle();
+    screen.feed("\x1b[2J\x1b[Hreplacement\x1b[?2026l");
+    await screen.whenIdle();
+    await waitFor(() => screen.unsafeEngine.modes.synchronizedOutputMode === false);
+    await waitFor(() => screen.unsafeEngine.options.scrollOnEraseInDisplay === false);
+
+    expect(Array.from({ length: SIZE.rows }, (_, row) => screen.viewRowText(row).trimEnd())).toEqual([
+      "L3",
+      "L4",
+      "L5",
+      "L6",
+      "L7",
+    ]);
+  });
+
+  it("preserves a frozen view across repeated partially filled redraws", async () => {
+    const screen = track(createStationVtScreen({ size: SIZE, flushIntervalMs: 1 }));
+    await feedAndFlush(
+      screen,
+      Array.from({ length: 10 }, (_, index) => `L${index}`).join("\r\n"),
+    );
+    screen.scrollBy(2);
+
+    await synchronizedRedraw(screen, ["first frame"]);
+    expect(renderedText(screen)).toEqual(["L3", "L4", "L5", "L6", "L7"]);
+
+    await synchronizedRedraw(screen, ["second frame"]);
+    expect(renderedText(screen)).toEqual(["L3", "L4", "L5", "L6", "L7"]);
+  });
+
+  it("does not let repeated redraw frames evict real history at the scrollback cap", async () => {
+    const screen = track(
+      createStationVtScreen({ size: SIZE, scrollback: 10, flushIntervalMs: 1 }),
+    );
+    await feedAndFlush(
+      screen,
+      Array.from({ length: 15 }, (_, index) => `H${index}`).join("\r\n"),
+    );
+
+    for (let index = 0; index < 5; index += 1) {
+      await synchronizedRedraw(
+        screen,
+        Array.from({ length: SIZE.rows }, (_, row) => `redraw-${row}`),
+      );
+    }
+
+    screen.scrollBy(100);
+    expect(renderedText(screen)).toEqual(["H5", "H6", "H7", "H8", "H9"]);
+  });
+
+  it("archives a later ordinary-to-synchronized screen transition", async () => {
+    const screen = track(createStationVtScreen({ size: SIZE, flushIntervalMs: 1 }));
+    await feedAndFlush(screen, frameA);
+    await synchronizedRedraw(screen, ["first app frame"]);
+    await synchronizedRedraw(screen, ["repaint frame"]);
+
+    await feedAndFlush(screen, "\x1b[2J\x1b[Hshell prompt");
+    const before = screen.bufferStats().baseY;
+    await synchronizedRedraw(screen, ["next app frame"]);
+
+    expect(screen.bufferStats().baseY).toBe(before + 1);
+    screen.scrollBy(1);
+    expect(renderedText(screen)[0]).toBe("shell prompt");
   });
 
   it("a stuck BSU with no ESU still paints after the bounded hold", async () => {
