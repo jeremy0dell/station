@@ -6,7 +6,7 @@ Station is distributed internally as authenticated private GitHub release assets
 
 On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to `jeremy0dell/station`, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
 
-From any directory, authenticate `gh`, then fetch and run the installer for the first binary baseline:
+From any directory, authenticate `gh`, then fetch and run the installer for the first binary candidate after it is published:
 
 ```bash
 gh auth login --hostname github.com
@@ -14,7 +14,7 @@ gh auth login --hostname github.com
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.0
+  tag=v0.7.1-rc.1
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
   gh api --method GET \
@@ -27,13 +27,13 @@ gh auth login --hostname github.com
 )
 ```
 
-Keep `tag=v0.7.0` for an exact install. After `v0.7.0` is published, replace that assignment with the following to resolve the latest stable tag while still fetching installer code and artifacts from that same tag:
+Keep `tag=v0.7.1-rc.1` for an exact prerelease install. After the first stable release is published, replace that assignment with the following to resolve the latest stable tag while still fetching installer code and artifacts from that same tag:
 
 ```bash
 tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
 ```
 
-The recipe never falls back to `main`. `gh` handles private-repository authentication for both the bootstrap and the installer's release discovery and asset downloads. Because `v0.7.0` is the first binary release, immutable rollback to a prior binary becomes available only after the next binary release.
+The recipe never falls back to `main`. `gh` handles private-repository authentication for both the bootstrap and the installer's release discovery and asset downloads. The earlier `v0.7.0` candidate remained unpublished, so immutable rollback to a prior binary becomes available only after a second binary release is published.
 
 ### Complete first-run setup
 
@@ -144,8 +144,9 @@ The compiled binary launches the native TUI and Observer without Node.js, pnpm, 
 
 After a second binary version exists, rollback is the same authenticated
 explicit-version install. Published tags and assets are immutable; do not
-delete, move, or overwrite them. If `v0.7.0` itself is bad, publish a higher
-version containing the revert or fix because there is no earlier binary tag.
+delete, move, or overwrite them. If the first published binary is bad, publish a
+higher version containing the revert or fix because there is no earlier binary
+release.
 
 ## Development Checkout
 

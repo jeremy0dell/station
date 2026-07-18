@@ -148,7 +148,7 @@ stn (bun build --compile, per platform, no ambient env)
   atomically published `station-build-id` sidecar and reverifies its repository
   inputs plus production package outputs; compiled and source output from the
   same whole-repository build therefore produce the same Observer selector while
-  retaining `{ version: "0.7.0", compiled: false }` display semantics.
+  retaining `{ version: "0.7.1-rc.1", compiled: false }` display semantics.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -381,7 +381,7 @@ Each native job runs the full binary smoke and uploads one archive:
 - `stn-v{version}-darwin-arm64.tar.gz`
 
 Here `{version}` is the package version without the tag's leading `v`, for
-example `stn-v0.7.0-darwin-arm64.tar.gz`.
+example `stn-v0.7.1-rc.1-darwin-arm64.tar.gz`.
 
 Every archive contains exactly `stn`, the `stn-ingress` and
 `stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
@@ -415,13 +415,14 @@ claim bit-for-bit reproducible Bun executables or archives.
 
 `scripts/install.sh` supports latest stable, explicit `--version`, and
 `--install-dir` (default `~/.local/bin`). The supported binary-install baseline
-starts at `v0.7.0`. Explicit installs set a tag, fetch
+starts at `v0.7.1-rc.1`; the earlier `v0.7.0` candidate remained unpublished.
+Explicit installs set a tag, fetch
 `scripts/install.sh` from that tag through the authenticated Contents API, and
 invoke it with `--version` set to the same tag. Latest install first resolves
 the latest stable tag, then performs the same tagged fetch and explicit invoke.
 There is no silent `main` fallback, so installer code and release artifacts are
 always paired. Immutable rollback becomes available with the second binary
-release because `v0.7.0` has no earlier binary artifact.
+published release because no earlier binary artifact exists.
 
 The installer uses authenticated `gh api` release endpoints, accepts only the
 four supported targets, verifies the one matching `SHA256SUMS` entry and exact
@@ -490,11 +491,11 @@ The future-shell export appears only when physical current-process resolution
 is incomplete. The installer never reads, selects, creates, or edits shell
 startup files.
 
-The first binary release is immutable `v0.7.0` and promotes only after all four
+The first binary candidate is `v0.7.1-rc.1` and promotes only after all four
 native targets pass automated and manual acceptance. Published tags and assets
 are never deleted, moved, or overwritten. Cross-version rollback is intentionally
-deferred until a second binary version exists; a bad `v0.7.0` rolls forward to a
-higher version containing the revert or fix.
+deferred until a second binary version exists; a bad first release rolls forward
+to a higher version containing the revert or fix.
 
 Drafts are still mutable. Release notes record the workflow commit, while the
 accepted-candidate artifact immutably records that commit plus the draft release
@@ -706,7 +707,7 @@ flow:
    `accepted-release-candidate-*` artifact, rechecks the exact tag, release,
    asset IDs, and hashes, then publishes only that draft.
 9. With terminal A continuously running installed `stn --version`, terminal B
-   repeatedly installs the draft → only complete `0.7.0` output appears, never
+   repeatedly installs the draft → only complete `0.7.1-rc.1` output appears, never
    command-not-found or malformed output; both aliases remain links to `stn`,
    so entrypoints never mix. Repeat with two immutable versions when preparing
    the second binary release and first rollback gate.
