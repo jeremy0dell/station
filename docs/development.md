@@ -156,12 +156,14 @@ the `station/` Bun dependencies before pushing.
 
 Ready, non-draft pull requests run `pnpm test:pre-push` once on
 `ubuntu-24.04`; release tags call that same full gate before adding the four
-native build and draft-install targets. Draft pull request activity allocates no
-runner, including synchronization before `ready_for_review`. Pushes to `main`
-run only build, typecheck, and lint as a cheap post-merge smoke. The repository
-ruleset must require the pull-request `standard-ci` check and block direct
-`main` pushes; the cheap smoke is a post-merge backstop, not a substitute for
-the full required gate.
+native build and draft-install targets. Both that gate and `smoke:release` must
+pass before any native release build starts.
+Draft pull request activity allocates no
+runner, including synchronization before `ready_for_review`.
+Pushes to `main` run only build, typecheck, and lint as a cheap post-merge
+smoke. The repository ruleset must require the pull-request `standard-ci` check
+and block direct `main` pushes; the cheap smoke is a post-merge backstop, not a
+substitute for the full required gate.
 
 Useful focused commands:
 

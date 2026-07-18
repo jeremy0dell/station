@@ -101,7 +101,10 @@ jobs:
   # Checked 2026-07-11: these hosted labels cover the four supported native targets.
   build-native:
     name: build (${{ matrix.target }})
-    needs: validate
+    needs:
+      - validate
+      - standard-ci
+      - release-smoke
     strategy:
       fail-fast: false
       matrix:

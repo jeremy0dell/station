@@ -38,8 +38,11 @@ describe("hosted CI policy", () => {
 
     const releaseStandardCi = between(release, "  standard-ci:", "  release-smoke:");
     expect(releaseStandardCi).toContain("uses: ./.github/workflows/standard-ci.yml");
+    const nativeBuilds = between(release, "  build-native:", "  create-draft:");
+    expect(nativeBuilds).toMatch(/needs:\s+- validate\s+- standard-ci\s+- release-smoke/);
 
     expect(development).toContain("Ready, non-draft pull requests run `pnpm test:pre-push`");
+    expect(development).toContain("before any native release build starts");
     expect(development).toMatch(/Draft pull request activity allocates no\s+runner/);
     expect(development).toMatch(/Pushes to `main`\s+run only build, typecheck, and lint/);
   });
