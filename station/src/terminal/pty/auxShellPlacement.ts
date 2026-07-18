@@ -16,7 +16,6 @@ const DEFAULT_ROWS = 24;
  * exception — it carries the real cwd so a recovered orphan reopens in place.)
  */
 const AUX_IDENTITY_PLACEHOLDER = "aux";
-const AUX_ENV: Record<string, string> = { TERM: "xterm-256color", COLORTERM: "truecolor" };
 
 /** Resolves whether a Station-owned shell should land in the host or stay local. */
 export type AuxShellPlacement = (
@@ -41,6 +40,7 @@ export function resolveAuxShellPlacement(
       // have defaulted both); mirror the local shell so an aux pane is identical
       // whether it lands in the host or stays local.
       const cwd = spawnOptions.cwd ?? process.cwd();
+      // The host applies child capability policy at final PTY spawn, so aux placement must not duplicate TERM values.
       const spawn: HostSpawnParamsInput = {
         kind: "aux",
         terminalTargetId: auxTerminalTargetId(paneId),
@@ -51,7 +51,6 @@ export function resolveAuxShellPlacement(
         worktreePath: cwd,
         command: defaultShell(),
         args: defaultShellArgs(),
-        env: AUX_ENV,
         cwd,
         cols,
         rows,

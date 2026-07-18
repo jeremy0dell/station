@@ -20,7 +20,11 @@ type Pipeline = {
 };
 
 /** The production wiring: real bridge pty feeding a real vt screen. */
-function startPipeline(command: string, size = { cols: 80, rows: 24 }): Pipeline {
+function startPipeline(
+  command: string,
+  size = { cols: 80, rows: 24 },
+  env: Readonly<Record<string, string | undefined>> = {},
+): Pipeline {
   const screen = createStationVtScreen({
     size,
     onResponse: (data) => {
@@ -31,7 +35,7 @@ function startPipeline(command: string, size = { cols: 80, rows: 24 }): Pipeline
     command: "/bin/sh",
     args: ["-c", command],
     size,
-    env: { LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" },
+    env: { LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8", ...env },
   });
   terminal.onData((data) => {
     screen.feed(data);
@@ -65,6 +69,41 @@ describe("pty pipeline smoke", () => {
       const col = visibleRowText(pipeline.screen, row).indexOf("SMOKE-RED");
       const span = spanAtColumn(pipeline.screen, row, col);
       expect(span?.fg).toBe("#cd3131");
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it("the child sees Station-owned terminal capabilities", async () => {
+    if (gated()) return;
+    const pipeline = startPipeline(
+      [
+        "printf 'TERM=%s\\nCOLORTERM=%s\\nTERM_PROGRAM=%s\\nGHOSTTY=%s\\nKITTY=%s\\nUSER=%s\\n'",
+        '"$TERM" "$COLORTERM" "$TERM_PROGRAM"',
+        '"${GHOSTTY_RESOURCES_DIR-unset}" "${KITTY_WINDOW_ID-unset}" "$USER_SETTING"',
+      ].join(" "),
+      { cols: 80, rows: 24 },
+      {
+        TERM: "xterm-kitty",
+        COLORTERM: "station-test-color",
+        TERM_PROGRAM: "ghostty",
+        GHOSTTY_RESOURCES_DIR: "/ghostty",
+        KITTY_WINDOW_ID: "7",
+        USER_SETTING: "ordinary",
+      },
+    );
+    try {
+      await waitFor(() => someRowIncludes(pipeline.screen, "USER=ordinary") >= 0, 5_000);
+      for (const expected of [
+        "TERM=xterm-256color",
+        "COLORTERM=truecolor",
+        "TERM_PROGRAM=Station",
+        "GHOSTTY=unset",
+        "KITTY=unset",
+        "USER=ordinary",
+      ]) {
+        expect(someRowIncludes(pipeline.screen, expected)).toBeGreaterThanOrEqual(0);
+      }
     } finally {
       pipeline.dispose();
     }

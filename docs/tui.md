@@ -81,6 +81,31 @@ STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
 bun run dashboard                     # interactive dashboard renderer without native panes
 ```
 
+## Child PTY Capability Environment
+
+The outer terminal environment belongs to OpenTUI and remains unchanged so the
+renderer can use the real host terminal. At the final Station-owned PTY spawn
+boundary, inherited and per-launch environment values are merged, outer-renderer
+identity and feature hints are removed, and Station applies `TERM=xterm-256color`,
+`COLORTERM=truecolor`, and `TERM_PROGRAM=Station`. Per-launch values cannot replace
+those fields or the derived `STATION_PANE` marker.
+
+Ordinary locale, authentication, provider, project, worktree, and user environment
+continues to pass through. Until Station supports a feature end to end, children must
+not infer it from Ghostty, Kitty, WezTerm, iTerm2, Windows Terminal, Warp, or another
+outer renderer; native Station currently advertises true color but neither an image
+protocol nor OSC 8 hyperlinks.
+
+`TMUX` and `TMUX_PANE` are retained deliberately because they provide command
+connectivity and bind `STATION_PANE` to the outer server and pane. They are not part
+of Station's renderer capability declaration. External tmux-provider sessions remain
+authoritative for their own environment and do not pass through this native PTY
+policy.
+
+The policy applies only when a local bridge, Bun, or Station Host PTY is created.
+Existing live PTYs keep the environment captured at spawn and are never torn down to
+adopt a capability-policy update.
+
 ## Boundaries
 
 - Keep the Station UI provider-neutral. Do not import provider packages, read SQLite, run `wt`, run `tmux`, run `git` or `gh`, or parse raw provider payloads.

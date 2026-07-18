@@ -17,6 +17,10 @@ import {
   createBunTerminalProcess,
   type BunTerminalProcessOptions,
 } from "./bunTerminalProcess.js";
+import {
+  createStationChildPtyEnvironment,
+  STATION_CHILD_TERMINAL_ENV,
+} from "./childPtyEnvironment.js";
 import { StationTerminalSpawnError } from "./errors.js";
 import { TerminalProcessEmitter } from "./terminalProcessEmitter.js";
 
@@ -81,12 +85,13 @@ function ensureSpawnHelperExecutable(): void {
   }
 }
 
+/** Spawns a native PTY after applying Station's child-terminal environment policy. */
 export function createLocalPtyTerminal(
   options: StationTerminalSpawnOptions = {},
   runtime: LocalPtyTerminalRuntime = {},
 ): StationTerminalProcess {
   const size = normalizeSize(options.size);
-  const env = createPtyEnv(options.env);
+  const env = createStationChildPtyEnvironment(process.env, options.env);
   const command = options.command ?? defaultShell();
   const args = options.args === undefined ? defaultShellArgs() : [...options.args];
   let implementation: PtyImplementation;
@@ -100,7 +105,7 @@ export function createLocalPtyTerminal(
   }
   const id = options.id ?? createTerminalId();
   const cwd = options.cwd ?? process.cwd();
-  const name = options.name ?? env.TERM ?? "xterm-256color";
+  const name = STATION_CHILD_TERMINAL_ENV.TERM;
 
   if (implementation !== "bridge") {
     const bunOptions: BunTerminalProcessOptions = {
@@ -400,32 +405,6 @@ export function defaultShellArgs(): string[] {
   }
 
   return ["-i"];
-}
-
-export function createPtyEnv(
-  env: Readonly<Record<string, string | undefined>> | undefined,
-): Record<string, string | undefined> {
-  const nextEnv = {
-    ...process.env,
-    ...env,
-  };
-
-  // Station renders panes itself, so children should see stable xterm-style capabilities.
-  nextEnv.TERM = env?.TERM || process.env.TERM || "xterm-256color";
-  nextEnv.COLORTERM = env?.COLORTERM || process.env.COLORTERM || "truecolor";
-
-  // The host owns terminal capabilities; a NO_COLOR/FORCE_COLOR leaked from the
-  // observer's env would override the COLORTERM we just set, so drop both.
-  delete nextEnv.NO_COLOR;
-  delete nextEnv.FORCE_COLOR;
-
-  // Bind ownership to the full tmux context so different servers may safely reuse pane ids.
-  nextEnv.STATION_PANE =
-    nextEnv.TMUX !== undefined && nextEnv.TMUX_PANE !== undefined
-      ? JSON.stringify([nextEnv.TMUX, nextEnv.TMUX_PANE])
-      : "1";
-
-  return nextEnv;
 }
 
 function normalizeSize(size: Partial<StationTerminalSize> | undefined): StationTerminalSize {

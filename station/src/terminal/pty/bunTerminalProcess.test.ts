@@ -11,7 +11,8 @@ import {
   createBunTerminalProcess,
   type BunTerminalProcessOptions,
 } from "./bunTerminalProcess.js";
-import { createLocalPtyTerminal, createPtyEnv } from "./localPtyTerminal.js";
+import { createStationChildPtyEnvironment } from "./childPtyEnvironment.js";
+import { createLocalPtyTerminal } from "./localPtyTerminal.js";
 
 const RUN_REAL_BUN_PTY = process.env.STATION_PTY_IMPL === "bun";
 const cleanups: Array<() => Promise<unknown> | unknown> = [];
@@ -31,7 +32,7 @@ function resolvedOptions(
     command,
     args,
     cwd: process.cwd(),
-    env: createPtyEnv(undefined),
+    env: createStationChildPtyEnvironment(process.env),
     name: "xterm-256color",
     size: { cols: 80, rows: 24 },
   };
@@ -250,19 +251,22 @@ if (RUN_REAL_BUN_PTY) {
       expect(observed.exit()).toEqual({ exitCode: 0 });
     });
 
-    it("passes the sanitized color-capable environment", async () => {
+    it("passes the Station-owned capability environment", async () => {
       const terminal = trackTerminal(
         createLocalPtyTerminal({
           command: "/bin/sh",
           args: [
             "-c",
-            'printf "%s|%s|%s|%s" "$TERM" "$COLORTERM" "${NO_COLOR-unset}" "${FORCE_COLOR-unset}"',
+            'printf "%s|%s|%s|%s|%s|%s|%s" "$TERM" "$COLORTERM" "$TERM_PROGRAM" "${NO_COLOR-unset}" "${FORCE_COLOR-unset}" "${GHOSTTY_RESOURCES_DIR-unset}" "$USER_SETTING"',
           ],
           env: {
-            TERM: "station-test-term",
+            TERM: "xterm-kitty",
             COLORTERM: "station-test-color",
+            TERM_PROGRAM: "ghostty",
             NO_COLOR: "1",
             FORCE_COLOR: "0",
+            GHOSTTY_RESOURCES_DIR: "/ghostty",
+            USER_SETTING: "ordinary",
           },
         }),
       );
@@ -270,7 +274,9 @@ if (RUN_REAL_BUN_PTY) {
 
       await waitFor(() => observed.exit() !== undefined, 5_000);
 
-      expect(observed.output()).toBe("station-test-term|station-test-color|unset|unset");
+      expect(observed.output()).toBe(
+        "xterm-256color|truecolor|Station|unset|unset|unset|ordinary",
+      );
     });
 
     it("dispose terminates a long-running payload before closing the terminal", async () => {

@@ -29,9 +29,19 @@ if (SMOKE) {
           worktreePath: process.cwd(),
           harnessProvider: "scripted",
           command: "/bin/sh",
-          args: ["-c", 'printf "READY:%s" "$STATION_PANE"; sleep 2'],
+          args: [
+            "-c",
+            'printf "READY:%s|%s|%s|%s|%s|%s" "$STATION_PANE" "$TERM" "$COLORTERM" "$TERM_PROGRAM" "${GHOSTTY_RESOURCES_DIR-unset}" "$USER_SETTING"; sleep 2',
+          ],
           cwd: process.cwd(),
-          env: { STATION_PANE: "0" },
+          env: {
+            STATION_PANE: "0",
+            TERM: "xterm-kitty",
+            COLORTERM: "station-test-color",
+            TERM_PROGRAM: "ghostty",
+            GHOSTTY_RESOURCES_DIR: "/ghostty",
+            USER_SETTING: "ordinary",
+          },
           cols: 80,
           rows: 24,
         });
@@ -40,15 +50,12 @@ if (SMOKE) {
           process.env.TMUX !== undefined && process.env.TMUX_PANE !== undefined
             ? JSON.stringify([process.env.TMUX, process.env.TMUX_PANE])
             : "1";
+        const expected = `READY:${stationPaneMarker}|xterm-256color|truecolor|Station|unset|ordinary`;
         await waitUntil(
-          () =>
-            table
-              .snapshot(ptyId)
-              .scrollback.join("")
-              .includes(`READY:${stationPaneMarker}`),
+          () => table.snapshot(ptyId).scrollback.join("").includes(expected),
           2000,
         );
-        expect(table.snapshot(ptyId).scrollback.join("")).toContain(`READY:${stationPaneMarker}`);
+        expect(table.snapshot(ptyId).scrollback.join("")).toContain(expected);
 
         // The PTY is parented to the host, not a client: it survives with none attached.
         await delay(1100);
