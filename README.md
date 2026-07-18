@@ -9,6 +9,9 @@
 Station gives every agent an isolated Git worktree, keeps its terminal session alive, and shows all active projects and sessions in one terminal workspace. Bring Claude Code, Codex, Cursor, OpenCode, or Pi; Station coordinates the surrounding work without replacing the harness.
 
 <p align="center">
+  <img width="1728" height="1048" alt="image" src="https://github.com/user-attachments/assets/358c6c52-800f-496a-ada0-c8c291c8c33f" />
+  <br>
+  <em>Terminal multi-plexing with a toggleable dashboard</em>
   <img width="1029" height="607" alt="image" src="https://github.com/user-attachments/assets/16deac8a-c591-40c9-af23-b993d5107070" />
   <br>
   <em>One live view of every project, worktree, and agent session.</em>
