@@ -1,8 +1,10 @@
-import { setTuiWidgetsInConfig } from "@station/config";
 import type { TuiStore } from "@station/dashboard-core";
-import { safeErrorFromUnknown } from "@station/runtime";
 import type { StoreApi } from "zustand/vanilla";
 import type { Automation } from "../config/stationConfig.js";
+import {
+  startWidgetConfigWrites,
+  type WidgetConfigWrites,
+} from "../config/tuiConfig.js";
 import {
   type ClipboardEffects,
   copyToClipboard,
@@ -63,6 +65,7 @@ export function createStation(options: CreateStationOptions): Station {
     layoutWriter,
     tuiConfigPath: options.tuiConfigPath,
   });
+  let shutdownStarted = false;
 
   // Input runtime; its shutdown tears down this composition, then exits the app.
   const stationInput = createInputRuntime(options, {
@@ -72,8 +75,11 @@ export function createStation(options: CreateStationOptions): Station {
     observerService: stationClient.service,
     automations,
     onShutdown: () => {
-      lifecycle.disposeForShutdown();
-      options.shutdown();
+      if (shutdownStarted) {
+        return;
+      }
+      shutdownStarted = true;
+      void lifecycle.disposeForShutdown().then(() => options.shutdown());
     },
   });
 
@@ -93,7 +99,9 @@ export function createStation(options: CreateStationOptions): Station {
     stationViewStore,
     stationInput,
     start: lifecycle.start,
-    dispose: lifecycle.disposeForShutdown,
+    dispose: () => {
+      void lifecycle.disposeForShutdown();
+    },
     disposeForShutdown: lifecycle.disposeForShutdown,
     disposeForHotReload: lifecycle.disposeForHotReload,
   };
@@ -216,12 +224,13 @@ function createLifecycle(deps: {
   let detachReconcile: (() => void) | undefined;
   let detachSessionReconcile: (() => void) | undefined;
   let detachLayoutWriter: (() => void) | undefined;
-  let detachWidgetConfigWrites: (() => void) | undefined;
+  let widgetConfigWrites: WidgetConfigWrites | undefined;
   let disposed = false;
+  let pendingWidgetWrites: Promise<void> | undefined;
 
-  const disposeInternal = (disposeTerminals: boolean): void => {
+  const disposeInternal = (disposeTerminals: boolean): Promise<void> => {
     if (disposed) {
-      return;
+      return pendingWidgetWrites ?? Promise.resolve();
     }
     disposed = true;
     detachOverlayRowFocus?.();
@@ -234,8 +243,8 @@ function createLifecycle(deps: {
     detachSessionReconcile = undefined;
     detachLayoutWriter?.();
     detachLayoutWriter = undefined;
-    detachWidgetConfigWrites?.();
-    detachWidgetConfigWrites = undefined;
+    pendingWidgetWrites = widgetConfigWrites?.dispose() ?? Promise.resolve();
+    widgetConfigWrites = undefined;
     // Real shutdown flushes pending layout synchronously (process.exit follows);
     // an HMR teardown just drops the timer — the reused store/registry keep it.
     if (disposeTerminals) {
@@ -253,6 +262,7 @@ function createLifecycle(deps: {
     if (disposeTerminals) {
       registry.disposeAll();
     }
+    return pendingWidgetWrites;
   };
 
   return {
@@ -273,7 +283,7 @@ function createLifecycle(deps: {
         detachLayoutWriter = store.subscribe(() => layoutWriter.schedule());
       }
       if (tuiConfigPath !== undefined) {
-        detachWidgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
+        widgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
       }
       detachStationSource = stationViewStore.getState().start();
       // The overlay bridge may synchronize immediately, so its dashboard source
@@ -281,57 +291,11 @@ function createLifecycle(deps: {
       detachOverlayRowFocus = createOverlayRowFocusReconciler(store, stationViewStore);
       stationClient.start();
     },
-    disposeForShutdown: (): void => disposeInternal(true),
-    disposeForHotReload: (): void => disposeInternal(false),
+    disposeForShutdown: (): Promise<void> => disposeInternal(true),
+    disposeForHotReload: (): void => {
+      void disposeInternal(false);
+    },
   };
-}
-
-function startWidgetConfigWrites(
-  stationViewStore: StoreApi<TuiStore>,
-  configPath: string,
-): () => void {
-  let pending: TuiStore["widgets"] | undefined;
-  let saving = false;
-
-  // Single-flight writer: `saving` keeps at most one drain running while
-  // `pending` coalesces to the newest widget set, so rapid edits (e.g. held
-  // reorder keys) collapse into sequential whole-file writes, never interleaved.
-  const drain = async (): Promise<void> => {
-    if (saving) {
-      return;
-    }
-    saving = true;
-    try {
-      while (pending !== undefined) {
-        const widgets = pending;
-        pending = undefined;
-        try {
-          await setTuiWidgetsInConfig({ configPath, widgets });
-        } catch (error) {
-          const safeError = safeErrorFromUnknown(error, {
-            tag: "StationWidgetConfigError",
-            code: "STATION_WIDGET_CONFIG_SAVE_FAILED",
-            message: "Could not save widgets to config.toml.",
-          });
-          stationViewStore.getState().pushToast({
-            kind: "error",
-            message: "Could not save widgets to config.toml.",
-            hint: safeError.message,
-          });
-        }
-      }
-    } finally {
-      saving = false;
-    }
-  };
-
-  return stationViewStore.subscribe((state, previous) => {
-    if (state.widgets === previous.widgets) {
-      return;
-    }
-    pending = state.widgets;
-    void drain();
-  });
 }
 
 /** Build the input runtime; aux shell placement uses the host when a socket is set. */

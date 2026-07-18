@@ -38,7 +38,7 @@ branch is configured.
 
 | File | Path (default) | What it controls | Read by | Relocate with |
 | --- | --- | --- | --- | --- |
-| **Runtime config** | `~/.config/station/config.toml` | Everything: projects, defaults, the observer daemon, providers (worktree/terminal/harness), event hooks, retention, feature flags, the `[tui]` widgets, and the `[workspace]` native-UI behavior | observer, `stn` CLI, native TUI | `STATION_CONFIG_PATH` or `stn --config <path>` |
+| **Runtime config** | `~/.config/station/config.toml` | Everything: projects, defaults, the observer daemon, providers (worktree/terminal/harness), event hooks, retention, feature flags, the `[tui]` widgets, and the `[workspace]` native-UI behavior | observer, `stn` CLI, native and standalone/tmux TUIs | `STATION_CONFIG_PATH` or `stn --config <path>` |
 | **Project-local config** | `<project.root>/.station/config.toml` | Opt-in per-project overrides: harness/layout defaults, extra commands, display | config loader (merged into the project) | set its `path` in `[projects.local_config]` |
 
 Not config, but adjacent:
@@ -278,9 +278,11 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 > clock/weather strip; `[workspace]` is interaction behavior (scroll, welcome,
 > automations). They never overlap.
 
-`[tui].widgets` is an array discriminated on `type`. Every widget accepts an
-optional `enabled` (bool; default true — `false` keeps the entry in config but
-hides it). Array order is display order, left to right:
+`[tui].widgets` configures the shared title strip in both the native Station
+overlay and the standalone dashboard used by fullscreen and tmux popup launches.
+It is an array discriminated on `type`. Every widget accepts an optional `enabled`
+(bool; default true — `false` keeps the entry in config but hides it). Array order
+is display order, left to right:
 
 - **`type = "time"`** — optional `time_format` (`12h` \| `24h`).
 - **`type = "weather"`** — required `city`; optional `label`, `temperature_unit`
@@ -547,9 +549,10 @@ section hard-fails validation, the TUI keeps running with workspace defaults and
 a warning before rendering. Fix the core config error to restore custom scroll,
 welcome, and automation settings.
 
-**`[tui]` vs `[workspace]`?** `[tui]` is decorative widgets (clock/weather);
-`[workspace]` is native-UI interaction behavior (scroll/welcome/automations). Both
-live in `config.toml`; both are read only by the TUI.
+**`[tui]` vs `[workspace]`?** `[tui]` is decorative title widgets shared by the
+native overlay and standalone/fullscreen/tmux dashboards; `[workspace]` is
+native-UI-only interaction behavior (scroll/welcome/automations). Both live in
+`config.toml`; only the TUI consumes their display and interaction behavior.
 
 **Why is `permission_mode = "auto"` rejected?** `auto` is Claude-only — valid only
 under `[harness.claude]`, never as a global default or for other harnesses.

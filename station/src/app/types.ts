@@ -89,6 +89,7 @@ export type Station = {
   stationInput: StationInputRuntime;
   start(): void;
   dispose(): void;
-  disposeForShutdown(): void;
+  /** Detach runtime resources and resolve after pending config edits are durable. */
+  disposeForShutdown(): Promise<void>;
   disposeForHotReload(): void;
 };

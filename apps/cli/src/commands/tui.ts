@@ -81,7 +81,8 @@ const nestedTuiDisabledError = {
 /**
  * COMPOSITION ROOT
  *
- * Owns Observer startup, renderer process selection, and persistent popup control wiring.
+ * Owns Observer startup, resolved-config propagation, renderer process selection,
+ * and persistent popup control wiring.
  */
 export async function runTuiCommand(
   args: string[],
@@ -110,7 +111,7 @@ export async function runTuiCommand(
     // --dev-fake-dashboard previews the read-only dashboard with mock data.
     return runRenderer(
       deps,
-      buildRendererEnv(parsed, { STATION_SOURCE: "mock" }),
+      buildRendererEnv(parsed, { STATION_SOURCE: "mock" }, options.configPath),
       "dashboard",
       parsed.persistentPopup,
       options.config?.terminal?.tmux?.command,
@@ -169,11 +170,15 @@ export async function runTuiCommand(
   // tmux popup we keep the read-only dashboard, since tmux owns the panes there.
   return runRenderer(
     deps,
-    buildRendererEnv(parsed, {
-      STATION_CLIENT_BUILD_VERSION: clientBuildVersion,
-      STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath,
-      STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
-    }),
+    buildRendererEnv(
+      parsed,
+      {
+        STATION_CLIENT_BUILD_VERSION: clientBuildVersion,
+        STATION_OBSERVER_SOCKET_PATH: observer.paths.socketPath,
+        STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
+      },
+      options.configPath,
+    ),
     parsed.popupMode ? "dashboard" : "station",
     parsed.persistentPopup,
     options.config?.terminal?.tmux?.command,
@@ -185,8 +190,13 @@ export async function runTuiCommand(
 function buildRendererEnv(
   parsed: ParsedTuiArgs,
   base: Record<string, string>,
+  resolvedConfigPath: string | undefined,
 ): Record<string, string> {
   const env = { ...base };
+  if (resolvedConfigPath !== undefined) {
+    // The CLI-selected file is authoritative over any inherited renderer environment.
+    env.STATION_CONFIG_PATH = resolvedConfigPath;
+  }
   if (parsed.popupMode) {
     env.STATION_TUI_POPUP = "1";
   }

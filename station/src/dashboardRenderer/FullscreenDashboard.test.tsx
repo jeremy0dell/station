@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import type { DashboardMouseEffects } from "./dashboardMouse.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 
 const SURFACE = { width: 80, height: 24 };
+const WIDGET_SURFACE = { width: 99, height: 25 };
 const TEST_EFFECTS: DashboardMouseEffects = {
   openShell: () => {},
   openUrl: () => {},
@@ -161,6 +163,54 @@ describe("FullscreenDashboard mouse composition", () => {
 
     expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
     expect(setup.captureCharFrame()).toContain("The test observer rejected this command.");
+  });
+});
+
+describe("FullscreenDashboard configured widgets", () => {
+  async function renderWidgets(widgets: readonly TuiWidgetConfig[]) {
+    const fixture = makeStationTestStore({ terminalRows: WIDGET_SURFACE.height });
+    fixture.store.setState({ widgets });
+    const setup = await render(fixture.store, WIDGET_SURFACE);
+    return { setup, store: fixture.store };
+  }
+
+  it("renders resolved configured widgets in the standalone title row at 99x25", async () => {
+    const { setup } = await renderWidgets([{ type: "fleet" }, { type: "prs" }]);
+
+    const titleRow = setup.captureCharFrame().split("\n")[0] ?? "";
+    expect(titleRow).toContain("station · overview");
+    expect(titleRow).toContain("7 agents · 7 open PRs");
+    expect(titleRow).toContain("[+]");
+  });
+
+  it("shows the configured definitions in widget settings", async () => {
+    const { setup, store } = await renderWidgets([{ type: "fleet" }, { type: "prs" }]);
+
+    await actOn(async () => {
+      store.getState().handleKey({ input: "W" });
+      await setup.flush();
+    });
+
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("[on ] fleet");
+    expect(frame).toContain("[on ] open PRs");
+    expect(frame).not.toContain("no widgets yet");
+  });
+
+  it("keeps the default title stable without fabricating widget values", async () => {
+    const { setup, store } = await renderWidgets([]);
+
+    const titleRow = setup.captureCharFrame().split("\n")[0] ?? "";
+    expect(titleRow).toContain("station · overview");
+    expect(titleRow).toContain("[+]");
+    expect(titleRow).not.toContain("agents");
+    expect(titleRow).not.toContain("open PR");
+
+    await actOn(async () => {
+      store.getState().handleKey({ input: "W" });
+      await setup.flush();
+    });
+    expect(setup.captureCharFrame()).toContain("no widgets yet");
   });
 });
 

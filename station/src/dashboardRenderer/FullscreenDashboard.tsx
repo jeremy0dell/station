@@ -2,8 +2,11 @@ import type { MouseEvent } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import type { TuiStore } from "@station/dashboard-core";
 import { useCallback } from "react";
+import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import { normalizeStationMouseEvent } from "../input/mouse.js";
+import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
+import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
 import { StationMouseProvider, type StationMouseDispatch } from "../station/view/stationMouseContext.js";
 import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMouse.js";
@@ -13,6 +16,7 @@ import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMous
  * fullscreen counterpart to Station's in-app `StationOverlay`: it drops the
  * backdrop, centering, and border so the same `DashboardRoot` owns the whole
  * screen (the CLI `tui`/`popup` surface that replaced the retired Ink UI).
+ * The reserved first row reuses Station's title and configured-widget chrome.
  *
  * Mouse targets route through the standalone dashboard adapter, which reuses
  * shared dashboard actions and delegates terminal effects to its environment.
@@ -25,6 +29,8 @@ export function FullscreenDashboard({
   effects: DashboardMouseEffects;
 }) {
   const { width, height } = useTerminalDimensions();
+  const widgets = useStore(store, (state) => state.widgets);
+  const topRowWidgets = useTopRowWidgets(widgets);
   const dispatch = useCallback<StationMouseDispatch>(
     (target, event: MouseEvent) => {
       routeDashboardMouse(target, normalizeStationMouseEvent(event), store, effects);
@@ -35,6 +41,12 @@ export function FullscreenDashboard({
     <StationMouseProvider value={dispatch}>
       <box width={width} height={height} flexDirection="column">
         <DashboardRoot store={store} columns={width} rows={height} />
+        <DashboardFrameTitle
+          store={store}
+          frame={{ left: 0, top: 0, width }}
+          topRowWidgets={topRowWidgets}
+          zIndex={1}
+        />
       </box>
     </StationMouseProvider>
   );

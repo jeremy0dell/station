@@ -9,7 +9,7 @@ import {
   runTuiCommand,
   type TuiCommandDeps,
 } from "@station/cli/internal";
-import type { TuiConfig } from "@station/config";
+import { loadConfig, setTuiWidgetsInConfig, type TuiConfig } from "@station/config";
 import { TUI_RENDERER_CONTROL_PROTOCOL_VERSION } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
@@ -244,6 +244,7 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([
       {
         STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_CONFIG_PATH: configPath,
         STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
       },
@@ -393,6 +394,7 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([
       {
         STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_CONFIG_PATH: configPath,
         STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
       },
@@ -628,6 +630,7 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([
       {
         STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_CONFIG_PATH: configPath,
         STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
         STATION_TUI_POPUP: "1",
@@ -676,6 +679,58 @@ describe("CLI tui command", () => {
     );
 
     expect(entries).toEqual(["station", "dashboard", "dashboard"]);
+  });
+
+  it("forwards the resolved explicit config to every renderer path and persists that file", async () => {
+    const explicit = await createTempState();
+    explicit.config.tui = { widgets: [{ type: "time" }] };
+    const explicitPath = await writeConfigToml(explicit.root, explicit.config);
+    const inherited = await createTempState();
+    inherited.config.tui = { widgets: [{ type: "time", timeFormat: "24h" }] };
+    const inheritedPath = await writeConfigToml(inherited.root, inherited.config);
+    const entries: string[] = [];
+    let persisted = false;
+    const spawnRenderer = async ({
+      entry,
+      env,
+    }: {
+      entry: string;
+      env: Record<string, string>;
+    }) => {
+      entries.push(entry);
+      expect(env.STATION_CONFIG_PATH).toBe(explicitPath);
+      if (!persisted) {
+        persisted = true;
+        const rendererConfigPath = env.STATION_CONFIG_PATH;
+        expect(rendererConfigPath).toBe(explicitPath);
+        if (rendererConfigPath === undefined) {
+          throw new Error("renderer did not receive the resolved config path");
+        }
+        await setTuiWidgetsInConfig({
+          configPath: rendererConfigPath,
+          widgets: [{ type: "fleet" }],
+        });
+      }
+      return { status: "exited" as const, code: 0 };
+    };
+    const launchOptions = {
+      env: { STATION_CONFIG_PATH: inheritedPath },
+      observerDeps: runningObserverDeps(),
+      tuiDeps: { spawnRenderer },
+    };
+
+    await runCli(["--config", explicitPath], launchOptions);
+    await runCli(["--config", explicitPath, "tui", "--popup"], launchOptions);
+    await runCli(["--config", explicitPath, "tui", "--popup", "--persistent"], launchOptions);
+    await runCli(["--config", explicitPath, "tui", "--dev-fake-dashboard"], launchOptions);
+
+    expect(entries).toEqual(["station", "dashboard", "dashboard", "dashboard"]);
+    expect((await loadConfig({ configPath: explicitPath })).config.tui?.widgets).toEqual([
+      { type: "fleet" },
+    ]);
+    expect((await loadConfig({ configPath: inheritedPath })).config.tui?.widgets).toEqual([
+      { type: "time", timeFormat: "24h" },
+    ]);
   });
 
   it("uses compiled self-exec and skips the source workspace installation preflight", async () => {
@@ -845,6 +900,7 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([
       {
         STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_CONFIG_PATH: configPath,
         STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
         STATION_TUI_PERSISTENT: "1",
@@ -1434,6 +1490,7 @@ describe("CLI tui command", () => {
     expect(envs).toEqual([
       {
         STATION_CLIENT_BUILD_VERSION: observerBuildVersion,
+        STATION_CONFIG_PATH: configPath,
         STATION_OBSERVER_BUILD_VERSION: observerBuildVersion,
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
       },
