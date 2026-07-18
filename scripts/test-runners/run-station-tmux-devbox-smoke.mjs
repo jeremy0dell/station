@@ -215,7 +215,10 @@ try {
   const insertion = "        <DashboardRoot store={store} columns={width} rows={height} />";
   assert(source.includes(insertion), `HMR insertion point missing from ${hmrTarget}`);
   const nextProbeTargetBytes = Buffer.from(
-    source.replace(insertion, `        <text>${probe}</text>\n${insertion}`),
+    source.replace(
+      insertion,
+      `        <text position="absolute" left={0} top={2} zIndex={100}>${probe}</text>\n${insertion}`,
+    ),
     "utf8",
   );
   assertTargetUnchanged("before the HMR probe write");
