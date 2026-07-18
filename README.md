@@ -12,7 +12,7 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
   <img width="1728" height="1048" alt="image" src="https://github.com/user-attachments/assets/358c6c52-800f-496a-ada0-c8c291c8c33f" />
   <br>
   <em>Terminal multi-plexing with a toggleable dashboard</em>
-  <img width="1029" height="607" alt="image" src="https://github.com/user-attachments/assets/16deac8a-c591-40c9-af23-b993d5107070" />
+  <img width="1042" height="608" alt="image" src="https://github.com/user-attachments/assets/270390db-ab1d-488e-afc7-8882d9e1fc32" />
   <br>
   <em>One live view of every project, worktree, and agent session.</em>
 </p>
