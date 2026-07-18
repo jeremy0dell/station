@@ -470,6 +470,16 @@ state-change/completion notifications. A completion report cannot claim an
 unbound session, and a later active execution may bind only after explicit
 `idle` or `exited` evidence from the prior execution.
 
+Harness adapters own the authority to corroborate inherited Station identity
+against provider-origin evidence and provider-required Station launch context.
+A contradiction remains durable diagnostic evidence with provider-native
+identity, but the adapter withholds Station
+session, worktree, terminal, and run correlation before Observer policy sees the
+report. The same adapter may reject recognizable observations persisted by an
+earlier build; reconcile excludes those observations and repairs the affected
+binding and readiness by replaying admitted session history. Unparseable legacy
+provider data fails open rather than causing speculative evidence deletion.
+
 Provider hooks are delivery hints. They may update durable observations and
 immediate projections, but scheduled reconcile remains the path to fresh
 provider-backed graph truth.
@@ -521,7 +531,7 @@ from the diagnostic use case.
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
-| Persisted harness compatibility | A harness adapter may reject observations accepted by an earlier build. Reconcile excludes only those provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
+| Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |

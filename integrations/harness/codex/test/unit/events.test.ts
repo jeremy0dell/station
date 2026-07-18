@@ -1,9 +1,10 @@
 import type { ObservedStatus, RawHarnessEvent } from "@station/contracts";
-import { HarnessEventObservationSchema } from "@station/contracts";
+import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactCodexHookPayload } from "../../src/compaction";
 import { CodexHarnessProviderError } from "../../src/errors";
 import {
+  acceptsCodexPersistedEvent,
   type CodexHookEvent,
   CodexHookEventSchema,
   codexHookPayloadReportId,
@@ -11,6 +12,7 @@ import {
   normalizeCodexRawEvent,
   parseCodexHookEvent,
 } from "../../src/events";
+import { codexHookAdapter } from "../../src/hookAdapter";
 import {
   codexForwardedEventTypes,
   codexIngressRuleForEventType,
@@ -303,47 +305,234 @@ describe("Codex hook event parsing", () => {
     expect(report.coalesceKey).toBe(`report:${firstId}`);
   });
 
-  it("uses STATION hook context fields before cwd correlation", () => {
+  it("retains STATION hook identity when cwd is the stamped worktree or a descendant", () => {
+    const payload = {
+      ...CODEX_HOOK_FIXTURES.PreToolUse,
+      cwd: "/tmp/station/web/task/src",
+    };
     const observations = normalizeCodexRawEvent(
-      {
-        provider: "codex",
-        observedAt: now,
-        event: {
-          session_id: "codex_session_123",
-          transcript_path: null,
-          cwd: "/tmp/not-the-worktree",
-          hook_event_name: "PreToolUse",
-          model: "gpt-5.4-codex",
-          permission_mode: "default",
-          turn_id: "turn_1",
-          tool_name: "Bash",
-          tool_input: { command: "pnpm test" },
-          tool_use_id: "call_test",
-          station_project_id: "web",
-          station_worktree_id: "wt_web_task",
-          station_worktree_path: "/tmp/station/web/task",
-          station_session_id: "ses_web_task",
-          station_terminal_provider: "tmux",
-          station_terminal_target_id: "tmux:station:@1:%2",
-        },
-      },
+      { provider: "codex", observedAt: now, event: payload },
       context(),
     );
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: "report_descendant_cwd",
+      observedAt: now,
+      payload,
+    });
 
     expect(observations[0]).toMatchObject({
       sessionId: "ses_web_task",
       worktreeId: "wt_web_task",
       harnessRunId: "codex:tmux:station:@1:%2",
-      status: {
-        value: "working",
+      status: { value: "working" },
+    });
+    expect(report.correlation).toMatchObject({
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      terminalTargetId: "tmux:station:@1:%2",
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/station/web/task/src",
+    });
+    expect(report.diagnostics?.correlationIssue).toBeUndefined();
+  });
+
+  it("withholds inherited STATION identity across a nested managed-worktree boundary", () => {
+    const payload = {
+      ...CODEX_HOOK_FIXTURES.PreToolUse,
+      cwd: "/tmp/station/web/.worktrees/feature/src",
+      station_worktree_path: "/tmp/station/web",
+      station_worktree_managed_root: "/tmp/station/web/.worktrees",
+    };
+    const compacted = compactCodexHookPayload(payload);
+    const observations = normalizeCodexRawEvent(
+      { provider: "codex", observedAt: now, event: compacted.payload },
+      context(),
+    );
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: "report_nested_managed_worktree",
+      observedAt: now,
+      payload: compacted.payload,
+    });
+
+    expect(observations[0]).toMatchObject({
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/station/web/.worktrees/feature/src",
+      diagnostics: {
+        correlationIssue: "station_identity_cwd_mismatch",
       },
       providerData: {
-        stationProjectId: "web",
-        stationWorktreeId: "wt_web_task",
-        stationSessionId: "ses_web_task",
-        stationTerminalTargetId: "tmux:station:@1:%2",
+        stationWorktreePath: "/tmp/station/web",
+        stationWorktreeManagedRoot: "/tmp/station/web/.worktrees",
       },
     });
+    expect(observations[0]).not.toHaveProperty("worktreeId");
+    expect(observations[0]).not.toHaveProperty("sessionId");
+    expect(report.correlation).toEqual({
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/station/web/.worktrees/feature/src",
+    });
+    expect(report.diagnostics).toMatchObject({
+      correlationIssue: "station_identity_cwd_mismatch",
+    });
+  });
+
+  it("withholds inherited STATION identity when cwd contradicts the stamped worktree", () => {
+    const payload = {
+      ...CODEX_HOOK_FIXTURES.PreToolUse,
+      cwd: "/tmp/codex-home/.codex/memories",
+    };
+    const observations = normalizeCodexRawEvent(
+      { provider: "codex", observedAt: now, event: payload },
+      context(),
+    );
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: "report_mismatched_cwd",
+      observedAt: now,
+      payload,
+    });
+
+    expect(observations[0]).toMatchObject({
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/codex-home/.codex/memories",
+      diagnostics: {
+        correlationIssue: "station_identity_cwd_mismatch",
+      },
+      providerData: {
+        cwd: "/tmp/codex-home/.codex/memories",
+        stationWorktreePath: "/tmp/station/web/task",
+        stationSessionId: "ses_web_task",
+      },
+    });
+    expect(observations[0]).not.toHaveProperty("projectId");
+    expect(observations[0]).not.toHaveProperty("worktreeId");
+    expect(observations[0]).not.toHaveProperty("sessionId");
+    expect(observations[0]).not.toHaveProperty("terminalTargetId");
+    expect(observations[0]).not.toHaveProperty("harnessRunId");
+    expect(report.correlation).toEqual({
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/codex-home/.codex/memories",
+    });
+    expect(report.diagnostics).toMatchObject({
+      rawEventType: "PreToolUse",
+      correlationIssue: "station_identity_cwd_mismatch",
+    });
+  });
+
+  it("keeps legacy STATION hook identity when no stamped worktree path is available", () => {
+    const { station_worktree_path: _omitted, ...payload } = {
+      ...CODEX_HOOK_FIXTURES.PreToolUse,
+      cwd: "/tmp/not-the-worktree",
+    };
+    const observations = normalizeCodexRawEvent(
+      { provider: "codex", observedAt: now, event: payload },
+      context(),
+    );
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId: "report_without_stamped_path",
+      observedAt: now,
+      payload,
+    });
+
+    expect(observations[0]).toMatchObject({
+      sessionId: "ses_web_task",
+      worktreeId: "wt_web_task",
+      harnessRunId: "codex:tmux:station:@1:%2",
+    });
+    expect(report.correlation).toMatchObject({
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      terminalTargetId: "tmux:station:@1:%2",
+      nativeSessionId: "codex_session_123",
+      cwd: "/tmp/not-the-worktree",
+    });
+    expect(report.diagnostics?.correlationIssue).toBeUndefined();
+  });
+
+  it("rejects only recognizable persisted Codex hook observations with contradictory paths", () => {
+    const valid = HarnessEventObservationSchema.parse(
+      normalizeCodexRawEvent(
+        {
+          provider: "codex",
+          observedAt: now,
+          event: CODEX_HOOK_FIXTURES.PreToolUse,
+        },
+        context(),
+      )[0],
+    );
+    const mismatched = HarnessEventObservationSchema.parse(
+      normalizeCodexRawEvent(
+        {
+          provider: "codex",
+          observedAt: now,
+          event: {
+            ...CODEX_HOOK_FIXTURES.PreToolUse,
+            cwd: "/tmp/codex-home/.codex/memories",
+          },
+        },
+        context(),
+      )[0],
+    );
+    const appServer = HarnessEventObservationSchema.parse(
+      normalizeCodexRawEvent(
+        {
+          provider: "codex",
+          observedAt: now,
+          event: {
+            method: "item/tool/requestUserInput",
+            id: 7,
+            params: {
+              threadId: "thr_input",
+              turnId: "turn_1",
+              itemId: "item_tool_1",
+              questions: [],
+            },
+          },
+        },
+        context(),
+      )[0],
+    );
+
+    expect(acceptsCodexPersistedEvent(valid)).toBe(true);
+    expect(acceptsCodexPersistedEvent(mismatched)).toBe(false);
+    expect(acceptsCodexPersistedEvent(appServer)).toBe(true);
+    expect(acceptsCodexPersistedEvent({ ...mismatched, providerData: { legacy: true } })).toBe(
+      true,
+    );
+    expect(
+      acceptsCodexPersistedEvent({
+        ...valid,
+        eventType: "SubagentStop",
+        rawEventType: "SubagentStop",
+      }),
+    ).toBe(false);
+  });
+
+  it("downgrades contradictory inherited identity to cwd hook scope", () => {
+    const event = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_scope",
+      provider: "codex",
+      kind: "harness" as const,
+      event: "PreToolUse",
+      receivedAt: now,
+      payload: CODEX_HOOK_FIXTURES.PreToolUse,
+    };
+
+    expect(codexHookAdapter.decideScope?.(event)).toEqual({
+      action: "accept",
+      reason: "station-env",
+    });
+    expect(
+      codexHookAdapter.decideScope?.({
+        ...event,
+        payload: {
+          ...CODEX_HOOK_FIXTURES.PreToolUse,
+          cwd: "/tmp/codex-home/.codex/memories",
+        },
+      }),
+    ).toEqual({ action: "accept", reason: "cwd" });
   });
 
   it("correlates hook cwd values inside an observed worktree", () => {
@@ -788,6 +977,7 @@ const commonCodexHookFields = {
   permission_mode: "default",
   station_project_id: "web",
   station_worktree_id: "wt_web_task",
+  station_worktree_path: "/tmp/station/web/task",
   station_session_id: "ses_web_task",
   station_terminal_target_id: "tmux:station:@1:%2",
 } as const;

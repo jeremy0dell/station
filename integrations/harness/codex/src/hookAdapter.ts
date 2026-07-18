@@ -16,13 +16,18 @@ import {
 } from "@station/contracts";
 import { z } from "zod";
 import { compactCodexHookPayload } from "./compaction.js";
-import { codexHookPayloadReportId, codexHookPayloadToHarnessEventReport } from "./events.js";
+import {
+  codexHookPayloadReportId,
+  codexHookPayloadToHarnessEventReport,
+  codexStationIdentityCwdMismatch,
+} from "./events.js";
 import { isCodexForwardedEventType } from "./ingressRules.js";
 
 /**
  * ADAPTER
  *
  * Normalizes Codex hook delivery into shared provider-event and harness-report contracts.
+ * Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.
  */
 export const codexHookAdapter: ProviderHookAdapter = {
   provider: "codex",
@@ -46,12 +51,25 @@ function decideCodexHookScope(event: ProviderHookEvent): ProviderHookScopeDecisi
   }
 
   const payload = parseStationHookIdentityPayload(event.payload);
-  if (payload?.station_session_id !== undefined && payload.station_worktree_id !== undefined) {
+  const cwdProbe = hookCwdProbeSchema.safeParse(event.payload);
+  const stationIdentityCorroborated =
+    payload?.station_worktree_path === undefined ||
+    (cwdProbe.success &&
+      !codexStationIdentityCwdMismatch(
+        cwdProbe.data.cwd,
+        payload.station_worktree_path,
+        payload.station_worktree_managed_root,
+      ));
+  if (
+    stationIdentityCorroborated &&
+    payload?.station_session_id !== undefined &&
+    payload.station_worktree_id !== undefined
+  ) {
     return { action: "accept", reason: "station-env" };
   }
-  // Sessions Station did not launch carry no station env; the observer
+  // Sessions Station did not launch carry no trusted station env; the observer
   // correlates their events by cwd (dropped there when ambiguous).
-  if (hookCwdProbeSchema.safeParse(event.payload).success) {
+  if (cwdProbe.success) {
     return { action: "accept", reason: "cwd" };
   }
   return { action: "ignore", reason: "missing-station-env" };

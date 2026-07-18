@@ -43,14 +43,24 @@ describe("session harness execution identity", () => {
 
   it("allows a new native execution only after explicit idle or exited evidence", () => {
     const activeA = binding(decide(undefined, evidence("native_a", status("working", t1))));
-    const idleA = binding(decide(activeA, evidence("native_a", status("idle", t2))));
-    const activeB = decide(idleA, evidence("native_b", status("working", t3)));
-    expect(activeB).toMatchObject({
-      mayDeriveState: true,
-      binding: { nativeSessionId: "native_b", state: "working" },
-    });
 
-    for (const state of ["unknown", "stuck"] as const) {
+    for (const replaceableState of ["idle", "exited"] as const) {
+      const replaceableA = binding(
+        decide(activeA, evidence("native_a", status(replaceableState, t2))),
+      );
+      const activeB = decide(replaceableA, evidence("native_b", status("working", t3)));
+      expect(activeB).toMatchObject({
+        mayDeriveState: true,
+        binding: { nativeSessionId: "native_b", state: "working" },
+      });
+    }
+  });
+
+  it("rejects mismatched activity while the owner is active, stuck, unknown, or newer", () => {
+    const activeA = binding(decide(undefined, evidence("native_a", status("working", t1))));
+    const idleA = binding(decide(activeA, evidence("native_a", status("idle", t2))));
+
+    for (const state of ["starting", "working", "needs_attention", "stuck", "unknown"] as const) {
       const blocked = decide({ ...idleA, state }, evidence("native_b", status("working", t3)));
       expect(blocked).toEqual({ mayDeriveState: false });
     }

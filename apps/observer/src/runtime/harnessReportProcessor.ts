@@ -24,7 +24,7 @@ export type HarnessReportProcessResult = {
 };
 
 function reportDecisionFields(report: HarnessEventReport): Record<string, unknown> {
-  return {
+  const fields: Record<string, unknown> = {
     provider: report.provider,
     reportId: report.reportId,
     eventType: report.eventType,
@@ -38,6 +38,10 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
       cwd: report.correlation?.cwd,
     },
   };
+  if (report.diagnostics?.correlationIssue !== undefined) {
+    fields.correlationIssue = report.diagnostics.correlationIssue;
+  }
+  return fields;
 }
 
 /**

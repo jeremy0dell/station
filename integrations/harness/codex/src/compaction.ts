@@ -12,6 +12,7 @@ const commonFieldNames = [
   "station_project_id",
   "station_worktree_id",
   "station_worktree_path",
+  "station_worktree_managed_root",
   "station_session_id",
   "station_terminal_provider",
   "station_terminal_target_id",

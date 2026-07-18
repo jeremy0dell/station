@@ -1143,6 +1143,7 @@ describe("contract schemas", () => {
       },
       diagnostics: {
         rawEventType: "PreToolUse",
+        correlationIssue: "station_identity_cwd_mismatch",
         payloadBytes: 400,
         compactedBytes: 180,
         compacted: true,
@@ -1155,6 +1156,17 @@ describe("contract schemas", () => {
     };
 
     expectParses(HarnessEventReportSchema, harnessReport, "harness event report");
+    expectFails(
+      HarnessEventReportSchema,
+      {
+        ...harnessReport,
+        diagnostics: {
+          ...(harnessReport.diagnostics as Record<string, unknown>),
+          correlationIssue: "unknown_correlation_issue",
+        },
+      },
+      "harness event report rejects unknown correlation issue",
+    );
     expectParses(
       HarnessEventReportSchema,
       {

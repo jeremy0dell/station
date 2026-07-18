@@ -23,11 +23,13 @@ describe("codexHookAdapter scope and enrichment", () => {
         env: {
           STATION_SESSION_ID: "ses_web_task",
           STATION_WORKTREE_ID: "wt_web_task",
+          STATION_WORKTREE_MANAGED_ROOT: "/tmp/station/web/.worktrees",
         },
       }),
     ).toMatchObject({
       station_session_id: "ses_web_task",
       station_worktree_id: "wt_web_task",
+      station_worktree_managed_root: "/tmp/station/web/.worktrees",
     });
   });
 

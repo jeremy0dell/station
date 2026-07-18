@@ -141,9 +141,11 @@ export const ObservedStatusSchema = z
 
 export type ObservedStatus = z.infer<typeof ObservedStatusSchema>;
 
+/** Provider-normalized machine-readable evidence for diagnostics, not provider vocabulary for core branching. */
 export const HarnessEventDiagnosticsSchema = z
   .object({
     rawEventType: nonEmptyStringSchema.optional(),
+    correlationIssue: z.literal("station_identity_cwd_mismatch").optional(),
     payloadBytes: z.number().int().nonnegative().optional(),
     compactedBytes: z.number().int().nonnegative().optional(),
     compacted: z.boolean().optional(),

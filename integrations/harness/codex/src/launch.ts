@@ -186,13 +186,17 @@ function codexLaunchEnv(
   request: BuildHarnessLaunchRequest,
   options: CodexLaunchOptions,
 ): Record<string, string> {
-  return harnessLaunchEnv("codex", request, {
+  const env = harnessLaunchEnv("codex", request, {
     env: options.env,
     observerSocketPath: options.observerSocketPath,
     stateDir: options.stateDir,
     hookSpoolDir: options.hookSpoolDir,
     carryEnv: [{ from: "CODEX_HOME" }],
   });
+  if (request.project.worktrunk.managedRoot !== undefined) {
+    env.STATION_WORKTREE_MANAGED_ROOT = request.project.worktrunk.managedRoot;
+  }
+  return env;
 }
 
 function codexProviderData(

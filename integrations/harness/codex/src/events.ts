@@ -8,7 +8,11 @@ import type {
   ObservedStatus,
   RawHarnessEvent,
 } from "@station/contracts";
-import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import {
+  HarnessEventReportSchema,
+  observedPathIsSameOrInside,
+  STATION_SCHEMA_VERSION,
+} from "@station/contracts";
 import {
   applyCorrelation,
   correlateTerminalBoundHarnessEvent,
@@ -31,6 +35,32 @@ const permissionModeSchema = z
   .enum(["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"])
   .optional();
 
+const CodexHookProviderDataSchema = z
+  .object({
+    codexSessionId: nonEmptyStringSchema,
+    hookEventName: nonEmptyStringSchema,
+    cwd: nonEmptyStringSchema,
+    model: nonEmptyStringSchema,
+    permissionMode: permissionModeSchema,
+    codexTurnId: nonEmptyStringSchema.optional(),
+    source: z.enum(["startup", "resume", "clear", "compact"]).optional(),
+    toolName: nonEmptyStringSchema.optional(),
+    toolUseId: nonEmptyStringSchema.optional(),
+    agentId: nonEmptyStringSchema.optional(),
+    agentType: nonEmptyStringSchema.optional(),
+    trigger: z.enum(["manual", "auto"]).optional(),
+    stationProjectId: nonEmptyStringSchema.optional(),
+    stationWorktreeId: nonEmptyStringSchema.optional(),
+    stationWorktreePath: nonEmptyStringSchema.optional(),
+    stationWorktreeManagedRoot: nonEmptyStringSchema.optional(),
+    stationSessionId: nonEmptyStringSchema.optional(),
+    stationTerminalProvider: nonEmptyStringSchema.optional(),
+    stationTerminalTargetId: nonEmptyStringSchema.optional(),
+  })
+  .strict();
+
+type CodexHookProviderData = z.infer<typeof CodexHookProviderDataSchema>;
+
 const commonFields = {
   session_id: nonEmptyStringSchema,
   transcript_path: nullableStringSchema,
@@ -40,6 +70,7 @@ const commonFields = {
   station_project_id: nonEmptyStringSchema.optional(),
   station_worktree_id: nonEmptyStringSchema.optional(),
   station_worktree_path: nonEmptyStringSchema.optional(),
+  station_worktree_managed_root: nonEmptyStringSchema.optional(),
   station_session_id: nonEmptyStringSchema.optional(),
   station_terminal_provider: nonEmptyStringSchema.optional(),
   station_terminal_target_id: nonEmptyStringSchema.optional(),
@@ -198,12 +229,19 @@ export function normalizeCodexRawEvent(
     );
   }
   const event = hookEvent.data;
-  const correlation = correlateTerminalBoundHarnessEvent({
-    provider: "codex",
-    identity: event,
-    context,
-    cwd: event.cwd,
-  });
+  const stationIdentityCwdMismatch = codexStationIdentityCwdMismatch(
+    event.cwd,
+    event.station_worktree_path,
+    event.station_worktree_managed_root,
+  );
+  const correlation = stationIdentityCwdMismatch
+    ? { cwd: event.cwd }
+    : correlateTerminalBoundHarnessEvent({
+        provider: "codex",
+        identity: event,
+        context,
+        cwd: event.cwd,
+      });
   const observation: HarnessEventObservation = {
     provider: "codex",
     rawEventType: event.hook_event_name,
@@ -214,6 +252,11 @@ export function normalizeCodexRawEvent(
   const turn = turnFromCodexHookEvent(event);
   if (turn !== undefined) {
     observation.turn = turn;
+  }
+  if (stationIdentityCwdMismatch) {
+    observation.diagnostics = {
+      correlationIssue: "station_identity_cwd_mismatch",
+    };
   }
   applyCorrelation(observation, correlation);
   observation.nativeSessionId = event.session_id;
@@ -241,7 +284,17 @@ export function codexHookPayloadToHarnessEventReport(
   if (correlation !== undefined) {
     report.correlation = correlation;
   }
-  report.diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
+  const diagnostics = harnessEventDiagnostics(event.hook_event_name, input.diagnostics);
+  if (
+    codexStationIdentityCwdMismatch(
+      event.cwd,
+      event.station_worktree_path,
+      event.station_worktree_managed_root,
+    )
+  ) {
+    diagnostics.correlationIssue = "station_identity_cwd_mismatch";
+  }
+  report.diagnostics = diagnostics;
   const coalesceKey = reportCoalesceKeyFromCodexEvent(event, input.reportId);
   if (coalesceKey !== undefined) {
     report.coalesceKey = coalesceKey;
@@ -379,8 +432,8 @@ function turnFromCodexHookEvent(event: CodexHookEvent): HarnessEventReport["turn
     : undefined;
 }
 
-function providerDataFromCodexEvent(event: CodexHookEvent): Record<string, unknown> {
-  const providerData: Record<string, unknown> = {
+function providerDataFromCodexEvent(event: CodexHookEvent): CodexHookProviderData {
+  const providerData: CodexHookProviderData = {
     codexSessionId: event.session_id,
     hookEventName: event.hook_event_name,
     cwd: event.cwd,
@@ -419,6 +472,9 @@ function providerDataFromCodexEvent(event: CodexHookEvent): Record<string, unkno
   if (event.station_worktree_path !== undefined) {
     providerData.stationWorktreePath = event.station_worktree_path;
   }
+  if (event.station_worktree_managed_root !== undefined) {
+    providerData.stationWorktreeManagedRoot = event.station_worktree_managed_root;
+  }
   if (event.station_session_id !== undefined) {
     providerData.stationSessionId = event.station_session_id;
   }
@@ -431,9 +487,53 @@ function providerDataFromCodexEvent(event: CodexHookEvent): Record<string, unkno
   return providerData;
 }
 
+export function codexStationIdentityCwdMismatch(
+  cwd: string,
+  stationWorktreePath: string | undefined,
+  stationWorktreeManagedRoot: string | undefined,
+): boolean {
+  if (stationWorktreePath === undefined) return false;
+  if (!observedPathIsSameOrInside(cwd, stationWorktreePath)) return true;
+  if (stationWorktreeManagedRoot === undefined) return false;
+  // A parent checkout contains its nested managed root lexically, but it does not own child worktrees.
+  return (
+    !observedPathIsSameOrInside(stationWorktreePath, stationWorktreeManagedRoot) &&
+    observedPathIsSameOrInside(cwd, stationWorktreeManagedRoot)
+  );
+}
+
+/**
+ * Rejects recognizable pre-fix hook observations whose cwd contradicts their Station stamp.
+ * Reconcile repairs their derived binding and readiness by replaying the remaining admitted history.
+ */
+export function acceptsCodexPersistedEvent(observation: HarnessEventObservation): boolean {
+  if (observation.eventType === "SubagentStop" || observation.rawEventType === "SubagentStop") {
+    return false;
+  }
+  const providerData = CodexHookProviderDataSchema.safeParse(observation.providerData);
+  if (!providerData.success) return true;
+  return !codexStationIdentityCwdMismatch(
+    providerData.data.cwd,
+    providerData.data.stationWorktreePath,
+    providerData.data.stationWorktreeManagedRoot,
+  );
+}
+
 function reportCorrelationFromCodexEvent(
   event: CodexHookEvent,
 ): HarnessEventReport["correlation"] | undefined {
+  if (
+    codexStationIdentityCwdMismatch(
+      event.cwd,
+      event.station_worktree_path,
+      event.station_worktree_managed_root,
+    )
+  ) {
+    return reportCorrelation({
+      cwd: event.cwd,
+      nativeSessionId: event.session_id,
+    });
+  }
   return reportCorrelation({
     cwd: event.cwd,
     nativeSessionId: event.session_id,

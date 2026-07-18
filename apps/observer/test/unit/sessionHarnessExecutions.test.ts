@@ -61,9 +61,36 @@ describe("session harness execution store", () => {
         ),
       ).toBe(true);
       expect(
+        applySessionHarnessExecutionEvidence(sqlite.database, {
+          provider: "codex",
+          nativeSessionId: "native_b",
+          status: status("working", "2026-07-14T12:00:04.000Z"),
+        }),
+      ).toBe(true);
+      expect(
+        getSessionHarnessExecution(sqlite.database, { provider: "codex", sessionId: "ses_1" }),
+      ).toMatchObject({ nativeSessionId: "native_a", state: "idle" });
+
+      expect(
         applySessionHarnessExecutionEvidence(
           sqlite.database,
-          evidence("codex", "ses_1", "native_b", "working", "2026-07-14T12:00:04.000Z"),
+          evidence("codex", "ses_1", "native_a", "working", "2026-07-14T12:00:05.000Z"),
+        ),
+      ).toBe(true);
+      expect(
+        getSessionHarnessExecution(sqlite.database, { provider: "codex", sessionId: "ses_1" }),
+      ).toMatchObject({ nativeSessionId: "native_a", state: "working" });
+
+      expect(
+        applySessionHarnessExecutionEvidence(
+          sqlite.database,
+          evidence("codex", "ses_1", "native_a", "exited", "2026-07-14T12:00:06.000Z"),
+        ),
+      ).toBe(true);
+      expect(
+        applySessionHarnessExecutionEvidence(
+          sqlite.database,
+          evidence("codex", "ses_1", "native_c", "working", "2026-07-14T12:00:07.000Z"),
         ),
       ).toBe(true);
       expect(
@@ -71,9 +98,9 @@ describe("session harness execution store", () => {
       ).toEqual({
         provider: "codex",
         sessionId: "ses_1",
-        nativeSessionId: "native_b",
+        nativeSessionId: "native_c",
         state: "working",
-        statusUpdatedAt: "2026-07-14T12:00:04.000Z",
+        statusUpdatedAt: "2026-07-14T12:00:07.000Z",
       });
     } finally {
       sqlite.close();

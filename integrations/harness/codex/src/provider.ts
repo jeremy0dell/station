@@ -20,7 +20,7 @@ import {
 import { safeErrorFromUnknown } from "@station/runtime";
 import { classifyCodexRunStatus } from "./classify.js";
 import { codexProviderErrorFromUnknown } from "./errors.js";
-import { normalizeCodexRawEvent } from "./events.js";
+import { acceptsCodexPersistedEvent, normalizeCodexRawEvent } from "./events.js";
 import { doctorCodexHooks } from "./hooks.js";
 import { buildCodexLaunchPlan, type CodexLaunchOptions } from "./launch.js";
 
@@ -80,8 +80,7 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
     errorMessage: "The Codex harness provider failed to ingest an event.",
     normalize: (event, context) => normalizeCodexRawEvent(event, context),
   },
-  acceptsPersistedEvent: (observation) =>
-    observation.eventType !== "SubagentStop" && observation.rawEventType !== "SubagentStop",
+  acceptsPersistedEvent: acceptsCodexPersistedEvent,
   doctorChecks,
   hooksStatus,
   version: { latestPackage: "@openai/codex" },
@@ -181,6 +180,11 @@ async function hooksStatus(
   return harnessHooksStatusFrom("codex", options.installHooks === true, hookResult);
 }
 
+/**
+ * ADAPTER
+ *
+ * Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.
+ */
 export function createCodexHarnessProvider(
   options: CodexHarnessProviderOptions = {},
 ): HarnessProvider {

@@ -221,6 +221,297 @@ describe("observer reconcile with Codex harness", () => {
     sqlite.close();
   });
 
+  it("keeps a parent owner when inherited identity crosses into a nested managed worktree", async () => {
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config: nestedManagedConfig,
+      providers: nestedManagedCodexProviders(),
+      clock: { now: () => new Date(now) },
+    });
+
+    try {
+      await core.reconcile("initial-nested-managed-worktree-context");
+      await reportAndReconcile(
+        api,
+        eventBus,
+        nestedManagedCodexReport({
+          reportId: "report_parent_working",
+          nativeSessionId: "native_parent",
+          event: "PreToolUse",
+          cwd: "/tmp/station/web",
+          observedAt: "2026-05-21T12:00:01.000Z",
+        }),
+      );
+      await reportAndReconcile(
+        api,
+        eventBus,
+        nestedManagedCodexReport({
+          reportId: "report_parent_idle",
+          nativeSessionId: "native_parent",
+          event: "Stop",
+          cwd: "/tmp/station/web",
+          observedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      );
+
+      const nestedReport = nestedManagedCodexReport({
+        reportId: "report_nested_working",
+        nativeSessionId: "native_nested",
+        event: "PreToolUse",
+        cwd: "/tmp/station/web/.worktrees/feature",
+        observedAt: "2026-05-21T12:00:03.000Z",
+      });
+      expect(nestedReport.correlation).toEqual({
+        nativeSessionId: "native_nested",
+        cwd: "/tmp/station/web/.worktrees/feature",
+      });
+      expect(nestedReport.diagnostics).toMatchObject({
+        correlationIssue: "station_identity_cwd_mismatch",
+      });
+      await reportAndReconcile(api, eventBus, nestedReport);
+
+      const parent = core.getSnapshot().rows.find((row) => row.id === "wt_main");
+      expect(parent?.agent).toMatchObject({
+        state: "idle",
+        sessionId: "ses_main",
+        updatedAt: "2026-05-21T12:00:02.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          sessionId: "ses_main",
+          nativeSessionId: "native_parent",
+          state: "idle",
+        }),
+      ]);
+      await expect(
+        persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              reportId: "report_nested_working",
+              worktreeId: "wt_feature",
+              nativeSessionId: "native_nested",
+              diagnostics: expect.objectContaining({
+                correlationIssue: "station_identity_cwd_mismatch",
+              }),
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("keeps the scoped owner authoritative across background activity decay and admits a later scoped execution", async () => {
+    let currentTime = now;
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(currentTime) },
+    });
+
+    try {
+      await core.reconcile("initial-inherited-identity-context");
+      await reportAndReconcile(
+        api,
+        eventBus,
+        codexLifecycleReport({
+          reportId: "report_owner_a_working",
+          nativeSessionId: "native_a",
+          event: "PreToolUse",
+          observedAt: "2026-05-21T12:00:01.000Z",
+        }),
+      );
+
+      const backgroundStartReport = codexBackgroundReport({
+        reportId: "report_background_b_start",
+        nativeSessionId: "native_b",
+        event: "SessionStart",
+        observedAt: "2026-05-21T12:00:02.000Z",
+      });
+      expect(backgroundStartReport.correlation).toEqual({
+        nativeSessionId: "native_b",
+        cwd: "/tmp/codex-home/.codex/memories",
+      });
+      expect(backgroundStartReport.diagnostics).toMatchObject({
+        correlationIssue: "station_identity_cwd_mismatch",
+      });
+      const backgroundStart = await reportAndReconcile(api, eventBus, backgroundStartReport);
+      expect(
+        backgroundStart.events.filter(
+          (event) =>
+            (event.type === "worktree.agentStateChanged" && event.agent?.state === "starting") ||
+            (event.type === "session.updated" && event.patch.status?.value === "starting"),
+        ),
+      ).toEqual([]);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        updatedAt: "2026-05-21T12:00:01.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({ nativeSessionId: "native_a", state: "working" }),
+      ]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({
+          sessionId: "ses_web_task",
+          target: { kind: "native-session", id: "native_a" },
+        }),
+      ]);
+
+      await reportAndReconcile(
+        api,
+        eventBus,
+        codexLifecycleReport({
+          reportId: "report_owner_a_idle",
+          nativeSessionId: "native_a",
+          event: "Stop",
+          observedAt: "2026-05-21T12:00:03.000Z",
+        }),
+      );
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        turnReadiness: { token: "report_owner_a_idle" },
+      });
+
+      const backgroundWorking = await reportAndReconcile(
+        api,
+        eventBus,
+        codexBackgroundReport({
+          reportId: "report_background_b_working",
+          nativeSessionId: "native_b",
+          event: "PreToolUse",
+          observedAt: "2026-05-21T12:00:04.000Z",
+        }),
+      );
+      expect(
+        backgroundWorking.events.filter(
+          (event) =>
+            (event.type === "worktree.agentStateChanged" && event.agent?.state === "working") ||
+            (event.type === "session.updated" && event.patch.status?.value === "working"),
+        ),
+      ).toEqual([]);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        updatedAt: "2026-05-21T12:00:03.000Z",
+        turnReadiness: { token: "report_owner_a_idle" },
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({ nativeSessionId: "native_a", state: "idle" }),
+      ]);
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_owner_a_idle" }),
+      ]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({ target: { kind: "native-session", id: "native_a" } }),
+      ]);
+      await expect(
+        persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              reportId: "report_background_b_working",
+              nativeSessionId: "native_b",
+              diagnostics: expect.objectContaining({
+                correlationIssue: "station_identity_cwd_mismatch",
+              }),
+            }),
+          }),
+        ]),
+      );
+
+      currentTime = "2026-05-21T12:16:05.000Z";
+      const decayedSnapshot = await core.reconcile("background-busy-status-decay");
+      expect(decayedSnapshot.rows[0]?.agent).toMatchObject({
+        state: "idle",
+        updatedAt: "2026-05-21T12:00:03.000Z",
+        turnReadiness: { token: "report_owner_a_idle" },
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({ nativeSessionId: "native_a", state: "idle" }),
+      ]);
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_owner_a_idle" }),
+      ]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({ target: { kind: "native-session", id: "native_a" } }),
+      ]);
+
+      const resumed = await reportAndReconcile(
+        api,
+        eventBus,
+        codexLifecycleReport({
+          reportId: "report_owner_a_resumed",
+          nativeSessionId: "native_a",
+          event: "PreToolUse",
+          observedAt: "2026-05-21T12:16:06.000Z",
+        }),
+      );
+      const workingEventIndex = resumed.events.findIndex(
+        (event) => event.type === "worktree.agentStateChanged" && event.agent?.state === "working",
+      );
+      const reconcileEventIndex = resumed.events.findIndex(
+        (event) => event.type === "observer.reconciled",
+      );
+      expect(workingEventIndex).toBeGreaterThanOrEqual(0);
+      expect(workingEventIndex).toBeLessThan(reconcileEventIndex);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        updatedAt: "2026-05-21T12:16:06.000Z",
+      });
+      expect(core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({ nativeSessionId: "native_a", state: "working" }),
+      ]);
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+      await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([
+        expect.objectContaining({ target: { kind: "native-session", id: "native_a" } }),
+      ]);
+
+      await reportAndReconcile(
+        api,
+        eventBus,
+        codexLifecycleReport({
+          reportId: "report_owner_a_final_idle",
+          nativeSessionId: "native_a",
+          event: "Stop",
+          observedAt: "2026-05-21T12:16:07.000Z",
+        }),
+      );
+      await reportAndReconcile(
+        api,
+        eventBus,
+        codexLifecycleReport({
+          reportId: "report_scoped_c_working",
+          nativeSessionId: "native_c",
+          event: "PreToolUse",
+          observedAt: "2026-05-21T12:16:08.000Z",
+        }),
+      );
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "working",
+        updatedAt: "2026-05-21T12:16:08.000Z",
+      });
+      await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({ nativeSessionId: "native_c", state: "working" }),
+      ]);
+      const recoveryHandles = await persistence.listSessionRecoveryHandles();
+      expect(recoveryHandles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ target: { kind: "native-session", id: "native_c" } }),
+        ]),
+      );
+      expect(
+        recoveryHandles.find(
+          (handle) => handle.target.kind === "native-session" && handle.target.id === "native_b",
+        ),
+      ).toBeUndefined();
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("keeps cross-native Stop evidence from changing readiness or firing completion", async () => {
     const clock = { now: () => new Date(now) };
     const { sqlite, persistence, eventBus, core, api } = createTestObserver({
@@ -635,6 +926,51 @@ describe("observer reconcile with Codex harness", () => {
     }
   });
 
+  it("repairs a legacy binding claimed through inherited mismatched Codex identity", async () => {
+    const fixture = await persistLegacyInheritedIdentitySequence();
+    const upgraded = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(now) },
+      sqlitePath: fixture.sqlitePath,
+    });
+
+    try {
+      await upgraded.core.reconcile("first-reconcile-after-identity-corroboration-upgrade");
+
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        updatedAt: "2026-05-21T12:00:02.000Z",
+        turnReadiness: { token: "report_legacy_owner_a_idle" },
+      });
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_a",
+          state: "idle",
+          statusUpdatedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      ]);
+      await expect(upgraded.persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_legacy_owner_a_idle" }),
+      ]);
+      await expect(
+        upgraded.persistence.listProviderObservations({ entityKind: "harness_event" }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              reportId: "report_legacy_background_b_working",
+              nativeSessionId: "native_b",
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      upgraded.sqlite.close();
+      await fixture.remove();
+    }
+  });
+
   it("repairs legacy persisted SubagentStop state after an upgrade", async () => {
     const fixture = await persistLegacySubagentStopSequence();
     const clock = { now: () => new Date(now) };
@@ -868,6 +1204,115 @@ function legacySubagentStopReport(input: {
   };
 }
 
+function legacyInheritedIdentityReport(input: {
+  reportId: string;
+  nativeSessionId: string;
+  observedAt: string;
+}): HarnessEventReport {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    reportId: input.reportId,
+    provider: "codex",
+    kind: "harness",
+    eventType: "PreToolUse",
+    observedAt: input.observedAt,
+    status: {
+      value: "working",
+      confidence: "medium",
+      reason: "Codex is about to use Bash.",
+      source: "harness_event",
+      updatedAt: input.observedAt,
+    },
+    correlation: {
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      terminalTargetId: "tmux:station:@1:%2",
+      nativeSessionId: input.nativeSessionId,
+      cwd: "/tmp/codex-home/.codex/memories",
+    },
+    diagnostics: {
+      rawEventType: "PreToolUse",
+    },
+    providerData: {
+      codexSessionId: input.nativeSessionId,
+      hookEventName: "PreToolUse",
+      cwd: "/tmp/codex-home/.codex/memories",
+      model: "gpt-5.4-codex",
+      permissionMode: "default",
+      codexTurnId: "turn_background",
+      toolName: "Bash",
+      toolUseId: `call_${input.reportId}`,
+      stationProjectId: "web",
+      stationWorktreeId: "wt_web_task",
+      stationWorktreePath: "/tmp/station/web/task",
+      stationSessionId: "ses_web_task",
+      stationTerminalProvider: "tmux",
+      stationTerminalTargetId: "tmux:station:@1:%2",
+    },
+  };
+}
+
+async function persistLegacyInheritedIdentitySequence(): Promise<{
+  sqlitePath: string;
+  remove: () => Promise<void>;
+}> {
+  const root = await mkdtemp(join(tmpdir(), "station-codex-inherited-identity-upgrade-"));
+  const sqlitePath = join(root, "observer.sqlite");
+  const legacy = createTestObserver({
+    config,
+    providers: codexProviders({ acceptLegacyPersistedEvents: true }),
+    clock: { now: () => new Date(now) },
+    sqlitePath,
+    idFactory: prefixedIds("legacy_identity"),
+  });
+
+  await legacy.core.reconcile("legacy-before-identity-corroboration-upgrade");
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    codexLifecycleReport({
+      reportId: "report_legacy_owner_a_working",
+      nativeSessionId: "native_a",
+      event: "PreToolUse",
+      observedAt: "2026-05-21T12:00:01.000Z",
+    }),
+  );
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    codexLifecycleReport({
+      reportId: "report_legacy_owner_a_idle",
+      nativeSessionId: "native_a",
+      event: "Stop",
+      observedAt: "2026-05-21T12:00:02.000Z",
+    }),
+  );
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    legacyInheritedIdentityReport({
+      reportId: "report_legacy_background_b_working",
+      nativeSessionId: "native_b",
+      observedAt: "2026-05-21T12:00:03.000Z",
+    }),
+  );
+
+  expect(legacy.core.getSnapshot().rows[0]?.agent).toMatchObject({
+    state: "working",
+    updatedAt: "2026-05-21T12:00:03.000Z",
+  });
+  await expect(legacy.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+    expect.objectContaining({ nativeSessionId: "native_b", state: "working" }),
+  ]);
+  await expect(legacy.persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+  legacy.sqlite.close();
+  return {
+    sqlitePath,
+    remove: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
 async function persistLegacySubagentStopSequence(
   options: { acknowledge?: boolean; laterStop?: boolean } = {},
 ): Promise<{ sqlitePath: string; remove: () => Promise<void> }> {
@@ -979,6 +1424,91 @@ async function persistLegacySubagentStopSequence(
     sqlitePath,
     remove: () => rm(root, { recursive: true, force: true }),
   };
+}
+
+function codexBackgroundReport(input: {
+  reportId: string;
+  nativeSessionId: string;
+  event: "SessionStart" | "PreToolUse";
+  observedAt: string;
+}): HarnessEventReport {
+  const common = {
+    session_id: input.nativeSessionId,
+    transcript_path: null,
+    cwd: "/tmp/codex-home/.codex/memories",
+    model: "gpt-5.4-codex",
+    permission_mode: "default" as const,
+    station_project_id: "web",
+    station_worktree_id: "wt_web_task",
+    station_worktree_path: "/tmp/station/web/task",
+    station_session_id: "ses_web_task",
+    station_terminal_provider: "tmux",
+    station_terminal_target_id: "tmux:station:@1:%2",
+  };
+  const payload =
+    input.event === "SessionStart"
+      ? {
+          ...common,
+          hook_event_name: "SessionStart" as const,
+          source: "startup" as const,
+        }
+      : {
+          ...common,
+          hook_event_name: "PreToolUse" as const,
+          turn_id: "turn_background",
+          tool_name: "Bash",
+          tool_input: { command: "background task" },
+          tool_use_id: `call_${input.reportId}`,
+        };
+  return codexHookPayloadToHarnessEventReport({
+    reportId: input.reportId,
+    observedAt: input.observedAt,
+    payload,
+  });
+}
+
+function nestedManagedCodexReport(input: {
+  reportId: string;
+  nativeSessionId: string;
+  event: "PreToolUse" | "Stop";
+  cwd: string;
+  observedAt: string;
+}): HarnessEventReport {
+  const common = {
+    session_id: input.nativeSessionId,
+    transcript_path: null,
+    cwd: input.cwd,
+    model: "gpt-5.4-codex",
+    permission_mode: "default" as const,
+    turn_id: "turn_nested",
+    station_project_id: "web",
+    station_worktree_id: "wt_main",
+    station_worktree_path: "/tmp/station/web",
+    station_worktree_managed_root: "/tmp/station/web/.worktrees",
+    station_session_id: "ses_main",
+    station_terminal_provider: "tmux",
+    station_terminal_target_id: "tmux:station:@1:%2",
+  };
+  const payload =
+    input.event === "PreToolUse"
+      ? {
+          ...common,
+          hook_event_name: "PreToolUse" as const,
+          tool_name: "Bash",
+          tool_input: { command: "pnpm test" },
+          tool_use_id: `call_${input.reportId}`,
+        }
+      : {
+          ...common,
+          hook_event_name: "Stop" as const,
+          stop_hook_active: false,
+          last_assistant_message: "Done.",
+        };
+  return codexHookPayloadToHarnessEventReport({
+    reportId: input.reportId,
+    observedAt: input.observedAt,
+    payload,
+  });
 }
 
 function codexLifecycleReport(input: {
@@ -1171,6 +1701,51 @@ function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {})
   });
 }
 
+function nestedManagedCodexProviders(): ProviderRegistry {
+  const providers = codexProviders();
+  return new ProviderRegistry({
+    worktree: new FakeWorktreeProvider({
+      now,
+      worktrees: [
+        createFakeWorktree({
+          id: "wt_main",
+          projectId: "web",
+          branch: "main",
+          path: "/tmp/station/web",
+          now,
+        }),
+        createFakeWorktree({
+          id: "wt_feature",
+          projectId: "web",
+          branch: "feature",
+          path: "/tmp/station/web/.worktrees/feature",
+          now,
+        }),
+      ],
+    }),
+    terminal: new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "tmux:station:@1:%2",
+          provider: "tmux",
+          projectId: "web",
+          worktreeId: "wt_main",
+          sessionId: "ses_main",
+          now,
+          harnessBinding: {
+            role: "main-agent",
+            harnessProvider: "codex",
+            currentCommand: "codex",
+          },
+        }),
+      ],
+    }),
+    harnesses: [...providers.harnesses.values()],
+    hookAdapters: [...providers.hookAdapters.values()],
+  });
+}
+
 function prefixedIds(prefix: string) {
   let command = 0;
   let event = 0;
@@ -1205,4 +1780,15 @@ const config: StationConfig = {
       },
     },
   ],
+};
+
+const nestedManagedConfig: StationConfig = {
+  ...config,
+  projects: config.projects.map((project) => ({
+    ...project,
+    worktrunk: {
+      ...project.worktrunk,
+      managedRoot: "/tmp/station/web/.worktrees",
+    },
+  })),
 };

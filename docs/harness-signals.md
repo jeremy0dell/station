@@ -45,7 +45,15 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
   `cwd`. Providers must attach the strongest identity they have; `cwd` alone
   is a last resort and drops the event when ambiguous. Station session and
   worktree IDs route evidence to a run but do not identify the provider-native
-  execution within that run.
+  execution within that run. Station IDs inherited through the process
+  environment are strong only after provider-origin evidence corroborates
+  them; Codex requires its observed cwd to be the stamped worktree path or an
+  ordinary descendant without crossing into the configured managed-worktree
+  root when that launch context is available.
+- `diagnostics.correlationIssue` — optional provider-normalized,
+  machine-readable evidence explaining why identity was withheld. The current
+  value is `station_identity_cwd_mismatch`; core records and logs it but does
+  not branch on provider vocabulary.
 - `reportId` / `coalesceKey` — dedup identity. Two transports reporting the
   same fact must derive the same identity from harness-native ids (e.g. a tool
   `call_id`) so they coalesce instead of racing.
@@ -92,6 +100,10 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    derive recovery, readiness, projected state changes, or completion
    notifications. Worktree-only external sessions remain independently keyed
    by native identity, and idle/completion evidence never establishes a binding.
+9. **Inherited identity is corroborated.** A provider must withhold inherited
+   Station project, worktree, session, terminal, and run correlation when its
+   own origin evidence contradicts the Station stamp. It retains provider-native
+   identity and diagnostic origin evidence so the report remains inspectable.
 
 ## Target Taxonomy (HarnessSignal)
 
