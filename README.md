@@ -6,53 +6,60 @@
 
 **Run multiple AI coding agents from one terminal, without them fighting over your code.**
 
-Don't lose your terminal workflow. Bring your own harness. Built on top-of-the-line open-source projects.
-
-It usually starts simple: one AI coding agent in one terminal window. Then you open a second window to run another agent on the same project, then a third, and soon they're all editing the same files in `main`, you've lost track of which window is doing what, and closing your terminal kills whatever was mid-run.
-
-station untangles this. It gives each agent its own isolated copy of the repo (a *worktree*, which station sets up and manages for you), so your agents stop colliding. Every session shows up in one live view, so you can see what each one is doing at a glance. And your sessions keep running even after you close your terminal: reattach later and your panes are right where you left them.
+Station gives every agent an isolated Git worktree, keeps its terminal session alive, and shows all active projects and sessions in one terminal workspace. Bring Claude Code, Codex, Cursor, OpenCode, or Pi; Station coordinates the surrounding work without replacing the harness.
 
 <p align="center">
   <img src="./station/assets/screenshots/fleet-overview.png" alt="Station TUI listing projects, worktrees, and live agent sessions, with a session-create dialog open" width="820">
   <br>
-  <em>One live view of every project, worktree, and agent session. A new session is a keypress away.</em>
+  <em>One live view of every project, worktree, and agent session.</em>
 </p>
 
----
+## Why Station
 
-## What it does
-
-station keeps track of everything that's running and makes it visible:
-
-- **Live TUI**: see every project, worktree, and agent session at a glance, updated in real time
-- **Observer**: a background process that owns runtime truth, reconciles Worktrunk state, and serves snapshots over a socket
-- **CLI**: `stn doctor`, `stn reconcile`, `stn snapshot`, `stn debug bundle`, and more
-- **Session creation**: start a new agent session from the TUI with project, branch, and harness already wired up
-- **Persistent sessions**: panes run in host-backed PTYs, so you can close your terminal and reattach to your running agents right where you left them
-- **Hook ingress**: Claude Code, Codex, Cursor, Pi, and OpenCode emit structured events that station receives and records
-- **Diagnostics**: trace IDs, debug bundles, bounded log retention, and provider health checks built in from day one
+- **Isolated worktrees** keep concurrent agents from editing the same checkout.
+- **Persistent terminal sessions** continue running when the Station UI closes.
+- **Live agent status** shows which sessions are working, ready, or need attention.
+- **One TUI** creates, opens, renames, and removes sessions across projects.
+- **Built-in diagnostics** provide health checks, trace lookup, and redacted debug bundles.
 
 <p align="center">
-  <img src="./station/assets/screenshots/agent-session-diff.png" alt="Split view: an agent session's transcript on the left, its live diff and working tree on the right" width="880">
+  <img src="./station/assets/screenshots/agent-session-diff.png" alt="Split view showing an agent transcript and its live working-tree diff" width="880">
   <br>
-  <em>Follow a session's work on the left and review its live diff against the worktree on the right.</em>
+  <em>Follow an agent and review its changes without leaving the terminal.</em>
 </p>
 
----
+## Install the binary
 
-## Getting started
+This procedure installs Station from authenticated GitHub release assets and
+assumes your GitHub account can read the private `jeremy0dell/station`
+repository. Install the [GitHub CLI](https://cli.github.com/) first. The binary
+does not require Node.js, pnpm, Bun, or a source checkout.
 
-The authenticated private binary is the user install path. On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to the private repository, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
-
-From any directory, authenticate `gh`, fetch the installer for the binary baseline, and run it:
+### 1. Authenticate GitHub CLI
 
 ```sh
 gh auth login --hostname github.com
+gh auth status --hostname github.com
+gh repo view jeremy0dell/station --json nameWithOwner --jq '.nameWithOwner'
+```
+
+If GitHub CLI is already authenticated, skip the login command. The repository
+check should print `jeremy0dell/station`; a not-found response means the active
+account cannot read the private repository. The commands below use the existing
+authentication, so do not paste credentials into the install command.
+
+### 2. Install the current preview candidate
+
+Run this from any directory:
+
+```sh
 (
   set -eu
   umask 077
   export GH_HOST=github.com
   tag=v0.7.1-rc.1
+  # After the first stable release, use:
+  # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
   gh api --method GET \
@@ -65,177 +72,127 @@ gh auth login --hostname github.com
 )
 ```
 
-The installer installs and physically verifies all three Station launchers, but it does not read, create, or edit shell startup files and does not infer a project from the install directory. If any launcher is missing or shadowed in the current process, it prints one safely quoted `export PATH=...` command for future shells; add that command to the shell configuration you choose. It also prints a current-shell recovery block ending in `stn setup` and an `Absolute fallback` using the installed `stn`. In the same shell, the default install can be made available explicitly before guided setup, verification, and launch:
+`v0.7.1-rc.1` is the first supported private-binary candidate; the earlier
+`v0.7.0` candidate remained unpublished. Run the recipe after the candidate is
+published. It fetches the installer and binary from the same immutable release
+tag, verifies the release checksum, and installs `stn`, `stn-ingress`, and
+`stn-tmux-popup` in `~/.local/bin` by default. It does not expose or print your
+GitHub credentials. After the first stable release, the commented assignment
+resolves the latest stable tag. Immutable rollback begins with the second
+published binary release because there is no earlier published binary artifact.
+
+### 3. Verify and start Station
+
+The installer prints an exact PATH command if `~/.local/bin` is not visible in
+the current shell. For the default install directory, run:
 
 ```sh
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
 export PATH
 hash -r
 
+command -v stn
 stn --version
 stn setup
 stn doctor
-stn tui
+stn
 ```
 
-`stn setup` can install missing Worktrunk, tmux, diffnav, and git-delta through Homebrew, requires one supported agent CLI, and writes a valid zero-project `~/.config/station/config.toml`; it never adds the current directory implicitly. It can also add provider hooks and the tmux popup binding. Complete the selected agent CLI's own sign-in if needed before starting a real session. The PATH assignment above lasts only for the current shell. For future shells, place the installer's exact export in your chosen shell configuration yourself; the installer never chooses or edits that file. If you chose a custom install directory, use its printed PATH block or the printed absolute `stn setup` fallback instead.
+The installer never edits shell startup files or adds the current directory as
+a project. See [Install](docs/install.md) for supported platforms, exact-version
+installs, custom install directories, and recovery. Then follow the
+[Quick start](docs/quick-start.md) to create the first agent session.
 
-On the cold-boot welcome screen, press `Enter` or `Space` to open project view. On the empty dashboard, press `Enter` (or `A`) on **Add your first project**, choose a folder inside an existing Git repository, and confirm it. Station resolves nested selections to their Git root and will not add an ordinary non-Git folder. Then press `N`, review the project, generated session name, and agent in the **Create Session** dialog, and press `Enter` on **Create session** to start the agent session.
+### Let your agent install and validate Station
 
-`stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
+Paste this prompt into a coding agent running on the machine where you want
+Station installed:
 
-The installer selects one of the four supported native targets (`darwin-arm64`, `darwin-x64`, `linux-arm64`, or `linux-x64`), verifies the release archive against `SHA256SUMS`, and installs `stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default. It checks all three physical launcher resolutions rather than relying on textual PATH membership. The compiled `stn` launches without Node.js, pnpm, Bun, or a source checkout. A useful default workflow additionally requires a Git repository, Worktrunk (`wt`), tmux, diffnav/git-delta, and one supported agent CLI; `stn setup` and `stn doctor` establish and verify those capabilities.
+```text
+Install Station private preview candidate v0.7.1-rc.1 and validate setup on this machine.
 
-`v0.7.1-rc.1` is the first supported private-binary candidate; the earlier
-`v0.7.0` candidate remained unpublished. The installer code and artifacts
-always come from the same immutable tag. The latest-install recipe resolves the
-current stable tag before fetching and invoking its installer. Immutable
-rollback begins with the second published binary release because there is no
-earlier published binary artifact. See [Install](docs/install.md) for the recipe,
-version pinning, PATH recovery, custom install directories, and the
-supported-platform and recovery contracts.
+Use the private GitHub repository jeremy0dell/station through GitHub CLI.
 
-### Development checkout
+Safety and scope:
+- First run `gh auth status --hostname github.com`, then verify repository
+  access with `gh repo view jeremy0dell/station`. Never ask me to paste,
+  extract, or print credentials. If authentication or repository access fails,
+  stop and ask me to run `gh auth login --hostname github.com` myself.
+- Do not clone the repository or build from source. Use release tag
+  `v0.7.1-rc.1`, read `docs/install.md` from that same tag with authenticated
+  `gh api`, and follow its temporary-file installer procedure. If that release
+  is not published yet, stop instead of falling back to another ref.
+- Never fetch installer code from `main` and never pipe network output directly
+  into a shell.
+- Install to `~/.local/bin` unless I approve another location. Do not edit any
+  shell startup file. Apply PATH changes only to the current shell and show me
+  the exact export I can add later.
+- Do not infer or add the current directory as a Station project.
 
-Source development still requires Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14. A `.node-version` / `.nvmrc` selects the current Node 24 release for fnm/nvm (asdf needs `legacy_version_file = yes`).
-
-On macOS, a fresh checkout can install the development dependencies, build both source lanes, and link `stn`:
-
-```sh
-./scripts/setup/bootstrap.sh
-stn setup     # required tools, an agent CLI, and a zero-project config
-stn           # launch the workspace
+Validation:
+1. Verify `command -v stn`, `command -v stn-ingress`, and
+   `command -v stn-tmux-popup`, then run `stn --version`.
+2. Run `stn setup plan --json`, summarize every proposed install or write, and
+   ask for approval before applying it.
+3. Run the guided `stn setup` and let me answer its choices. If you cannot pass
+   through an interactive prompt, ask me to run it, then continue afterward.
+4. Run `stn setup check --json` and `stn doctor`.
+5. Report the installed path and version, whether setup reports
+   `summary.requiredOk: true`, doctor health, and any remaining manual steps.
+   A valid zero-project config is acceptable. Do not claim success while a
+   required check is failing.
 ```
-
-For manual or non-macOS development, install and verify both source lanes:
-
-station has two lanes and both must be installed: the **CLI + observer** on pnpm/Node, and the **terminal UI** on Bun (a separate workspace, *not* a pnpm-workspace member, so `pnpm install` does not touch it).
-
-```sh
-# Lane 1 — CLI + observer (pnpm/Node)
-pnpm install
-pnpm build
-
-# Lane 2 — terminal UI (Bun). Without this, bare `stn` refuses to launch ("@opentui not found").
-cd station && bun install && cd ..
-
-# Verify, configure, and launch
-pnpm smoke:release
-pnpm stn setup            # writes a config, enables hooks, installs the tmux popup binding
-pnpm stn doctor           # checks everything is wired up (incl. the Bun UI lane)
-pnpm stn reconcile --reason manual
-pnpm stn
-```
-
-To use bare `stn`, `stn-ingress`, and `stn-tmux-popup` from any directory, link the checkout globally (the macOS script already does this):
-
-```sh
-pnpm station:link
-stn doctor
-```
-
-### Config
-
-`stn setup` writes a first config for you. To edit it manually or start from the annotated example:
-
-```sh
-mkdir -p ~/.config/station
-cp examples/config.toml ~/.config/station/config.toml
-# edit project roots, then:
-stn doctor
-```
-
-[`examples/config.toml`](examples/config.toml) is the annotated starter — projects, observer tuning, harness defaults, tmux topology, hooks, and the native `[workspace]` UI settings. For the field-by-field reference (every section, defaults, the project-local file, and environment variables), see [docs/configuration.md](docs/configuration.md).
-
----
 
 ## How it works
 
-The repo is a pnpm workspace with two apps under `apps/` (the `stn` CLI and the observer), the Station terminal UI in `station/`, and a set of shared packages.
+Station combines four runtime roles:
 
-**`@station/observer`**: the background process. It talks to configured providers (Worktrunk, tmux, agent harnesses), reconciles project state, records bounded diagnostic evidence, and serves snapshots and events over a Unix socket. Everything else asks the observer questions; nothing else invents runtime state.
+- The **observer** reconciles project, worktree, terminal, harness, and
+  repository state into one current graph.
+- The **TUI** renders that graph and submits typed commands without reaching
+  into providers directly.
+- The **CLI** handles setup, health checks, snapshots, observer lifecycle, and
+  debugging.
+- **Integrations** adapt Worktrunk, tmux, supported agent harnesses, and GitHub
+  behind provider boundaries.
 
-**`@station/cli`**: the `stn` command. Setup, reconciliation, snapshots, live event observation, hooks, diagnostics, and TUI launch. Use `pnpm stn <cmd>` during development.
-
-**The Station workspace**: the terminal UI is the OpenTUI renderer in `station/` (on the Bun lane). It connects to the observer, refreshes from live events and snapshots, and shows a provider-neutral view of projects, worktrees, sessions, terminal targets, and agent status. `stn` (no subcommand) starts the observer and launches the native Station workspace: real PTY panes with host-backed persistence, so closing your terminal doesn't stop your agents; reattach and the panes are still running. (Inside an existing tmux session it opens as a read-only dashboard popup instead.) A mock-data dashboard preview is available for development via `--dev-fake-dashboard`.
-
-<p align="center">
-  <img src="./station/assets/screenshots/diff-navigator.png" alt="Station's diff navigator showing a filterable file list and inline add/remove hunks for a session's changes" width="880">
-  <br>
-  <em>The workspace's diff navigator walks a session's changes file by file, with inline hunks.</em>
-</p>
-
-**`stn-ingress`** (`apps/cli/src/ingress`): the sender used by generated hook commands. Delivers raw provider hook events to the observer socket with bounded delivery and local spooling when the observer is unavailable; the observer normalizes them via provider hook adapters.
-
----
-
-## Integrations
-
-station is built around provider boundaries. External tools stay in their own lane; station checks and reports their availability rather than bundling them.
-
-### Supported harnesses
-
-station never asks an agent what it's doing. It watches the hook events each harness emits and derives one status per session: **working**, **idle** (shown as **ready** the moment a turn finishes), **needs attention**, plus lifecycle (**starting**, **exited**) and fallbacks (**stuck**, **unknown**, **no agent**). A harness can only surface the states it can report, so coverage varies.
-
-| Harness | Working | Done | Needs attention | Support | Connects via |
-|---------|:-------:|:----:|:---------------:|---------|--------------|
-| **Claude Code** | ✓ | ✓ | ✓ | Full | `settings.json` hooks |
-| **Codex** | ✓ | ✓ | ✓ | Full | `~/.codex` profile hooks |
-| **Cursor** | ✓ | ✓ | ✓ ¹ | Full | `~/.cursor/hooks.json` |
-| **OpenCode** | ✓ | ✓ | ✓ | Full | plugin |
-| **Pi** | ✓ | ✓ | ✗ | Partial | in-process extension |
-
-¹ Cursor reports attention on error at the end of a turn, not from a live permission prompt.
-
-Full per-event detail and hook setup live in [Harnesses](docs/harnesses.md).
-
-### Backend integrations
-
-| Integration | Role |
-|-------------|------|
-| **Worktrunk** (`wt`) | Worktree backend: canonical branch and worktree state |
-| **tmux** | Terminal provider: pane and window identity, dashboard popup |
-| **GitHub** | Repository metadata: pull request and CI state |
-
----
-
-## Development
-
-```sh
-pnpm build              # build all packages
-pnpm typecheck          # type-check all packages
-pnpm lint               # biome + source-order checks
-pnpm test:unit          # unit tests
-pnpm test:contracts     # contract tests
-pnpm test:integration   # integration tests
-pnpm test:diagnostics   # diagnostics tests
-pnpm test:agent:scripted  # scripted-agent lane (no real harness needed)
-pnpm smoke:install      # isolated authenticated-installer contract
-pnpm test:all           # full gate: build + typecheck + lint + tests + installer smoke
-```
-
----
-
-## Status
-
-station is under active development. The current build supports local setup, diagnostics, Worktrunk reconciliation, JSON snapshots, hook ingestion, debug bundles, and the TUI. It is ready for local daily use; interfaces may still change.
-
----
+Read [Overview](docs/overview.md) for the mental model and
+[Harnesses](docs/harnesses.md) for agent-status coverage.
 
 ## Documentation
 
-| Doc | What it covers |
-|-----|---------------|
-| [Overview](docs/overview.md) | What station is, why it exists, and the mental model behind it |
-| [Install](docs/install.md) | Private binary install, rollback, and development checkout setup |
-| [Homebrew packaging](docs/homebrew.md) | Separate source formula and manual tap workflow |
-| [Architecture](docs/architecture.md) | Repository-wide system and boundary map |
-| [Observer architecture](docs/observer-architecture.md) | Canonical Observer boundaries, flows, state lifetimes, and active deviations |
-| [Architecture documentation](docs/architecture-documentation.md) | Controlled JSDoc roles for Observer architectural seams |
-| [Development](docs/development.md) | Environment, test gates, data-shape conventions |
-| [TUI](docs/tui.md) | OpenTUI/React Station UI coding, terminal layout, test expectations |
-| [Debugging](docs/debugging.md) | Trace IDs, command IDs, no-action debugging, evidence lookup |
-| [Diagnostics](docs/diagnostics.md) | `stn doctor`, debug bundles, log retention, hook setup |
-| [System dependencies](docs/system-dependencies.md) | External tools, install checks, dependency diagnostics |
-| [Harnesses](docs/harnesses.md) | Supported harnesses, what each can report, and hook delivery |
-| [Known issues](docs/known-issues.md) | Accepted limitations for the current local-use checkpoint |
+Start at the [documentation home](docs/index.md), or go directly to:
+
+- [Quick start](docs/quick-start.md) — add a project and run the first agent
+- [Install](docs/install.md) — installation, verification, updates, and recovery
+- [Configuration](docs/configuration.md) — runtime, project, harness, and
+  workspace settings
+- [Harnesses](docs/harnesses.md) — supported agents and status coverage
+- [Diagnostics](docs/diagnostics.md) — health checks and support evidence
+- [Limitations and workarounds](docs/limitations.md) — current user-visible
+  constraints
+- [Development](docs/development.md) — contributor environment and test gates
+- [Architecture](docs/architecture.md) — repository boundaries and sources of
+  truth
+
+## Development
+
+Source development uses Node.js 24.2+ (and below 25), pnpm 11, and Bun
+1.3.14.
+
+```sh
+pnpm install
+pnpm build
+cd station && bun install && cd ..
+pnpm test:all
+```
+
+See [Development](docs/development.md) and
+[Local development](docs/local-development.md) before running provider-backed
+or real-agent lanes.
+
+## Release status
+
+Station v0.7 is a private preview for local daily use. The authenticated
+binary supports macOS and Linux on arm64 and x64. User-facing commands and
+configuration may change between preview releases.

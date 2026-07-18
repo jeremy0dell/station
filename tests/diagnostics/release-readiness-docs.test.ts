@@ -1,33 +1,73 @@
-import { readdir, readFile } from "node:fs/promises";
+import { promises as fs } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const removedPersistenceOption = ["--persist", "path"].join("-");
 
 describe("release readiness docs", () => {
-  it("documents install, known issues, system dependencies, and deterministic versus real gates", async () => {
-    const [readme, install, knownIssues, systemDependencies, testsReadme, localRealConfig] =
-      await Promise.all([
-        read("README.md"),
-        read("docs/install.md"),
-        read("docs/known-issues.md"),
-        read("docs/system-dependencies.md"),
-        read("tests/README.md"),
-        read("examples/local-real-config.toml"),
-      ]);
+  it("separates release guidance from contributor and test references", async () => {
+    const [
+      readme,
+      docsIndex,
+      quickStart,
+      install,
+      limitations,
+      systemDependencies,
+      testsReadme,
+      localRealConfig,
+    ] = await Promise.all([
+      read("README.md"),
+      read("docs/index.md"),
+      read("docs/quick-start.md"),
+      read("docs/install.md"),
+      read("docs/limitations.md"),
+      read("docs/system-dependencies.md"),
+      read("tests/README.md"),
+      read("examples/local-real-config.toml"),
+    ]);
 
-    expect(readme).toContain("pnpm smoke:release");
-    expect(readme).toContain("docs/install.md");
+    expect(readme).toContain("docs/index.md");
+    expect(readme).toContain("docs/quick-start.md");
+    expect(readme).toContain("docs/limitations.md");
+    expect(docsIndex).toContain("## Start Here");
+    expect(docsIndex).toContain("install.md#let-your-agent-install-and-validate-station");
+    expect(docsIndex).toContain("## Use Station");
+    expect(docsIndex).toContain("## Develop Station");
+    expect(docsIndex).not.toContain("single-binary.md");
+    expect(docsIndex).not.toContain("observer-singleton.md");
+    expect(docsIndex).not.toContain("homebrew.md");
+    expect(quickStart).toContain("Add your first project");
+    expect(quickStart).toContain("Create Session");
     expect(install).toContain("Node.js 24.2+");
     expect(install).toContain("pnpm smoke:release");
     expect(install).toContain("examples/local-real-config.toml");
-    expect(knownIssues).toContain("Real E2E remains opt-in");
+    expect(limitations).toContain("Agent Status Can Be Conservative");
+    expect(limitations).not.toMatch(/TODO|Test Coverage Gaps|Remaining work/i);
     expect(systemDependencies).toContain("tmux");
     expect(systemDependencies).toContain("pnpm setup:system:check");
     expect(testsReadme).toContain("release-hardening-smoke");
     expect(localRealConfig).toContain('managed_root = "~/.worktrees"');
     expect(localRealConfig).toContain("include_external = false");
     expect(localRealConfig).not.toContain('profile = "default"');
+  });
+
+  it("provides an agent-led binary install and setup validation prompt", async () => {
+    const documents = await Promise.all(["README.md", "docs/install.md"].map(read));
+
+    for (const document of documents) {
+      const normalized = document.replace(/\s+/g, " ").toLowerCase();
+      expect(normalized).toContain("let your agent install and validate station");
+      expect(document).toContain("gh auth status --hostname github.com");
+      expect(document).toContain("gh repo view jeremy0dell/station");
+      expect(document).toContain("docs/install.md");
+      expect(document).toContain("stn setup plan --json");
+      expect(document).toContain("stn setup check --json");
+      expect(document).toContain("stn doctor");
+      expect(document).toContain("summary.requiredOk: true");
+      expect(normalized).toContain("do not clone the repository or build from source");
+      expect(normalized).toContain("do not edit any shell startup file");
+      expect(normalized).toContain("do not claim success");
+    }
   });
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
@@ -45,7 +85,8 @@ describe("release readiness docs", () => {
     for (const document of documents) {
       expect(document).toContain("Node.js 24.2+");
     }
-    expect(JSON.parse(await read("package.json")).engines.node).toBe(">=24.2 <25");
+    const packageManifest = await readPackageManifest();
+    expect(packageManifest.engines.node).toBe(">=24.2 <25");
   });
 
   it("documents the authenticated private binary release contract", async () => {
@@ -61,10 +102,10 @@ describe("release readiness docs", () => {
           ".github/workflows/promote-release.yml",
         ].map(read),
       );
-    const packageJson = JSON.parse(await read("package.json"));
+    const packageJson = await readPackageManifest();
 
-    expect(readme).toContain("authenticated private binary");
-    expect(readme).toContain("without Node.js, pnpm, Bun");
+    expect(readme).toContain("authenticated GitHub release assets");
+    expect(readme).toContain("does not require Node.js, pnpm, Bun");
     expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
     expect(install).toContain("tag=v0.7.1-rc.1");
     for (const [path, document] of [
@@ -83,6 +124,7 @@ describe("release readiness docs", () => {
         expect(recipe, path).not.toContain("cd /path/to/your/git-project");
         expect(recipe, path).toContain("umask 077");
         expect(recipe, path).toContain("export GH_HOST=github.com");
+        expect(recipe, path).toContain("releases/latest");
         expect(recipe.indexOf("export GH_HOST=github.com"), path).toBeLessThan(
           recipe.indexOf("gh api --method GET"),
         );
@@ -109,7 +151,7 @@ describe("release readiness docs", () => {
     expect(install).toContain(
       'tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest',
     );
-    expect(readme.replace(/\s+/g, " ")).toContain("installer code and artifacts");
+    expect(install.replace(/\s+/g, " ")).toContain("installer code and artifacts");
     expect(install).toContain("SHA256SUMS");
     expect(install).toContain("stn-tmux-popup");
     for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
@@ -239,38 +281,44 @@ describe("release readiness docs", () => {
   });
 
   it("documents the complete first-run handoff after the binary install", async () => {
-    const documents = await Promise.all(
-      ["README.md", "docs/install.md"].map(async (path) => [path, await read(path)] as const),
+    const [readme, install, quickStart] = await Promise.all(
+      ["README.md", "docs/install.md", "docs/quick-start.md"].map(read),
     );
 
-    for (const [path, document] of documents) {
-      expect(document, path).not.toContain(removedPersistenceOption);
-      expect(document, path).toMatch(/does not (?:read, create, or )?edit shell startup files/);
-      expect(document, path).toContain("chosen shell configuration");
-      expect(document, path).toContain("future shells");
-      expect(document, path).toContain("Absolute fallback");
-      expect(document, path).toContain("all three");
-      expect(document, path).toContain("physically");
-      expect(document, path).toContain("From any directory");
-      expect(document, path).toContain("zero-project");
-      expect(document, path).toContain("Add your first project");
-      expect(document, path).not.toContain("cd /path/to/your/git-project");
-      expect(document, path).toMatch(/PATH="\$HOME\/\.local\/bin\$\{PATH:\+":\$PATH"\}"/);
-      expect(document, path).toContain("hash -r");
-      expect(document, path).toContain("stn setup");
-      expect(document, path).toContain("stn doctor");
-      expect(document, path).toContain("stn tui");
-      expect(document, path).toContain("~/.config/station/config.toml");
-      expect(document, path).toContain("empty dashboard");
-      expect(document, path).toContain("Create Session");
-      expect(document, path).toContain("start the agent session");
-    }
+    expect(readme).not.toContain(removedPersistenceOption);
+    expect(readme).toContain("docs/install.md");
+    expect(readme).toContain("docs/quick-start.md");
+    expect(readme).toContain("stn setup");
+    expect(readme).toContain("stn doctor");
+    expect(readme).toMatch(/PATH="\$HOME\/\.local\/bin\$\{PATH:\+":\$PATH"\}"/);
+    expect(readme).toContain("hash -r");
 
-    const install = await read("docs/install.md");
+    expect(install).not.toContain(removedPersistenceOption);
+    expect(install).toMatch(/does not (?:read, create, or )?edit shell startup files/);
+    expect(install).toContain("chosen shell configuration");
+    expect(install).toContain("future shells");
+    expect(install).toContain("Absolute fallback");
+    expect(install).toContain("all three");
+    expect(install).toContain("physically");
+    expect(install).toContain("From any directory");
+    expect(install).toContain("zero-project");
+    expect(install).not.toContain("cd /path/to/your/git-project");
+    expect(install).toMatch(/PATH="\$HOME\/\.local\/bin\$\{PATH:\+":\$PATH"\}"/);
+    expect(install).toContain("hash -r");
+    expect(install).toContain("stn setup");
+    expect(install).toContain("stn doctor");
+    expect(install).toContain("stn tui");
+    expect(install).toContain("~/.config/station/config.toml");
     expect(install).toContain("PATH uses `:` to separate entries");
     expect(install).toMatch(
       /before GitHub requests[^.]*temporary-directory creation[^.]*destination mutation/,
     );
+
+    expect(quickStart).not.toContain(removedPersistenceOption);
+    expect(quickStart).toContain("Add your first project");
+    expect(quickStart).toContain("Create Session");
+    expect(quickStart).toContain("Create session");
+    expect(quickStart).toContain("stn doctor");
 
     for (const path of ["docs/development.md", "docs/single-binary.md"]) {
       expect(await read(path), path).not.toContain(removedPersistenceOption);
@@ -308,8 +356,22 @@ describe("release readiness docs", () => {
   });
 });
 
+interface PackageManifest {
+  engines: { node: string };
+  scripts: Record<string, string>;
+  version: string;
+}
+
 async function read(path: string): Promise<string> {
-  return readFile(path, "utf8");
+  return fs.readFile(path, "utf8");
+}
+
+async function readPackageManifest(): Promise<PackageManifest> {
+  try {
+    return JSON.parse(await read("package.json")) as PackageManifest;
+  } catch (cause) {
+    throw new Error("package.json must contain valid JSON", { cause });
+  }
 }
 
 function continuedShellCommands(document: string): string[] {
@@ -325,7 +387,7 @@ function shellBlocks(document: string): string[] {
 }
 
 async function markdownFiles(root: string): Promise<string[]> {
-  const entries = await readdir(root, { withFileTypes: true });
+  const entries = await fs.readdir(root, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
     const path = join(root, entry.name);

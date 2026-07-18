@@ -1,20 +1,94 @@
-# Install
+# Install Station
 
-Station is distributed internally as authenticated private GitHub release assets. There is no public package or public download channel.
+Station is distributed through authenticated GitHub release assets in the
+private `jeremy0dell/station` repository. This procedure assumes your GitHub
+account already has read access; it does not require or display a personal
+access token.
 
-## Private Binary
+## Binary Requirements
 
-On a development-ready Mac, have Xcode Command Line Tools, Homebrew, GitHub CLI access to `jeremy0dell/station`, and Codex or another supported agent CLI ready. Node.js can be present, but the compiled Station binary does not use it.
+The compiled binary supports these targets:
 
-From any directory, authenticate `gh`, then fetch and run the installer for the first binary candidate after it is published:
+- macOS on Apple silicon (`darwin-arm64`)
+- macOS on Intel (`darwin-x64`)
+- Linux on arm64 (`linux-arm64`)
+- Linux on x64 (`linux-x64`)
+
+Install the [GitHub CLI](https://cli.github.com/) before continuing. The binary
+install itself does not require a source checkout, Node.js, pnpm, Bun, Xcode, or
+Homebrew. `stn setup` handles the separate tools needed for the complete agent
+workflow after Station is installed.
+
+## Let Your Agent Install and Validate Station
+
+If you prefer an agent-led install, paste this prompt into a coding agent on the
+target machine:
+
+```text
+Install Station private preview candidate v0.7.1-rc.1 and validate setup on this machine.
+
+Use the private GitHub repository jeremy0dell/station through GitHub CLI.
+
+Safety and scope:
+- First run `gh auth status --hostname github.com`, then verify repository
+  access with `gh repo view jeremy0dell/station`. Never ask me to paste,
+  extract, or print credentials. If authentication or repository access fails,
+  stop and ask me to run `gh auth login --hostname github.com` myself.
+- Do not clone the repository or build from source. Use release tag
+  `v0.7.1-rc.1`, read `docs/install.md` from that same tag with authenticated
+  `gh api`, and follow its temporary-file installer procedure. If that release
+  is not published yet, stop instead of falling back to another ref.
+- Never fetch installer code from `main` and never pipe network output directly
+  into a shell.
+- Install to `~/.local/bin` unless I approve another location. Do not edit any
+  shell startup file. Apply PATH changes only to the current shell and show me
+  the exact export I can add later.
+- Do not infer or add the current directory as a Station project.
+
+Validation:
+1. Verify `command -v stn`, `command -v stn-ingress`, and
+   `command -v stn-tmux-popup`, then run `stn --version`.
+2. Run `stn setup plan --json`, summarize every proposed install or write, and
+   ask for approval before applying it.
+3. Run the guided `stn setup` and let me answer its choices. If you cannot pass
+   through an interactive prompt, ask me to run it, then continue afterward.
+4. Run `stn setup check --json` and `stn doctor`.
+5. Report the installed path and version, whether setup reports
+   `summary.requiredOk: true`, doctor health, and any remaining manual steps.
+   A valid zero-project config is acceptable. Do not claim success while a
+   required check is failing.
+```
+
+The agent should stop at authentication or approval boundaries rather than
+inventing credentials or setup choices.
+
+## 1. Authenticate GitHub CLI
+
+Sign in with the GitHub account that can read `jeremy0dell/station`:
 
 ```bash
 gh auth login --hostname github.com
+gh auth status --hostname github.com
+gh repo view jeremy0dell/station --json nameWithOwner --jq '.nameWithOwner'
+```
+
+If GitHub CLI is already authenticated, skip the login command. The repository
+check should print `jeremy0dell/station`; a not-found response means the active
+account cannot read the private repository. GitHub CLI supplies its stored
+authentication to the API calls below, so do not add credentials to the recipe.
+
+## 2. Install the Current Preview Candidate
+
+From any directory, run:
+
+```bash
 (
   set -eu
   umask 077
   export GH_HOST=github.com
   tag=v0.7.1-rc.1
+  # After the first stable release, use:
+  # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
   installer="$(mktemp)"
   trap 'rm -f "$installer"' EXIT
   gh api --method GET \
@@ -27,51 +101,113 @@ gh auth login --hostname github.com
 )
 ```
 
-Keep `tag=v0.7.1-rc.1` for an exact prerelease install. After the first stable release is published, replace that assignment with the following to resolve the latest stable tag while still fetching installer code and artifacts from that same tag:
+`v0.7.1-rc.1` is the first supported private-binary candidate; the earlier
+`v0.7.0` candidate remained unpublished. Run this recipe after the candidate is
+published. Keep the fixed assignment for an exact prerelease install. After the
+first stable release, use the commented assignment to resolve the latest stable
+tag while still fetching installer code and artifacts from that same immutable
+tag. The recipe never falls back to `main`, never prints GitHub credentials,
+and never pipes network output directly into a shell.
 
-```bash
-tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
+The installer selects the matching platform archive, verifies it against
+`SHA256SUMS`, and installs these launchers in `~/.local/bin` by default:
+
+```text
+stn
+stn-ingress
+stn-tmux-popup
 ```
 
-The recipe never falls back to `main`. `gh` handles private-repository authentication for both the bootstrap and the installer's release discovery and asset downloads. The earlier `v0.7.0` candidate remained unpublished, so immutable rollback to a prior binary becomes available only after a second binary release is published.
+It also installs the redistributed license under
+`${XDG_DATA_HOME:-$HOME/.local/share}/station/`.
 
-### Complete first-run setup
+Immutable rollback to a prior binary becomes available only after a second
+binary release is published.
 
-The installer installs the Station artifacts and physically verifies all three bare launchers. It does not infer a project from the install directory, and it does not read, create, or edit shell startup files. Shell configuration placement is always user-owned:
+## 3. Verify the Install
 
-| Concern | Owner |
-| --- | --- |
-| Download and install artifacts | Station installer |
-| Verify all launcher paths physically resolve to the installed runtime | Station installer |
-| Detect current-process PATH mismatch | Station installer |
-| Print a current-shell recovery block | Station installer |
-| Print one future-shell export command | Station installer |
-| Choose a shell startup file | User |
-| Modify `.zprofile`, `.zshrc`, `.bash_profile`, `.bash_login`, `.bashrc`, `.profile`, or files under ZDOTDIR | Never the installer |
-| Run `stn setup` | User, with an absolute fallback supplied by the installer |
-
-For immediate availability in the current shell with the default install directory, run:
+The installer physically verifies all three launchers. If the install directory
+is not visible in the current shell, it prints an exact current-shell recovery
+block and one export command for future shells. For the default directory, the
+current-shell commands are:
 
 ```bash
 PATH="$HOME/.local/bin${PATH:+":$PATH"}"
 export PATH
 hash -r
 
+command -v stn
 stn --version
+```
+
+`command -v stn` should resolve to `~/.local/bin/stn`, and `stn --version`
+should print the installed release version. If another `stn` shadows the binary,
+use the exact PATH block or the `Absolute fallback` printed by the installer.
+
+The PATH assignment affects only the current shell. Copy the installer's exact
+export into the chosen shell configuration if you want it applied in future
+shells. The installer does not read, create, or edit shell startup files.
+
+## Install an Exact Version
+
+To install or return to an immutable release such as `v0.7.1-rc.1`, use the
+same recipe with this assignment instead of the latest-release lookup:
+
+```bash
+tag=v0.7.1-rc.1
+```
+
+The installer code and artifacts still come from that same tag. The earlier
+`v0.7.0` candidate remained unpublished, so rollback to an earlier binary starts
+with the second published version.
+
+## Use a Custom Install Directory
+
+Change the final installer invocation to pass an absolute or home-relative
+path:
+
+```bash
+sh "$installer" --version "$tag" --install-dir "$HOME/bin"
+```
+
+Use the PATH and absolute commands printed by that install rather than the
+default `~/.local/bin` examples. The normalized install directory cannot
+contain `:` because PATH uses `:` to separate entries. This validation happens
+before GitHub requests, temporary-directory creation, or destination mutation.
+
+## 4. Complete First-Run Setup
+
+Run setup only after `stn --version` succeeds:
+
+```bash
 stn setup
 stn doctor
 stn tui
 ```
 
-If any launcher is missing or physically resolves somewhere else, the installer names every mismatch. It then prints one safely quoted `export PATH=...` command to add to your chosen shell configuration for future shells, followed by the authoritative current-shell block ending in `stn setup` and an `Absolute fallback` that invokes the installed binary directly. It is safe to run the current-shell block from `HOME`, Desktop, or another ordinary directory. If you used `--install-dir`, use the exact printed commands instead of substituting `~/.local/bin`.
+Setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta;
+requires one supported agent CLI; writes a valid zero-project
+`~/.config/station/config.toml`; starts or restarts the Observer; and offers to
+install provider hooks, Worktrunk shell integration, and the `Ctrl-b Space`
+tmux popup binding. Complete the selected agent CLI's own sign-in before
+starting a real session.
 
-Guided setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta through Homebrew; requires one supported agent CLI; writes a valid zero-project `~/.config/station/config.toml`; starts or restarts the Observer; and optionally installs Worktrunk and agent hooks, Worktrunk shell integration, and the `Ctrl-b Space` tmux popup binding. Setup never adopts its current directory or an ancestor repository. Setup checks that the selected agent command runs, but it does not authenticate that provider, so complete the agent CLI's normal sign-in before starting a real session. The compiled Station binary itself does not require Node.js, pnpm, or Bun.
+Setup never adopts its current directory or an ancestor repository. On the
+empty dashboard, choose **Add your first project**, select a folder inside an
+existing Git repository, and confirm its detected Git root. Then press `N`,
+review the **Create Session** dialog, and choose **Create session** to start the
+agent session. The complete walkthrough is in [Quick start](quick-start.md).
 
-The PATH assignment above affects only the current shell. To make Station available in future shells, copy the installer's export into the shell configuration you choose; the installer never chooses or edits that file. `stn tui` forces the full workspace both inside and outside tmux. After onboarding, bare `stn` opens that workspace outside tmux and the read-only popup dashboard inside tmux.
+The installer and setup have separate ownership:
 
-On the cold-boot welcome screen, press `Enter` or `Space` to open project view. On the empty dashboard, press `Enter` (or `A`) on **Add your first project**, choose a folder inside an existing Git repository, and confirm it. A nested folder resolves to its Git root; an ordinary non-Git folder cannot be added from this flow. Then press `N`, review the project, generated session name, and agent in the **Create Session** dialog, and press `Enter` on **Create session** to start the agent session.
-
-Pass `--install-dir PATH` to override the default `~/.local/bin`; run `scripts/install.sh --help` from a checkout for the complete command surface. The normalized install directory cannot contain `:` because PATH uses `:` to separate entries. This validation happens before GitHub requests, temporary-directory creation, or destination mutation.
+| Concern | Owner |
+| --- | --- |
+| Download, verify, and install the binary artifacts | Station installer |
+| Verify all three launcher paths physically | Station installer |
+| Print current-shell, future-shell, and absolute recovery commands | Station installer |
+| Choose or edit a shell configuration | User |
+| Write Station configuration and install integrations | `stn setup` |
+| Choose the first Git project | User in Station |
 
 The installer:
 
@@ -158,7 +294,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. The compiled release design and phased roadmap live in [Single-binary Station](single-binary.md); the separate source-package path is documented in [Homebrew packaging](homebrew.md).
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. See [Development](development.md) for the current source workflow and test gates.
 
 ## Development Requirements
 

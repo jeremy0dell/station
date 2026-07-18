@@ -1,6 +1,6 @@
 # TUI Development
 
-Status: current living doc for the OpenTUI Station terminal UI in `station/` (`@station/workspace`), its boundaries, and its test expectations. Station is pre-alpha.
+Status: current contributor reference for the OpenTUI Station terminal UI in `station/` (`@station/workspace`), its boundaries, and its test expectations. Station v0.7 is a private preview.
 
 Station is the terminal UI client. It renders observer snapshots and events, owns local interaction state, and dispatches typed observer commands. It does not derive runtime truth from providers. The classic Ink TUI (`apps/tui`) was retired; Station is now the sole terminal UI.
 
@@ -16,7 +16,7 @@ Both entry points load `[tui].widgets` from the runtime config and render the sa
 configured-widget title chrome; widget settings update that shared config when a
 config path is available.
 
-Launch is driven by `apps/cli/src/commands/tui.ts`. The Node CLI shells out to the Bun renderer (dual-runtime, accepted for alpha):
+Launch is driven by `apps/cli/src/commands/tui.ts`. A source checkout uses the Node CLI to launch the Bun renderer:
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
 - Inside tmux, `stn` opens the interactive observer-backed dashboard in a

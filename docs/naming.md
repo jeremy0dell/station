@@ -127,12 +127,12 @@ Some names are compatibility aliases, not the preferred vocabulary:
 - `hook.ingested` and `hook.spoolDrained` are removed, not aliased. Use `providerHook.ingested` and `providerHook.spoolDrained`; the retired strings error as input rather than silently upgrading.
 - `hookSpool` names are acceptable for filesystem compatibility, but new code should prefer `providerHookSpool` or a broader `providerIngressSpool` when the spool contains both provider hook events and harness event reports.
 
-Because STATION is pre-alpha, there is no compatibility surface to preserve for
-STATION's own retired names. Remove a retired name instead of aliasing it. Do
-not add alias-only wrappers for names that are not part of a real external
-contract. This does not permit silent shared-schema drift: breaking payload
-changes bump the exact schema version and require generated provider hooks to
-be reinstalled.
+During the private preview, Station does not preserve compatibility for its own
+retired internal names. Remove a retired name instead of aliasing it. Do not add
+alias-only wrappers for names that are not part of a real external contract.
+This does not permit silent shared-schema drift: breaking payload changes bump
+the exact schema version and require generated provider hooks to be
+reinstalled.
 
 ## Status Sources
 
