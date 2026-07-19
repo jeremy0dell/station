@@ -1,9 +1,14 @@
 import { describe, expect, it } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { createLocalPtyTerminal } from "./pty/localPtyTerminal.js";
 import { spanAtColumn, visibleRowText } from "./testing/vtAssert.js";
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalProcess } from "./types.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
+
+const PI_CAPABILITIES_PROBE = fileURLToPath(
+  new URL("./pty/fixtures/piCapabilitiesProbe.ts", import.meta.url),
+);
 
 const gated = (): boolean => {
   if (Bun.env.STATION_PTY_SMOKE !== "1") {
@@ -20,8 +25,9 @@ type Pipeline = {
 };
 
 /** The production wiring: real bridge pty feeding a real vt screen. */
-function startPipeline(
+function startArgvPipeline(
   command: string,
+  args: readonly string[],
   size = { cols: 80, rows: 24 },
   env: Readonly<Record<string, string | undefined>> = {},
 ): Pipeline {
@@ -32,8 +38,8 @@ function startPipeline(
     },
   });
   const terminal = createLocalPtyTerminal({
-    command: "/bin/sh",
-    args: ["-c", command],
+    command,
+    args,
     size,
     env: { LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8", ...env },
   });
@@ -48,6 +54,14 @@ function startPipeline(
       screen.dispose();
     },
   };
+}
+
+function startPipeline(
+  command: string,
+  size = { cols: 80, rows: 24 },
+  env: Readonly<Record<string, string | undefined>> = {},
+): Pipeline {
+  return startArgvPipeline("/bin/sh", ["-c", command], size, env);
 }
 
 function someRowIncludes(screen: StationVtScreen, needle: string): number {
@@ -74,14 +88,11 @@ describe("pty pipeline smoke", () => {
     }
   });
 
-  it("the child sees Station-owned terminal capabilities", async () => {
+  it("the real Pi detector sees only Station-owned terminal capabilities", async () => {
     if (gated()) return;
-    const pipeline = startPipeline(
-      [
-        "printf 'TERM=%s\\nCOLORTERM=%s\\nTERM_PROGRAM=%s\\nGHOSTTY=%s\\nKITTY=%s\\nUSER=%s\\n'",
-        '"$TERM" "$COLORTERM" "$TERM_PROGRAM"',
-        '"${GHOSTTY_RESOURCES_DIR-unset}" "${KITTY_WINDOW_ID-unset}" "$USER_SETTING"',
-      ].join(" "),
+    const pipeline = startArgvPipeline(
+      process.execPath,
+      [PI_CAPABILITIES_PROBE],
       { cols: 80, rows: 24 },
       {
         TERM: "xterm-kitty",
@@ -89,18 +100,35 @@ describe("pty pipeline smoke", () => {
         TERM_PROGRAM: "ghostty",
         GHOSTTY_RESOURCES_DIR: "/ghostty",
         KITTY_WINDOW_ID: "7",
+        WEZTERM_PANE: "4",
+        __CFBundleIdentifier: "com.mitchellh.ghostty",
+        NO_COLOR: "1",
+        FORCE_COLOR: "0",
+        CURSOR_TRACE_ID: "provider-trace",
+        VSCODE_GIT_ASKPASS_MAIN: "/opt/vscode/askpass-main.js",
+        TMUX: "/tmp/tmux-501/renderer,123,0",
+        TMUX_PANE: "%7",
         USER_SETTING: "ordinary",
       },
     );
     try {
-      await waitFor(() => someRowIncludes(pipeline.screen, "USER=ordinary") >= 0, 5_000);
+      await waitFor(() => someRowIncludes(pipeline.screen, "USER_SETTING=ordinary") >= 0, 5_000);
       for (const expected of [
+        'CAPABILITIES={"images":null,"trueColor":true,"hyperlinks":false}',
         "TERM=xterm-256color",
         "COLORTERM=truecolor",
         "TERM_PROGRAM=Station",
         "GHOSTTY=unset",
         "KITTY=unset",
-        "USER=ordinary",
+        "WEZTERM=unset",
+        "BUNDLE=unset",
+        "NO_COLOR=1",
+        "FORCE_COLOR=0",
+        "VSCODE_GIT_ASKPASS_MAIN=/opt/vscode/askpass-main.js",
+        "CURSOR_TRACE_ID=provider-trace",
+        "STATION_OUTER_TMUX=/tmp/tmux-501/renderer,123,0",
+        "STATION_OUTER_TMUX_PANE=%7",
+        "USER_SETTING=ordinary",
       ]) {
         expect(someRowIncludes(pipeline.screen, expected)).toBeGreaterThanOrEqual(0);
       }

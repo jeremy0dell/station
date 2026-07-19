@@ -137,13 +137,19 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
       const cols = Math.max(MIN_COLS, params.cols);
       const rows = Math.max(MIN_ROWS, params.rows);
+      // A persistent Host can outlive or reattach through renderers, so no inherited or launch-plan tmux pair is authoritative.
+      const env: Record<string, string | undefined> = {
+        ...params.env,
+        TMUX: undefined,
+        TMUX_PANE: undefined,
+      };
       let terminal: StationTerminalProcess;
       try {
         terminal = createTerminal({
           command: params.command,
           args: params.args,
           cwd: params.cwd,
-          ...(params.env === undefined ? {} : { env: params.env }),
+          env,
           size: { cols, rows },
         });
       } catch (error) {

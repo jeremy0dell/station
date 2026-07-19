@@ -90,16 +90,27 @@ identity and feature hints are removed, and Station applies `TERM=xterm-256color
 those fields or the derived `STATION_PANE` marker.
 
 Ordinary locale, authentication, provider, project, worktree, and user environment
-continues to pass through. Until Station supports a feature end to end, children must
-not infer it from Ghostty, Kitty, WezTerm, iTerm2, Windows Terminal, Warp, or another
-outer renderer; native Station currently advertises true color but neither an image
-protocol nor OSC 8 hyperlinks.
+continues to pass through, including functional Git askpass and provider context plus
+the `NO_COLOR` / `FORCE_COLOR` user preferences. Until Station supports a feature end
+to end, children must not infer it from Ghostty, Kitty, WezTerm, iTerm2, Windows
+Terminal, Warp, or another outer renderer; native Station currently advertises true
+color but neither an image protocol nor OSC 8 hyperlinks.
+
+Outer-renderer variables are application conventions, not an exhaustive standard
+registry. Station therefore maintains a curated set of known identity and capability
+signals and couples changes to behavioral regressions such as the pinned
+[Pi 0.80.10 detector](https://github.com/earendil-works/pi/blob/8dc78834cde4e329284cf505f9e3f99763df5529/packages/tui/src/terminal-image.ts#L65-L124).
+Values that also carry authentication, provider, or user-preference behavior are not
+blanket-scrubbed merely because a detector may inspect them.
 
 `TMUX` and `TMUX_PANE` are removed because conventional capability probes treat
-them as proof that tmux renders the child. When native Station itself was launched
-inside tmux, the captured values remain available as `STATION_OUTER_TMUX` and
-`STATION_OUTER_TMUX_PANE` for deliberate commands such as
+them as proof that tmux renders the child. Renderer-owned local PTYs retain a complete
+outer pair as `STATION_OUTER_TMUX` and `STATION_OUTER_TMUX_PANE` for deliberate
+commands such as
 `TMUX="$STATION_OUTER_TMUX" TMUX_PANE="$STATION_OUTER_TMUX_PANE" tmux ...`.
+Persistent Host PTYs expose neither value because a Host can outlive and reattach
+through different renderers; its process environment is never current-renderer
+provenance.
 External tmux-provider sessions remain authoritative for their own environment and
 do not pass through this native PTY policy.
 

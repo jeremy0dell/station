@@ -223,9 +223,10 @@ bun run build:ctty-helper
 bun run test:pty:bun             # Bun.Terminal + controlling-terminal helper
 ```
 
-Both PTY lanes include deterministic child-environment probes for local and
-Station Host-backed spawns, so capability-policy changes must keep the two
-implementations equivalent.
+Both PTY lanes include the pinned Pi 0.80.10 capability detector in real local
+and Station Host-backed child processes. They prove equivalent Station-owned
+capabilities while requiring persistent Host spawns to fail closed on tmux
+provenance. Both lanes are part of `test:pre-push`.
 
 To daily-drive the Bun implementation in the isolated devbox, return to the
 repo root and start a fresh host with the selector in its environment:

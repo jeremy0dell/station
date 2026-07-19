@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { StationTerminalExit, StationTerminalProcess } from "../types.js";
 import { waitFor } from "../testing/waitFor.js";
@@ -15,6 +16,9 @@ import { createStationChildPtyEnvironment } from "./childPtyEnvironment.js";
 import { createLocalPtyTerminal } from "./localPtyTerminal.js";
 
 const RUN_REAL_BUN_PTY = process.env.STATION_PTY_IMPL === "bun";
+const PI_CAPABILITIES_PROBE = fileURLToPath(
+  new URL("./fixtures/piCapabilitiesProbe.ts", import.meta.url),
+);
 const cleanups: Array<() => Promise<unknown> | unknown> = [];
 
 afterEach(async () => {
@@ -251,14 +255,11 @@ if (RUN_REAL_BUN_PTY) {
       expect(observed.exit()).toEqual({ exitCode: 0 });
     });
 
-    it("passes the Station-owned capability environment", async () => {
+    it("makes the real Pi detector see only Station-owned capabilities", async () => {
       const terminal = trackTerminal(
         createLocalPtyTerminal({
-          command: "/bin/sh",
-          args: [
-            "-c",
-            'printf "%s|%s|%s|%s|%s|%s|%s" "$TERM" "$COLORTERM" "$TERM_PROGRAM" "${NO_COLOR-unset}" "${FORCE_COLOR-unset}" "${GHOSTTY_RESOURCES_DIR-unset}" "$USER_SETTING"',
-          ],
+          command: process.execPath,
+          args: [PI_CAPABILITIES_PROBE],
           env: {
             TERM: "xterm-kitty",
             COLORTERM: "station-test-color",
@@ -266,6 +267,13 @@ if (RUN_REAL_BUN_PTY) {
             NO_COLOR: "1",
             FORCE_COLOR: "0",
             GHOSTTY_RESOURCES_DIR: "/ghostty",
+            KITTY_WINDOW_ID: "7",
+            WEZTERM_PANE: "4",
+            __CFBundleIdentifier: "com.mitchellh.ghostty",
+            CURSOR_TRACE_ID: "provider-trace",
+            VSCODE_GIT_ASKPASS_MAIN: "/opt/vscode/askpass-main.js",
+            TMUX: "/tmp/tmux-501/renderer,123,0",
+            TMUX_PANE: "%7",
             USER_SETTING: "ordinary",
           },
         }),
@@ -274,9 +282,25 @@ if (RUN_REAL_BUN_PTY) {
 
       await waitFor(() => observed.exit() !== undefined, 5_000);
 
-      expect(observed.output()).toBe(
-        "xterm-256color|truecolor|Station|unset|unset|unset|ordinary",
-      );
+      for (const expected of [
+        'CAPABILITIES={"images":null,"trueColor":true,"hyperlinks":false}',
+        "TERM=xterm-256color",
+        "COLORTERM=truecolor",
+        "TERM_PROGRAM=Station",
+        "GHOSTTY=unset",
+        "KITTY=unset",
+        "WEZTERM=unset",
+        "BUNDLE=unset",
+        "NO_COLOR=1",
+        "FORCE_COLOR=0",
+        "VSCODE_GIT_ASKPASS_MAIN=/opt/vscode/askpass-main.js",
+        "CURSOR_TRACE_ID=provider-trace",
+        "STATION_OUTER_TMUX=/tmp/tmux-501/renderer,123,0",
+        "STATION_OUTER_TMUX_PANE=%7",
+        "USER_SETTING=ordinary",
+      ]) {
+        expect(observed.output()).toContain(expected);
+      }
     });
 
     it("dispose terminates a long-running payload before closing the terminal", async () => {

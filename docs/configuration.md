@@ -510,14 +510,18 @@ launch mode. Native Station child PTYs also receive standard terminal values
 inherited and per-launch environment merging. Outer-renderer identity and
 feature hints are removed at that boundary, while ordinary locale,
 authentication, provider, project, worktree, and user environment passes
-through; these terminal values are generated behavior, not hand-authored
-configuration.
+through. This includes functional values such as Git askpass configuration and
+the `NO_COLOR` / `FORCE_COLOR` user preferences; these terminal values are
+generated behavior, not hand-authored configuration.
 
 Native Station removes `TMUX` and `TMUX_PANE` from its children because they are
-widely interpreted as direct-terminal capability evidence. If Station itself was
-launched inside tmux, it exposes the captured outer values as
+widely interpreted as direct-terminal capability evidence. For a local PTY owned
+by the current renderer, Station exposes a complete outer pair as
 `STATION_OUTER_TMUX` and `STATION_OUTER_TMUX_PANE` for deliberate tmux commands
-without misidentifying the child renderer. Station-owned PTYs use
+without misidentifying the child renderer. Persistent Host PTYs expose neither
+pair: the Host can outlive and reattach through different renderers, so its own
+environment and launch-plan values are not authoritative outer-terminal
+provenance. Station-owned PTYs use
 `STATION_PANE=1`, so launch input cannot clear or replace Station ownership. If a
 new tmux server is started inside one, its real server-and-pane context differs
 from that marker and cannot leak Station ownership into later panes. There is no
