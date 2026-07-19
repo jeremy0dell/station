@@ -81,8 +81,11 @@ describe("ClaudeHarnessProvider", () => {
 
   it("reports authenticated doctor checks when auth status is logged in", async () => {
     const calls: ExternalCommandInput[] = [];
+    const root = await mkdtemp(join(tmpdir(), "station-claude-doctor-"));
     const provider = createClaudeHarnessProvider({
       command: "claude-test",
+      stateDir: join(root, "observer"),
+      claudeConfigDir: join(root, "claude-home"),
       now: () => new Date(now),
       runner: async (input) => {
         calls.push(input);
@@ -93,7 +96,7 @@ describe("ClaudeHarnessProvider", () => {
       },
     });
 
-    const checks = await provider.doctorChecks();
+    const checks = await provider.doctorChecks?.();
 
     expect(checks).toEqual([
       expect.objectContaining({ name: "claude.version", status: "ok" }),
@@ -104,8 +107,11 @@ describe("ClaudeHarnessProvider", () => {
   });
 
   it("warns in doctor checks when claude is not logged in", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-claude-doctor-"));
     const provider = createClaudeHarnessProvider({
       command: "claude-test",
+      stateDir: join(root, "observer"),
+      claudeConfigDir: join(root, "claude-home"),
       now: () => new Date(now),
       runner: async (input) => {
         if (input.args?.[0] === "--version") {
@@ -115,20 +121,20 @@ describe("ClaudeHarnessProvider", () => {
       },
     });
 
-    const checks = await provider.doctorChecks();
+    const checks = await provider.doctorChecks?.();
 
-    expect(checks[1]).toMatchObject({
+    expect(checks?.[1]).toMatchObject({
       name: "claude.auth",
       status: "warn",
     });
-    expect(checks[1]?.message).toContain("login");
+    expect(checks?.[1]?.message).toContain("login");
   });
 
   it("hooksStatus reports requested:false / installed:false when hooks are not enabled", async () => {
     // install_hooks omitted → the doctor short-circuits without reading files, so
     // the gate sees requested:false (and points the user at the config flag).
     const provider = createClaudeHarnessProvider({ now: () => new Date(now) });
-    await expect(provider.hooksStatus()).resolves.toMatchObject({
+    await expect(provider.hooksStatus?.()).resolves.toMatchObject({
       provider: "claude",
       requested: false,
       installed: false,
@@ -162,7 +168,7 @@ describe("ClaudeHarnessProvider", () => {
     });
 
     // The observer passes the config path to the guard via context.
-    await expect(provider.hooksStatus({ stationConfigPath })).resolves.toMatchObject({
+    await expect(provider.hooksStatus?.({ stationConfigPath })).resolves.toMatchObject({
       provider: "claude",
       requested: true,
       installed: true,
@@ -178,7 +184,7 @@ describe("ClaudeHarnessProvider", () => {
       stateDir: join(root, "observer"),
       now: () => new Date(now),
     });
-    await expect(provider.hooksStatus()).resolves.toMatchObject({
+    await expect(provider.hooksStatus?.()).resolves.toMatchObject({
       provider: "claude",
       requested: true,
       installed: false,
@@ -257,7 +263,7 @@ describe("ClaudeHarnessProvider", () => {
   it("ingests forwarded hook events through provider-local parsing", async () => {
     const provider = createClaudeHarnessProvider();
 
-    const observations = await provider.ingestEvent(
+    const observations = await provider.ingestEvent?.(
       {
         provider: "claude",
         event: {
@@ -273,7 +279,7 @@ describe("ClaudeHarnessProvider", () => {
       { projects: [], worktrees: [], terminalTargets: [] },
     );
 
-    expect(observations[0]).toMatchObject({
+    expect(observations?.[0]).toMatchObject({
       provider: "claude",
       rawEventType: "Stop",
       sessionId: "ses_web_task",
@@ -286,7 +292,7 @@ describe("ClaudeHarnessProvider", () => {
     const provider = createClaudeHarnessProvider();
 
     await expect(
-      provider.ingestEvent(
+      provider.ingestEvent?.(
         { provider: "claude", event: { hook_event_name: "Stop" } },
         { projects: [], worktrees: [], terminalTargets: [] },
       ),

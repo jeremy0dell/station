@@ -107,7 +107,7 @@ describe("release readiness docs", () => {
     expect(readme).toContain("authenticated GitHub release assets");
     expect(readme).toContain("does not require Node.js, pnpm, Bun");
     expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
-    expect(install).toContain("tag=v0.7.1-rc.3");
+    expect(install).toContain("tag=v0.7.1-rc.4");
     for (const [path, document] of [
       ["README.md", readme],
       ["docs/install.md", install],
@@ -163,7 +163,7 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
     expect(singleBinary).toContain("without `+` build metadata");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
-    expect(development).toContain("accepted-release-candidate-0.7.1-rc.3");
+    expect(development).toContain("accepted-release-candidate-0.7.1-rc.4");
     const acceptanceRecipes = shellBlocks(development).filter((block) =>
       block.includes('STATION_INSTALL_RELEASE_ID="$release_id"'),
     );
@@ -221,7 +221,7 @@ describe("release readiness docs", () => {
     expect(promote).toContain("actions/workflows/$workflow_id");
     expect(promote).toContain("compare/$commit...main");
     expect(promote).toContain('prerelease="$expected_prerelease"');
-    expect(packageJson.version).toBe("0.7.1-rc.3");
+    expect(packageJson.version).toBe("0.7.1-rc.4");
     expect(development).toContain("HOST_UPGRADE_BLOCKED");
     expect(homebrew).toContain("`workflow_dispatch` only");
     expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
@@ -274,7 +274,7 @@ describe("release readiness docs", () => {
       "stn-ingress",
       "HOST_UPGRADE_BLOCKED",
       "same Observer socket",
-      "second binary release",
+      "prior published binary",
     ]) {
       expect(normalizedDevelopment).toContain(acceptance);
     }

@@ -930,7 +930,7 @@ function environmentWithoutGitLocals(source) {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.7.1-rc.3";
+    return "0.7.1-rc.4";
   }
   if (
     normalized.length === 2 &&
@@ -1088,7 +1088,11 @@ async function writeFakeTmux(path, statePath) {
 }
 
 async function readFakeTmuxState(path) {
-  return JSON.parse(await readFile(path, "utf8"));
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    throw new Error(`Could not parse fake tmux state at ${path}.`, { cause: error });
+  }
 }
 
 async function writeFakeTmuxState(path, state) {

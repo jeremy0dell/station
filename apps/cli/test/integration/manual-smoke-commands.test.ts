@@ -116,7 +116,7 @@ describe("CLI manual-smoke commands", () => {
       "--version",
     ]);
 
-    expect(direct).toEqual({ code: 0, output: "0.7.1-rc.3", outputFormat: "text" });
+    expect(direct).toEqual({ code: 0, output: "0.7.1-rc.4", outputFormat: "text" });
     expect(withMissingConfig).toEqual(direct);
   });
 
@@ -225,7 +225,15 @@ describe("CLI manual-smoke commands", () => {
     for (const { topic, example } of dispatchExamples) {
       const payload = commandDispatchJsonPayload(example);
       expect(payload, `${topic}: ${example}`).toBeDefined();
-      const parsed = StationCommandSchema.safeParse(JSON.parse(String(payload)));
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(String(payload));
+      } catch (error) {
+        throw new Error(`Command dispatch example contains invalid JSON: ${topic}.`, {
+          cause: error,
+        });
+      }
+      const parsed = StationCommandSchema.safeParse(decoded);
       expect(parsed.success, `${topic}: ${example}`).toBe(true);
     }
   });
