@@ -27,6 +27,7 @@ const commonFields = {
   station_session_id: nonEmptyStringSchema.optional(),
   station_terminal_provider: nonEmptyStringSchema.optional(),
   station_terminal_target_id: nonEmptyStringSchema.optional(),
+  station_extension_protocol: z.literal(2).optional(),
 };
 
 const SessionStartEventSchema = z
@@ -62,6 +63,13 @@ const AgentEndEventSchema = z
   })
   .strict();
 
+const AgentSettledEventSchema = z
+  .object({
+    ...commonFields,
+    event_type: z.literal("agent_settled"),
+  })
+  .strict();
+
 const TurnStartEventSchema = z
   .object({
     ...commonFields,
@@ -76,6 +84,7 @@ const ToolExecutionStartEventSchema = z
     event_type: z.literal("tool_execution_start"),
     tool_call_id: nonEmptyStringSchema.optional(),
     tool_name: nonEmptyStringSchema.optional(),
+    active_question_call_id: nonEmptyStringSchema.optional(),
   })
   .strict();
 
@@ -86,6 +95,16 @@ const ToolExecutionEndEventSchema = z
     tool_call_id: nonEmptyStringSchema.optional(),
     tool_name: nonEmptyStringSchema.optional(),
     is_error: z.boolean().optional(),
+    active_question_call_id: nonEmptyStringSchema.optional(),
+  })
+  .strict();
+
+const QuestionPromptOpenEventSchema = z
+  .object({
+    ...commonFields,
+    event_type: z.literal("question_prompt_open"),
+    tool_call_id: nonEmptyStringSchema,
+    tool_name: z.literal("ask_user_question"),
   })
   .strict();
 
@@ -103,6 +122,8 @@ const SessionCompactEventSchema = z
     event_type: z.literal("session_compact"),
     from_extension: z.boolean().optional(),
     compaction_entry_id: nonEmptyStringSchema.optional(),
+    reason: z.enum(["manual", "threshold", "overflow"]).optional(),
+    will_retry: z.boolean().optional(),
   })
   .strict();
 
@@ -113,9 +134,11 @@ const piCompactEventSchemaByName = {
   session_shutdown: SessionShutdownEventSchema,
   agent_start: AgentStartEventSchema,
   agent_end: AgentEndEventSchema,
+  agent_settled: AgentSettledEventSchema,
   turn_start: TurnStartEventSchema,
   tool_execution_start: ToolExecutionStartEventSchema,
   tool_execution_end: ToolExecutionEndEventSchema,
+  question_prompt_open: QuestionPromptOpenEventSchema,
   message_end: MessageEndEventSchema,
   session_compact: SessionCompactEventSchema,
 } satisfies Record<PiSupportedEventName, z.ZodType>;
@@ -127,9 +150,11 @@ export const PiCompactEventSchema = z.discriminatedUnion(
     typeof SessionShutdownEventSchema,
     typeof AgentStartEventSchema,
     typeof AgentEndEventSchema,
+    typeof AgentSettledEventSchema,
     typeof TurnStartEventSchema,
     typeof ToolExecutionStartEventSchema,
     typeof ToolExecutionEndEventSchema,
+    typeof QuestionPromptOpenEventSchema,
     typeof MessageEndEventSchema,
     typeof SessionCompactEventSchema,
   ],

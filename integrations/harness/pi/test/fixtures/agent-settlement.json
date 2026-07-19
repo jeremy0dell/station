@@ -1,0 +1,47 @@
+[
+  {
+    "event_type": "agent_start",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "agent_end",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "message_count": 2,
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "agent_start",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "agent_end",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "message_count": 3,
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "agent_start",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "agent_end",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "message_count": 2,
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "agent_settled",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_settlement",
+    "station_extension_protocol": 2
+  }
+]

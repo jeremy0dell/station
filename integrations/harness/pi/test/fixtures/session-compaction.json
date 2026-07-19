@@ -1,0 +1,40 @@
+[
+  {
+    "event_type": "session_compact",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_compaction",
+    "reason": "manual",
+    "will_retry": false,
+    "from_extension": false,
+    "compaction_entry_id": "compact_manual",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "session_compact",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_compaction",
+    "reason": "threshold",
+    "will_retry": false,
+    "from_extension": false,
+    "compaction_entry_id": "compact_threshold",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "session_compact",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_compaction",
+    "reason": "overflow",
+    "will_retry": true,
+    "from_extension": false,
+    "compaction_entry_id": "compact_overflow",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "session_compact",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_compaction",
+    "from_extension": false,
+    "compaction_entry_id": "compact_legacy",
+    "station_extension_protocol": 2
+  }
+]

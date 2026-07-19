@@ -1,0 +1,65 @@
+[
+  {
+    "event_type": "tool_execution_start",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_parallel",
+    "tool_call_id": "question_parallel",
+    "tool_name": "ask_user_question",
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "tool_execution_start",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_parallel",
+    "tool_call_id": "read_parallel",
+    "tool_name": "read",
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "question_prompt_open",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_parallel",
+    "tool_call_id": "question_parallel",
+    "tool_name": "ask_user_question",
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "tool_execution_end",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_parallel",
+    "tool_call_id": "read_parallel",
+    "tool_name": "read",
+    "is_error": false,
+    "active_question_call_id": "question_parallel",
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "tool_execution_end",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_parallel",
+    "tool_call_id": "question_parallel",
+    "tool_name": "ask_user_question",
+    "is_error": false,
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  }
+]

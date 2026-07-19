@@ -1,0 +1,39 @@
+[
+  {
+    "event_type": "tool_execution_start",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_cancelled",
+    "tool_call_id": "call_IuSnFNe4fJyktrX3WOM80ZeA|fc_0b3250179c1bbfe9016a5bf018915c81959350bb36a66dcc6f",
+    "tool_name": "ask_user_question",
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "question_prompt_open",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_cancelled",
+    "tool_call_id": "call_IuSnFNe4fJyktrX3WOM80ZeA|fc_0b3250179c1bbfe9016a5bf018915c81959350bb36a66dcc6f",
+    "tool_name": "ask_user_question",
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  },
+  {
+    "event_type": "tool_execution_end",
+    "cwd": "/work/project",
+    "pi_session_id": "pi_session_question_cancelled",
+    "tool_call_id": "call_IuSnFNe4fJyktrX3WOM80ZeA|fc_0b3250179c1bbfe9016a5bf018915c81959350bb36a66dcc6f",
+    "tool_name": "ask_user_question",
+    "is_error": false,
+    "station_project_id": "project",
+    "station_worktree_id": "wt_project",
+    "station_session_id": "ses_project",
+    "station_terminal_target_id": "tmux:station:@1:%2",
+    "station_extension_protocol": 2
+  }
+]
