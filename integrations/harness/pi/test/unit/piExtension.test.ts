@@ -8,6 +8,8 @@ import {
   registerStationPiExtension,
 } from "../../src/piExtension";
 
+type HookDelivery = Parameters<NonNullable<PiExtensionDeps["sendReport"]>>[0];
+
 describe("station Pi extension", () => {
   it("keeps the extension runtime dependency-light", async () => {
     const source = await readFile(new URL("../../src/piExtension.ts", import.meta.url), "utf8");
@@ -34,6 +36,7 @@ describe("station Pi extension", () => {
       "session_shutdown",
       "agent_start",
       "agent_end",
+      "agent_settled",
       "turn_start",
       "tool_execution_start",
       "tool_execution_end",
@@ -98,6 +101,7 @@ describe("station Pi extension", () => {
           station_worktree_id: "wt_web_task",
           station_session_id: "ses_web_task",
           station_terminal_target_id: "tmux:station:@1:%2",
+          station_extension_protocol: 2,
         }),
         report: expect.objectContaining({
           provider: "pi",
@@ -110,6 +114,7 @@ describe("station Pi extension", () => {
               provider: "openai",
               id: "gpt-5.4",
             },
+            stationExtensionProtocol: 2,
             toolCallId: "toolu_1",
             toolName: "bash",
           },
@@ -117,6 +122,145 @@ describe("station Pi extension", () => {
       },
     ]);
     expect(JSON.stringify(delivered)).not.toContain("raw command body");
+  });
+
+  it("serializes prompt-open attention ahead of parallel sibling completion", async () => {
+    const delivered: HookDelivery[] = [];
+    const handlers = new Map<string, (event: unknown, context: unknown) => Promise<void>>();
+    const busHandlers = new Map<string, (data: unknown) => void>();
+    let reportIndex = 0;
+
+    registerStationPiExtension(
+      {
+        on: (event, handler) => handlers.set(event, handler),
+        events: {
+          on: (channel, handler) => {
+            busHandlers.set(channel, handler);
+            return undefined;
+          },
+        },
+      },
+      {
+        env: env(),
+        pid: 4321,
+        reportId: () => `report_pi_question_${++reportIndex}`,
+        sendReport: async (input) => {
+          delivered.push(input);
+        },
+      },
+    );
+
+    await handlers.get("tool_execution_start")?.(
+      { toolCallId: "question_1", toolName: "ask_user_question", args: { secret: true } },
+      context(),
+    );
+    await handlers.get("tool_execution_start")?.(
+      { toolCallId: "read_1", toolName: "read", args: { path: "/secret" } },
+      context(),
+    );
+    busHandlers.get("rpiv:ask-user:prompt")?.({ question: "secret prompt" });
+    await handlers.get("tool_execution_end")?.(
+      { toolCallId: "read_1", toolName: "read", result: "secret result", isError: false },
+      context(),
+    );
+    await handlers.get("tool_execution_end")?.(
+      { toolCallId: "question_1", toolName: "ask_user_question", isError: false },
+      context(),
+    );
+
+    expect(delivered.map((item) => item.eventType)).toEqual([
+      "tool_execution_start",
+      "tool_execution_start",
+      "question_prompt_open",
+      "tool_execution_end",
+      "tool_execution_end",
+    ]);
+    expect(
+      delivered.map((item) => [item.report.status?.value, item.report.status?.attention]),
+    ).toEqual([
+      ["working", undefined],
+      ["working", undefined],
+      ["needs_attention", "question"],
+      ["needs_attention", "question"],
+      ["working", undefined],
+    ]);
+    expect(delivered[3]?.payload).toMatchObject({
+      tool_call_id: "read_1",
+      active_question_call_id: "question_1",
+    });
+    expect(JSON.stringify(delivered)).not.toContain("secret");
+  });
+
+  it("does not open attention when question execution is rejected before its prompt", async () => {
+    const delivered: HookDelivery[] = [];
+    const handlers = new Map<string, (event: unknown, context: unknown) => Promise<void>>();
+
+    registerStationPiExtension(
+      {
+        on: (event, handler) => handlers.set(event, handler),
+        events: { on: () => undefined },
+      },
+      {
+        env: env(),
+        pid: 4321,
+        reportId: () => `report_pi_rejected_${delivered.length}`,
+        sendReport: async (input) => {
+          delivered.push(input);
+        },
+      },
+    );
+
+    await handlers.get("tool_execution_start")?.(
+      { toolCallId: "question_rejected", toolName: "ask_user_question" },
+      context(),
+    );
+    await handlers.get("tool_execution_end")?.(
+      { toolCallId: "question_rejected", toolName: "ask_user_question", isError: true },
+      context(),
+    );
+
+    expect(delivered.map((item) => item.report.status?.value)).toEqual(["working", "working"]);
+    expect(delivered.every((item) => item.report.status?.attention === undefined)).toBe(true);
+  });
+
+  it("retains settlement and compaction lifecycle metadata without summary bodies", () => {
+    const rawSecret = "secret compaction summary";
+    const settled = compactPiExtensionEvent("agent_settled", {}, context(), {
+      env: env(),
+      pid: 4321,
+    });
+    const compacted = compactPiExtensionEvent(
+      "session_compact",
+      {
+        reason: "manual",
+        willRetry: false,
+        fromExtension: false,
+        compactionEntry: {
+          id: "compact_1",
+          summary: rawSecret,
+        },
+      },
+      context(),
+      {
+        env: env(),
+        pid: 4321,
+      },
+    );
+
+    expect(settled).toMatchObject({
+      event_type: "agent_settled",
+      cwd: "/tmp/station/web/task",
+      station_extension_protocol: 2,
+    });
+    expect(compacted).toMatchObject({
+      event_type: "session_compact",
+      station_extension_protocol: 2,
+      reason: "manual",
+      will_retry: false,
+      from_extension: false,
+      compaction_entry_id: "compact_1",
+    });
+    expect(JSON.stringify(compacted)).not.toContain(rawSecret);
   });
 
   it("routes compact payloads and explicit runtime paths through stn-ingress", async () => {
@@ -164,7 +308,7 @@ describe("station Pi extension", () => {
     );
     await handlers.get("session_start")?.({ reason: "startup" }, context());
 
-    expect(JSON.parse(await readFile(argsPath, "utf8"))).toEqual([
+    expect(await readJsonFile(argsPath)).toEqual([
       "--socket",
       join(root, "observer.sock"),
       "--state-dir",
@@ -176,11 +320,12 @@ describe("station Pi extension", () => {
       "pi",
       "session_start",
     ]);
-    expect(JSON.parse(await readFile(stdinPath, "utf8"))).toMatchObject({
+    expect(await readJsonFile(stdinPath)).toMatchObject({
       event_type: "session_start",
       reason: "startup",
       station_session_id: "ses_web_task",
       station_worktree_id: "wt_web_task",
+      station_extension_protocol: 2,
     });
   });
 
@@ -216,34 +361,85 @@ describe("station Pi extension", () => {
     await expect(access(spoolDir)).rejects.toThrow();
   }, 8_000);
 
-  it("omits prompts, message bodies, tool results, and system prompts", () => {
+  it("omits prompts, answers, message bodies, tool results, and system prompts", () => {
     const rawSecret = "secret raw body";
-    const payload = compactPiExtensionEvent(
-      "message_end",
-      {
-        prompt: rawSecret,
-        systemPrompt: rawSecret,
-        message: {
-          role: "assistant",
-          content: rawSecret,
+    const payloads = [
+      compactPiExtensionEvent(
+        "message_end",
+        {
+          prompt: rawSecret,
+          systemPrompt: rawSecret,
+          message: {
+            role: "assistant",
+            content: rawSecret,
+          },
+          result: rawSecret,
         },
-        result: rawSecret,
-      },
-      context(),
-      {
-        env: env(),
-        pid: 4321,
-      },
-    );
+        context(),
+        {
+          env: env(),
+          pid: 4321,
+        },
+      ),
+      compactPiExtensionEvent(
+        "tool_execution_start",
+        {
+          toolCallId: "question_1",
+          toolName: "ask_user_question",
+          args: { questions: [{ question: rawSecret }] },
+        },
+        context(),
+        {
+          env: env(),
+          pid: 4321,
+        },
+      ),
+      compactPiExtensionEvent(
+        "tool_execution_end",
+        {
+          toolCallId: "question_1",
+          toolName: "ask_user_question",
+          result: {
+            content: rawSecret,
+            details: { answers: [rawSecret] },
+          },
+          isError: false,
+        },
+        context(),
+        {
+          env: env(),
+          pid: 4321,
+        },
+      ),
+    ];
 
-    expect(payload).toMatchObject({
+    expect(payloads[0]).toMatchObject({
       event_type: "message_end",
       message_role: "assistant",
       cwd: "/tmp/station/web/task",
     });
-    expect(JSON.stringify(payload)).not.toContain(rawSecret);
+    expect(payloads[1]).toMatchObject({
+      event_type: "tool_execution_start",
+      tool_call_id: "question_1",
+      tool_name: "ask_user_question",
+    });
+    expect(payloads[2]).toMatchObject({
+      event_type: "tool_execution_end",
+      tool_call_id: "question_1",
+      tool_name: "ask_user_question",
+      is_error: false,
+    });
+    expect(JSON.stringify(payloads)).not.toContain(rawSecret);
   });
 });
+
+async function readJsonFile(path: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    throw new Error(`Could not parse JSON file ${path}.`, { cause: error });
+  }
+}
 
 function env(): Record<string, string> {
   return {

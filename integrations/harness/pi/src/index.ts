@@ -1,3 +1,7 @@
+export {
+  type PiCompactEvent,
+  parsePiCompactEvent,
+} from "./event/compactEvent.js";
 export { compactPiHookPayload, type PiPayloadCompactionResult } from "./event/compaction.js";
 export {
   type PiHarnessEventReportInput,

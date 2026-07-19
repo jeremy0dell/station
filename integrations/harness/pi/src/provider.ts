@@ -11,7 +11,7 @@ import {
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { classifyPiRunStatus } from "./classify.js";
-import { piProviderErrorFromUnknown } from "./errors.js";
+import { PiHarnessProviderError, piProviderErrorFromUnknown } from "./errors.js";
 import { normalizePiRawEvent } from "./event/mapping.js";
 import { buildPiLaunchPlan } from "./launch.js";
 
@@ -37,6 +37,9 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: true,
 };
 
+const minimumPiVersion = [0, 80, 5] as const;
+const minimumPiVersionText = minimumPiVersion.join(".");
+
 const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {
   id: "pi",
   displayName: "Pi",
@@ -48,7 +51,7 @@ const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {
   resumeFromOptions: (options) => options.resume === true,
   health: {
     args: ["--version"],
-    diagnostics: () => ({ command: "pi --version succeeded" }),
+    diagnostics: (result) => piHealthDiagnostics(result.stdout),
     unavailableError: (error) =>
       piProviderErrorFromUnknown(error, {
         code: "HARNESS_PI_UNAVAILABLE",
@@ -65,6 +68,43 @@ const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {
     normalize: (event, context) => normalizePiRawEvent(event, context),
   },
 };
+
+function piHealthDiagnostics(output: string): Record<string, string> {
+  const match = output.trim().match(/^(?:pi\s+)?v?(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/i);
+  if (match === null) {
+    throw new PiHarnessProviderError(
+      "HARNESS_PI_VERSION_UNSUPPORTED",
+      "Station could not determine the installed Pi version.",
+      { hint: `Install Pi ${minimumPiVersionText} or newer.` },
+    );
+  }
+
+  const installed = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+  if (compareVersion(installed, minimumPiVersion) < 0) {
+    throw new PiHarnessProviderError(
+      "HARNESS_PI_VERSION_UNSUPPORTED",
+      `Pi ${installed.join(".")} does not emit the settlement event Station requires.`,
+      { hint: `Install Pi ${minimumPiVersionText} or newer.` },
+    );
+  }
+
+  return {
+    command: "pi --version succeeded",
+    installedVersion: installed.join("."),
+    minimumVersion: minimumPiVersionText,
+  };
+}
+
+function compareVersion(
+  left: readonly [number, number, number],
+  right: readonly [number, number, number],
+): number {
+  for (let index = 0; index < left.length; index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
 
 function command(options: PiHarnessProviderOptions): string {
   return harnessCommand(options, "STATION_PI_BIN", "pi");

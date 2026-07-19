@@ -32,8 +32,18 @@ export type PiHarnessEventReportInput = {
   };
 };
 
+function usesSettledEvent(event: PiCompactEvent): boolean {
+  return event.station_extension_protocol === 2;
+}
+
 function turnFromPiEvent(event: PiCompactEvent): HarnessEventReport["turn"] | undefined {
-  return event.event_type === "agent_end" ? { kind: "turn_completed" } : undefined;
+  if (
+    event.event_type === "agent_settled" ||
+    (event.event_type === "agent_end" && !usesSettledEvent(event))
+  ) {
+    return { kind: "turn_completed" };
+  }
+  return undefined;
 }
 
 function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown> {
@@ -41,6 +51,7 @@ function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown>
   assignProviderData(providerData, "piSessionId", event.pi_session_id);
   assignProviderData(providerData, "piSessionFile", event.pi_session_file);
   assignProviderData(providerData, "model", event.model);
+  assignProviderData(providerData, "stationExtensionProtocol", event.station_extension_protocol);
   switch (event.event_type) {
     case "session_start":
       assignProviderData(providerData, "sessionStartReason", event.reason);
@@ -56,11 +67,17 @@ function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown>
     case "tool_execution_start":
       assignProviderData(providerData, "toolCallId", event.tool_call_id);
       assignProviderData(providerData, "toolName", event.tool_name);
+      assignProviderData(providerData, "activeQuestionCallId", event.active_question_call_id);
       break;
     case "tool_execution_end":
       assignProviderData(providerData, "toolCallId", event.tool_call_id);
       assignProviderData(providerData, "toolName", event.tool_name);
       assignProviderData(providerData, "isError", event.is_error);
+      assignProviderData(providerData, "activeQuestionCallId", event.active_question_call_id);
+      break;
+    case "question_prompt_open":
+      assignProviderData(providerData, "toolCallId", event.tool_call_id);
+      assignProviderData(providerData, "toolName", event.tool_name);
       break;
     case "message_end":
       assignProviderData(providerData, "messageRole", event.message_role);
@@ -71,8 +88,11 @@ function providerDataFromPiEvent(event: PiCompactEvent): Record<string, unknown>
     case "session_compact":
       assignProviderData(providerData, "fromExtension", event.from_extension);
       assignProviderData(providerData, "compactionEntryId", event.compaction_entry_id);
+      assignProviderData(providerData, "compactionReason", event.reason);
+      assignProviderData(providerData, "willRetry", event.will_retry);
       break;
     case "agent_start":
+    case "agent_settled":
       break;
     default:
       assertNever(event);
@@ -104,7 +124,11 @@ function reportCoalesceKeyFromPiEvent(event: PiCompactEvent): string | undefined
   if (event.event_type === "turn_start" && event.turn_index !== undefined) {
     parts.push(`turn:${event.turn_index}`);
   }
-  if (event.event_type === "tool_execution_start" || event.event_type === "tool_execution_end") {
+  if (
+    event.event_type === "tool_execution_start" ||
+    event.event_type === "tool_execution_end" ||
+    event.event_type === "question_prompt_open"
+  ) {
     if (event.tool_call_id !== undefined) {
       parts.push(`tool:${event.tool_call_id}`);
     } else if (event.tool_name !== undefined) {
@@ -192,6 +216,118 @@ export function piHookPayloadToHarnessEventReport(
   return HarnessEventReportSchema.parse(report);
 }
 
+function statusForPiShutdown(
+  event: Extract<PiCompactEvent, { event_type: "session_shutdown" }>,
+  observedAt: string,
+): ObservedStatus {
+  if (event.reason === "quit") {
+    return {
+      value: "exited",
+      confidence: "high",
+      reason: "Pi session quit.",
+      source: "harness_event",
+      updatedAt: observedAt,
+    };
+  }
+  return {
+    value: "working",
+    confidence: "medium",
+    reason:
+      event.reason === undefined
+        ? "Pi session is shutting down."
+        : `Pi session is shutting down for ${event.reason}.`,
+    source: "harness_event",
+    updatedAt: observedAt,
+  };
+}
+
+function statusForPiCompaction(
+  event: Extract<PiCompactEvent, { event_type: "session_compact" }>,
+  observedAt: string,
+): ObservedStatus {
+  // Only an explicitly completed manual /compact is idle; every other form may continue.
+  if (event.reason === "manual" && event.will_retry === false) {
+    return {
+      value: "idle",
+      confidence: "high",
+      reason: "Pi completed manual session compaction.",
+      source: "harness_event",
+      updatedAt: observedAt,
+    };
+  }
+  return {
+    value: "working",
+    confidence: "medium",
+    reason:
+      event.reason === undefined
+        ? "Pi compacted the session; continuation state is unknown."
+        : `Pi completed ${event.reason} session compaction and may continue.`,
+    source: "harness_event",
+    updatedAt: observedAt,
+  };
+}
+
+function piQuestionAttention(observedAt: string): ObservedStatus {
+  return {
+    value: "needs_attention",
+    confidence: "high",
+    reason: "Pi is waiting for a question response.",
+    source: "harness_event",
+    updatedAt: observedAt,
+    attention: "question",
+  };
+}
+
+function statusForPiToolStart(
+  event: Extract<PiCompactEvent, { event_type: "tool_execution_start" }>,
+  observedAt: string,
+): ObservedStatus {
+  if (event.active_question_call_id !== undefined) {
+    return piQuestionAttention(observedAt);
+  }
+  return {
+    value: "working",
+    confidence: "medium",
+    reason:
+      event.tool_name === undefined
+        ? "Pi started a tool execution."
+        : `Pi started ${event.tool_name}.`,
+    source: "harness_event",
+    updatedAt: observedAt,
+  };
+}
+
+function statusForPiToolEnd(
+  event: Extract<PiCompactEvent, { event_type: "tool_execution_end" }>,
+  observedAt: string,
+): ObservedStatus {
+  if (event.active_question_call_id !== undefined) {
+    return piQuestionAttention(observedAt);
+  }
+  if (event.tool_name === "ask_user_question") {
+    return {
+      value: "working",
+      confidence: "high",
+      reason: "Pi question execution ended.",
+      source: "harness_event",
+      updatedAt: observedAt,
+    };
+  }
+  return {
+    value: "working",
+    confidence: "medium",
+    reason:
+      event.tool_name === undefined
+        ? "Pi completed a tool execution."
+        : `Pi completed ${event.tool_name}.`,
+    source: "harness_event",
+    updatedAt: observedAt,
+  };
+}
+
+/**
+ * Maps one strict compact Pi event to provider-neutral status without retaining cross-event state.
+ */
 export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): ObservedStatus {
   switch (event.event_type) {
     case "session_start":
@@ -214,63 +350,42 @@ export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): Ob
         updatedAt: observedAt,
       };
     case "agent_end":
-      return {
-        value: "idle",
-        confidence: "medium",
-        reason: "Pi agent turn completed.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
-    case "session_shutdown":
-      if (event.reason === "quit") {
+      if (!usesSettledEvent(event)) {
         return {
-          value: "exited",
-          confidence: "high",
-          reason: "Pi session quit.",
+          value: "idle",
+          confidence: "medium",
+          reason: "Legacy Pi agent turn completed.",
           source: "harness_event",
           updatedAt: observedAt,
         };
       }
+      // A low-level run can still be followed by retry, compaction, or queued continuation.
       return {
         value: "working",
         confidence: "medium",
-        reason:
-          event.reason === undefined
-            ? "Pi session is shutting down."
-            : `Pi session is shutting down for ${event.reason}.`,
+        reason: "Pi agent run ended and may continue automatically.",
         source: "harness_event",
         updatedAt: observedAt,
       };
+    case "agent_settled":
+      // Pi emits settlement only after automatic continuation paths are exhausted.
+      return {
+        value: "idle",
+        confidence: "high",
+        reason: "Pi agent settled.",
+        source: "harness_event",
+        updatedAt: observedAt,
+      };
+    case "session_shutdown":
+      return statusForPiShutdown(event, observedAt);
     case "session_compact":
-      return {
-        value: "working",
-        confidence: "medium",
-        reason: "Pi compacted the session.",
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return statusForPiCompaction(event, observedAt);
     case "tool_execution_start":
-      return {
-        value: "working",
-        confidence: "medium",
-        reason:
-          event.tool_name === undefined
-            ? "Pi started a tool execution."
-            : `Pi started ${event.tool_name}.`,
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return statusForPiToolStart(event, observedAt);
     case "tool_execution_end":
-      return {
-        value: "working",
-        confidence: "medium",
-        reason:
-          event.tool_name === undefined
-            ? "Pi completed a tool execution."
-            : `Pi completed ${event.tool_name}.`,
-        source: "harness_event",
-        updatedAt: observedAt,
-      };
+      return statusForPiToolEnd(event, observedAt);
+    case "question_prompt_open":
+      return piQuestionAttention(observedAt);
     case "message_end":
       return {
         value: "working",

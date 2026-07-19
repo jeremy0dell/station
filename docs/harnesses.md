@@ -9,7 +9,7 @@ For the ingress mechanics, see [harness-ingress.md](harness-ingress.md). For set
 station never asks an agent what it is doing. The observer takes the hook events a harness emits, maps each one to an observed status, and projects a single status per session onto the snapshot. The status vocabulary is defined in `packages/contracts/src/observations.ts` (`AgentStateSchema`):
 
 | Status | Meaning |
-|--------|---------|
+| -------- | --------- |
 | `starting` | The harness session is launching. |
 | `working` | The agent is actively running a turn or a tool. |
 | `idle` | The agent finished and is waiting for input. The TUI shows **ready** the moment a turn completes and it is safe to prompt. |
@@ -23,19 +23,22 @@ A harness can only light up the states it can report. That gives two support tie
 currently supported harnesses:
 
 - **Full**: reports activity, completion, and attention. Can drive every status.
-- **Partial**: reports activity and completion, but has no attention signal.
+- **Partial**: reports activity and completion, but has only limited or no attention signals.
 
 ## Support at a glance
 
 | Harness | Working | Done | Needs attention | Support | Hooks |
-|---------|:-------:|:----:|:---------------:|---------|-------|
+| --------- | :-------: | :----: | :---------------: | --------- | ------- |
 | Claude Code | ✓ | ✓ | ✓ | Full | `settings.json` |
 | Codex | ✓ | ✓ | ✓ | Full | `~/.codex` `station` profile (TOML) |
 | Cursor | ✓ | ✓ | ✓ ¹ | Full | `~/.cursor/hooks.json` |
 | OpenCode | ✓ | ✓ | ✓ | Full | plugin |
-| Pi | ✓ | ✓ | ✗ | Partial | in-process extension |
+| Pi | ✓ | ✓ | Limited ² | Partial | in-process extension |
 
 ¹ Cursor surfaces attention from a `stop` event with error status, not from a live permission prompt.
+
+² Pi detects the stable prompt-open event from `ask_user_question`, but not
+  generic extension dialogs, permission prompts, or plan approval UI.
 
 ## Per-harness detail
 
@@ -73,11 +76,35 @@ Coverage: full, and the richest of the set. `permission.asked`, `question.asked`
 
 ### Pi (Partial)
 
-Events (`integrations/harness/pi/src/event/catalog.ts`): `session_start`, `session_shutdown`, `agent_start`, `agent_end`, `turn_start`, `tool_execution_start`, `tool_execution_end`, `message_end`, `session_compact`.
+Events (`integrations/harness/pi/src/event/catalog.ts`): `session_start`,
+`session_shutdown`, `agent_start`, `agent_end`, `agent_settled`, `turn_start`,
+`tool_execution_start`, `tool_execution_end`, `message_end`, `session_compact`,
+plus the Station-derived `question_prompt_open` edge.
 
-Hooks: Pi loads an in-process station extension, so there is no external config file. Reports spool to the observer socket, or to disk when the observer is unavailable.
+Hooks: Pi loads an in-process station extension, so there is no external config
+file. Reports spool to the observer socket, or to disk when the observer is
+unavailable. Station requires Pi `0.80.5` or newer and reports older or
+unparseable versions as unavailable because they lack the required settlement
+edge.
 
-Coverage: partial. Lifecycle and activity are covered (`agent_end` maps to **idle**, `session_shutdown` to **exited**), but Pi emits no permission or notification event, so it never reports **needs attention**.
+Coverage: partial. An `ask_user_question` tool start is only preflight and
+remains **working**. Its stable prompt-open event drives **needs attention**
+with question intent; unrelated parallel tool events preserve that attention
+until the matching question ends. A question rejected before prompt-open never
+reports attention. The matching tool end returns to **working** whether the
+prompt was answered or cancelled.
+
+Settlement-aware producers mark `agent_end` as **working** because Pi may retry,
+compact, or run a queued continuation; `agent_settled` drives **idle** and
+completed-turn readiness. Markerless legacy reports retain their historical
+`agent_end` completion behavior so already-running sessions do not remain
+falsely busy during an upgrade. A completed manual compaction can also drive
+**idle**, while threshold, overflow, and legacy compaction remain **working**
+until settlement. Quit shutdown drives **exited**.
+
+Pi has no universal typed event for extension dialogs, permission prompts, or
+plan approval UI, so those remain invisible. Question prose and options never
+leave the Pi adapter and are never classified as plan intent.
 
 ## Installing hooks
 

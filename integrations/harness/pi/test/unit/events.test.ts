@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
 import type { ProviderHookEvent, RawHarnessEvent } from "@station/contracts";
-import { HarnessEventObservationSchema } from "@station/contracts";
+import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { PiHarnessProviderError } from "../../src/errors";
 import {
   compactPiHookPayload,
   normalizePiRawEvent,
+  PiCompactEventSchema,
   parsePiCompactEvent,
   piHookPayloadToHarnessEventReport,
   statusFromPiEvent,
@@ -132,45 +134,124 @@ describe("Pi compact event parsing", () => {
     expect(JSON.stringify(report)).not.toContain(rawSecret);
   });
 
-  it("marks Pi agent_end events as completed turns", () => {
-    const payload = {
-      event_type: "agent_end",
-      cwd: "/tmp/station/web/task",
-      pi_session_id: "pi_session_123",
-      station_project_id: "web",
-      station_worktree_id: "wt_web_task",
-      station_session_id: "ses_web_task",
-      station_terminal_target_id: "tmux:station:@1:%2",
-    };
+  it.each([
+    "ask-user-question-cancelled",
+    "ask-user-question-answered",
+  ])("replays %s with correlated question attention and resolution", (fixtureName) => {
+    const [startedEvent, openedEvent, resolvedEvent] = eventSequenceFixture(fixtureName);
+    if (
+      startedEvent?.event_type !== "tool_execution_start" ||
+      openedEvent?.event_type !== "question_prompt_open" ||
+      resolvedEvent?.event_type !== "tool_execution_end"
+    ) {
+      throw new Error(`${fixtureName} did not contain a question start/open/end sequence.`);
+    }
 
-    expect(
-      normalizePiRawEvent(
-        {
-          provider: "pi",
-          observedAt: now,
-          event: payload,
-        },
-        context(),
-      )[0],
-    ).toMatchObject({
+    const reports = [startedEvent, openedEvent, resolvedEvent].map((event, index) =>
+      piHookPayloadToHarnessEventReport({
+        reportId: `report_${fixtureName}_${index}`,
+        eventType: event.event_type,
+        observedAt: now,
+        payload: event,
+      }),
+    );
+
+    expect(reports[0]).toMatchObject({
+      coalesceKey: `tool:${startedEvent.tool_call_id}`,
+      status: { value: "working" },
+    });
+    expect(reports[1]).toMatchObject({
+      coalesceKey: `tool:${startedEvent.tool_call_id}`,
       status: {
-        value: "idle",
+        value: "needs_attention",
+        confidence: "high",
+        attention: "question",
       },
-      turn: {
-        kind: "turn_completed",
+      providerData: {
+        toolCallId: startedEvent.tool_call_id,
+        toolName: "ask_user_question",
       },
     });
+    expect(reports[2]).toMatchObject({
+      coalesceKey: `tool:${startedEvent.tool_call_id}`,
+      status: {
+        value: "working",
+        confidence: "high",
+      },
+      providerData: {
+        toolCallId: startedEvent.tool_call_id,
+        toolName: "ask_user_question",
+        isError: false,
+      },
+    });
+    expect(reports[2]?.status?.attention).toBeUndefined();
+    expect(resolvedEvent.tool_call_id).toBe(startedEvent.tool_call_id);
+  });
 
-    expect(
+  it("holds question attention across parallel sibling tool completion", () => {
+    const reports = eventSequenceFixture("ask-user-question-parallel").map((event, index) =>
       piHookPayloadToHarnessEventReport({
-        reportId: "report_pi_done",
-        eventType: "agent_end",
+        reportId: `report_pi_parallel_question_${index}`,
+        eventType: event.event_type,
         observedAt: now,
-        payload,
+        payload: event,
       }),
-    ).toMatchObject({
+    );
+
+    expect(reports.map((report) => [report.status?.value, report.status?.attention])).toEqual([
+      ["working", undefined],
+      ["working", undefined],
+      ["needs_attention", "question"],
+      ["needs_attention", "question"],
+      ["working", undefined],
+    ]);
+    expect(reports[3]?.providerData).toMatchObject({
+      toolName: "read",
+      activeQuestionCallId: "question_parallel",
+    });
+  });
+
+  it("does not open attention for a rejected question preflight", () => {
+    const reports = eventSequenceFixture("ask-user-question-rejected").map((event, index) =>
+      piHookPayloadToHarnessEventReport({
+        reportId: `report_pi_rejected_question_${index}`,
+        eventType: event.event_type,
+        observedAt: now,
+        payload: event,
+      }),
+    );
+
+    expect(reports.map((report) => [report.status?.value, report.status?.attention])).toEqual([
+      ["working", undefined],
+      ["working", undefined],
+    ]);
+  });
+
+  it("keeps low-level agent ends working until final settlement completes the turn", () => {
+    const reports = eventSequenceFixture("agent-settlement").map((event, index) =>
+      piHookPayloadToHarnessEventReport({
+        reportId: `report_pi_settlement_${index}`,
+        eventType: event.event_type,
+        observedAt: now,
+        payload: event,
+      }),
+    );
+
+    for (const index of [1, 3, 5]) {
+      expect(reports[index]).toMatchObject({
+        eventType: "agent_end",
+        status: {
+          value: "working",
+          confidence: "medium",
+        },
+      });
+      expect(reports[index]?.turn).toBeUndefined();
+    }
+    expect(reports.at(-1)).toMatchObject({
+      eventType: "agent_settled",
       status: {
         value: "idle",
+        confidence: "high",
       },
       turn: {
         kind: "turn_completed",
@@ -178,17 +259,73 @@ describe("Pi compact event parsing", () => {
     });
   });
 
+  it("preserves completion for an already-running legacy Station extension", () => {
+    const report = piHookPayloadToHarnessEventReport({
+      reportId: "report_pi_legacy_agent_end",
+      eventType: "agent_end",
+      observedAt: now,
+      payload: {
+        event_type: "agent_end",
+        cwd: "/work/project",
+        pi_session_id: "pi_session_legacy",
+        station_project_id: "project",
+        station_worktree_id: "wt_project",
+        station_session_id: "ses_project",
+      },
+    });
+
+    expect(report).toMatchObject({
+      status: { value: "idle", confidence: "medium" },
+      turn: { kind: "turn_completed" },
+    });
+    expect(report.providerData).not.toHaveProperty("stationExtensionProtocol");
+  });
+
+  it("replays manual, automatic, retried, and legacy compaction policy", () => {
+    const reports = eventSequenceFixture("session-compaction").map((event, index) =>
+      piHookPayloadToHarnessEventReport({
+        reportId: `report_pi_compaction_${index}`,
+        eventType: event.event_type,
+        observedAt: now,
+        payload: event,
+      }),
+    );
+
+    expect(reports.map((report) => [report.status?.value, report.status?.confidence])).toEqual([
+      ["idle", "high"],
+      ["working", "medium"],
+      ["working", "medium"],
+      ["working", "medium"],
+    ]);
+    expect(reports[0]?.providerData).toMatchObject({
+      compactionReason: "manual",
+      willRetry: false,
+    });
+    expect(reports[1]?.providerData).toMatchObject({
+      compactionReason: "threshold",
+      willRetry: false,
+    });
+    expect(reports[2]?.providerData).toMatchObject({
+      compactionReason: "overflow",
+      willRetry: true,
+    });
+    expect(reports[3]?.providerData).not.toHaveProperty("compactionReason");
+    expect(reports[3]?.providerData).not.toHaveProperty("willRetry");
+  });
+
   it("maps every supported Pi event to the v1 status policy", () => {
     const expected = [
       ["session_start", "starting", "high"],
       ["session_shutdown", "exited", "high"],
       ["agent_start", "working", "high"],
-      ["agent_end", "idle", "medium"],
+      ["agent_end", "working", "medium"],
+      ["agent_settled", "idle", "high"],
       ["turn_start", "working", "medium"],
       ["tool_execution_start", "working", "medium"],
       ["tool_execution_end", "working", "medium"],
       ["message_end", "working", "medium"],
       ["session_compact", "working", "medium"],
+      ["question_prompt_open", "needs_attention", "high"],
     ] as const;
 
     const statuses = piPayloads().map((payload) => {
@@ -278,11 +415,27 @@ describe("Pi compact event parsing", () => {
         },
       }),
     ).toThrowError(PiHarnessProviderError);
+
+    expect(() =>
+      parsePiCompactEvent({
+        event_type: "agent_end",
+        cwd: "/tmp/station/web/task",
+        station_extension_protocol: 1,
+      }),
+    ).toThrowError(PiHarnessProviderError);
+
+    expect(() =>
+      parsePiCompactEvent({
+        event_type: "question_prompt_open",
+        cwd: "/tmp/station/web/task",
+        tool_name: "ask_user_question",
+      }),
+    ).toThrowError(PiHarnessProviderError);
   });
 
   it("uses a schema-backed STATION identity envelope for Pi hook scope", () => {
     const baseEvent: ProviderHookEvent = {
-      schemaVersion: 1,
+      schemaVersion: STATION_SCHEMA_VERSION,
       provider: "pi",
       kind: "harness",
       event: "agent_start",
@@ -324,6 +477,16 @@ describe("Pi compact event parsing", () => {
     ).toEqual({ action: "ignore", reason: "missing-station-env" });
   });
 });
+
+function eventSequenceFixture(name: string) {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8"));
+  } catch (error) {
+    throw new Error(`Could not parse Pi event fixture ${name}.`, { cause: error });
+  }
+  return PiCompactEventSchema.array().parse(value);
+}
 
 function context() {
   return {
@@ -369,6 +532,7 @@ function piPayloads() {
     station_worktree_id: "wt_web_task",
     station_session_id: "ses_web_task",
     station_terminal_target_id: "tmux:station:@1:%2",
+    station_extension_protocol: 2 as const,
   };
 
   return [
@@ -390,6 +554,10 @@ function piPayloads() {
       ...common,
       event_type: "agent_end",
       message_count: 2,
+    },
+    {
+      ...common,
+      event_type: "agent_settled",
     },
     {
       ...common,
@@ -418,6 +586,12 @@ function piPayloads() {
       ...common,
       event_type: "session_compact",
       from_extension: false,
+    },
+    {
+      ...common,
+      event_type: "question_prompt_open",
+      tool_call_id: "question_1",
+      tool_name: "ask_user_question",
     },
   ];
 }

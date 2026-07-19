@@ -50,9 +50,34 @@ describe("PiHarnessProvider", () => {
       lastCheckedAt: now,
       diagnostics: {
         command: "pi --version succeeded",
+        installedVersion: "1.2.3",
+        minimumVersion: "0.80.5",
       },
     });
     expect(calls.map((call) => call.args)).toEqual([["--version"]]);
+  });
+
+  it.each([
+    "0.80.4",
+    "not-a-version",
+  ])("rejects unsupported Pi version output %s", async (stdout) => {
+    const provider = createPiHarnessProvider({
+      command: "pi-test",
+      now: () => new Date(now),
+      runner: async (input) => result(input, `${stdout}\n`),
+    });
+
+    await expect(provider.health()).resolves.toMatchObject({
+      providerId: "pi",
+      providerType: "harness",
+      status: "unavailable",
+      lastError: {
+        tag: "HarnessProviderError",
+        code: "HARNESS_PI_VERSION_UNSUPPORTED",
+        provider: "pi",
+        hint: "Install Pi 0.80.5 or newer.",
+      },
+    });
   });
 
   it("falls back to STATION_PI_BIN when no command is configured", async () => {

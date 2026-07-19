@@ -7,13 +7,29 @@ import { systemClock, toIsoTimestamp } from "@station/runtime";
 import { parsePiCompactEvent } from "./event/compactEvent.js";
 import { compactPiHookPayload } from "./event/compaction.js";
 import { piHookPayloadToHarnessEventReport } from "./event/mapping.js";
-import { type PiSupportedEventName, piSupportedEventNames } from "./event/names.js";
+import {
+  type PiNativeEventName,
+  type PiSupportedEventName,
+  piNativeEventNames,
+} from "./event/names.js";
 
 type PiExtensionApi = {
   on: (
-    event: PiSupportedEventName,
+    event: PiNativeEventName,
     handler: (event: unknown, context: unknown) => Promise<void>,
   ) => void;
+  events?: {
+    on: (channel: string, handler: (data: unknown) => void) => (() => void) | undefined;
+  };
+};
+
+type PiEventMetadata = {
+  activeQuestionCallId?: string;
+};
+
+type PiQuestionCall = {
+  state: "started" | "open";
+  context: unknown;
 };
 
 type HookCommandInput = {
@@ -36,39 +52,131 @@ export type PiExtensionDeps = {
 
 const defaultReportId = () => `hook_${Date.now()}_${randomUUID()}`;
 const defaultIngressTimeoutMs = 5000;
+const stationPiExtensionProtocol = 2;
+const askUserQuestionToolName = "ask_user_question";
+const askUserPromptChannel = "rpiv:ask-user:prompt";
 
 /**
  * ADAPTER
  *
- * Compacts Pi lifecycle events and delegates delivery to build-aware CLI ingress.
+ * Compacts allowlisted Pi status events without user-content bodies, derives the
+ * stable question-open edge, and serializes delivery to build-aware CLI ingress.
  */
 export function registerStationPiExtension(pi: PiExtensionApi, deps: PiExtensionDeps = {}): void {
-  for (const eventType of piSupportedEventNames) {
+  const deliver = createSerializedDelivery(deps);
+  const questionCalls = new Map<string, PiQuestionCall>();
+
+  for (const eventType of piNativeEventNames) {
     pi.on(eventType, async (event, context) => {
+      const metadata = metadataForPiEvent(eventType, event, context, questionCalls);
+      await deliver(eventType, event, context, metadata);
+    });
+  }
+
+  pi.events?.on(askUserPromptChannel, () => {
+    const pending = firstQuestionCall(questionCalls, "started");
+    if (pending === undefined) return;
+    pending.call.state = "open";
+    void deliver(
+      "question_prompt_open",
+      { toolCallId: pending.id, toolName: askUserQuestionToolName },
+      pending.call.context,
+    );
+  });
+}
+
+function createSerializedDelivery(deps: PiExtensionDeps) {
+  const sendIngress = defaultSendReport(deps);
+  let tail = Promise.resolve();
+
+  return (
+    eventType: PiSupportedEventName,
+    event: unknown,
+    context: unknown,
+    metadata: PiEventMetadata = {},
+  ): Promise<void> => {
+    // Custom event-bus callbacks are synchronous, so one queue preserves their order with awaited Pi events.
+    tail = tail.then(async () => {
       try {
-        const payload = compactPiExtensionEvent(eventType, event, context, deps);
+        const payload = compactPiExtensionEvent(eventType, event, context, deps, metadata);
         if (deps.sendReport === undefined) {
-          await defaultSendReport(deps)({ eventType, payload });
-        } else {
-          const report = reportFromPiExtensionPayload(eventType, payload, deps);
-          await deps.sendReport({ eventType, payload, report });
+          await sendIngress({ eventType, payload });
+          return;
         }
+        const report = reportFromPiExtensionPayload(eventType, payload, deps);
+        await deps.sendReport({ eventType, payload, report });
       } catch {
         // Extension telemetry must never interrupt the user's Pi session.
       }
     });
+    return tail;
+  };
+}
+
+function metadataForPiEvent(
+  eventType: PiNativeEventName,
+  event: unknown,
+  context: unknown,
+  questionCalls: Map<string, PiQuestionCall>,
+): PiEventMetadata {
+  const eventRecord = asRecord(event);
+  if (eventType === "tool_execution_start") {
+    const toolCallId = stringField(eventRecord, "toolCallId");
+    if (
+      stringField(eventRecord, "toolName") === askUserQuestionToolName &&
+      toolCallId !== undefined
+    ) {
+      questionCalls.set(toolCallId, { state: "started", context });
+    }
+  } else if (eventType === "tool_execution_end") {
+    if (stringField(eventRecord, "toolName") === askUserQuestionToolName) {
+      removeQuestionCall(questionCalls, stringField(eventRecord, "toolCallId"));
+    }
+  } else if (eventType === "session_shutdown") {
+    questionCalls.clear();
   }
+
+  const activeQuestion = firstQuestionCall(questionCalls, "open");
+  return activeQuestion === undefined ? {} : { activeQuestionCallId: activeQuestion.id };
+}
+
+function firstQuestionCall(
+  questionCalls: Map<string, PiQuestionCall>,
+  state: PiQuestionCall["state"],
+): { id: string; call: PiQuestionCall } | undefined {
+  for (const [id, call] of questionCalls) {
+    if (call.state === state) return { id, call };
+  }
+  return undefined;
+}
+
+function removeQuestionCall(
+  questionCalls: Map<string, PiQuestionCall>,
+  toolCallId: string | undefined,
+): void {
+  if (toolCallId !== undefined) {
+    questionCalls.delete(toolCallId);
+    return;
+  }
+  const first =
+    firstQuestionCall(questionCalls, "open") ?? firstQuestionCall(questionCalls, "started");
+  if (first !== undefined) questionCalls.delete(first.id);
 }
 
 export default function stationPiExtension(pi: PiExtensionApi): void {
   registerStationPiExtension(pi);
 }
 
+/**
+ * Retains only correlation and low-cardinality lifecycle metadata from one Pi
+ * extension event.
+ */
 export function compactPiExtensionEvent(
   eventType: PiSupportedEventName,
   event: unknown,
   context: unknown,
   deps: PiExtensionDeps = {},
+  metadata: PiEventMetadata = {},
 ): Record<string, unknown> {
   const env = deps.env ?? process.env;
   const eventRecord = asRecord(event);
@@ -85,6 +193,7 @@ export function compactPiExtensionEvent(
     event_type: eventType,
     cwd,
     pid: deps.pid ?? process.pid,
+    station_extension_protocol: stationPiExtensionProtocol,
   };
   assignEnvField(payload, "station_project_id", env.STATION_PROJECT_ID);
   assignEnvField(payload, "station_worktree_id", env.STATION_WORKTREE_ID);
@@ -99,51 +208,77 @@ export function compactPiExtensionEvent(
     piSessionId(eventRecord, sessionManager, sessionFile),
   );
   assignOptionalField(payload, "model", modelSummary(eventRecord, contextRecord));
-
-  if (eventType === "session_start") {
-    assignOptionalField(payload, "reason", stringField(eventRecord, "reason"));
-    assignOptionalField(
-      payload,
-      "previous_session_file",
-      stringField(eventRecord, "previousSessionFile"),
-    );
-  }
-  if (eventType === "session_shutdown") {
-    assignOptionalField(payload, "reason", stringField(eventRecord, "reason"));
-    assignOptionalField(
-      payload,
-      "target_session_file",
-      stringField(eventRecord, "targetSessionFile"),
-    );
-  }
-  if (eventType === "agent_end") {
-    const messages = arrayField(eventRecord, "messages");
-    if (messages !== undefined) {
-      payload.message_count = messages.length;
-    }
-  }
-  if (eventType === "turn_start") {
-    assignOptionalField(payload, "turn_index", numberField(eventRecord, "turnIndex"));
-  }
-  if (eventType === "tool_execution_start" || eventType === "tool_execution_end") {
-    assignOptionalField(payload, "tool_call_id", stringField(eventRecord, "toolCallId"));
-    assignOptionalField(payload, "tool_name", stringField(eventRecord, "toolName"));
-  }
-  if (eventType === "tool_execution_end") {
-    assignOptionalField(payload, "is_error", booleanField(eventRecord, "isError"));
-  }
-  if (eventType === "message_end") {
-    const message = asRecord(eventRecord?.message);
-    assignOptionalField(payload, "message_role", stringField(message, "role"));
-  }
-  if (eventType === "session_compact") {
-    assignOptionalField(payload, "from_extension", booleanField(eventRecord, "fromExtension"));
-    const compactionEntry = asRecord(eventRecord?.compactionEntry);
-    assignOptionalField(payload, "compaction_entry_id", stringField(compactionEntry, "id"));
-  }
+  assignPiEventFields(payload, eventType, eventRecord, metadata);
 
   parsePiCompactEvent(payload);
   return payload;
+}
+
+function assignPiEventFields(
+  payload: Record<string, unknown>,
+  eventType: PiSupportedEventName,
+  event: Record<string, unknown> | undefined,
+  metadata: PiEventMetadata,
+): void {
+  switch (eventType) {
+    case "session_start":
+      assignOptionalField(payload, "reason", stringField(event, "reason"));
+      assignOptionalField(
+        payload,
+        "previous_session_file",
+        stringField(event, "previousSessionFile"),
+      );
+      return;
+    case "session_shutdown":
+      assignOptionalField(payload, "reason", stringField(event, "reason"));
+      assignOptionalField(payload, "target_session_file", stringField(event, "targetSessionFile"));
+      return;
+    case "agent_end": {
+      const messages = arrayField(event, "messages");
+      if (messages !== undefined) payload.message_count = messages.length;
+      return;
+    }
+    case "turn_start":
+      assignOptionalField(payload, "turn_index", numberField(event, "turnIndex"));
+      return;
+    case "tool_execution_start":
+      assignOptionalField(payload, "tool_call_id", stringField(event, "toolCallId"));
+      assignOptionalField(payload, "tool_name", stringField(event, "toolName"));
+      assignOptionalField(payload, "active_question_call_id", metadata.activeQuestionCallId);
+      return;
+    case "tool_execution_end":
+      assignOptionalField(payload, "tool_call_id", stringField(event, "toolCallId"));
+      assignOptionalField(payload, "tool_name", stringField(event, "toolName"));
+      assignOptionalField(payload, "is_error", booleanField(event, "isError"));
+      assignOptionalField(payload, "active_question_call_id", metadata.activeQuestionCallId);
+      return;
+    case "question_prompt_open":
+      assignOptionalField(payload, "tool_call_id", stringField(event, "toolCallId"));
+      assignOptionalField(payload, "tool_name", stringField(event, "toolName"));
+      return;
+    case "message_end": {
+      const message = asRecord(event?.message);
+      assignOptionalField(payload, "message_role", stringField(message, "role"));
+      return;
+    }
+    case "session_compact": {
+      assignOptionalField(payload, "reason", stringField(event, "reason"));
+      assignOptionalField(payload, "will_retry", booleanField(event, "willRetry"));
+      assignOptionalField(payload, "from_extension", booleanField(event, "fromExtension"));
+      const compactionEntry = asRecord(event?.compactionEntry);
+      assignOptionalField(payload, "compaction_entry_id", stringField(compactionEntry, "id"));
+      return;
+    }
+    case "agent_start":
+    case "agent_settled":
+      return;
+    default:
+      assertNeverPiEvent(eventType);
+  }
+}
+
+function assertNeverPiEvent(eventType: never): never {
+  throw new Error(`Unsupported Pi extension event: ${String(eventType)}.`);
 }
 
 function reportFromPiExtensionPayload(

@@ -1,9 +1,9 @@
 import { execFile, spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
@@ -18,6 +18,7 @@ import {
   startObserverServer,
 } from "@station/observer/internal";
 import { createPiHarnessProvider } from "@station/pi";
+import { stationObserverBuildVersion } from "@station/runtime";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -41,7 +42,7 @@ describeRealPi("real Pi session.create launch lane", () => {
   afterEach(async () => {
     const tasks = cleanupTasks;
     cleanupTasks = [];
-    for (const task of tasks.reverse()) {
+    for (const task of tasks.toReversed()) {
       await task().catch(() => undefined);
     }
   });
@@ -199,7 +200,7 @@ describeRealPi("real Pi session.create launch lane", () => {
     }
   }, 180_000);
 
-  it("runs real Pi with the STATION extension and persists completed-turn readiness before print shutdown", async () => {
+  it("runs real Pi and persists settled-turn evidence before print shutdown", async () => {
     const piBin = process.env.STATION_PI_BIN ?? "pi";
     await execFileAsync(piBin, ["--version"], { timeout: 15_000 });
 
@@ -209,6 +210,7 @@ describeRealPi("real Pi session.create launch lane", () => {
     const hookSpoolDir = join(stateDir, "spool", "hooks");
     const worktreePath = join(root, "worktree");
     const sessionDir = join(root, "pi-sessions");
+    const piHome = join(root, "pi-home");
     const runDir = join(root, "run");
     const socketPath = join(runDir, "observer.sock");
     const extensionPath = join(
@@ -219,13 +221,17 @@ describeRealPi("real Pi session.create launch lane", () => {
       "dist",
       "piExtension.js",
     );
+    const fauxExtensionPath = join(root, "faux-provider.mjs");
     await mkdir(stateDir, { recursive: true });
     await mkdir(hookSpoolDir, { recursive: true });
     await mkdir(worktreePath, { recursive: true });
     await mkdir(sessionDir, { recursive: true });
+    await mkdir(piHome, { recursive: true });
     await mkdir(runDir, { recursive: true });
     await execFileAsync("git", ["init"], { cwd: worktreePath, timeout: 10_000 });
     await access(extensionPath);
+    await writeFauxTextProvider(fauxExtensionPath, await resolvePiFauxModulePath(piBin));
+    const ingressPath = join(process.cwd(), "bin", "stn-ingress");
 
     if (process.env.STATION_REAL_PI_KEEP_TEMP !== "1") {
       cleanupTasks.push(async () => {
@@ -243,7 +249,10 @@ describeRealPi("real Pi session.create launch lane", () => {
     const eventBus = createObserverEventBus();
     const queue = createCommandQueue({ persistence, idFactory, clock, eventBus });
     const testConfig = config(root, stateDir);
-    testConfig.observer.socketPath = socketPath;
+    testConfig.observer = {
+      ...testConfig.observer,
+      socketPath,
+    };
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({
         now,
@@ -294,6 +303,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       clock,
       config: testConfig,
       socketPath,
+      observerBuildVersion: stationObserverBuildVersion(),
       stateDir,
       hookSpoolDir,
       hookReconcileDebounceMs: 0,
@@ -309,8 +319,10 @@ describeRealPi("real Pi session.create launch lane", () => {
         piBin,
         cwd: worktreePath,
         extensionPath,
+        fauxExtensionPath,
         sessionDir,
         env: {
+          PI_CODING_AGENT_DIR: piHome,
           STATION_PROJECT_ID: "web",
           STATION_WORKTREE_ID: "wt_real_pi_callback",
           STATION_WORKTREE_PATH: worktreePath,
@@ -318,6 +330,7 @@ describeRealPi("real Pi session.create launch lane", () => {
           STATION_HARNESS_PROVIDER: "pi",
           STATION_TERMINAL_PROVIDER: "tmux",
           STATION_TERMINAL_TARGET_ID: "real-pi-callback-target",
+          STATION_INGRESS_BIN: ingressPath,
           STATION_OBSERVER_SOCKET_PATH: socketPath,
           STATION_OBSERVER_STATE_DIR: stateDir,
           STATION_HOOK_SPOOL_DIR: hookSpoolDir,
@@ -325,7 +338,22 @@ describeRealPi("real Pi session.create launch lane", () => {
       });
 
       expect(run.exitCode, run.stderr).toBe(0);
-      await pollForPiReadiness(persistence);
+      const settledObservation = await pollForPiSettlement(persistence);
+      const observations = await persistence.listProviderObservations();
+      const piObservations = observations.filter(
+        (observation) =>
+          observation.provider === "pi" &&
+          observation.entityKind === "harness_event" &&
+          observation.payload.sessionId === "ses_real_pi_callback",
+      );
+      const piEventTypes = piObservations.map((observation) =>
+        observation.entityKind === "harness_event" ? observation.payload.rawEventType : undefined,
+      );
+      const agentEndObservation = piObservations.find(
+        (observation) =>
+          observation.entityKind === "harness_event" &&
+          observation.payload.rawEventType === "agent_end",
+      );
       const snapshot = await core.reconcile("real-pi-callback-observed");
       expect(snapshot.rows[0]?.agent).toMatchObject({
         harness: "pi",
@@ -333,12 +361,34 @@ describeRealPi("real Pi session.create launch lane", () => {
         state: "exited",
       });
       expect(
-        (await persistence.listSessionTurnReadiness()).find(
-          (readiness) => readiness.sessionId === "ses_real_pi_callback",
-        ),
+        agentEndObservation?.entityKind === "harness_event"
+          ? agentEndObservation.payload
+          : undefined,
       ).toMatchObject({
-        worktreeId: "wt_real_pi_callback",
+        rawEventType: "agent_end",
+        status: {
+          value: "working",
+        },
       });
+      if (agentEndObservation?.entityKind === "harness_event") {
+        expect(agentEndObservation.payload.turn).toBeUndefined();
+      }
+      expect(settledObservation.payload).toMatchObject({
+        rawEventType: "agent_settled",
+        status: {
+          value: "idle",
+        },
+        turn: {
+          kind: "turn_completed",
+        },
+      });
+      expect(piEventTypes.indexOf("agent_end")).toBeGreaterThanOrEqual(0);
+      expect(piEventTypes.indexOf("agent_settled")).toBeGreaterThan(
+        piEventTypes.indexOf("agent_end"),
+      );
+      expect(piEventTypes.indexOf("session_shutdown")).toBeGreaterThan(
+        piEventTypes.indexOf("agent_settled"),
+      );
     } catch (error) {
       await writeFailureBundle({
         config: testConfig,
@@ -379,6 +429,7 @@ async function runPi(input: {
   piBin: string;
   cwd: string;
   extensionPath: string;
+  fauxExtensionPath: string;
   sessionDir: string;
   env: Record<string, string>;
 }): Promise<RunPiResult> {
@@ -386,14 +437,25 @@ async function runPi(input: {
     const child = spawn(
       input.piBin,
       [
+        "--offline",
+        "--no-extensions",
+        "--no-skills",
+        "--no-prompt-templates",
+        "--no-context-files",
+        "--approve",
         "--extension",
         input.extensionPath,
+        "--extension",
+        input.fauxExtensionPath,
+        "--provider",
+        "station-real-faux",
+        "--model",
+        "station-real-faux-1",
         "--session-dir",
         input.sessionDir,
-        "--no-context-files",
         "--no-tools",
         "--print",
-        "Reply with exactly STATION_REAL_PI_OK.",
+        "Run the deterministic Station settlement scenario.",
       ],
       {
         cwd: input.cwd,
@@ -422,20 +484,72 @@ async function runPi(input: {
   });
 }
 
-async function pollForPiReadiness(persistence: ReturnType<typeof createSqliteObserverPersistence>) {
+async function resolvePiFauxModulePath(piBin: string): Promise<string> {
+  const configuredRoot = process.env.STATION_REAL_PI_PACKAGE_ROOT;
+  const packageRoot =
+    configuredRoot === undefined
+      ? resolve(dirname(await resolveExecutablePath(piBin)), "..")
+      : resolve(configuredRoot);
+  const path = join(
+    packageRoot,
+    "node_modules",
+    "@earendil-works",
+    "pi-ai",
+    "dist",
+    "providers",
+    "faux.js",
+  );
+  await access(path);
+  return path;
+}
+
+async function resolveExecutablePath(command: string): Promise<string> {
+  if (command.includes("/")) return realpath(command);
+  const result = await execFileAsync("which", [command], { encoding: "utf8", timeout: 10_000 });
+  return realpath(result.stdout.trim());
+}
+
+async function writeFauxTextProvider(path: string, fauxModulePath: string): Promise<void> {
+  await writeFile(
+    path,
+    `import { createFauxCore, fauxAssistantMessage } from ${JSON.stringify(fauxModulePath)};\n` +
+      `export default function registerStationRealFaux(pi) {\n` +
+      `  const faux = createFauxCore({\n` +
+      `    api: "station-real-faux-api", provider: "station-real-faux",\n` +
+      `    models: [{ id: "station-real-faux-1", name: "Station Real Faux", input: ["text"] }],\n` +
+      `  });\n` +
+      `  faux.setResponses([fauxAssistantMessage("STATION_REAL_PI_OK")]);\n` +
+      `  pi.registerProvider("station-real-faux", {\n` +
+      `    baseUrl: "http://localhost:0", apiKey: "station-real-test", api: faux.api,\n` +
+      `    models: [{\n` +
+      `      id: "station-real-faux-1", name: "Station Real Faux", reasoning: false, input: ["text"],\n` +
+      `      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },\n` +
+      `      contextWindow: 128000, maxTokens: 4096,\n` +
+      `    }],\n` +
+      `    streamSimple: faux.streamSimple,\n` +
+      `  });\n` +
+      `}\n`,
+    "utf8",
+  );
+}
+
+async function pollForPiSettlement(
+  persistence: ReturnType<typeof createSqliteObserverPersistence>,
+) {
   return poll(async () => {
     const observations = await persistence.listProviderObservations();
     return observations.find((observation) => {
       if (observation.provider !== "pi" || observation.entityKind !== "harness_event") {
         return false;
       }
-      const payload = observation.payload as {
-        status?: { value?: unknown };
-        turn?: { kind?: unknown };
-      };
-      return payload.status?.value === "idle" && payload.turn?.kind === "turn_completed";
+      const payload = observation.payload;
+      return (
+        payload.rawEventType === "agent_settled" &&
+        payload.status?.value === "idle" &&
+        payload.turn?.kind === "turn_completed"
+      );
     });
-  }, "Observer did not ingest a completed idle Pi extension event.");
+  }, "Observer did not ingest settled-turn evidence from the Pi extension.");
 }
 
 async function poll<T>(probe: () => Promise<T | false | undefined>, message: string): Promise<T> {
@@ -497,6 +611,7 @@ function config(root: string, stateDir: string): StationConfig {
         enabled: true,
       },
     },
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     projects: [
       {
         id: "web",

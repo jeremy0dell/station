@@ -75,9 +75,10 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    status but never triggers attention UX (sound, notification). Providers own
    the classification.
 4. **Blocking states beat activity.** A tool call that *is* the user request
-   (codex `request_user_input`) must normalize as `needs_attention`, not as
-   tool activity — the request and the "working" signal must be the same
-   event, not a race.
+   (Codex `request_user_input`) must normalize as `needs_attention`, not as
+   tool activity. When a provider separates prompt-open from tool preflight,
+   sibling activity must carry the active request identity until its matching
+   resolution instead of clearing attention.
 5. **Nothing drops silently.** Every ingested report logs its projection
    decision (`Harness event report processed.` / `skipped.` with
    `projected`/`correlatedBy`/`deduped`). An accepted report with
@@ -104,6 +105,13 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    Station project, worktree, session, terminal, and run correlation when its
    own origin evidence contradicts the Station stamp. It retains provider-native
    identity and diagnostic origin evidence so the report remains inspectable.
+10. **Native settlement outranks low-level completion.** A producer that marks
+    itself settlement-aware keeps each low-level run end `working` because
+    retries, automatic compaction, or queued follow-ups may continue. Automatic
+    compaction completion likewise remains `working`; only the native settled
+    edge may mark the completed turn `idle` and ready. Markerless legacy
+    producers retain their historical low-level completion semantics during a
+    rolling upgrade.
 
 ## Target Taxonomy (HarnessSignal)
 
