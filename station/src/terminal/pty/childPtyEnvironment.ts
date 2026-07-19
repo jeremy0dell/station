@@ -76,9 +76,18 @@ export function createStationChildPtyEnvironment(
 
   Object.assign(childEnvironment, STATION_CHILD_TERMINAL_ENV);
 
-  // TMUX remains a connectivity channel and STATION_PANE binding, not evidence of Station's renderer.
-  childEnvironment.STATION_PANE =
-    tmux !== undefined && tmuxPane !== undefined ? JSON.stringify([tmux, tmuxPane]) : "1";
+  // TMUX claims the child is rendered by tmux, so keep outer-server access only
+  // under Station-owned names that capability probes do not treat as terminal identity.
+  delete childEnvironment.TMUX;
+  delete childEnvironment.TMUX_PANE;
+  if (tmux !== undefined && tmuxPane !== undefined) {
+    childEnvironment.STATION_OUTER_TMUX = tmux;
+    childEnvironment.STATION_OUTER_TMUX_PANE = tmuxPane;
+  } else {
+    delete childEnvironment.STATION_OUTER_TMUX;
+    delete childEnvironment.STATION_OUTER_TMUX_PANE;
+  }
+  childEnvironment.STATION_PANE = "1";
 
   return childEnvironment;
 }

@@ -494,7 +494,8 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
 `STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
-`STATION_OBSERVER_BUILD_VERSION`, `STATION_PANE`, `STATION_TUI_POPUP`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_PANE`, `STATION_OUTER_TMUX`,
+`STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
 `STATION_TUI_PERSISTENT`,
 `STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
 build variables as a pair: the first identifies the renderer artifact and the
@@ -512,14 +513,16 @@ authentication, provider, project, worktree, and user environment passes
 through; these terminal values are generated behavior, not hand-authored
 configuration.
 
-`TMUX` and `TMUX_PANE` remain available for command connectivity. Native Station
-uses their merged values to assign `STATION_PANE` to the full tmux
-server-and-pane context, or `1` when there is none, so launch input cannot clear
-or replace Station ownership. The CLI honors it only while that terminal
-context still matches, preventing a long-lived tmux server from leaking Station
-ownership into a later pane even when two servers reuse the same pane id. There
-is no persistent nesting override; `stn tui --allow-nested` applies to one
-launch. Tmux launchers use
+Native Station removes `TMUX` and `TMUX_PANE` from its children because they are
+widely interpreted as direct-terminal capability evidence. If Station itself was
+launched inside tmux, it exposes the captured outer values as
+`STATION_OUTER_TMUX` and `STATION_OUTER_TMUX_PANE` for deliberate tmux commands
+without misidentifying the child renderer. Station-owned PTYs use
+`STATION_PANE=1`, so launch input cannot clear or replace Station ownership. If a
+new tmux server is started inside one, its real server-and-pane context differs
+from that marker and cannot leak Station ownership into later panes. There is no
+persistent nesting override; `stn tui --allow-nested` applies to one launch.
+Tmux launchers use
 `STATION_TUI_POPUP=1` as routing provenance for their renderer child, not as
 authentication. These variables are not hand-authored overrides. Hook scripts
 and launched agents receive the other context so they can report back to the

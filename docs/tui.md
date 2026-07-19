@@ -27,8 +27,8 @@ Launch is driven by `apps/cli/src/commands/tui.ts`. A source checkout uses the N
 
 ## Nested Workspaces
 
-Station-owned PTYs carry a `STATION_PANE` marker bound to their current tmux
-server and pane, or `1` when Station itself is outside tmux. From that context,
+Station-owned PTYs carry `STATION_PANE=1` because Station, rather than any outer
+tmux client, is their direct terminal boundary. From that context,
 bare `stn` outside tmux and explicit `stn tui` refuse to open another native
 workspace:
 
@@ -49,10 +49,9 @@ explicit `stn popup` keep their popup behavior. Tmux launchers mark their
 `--allow-nested`. The mock dashboard remains available without an override.
 
 The controlling-TTY single-instance guard is not sufficient here: each nested
-pane has its own child PTY, so the outer workspace is not a same-TTY rival. The
-tmux-context binding also prevents a server started from a Station shell or
-Observer descendant from copying the marker into unrelated later panes, even
-when different servers reuse the same pane id.
+pane has its own child PTY, so the outer workspace is not a same-TTY rival. A
+tmux server started from a Station shell supplies its own `TMUX` context, which
+no longer matches the copied `STATION_PANE=1` marker in later panes.
 
 Persistent popups use a strict child-process IPC channel between the Node CLI and the Bun
 dashboard renderer. The CLI composition root retains all terminal-provider authority; the
@@ -96,11 +95,13 @@ not infer it from Ghostty, Kitty, WezTerm, iTerm2, Windows Terminal, Warp, or an
 outer renderer; native Station currently advertises true color but neither an image
 protocol nor OSC 8 hyperlinks.
 
-`TMUX` and `TMUX_PANE` are retained deliberately because they provide command
-connectivity and bind `STATION_PANE` to the outer server and pane. They are not part
-of Station's renderer capability declaration. External tmux-provider sessions remain
-authoritative for their own environment and do not pass through this native PTY
-policy.
+`TMUX` and `TMUX_PANE` are removed because conventional capability probes treat
+them as proof that tmux renders the child. When native Station itself was launched
+inside tmux, the captured values remain available as `STATION_OUTER_TMUX` and
+`STATION_OUTER_TMUX_PANE` for deliberate commands such as
+`TMUX="$STATION_OUTER_TMUX" TMUX_PANE="$STATION_OUTER_TMUX_PANE" tmux ...`.
+External tmux-provider sessions remain authoritative for their own environment and
+do not pass through this native PTY policy.
 
 The policy applies only when a local bridge, Bun, or Station Host PTY is created.
 Existing live PTYs keep the environment captured at spawn and are never torn down to

@@ -95,24 +95,40 @@ describe("createStationChildPtyEnvironment", () => {
     });
   });
 
-  it("retains tmux connectivity and binds Station ownership to the merged tmux context", () => {
+  it("removes direct tmux identity while preserving explicit outer-server access", () => {
     const child = createStationChildPtyEnvironment(
       {
         TMUX: "/tmp/tmux-501/origin,123,0",
         TMUX_PANE: "%3",
+        STATION_OUTER_TMUX: "stale-origin",
+        STATION_OUTER_TMUX_PANE: "stale-origin-pane",
         STATION_PANE: "inherited",
       },
       {
         TMUX: "/tmp/tmux-501/launch,456,0",
         TMUX_PANE: "%7",
+        STATION_OUTER_TMUX: "stale-launch",
+        STATION_OUTER_TMUX_PANE: "stale-launch-pane",
         STATION_PANE: "launch",
       },
     );
 
-    expect(child.TMUX).toBe("/tmp/tmux-501/launch,456,0");
-    expect(child.TMUX_PANE).toBe("%7");
-    expect(child.STATION_PANE).toBe(
-      JSON.stringify(["/tmp/tmux-501/launch,456,0", "%7"]),
-    );
+    expect(child.TMUX).toBeUndefined();
+    expect(child.TMUX_PANE).toBeUndefined();
+    expect(child.STATION_OUTER_TMUX).toBe("/tmp/tmux-501/launch,456,0");
+    expect(child.STATION_OUTER_TMUX_PANE).toBe("%7");
+    expect(child.STATION_PANE).toBe("1");
+  });
+
+  it("clears stale outer-tmux access when no complete direct tmux context exists", () => {
+    const child = createStationChildPtyEnvironment({
+      TMUX: "/tmp/tmux-501/incomplete,123,0",
+      STATION_OUTER_TMUX: "stale",
+      STATION_OUTER_TMUX_PANE: "stale-pane",
+    });
+
+    expect(child.TMUX).toBeUndefined();
+    expect(child.STATION_OUTER_TMUX).toBeUndefined();
+    expect(child.STATION_OUTER_TMUX_PANE).toBeUndefined();
   });
 });

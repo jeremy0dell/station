@@ -31,7 +31,7 @@ if (SMOKE) {
           command: "/bin/sh",
           args: [
             "-c",
-            'printf "READY:%s|%s|%s|%s|%s|%s" "$STATION_PANE" "$TERM" "$COLORTERM" "$TERM_PROGRAM" "${GHOSTTY_RESOURCES_DIR-unset}" "$USER_SETTING"; sleep 2',
+            'printf "READY:%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" "$STATION_PANE" "$TERM" "$COLORTERM" "$TERM_PROGRAM" "${GHOSTTY_RESOURCES_DIR-unset}" "${TMUX-unset}" "${TMUX_PANE-unset}" "$STATION_OUTER_TMUX" "$STATION_OUTER_TMUX_PANE" "$USER_SETTING"; sleep 2',
           ],
           cwd: process.cwd(),
           env: {
@@ -40,17 +40,17 @@ if (SMOKE) {
             COLORTERM: "station-test-color",
             TERM_PROGRAM: "ghostty",
             GHOSTTY_RESOURCES_DIR: "/ghostty",
+            TMUX: "/tmp/tmux-501/station-smoke,123,0",
+            TMUX_PANE: "%7",
             USER_SETTING: "ordinary",
           },
           cols: 80,
           rows: 24,
         });
 
-        const stationPaneMarker =
-          process.env.TMUX !== undefined && process.env.TMUX_PANE !== undefined
-            ? JSON.stringify([process.env.TMUX, process.env.TMUX_PANE])
-            : "1";
-        const expected = `READY:${stationPaneMarker}|xterm-256color|truecolor|Station|unset|ordinary`;
+        const expected =
+          "READY:1|xterm-256color|truecolor|Station|unset|unset|unset|" +
+          "/tmp/tmux-501/station-smoke,123,0|%7|ordinary";
         await waitUntil(
           () => table.snapshot(ptyId).scrollback.join("").includes(expected),
           2000,
