@@ -56,19 +56,33 @@ describe("resolveAuxShellPlacement", () => {
       const spawns: unknown[] = [];
       const placeShell = resolveAuxShellPlacement(path, () => fakeClient(spawns));
       const createTerminal = placeShell("pane-split-0");
-      expect(createTerminal).toBeDefined();
+      if (createTerminal === undefined) {
+        throw new Error("Expected the host-backed aux terminal factory.");
+      }
 
-      const terminal = createTerminal!({ cwd: "/work/sub", size: { cols: 120, rows: 40 } });
+      const terminal = createTerminal({
+        cwd: "/work/sub",
+        env: { TERM: "xterm-kitty", GHOSTTY_RESOURCES_DIR: "/ghostty" },
+        size: { cols: 120, rows: 40 },
+      });
       await flush();
 
       expect(spawns).toHaveLength(1);
-      const params = spawns[0] as { kind: string; terminalTargetId: string; cwd: string; cols: number; rows: number };
+      const params = spawns[0] as {
+        kind: string;
+        terminalTargetId: string;
+        cwd: string;
+        cols: number;
+        rows: number;
+        env?: Record<string, string>;
+      };
       expect(params.kind).toBe("aux");
       // Derived from the pane id, so a later boot recomputes the same key.
       expect(params.terminalTargetId).toBe("aux:pane-split-0");
       expect(params.cwd).toBe("/work/sub");
       expect(params.cols).toBe(120);
       expect(params.rows).toBe(40);
+      expect(params.env).toBeUndefined();
       expect(terminal.id).toBe("aux:pane-split-0");
       expect(terminal.command).toBe("host-aux");
       terminal.dispose();

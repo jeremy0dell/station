@@ -16,7 +16,6 @@ export type StationTerminalSpawnOptions = {
   args?: readonly string[];
   cwd?: string;
   env?: Readonly<Record<string, string | undefined>>;
-  name?: string;
   size?: Partial<StationTerminalSize>;
 };
 

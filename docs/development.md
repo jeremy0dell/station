@@ -223,6 +223,10 @@ bun run build:ctty-helper
 bun run test:pty:bun             # Bun.Terminal + controlling-terminal helper
 ```
 
+Both PTY lanes include deterministic child-environment probes for local and
+Station Host-backed spawns, so capability-policy changes must keep the two
+implementations equivalent.
+
 To daily-drive the Bun implementation in the isolated devbox, return to the
 repo root and start a fresh host with the selector in its environment:
 
