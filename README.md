@@ -61,7 +61,7 @@ Run this from any directory:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.2
+  tag=v0.7.1-rc.3
   # After the first stable release, use:
   # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
   installer="$(mktemp)"
@@ -76,15 +76,14 @@ Run this from any directory:
 )
 ```
 
-`v0.7.1-rc.2` is the current private-binary candidate; the earlier
-`v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished. Run the recipe
-after the candidate is published. It fetches the installer and binary from the
-same immutable release tag, verifies the release checksum, and installs `stn`,
-`stn-ingress`, and `stn-tmux-popup` in `~/.local/bin` by default. It does not
-expose or print your GitHub credentials. After the first stable release, the
-commented assignment resolves the latest stable tag. Immutable rollback begins
-with the second published binary release because there is no earlier published
-binary artifact.
+`v0.7.1-rc.3` is the current private-binary candidate. `v0.7.1-rc.2` remains
+published as its immutable rollback; the earlier `v0.7.0` and `v0.7.1-rc.1`
+candidates remained unpublished. Run the recipe after the candidate is
+published. It fetches the installer and binary from the same immutable release
+tag, verifies the release checksum, and installs `stn`, `stn-ingress`, and
+`stn-tmux-popup` in `~/.local/bin` by default. It does not expose or print your
+GitHub credentials. After the first stable release, the commented assignment
+resolves the latest stable tag.
 
 ### 3. Verify and start Station
 
@@ -114,7 +113,7 @@ Paste this prompt into a coding agent running on the machine where you want
 Station installed:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.2 and validate setup on this machine.
+Install Station private preview candidate v0.7.1-rc.3 and validate setup on this machine.
 
 Use the private GitHub repository jeremy0dell/station through GitHub CLI.
 
@@ -124,7 +123,7 @@ Safety and scope:
   extract, or print credentials. If authentication or repository access fails,
   stop and ask me to run `gh auth login --hostname github.com` myself.
 - Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.2`, read `docs/install.md` from that same tag with authenticated
+  `v0.7.1-rc.3`, read `docs/install.md` from that same tag with authenticated
   `gh api`, and follow its temporary-file installer procedure. If that release
   is not published yet, stop instead of falling back to another ref.
 - Never fetch installer code from `main` and never pipe network output directly
