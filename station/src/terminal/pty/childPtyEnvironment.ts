@@ -4,18 +4,21 @@ export const STATION_CHILD_TERMINAL_ENV = {
   TERM_PROGRAM: "Station",
 } as const;
 
-const OUTER_TERMINAL_ENVIRONMENT_KEYS = new Set([
+/**
+ * Curated outer-renderer signals, not an exhaustive environment registry.
+ * Functional provider, authentication, and user-preference values deliberately pass through.
+ */
+const KNOWN_OUTER_TERMINAL_ENVIRONMENT_KEYS = new Set([
+  "__CFBundleIdentifier",
   "COLORTERM_BCE",
   "COLORFGBG",
   "COLUMNS",
-  "FORCE_COLOR",
   "FORCE_HYPERLINK",
   "FORCE_HYPERLINKS",
   "LC_TERMINAL",
   "LC_TERMINAL_VERSION",
   "LINES",
   "MSYSCON",
-  "NO_COLOR",
   "SHELL_SESSION_ID",
   "STY",
   "TERMCAP",
@@ -36,7 +39,7 @@ const OUTER_TERMINAL_ENVIRONMENT_KEYS = new Set([
   "ZELLIJ_PANE_ID",
 ]);
 
-const OUTER_TERMINAL_ENVIRONMENT_PREFIXES = [
+const KNOWN_OUTER_TERMINAL_ENVIRONMENT_PREFIXES = [
   "ALACRITTY_",
   "CMUX_",
   "ConEmu",
@@ -54,8 +57,9 @@ type Environment = Readonly<Record<string, string | undefined>>;
 
 /**
  * Builds the environment for a Station-rendered child PTY without mutating the
- * outer renderer environment; ordinary launch values pass through, while
- * Station-owned terminal identity is applied after outer-only hints are removed.
+ * outer renderer environment; ordinary launch values, including authentication,
+ * provider context, and color preferences, pass through. Station-owned terminal
+ * identity is applied after known outer-only hints are removed.
  */
 export function createStationChildPtyEnvironment(
   inheritedEnvironment: Environment,
@@ -94,7 +98,7 @@ export function createStationChildPtyEnvironment(
 
 function isOuterTerminalEnvironmentKey(key: string): boolean {
   return (
-    OUTER_TERMINAL_ENVIRONMENT_KEYS.has(key) ||
-    OUTER_TERMINAL_ENVIRONMENT_PREFIXES.some((prefix) => key.startsWith(prefix))
+    KNOWN_OUTER_TERMINAL_ENVIRONMENT_KEYS.has(key) ||
+    KNOWN_OUTER_TERMINAL_ENVIRONMENT_PREFIXES.some((prefix) => key.startsWith(prefix))
   );
 }

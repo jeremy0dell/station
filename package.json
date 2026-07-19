@@ -66,7 +66,7 @@
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
     "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm test:e2e:observer && pnpm smoke:install",
-    "test:pre-push": "pnpm test:all && pnpm test:sqlite:bun && pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty:bun && pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local"
+    "test:pre-push": "pnpm test:all && pnpm test:sqlite:bun && pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty && pnpm --dir station test:pty:bun && pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",

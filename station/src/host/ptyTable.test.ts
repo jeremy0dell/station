@@ -1,6 +1,9 @@
 import type { HostSpawnParams } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import type { StationTerminalProcess } from "../terminal/types.js";
+import type {
+  StationTerminalProcess,
+  StationTerminalSpawnOptions,
+} from "../terminal/types.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createPtyTable } from "./ptyTable.js";
 
@@ -38,6 +41,32 @@ function singleTable() {
 }
 
 describe("createPtyTable", () => {
+  it("fails closed on tmux provenance for persistent Host spawns", () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    let received: StationTerminalSpawnOptions | undefined;
+    const table = createPtyTable({
+      createTerminal: (options) => {
+        received = options;
+        return scripted.terminal;
+      },
+    });
+
+    table.spawn({
+      ...baseParams,
+      env: {
+        TMUX: "/tmp/tmux-501/stale-launch,222,0",
+        TMUX_PANE: "%7",
+        USER_SETTING: "ordinary",
+      },
+    });
+
+    expect(received?.env).toEqual({
+      TMUX: undefined,
+      TMUX_PANE: undefined,
+      USER_SETTING: "ordinary",
+    });
+  });
+
   it("spawns, captures output into the ring, and lists the live PTY", () => {
     const { table, scripteds } = tableWithScripted();
     const { ptyId } = table.spawn(baseParams);
