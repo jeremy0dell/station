@@ -24,5 +24,8 @@
     "@station/protocol": "workspace:*",
     "@station/runtime": "workspace:*",
     "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@station/testing": "workspace:*"
   }
 }

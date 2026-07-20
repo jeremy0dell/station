@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessProvider, TerminalIntent, TerminalIntentReceipt } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -474,6 +474,54 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("removes a clean exited worktree when terminal cleanup finds an already-missing target", async () => {
+    const fixture = createFixture({
+      state: "exited",
+      terminalCloseTargetMissing: true,
+    });
+    await fixture.core.reconcile("pre-cleanup");
+
+    expect(fixture.core.getSnapshot().rows[0]?.agent?.state).toBe("exited");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.harness.snapshot().stopped).toEqual([]);
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    expect(fixture.worktree.snapshot().removed).toEqual([
+      {
+        projectId: "web",
+        worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+      },
+    ]);
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ses_web_cleanup",
+          lifecycle: "ended",
+          endedAt: now,
+        }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
   it("force-removes a worktree when terminal cleanup finds an already-missing target", async () => {
     const fixture = createFixture({
       dirty: true,
@@ -554,7 +602,7 @@ describe("cleanup command handlers", () => {
 
 function createFixture(input: {
   dirty?: boolean;
-  state: "none" | "terminal" | "working";
+  state: "none" | "terminal" | "working" | "exited";
   harnessStopSupported?: boolean;
   terminalCloseTargetMissing?: boolean;
   projectRootPath?: boolean;
@@ -610,14 +658,14 @@ function createFixture(input: {
   const harness = new FakeHarnessProvider({
     now,
     runs:
-      input.state === "working"
+      input.state === "working" || input.state === "exited"
         ? [
             createFakeHarnessRun({
               id: "run_web_cleanup",
               projectId: "web",
               worktreeId: "wt_web_cleanup",
               sessionId: "ses_web_cleanup",
-              state: "working",
+              state: input.state,
               now,
             }),
           ]
@@ -691,6 +739,7 @@ function withoutNativeStop(provider: FakeHarnessProvider): HarnessProvider {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
