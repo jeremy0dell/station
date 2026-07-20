@@ -8,6 +8,7 @@ import {
   type UnixSocketProbe,
   type UnixSocketProbeOptions,
   type UnixSocketServer,
+  unixSocketHolderEvidencePath,
 } from "@station/protocol";
 import { type RuntimeClock, runRuntimeBoundary, systemClock } from "@station/runtime";
 import type { ObserverIncumbentLifecycle } from "./observerHandoff.js";
@@ -177,10 +178,11 @@ async function closeObserverServer(server: UnixSocketServer, clock: RuntimeClock
 }
 
 export function observerSocketInaccessibleError(socketPath: string): SafeError {
+  const evidencePath = unixSocketHolderEvidencePath();
   return {
     tag: "ObserverSocketError",
     code: "OBSERVER_SOCKET_INACCESSIBLE",
     message: "The Observer socket exists but cannot be reached or proven safe to reclaim.",
-    hint: `Restore access to ${socketPath}, normally mode 0600; inspect it with lsof, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
+    hint: `Restore access to ${socketPath}, normally mode 0600. Station will not reclaim it without holder evidence from ${evidencePath}; install lsof if that executable is missing (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof). Retry, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
   };
 }

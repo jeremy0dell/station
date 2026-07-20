@@ -274,6 +274,7 @@ export type SetupFacts = {
   homeDir: string;
   compiled: boolean;
   stateDir: SetupStateDirFact;
+  socketEvidence: SetupDependencyFact;
   worktrunk: SetupDependencyFact;
   worktrunkAutomation: SetupWorktrunkAutomationFact;
   tmux: SetupDependencyFact;

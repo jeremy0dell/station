@@ -103,7 +103,8 @@ export const machineProfiles: readonly MachineProfile[] = [
   },
   {
     name: "all-tools-present",
-    description: "Every dependency present but no STATION config yet; only config is missing.",
+    description:
+      "Every required dependency present but no STATION config or socket evidence tool yet.",
     state: { ...linuxAllTools },
     expect: {
       exitCode: 1,
@@ -117,6 +118,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         diffnav: "ok",
         "git-delta": "ok",
         config: "missing",
+        "observer-socket-evidence": "warning",
       },
     },
   },

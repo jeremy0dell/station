@@ -57,6 +57,7 @@ function setupChecks(
 ): SetupCheck[] {
   return [
     stateDirCheck(facts),
+    socketEvidenceCheck(facts),
     ...(facts.compiled ? [] : xcodeChecks(facts)),
     dependencyCheck({
       id: "worktrunk",
@@ -110,6 +111,28 @@ function setupChecks(
       message: "Run stn doctor after setup to validate the observer runtime.",
     },
   ];
+}
+
+function socketEvidenceCheck(facts: SetupFacts): SetupCheck {
+  const details = { command: facts.socketEvidence.command };
+  if (facts.socketEvidence.status === "ok") {
+    return {
+      id: "observer-socket-evidence",
+      tier: "recommended",
+      status: "ok",
+      label: "Observer socket evidence",
+      message: "lsof is available for safe Observer socket recovery and build handoff.",
+      details,
+    };
+  }
+  return {
+    id: "observer-socket-evidence",
+    tier: "recommended",
+    status: "warning",
+    label: "Observer socket evidence",
+    message: `Fresh Observer startup can continue, but stale-socket recovery and build handoff are blocked until lsof is executable at ${facts.socketEvidence.command}. Install lsof, then rerun stn setup check (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof).`,
+    details,
+  };
 }
 
 function tmuxPopupBindingCheck(facts: SetupFacts): SetupCheck {

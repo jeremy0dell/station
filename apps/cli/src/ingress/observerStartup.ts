@@ -3,7 +3,11 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ObserverPaths } from "@station/config";
 import type { ObserverHealth, SafeError } from "@station/contracts";
-import { createObserverClient, probeUnixSocket } from "@station/protocol";
+import {
+  createObserverClient,
+  probeUnixSocket,
+  unixSocketHolderEvidencePath,
+} from "@station/protocol";
 import {
   environmentWithoutGitLocals,
   type RuntimeClock,
@@ -228,11 +232,12 @@ export async function startProviderHookObserver(
 }
 
 function observerSocketInaccessibleError(socketPath: string): SafeError {
+  const evidencePath = unixSocketHolderEvidencePath();
   return {
     tag: "ObserverSocketError",
     code: "OBSERVER_SOCKET_INACCESSIBLE",
     message: "The Observer socket exists but cannot be reached or proven safe to reclaim.",
-    hint: `Restore access to ${socketPath}, normally mode 0600; inspect it with lsof, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
+    hint: `Restore access to ${socketPath}, normally mode 0600. Station will not reclaim it without holder evidence from ${evidencePath}; install lsof if that executable is missing (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof). Retry, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
   };
 }
 

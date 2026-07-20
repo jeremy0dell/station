@@ -8,7 +8,7 @@
 // then STOPS the devbox, so a live devbox here will be stopped.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +29,7 @@ const observerSock = join(socketDir, "observer.sock");
 const hostSock = join(socketDir, "station-host.sock");
 const hooksDir = join(ds, "observer", "hooks");
 const globalStateFragment = join(".local", "state", "station");
+let socketRestricted = false;
 
 process.stderr.write(
   "station:devbox smoke — starts and STOPS this checkout's devbox (.dev-state).\n",
@@ -71,6 +72,50 @@ try {
     label: "isolated observer status",
   });
   assertNoGlobalLeak(isoStatus.stdout, "isolated observer status");
+  const healthyStatus = JSON.parse(isoStatus.stdout);
+  const originalPid = healthyStatus.health?.pid;
+  assert(
+    Number.isInteger(originalPid),
+    `isolated status did not report a PID\n${isoStatus.stdout}`,
+  );
+  const originalSocket = statSync(observerSock);
+
+  chmodSync(observerSock, 0o000);
+  socketRestricted = true;
+  const blocked = spawnResult("node", [wrapper, "start"], {
+    env: { ...process.env, STATION_ISOLATED_NO_LAUNCH: "1" },
+  });
+  assert(blocked.status === 1, `inaccessible devbox start exited ${blocked.status}`);
+  assert(
+    blocked.stderr.includes("OBSERVER_SOCKET_INACCESSIBLE"),
+    `inaccessible devbox start hid the Observer diagnosis\n${blocked.stderr}`,
+  );
+  assert(
+    blocked.stderr.includes("The isolated Observer and .dev-state were preserved."),
+    `inaccessible devbox start omitted preservation guidance\n${blocked.stderr}`,
+  );
+  assert(
+    blocked.stderr.includes("pnpm station:devbox status") &&
+      blocked.stderr.includes("pnpm station:devbox start"),
+    `inaccessible devbox start omitted recovery commands\n${blocked.stderr}`,
+  );
+  process.kill(originalPid, 0);
+  const blockedSocket = statSync(observerSock);
+  assert(
+    blockedSocket.dev === originalSocket.dev && blockedSocket.ino === originalSocket.ino,
+    "inaccessible devbox start replaced the incumbent socket",
+  );
+
+  chmodSync(observerSock, 0o600);
+  socketRestricted = false;
+  devbox(["start"], "recovery start", { STATION_ISOLATED_NO_LAUNCH: "1" });
+  const recoveredStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
+    label: "recovered isolated observer status",
+  });
+  assert(
+    JSON.parse(recoveredStatus.stdout).health?.pid === originalPid,
+    "restoring socket access did not reconnect to the original devbox Observer",
+  );
 
   // stop removes the isolated observer + host sockets (teardown scoped to .dev-state).
   devbox(["stop"], "stop");
@@ -86,6 +131,7 @@ try {
   );
 } catch (error) {
   // Best-effort teardown so a failed assertion never leaves the observer running.
+  if (socketRestricted) chmodSync(observerSock, 0o600);
   spawnSync("node", [wrapper, "stop"], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 });
   throw error;
 }
@@ -123,12 +169,7 @@ function assertNoGlobalLeak(output, label) {
 }
 
 function spawnChecked(command, args, options) {
-  const result = spawnSync(command, args, {
-    cwd: repoRoot,
-    encoding: "utf8",
-    timeout: timeoutMs,
-    env: options.env ?? process.env,
-  });
+  const result = spawnResult(command, args, options);
   if (result.error !== undefined) {
     throw result.error;
   }
@@ -138,6 +179,15 @@ function spawnChecked(command, args, options) {
     );
   }
   return { stdout: result.stdout.trim(), stderr: result.stderr.trim() };
+}
+
+function spawnResult(command, args, options = {}) {
+  return spawnSync(command, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    timeout: timeoutMs,
+    env: options.env ?? process.env,
+  });
 }
 
 function assert(condition, message) {

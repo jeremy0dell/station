@@ -240,7 +240,16 @@ seed_cursor_link "$HOME/.ssh" "$STATION_CURSOR_HOME/.ssh"
 seed_cursor_link "$HOME/.config/git" "$STATION_CURSOR_HOME/.config/git"
 
 # Idempotent: reuses a healthy observer, so reopening Station leaves agents alone.
-node "$CLI" --config "$CFG" observer start >/dev/null
+if ! observer_start_output="$(node "$CLI" --config "$CFG" observer start 2>&1)"; then
+  printf '%s\n' "$observer_start_output" >&2
+  echo >&2
+  echo "The isolated Observer and .dev-state were preserved." >&2
+  echo "Restore the socket access or evidence named above, then run:" >&2
+  echo "  pnpm station:devbox status" >&2
+  echo "  pnpm station:devbox start" >&2
+  echo "For intentionally disposable state only, 'pnpm station:devbox reset -- --yes' deletes .dev-state and its agents." >&2
+  exit 1
+fi
 
 # Install status hooks against THIS observer so the launch guard lets these
 # harnesses spawn; each writes into its own isolated home/state, never globals.

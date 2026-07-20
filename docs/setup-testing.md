@@ -55,6 +55,11 @@ pnpm test:env:docker                                         # same, via script
 Requires Docker. Covers: `happy-linux`, `no-git`, `no-tmux`, `no-worktrunk`,
 `no-bun`, `no-diffnav`, `no-harness`.
 
+The minimal Linux images intentionally omit `/usr/bin/lsof`. `happy-linux`
+therefore proves that setup reports `observer-socket-evidence` as a recommended
+warning while fresh launch readiness remains unchanged; real stale recovery is
+still fail-closed until the package is installed.
+
 ## Tier 3 — macOS Tart VM snapshots (full fidelity, on-demand)
 
 Only a real Mac can exercise real `brew install`, `/opt/homebrew`, `node@24`

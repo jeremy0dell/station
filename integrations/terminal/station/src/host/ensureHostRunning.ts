@@ -12,7 +12,7 @@ import {
   stationHostCompatibilityError,
   stationHostSafeError,
 } from "@station/host";
-import { probeUnixSocket } from "@station/protocol";
+import { probeUnixSocket, unixSocketHolderEvidencePath } from "@station/protocol";
 import {
   runRuntimeBoundaryWithRetryAndTimeout,
   safeErrorFromUnknown,
@@ -228,11 +228,12 @@ async function negotiateIncumbentHost(input: {
 }
 
 function inaccessibleHostSocketError(socketPath: string): SafeError {
+  const evidencePath = unixSocketHolderEvidencePath();
   return stationHostSafeError(
     "HOST_UNREACHABLE",
     `The Station Host socket exists at ${socketPath} but cannot be reached or proven safe to reclaim.`,
     {
-      hint: "Restore access, normally mode 0600, and inspect it with lsof; do not unlink it or start a competing Host while ownership is uncertain.",
+      hint: `Restore access, normally mode 0600. Station will not reclaim the socket without holder evidence from ${evidencePath}; install lsof if that executable is missing; do not unlink it or start a competing Host while ownership is uncertain.`,
     },
   );
 }

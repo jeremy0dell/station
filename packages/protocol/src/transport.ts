@@ -11,7 +11,6 @@ import { unwrapBoundaryResult } from "./runtime.js";
 
 const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
 const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
-const unixSocketLsofPath = process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
 const PositivePidSchema = z.coerce.number().int().positive();
 const ErrorCodeSchema = z.object({ code: z.string() });
 
@@ -72,6 +71,11 @@ type UnixSocketHolderReaderOptions = {
     args: readonly string[],
   ) => Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">;
 };
+
+/** ADAPTER: Returns the canonical executable used for Unix-socket holder evidence. */
+export function unixSocketHolderEvidencePath(platform: NodeJS.Platform = process.platform): string {
+  return platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
+}
 
 export async function ensureSocketDirectory(socketPath: string): Promise<void> {
   await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
@@ -160,7 +164,7 @@ export function readUnixSocketHolderPids(
   socketPath: string,
   options: UnixSocketHolderReaderOptions = {},
 ): number[] {
-  const result = (options.runLsof ?? runLsof)(unixSocketLsofPath, ["-t", socketPath]);
+  const result = (options.runLsof ?? runLsof)(unixSocketHolderEvidencePath(), ["-t", socketPath]);
   const stdout = result.stdout;
   const stderr = result.stderr;
   if (

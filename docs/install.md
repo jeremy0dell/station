@@ -19,6 +19,14 @@ install itself does not require a source checkout, Node.js, pnpm, Bun, Xcode, or
 Homebrew. `stn setup` handles the separate tools needed for the complete agent
 workflow after Station is installed.
 
+Station uses the platform `lsof` executable (`/usr/sbin/lsof` on macOS,
+`/usr/bin/lsof` on Linux) to prove that an unreachable Unix socket has no live
+owner. Its absence does not block a fresh Observer, but setup reports a
+recommended warning because stale-socket recovery and build handoff must refuse
+to proceed without that evidence. Linux VM images can install it with
+`sudo apt-get install lsof` (Debian/Ubuntu) or `sudo dnf install lsof`
+(Fedora/RHEL); macOS normally includes it.
+
 ## Let Your Agent Install and Validate Station
 
 If you prefer an agent-led install, paste this prompt into a coding agent on the
@@ -192,6 +200,13 @@ install provider hooks, Worktrunk shell integration, and the `Ctrl-b Space`
 tmux popup binding. Complete the selected agent CLI's own sign-in before
 starting a real session.
 
+If setup writes the config but cannot activate it, it leaves the config and the
+incumbent Observer untouched, prints the exact error and recovery command, and
+exits nonzero. Restore the socket access/evidence named by that error, then run
+the printed `stn --config ... observer restart`; setup does not need to be
+rerun. Restoring a live socket to mode `0600` lets Station reconnect to its
+original process.
+
 Setup never adopts its current directory or an ancestor repository. On the
 empty dashboard, choose **Add your first project**, select a folder inside an
 existing Git repository, and confirm its detected Git root. Then press `N`,
@@ -305,6 +320,10 @@ For a complete source-development workflow, `stn setup check` exits 1 until thes
 - Bun — source-checkout `stn` renders the TUI through `bun run`; compiled `stn` embeds the renderer
 - diffnav and git-delta for the "See diff (split right)" automation
 - One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
+
+`lsof` is a recommended recovery dependency rather than a launch prerequisite:
+fresh startup works without it, while stale-socket recovery and Observer build
+handoff remain blocked until holder evidence is available.
 
 `bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk, Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
 

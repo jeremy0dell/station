@@ -386,6 +386,8 @@ describe("guided setup command", () => {
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: TEST_ACTIVATION_FAILED");
     expect(output).toContain("Hint: Inspect observer logs.");
+    expect(output).toContain("Setup does not need to be rerun; the config is saved.");
+    expect(output).toContain("Resolve the error above, then activate it with:");
     expect(output).toContain(`Run: stn --config ${configPath} observer restart`);
     expect(output).not.toContain("Core setup complete.");
   });
