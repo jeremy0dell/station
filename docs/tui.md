@@ -147,7 +147,9 @@ adopt a capability-policy update.
   / header click toggles the STATION overlay; `Ctrl-Q` always exits Station.
   Persistent tmux sessions are signed by renderer command and build identity
   so an installed upgrade replaces, rather than reuses, a warm renderer pinned
-  to an older Observer build.
+  to an older Observer build. Replacement kills through a compare-and-set on
+  the signature just read, and a session whose signature is absent is treated
+  as foreign and never killed; the popup refuses with a manual-resolution hint.
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
 

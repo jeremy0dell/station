@@ -92,12 +92,21 @@ describe("tmux popup", () => {
       popupMouseCall,
     ]);
 
+    let replacedAlive = true;
     const replacedCalls: ExternalCommandInput[] = [];
     await expect(
       ensurePersistentPopupSession({
         tuiCommand: "node current tui --popup --persistent",
         runner: async (input) => {
           replacedCalls.push(input);
+          if (input.args?.[0] === "has-session") {
+            if (!replacedAlive) throw Object.assign(new Error("missing"), { code: 1 });
+            return tmuxCommandResult(input);
+          }
+          if (input.args?.[0] === "if-shell") {
+            replacedAlive = false;
+            return tmuxCommandResult(input);
+          }
           if (input.args?.includes("@station_popup_ui_signature")) {
             return tmuxCommandResult(input, "v1:node stale tui --popup --persistent\n");
           }
@@ -105,11 +114,62 @@ describe("tmux popup", () => {
         },
       }),
     ).resolves.toEqual({ created: true, sessionName: "_station-ui" });
+    // Replacement kills through a compare-and-set on the exact signature just read.
     expect(replacedCalls.map((call) => call.args)).toContainEqual([
-      "kill-session",
+      "if-shell",
+      "-F",
       "-t",
-      "_station-ui",
+      "_station-ui:",
+      "#{==:#{@station_popup_ui_signature},v1:node stale tui --popup --persistent}",
+      "kill-session -t _station-ui",
     ]);
+  });
+
+  it("refuses to replace an unsigned session without ownership evidence", async () => {
+    const unsignedCalls: ExternalCommandInput[] = [];
+    await expect(
+      ensurePersistentPopupSession({
+        runner: async (input) => {
+          unsignedCalls.push(input);
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "TERMINAL_POPUP_FAILED",
+      message: "The tmux session _station-ui exists without Station ownership evidence.",
+      provider: "tmux",
+    });
+    expect(unsignedCalls.map((call) => call.args)).toEqual([
+      ["has-session", "-t", "_station-ui"],
+      ["show-options", "-t", "_station-ui", "-qv", "@station_popup_ui_signature"],
+      ["has-session", "-t", "_station-ui"],
+    ]);
+    expect(
+      unsignedCalls.some(
+        (call) => call.args?.[0] === "kill-session" || call.args?.[0] === "if-shell",
+      ),
+    ).toBe(false);
+  });
+
+  it("reuses a concurrent replacement winner instead of killing its session", async () => {
+    let signature = "v1:node stale tui --popup --persistent";
+    const concurrentCalls: ExternalCommandInput[] = [];
+    await expect(
+      ensurePersistentPopupSession({
+        runner: async (input) => {
+          concurrentCalls.push(input);
+          if (input.args?.[0] === "if-shell") {
+            // The CAS no-ops: a contender already swapped in this exact build's session.
+            signature = defaultSignature;
+          }
+          if (input.args?.includes("@station_popup_ui_signature")) {
+            return tmuxCommandResult(input, `${signature}\n`);
+          }
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).resolves.toEqual({ created: false, sessionName: "_station-ui" });
+    expect(concurrentCalls.some((call) => call.args?.[0] === "new-session")).toBe(false);
   });
 
   it("registers lease and mirrors before committing the route, then opens with a claim", async () => {
@@ -693,6 +753,7 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
   const globalOptions = new Map<string, string>();
   const sessionOptions = new Map<string, string>();
   const sessionSignatures = new Map([["_station-ui", defaultSignature]]);
+  const killedSessions = new Set<string>();
   const shellWindows = new Map<string, string>();
   let nextShellWindowId = 42;
   if (options.registered === true) {
@@ -756,6 +817,9 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
       return tmuxCommandResult(input, `${clientName}\n`);
     }
     if (args[0] === "has-session") {
+      if (killedSessions.has(args[2] ?? "")) {
+        throw Object.assign(new Error("no such session"), { code: 1 });
+      }
       return tmuxCommandResult(input);
     }
     if (args[0] === "show-options") {
@@ -790,6 +854,15 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     if (args[0] === "if-shell") {
       const condition = args[args.indexOf("-t") >= 0 ? 4 : 2] ?? "";
       const command = args[args.indexOf("-t") >= 0 ? 5 : 3] ?? "";
+      if (command.startsWith("kill-session -t ")) {
+        const target = command.slice("kill-session -t ".length);
+        const expected = extractComparedValue(condition, "@station_popup_ui_signature");
+        if ((sessionSignatures.get(target) ?? "") === expected) {
+          killedSessions.add(target);
+          sessionSignatures.delete(target);
+        }
+        return tmuxCommandResult(input);
+      }
       if (command.includes("display-popup") && displayReplacementPending !== undefined) {
         globalOptions.set("@station_popup_active_claim", displayReplacementPending);
         globalOptions.set("@station_popup_client", "/dev/ttys099");
@@ -902,6 +975,11 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
         }
         return tmuxCommandResult(input);
       }
+      return tmuxCommandResult(input);
+    }
+    if (args[0] === "new-session") {
+      const nameIndex = args.indexOf("-s");
+      if (nameIndex >= 0) killedSessions.delete(args[nameIndex + 1] ?? "");
       return tmuxCommandResult(input);
     }
     if (args[0] === "display-popup" && !args.includes("-C") && options.displayExit !== undefined) {
