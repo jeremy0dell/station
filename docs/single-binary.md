@@ -357,7 +357,10 @@ selectors, runs the lower identity as incumbent, proves higher-identity handoff,
 then refuses a losing artifact's mutating command without recording it or
 touching the replacement Observer, Station Host, or live PTY. The native PTY
 test also proves the unset compiled selector launches a payload through the
-extracted helper on the current platform. `observerReap.ts` and the same-TTY UI
+extracted helper on the current platform. The physical Observer socket is also
+made mode `000`: status/start/restart/doctor and `stn-ingress` must preserve its
+PID, inode, pidfile, and holder set, spool exactly one hook, then reconnect to the
+same process and drain it after mode `0600` is restored. `observerReap.ts` and the same-TTY UI
 reaper recognize the exact compiled process shapes.
 
 ### A5 — release pipeline (private, deterministic, verifiable)
@@ -664,7 +667,8 @@ Native release CI: build, smoke, and draft-install the compiled binary on
 `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15-intel`, and `macos-15`.
 
 CI smoke (A4): the binary end-to-end minus TTY, **including** the
-hostile-directory RCE gate and detached self-spawn.
+hostile-directory RCE gate, detached self-spawn, and inaccessible-socket
+preservation through the physical `stn` and `stn-ingress` entrypoints.
 
 **Release acceptance (every target, on a clean box with no Node/Bun/
 node_modules on PATH):** this is the gate v1 lacked. `STATION_DASHBOARD_

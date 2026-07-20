@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import { createObserverClient } from "@station/protocol";
@@ -9,7 +9,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it, vi } from "vitest";
-import { createStaleSocketFile, createTempSocketPath } from "../../../../tests/support/sockets";
+import { createRealStaleSocket, createTempSocketPath } from "../../../../tests/support/sockets";
 import {
   acquireObserverBootClaim,
   createCommandQueue,
@@ -49,10 +49,10 @@ const degradedSqliteHealth = {
 describe("observer protocol server", () => {
   it("translates absent, stale, and listening socket transport states", async () => {
     const { dir, socketPath } = await createTempSocketPath();
-    await expect(probeObserverSocket(socketPath)).resolves.toBe("absent");
+    await expect(probeObserverSocket(socketPath)).resolves.toEqual({ status: "absent" });
 
-    await createStaleSocketFile(socketPath);
-    await expect(probeObserverSocket(socketPath)).resolves.toBe("stale");
+    await createRealStaleSocket(socketPath);
+    await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({ status: "stale" });
 
     const fixture = createObserverFixture(socketPath);
     const server = await startObserverServer({
@@ -62,7 +62,9 @@ describe("observer protocol server", () => {
       drainOnStart: false,
     });
     try {
-      await expect(probeObserverSocket(socketPath)).resolves.toBe("listening");
+      await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({
+        status: "listening",
+      });
       const stateDir = join(dir, "losing-state");
       const providerRegistryFactory = vi.fn(() => {
         throw new Error("providers must not be constructed for a listening socket");
@@ -88,6 +90,49 @@ describe("observer protocol server", () => {
       });
       await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
+      await server.close();
+      fixture.sqlite.close();
+    }
+  });
+
+  it("refuses inaccessible ownership before providers or runtime state are created", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const fixture = createObserverFixture(socketPath);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+      drainOnStart: false,
+    });
+    const stateDir = join(dir, "refused-state");
+    const providerRegistryFactory = vi.fn(() => {
+      throw new Error("providers must not be constructed for inaccessible ownership");
+    });
+    try {
+      await chmod(socketPath, 0o000);
+      await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({
+        status: "inaccessible",
+        error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+      });
+      const lifecycle = createObserverLifecycleClient({ timeoutMs: 100 });
+      await expect(lifecycle.socketListening(socketPath, { timeoutMs: 100 })).rejects.toMatchObject(
+        {
+          code: "OBSERVER_SOCKET_INACCESSIBLE",
+        },
+      );
+      await expect(
+        runObserverMain(
+          ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "1000"],
+          { providerRegistryFactory, buildVersion: observerBuildVersion },
+        ),
+      ).rejects.toMatchObject({ code: "OBSERVER_SOCKET_INACCESSIBLE" });
+      expect(providerRegistryFactory).not.toHaveBeenCalled();
+      await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await chmod(socketPath, 0o600);
       await server.close();
       fixture.sqlite.close();
     }

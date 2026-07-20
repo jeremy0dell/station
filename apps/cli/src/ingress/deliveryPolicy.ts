@@ -42,8 +42,8 @@ const nonSpoolableErrorCodes = new Set([
 /**
  * USE CASE
  *
- * Gates provider-hook delivery on Observer build compatibility, negotiates an
- * allowed replacement before retrying, spools offline events, and rejects known incompatibility.
+ * Gates delivery on compatible ownership and spools inaccessible failures
+ * without delivery, auto-start lock mutation, or competing Observer startup.
  */
 export async function deliverProviderHookWithSpooling(input: {
   paths: ObserverPaths;
@@ -171,7 +171,7 @@ async function prepareObserverForDelivery(
         ),
       };
     }
-  } else if (status.error?.code === "PROTOCOL_SCHEMA_MISMATCH" || !input.autoStart) {
+  } else if (status.status === "unhealthy" || !input.autoStart) {
     return {
       ok: false,
       error:

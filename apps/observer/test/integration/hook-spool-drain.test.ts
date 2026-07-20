@@ -263,7 +263,7 @@ describe("observer hook spool drain", () => {
       clock: fixture.clock,
     });
 
-    await waitFor(async () => (await probeObserverSocket(socketPath)) === "listening");
+    await waitFor(async () => (await probeObserverSocket(socketPath)).status === "listening");
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
     const server = await serverPromise;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -8,6 +9,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,13 +22,17 @@ const repoRoot = dirname(dirname(dirname(runnerPath)));
 const observerInternalUrl = pathToFileURL(
   join(repoRoot, "apps", "observer", "dist", "internal.js"),
 ).href;
+const protocolUrl = pathToFileURL(join(repoRoot, "packages", "protocol", "dist", "index.js")).href;
 const contentionTimeoutMs = 100;
 const processTimeoutMs = 15_000;
 
-if (process.argv[2] === "--child") {
+if (process.argv[2] === "--socket-server-child") {
+  await runSocketServerChild(parseFlags(process.argv.slice(3))).catch(failChild);
+} else if (process.argv[2] === "--socket-probe-child") {
+  await runSocketProbeChild(parseFlags(process.argv.slice(3))).catch(failChild);
+} else if (process.argv[2] === "--child") {
   await runChild(parseFlags(process.argv.slice(3))).catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
+    failChild(error);
   });
 } else {
   await runController(parseControllerArgs(process.argv.slice(2)));
@@ -86,6 +92,7 @@ async function runController({ rounds }) {
     assert.equal(maximumCriticalSectionConcurrency, 1);
     assertClaimFile(claimPath);
     assert.equal(await readIntegrityCheck(claimPath), "ok");
+    await verifySocketSafetyAcrossRuntimes(tempRoot);
 
     console.log(
       `Observer boot claim passed ${rounds} alternating Node/Bun races, ` +
@@ -93,10 +100,174 @@ async function runController({ rounds }) {
     );
     console.log("Exactly one transaction entered each race; maximum critical concurrency was 1.");
     console.log("The persistent claim inode was unchanged and integrity_check=ok.");
+    console.log("Node and Bun agreed on inaccessible, stale, and displaced-abandon socket safety.");
     console.log("No fairness property is asserted.");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
+}
+
+async function verifySocketSafetyAcrossRuntimes() {
+  const tempRoot = mkdtempSync("/tmp/stn-socket-");
+  try {
+    for (const runtime of ["node", "bun"]) {
+      const socketPath = join(tempRoot, `live-${runtime}.sock`);
+      const owner = startSocketServerChild({
+        runtime,
+        socketPath,
+        name: `live-${runtime}`,
+        tempRoot,
+        releaseMode: "close",
+      });
+      try {
+        await waitFor(`${runtime} live socket`, () => existsSync(owner.readyPath));
+        chmodSync(socketPath, 0o000);
+        for (const probeRuntime of ["node", "bun"]) {
+          assert.deepEqual(await runSocketProbe(probeRuntime, socketPath, tempRoot), {
+            status: "inaccessible",
+            reason: probeRuntime === "node" ? "permission-denied" : "live-holder",
+            errorCode: "PROTOCOL_SOCKET_INACCESSIBLE",
+          });
+        }
+        chmodSync(socketPath, 0o600);
+      } finally {
+        writeMarkerIfMissing(owner.releasePath);
+        assertChildSucceeded(await owner.completed);
+      }
+    }
+
+    const stalePath = join(tempRoot, "stale.sock");
+    const staleOwner = startSocketServerChild({
+      runtime: "node",
+      socketPath: stalePath,
+      name: "stale-owner",
+      tempRoot,
+      releaseMode: "exit",
+    });
+    await waitFor("stale socket owner", () => existsSync(staleOwner.readyPath));
+    writeMarker(staleOwner.releasePath);
+    assertChildSucceeded(await staleOwner.completed);
+    for (const runtime of ["node", "bun"]) {
+      assert.deepEqual(await runSocketProbe(runtime, stalePath, tempRoot), {
+        status: "stale",
+      });
+    }
+    unlinkSync(stalePath);
+
+    for (const [ownerRuntime, successorRuntime] of [
+      ["node", "bun"],
+      ["bun", "node"],
+    ]) {
+      const socketPath = join(tempRoot, `displaced-${ownerRuntime}.sock`);
+      const owner = startSocketServerChild({
+        runtime: ownerRuntime,
+        socketPath,
+        name: `displaced-${ownerRuntime}`,
+        tempRoot,
+        releaseMode: "abandon",
+      });
+      await waitFor(`${ownerRuntime} displaced owner`, () => existsSync(owner.readyPath));
+      unlinkSync(socketPath);
+      const successor = startSocketServerChild({
+        runtime: successorRuntime,
+        socketPath,
+        name: `successor-${successorRuntime}`,
+        tempRoot,
+        releaseMode: "close",
+      });
+      try {
+        await waitFor(`${successorRuntime} successor`, () => existsSync(successor.readyPath));
+        writeMarker(owner.releasePath);
+        assertChildSucceeded(await owner.completed);
+        for (const runtime of ["node", "bun"]) {
+          assert.deepEqual(await runSocketProbe(runtime, socketPath, tempRoot), {
+            status: "listening",
+          });
+        }
+      } finally {
+        writeMarkerIfMissing(successor.releasePath);
+        assertChildSucceeded(await successor.completed);
+      }
+    }
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+function startSocketServerChild({ runtime, socketPath, name, tempRoot, releaseMode }) {
+  const readyPath = join(tempRoot, `${name}.ready`);
+  const releasePath = join(tempRoot, `${name}.release`);
+  const child = spawn(
+    runtime === "node" ? nodeExecutable() : "bun",
+    [
+      runnerPath,
+      "--socket-server-child",
+      "--socket",
+      socketPath,
+      "--ready",
+      readyPath,
+      "--release",
+      releasePath,
+      "--release-mode",
+      releaseMode,
+    ],
+    {
+      cwd: repoRoot,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  assert.ok(child.pid !== undefined, `Could not start ${runtime} socket child.`);
+  return {
+    readyPath,
+    releasePath,
+    completed: collectChildExit(child, runtime),
+  };
+}
+
+async function runSocketServerChild(flags) {
+  const socketPath = requiredFlag(flags, "socket");
+  const readyPath = requiredFlag(flags, "ready");
+  const releasePath = requiredFlag(flags, "release");
+  const releaseMode = requiredFlag(flags, "release-mode");
+  const { listenUnixSocket } = await import(protocolUrl);
+  const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+  writeMarker(readyPath);
+  await waitFor("socket release", () => existsSync(releasePath));
+  if (releaseMode === "close") await server.close();
+  else if (releaseMode === "abandon") server.abandon();
+  else assert.equal(releaseMode, "exit");
+  if (releaseMode !== "close") process.exit(0);
+}
+
+async function runSocketProbe(runtime, socketPath, tempRoot) {
+  const resultPath = join(tempRoot, `probe-${runtime}-${process.pid}-${Date.now()}.json`);
+  const child = spawn(
+    runtime === "node" ? nodeExecutable() : "bun",
+    [runnerPath, "--socket-probe-child", "--socket", socketPath, "--result", resultPath],
+    {
+      cwd: repoRoot,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  assertChildSucceeded(await collectChildExit(child, runtime));
+  const result = readJson(resultPath);
+  rmSync(resultPath, { force: true });
+  return result;
+}
+
+async function runSocketProbeChild(flags) {
+  const socketPath = requiredFlag(flags, "socket");
+  const resultPath = requiredFlag(flags, "result");
+  const { probeUnixSocket } = await import(protocolUrl);
+  const probe = await probeUnixSocket(socketPath);
+  writeJson(resultPath, {
+    status: probe.status,
+    ...(probe.status === "inaccessible"
+      ? { reason: probe.reason, errorCode: probe.error.code }
+      : {}),
+  });
 }
 
 async function runRace({ tempRoot, socketPath, name, runtimes }) {
@@ -380,6 +551,10 @@ function writeMarker(path) {
   writeFileSync(path, "", { flag: "wx", mode: 0o600 });
 }
 
+function writeMarkerIfMissing(path) {
+  if (!existsSync(path)) writeMarker(path);
+}
+
 function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value)}\n`, { flag: "wx", mode: 0o600 });
 }
@@ -417,4 +592,17 @@ async function readIntegrityCheck(path) {
 function errorMessage(error) {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+function assertChildSucceeded(exit) {
+  assert.equal(
+    exit.code,
+    0,
+    `${exit.runtime} child failed (${exit.signal ?? "no signal"}):\n${exit.stderr}`,
+  );
+}
+
+function failChild(error) {
+  console.error(error);
+  process.exitCode = 1;
 }

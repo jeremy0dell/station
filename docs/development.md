@@ -199,19 +199,24 @@ creates observer databases under Node and Bun, then reopens each database under
 the other runtime to verify the shared SQLite contract and migrations. It also
 runs the permanent boot-claim race: 50 alternating Node/Bun two-process rounds,
 three-contender rounds, and killed-owner recovery with stable inode and
-`integrity_check=ok`; this gate makes no fairness claim. Both the local pre-push
+`integrity_check=ok`. That runner also checks Node/Bun inaccessible and stale
+classification plus displaced-listener abandonment; the claim gate makes no
+fairness claim. Both the local pre-push
 gate and the hosted `standard-ci` job run these checks.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
 claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
 same-version build-identity handoff and refusal, cross-version graceful handoff,
-and clean restart while the persistent claim remains. The compiled binary smoke
+inaccessible-socket preservation, displaced shutdown, and clean restart while
+the persistent claim remains. The compiled binary smoke
 also builds a second artifact from one production-source change in an isolated
 detached worktree, queries both exact selectors, proves lower-to-higher
 same-version replacement and post-handoff mutation refusal, then proves
 source/compiled ordering and Station Host PTY continuity across both Observer
-replacements. Run both after `pnpm build` when changing startup, socket
+replacements. It also chmods the physical Observer socket to `000`, proves status,
+start, restart, doctor, and ingress preserve the original PID/socket/pidfile,
+then restores access and drains the one spooled event. Run both after `pnpm build` when changing startup, socket
 ownership, pidfiles, or claim lifecycle behavior.
 
 For focused Station PTY work, run both implementations explicitly:

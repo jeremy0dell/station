@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { lstat, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { SafeError } from "@station/contracts";
 import {
@@ -12,7 +12,7 @@ import {
   stationHostCompatibilityError,
   stationHostSafeError,
 } from "@station/host";
-import { isSocketStale, removeStaleSocket } from "@station/protocol";
+import { probeUnixSocket } from "@station/protocol";
 import {
   runRuntimeBoundaryWithRetryAndTimeout,
   safeErrorFromUnknown,
@@ -60,8 +60,10 @@ type IncumbentHostDecision =
   | { outcome: "unavailable"; error: SafeError };
 
 /**
- * Ensure the host by socket health, reaping stale sockets before detached spawn.
- * Compatibility failures remain `unavailable` preservation errors for callers to surface.
+ * ADAPTER
+ *
+ * Preserves inaccessible Host ownership and defers definite stale reclaim to
+ * the child binder while retaining compatibility-aware idle replacement.
  */
 export async function ensureStationHostRunning(
   options: EnsureStationHostOptions,
@@ -69,6 +71,14 @@ export async function ensureStationHostRunning(
 ): Promise<StationHostHandle> {
   const { socketPath } = options;
   const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
+  const probe = await probeUnixSocket(socketPath);
+  if (probe.status === "inaccessible") {
+    return {
+      status: "unavailable",
+      socketPath,
+      error: inaccessibleHostSocketError(socketPath),
+    };
+  }
   // A caller-supplied client is shared and long-lived (the provider reuses it), so
   // only a client WE created is disposed on a failure path.
   const ownsClient = deps.clientFactory === undefined;
@@ -79,13 +89,16 @@ export async function ensureStationHostRunning(
     }
   };
 
-  const incumbent = await negotiateIncumbentHost({
-    socketPath,
-    expectedBuildVersion,
-    replacementConfigured: options.hostCommand[0].length > 0,
-    timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
-    client,
-  });
+  const incumbent =
+    probe.status === "absent" || probe.status === "stale"
+      ? ({ outcome: "start" } as const)
+      : await negotiateIncumbentHost({
+          socketPath,
+          expectedBuildVersion,
+          replacementConfigured: options.hostCommand[0].length > 0,
+          timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
+          client,
+        });
   if (incumbent.outcome === "running") {
     return { status: "running", socketPath, client };
   }
@@ -162,14 +175,6 @@ async function negotiateIncumbentHost(input: {
   timeoutMs: number;
   client: StationHostClient;
 }): Promise<IncumbentHostDecision> {
-  if (!(await socketExists(input.socketPath))) {
-    return { outcome: "start" };
-  }
-  if (await isSocketStale(input.socketPath)) {
-    await removeStaleSocket(input.socketPath).catch(() => undefined);
-    return { outcome: "start" };
-  }
-
   let health: HostHealthResult;
   try {
     health = await input.client.health();
@@ -205,9 +210,6 @@ async function negotiateIncumbentHost(input: {
     // waits for release so no connectable incumbent is ever unlinked.
     await input.client.stopIfIdle(input.expectedBuildVersion);
     await waitForSocketRelease(input.socketPath, input.timeoutMs);
-    if (await socketExists(input.socketPath)) {
-      await removeStaleSocket(input.socketPath);
-    }
     return { outcome: "start" };
   } catch (error) {
     return {
@@ -225,6 +227,16 @@ async function negotiateIncumbentHost(input: {
   }
 }
 
+function inaccessibleHostSocketError(socketPath: string): SafeError {
+  return stationHostSafeError(
+    "HOST_UNREACHABLE",
+    `The Station Host socket exists at ${socketPath} but cannot be reached or proven safe to reclaim.`,
+    {
+      hint: "Restore access, normally mode 0600, and inspect it with lsof; do not unlink it or start a competing Host while ownership is uncertain.",
+    },
+  );
+}
+
 function defaultClientFactory(socketPath: string, expectedBuildVersion: string): StationHostClient {
   return createStationHostClient({ socketPath, expectedBuildVersion, timeoutMs: 1000 });
 }
@@ -235,15 +247,6 @@ function defaultSpawnHost(input: SpawnStationHostInput): ChildProcessLike {
   // this detached/ignore shape onto the bridge or its PTYs die at spawn.
   const [command, ...args] = input.argv;
   return spawn(command, args, input.spawnOptions);
-}
-
-async function socketExists(socketPath: string): Promise<boolean> {
-  try {
-    await lstat(socketPath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function waitForSocketRelease(socketPath: string, timeoutMs: number): Promise<void> {
@@ -258,7 +261,8 @@ async function waitForSocketRelease(socketPath: string, timeoutMs: number): Prom
       retry: { retries: Math.max(1, Math.ceil(timeoutMs / 50)), delayMs: 50 },
     },
     async () => {
-      if ((await socketExists(socketPath)) && !(await isSocketStale(socketPath))) {
+      const probe = await probeUnixSocket(socketPath);
+      if (probe.status === "listening" || probe.status === "inaccessible") {
         throw stationHostSafeError(
           "HOST_UNREACHABLE",
           "Station host socket is still accepting connections after idle shutdown.",

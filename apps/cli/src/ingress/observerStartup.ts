@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ObserverPaths } from "@station/config";
 import type { ObserverHealth, SafeError } from "@station/contracts";
-import { createObserverClient, isSocketStale } from "@station/protocol";
+import { createObserverClient, probeUnixSocket } from "@station/protocol";
 import {
   environmentWithoutGitLocals,
   type RuntimeClock,
@@ -81,8 +81,12 @@ export async function getProviderHookObserverStatus(
   deps: ProviderHookObserverStartupDeps = {},
 ): Promise<ProviderHookObserverStatus> {
   const paths = options.paths;
-  if (await isSocketStale(paths.socketPath)) {
+  const probe = await probeUnixSocket(paths.socketPath);
+  if (probe.status === "stale") {
     return { status: "stale", paths };
+  }
+  if (probe.status === "inaccessible") {
+    return { status: "unhealthy", paths, error: observerSocketInaccessibleError(paths.socketPath) };
   }
 
   const client = (deps.clientFactory ?? defaultClientFactory)(paths.socketPath, {
@@ -99,7 +103,7 @@ export async function getProviderHookObserverStatus(
     };
   } catch (error) {
     return {
-      status: "stopped",
+      status: probe.status === "listening" ? "unhealthy" : "stopped",
       paths,
       error: safeErrorFromUnknown(error, {
         tag: "ObserverConnectionError",
@@ -113,9 +117,9 @@ export async function getProviderHookObserverStatus(
 /**
  * USE CASE
  *
- * Attaches provider-hook delivery to a compatible incumbent, starts a child to
- * negotiate replacement of an older build, and refuses incomplete ownership
- * evidence while leaving mutation to the child's serialized boot lifecycle.
+ * Attaches provider-hook delivery to a compatible incumbent and auto-starts
+ * only from stopped or proven-stale ownership; inaccessible and listening-
+ * unhealthy sockets never authorize mutation.
  */
 export async function startProviderHookObserver(
   options: ProviderHookObserverStartupOptions,
@@ -144,8 +148,15 @@ export async function startProviderHookObserver(
         error: observerHandoffRefusedError(existing.health, buildVersion, classification.reason),
       };
     }
-  } else if (existing.error?.code === "PROTOCOL_SCHEMA_MISMATCH") {
-    return { status: "unhealthy", paths, error: existing.error };
+  } else if (
+    existing.status === "unhealthy" ||
+    existing.error?.code === "PROTOCOL_SCHEMA_MISMATCH"
+  ) {
+    return {
+      status: "unhealthy",
+      paths,
+      ...(existing.error === undefined ? {} : { error: existing.error }),
+    };
   }
   const startTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
   if (startTimeoutMs === undefined) return startupTimedOutStatus(paths);
@@ -213,6 +224,15 @@ export async function startProviderHookObserver(
     status: "unhealthy",
     paths,
     error: result.error,
+  };
+}
+
+function observerSocketInaccessibleError(socketPath: string): SafeError {
+  return {
+    tag: "ObserverSocketError",
+    code: "OBSERVER_SOCKET_INACCESSIBLE",
+    message: "The Observer socket exists but cannot be reached or proven safe to reclaim.",
+    hint: `Restore access to ${socketPath}, normally mode 0600; inspect it with lsof, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
   };
 }
 

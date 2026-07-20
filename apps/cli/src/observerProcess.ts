@@ -1,10 +1,9 @@
-import { lstat } from "node:fs/promises";
 import type { ObserverHealth, ObserverStopReceipt, SafeError } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
 import {
   createObserverClient,
   type ExpectedObserverIdentity,
-  isSocketStale,
+  probeUnixSocket,
 } from "@station/protocol";
 import {
   parseStationObserverBuildVersion,
@@ -34,14 +33,23 @@ export type {
   SpawnObserverInput,
 } from "./observerProcess/types.js";
 
+/**
+ * USE CASE
+ *
+ * Reports inaccessible socket ownership without spawning, unlinking, stopping,
+ * or signaling another process.
+ */
 export async function getObserverStatus(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
-  const socketExists = await socketPathExists(paths.socketPath);
-  if (await isSocketStale(paths.socketPath)) {
+  const probe = await probeUnixSocket(paths.socketPath);
+  if (probe.status === "stale") {
     return { status: "stale", paths };
+  }
+  if (probe.status === "inaccessible") {
+    return { status: "unhealthy", paths, error: observerSocketInaccessibleError(paths.socketPath) };
   }
 
   const client =
@@ -57,6 +65,7 @@ export async function getObserverStatus(
       health: await client.health(),
     };
   } catch (error) {
+    const socketExists = probe.status === "listening";
     const safeError = observerConnectionError(error, paths, socketExists);
     return {
       status: socketExists ? "unhealthy" : "stopped",
@@ -316,6 +325,7 @@ export async function restartObserver(
       await stopRunningObserver(status, options, deps);
     }
   }
+  if (status.status === "unhealthy") return status;
   return startObserver({ ...options, paths: status.paths }, deps);
 }
 
@@ -370,15 +380,6 @@ export async function logObserverLifecycleFailure(input: {
   }
 }
 
-async function socketPathExists(socketPath: string): Promise<boolean> {
-  try {
-    await lstat(socketPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function observerConnectionError(
   error: unknown,
   paths: ObserverPaths,
@@ -414,6 +415,15 @@ function observerConnectionError(
   if (safeError.traceId !== undefined) enhanced.traceId = safeError.traceId;
   if (safeError.diagnosticId !== undefined) enhanced.diagnosticId = safeError.diagnosticId;
   return enhanced;
+}
+
+function observerSocketInaccessibleError(socketPath: string): SafeError {
+  return {
+    tag: "ObserverSocketError",
+    code: "OBSERVER_SOCKET_INACCESSIBLE",
+    message: "The Observer socket exists but cannot be reached or proven safe to reclaim.",
+    hint: `Restore access to ${socketPath}, normally mode 0600; inspect it with lsof, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
+  };
 }
 
 function observerStatusHealthTimeoutMs(timeoutMs: number | undefined): number {

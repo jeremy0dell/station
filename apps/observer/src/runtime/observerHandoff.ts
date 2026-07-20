@@ -83,8 +83,8 @@ export type ObserverStopRequest = ObserverLifecycleRequest & {
 /**
  * DRIVEN PORT
  *
- * Supplies socket ownership and exact local-process evidence without exposing
- * operating-system commands to the handoff use case.
+ * Supplies exact local-process evidence without exposing operating-system
+ * commands; unavailable socket-holder evidence throws and never means zero.
  */
 export interface ObserverProcessEvidenceSource {
   listObserverProcesses(): ObserverProcessEntry[];
@@ -97,8 +97,8 @@ export interface ObserverProcessEvidenceSource {
 /**
  * DRIVEN PORT
  *
- * Exposes the incumbent's validated lifecycle operations while keeping NDJSON
- * transport mechanics outside build-aware handoff orchestration.
+ * Exposes validated incumbent lifecycle operations while keeping transport
+ * mechanics outside handoff; inaccessible sockets cannot count as process exit.
  */
 export interface ObserverIncumbentLifecycle {
   health(socketPath: string, request: ObserverLifecycleRequest): Promise<ObserverHealth>;
@@ -211,7 +211,7 @@ export function classifyObserverIncumbent(input: {
  * USE CASE
  *
  * Replaces an older incumbent only after corroborating its socket and process
- * identity, then waits for both exact process death and socket closure.
+ * identity; probe or evidence failure refuses before any signal.
  */
 export async function negotiateObserverIncumbent(
   input: {

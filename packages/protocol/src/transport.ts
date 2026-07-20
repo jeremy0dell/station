@@ -1,10 +1,19 @@
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import { PassThrough } from "node:stream";
-import { runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import type { SafeError } from "@station/contracts";
+import { isSafeError, runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import { z } from "zod";
 import { protocolSafeError } from "./messages.js";
 import { unwrapBoundaryResult } from "./runtime.js";
+
+const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
+const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
+const unixSocketLsofPath = process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
+const PositivePidSchema = z.coerce.number().int().positive();
+const ErrorCodeSchema = z.object({ code: z.string() });
 
 export type NdjsonConnection = {
   send(value: unknown): void;
@@ -21,10 +30,47 @@ export type ListenUnixSocketOptions = {
 export type UnixSocketServer = {
   readonly socketPath: string;
   close(): Promise<void>;
+  abandon(): void;
 };
 
 export type ConnectUnixSocketOptions = {
   timeoutMs?: number;
+};
+
+export type SocketIdentity = { ino: bigint; birthtimeNs: bigint };
+
+export type UnixSocketProbe =
+  | { status: "absent" }
+  | { status: "listening"; identity: SocketIdentity }
+  | { status: "stale"; identity: SocketIdentity }
+  | {
+      status: "inaccessible";
+      identity?: SocketIdentity;
+      reason:
+        | "permission-denied"
+        | "timeout"
+        | "live-holder"
+        | "evidence-unavailable"
+        | "path-changed"
+        | "not-a-socket"
+        | "unclassified";
+      error: SafeError;
+    };
+
+export type UnixSocketPathMetadata = SocketIdentity & { isSocket: boolean };
+
+export type UnixSocketProbeOptions = {
+  timeoutMs?: number;
+  socketHolders?: (socketPath: string) => readonly number[] | Promise<readonly number[]>;
+  connect?: (socketPath: string, timeoutMs: number) => Promise<void>;
+  readMetadata?: (socketPath: string) => Promise<UnixSocketPathMetadata | undefined>;
+};
+
+type UnixSocketHolderReaderOptions = {
+  runLsof?: (
+    file: string,
+    args: readonly string[],
+  ) => Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">;
 };
 
 export async function ensureSocketDirectory(socketPath: string): Promise<void> {
@@ -32,35 +78,124 @@ export async function ensureSocketDirectory(socketPath: string): Promise<void> {
   await chmod(dirname(socketPath), 0o700);
 }
 
-export async function isSocketStale(socketPath: string): Promise<boolean> {
+/**
+ * ADAPTER
+ *
+ * Translates filesystem, connection, and process-holder evidence into four
+ * fail-closed Unix-socket ownership states.
+ */
+export async function probeUnixSocket(
+  socketPath: string,
+  options: UnixSocketProbeOptions = {},
+): Promise<UnixSocketProbe> {
+  const readMetadata = options.readMetadata ?? readUnixSocketMetadata;
+  let initial: UnixSocketPathMetadata | undefined;
   try {
-    const stats = await lstat(socketPath);
-    if (!stats.isSocket()) {
-      return true;
+    initial = await readMetadata(socketPath);
+  } catch (error) {
+    return inaccessibleSocket("unclassified", error);
+  }
+  if (initial === undefined) return { status: "absent" };
+  if (!initial.isSocket) {
+    return inaccessibleSocket("not-a-socket", undefined, socketIdentity(initial));
+  }
+
+  const initialIdentity = socketIdentity(initial);
+  const timeoutMs = Math.max(
+    MIN_SOCKET_PROBE_TIMEOUT_MS,
+    options.timeoutMs ?? DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
+  );
+  const connect = options.connect ?? probeUnixSocketConnection;
+
+  try {
+    await connect(socketPath, timeoutMs);
+    const current = await readMetadataAfterProbe(readMetadata, socketPath, initialIdentity);
+    if (current.status === "inaccessible") return current;
+    return { status: "listening", identity: initialIdentity };
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === "EACCES" || code === "EPERM") {
+      return inaccessibleSocket("permission-denied", error, initialIdentity);
     }
-  } catch {
-    return false;
-  }
+    if (code === "PROTOCOL_CONNECT_TIMEOUT") {
+      return inaccessibleSocket("timeout", error, initialIdentity);
+    }
 
-  try {
-    // Generous timeout: misclassifying a busy-but-live observer as stale makes
-    // the caller unlink its socket and silently orphan the running process.
-    const connection = await connectUnixSocket(socketPath, { timeoutMs: 1000 });
-    connection.close();
-    return false;
-  } catch {
-    return true;
+    let current: UnixSocketPathMetadata | undefined;
+    try {
+      current = await readMetadata(socketPath);
+    } catch (metadataError) {
+      return inaccessibleSocket("unclassified", metadataError, initialIdentity);
+    }
+    if (current === undefined) return { status: "absent" };
+    if (!current.isSocket) {
+      return inaccessibleSocket("not-a-socket", error, socketIdentity(current));
+    }
+    if (!socketIdentitiesMatch(initialIdentity, current)) {
+      return inaccessibleSocket("path-changed", error, socketIdentity(current));
+    }
+
+    // Bun reports ENOENT for both a live inaccessible pathname and a dead socket.
+    if (code !== "ECONNREFUSED" && code !== "ENOENT") {
+      return inaccessibleSocket("unclassified", error, initialIdentity);
+    }
+    try {
+      const holders = await (options.socketHolders ?? readUnixSocketHolderPids)(socketPath);
+      return holders.length === 0
+        ? { status: "stale", identity: initialIdentity }
+        : inaccessibleSocket("live-holder", error, initialIdentity);
+    } catch (evidenceError) {
+      return inaccessibleSocket("evidence-unavailable", evidenceError, initialIdentity);
+    }
   }
 }
 
-export async function removeStaleSocket(socketPath: string): Promise<boolean> {
-  if (!(await isSocketStale(socketPath))) {
-    return false;
+/**
+ * ADAPTER
+ *
+ * Reads canonical lsof holder evidence, treating only its empty status-1 result
+ * as proof that no process owns the socket.
+ */
+export function readUnixSocketHolderPids(
+  socketPath: string,
+  options: UnixSocketHolderReaderOptions = {},
+): number[] {
+  const result = (options.runLsof ?? runLsof)(unixSocketLsofPath, ["-t", socketPath]);
+  const stdout = result.stdout;
+  const stderr = result.stderr;
+  if (
+    result.error !== undefined ||
+    result.signal !== null ||
+    stderr.length > 0 ||
+    (result.status !== 0 && result.status !== 1)
+  ) {
+    throw socketEvidenceUnavailable(socketPath);
   }
-  await unlink(socketPath);
-  return true;
+  // lsof uses status 1 with no output for its canonical no-match result.
+  if (result.status === 1) {
+    if (stdout.length === 0) return [];
+    throw socketEvidenceUnavailable(socketPath);
+  }
+
+  const lines = stdout.trimEnd().split("\n");
+  if (lines.length === 0 || lines.every((line) => line.length === 0)) {
+    throw socketEvidenceUnavailable(socketPath);
+  }
+  const pids: number[] = [];
+  for (const line of lines) {
+    const pid = PositivePidSchema.safeParse(line);
+    if (!pid.success) throw socketEvidenceUnavailable(socketPath);
+    pids.push(pid.data);
+  }
+  return [...new Set(pids)];
 }
 
+/**
+ * ADAPTER
+ *
+ * Binds before reclaiming, revalidates stale-path identity immediately before
+ * unlink, and exposes normal owned close separately from displaced abandon.
+ */
 export async function listenUnixSocket(
   options: ListenUnixSocketOptions,
 ): Promise<UnixSocketServer> {
@@ -88,25 +223,30 @@ export async function listenUnixSocket(
   return {
     socketPath: options.socketPath,
     close: () => closeServer(server, options.socketPath, sockets),
+    abandon: () => abandonServer(server, sockets),
   };
 }
 
-// Claims the socket path by binding, never by pre-emptively unlinking. The
-// reprobe protects an already-live owner, but does not serialize reclaimers
-// that cached the same stale result; Observer boot owns that exclusion.
 async function bindWithStaleReclaim(server: Server, socketPath: string): Promise<void> {
   try {
     await listenOnce(server, socketPath);
     return;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+    if (errorCode(error) !== "EADDRINUSE") {
       throw error;
     }
-    if (!(await isSocketStale(socketPath))) {
-      throw error; // a live server owns it — we lost the race
+    const probe = await probeUnixSocket(socketPath);
+    if (probe.status === "inaccessible") throw probe.error;
+    if (probe.status !== "stale") {
+      throw error;
+    }
+    const current = await readUnixSocketMetadata(socketPath);
+    // The stale evidence authorizes removal only while the exact probed pathname survives.
+    if (current === undefined || !socketIdentitiesMatch(probe.identity, current)) {
+      throw inaccessibleSocket("path-changed", undefined, current).error;
     }
     await unlink(socketPath);
-    await listenOnce(server, socketPath); // retry once; a fresh EADDRINUSE now surfaces
+    await listenOnce(server, socketPath);
   }
 }
 
@@ -384,7 +524,7 @@ function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonC
 
 async function closeServer(
   server: Server,
-  socketPath: string,
+  _socketPath: string,
   sockets: Set<Socket>,
 ): Promise<void> {
   const closed = new Promise<void>((resolve, reject) => {
@@ -401,9 +541,143 @@ async function closeServer(
     socket.destroySoon();
   }
   await closed;
-  try {
-    await removeStaleSocket(socketPath);
-  } catch {
-    // The socket may already be gone after process teardown.
+}
+
+function abandonServer(server: Server, sockets: Set<Socket>): void {
+  for (const socket of sockets) {
+    socket.destroy();
   }
+  // A displaced server must leave the successor pathname intact; process exit releases its fd.
+  server.unref();
+}
+
+async function probeUnixSocketConnection(socketPath: string, timeoutMs: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const socket = createConnection(socketPath);
+    const signal = AbortSignal.timeout(timeoutMs);
+    let settled = false;
+    const onAbort = () => {
+      settle(() =>
+        reject(
+          protocolSafeError({
+            tag: "TimeoutError",
+            code: "PROTOCOL_CONNECT_TIMEOUT",
+            message: `Timed out connecting to Unix socket ${socketPath}.`,
+          }),
+        ),
+      );
+      socket.destroy();
+    };
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+      socket.off("connect", onConnect);
+      socket.off("error", onError);
+    };
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
+    const onConnect = () => {
+      settle(resolve);
+      socket.end();
+      socket.destroy();
+    };
+    const onError = (error: Error) => {
+      settle(() => reject(error));
+      socket.destroy();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    socket.once("connect", onConnect);
+    socket.once("error", onError);
+  });
+}
+
+async function readMetadataAfterProbe(
+  readMetadata: (socketPath: string) => Promise<UnixSocketPathMetadata | undefined>,
+  socketPath: string,
+  initialIdentity: SocketIdentity,
+): Promise<{ status: "unchanged" } | Extract<UnixSocketProbe, { status: "inaccessible" }>> {
+  try {
+    const current = await readMetadata(socketPath);
+    if (
+      current === undefined ||
+      !current.isSocket ||
+      !socketIdentitiesMatch(initialIdentity, current)
+    ) {
+      return inaccessibleSocket(
+        current !== undefined && !current.isSocket ? "not-a-socket" : "path-changed",
+        undefined,
+        current,
+      );
+    }
+    return { status: "unchanged" };
+  } catch (error) {
+    return inaccessibleSocket("unclassified", error, initialIdentity);
+  }
+}
+
+async function readUnixSocketMetadata(
+  socketPath: string,
+): Promise<UnixSocketPathMetadata | undefined> {
+  try {
+    const stats = await lstat(socketPath, { bigint: true });
+    return {
+      ino: stats.ino,
+      birthtimeNs: stats.birthtimeNs,
+      isSocket: stats.isSocket(),
+    };
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function socketIdentity(metadata: SocketIdentity): SocketIdentity {
+  return { ino: metadata.ino, birthtimeNs: metadata.birthtimeNs };
+}
+
+function socketIdentitiesMatch(left: SocketIdentity, right: SocketIdentity): boolean {
+  return left.ino === right.ino && left.birthtimeNs === right.birthtimeNs;
+}
+
+function inaccessibleSocket(
+  reason: Extract<UnixSocketProbe, { status: "inaccessible" }>["reason"],
+  error: unknown,
+  identity?: SocketIdentity,
+): Extract<UnixSocketProbe, { status: "inaccessible" }> {
+  const fallback = protocolSafeError({
+    code: "PROTOCOL_SOCKET_INACCESSIBLE",
+    message: "The Unix socket exists but cannot be reached or proven safe to reclaim.",
+  });
+  const safeError = isSafeError(error) ? error : fallback;
+  const result: Extract<UnixSocketProbe, { status: "inaccessible" }> = {
+    status: "inaccessible",
+    reason,
+    error: safeError,
+  };
+  if (identity !== undefined) result.identity = socketIdentity(identity);
+  return result;
+}
+
+function errorCode(error: unknown): string | undefined {
+  const parsed = ErrorCodeSchema.safeParse(error);
+  return parsed.success ? parsed.data.code : undefined;
+}
+
+function runLsof(file: string, args: readonly string[]) {
+  return spawnSync(file, [...args], {
+    encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
+    maxBuffer: 8 * 1024 * 1024,
+  });
+}
+
+function socketEvidenceUnavailable(socketPath: string): Error & SafeError {
+  const safeError = protocolSafeError({
+    code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE",
+    message: `Could not determine process ownership for Unix socket ${socketPath}.`,
+  });
+  return Object.assign(new Error(safeError.message), safeError);
 }

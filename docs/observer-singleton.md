@@ -111,8 +111,12 @@ Boot sequence while holding `C`:
    means another boot is in progress, so do not enter. Process death releases
    the OS transaction lock; the database file persists and needs no stale-owner
    deletion. Do not revive either rejected stale-path deletion scheme.
-2. **Probe and negotiate** the resolved socket as `absent`, `stale`, or
-   `listening`. For a listening socket, compare strict SemVer health while still
+2. **Probe and negotiate** the resolved socket as `absent`, `stale`, `listening`,
+   or `inaccessible`. Only `ECONNREFUSED`, or Bun's ambiguous existing-path
+   `ENOENT`, with strict zero-holder `lsof` evidence is stale. Permission errors,
+   timeouts, live holders, unavailable evidence, path replacement, and non-socket
+   collisions are inaccessible and refuse before provider construction, main
+   SQLite, bind, pidfile, stop, or signal. For a listening socket, compare strict SemVer health while still
    holding `C`: an exact identified selector or a higher-version incumbent attaches and
    the child exits 0; an elected same-version candidate or higher-version
    candidate replaces an incumbent only through verified graceful handoff;
@@ -121,8 +125,9 @@ Boot sequence while holding `C`:
    without adding client-side ownership mutation. The controlled stop request
    pins the revalidated process health and performs its final health check plus
    stop on one connection, so a socket replacement fails closed.
-3. For `absent` or `stale`, **bind or reclaim** through the existing claimed
-   bind path, capture socket identity, publish and fsync the socket-specific
+3. For `absent` or proven `stale`, **bind or reclaim** through the existing claimed
+   bind path. The binder probes again, rechecks inode and birth time immediately
+   before its one unlink attempt, captures the bound identity, publishes and fsyncs the socket-specific
    pidfile, arm the seeded ownership watcher, and commit readiness.
 4. **Release `C` synchronously before health waiters are unblocked.** Startup
    reconcile follows outside the claim. A pre-ready stop or startup failure
@@ -148,8 +153,9 @@ Supporting:
 
 Permanent coverage includes the 50-round Node-vs-Bun transaction race,
 three-contender rounds, killed-owner recovery, production cold and stale-socket
-races, XDG/state divergence, explicit paths with spaces, and CLI/hook timeout
-and non-mutation cases. It proves mutual exclusion, not fairness.
+races, inaccessible live ownership, displaced-listener abandonment, XDG/state
+divergence, explicit paths with spaces, and CLI/hook timeout and non-mutation
+cases. It proves mutual exclusion, not fairness.
 
 ## Remaining work
 

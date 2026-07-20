@@ -9,18 +9,19 @@ import {
   readlink,
   rm,
   stat,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
-import { startObserver } from "@station/cli";
+import { getObserverStatus, restartObserver, runCli, startObserver } from "@station/cli";
 import { emptyConfig } from "@station/config";
 import { ObserverProcessIdentitySchema } from "@station/contracts";
 import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
-import { createObserverClient } from "@station/protocol";
+import { createObserverClient, listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createRealStaleSocket, waitForSocketClosed } from "../support/sockets";
 import { createTempState, writeConfigToml } from "../support/temp-projects";
 
@@ -152,6 +153,80 @@ describe("observer lifecycle e2e", () => {
     }
 
     await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("preserves an inaccessible live Observer until access is restored", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const configPath = await writeConfigToml(fixture.root, config);
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    const pidfilePath = `${fixture.socketPath}.pid`;
+    const started = await startObserver({ config, timeoutMs: 30_000 });
+    expect(started.status).toBe("running");
+    if (
+      started.status !== "running" ||
+      started.health.pid === undefined ||
+      started.health.version === undefined
+    ) {
+      throw new Error("Observer did not report a process identity.");
+    }
+    const originalPid = started.health.pid;
+    const originalSocket = await stat(fixture.socketPath);
+    const originalPidfile = await stat(pidfilePath);
+    const originalPidfileBytes = await readFile(pidfilePath);
+    const originalHolders = await socketHolders(fixture.socketPath);
+    let restored = false;
+    const spawnObserver = vi.fn(async () => {
+      throw new Error("inaccessible ownership must not spawn");
+    });
+    try {
+      await chmod(fixture.socketPath, 0o000);
+      const deps = { buildVersion: started.health.version, spawnObserver };
+      await expect(getObserverStatus({ config, timeoutMs: 100 }, deps)).resolves.toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+      });
+      await expect(startObserver({ config, timeoutMs: 100 }, deps)).resolves.toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+      });
+      await expect(restartObserver({ config, timeoutMs: 100 }, deps)).resolves.toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+      });
+      await expect(
+        runCli(["--config", configPath, "doctor"], { observerDeps: deps }),
+      ).rejects.toThrow(/OBSERVER_SOCKET_INACCESSIBLE/u);
+      await sleep(5500);
+
+      expect(processIsAlive(originalPid)).toBe(true);
+      const currentSocket = await stat(fixture.socketPath);
+      expect({ dev: currentSocket.dev, ino: currentSocket.ino }).toEqual({
+        dev: originalSocket.dev,
+        ino: originalSocket.ino,
+      });
+      const currentPidfile = await stat(pidfilePath);
+      expect({ dev: currentPidfile.dev, ino: currentPidfile.ino }).toEqual({
+        dev: originalPidfile.dev,
+        ino: originalPidfile.ino,
+      });
+      await expect(readFile(pidfilePath)).resolves.toEqual(originalPidfileBytes);
+      expect(await socketHolders(fixture.socketPath)).toEqual(originalHolders);
+      expect(spawnObserver).not.toHaveBeenCalled();
+
+      await chmod(fixture.socketPath, 0o600);
+      restored = true;
+      await expect(client.health()).resolves.toMatchObject({ pid: originalPid, status: "healthy" });
+      await client.stop();
+      await waitForSocketClosed(fixture.socketPath);
+      await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      if (!restored) await chmod(fixture.socketPath, 0o600).catch(() => undefined);
+      if (processIsAlive(originalPid)) {
+        await client.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+    }
   });
 
   it("replaces a lower build only after its process and socket have closed", async () => {
@@ -417,6 +492,44 @@ describe("observer lifecycle e2e", () => {
 
     expect((await stat(claimPath)).ino).toBe(firstClaim.ino);
     await expectClaimDatabase(claimPath);
+  });
+
+  it("abandons a displaced listener without deleting the successor socket or pidfile", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const status = await startObserver({ config, timeoutMs: 30_000 });
+    expect(status.status).toBe("running");
+    if (status.status !== "running" || status.health.pid === undefined) {
+      throw new Error("Observer did not report a process identity.");
+    }
+    const displacedPid = status.health.pid;
+    const pidfilePath = `${fixture.socketPath}.pid`;
+    let successor: Awaited<ReturnType<typeof listenUnixSocket>> | undefined;
+    try {
+      await unlink(fixture.socketPath);
+      successor = await listenUnixSocket({
+        socketPath: fixture.socketPath,
+        onConnection: () => undefined,
+      });
+      const successorPidfile = "successor pidfile must survive displaced shutdown\n";
+      await writeFile(pidfilePath, successorPidfile, { mode: 0o600 });
+
+      await waitFor(async () => !processIsAlive(displacedPid), 10_000);
+      await expect(probeUnixSocket(fixture.socketPath)).resolves.toMatchObject({
+        status: "listening",
+      });
+      await expect(readFile(pidfilePath, "utf8")).resolves.toBe(successorPidfile);
+    } finally {
+      await successor?.close().catch(() => undefined);
+      if (
+        processIsAlive(displacedPid) &&
+        (await observerProcessesForSocket(fixture.socketPath)).includes(displacedPid)
+      ) {
+        process.kill(displacedPid, "SIGTERM");
+        await expectProcessExit(displacedPid).catch(() => undefined);
+      }
+      await rm(pidfilePath, { force: true });
+    }
   });
 
   it("does not construct Observer state while a production boot claim is held", async () => {
