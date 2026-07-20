@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import type { TmuxCommandInput } from "../command.js";
+import { shellQuote } from "../shell.js";
 import { buildPersistentPopupTuiCommand } from "./args.js";
 import {
   hasTmuxSession,
@@ -198,7 +199,7 @@ async function killPersistentPopupSessionIfUnchanged(
       "-t",
       `${sessionName}:`,
       signatureMatches,
-      `kill-session -t ${sessionName}`,
+      `kill-session -t ${shellQuote(sessionName)}`,
     ],
     operation: "provider.tmux.popup.killPersistentUi",
     message: "tmux failed to replace the persistent station popup UI.",
@@ -270,7 +271,7 @@ export async function ensurePersistentPopupSession(
       // so an unsigned session is not proven Station-owned and is never killed.
       throw persistentPopupOwnershipError(
         `The tmux session ${sessionName} exists without Station ownership evidence.`,
-        `Inspect it with "tmux attach-session -t ${sessionName}" and, when it holds nothing you need, kill it with "tmux kill-session -t ${sessionName}"; Station will not replace an unsigned session.`,
+        `Inspect it with "tmux attach-session -t ${shellQuote(sessionName)}" and, when it holds nothing you need, kill it with "tmux kill-session -t ${shellQuote(sessionName)}"; Station will not replace an unsigned session.`,
       );
     }
   }

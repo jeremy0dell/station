@@ -97,6 +97,7 @@ describe("tmux popup", () => {
     await expect(
       ensurePersistentPopupSession({
         tuiCommand: "node current tui --popup --persistent",
+        uiSessionName: "station ui",
         runner: async (input) => {
           replacedCalls.push(input);
           if (input.args?.[0] === "has-session") {
@@ -113,15 +114,15 @@ describe("tmux popup", () => {
           return tmuxCommandResult(input);
         },
       }),
-    ).resolves.toEqual({ created: true, sessionName: "_station-ui" });
+    ).resolves.toEqual({ created: true, sessionName: "station ui" });
     // Replacement kills through a compare-and-set on the exact signature just read.
     expect(replacedCalls.map((call) => call.args)).toContainEqual([
       "if-shell",
       "-F",
       "-t",
-      "_station-ui:",
+      "station ui:",
       "#{==:#{@station_popup_ui_signature},v1:node stale tui --popup --persistent}",
-      "kill-session -t _station-ui",
+      "kill-session -t 'station ui'",
     ]);
   });
 
@@ -136,6 +137,7 @@ describe("tmux popup", () => {
       }),
     ).rejects.toMatchObject({
       code: "TERMINAL_POPUP_FAILED",
+      hint: expect.stringContaining("tmux attach-session -t '_station-ui'"),
       message: "The tmux session _station-ui exists without Station ownership evidence.",
       provider: "tmux",
     });
@@ -855,7 +857,8 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
       const condition = args[args.indexOf("-t") >= 0 ? 4 : 2] ?? "";
       const command = args[args.indexOf("-t") >= 0 ? 5 : 3] ?? "";
       if (command.startsWith("kill-session -t ")) {
-        const target = command.slice("kill-session -t ".length);
+        const targetIndex = args.indexOf("-t");
+        const target = targetIndex < 0 ? "" : (args[targetIndex + 1] ?? "").replace(/:$/, "");
         const expected = extractComparedValue(condition, "@station_popup_ui_signature");
         if ((sessionSignatures.get(target) ?? "") === expected) {
           killedSessions.add(target);
