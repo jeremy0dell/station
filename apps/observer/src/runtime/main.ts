@@ -324,7 +324,14 @@ async function runClaimedObserverRuntime(input: {
           }
         }
         ownership?.stop();
-        if (stillOwnsSocket) {
+        // close() unlinks the bound pathname, so ownership is revalidated with no await
+        // between this check and close; a stale check could remove a successor's socket.
+        const identityAtClose = stillOwnsSocket ? await readSocketIdentity(socketPath) : undefined;
+        const ownsSocketAtClose =
+          boundSocketIdentity !== undefined &&
+          identityAtClose?.ino === boundSocketIdentity.ino &&
+          identityAtClose.birthtimeNs === boundSocketIdentity.birthtimeNs;
+        if (ownsSocketAtClose) {
           try {
             await server?.close();
           } catch (error) {
