@@ -510,8 +510,11 @@ launch mode. Native Station child PTYs also receive standard terminal values
 inherited and per-launch environment merging. Outer-renderer identity and
 feature hints are removed at that boundary, while ordinary locale,
 authentication, provider, project, worktree, and user environment passes
-through. This includes functional values such as Git askpass configuration and
-the `NO_COLOR` / `FORCE_COLOR` user preferences; these terminal values are
+through. This includes functional values such as Git askpass configuration.
+Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences, while
+persistent Host PTYs discard daemon-inherited copies and preserve only values
+carried by the explicit launch request; a Host may have been auto-started from a
+headless provider hook rather than a user terminal. These terminal values are
 generated behavior, not hand-authored configuration.
 
 Native Station removes `TMUX` and `TMUX_PANE` from its children because they are

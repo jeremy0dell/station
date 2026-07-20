@@ -90,11 +90,15 @@ identity and feature hints are removed, and Station applies `TERM=xterm-256color
 those fields or the derived `STATION_PANE` marker.
 
 Ordinary locale, authentication, provider, project, worktree, and user environment
-continues to pass through, including functional Git askpass and provider context plus
-the `NO_COLOR` / `FORCE_COLOR` user preferences. Until Station supports a feature end
-to end, children must not infer it from Ghostty, Kitty, WezTerm, iTerm2, Windows
-Terminal, Warp, or another outer renderer; native Station currently advertises true
-color but neither an image protocol nor OSC 8 hyperlinks.
+continues to pass through, including functional Git askpass and provider context.
+Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences. A
+persistent Host may inherit those values from a headless provider hook rather
+than a user terminal, so Host PTYs discard daemon-inherited copies and preserve
+only values carried by the explicit launch request. Until Station supports a
+feature end to end, children must not infer it from Ghostty, Kitty, WezTerm,
+iTerm2, Windows Terminal, Warp, or another outer renderer; native Station
+currently advertises true color but neither an image protocol nor OSC 8
+hyperlinks.
 
 Outer-renderer variables are application conventions, not an exhaustive standard
 registry. Station therefore maintains a curated set of known identity and capability
