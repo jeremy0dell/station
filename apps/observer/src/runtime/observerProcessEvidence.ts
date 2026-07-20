@@ -8,26 +8,29 @@ import type {
   ObserverProcessSignalResult,
 } from "./observerHandoff.js";
 import { readObserverProcessIdentity } from "./observerPidfile.js";
+import { readObserverSocketHolderPids } from "./server.js";
 
 const processListLinePattern =
   /^\s*(\d+)\s+([A-Z][a-z]{2} [A-Z][a-z]{2}\s+\d+ \d\d:\d\d:\d\d \d{4})\s+(.+)$/u;
 const ProcessListLineSchema = z.string().regex(processListLinePattern);
 const PositivePidSchema = z.coerce.number().int().positive();
+const ErrorCodeSchema = z.object({ code: z.string() });
 const processListingMaxBufferBytes = 8 * 1024 * 1024;
 const observerArgFlags = ["config", "socket", "state-dir", "startup-timeout-ms"] as const;
 const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
-const lsofPath = process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
 
 type LocalObserverProcessEvidenceDeps = {
   execFile?: (file: string, args: readonly string[]) => string;
+  socketHolders?: (socketPath: string) => number[];
   signal?: (pid: number, signal: NodeJS.Signals | 0) => void;
 };
 
 /**
  * ADAPTER
  *
- * Translates ps, lsof, pidfile, and process-signal results into conservative
- * local Observer ownership evidence.
+ * Translates ps, strict socket-holder evidence, pidfiles, and process signals
+ * into conservative ownership evidence; holder failures throw instead of
+ * meaning zero owners.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
@@ -36,7 +39,7 @@ export function createLocalObserverProcessEvidence(
   const signal = deps.signal ?? process.kill;
   return {
     listObserverProcesses: () => parseObserverProcessList(execFile(psPath, processListArgs())),
-    socketHolders: (socketPath) => readSocketHolders(socketPath, execFile),
+    socketHolders: deps.socketHolders ?? readObserverSocketHolderPids,
     processStartToken: (pid) => readProcessStartToken(pid, execFile),
     readProcessIdentity: readObserverProcessIdentity,
     signal: (pid, requestedSignal) => signalProcess(pid, requestedSignal, signal),
@@ -102,22 +105,6 @@ function isObserverArgv(argv: readonly string[]): boolean {
   return isSourceObserver || (isStationBinary && argv[1] === "__observer");
 }
 
-function readSocketHolders(
-  socketPath: string,
-  execFile: (file: string, args: readonly string[]) => string,
-): number[] {
-  try {
-    return execFile(lsofPath, ["-t", socketPath])
-      .split("\n")
-      .flatMap((line) => {
-        const pid = PositivePidSchema.safeParse(line.trim());
-        return pid.success ? [pid.data] : [];
-      });
-  } catch {
-    return [];
-  }
-}
-
 function readProcessStartToken(
   pid: number,
   execFile: (file: string, args: readonly string[]) => string,
@@ -155,8 +142,8 @@ function signalProcess(
     send(pid, signal);
     return "sent";
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ESRCH") return "absent";
+    const parsed = ErrorCodeSchema.safeParse(error);
+    if (parsed.success && parsed.data.code === "ESRCH") return "absent";
     return "refused";
   }
 }

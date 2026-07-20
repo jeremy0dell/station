@@ -94,15 +94,15 @@ export type RunObserverMainDeps = {
   processEvidence?: ObserverProcessEvidenceSource;
   handoffNow?: () => number;
   handoffSleep?: (ms: number) => Promise<void>;
+  exit?: (code: number) => void;
 };
 
 /**
  * COMPOSITION ROOT
  *
- * Claims boot ownership before negotiating an incumbent or constructing
- * adapters, then constructs logging and project-config adapters once and passes
- * only their application ports inward. It owns socket and pidfile publication
- * and releases the boot claim before publishing exact build health.
+ * Claims boot ownership, branches on four-state socket evidence before
+ * constructing providers, and owns bind, pidfile, and ownership-aware shutdown
+ * before releasing the claim and publishing exact build health.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -140,7 +140,12 @@ export async function runObserverMain(
   // This outer lifetime keeps the claim through any pre-ready socket and
   // pidfile cleanup; the ready gate performs the normal early release.
   try {
-    if ((await probeObserverSocket(socketPath)) === "listening") {
+    const processEvidence = deps.processEvidence ?? createLocalObserverProcessEvidence();
+    const socketProbe = await probeObserverSocket(socketPath, {
+      socketHolders: (path) => processEvidence.socketHolders(path),
+    });
+    if (socketProbe.status === "inaccessible") throw socketProbe.error;
+    if (socketProbe.status === "listening") {
       const remainingStartupMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
       const parentReserveMs = Math.min(
         HANDOFF_PARENT_RESERVE_MAX_MS,
@@ -169,7 +174,7 @@ export async function runObserverMain(
           lifecycle:
             deps.incumbentLifecycle ??
             createObserverLifecycleClient({ timeoutMs: handoffTimeoutMs }),
-          evidence: deps.processEvidence ?? createLocalObserverProcessEvidence(),
+          evidence: processEvidence,
           now: handoffNow,
           ...(deps.handoffSleep === undefined ? {} : { sleep: deps.handoffSleep }),
         },
@@ -270,6 +275,7 @@ async function runClaimedObserverRuntime(input: {
   let stopReceipt: Promise<ObserverStopReceipt> | undefined;
   let observerApi: ObserverApi;
   let shutdownExitCode = 0;
+  let displaced = false;
   const stopObserver = async (exitCode = 0) => {
     shutdownExitCode = Math.max(shutdownExitCode, exitCode);
     stopping ??= runShutdownWithBackstop(
@@ -318,10 +324,23 @@ async function runClaimedObserverRuntime(input: {
           }
         }
         ownership?.stop();
-        try {
-          await server?.close();
-        } catch (error) {
-          shutdownError ??= error;
+        // close() unlinks the bound pathname, so ownership is revalidated with no await
+        // between this check and close; a stale check could remove a successor's socket.
+        const identityAtClose = stillOwnsSocket ? await readSocketIdentity(socketPath) : undefined;
+        const ownsSocketAtClose =
+          boundSocketIdentity !== undefined &&
+          identityAtClose?.ino === boundSocketIdentity.ino &&
+          identityAtClose.birthtimeNs === boundSocketIdentity.birthtimeNs;
+        if (ownsSocketAtClose) {
+          try {
+            await server?.close();
+          } catch (error) {
+            shutdownError ??= error;
+          }
+        } else {
+          // Displaced shutdown must preserve the successor socket and every pidfile.
+          server?.abandon();
+          displaced = true;
         }
         ownsSocket = false;
         stopResolve();
@@ -459,6 +478,10 @@ async function runClaimedObserverRuntime(input: {
 
   await stopped;
   sqlite.close();
+  if (displaced) {
+    // Node's natural handle cleanup closes Unix servers and can unlink a successor pathname.
+    (deps.exit ?? process.exit)(shutdownExitCode);
+  }
   // Stray unref-less timers must not keep a stopped observer alive.
   setTimeout(() => process.exit(0), 2000).unref();
   return 0;

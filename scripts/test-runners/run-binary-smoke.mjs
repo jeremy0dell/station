@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import {
   access,
+  chmod,
   lstat,
   mkdir,
   mkdtemp,
@@ -16,7 +18,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createObserverClient } from "../../packages/protocol/dist/index.js";
+import {
+  createObserverClient,
+  readUnixSocketHolderPids,
+} from "../../packages/protocol/dist/index.js";
 import {
   parseStationObserverBuildVersion,
   stationObserverBuildVersion,
@@ -250,6 +255,15 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       const snapshot = await observerClient.getSnapshot();
       assertEqual(snapshot.observer.healthy, true, "compiled observer snapshot");
       assertEqual(snapshot.observer.version, expectedVersion, "compiled observer display version");
+      await verifyCompiledInaccessibleObserver({
+        binaryPath,
+        childEnv,
+        configPath,
+        observerClient,
+        observerPid,
+        socketPath,
+        stateDir,
+      });
 
       const coldPopup = await runManagedPopupBinding(
         persistedPopupRunShellCommand,
@@ -954,6 +968,166 @@ function isolatedBinaryEnv({ homeDir: home, runtimeDir: runtime }) {
     TERM: "xterm-256color",
     TMPDIR: join(home, "tmp"),
   };
+}
+
+async function verifyCompiledInaccessibleObserver(input) {
+  const pidfilePath = `${input.socketPath}.pid`;
+  const spoolDir = join(input.stateDir, "spool", "hooks");
+  const observerLogPath = join(input.stateDir, "logs", "observer.jsonl");
+  const socketBefore = fileIdentity(await lstat(input.socketPath));
+  const pidfileBefore = fileIdentity(await lstat(pidfilePath));
+  const pidfileBytes = await readFile(pidfilePath);
+  const pidfileHash = sha256(pidfileBytes);
+  const holdersBefore = readUnixSocketHolderPids(input.socketPath);
+  const processesBefore = await observerProcessInventory(input.socketPath);
+  const observerLogBefore = await readFile(observerLogPath, "utf8");
+  const spoolDepthBefore = await directoryFileCount(spoolDir);
+  assertEqual(spoolDepthBefore, 0, "compiled inaccessible precondition spool depth");
+
+  await chmod(input.socketPath, 0o000);
+  try {
+    const status = await run(
+      input.binaryPath,
+      ["--config", input.configPath, "observer", "status"],
+      { env: input.childEnv },
+    );
+    assertEqual(
+      JSON.parse(status.stdout).error?.code,
+      "OBSERVER_SOCKET_INACCESSIBLE",
+      "compiled inaccessible status code",
+    );
+    for (const action of ["start", "restart"]) {
+      const result = await run(
+        input.binaryPath,
+        ["--config", input.configPath, "observer", action],
+        { env: input.childEnv, allowedExitCodes: [1] },
+      );
+      assertEqual(
+        JSON.parse(result.stdout).error?.code,
+        "OBSERVER_SOCKET_INACCESSIBLE",
+        `compiled inaccessible ${action} code`,
+      );
+    }
+    const doctor = await run(input.binaryPath, ["--config", input.configPath, "doctor"], {
+      env: input.childEnv,
+      allowedExitCodes: [1],
+    });
+    assertIncludes(
+      `${doctor.stdout}${doctor.stderr}`,
+      "OBSERVER_SOCKET_INACCESSIBLE",
+      "compiled inaccessible doctor code",
+    );
+
+    const branch = "station/binary-inaccessible-socket";
+    const ingress = await run(
+      join(dirname(input.binaryPath), "stn-ingress"),
+      ["--socket", input.socketPath, "--state-dir", input.stateDir, "worktrunk", "post-create"],
+      { env: input.childEnv, input: JSON.stringify({ branch }) },
+    );
+    assertEqual(ingress.code, 0, "compiled inaccessible ingress acceptance");
+
+    await delay(7000);
+    assertEqual(processIsAlive(input.observerPid), true, "compiled inaccessible original process");
+    assertDeepEqual(
+      fileIdentity(await lstat(input.socketPath)),
+      socketBefore,
+      "compiled inaccessible socket identity",
+    );
+    assertDeepEqual(
+      fileIdentity(await lstat(pidfilePath)),
+      pidfileBefore,
+      "compiled inaccessible pidfile identity",
+    );
+    assertEqual(
+      sha256(await readFile(pidfilePath)),
+      pidfileHash,
+      "compiled inaccessible pidfile hash",
+    );
+    assertDeepEqual(
+      readUnixSocketHolderPids(input.socketPath),
+      holdersBefore,
+      "compiled inaccessible holder set",
+    );
+    assertDeepEqual(
+      await observerProcessInventory(input.socketPath),
+      processesBefore,
+      "compiled inaccessible process inventory",
+    );
+    assertEqual(
+      await readFile(observerLogPath, "utf8"),
+      observerLogBefore,
+      "compiled inaccessible observer log position",
+    );
+    assertEqual(
+      await directoryFileCount(spoolDir),
+      spoolDepthBefore + 1,
+      "compiled inaccessible single spool record",
+    );
+    const spoolFiles = await readdir(spoolDir);
+    const spoolRecord = JSON.parse(await readFile(join(spoolDir, spoolFiles[0]), "utf8"));
+    assertEqual(spoolRecord.event.payload.branch, branch, "compiled inaccessible spool payload");
+    assertEqual(
+      spoolRecord.lastError?.code,
+      "OBSERVER_SOCKET_INACCESSIBLE",
+      "compiled inaccessible spool error",
+    );
+  } finally {
+    await chmod(input.socketPath, 0o600);
+  }
+
+  const restoredStatus = await run(
+    input.binaryPath,
+    ["--config", input.configPath, "observer", "status"],
+    { env: input.childEnv },
+  );
+  assertEqual(
+    JSON.parse(restoredStatus.stdout).health?.pid,
+    input.observerPid,
+    "compiled restored observer identity",
+  );
+  const restoredDoctor = await run(input.binaryPath, ["--config", input.configPath, "doctor"], {
+    env: input.childEnv,
+  });
+  assertEqual(restoredDoctor.code, 0, "compiled restored doctor");
+  await run(
+    input.binaryPath,
+    ["--config", input.configPath, "reconcile", "--reason", "binary-smoke"],
+    {
+      env: input.childEnv,
+    },
+  );
+  await waitForDirectoryFileCount(spoolDir, 0);
+  assertEqual(
+    (await input.observerClient.health()).pid,
+    input.observerPid,
+    "compiled restored original observer",
+  );
+}
+
+function fileIdentity(stats) {
+  return { device: stats.dev, inode: stats.ino, birthtimeMs: stats.birthtimeMs };
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function observerProcessInventory(socketPath) {
+  const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
+  const result = await run(psPath, ["-axo", "pid=,command="]);
+  return result.stdout
+    .split("\n")
+    .filter((line) => line.includes(socketPath))
+    .map((line) => line.trim())
+    .sort();
+}
+
+async function waitForDirectoryFileCount(directory, expected) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if ((await directoryFileCount(directory)) === expected) return;
+    await delay(25);
+  }
+  fail(`directory file count did not reach ${expected}: ${directory}`);
 }
 
 async function writeSmokeConfig(path, state, socket, terminal = "noop-terminal") {
@@ -1826,6 +2000,12 @@ function signalProcess(pid, signal) {
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
+    fail(`${label}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
+  }
+}
+
+function assertDeepEqual(actual, expected, label) {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     fail(`${label}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
   }
 }

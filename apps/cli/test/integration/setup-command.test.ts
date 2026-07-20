@@ -336,6 +336,8 @@ describe("CLI setup command", () => {
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: OBSERVER_EXITED_ON_START");
     expect(output).toContain("Hint: Inspect the observer boot log.");
+    expect(output).toContain("Setup does not need to be rerun; the config is saved.");
+    expect(output).toContain("Resolve the error above, then activate it with:");
     expect(output).toContain(`Run: stn --config '${configPath}' observer restart`);
     expect(output).not.toContain("Core setup complete.");
   });

@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HOST_PROTOCOL_VERSION, type StationHostClient, stationHostSafeError } from "@station/host";
-import { isSocketStale, listenUnixSocket } from "@station/protocol";
+import { listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import {
   type ChildProcessLike,
   ensureStationHostRunning,
@@ -151,6 +151,45 @@ describe("ensureStationHostRunning", () => {
     }
   });
 
+  it("preserves inaccessible Host ownership without health, spawn, or unlink", async () => {
+    const socket = await liveSocket();
+    const { socketPath } = socket;
+    const before = await lstat(socketPath, { bigint: true });
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+    const clientFactory = vi.fn(() => {
+      throw new Error("inaccessible ownership must not create a client");
+    });
+    try {
+      await chmod(socketPath, 0o000);
+      const handle = await ensureStationHostRunning(
+        {
+          socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          expectedBuildVersion,
+        },
+        { clientFactory, spawnHost },
+      );
+
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: { code: "HOST_UNREACHABLE", hint: expect.stringContaining("do not unlink") },
+      });
+      const after = await lstat(socketPath, { bigint: true });
+      expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
+        ino: before.ino,
+        birthtimeNs: before.birthtimeNs,
+      });
+      expect(clientFactory).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await chmod(socketPath, 0o600);
+      await socket.close();
+    }
+  });
+
   it("stops an idle same-protocol host before spawning and validating the requested build", async () => {
     const socket = await liveSocket();
     const { socketPath } = socket;
@@ -237,7 +276,7 @@ describe("ensureStationHostRunning", () => {
         error: { code: "HOST_UPGRADE_BLOCKED" },
       });
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(isSocketStale(socketPath)).resolves.toBe(false);
+      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
       await socket.close();
     }
@@ -278,7 +317,7 @@ describe("ensureStationHostRunning", () => {
       });
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(isSocketStale(socketPath)).resolves.toBe(false);
+      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
       await socket.close();
     }
@@ -320,7 +359,7 @@ describe("ensureStationHostRunning", () => {
       });
       expect(stopIfIdle).toHaveBeenCalledTimes(1);
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(isSocketStale(socketPath)).resolves.toBe(false);
+      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
       await socket.close();
     }
@@ -357,7 +396,7 @@ describe("ensureStationHostRunning", () => {
       });
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(isSocketStale(socketPath)).resolves.toBe(false);
+      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
       await socket.close();
     }
@@ -398,7 +437,7 @@ describe("ensureStationHostRunning", () => {
       });
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
-      await expect(isSocketStale(socketPath)).resolves.toBe(false);
+      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
       await socket.close();
     }

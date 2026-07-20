@@ -258,8 +258,8 @@ and reloads after later gaps or events that cannot be reduced safely.
 
 ### Startup
 
-Normal CLI and provider-hook startup is attach-or-spawn: clients may classify a
-stale socket, but only the spawned Observer child mutates ownership. The child
+Normal CLI and provider-hook startup is attach-or-spawn: clients may classify an
+absent or proven-stale socket, but only the spawned Observer child mutates ownership. The child
 serializes probe, stale reclaim, bind, pidfile publication, watcher setup, and
 ready-state commitment with an OS-backed SQLite transaction.
 
@@ -273,13 +273,18 @@ Current startup proceeds in this order:
    and prepares private state and socket directories.
 3. Before provider construction or main-database access, the child opens the
    low-level claim database beside the resolved socket and acquires `BEGIN
-   IMMEDIATE` with that startup budget. An absent or stale probe keeps the claim
-   for owned startup. A listening probe reads incumbent health and applies the
+   IMMEDIATE` with that startup budget. The shared transport probe distinguishes
+   `absent`, `listening`, `stale`, and `inaccessible`. Absent or proven-stale
+   keeps the claim for owned startup; bind performs a fresh zero-holder and path-
+   identity check before its only unlink attempt. Listening reads incumbent health and applies the
    strict SemVer selector policy: exact builds or higher-version incumbents
    attach; a deterministically elected same-version build or higher-version
    candidate may replace an incumbent only after complete process attribution.
    A losing or legacy same-version candidate refuses rather than attaching.
-   Hard contention, invalid ownership evidence, or claim I/O failure is fatal.
+   Inaccessible paths, missing or malformed `lsof` evidence, path replacement,
+   and non-socket collisions fail before provider construction, main SQLite,
+   bind, pidfile publication, stop, or signal. Hard contention or claim I/O
+   failure is also fatal.
 4. CLI composition receives the resolved state directory and constructs the
    providers. Compiled composition materializes the Pi extension here; Observer
    code remains provider-neutral.
@@ -349,7 +354,10 @@ the bounded stop timeout fails.
 If the process still owns the socket, it conditionally removes only an exact
 matching process identity and syncs the socket directory before the protocol
 server releases the socket. A displaced process marks ownership lost before
-shutdown and leaves a successor's pidfile untouched. Pidfile cleanup failure is
+shutdown, leaves every pidfile untouched, destroys accepted clients, and abandons
+the native listener without calling close. After SQLite closes it exits explicitly;
+Node's natural handle cleanup can otherwise unlink the successor pathname.
+Pidfile cleanup failure is
 warned and shutdown continues because a stale corroborating file is safer than
 deleting another process's identity or hanging shutdown.
 
@@ -527,6 +535,7 @@ from the diagnostic use case.
 | Concern | Current contract |
 | --- | --- |
 | Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
+| Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |

@@ -1,10 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { chmod, lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getObserverStatus, restartObserver, startObserver, stopObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
-import { describe, expect, it } from "vitest";
-import { createStaleSocketFile } from "../../../../../tests/support/sockets";
+import { describe, expect, it, vi } from "vitest";
+import { createRealStaleSocket } from "../../../../../tests/support/sockets";
 import { fileExists } from "../../../../../tests/support/spool";
 import { createTempState } from "../../../../../tests/support/temp-projects";
 
@@ -18,7 +18,7 @@ const exactTwoBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 describe("CLI observer process lifecycle", () => {
   it("maps stale sockets distinctly from stopped observers", async () => {
     const fixture = await createTempState();
-    await createStaleSocketFile(fixture.socketPath);
+    await createRealStaleSocket(fixture.socketPath);
 
     await expect(
       getObserverStatus({
@@ -85,7 +85,7 @@ describe("CLI observer process lifecycle", () => {
 
   it("leaves a stale socket for the spawned observer to reclaim", async () => {
     const fixture = await createTempState();
-    await createStaleSocketFile(fixture.socketPath);
+    await createRealStaleSocket(fixture.socketPath);
     let spawned = false;
     let staleSocketPresentAtSpawn = false;
 
@@ -239,6 +239,48 @@ describe("CLI observer process lifecycle", () => {
         },
       });
     } finally {
+      await server.close();
+    }
+  });
+
+  it("reports inaccessible ownership without health, spawn, stop, or socket mutation", async () => {
+    const fixture = await createTempState();
+    const server = await listenUnixSocket({
+      socketPath: fixture.socketPath,
+      onConnection: () => undefined,
+    });
+    const before = await lstat(fixture.socketPath, { bigint: true });
+    const spawnObserver = vi.fn(
+      async (): Promise<ChildProcessLike> => ({
+        pid: 1234,
+        unref: () => undefined,
+      }),
+    );
+    const clientFactory = vi.fn(() => {
+      throw new Error("inaccessible ownership must not create a client");
+    });
+    try {
+      await chmod(fixture.socketPath, 0o000);
+      for (const operation of [getObserverStatus, startObserver, restartObserver]) {
+        await expect(
+          operation(
+            { config: fixture.config, timeoutMs: 100 },
+            { buildVersion: zeroBuildVersion, spawnObserver, clientFactory },
+          ),
+        ).resolves.toMatchObject({
+          status: "unhealthy",
+          error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+        });
+      }
+      const after = await lstat(fixture.socketPath, { bigint: true });
+      expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
+        ino: before.ino,
+        birthtimeNs: before.birthtimeNs,
+      });
+      expect(spawnObserver).not.toHaveBeenCalled();
+      expect(clientFactory).not.toHaveBeenCalled();
+    } finally {
+      await chmod(fixture.socketPath, 0o600);
       await server.close();
     }
   });

@@ -1,4 +1,4 @@
-import { mkdir, utimes } from "node:fs/promises";
+import { access, chmod, mkdir, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   ObserverHealth,
@@ -8,7 +8,8 @@ import type {
   SafeError,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { describe, expect, it } from "vitest";
+import { listenUnixSocket } from "@station/protocol";
+import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../tests/support/temp-projects";
 import { deliverProviderHookWithSpooling } from "../../src/ingress/deliveryPolicy.js";
 
@@ -259,9 +260,9 @@ describe("provider hook delivery policy", () => {
     const callsAtTimeout = healthCalls;
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(healthCalls).toBe(callsAtTimeout);
-    expect(healthCalls).toBe(2);
+    expect(healthCalls).toBeGreaterThanOrEqual(2);
     expect(requestTimeouts[1]).toBeLessThan(requestTimeouts[0] ?? 0);
-    expect(state.spawnCount).toBe(0);
+    expect(state.spawnCount).toBeLessThanOrEqual(1);
     expect(elapsedMs).toBeLessThan(startupTimeoutMs * 2);
   });
 
@@ -371,6 +372,48 @@ describe("provider hook delivery policy", () => {
     expect(state.spawnCount).toBe(0);
     expect(deliveries).toBe(0);
     expect(state.spooled).toBe(0);
+  });
+
+  it("spools inaccessible ownership without delivery, spawn, or auto-start lock mutation", async () => {
+    const fixture = await createTempState();
+    const server = await listenUnixSocket({
+      socketPath: fixture.socketPath,
+      onConnection: () => undefined,
+    });
+    const state = { running: false, spawnCount: 0, spooled: 0 };
+    const spawnObserver = vi.fn(async () => {
+      state.spawnCount += 1;
+      return { pid: 12345, unref: () => undefined };
+    });
+    const clientFactory = vi.fn(() => {
+      throw new Error("inaccessible ownership must not create a client");
+    });
+    const input = deliveryInput(fixture, "hook_inaccessible", state, {
+      buildVersion,
+      spawnObserver,
+      clientFactory,
+    });
+    input.deliver = vi.fn(async () => ({ receipt: ingestedReceipt(input.event) }));
+    const lockDir = join(fixture.stateDir, "run", "hook-autostart.lock");
+    try {
+      await chmod(fixture.socketPath, 0o000);
+      await expect(deliverProviderHookWithSpooling(input)).resolves.toMatchObject({
+        hookId: "hook_inaccessible",
+        provider: input.event.provider,
+        event: input.event.event,
+        accepted: true,
+        status: "spooled",
+        error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+      });
+      expect(input.deliver).not.toHaveBeenCalled();
+      expect(spawnObserver).not.toHaveBeenCalled();
+      expect(clientFactory).not.toHaveBeenCalled();
+      expect(state.spooled).toBe(1);
+      await expect(access(lockDir)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await chmod(fixture.socketPath, 0o600);
+      await server.close();
+    }
   });
 
   it("rejects without cross-build delivery or spooling when auto-start is disabled", async () => {

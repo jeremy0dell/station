@@ -1,11 +1,14 @@
-import { lstat } from "node:fs/promises";
-import type { ObserverApi } from "@station/contracts";
+import type { ObserverApi, SafeError } from "@station/contracts";
 import {
-  connectUnixSocket,
   createObserverClient,
   type ProtocolMethod,
+  probeUnixSocket,
+  readUnixSocketHolderPids,
   startProtocolServer,
+  type UnixSocketProbe,
+  type UnixSocketProbeOptions,
   type UnixSocketServer,
+  unixSocketHolderEvidencePath,
 } from "@station/protocol";
 import { type RuntimeClock, runRuntimeBoundary, systemClock } from "@station/runtime";
 import type { ObserverIncumbentLifecycle } from "./observerHandoff.js";
@@ -16,6 +19,7 @@ const MIN_SOCKET_PROBE_TIMEOUT_MS = 1;
 export type ObserverServer = {
   readonly socketPath: string;
   close(): Promise<void>;
+  abandon(): void;
 };
 
 export type StartObserverServerOptions = {
@@ -27,48 +31,52 @@ export type StartObserverServerOptions = {
   guardOperation?: () => void;
 };
 
-export type ObserverSocketProbe = "absent" | "stale" | "listening";
+export type ObserverSocketProbe =
+  | Exclude<UnixSocketProbe, { status: "inaccessible" }>
+  | {
+      status: "inaccessible";
+      reason: Extract<UnixSocketProbe, { status: "inaccessible" }>["reason"];
+      error: SafeError;
+    };
 
 /**
  * ADAPTER
  *
- * Translates local Unix-socket transport evidence into the boot states used by
- * Observer composition without exposing connection mechanics there.
+ * Translates four-state Unix-socket evidence into Observer ownership states and
+ * an actionable inaccessible-socket diagnostic.
  */
 export async function probeObserverSocket(
   socketPath: string,
-  options: { timeoutMs?: number } = {},
+  options: Pick<UnixSocketProbeOptions, "socketHolders" | "timeoutMs"> = {},
 ): Promise<ObserverSocketProbe> {
-  const initial = await socketMetadata(socketPath);
-  if (initial === undefined) {
-    return "absent";
-  }
-  if (!initial.isSocket()) {
-    return "stale";
-  }
-
-  try {
-    const connection = await connectUnixSocket(socketPath, {
-      timeoutMs: Math.max(
-        MIN_SOCKET_PROBE_TIMEOUT_MS,
-        Math.min(
-          options.timeoutMs ?? DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
-          DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
-        ),
+  const probeOptions: UnixSocketProbeOptions = {
+    timeoutMs: Math.max(
+      MIN_SOCKET_PROBE_TIMEOUT_MS,
+      Math.min(
+        options.timeoutMs ?? DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
+        DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
       ),
-    });
-    connection.close();
-    return "listening";
-  } catch {
-    return (await socketMetadata(socketPath)) === undefined ? "absent" : "stale";
-  }
+    ),
+  };
+  if (options.socketHolders !== undefined) probeOptions.socketHolders = options.socketHolders;
+  const probe = await probeUnixSocket(socketPath, probeOptions);
+  if (probe.status !== "inaccessible") return probe;
+  return {
+    status: "inaccessible",
+    reason: probe.reason,
+    error: observerSocketInaccessibleError(socketPath),
+  };
+}
+
+export function readObserverSocketHolderPids(socketPath: string): number[] {
+  return readUnixSocketHolderPids(socketPath);
 }
 
 /**
  * ADAPTER
  *
  * Translates build-aware incumbent lifecycle requests into validated local
- * protocol calls and socket probes.
+ * protocol calls; false means proven release while inaccessible probes throw.
  */
 export function createObserverLifecycleClient(options: {
   timeoutMs: number;
@@ -87,18 +95,21 @@ export function createObserverLifecycleClient(options: {
         timeoutMs: requestTimeout(request.timeoutMs),
         expectedObserverIdentity: request.expectedObserver,
       }).stop(),
-    socketListening: async (socketPath, request) =>
-      (await probeObserverSocket(socketPath, {
+    socketListening: async (socketPath, request) => {
+      const probe = await probeObserverSocket(socketPath, {
         timeoutMs: requestTimeout(request.timeoutMs),
-      })) === "listening",
+      });
+      if (probe.status === "inaccessible") throw probe.error;
+      return probe.status === "listening";
+    },
   };
 }
 
 /**
  * ADAPTER
  *
- * Owns the Observer protocol socket lifecycle and enforces the runtime's
- * admission policy before application operations cross the transport boundary.
+ * Owns the Observer protocol socket lifecycle, including owned close versus
+ * displaced abandon, and enforces admission before application operations.
  */
 export async function startObserverServer(
   options: StartObserverServerOptions,
@@ -136,6 +147,7 @@ export async function startObserverServer(
   return {
     socketPath: options.socketPath,
     close: () => closeObserverServer(server, clock),
+    abandon: () => server.abandon(),
   };
 }
 
@@ -165,15 +177,12 @@ async function closeObserverServer(server: UnixSocketServer, clock: RuntimeClock
   }
 }
 
-async function socketMetadata(
-  socketPath: string,
-): Promise<Awaited<ReturnType<typeof lstat>> | undefined> {
-  try {
-    return await lstat(socketPath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
-    throw error;
-  }
+export function observerSocketInaccessibleError(socketPath: string): SafeError {
+  const evidencePath = unixSocketHolderEvidencePath();
+  return {
+    tag: "ObserverSocketError",
+    code: "OBSERVER_SOCKET_INACCESSIBLE",
+    message: "The Observer socket exists but cannot be reached or proven safe to reclaim.",
+    hint: `Restore access to ${socketPath}, normally mode 0600. Station will not reclaim it without holder evidence from ${evidencePath}; install lsof if that executable is missing (Debian/Ubuntu: sudo apt-get install lsof; Fedora/RHEL: sudo dnf install lsof). Retry, or use an isolated socket and state directory. Do not unlink it or trust its pidfile as liveness proof.`,
+  };
 }

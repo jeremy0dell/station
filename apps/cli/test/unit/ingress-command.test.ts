@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ObserverHealth, ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { createStaleSocketFile } from "../../../../tests/support/sockets";
+import { createRealStaleSocket } from "../../../../tests/support/sockets";
 import {
   fileExists,
   listHookSpoolFiles,
@@ -52,7 +52,7 @@ describe("provider hook ingress command", () => {
   it("turns raw observer flags into one finalized startup command", async () => {
     const fixture = await createTempState();
     const observerEntry = join(fixture.root, "custom-observer.js");
-    await createStaleSocketFile(fixture.socketPath);
+    await createRealStaleSocket(fixture.socketPath);
     let running = false;
     let staleSocketPresentAtSpawn = false;
     let spawnInput:

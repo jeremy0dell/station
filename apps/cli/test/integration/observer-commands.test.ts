@@ -1,6 +1,8 @@
+import { chmod, lstat } from "node:fs/promises";
 import { runCli } from "@station/cli";
 import { runObserverCommand } from "@station/cli/internal";
-import { describe, expect, it } from "vitest";
+import { listenUnixSocket } from "@station/protocol";
+import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -183,5 +185,52 @@ describe("CLI observer commands", () => {
     await expect(
       runCli(["--config", configPath, "observer", "status"], { observerDeps }),
     ).resolves.toMatchObject({ code: 0, output: { status: "running" } });
+  });
+
+  it("reports inaccessible ownership and fails start, restart, and doctor without mutation", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const server = await listenUnixSocket({
+      socketPath: fixture.socketPath,
+      onConnection: () => undefined,
+    });
+    const before = await lstat(fixture.socketPath, { bigint: true });
+    const spawnObserver = vi.fn(async () => ({ pid: 1234, unref: () => undefined }));
+    const observerDeps = { buildVersion: zeroBuildVersion, spawnObserver };
+    try {
+      await chmod(fixture.socketPath, 0o000);
+      await expect(
+        runCli(["--config", configPath, "observer", "status"], { observerDeps }),
+      ).resolves.toMatchObject({
+        code: 0,
+        output: {
+          status: "unhealthy",
+          error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+        },
+      });
+      for (const action of ["start", "restart"]) {
+        await expect(
+          runCli(["--config", configPath, "observer", action], { observerDeps }),
+        ).resolves.toMatchObject({
+          code: 1,
+          output: {
+            status: "unhealthy",
+            error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+          },
+        });
+      }
+      await expect(runCli(["--config", configPath, "doctor"], { observerDeps })).rejects.toThrow(
+        /OBSERVER_SOCKET_INACCESSIBLE/u,
+      );
+      const after = await lstat(fixture.socketPath, { bigint: true });
+      expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
+        ino: before.ino,
+        birthtimeNs: before.birthtimeNs,
+      });
+      expect(spawnObserver).not.toHaveBeenCalled();
+    } finally {
+      await chmod(fixture.socketPath, 0o600);
+      await server.close();
+    }
   });
 });

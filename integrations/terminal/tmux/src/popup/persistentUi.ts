@@ -1,5 +1,7 @@
+import type { SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import type { TmuxCommandInput } from "../command.js";
+import { shellQuote } from "../shell.js";
 import { buildPersistentPopupTuiCommand } from "./args.js";
 import {
   hasTmuxSession,
@@ -182,16 +184,37 @@ function registeredRouteMatches(
   });
 }
 
-async function killPersistentPopupSession(
+async function killPersistentPopupSessionIfUnchanged(
   input: TmuxCommandInput,
   sessionName: string,
+  expectedSignature: string,
 ): Promise<void> {
+  // The kill is compare-and-set on the signature just read: a contender that already
+  // replaced the session must not have its fresh session killed by a stale decision.
+  const signatureMatches = globalOptionEqualsFormat(persistentUiSignatureOption, expectedSignature);
   await runTmuxPopupCommand(input, {
-    args: ["kill-session", "-t", sessionName],
+    args: [
+      "if-shell",
+      "-F",
+      "-t",
+      `${sessionName}:`,
+      signatureMatches,
+      `kill-session -t ${shellQuote(sessionName)}`,
+    ],
     operation: "provider.tmux.popup.killPersistentUi",
     message: "tmux failed to replace the persistent station popup UI.",
     timeoutMessage: "tmux persistent popup UI replacement timed out.",
   });
+}
+
+function persistentPopupOwnershipError(message: string, hint: string): SafeError {
+  return {
+    tag: "TerminalProviderError",
+    code: "TERMINAL_POPUP_FAILED",
+    message,
+    provider: "tmux",
+    hint,
+  };
 }
 
 async function enablePersistentPopupSessionMouse(
@@ -228,7 +251,29 @@ export async function ensurePersistentPopupSession(
       await enablePersistentPopupSessionMouse(input, sessionName);
       return { sessionName, created: false };
     }
-    await killPersistentPopupSession(input, sessionName);
+    if (currentSignature !== undefined) {
+      await killPersistentPopupSessionIfUnchanged(input, sessionName, currentSignature);
+      if (await hasTmuxSession(input, sessionName)) {
+        // The CAS kill no-opped, so a concurrent contender owns the session now;
+        // only its exact signature is reusable.
+        const contenderSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
+        if (contenderSignature === signature) {
+          await enablePersistentPopupSessionMouse(input, sessionName);
+          return { sessionName, created: false };
+        }
+        throw persistentPopupOwnershipError(
+          `The tmux session ${sessionName} changed during persistent popup replacement.`,
+          "Retry opening the popup; the concurrent replacement usually settles on the next attempt.",
+        );
+      }
+    } else if (await hasTmuxSession(input, sessionName)) {
+      // Every Station-created session is signed at creation since the first release,
+      // so an unsigned session is not proven Station-owned and is never killed.
+      throw persistentPopupOwnershipError(
+        `The tmux session ${sessionName} exists without Station ownership evidence.`,
+        `Inspect it with "tmux attach-session -t ${shellQuote(sessionName)}" and, when it holds nothing you need, kill it with "tmux kill-session -t ${shellQuote(sessionName)}"; Station will not replace an unsigned session.`,
+      );
+    }
   }
 
   await runTmuxPopupCommand(input, {

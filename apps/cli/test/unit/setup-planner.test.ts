@@ -21,6 +21,7 @@ describe("setup planner", () => {
     });
     expect(plan.checks.map((check) => [check.id, check.status])).toEqual([
       ["state-dir", "ok"],
+      ["observer-socket-evidence", "ok"],
       ["worktrunk", "ok"],
       ["tmux", "ok"],
       ["bun", "ok"],
@@ -37,6 +38,21 @@ describe("setup planner", () => {
       ["git-delta", "ok"],
       ["doctor", "warning"],
     ]);
+  });
+
+  it("warns without socket evidence without blocking fresh setup", () => {
+    const plan = buildSetupPlan(
+      facts({
+        socketEvidence: { status: "missing", command: "/usr/bin/lsof" },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "observer-socket-evidence")).toMatchObject({
+      tier: "recommended",
+      status: "warning",
+      message: expect.stringContaining("Fresh Observer startup can continue"),
+    });
+    expect(plan.summary).toMatchObject({ workflowReady: true, requiredOk: true });
   });
 
   it("plans Homebrew installs for missing required tools", () => {
@@ -564,6 +580,7 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
     homeDir: "/tmp/home",
     compiled: false,
     stateDir: { status: "ok", path: "/tmp/home/.local/state/station" },
+    socketEvidence: { status: "ok", command: "/usr/bin/lsof" },
     worktrunk: {
       status: "ok",
       command: "wt",

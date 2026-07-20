@@ -34,6 +34,7 @@ export const expectations = {
       "git-delta": "ok",
       harness: "ok",
       config: "missing",
+      "observer-socket-evidence": "warning",
     },
   },
   "no-git": { exitCode: 1, requiredOk: false, checks: { "git-project": "missing" } },

@@ -18,8 +18,12 @@ FROM node:24-bookworm AS builder
 RUN corepack enable && corepack prepare pnpm@11.0.0 --activate
 WORKDIR /app
 COPY . .
+# The checkout's real .git is outside Docker context, while build identity still
+# requires a stable tracked source snapshot.
+RUN git init -q && git config user.email setup@test && git config user.name setup-test \
+  && git add -A && git commit -qm setup-container
 # The CLI/observer build is enough for `stn`; the Bun TUI workspace is not needed.
-RUN pnpm install --frozen-lockfile && pnpm build
+RUN CI=true pnpm install --frozen-lockfile --ignore-scripts && pnpm build
 
 # ---- base: the built CLI on a full toolchain -----------------------------------
 # git + tmux present; an agent CLI is faked with a tiny shim so the harness check

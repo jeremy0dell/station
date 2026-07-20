@@ -49,9 +49,8 @@ describe("local Observer process evidence", () => {
     }
   });
 
-  it("normalizes lsof, start-token, absence, and refusal results", () => {
-    const execFile = vi.fn((file: string, args: readonly string[]) => {
-      if (file.endsWith("/lsof")) return "10\n20\nnot-a-pid\n";
+  it("normalizes strict holders, start-token, absence, and refusal results", () => {
+    const execFile = vi.fn((_file: string, args: readonly string[]) => {
       if (args.includes("pid=,lstart=,command=")) return "";
       if (args.includes("lstart=")) return "Sat Jul  4 17:45:33 2026\n";
       return "";
@@ -60,7 +59,8 @@ describe("local Observer process evidence", () => {
       if (signal === "SIGTERM") return;
       throw Object.assign(new Error("gone"), { code: "ESRCH" });
     });
-    const evidence = createLocalObserverProcessEvidence({ execFile, signal: sent });
+    const socketHolders = vi.fn(() => [10, 20]);
+    const evidence = createLocalObserverProcessEvidence({ execFile, socketHolders, signal: sent });
 
     expect(evidence.socketHolders("/a/o.sock")).toEqual([10, 20]);
     expect(evidence.listObserverProcesses()).toEqual([]);
@@ -68,12 +68,22 @@ describe("local Observer process evidence", () => {
     expect(evidence.signal(10, "SIGTERM")).toBe("sent");
     expect(evidence.signal(10, 0)).toBe("absent");
     const expectedPs = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
-    const expectedLsof = process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
-    expect(execFile.mock.calls.map(([file]) => file)).toEqual([
-      expectedLsof,
-      expectedPs,
-      expectedPs,
-    ]);
+    expect(socketHolders).toHaveBeenCalledWith("/a/o.sock");
+    expect(execFile.mock.calls.map(([file]) => file)).toEqual([expectedPs, expectedPs]);
+  });
+
+  it("propagates unavailable holder evidence instead of reporting zero owners", () => {
+    const evidence = createLocalObserverProcessEvidence({
+      socketHolders: () => {
+        throw Object.assign(new Error("unavailable"), {
+          code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE",
+        });
+      },
+    });
+
+    expect(() => evidence.socketHolders("/a/o.sock")).toThrow(
+      expect.objectContaining({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" }),
+    );
   });
 
   it("treats permission errors as refusal instead of absence", () => {

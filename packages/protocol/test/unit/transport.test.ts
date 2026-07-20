@@ -1,14 +1,14 @@
-import { mkdir, stat } from "node:fs/promises";
+import { access, mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   connectUnixSocket,
   inMemoryNdjsonConnectionPair,
-  isSocketStale,
   listenUnixSocket,
-  removeStaleSocket,
+  probeUnixSocket,
+  readUnixSocketHolderPids,
 } from "@station/protocol";
-import { describe, expect, it } from "vitest";
-import { createStaleSocketFile, createTempSocketPath } from "../../../../tests/support/sockets";
+import { describe, expect, it, vi } from "vitest";
+import { createRealStaleSocket, createTempSocketPath } from "../../../../tests/support/sockets";
 
 describe("Unix socket NDJSON transport", () => {
   it("exchanges newline-delimited JSON frames over a Unix socket", async () => {
@@ -36,13 +36,13 @@ describe("Unix socket NDJSON transport", () => {
     await server.close();
   });
 
-  it("creates a user-only socket directory and removes stale socket files", async () => {
+  it("creates a user-only socket directory and classifies socket states", async () => {
     const { socketPath } = await createTempSocketPath();
     await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
-    await createStaleSocketFile(socketPath);
+    await expect(probeUnixSocket(socketPath)).resolves.toEqual({ status: "absent" });
+    await createRealStaleSocket(socketPath);
 
-    await expect(isSocketStale(socketPath)).resolves.toBe(true);
-    await expect(removeStaleSocket(socketPath)).resolves.toBe(true);
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "stale" });
 
     const server = await listenUnixSocket({
       socketPath,
@@ -50,20 +50,20 @@ describe("Unix socket NDJSON transport", () => {
     });
     const dirMode = (await stat(dirname(socketPath))).mode & 0o777;
     expect(dirMode).toBe(0o700);
-    await expect(isSocketStale(socketPath)).resolves.toBe(false);
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
 
     await server.close();
+    await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("reclaims a stale socket file on its own during listen", async () => {
     const { socketPath } = await createTempSocketPath();
     await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
-    await createStaleSocketFile(socketPath);
-    await expect(isSocketStale(socketPath)).resolves.toBe(true);
+    await createRealStaleSocket(socketPath);
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "stale" });
 
-    // No prior removeStaleSocket: listen must reclaim the dead socket itself.
     const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
-    await expect(isSocketStale(socketPath)).resolves.toBe(false);
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     await server.close();
   });
 
@@ -75,9 +75,141 @@ describe("Unix socket NDJSON transport", () => {
       listenUnixSocket({ socketPath, onConnection: () => undefined }),
     ).rejects.toMatchObject({ code: "EADDRINUSE" });
     // The live server is untouched and still accepting.
-    await expect(isSocketStale(socketPath)).resolves.toBe(false);
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
 
     await live.close();
+  });
+
+  it.each(["EACCES", "EPERM"])("fails closed for %s without consulting holders", async (code) => {
+    const socketHolders = vi.fn(() => []);
+    const result = await probeUnixSocket("/tmp/inaccessible.sock", {
+      readMetadata: async () => metadata(1n),
+      connect: async () => {
+        throw Object.assign(new Error(code), { code });
+      },
+      socketHolders,
+    });
+
+    expect(result).toMatchObject({
+      status: "inaccessible",
+      reason: "permission-denied",
+      error: { code: "PROTOCOL_SOCKET_INACCESSIBLE" },
+    });
+    expect(socketHolders).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for connect timeout and unclassified failures", async () => {
+    const timeout = await probeUnixSocket("/tmp/timeout.sock", {
+      readMetadata: async () => metadata(1n),
+      connect: async () => {
+        throw { tag: "TimeoutError", code: "PROTOCOL_CONNECT_TIMEOUT", message: "timeout" };
+      },
+    });
+    expect(timeout).toMatchObject({ status: "inaccessible", reason: "timeout" });
+
+    const unknown = await probeUnixSocket("/tmp/unknown.sock", {
+      readMetadata: async () => metadata(1n),
+      connect: async () => {
+        throw Object.assign(new Error("unknown"), { code: "EIO" });
+      },
+    });
+    expect(unknown).toMatchObject({ status: "inaccessible", reason: "unclassified" });
+  });
+
+  it("requires zero-holder evidence for refused and Bun-style ENOENT connections", async () => {
+    for (const code of ["ECONNREFUSED", "ENOENT"]) {
+      const stale = await probeUnixSocket("/tmp/dead.sock", {
+        readMetadata: async () => metadata(1n),
+        connect: async () => {
+          throw Object.assign(new Error(code), { code });
+        },
+        socketHolders: () => [],
+      });
+      expect(stale).toMatchObject({ status: "stale" });
+    }
+
+    const held = await probeUnixSocket("/tmp/held.sock", {
+      readMetadata: async () => metadata(1n),
+      connect: async () => {
+        throw Object.assign(new Error("refused"), { code: "ECONNREFUSED" });
+      },
+      socketHolders: () => [42],
+    });
+    expect(held).toMatchObject({ status: "inaccessible", reason: "live-holder" });
+
+    const unavailable = await probeUnixSocket("/tmp/unknown-owner.sock", {
+      readMetadata: async () => metadata(1n),
+      connect: async () => {
+        throw Object.assign(new Error("refused"), { code: "ECONNREFUSED" });
+      },
+      socketHolders: () => {
+        throw { code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" };
+      },
+    });
+    expect(unavailable).toMatchObject({
+      status: "inaccessible",
+      reason: "evidence-unavailable",
+    });
+  });
+
+  it("fails closed when the socket path changes during probing or is not a socket", async () => {
+    let reads = 0;
+    const changed = await probeUnixSocket("/tmp/replaced.sock", {
+      readMetadata: async () => {
+        reads += 1;
+        return metadata(reads === 1 ? 1n : 2n);
+      },
+      connect: async () => undefined,
+    });
+    expect(changed).toMatchObject({ status: "inaccessible", reason: "path-changed" });
+
+    const { socketPath } = await createTempSocketPath();
+    await writeFile(socketPath, "collision", { mode: 0o600 });
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({
+      status: "inaccessible",
+      reason: "not-a-socket",
+    });
+    await expect(access(socketPath)).resolves.toBeUndefined();
+  });
+
+  it("strictly parses lsof holders and accepts only its canonical empty status-1 result", () => {
+    const result = (status: number | null, stdout: string, stderr = "") => ({
+      status,
+      stdout,
+      stderr,
+      signal: null,
+    });
+    expect(
+      readUnixSocketHolderPids("/tmp/socket", {
+        runLsof: () => result(0, "10\n20\n10\n"),
+      }),
+    ).toEqual([10, 20]);
+    expect(readUnixSocketHolderPids("/tmp/socket", { runLsof: () => result(1, "") })).toEqual([]);
+
+    for (const commandResult of [
+      result(0, ""),
+      result(0, "10\ninvalid\n"),
+      result(0, "10\n", "warning"),
+      result(1, "10\n"),
+      result(2, ""),
+      { ...result(null, ""), signal: "SIGTERM" as const },
+      { ...result(null, ""), error: new Error("missing lsof") },
+    ]) {
+      expect(() =>
+        readUnixSocketHolderPids("/tmp/socket", { runLsof: () => commandResult }),
+      ).toThrow(expect.objectContaining({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" }));
+    }
+  });
+
+  it("abandons a displaced listener without deleting its successor pathname", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const displaced = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    await unlink(socketPath);
+    const successor = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+
+    displaced.abandon();
+    await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
+    await successor.close();
   });
 
   it("relays frames both ways over an in-memory connection pair", async () => {
@@ -119,3 +251,7 @@ describe("Unix socket NDJSON transport", () => {
     await expect(client.closed).resolves.toBeUndefined();
   });
 });
+
+function metadata(ino: bigint) {
+  return { ino, birthtimeNs: ino * 10n, isSocket: true };
+}

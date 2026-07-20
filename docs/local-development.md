@@ -133,6 +133,14 @@ Use `pnpm station:devbox dev` for the same isolated stack with `bun --hot` UI
 reload. It keeps the observer, state, hooks, and host under `.dev-state`, but UI
 edits under `station/src/**` reload in place.
 
+An inaccessible devbox socket is a preservation boundary, not an automatic
+reset. Startup prints `OBSERVER_SOCKET_INACCESSIBLE`, preserves the existing
+Observer, host, agents, socket, and `.dev-state`, and exits nonzero. Restore
+socket mode `0600` (and install the exact `lsof` path named by the error if it is
+missing), run `pnpm station:devbox status`, then rerun the original start command;
+that reconnects to the incumbent. Use `pnpm station:devbox reset -- --yes` only
+when the state and agents are intentionally disposable.
+
 The observer + agents are left running when Station exits, so close/reopen
 reattaches.
 
@@ -439,6 +447,12 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   roots, and launched agents carry the same isolated provider-home env.
 - **Station connects to the wrong observer** → it reads `STATION_OBSERVER_SOCKET_PATH`;
   point it at the isolated socket. `station:isolated` exports it and prints it.
+- **`OBSERVER_SOCKET_INACCESSIBLE` blocks setup or dev startup** → Station cannot
+  prove that reclaiming the pathname is safe. It preserves the process, socket,
+  pidfile, config, and `.dev-state`. Restore socket mode `0600`; if the hint names
+  a missing `lsof`, install it (`apt-get install lsof` or `dnf install lsof`), then
+  rerun the printed Observer/devbox command. Do not unlink the socket based on a
+  pidfile alone.
 - **`observer stop` hangs / `OBSERVER_STOP_FAILED`** → an observer mid-reconcile
   can outlast the stop poll window; SIGTERM triggers the same graceful path.
   `station:isolated:stop` does a best-effort graceful stop then SIGKILLs the

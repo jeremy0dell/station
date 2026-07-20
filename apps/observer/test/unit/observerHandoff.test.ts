@@ -269,6 +269,21 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalled();
   });
 
+  it("refuses unavailable holder evidence before stop or signal", async () => {
+    const fixture = handoffFixture();
+    fixture.evidence.socketHolders = () => {
+      throw Object.assign(new Error("lsof unavailable"), {
+        code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE",
+      });
+    };
+
+    await expect(runNegotiation(fixture)).rejects.toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+    });
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
   it("treats a stop receipt as acknowledgement and waits for socket closure and exact death", async () => {
     const fixture = handoffFixture();
     let sleeps = 0;
@@ -338,6 +353,18 @@ describe("negotiateObserverIncumbent", () => {
       code: "OBSERVER_HANDOFF_REFUSED",
     });
     expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
+  it("refuses an inaccessible exit probe before absence or termination signals", async () => {
+    const fixture = handoffFixture();
+    fixture.lifecycle.socketListening = async () => {
+      throw { code: "OBSERVER_SOCKET_INACCESSIBLE" };
+    };
+
+    await expect(runNegotiation(fixture)).rejects.toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+    });
+    expect(fixture.signal).not.toHaveBeenCalled();
   });
 
   it("does not treat unreadable process identity as exact death", async () => {

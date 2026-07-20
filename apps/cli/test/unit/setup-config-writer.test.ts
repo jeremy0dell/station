@@ -342,6 +342,7 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
     homeDir: "/tmp/home",
     compiled: false,
     stateDir: { status: "ok", path: "/tmp/home/.local/state/station" },
+    socketEvidence: { status: "ok", command: "/usr/bin/lsof" },
     worktrunk: { status: "ok", command: "wt" },
     worktrunkAutomation: {
       status: "ok",

@@ -3,6 +3,7 @@ import { access as nodeAccess } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { resolveObserverPaths } from "@station/config";
+import { unixSocketHolderEvidencePath } from "@station/protocol";
 import { type ExternalCommandRunner, isCompiledBinary } from "@station/runtime";
 import {
   buildManagedFastPopupRunShellCommand,
@@ -102,26 +103,41 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   const configPath = setupConfigPath(configPathOptions);
   const xcodeOptions: CheckXcodeOptions = { ...commandOptions };
   if (options.platform !== undefined) xcodeOptions.platform = options.platform;
-  const [worktrunk, tmux, bun, diffnav, gitDelta, brew, xcode, harnesses, config, launchers] =
-    await Promise.all([
-      checkSetupWorktrunk(dependencyOptions),
-      checkSetupTmux(dependencyOptions),
-      compiled
-        ? Promise.resolve({ status: "ok" as const, command: "bun" })
-        : checkSetupBun(dependencyOptions),
-      checkSetupDiffnav(dependencyOptions),
-      checkSetupGitDelta(dependencyOptions),
-      checkBrewDependency({
-        ...commandOptions,
-        ...(options.noBrew === undefined ? {} : { noBrew: options.noBrew }),
-      }),
-      compiled
-        ? Promise.resolve({ status: "ok" as const, applicable: false })
-        : checkSetupXcode(xcodeOptions),
-      checkSetupHarnesses(commandOptions),
-      checkSetupConfig({ ...configPathOptions, configPath }),
-      checkSetupLaunchers(dependencyOptions),
-    ]);
+  const [
+    socketEvidence,
+    worktrunk,
+    tmux,
+    bun,
+    diffnav,
+    gitDelta,
+    brew,
+    xcode,
+    harnesses,
+    config,
+    launchers,
+  ] = await Promise.all([
+    checkSetupSocketEvidence({
+      ...(options.platform === undefined ? {} : { platform: options.platform }),
+      ...(options.access === undefined ? {} : { access: options.access }),
+    }),
+    checkSetupWorktrunk(dependencyOptions),
+    checkSetupTmux(dependencyOptions),
+    compiled
+      ? Promise.resolve({ status: "ok" as const, command: "bun" })
+      : checkSetupBun(dependencyOptions),
+    checkSetupDiffnav(dependencyOptions),
+    checkSetupGitDelta(dependencyOptions),
+    checkBrewDependency({
+      ...commandOptions,
+      ...(options.noBrew === undefined ? {} : { noBrew: options.noBrew }),
+    }),
+    compiled
+      ? Promise.resolve({ status: "ok" as const, applicable: false })
+      : checkSetupXcode(xcodeOptions),
+    checkSetupHarnesses(commandOptions),
+    checkSetupConfig({ ...configPathOptions, configPath }),
+    checkSetupLaunchers(dependencyOptions),
+  ]);
   const worktrunkAutomation = await checkSetupWorktrunkAutomation({
     worktrunk,
     configReady: config.status === "valid",
@@ -206,6 +222,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     homeDir,
     compiled,
     stateDir,
+    socketEvidence,
     worktrunk,
     worktrunkAutomation,
     tmux,
@@ -220,6 +237,17 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     harnesses,
     config,
     tmuxBinding,
+  };
+}
+
+/** ADAPTER: Checks the exact lsof executable used by fail-closed socket recovery. */
+export async function checkSetupSocketEvidence(
+  options: { platform?: NodeJS.Platform; access?: (path: string) => Promise<void> } = {},
+): Promise<SetupDependencyFact> {
+  const command = unixSocketHolderEvidencePath(options.platform);
+  return {
+    status: (await canExecute(command, options.access)) ? "ok" : "missing",
+    command,
   };
 }
 

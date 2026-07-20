@@ -182,6 +182,14 @@ process or unlink a socket from this file alone. Clean shutdown removes the
 file only when the Observer still owns the socket and every identity field
 matches its published value.
 
+`OBSERVER_SOCKET_INACCESSIBLE` means the socket exists but Station could neither
+connect nor prove it stale. Preserve the socket and pidfile. Restore socket access
+(normally `chmod 600 <socket>`), compare `lsof -t <socket>` with the strict
+pidfile and `ps -ww -p <pid> -o lstart=,command=`, or use an isolated socket and
+state directory. Do not unlink the socket or treat its pidfile as liveness proof;
+`status`, `start`, `restart`, `doctor`, and provider ingress intentionally perform
+no takeover while this diagnosis remains.
+
 The pidfile and health response use the exact Observer selector shown above;
 `stn --version` and `StationSnapshot.observer.version` remain the display
 version (`0.7.0` in this example).

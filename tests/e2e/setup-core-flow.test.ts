@@ -7,6 +7,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -167,6 +168,7 @@ describe("setup core flow e2e", () => {
     const observerSocket = join(runtimeDir, "station", "observer.sock");
     const legacyObserverSocket = join(root, "home", ".local", "state", "station", "observer.sock");
     let passed = false;
+    let socketRestricted = false;
     try {
       const home = join(root, "home");
       const setupCwd = join(root, "setup-cwd");
@@ -209,10 +211,12 @@ describe("setup core flow e2e", () => {
         STATION_DASHBOARD_COMMAND: "true",
         STATION_FAST_POPUP_NO_FALLBACK: "1",
       };
+      delete env.STATION_PANE;
       const launch = runStation([], { cwd: setupCwd, env });
       expect(launch.status).toBe(0);
       const observer = createObserverClient({ socketPath: observerSocket, timeoutMs: 1000 });
       const beforeHealth = await observer.health();
+      const beforeSocket = await stat(observerSocket);
       const beforeSnapshot = await observer.getSnapshot();
       expect(beforeHealth.pid).toBeTypeOf("number");
       expect(beforeSnapshot).toMatchObject({ counts: { projects: 0 }, projects: [] });
@@ -243,13 +247,37 @@ describe("setup core flow e2e", () => {
       );
       expect(JSON.stringify(parsedPlan.actions)).not.toContain("github");
 
+      await chmod(observerSocket, 0o000);
+      socketRestricted = true;
       const apply = runStation(["--config", configPath, "setup", "apply", "--yes"], {
         cwd: setupCwd,
         env,
+        allowFailure: true,
       });
-      expect(apply.stdout).toContain("Core setup complete.");
+      expect(apply.status).toBe(1);
+      expect(apply.stdout).toContain("Config was written, but observer activation failed.");
+      expect(apply.stdout).toContain("Code: OBSERVER_SOCKET_INACCESSIBLE");
+      expect(apply.stdout).toContain("Setup does not need to be rerun; the config is saved.");
+      expect(apply.stdout).toContain(`Run: stn --config ${configPath} observer restart`);
+      expect(apply.stdout).not.toContain("Core setup complete.");
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
 
+      expect(processIsAlive(beforeHealth.pid)).toBe(true);
+      const blockedSocket = await stat(observerSocket);
+      expect({ dev: blockedSocket.dev, ino: blockedSocket.ino }).toEqual({
+        dev: beforeSocket.dev,
+        ino: beforeSocket.ino,
+      });
+
+      await chmod(observerSocket, 0o600);
+      socketRestricted = false;
+      await expect(observer.health()).resolves.toMatchObject({ pid: beforeHealth.pid });
+
+      const activate = runStation(["--config", configPath, "observer", "restart"], {
+        cwd: setupCwd,
+        env,
+      });
+      expect(activate.stdout).toContain('"status": "running"');
       const afterHealth = await observer.health();
       const afterSnapshot = await observer.getSnapshot();
       expect(afterHealth.pid).toBeTypeOf("number");
@@ -275,6 +303,7 @@ describe("setup core flow e2e", () => {
       });
       passed = true;
     } finally {
+      if (socketRestricted) await chmod(observerSocket, 0o600).catch(() => undefined);
       await stopObserverCandidates([observerSocket, legacyObserverSocket]);
       if (passed || process.env.STATION_KEEP_SETUP_E2E_TEMP !== "1") {
         await Promise.all([
@@ -505,6 +534,16 @@ async function stopObserverCandidates(socketPaths: readonly string[]): Promise<v
     const client = createObserverClient({ socketPath, timeoutMs: 1000 });
     await client.stop().catch(() => undefined);
     await waitForSocketClosed(socketPath, { timeoutMs: 5000 });
+  }
+}
+
+function processIsAlive(pid: number | undefined): boolean {
+  if (pid === undefined) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 

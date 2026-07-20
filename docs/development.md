@@ -7,7 +7,7 @@ Status: current living doc for development, test, and documentation workflow.
 - Use Node.js 24.2+ (and below 25) and pnpm 11. The root `package.json` requires `node: >=24.2 <25`, `pnpm: 11.0.0`, and `packageManager: pnpm@11.0.0`.
 - Use the repo-local command during development: `pnpm stn ...`.
 - Use `pnpm station:link` only when you intentionally want all three launchers globally bound to the current checkout.
-- External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, and Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows.
+- External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows, and `lsof` for fail-closed socket recovery or Observer handoff.
 
 ## Local TUI Workflow
 
@@ -41,6 +41,7 @@ CLI/package, observer, provider, protocol, and host restart boundaries.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
 - `pnpm station:devbox tmux dev` starts a checkout-keyed private tmux server and isolated live Observer, then keeps the foreground command as the signal-cleanup owner. Attach with `pnpm station:devbox tmux attach`; inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
@@ -199,19 +200,24 @@ creates observer databases under Node and Bun, then reopens each database under
 the other runtime to verify the shared SQLite contract and migrations. It also
 runs the permanent boot-claim race: 50 alternating Node/Bun two-process rounds,
 three-contender rounds, and killed-owner recovery with stable inode and
-`integrity_check=ok`; this gate makes no fairness claim. Both the local pre-push
+`integrity_check=ok`. That runner also checks Node/Bun inaccessible and stale
+classification plus displaced-listener abandonment; the claim gate makes no
+fairness claim. Both the local pre-push
 gate and the hosted `standard-ci` job run these checks.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
 claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
 same-version build-identity handoff and refusal, cross-version graceful handoff,
-and clean restart while the persistent claim remains. The compiled binary smoke
+inaccessible-socket preservation, displaced shutdown, and clean restart while
+the persistent claim remains. The compiled binary smoke
 also builds a second artifact from one production-source change in an isolated
 detached worktree, queries both exact selectors, proves lower-to-higher
 same-version replacement and post-handoff mutation refusal, then proves
 source/compiled ordering and Station Host PTY continuity across both Observer
-replacements. Run both after `pnpm build` when changing startup, socket
+replacements. It also chmods the physical Observer socket to `000`, proves status,
+start, restart, doctor, and ingress preserve the original PID/socket/pidfile,
+then restores access and drains the one spooled event. Run both after `pnpm build` when changing startup, socket
 ownership, pidfiles, or claim lifecycle behavior.
 
 For focused Station PTY work, run both implementations explicitly:

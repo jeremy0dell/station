@@ -151,7 +151,12 @@ function renderObserverActivationFailure(
     configPath === undefined
       ? formatCommand(["stn", "observer", "restart"])
       : formatCommand(["stn", "--config", configPath, "observer", "restart"]);
-  lines.push(`Run: ${restartCommand}`, "");
+  lines.push(
+    "Setup does not need to be rerun; the config is saved.",
+    "Resolve the error above, then activate it with:",
+    `Run: ${restartCommand}`,
+    "",
+  );
   return lines.join("\n");
 }
 

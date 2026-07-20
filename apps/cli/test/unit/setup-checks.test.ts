@@ -15,7 +15,10 @@ import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
 import { checkSetupGitDelta } from "../../src/commands/setup/checks/gitDelta.js";
 import { checkSetupLaunchers } from "../../src/commands/setup/checks/launchers.js";
 import { checkSetupStateDir } from "../../src/commands/setup/checks/stateDir.js";
-import { collectSetupFacts } from "../../src/commands/setup/checks/system.js";
+import {
+  checkSetupSocketEvidence,
+  collectSetupFacts,
+} from "../../src/commands/setup/checks/system.js";
 import {
   checkSetupTmuxBinding,
   tmuxPopupBindingBlock,
@@ -41,6 +44,19 @@ describe("setup dependency checks", () => {
       status: "ok",
       path,
     });
+  });
+
+  it("checks the canonical lsof path used for socket ownership evidence", async () => {
+    await expect(
+      checkSetupSocketEvidence({
+        platform: "linux",
+        access: fakeAccess(["/usr/bin/lsof"]),
+      }),
+    ).resolves.toEqual({ status: "ok", command: "/usr/bin/lsof" });
+
+    await expect(
+      checkSetupSocketEvidence({ platform: "darwin", access: fakeAccess([]) }),
+    ).resolves.toEqual({ status: "missing", command: "/usr/sbin/lsof" });
   });
 
   it("executes the compiled asset probe from the state directory", async () => {
