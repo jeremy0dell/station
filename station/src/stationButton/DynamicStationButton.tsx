@@ -35,7 +35,8 @@ import {
   STATION_ICON,
   targetDims,
 } from "./layout.js";
-import { useTweenAmount, useTweenedOptionalValue } from "./useTweenAmount.js";
+import { useTweenAmount } from "./hooks/useTweenAmount.js";
+import { useTweenedOptionalValue } from "./hooks/useTweenedOptionalValue.js";
 
 export type DynamicStationButtonProps = {
   /** Everything the display ladder needs; islandDisplay decides what paints. */

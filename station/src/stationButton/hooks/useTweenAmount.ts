@@ -1,6 +1,6 @@
 import { useRenderer } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { ANIM_MS, easeInOutCubic, FRAME_MS } from "./layout.js";
+import { ANIM_MS, easeInOutCubic, FRAME_MS } from "../layout.js";
 
 /**
  * Tweens a scalar target through a manual interval because Station does not attach OpenTUI's
@@ -53,23 +53,3 @@ export function useTweenAmount(target: number): number {
   return amount;
 }
 
-export type TweenedOptionalValue<T> = {
-  value: T | undefined;
-  amount: number;
-};
-
-/** Retains an outgoing optional value until its reversible tween finishes. */
-export function useTweenedOptionalValue<T>(value: T | undefined): TweenedOptionalValue<T> {
-  const [heldValue, setHeldValue] = useState(value);
-  const amount = useTweenAmount(value === undefined ? 0 : 1);
-
-  useEffect(() => {
-    if (value !== undefined) {
-      setHeldValue(value);
-    } else if (amount === 0) {
-      setHeldValue(undefined);
-    }
-  }, [amount, value]);
-
-  return { value: value === undefined ? heldValue : value, amount };
-}
