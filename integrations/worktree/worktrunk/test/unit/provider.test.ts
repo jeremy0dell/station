@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { gitLocalEnvironmentVariables, nodeExternalCommandRunner } from "@station/runtime";
+import {
+  environmentWithoutGitLocals,
+  gitLocalEnvironmentVariables,
+  nodeExternalCommandRunner,
+} from "@station/runtime";
 import { WorktrunkProvider, type WorktrunkProviderOptions } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
@@ -24,10 +28,25 @@ const project: ProviderProjectConfig = {
   },
 };
 
-function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
+function testProvider(
+  options: WorktrunkProviderOptions,
+  coreBareRunner: (
+    input: ExternalCommandInput,
+  ) => ExternalCommandResult | Promise<ExternalCommandResult> = healthySyntheticCoreBareRunner,
+): WorktrunkProvider {
+  const runner = options.runner;
   return new WorktrunkProvider({
-    resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
     ...options,
+    resolveRegistrationIdentity:
+      options.resolveRegistrationIdentity ?? (async (path) => `git-registration:${path}`),
+    resolveRepositoryIdentity:
+      options.resolveRepositoryIdentity ?? (async (path) => `git-repository:${path}`),
+    ...(runner === undefined
+      ? {}
+      : {
+          runner: async (input: ExternalCommandInput) =>
+            isCoreBareCommand(input) ? coreBareRunner(input) : runner(input),
+        }),
   });
 }
 
@@ -317,9 +336,354 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("refuses pre-existing checkout core.bare=true before create or remove mutation", async () => {
+    const createState = syntheticCoreBareState({ localBare: true });
+    let createCalls = 0;
+    const createProvider = testProvider(
+      {
+        command: "wt",
+        runner: async (input) => {
+          createCalls += 1;
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        },
+      },
+      syntheticCoreBareRunner(createState),
+    );
+
+    await expect(
+      createProvider.createWorktree({ project, branch: "feature" }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_PROJECT_ROOT_BARE",
+      message: expect.stringContaining("/tmp/station/web"),
+    });
+    expect(createCalls).toBe(0);
+
+    const removeState = syntheticCoreBareState({ localBare: false });
+    const removeCalls: ExternalCommandInput[] = [];
+    const removeProvider = testProvider(
+      {
+        command: "wt",
+        runner: async (input) => {
+          removeCalls.push(input);
+          return result(
+            input,
+            input.args?.includes("list") === true
+              ? JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }])
+              : "{}",
+          );
+        },
+      },
+      syntheticCoreBareRunner(removeState),
+    );
+    const [selected] = await removeProvider.listWorktrees(project);
+    if (selected === undefined) throw new Error("Expected a selected worktree.");
+    setSyntheticCoreBare(removeState, true);
+
+    await expect(
+      removeProvider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: `git-registration:${selected.path}`,
+      }),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_PROJECT_ROOT_BARE" });
+    expect(removeCalls.filter((call) => call.args?.includes("remove") === true)).toEqual([]);
+    expect(removeCalls.filter((call) => call.args?.includes("list") === true)).toHaveLength(2);
+  });
+
+  it.each([
+    false,
+    "absent",
+  ] as const)("restores the exact repository-local core.bare=%s preimage after create", async (localBare) => {
+    const state = syntheticCoreBareState({ localBare });
+    const provider = testProvider(
+      {
+        command: "wt",
+        runner: async (input) => {
+          setSyntheticCoreBare(state, true);
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        },
+      },
+      syntheticCoreBareRunner(state),
+    );
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).resolves.toMatchObject({
+      branch: "feature",
+    });
+    expect(state.localBare).toBe(localBare);
+    expect(state.bare).toBe(false);
+    expect(state.events).toContain(localBare === "absent" ? "restore-unset" : "restore-false");
+  });
+
+  it("restores core.bare after failed create and successful remove mutations", async () => {
+    const createState = syntheticCoreBareState({ localBare: false });
+    const createProvider = testProvider(
+      {
+        command: "wt",
+        runner: async () => {
+          setSyntheticCoreBare(createState, true);
+          throw Object.assign(new Error("wt failed"), {
+            code: 128,
+            stderr: "fatal: a branch named 'feature' already exists",
+          });
+        },
+      },
+      syntheticCoreBareRunner(createState),
+    );
+
+    await expect(
+      createProvider.createWorktree({ project, branch: "feature" }),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_BRANCH_EXISTS" });
+    expect(createState.localBare).toBe(false);
+    expect(createState.bare).toBe(false);
+
+    const removeState = syntheticCoreBareState({ localBare: false });
+    const removeProvider = testProvider(
+      {
+        command: "wt",
+        runner: async (input) => {
+          if (input.args?.includes("remove") === true) {
+            setSyntheticCoreBare(removeState, true);
+            return result(input, "{}");
+          }
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        },
+      },
+      syntheticCoreBareRunner(removeState),
+    );
+    const [selected] = await removeProvider.listWorktrees(project);
+    if (selected === undefined) throw new Error("Expected a selected worktree.");
+
+    await expect(
+      removeProvider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: `git-registration:${selected.path}`,
+      }),
+    ).resolves.toMatchObject({ removed: true });
+    expect(removeState.localBare).toBe(false);
+    expect(removeState.bare).toBe(false);
+  });
+
+  it("uses repair failure as primary only after a successful mutation", async () => {
+    const state = syntheticCoreBareState({ localBare: false, failRestore: true });
+    const provider = testProvider(
+      {
+        command: "wt",
+        runner: async (input) => {
+          setSyntheticCoreBare(state, true);
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        },
+      },
+      syntheticCoreBareRunner(state),
+    );
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED",
+      message: expect.stringContaining("mutation may already have completed"),
+      hint: expect.stringContaining("Do not retry"),
+      diagnosticDetails: [
+        expect.objectContaining({
+          type: "external_command",
+          operation: "provider.worktrunk.coreBare.restore",
+        }),
+      ],
+    });
+    expect(state.localBare).toBe(true);
+  });
+
+  it("preserves the operation error as primary when operation and repair both fail", async () => {
+    const state = syntheticCoreBareState({ localBare: false, failRestore: true });
+    const provider = testProvider(
+      {
+        command: "wt",
+        runner: async () => {
+          setSyntheticCoreBare(state, true);
+          throw Object.assign(new Error("wt failed"), {
+            code: 128,
+            stderr: "fatal: a branch named 'feature' already exists",
+          });
+        },
+      },
+      syntheticCoreBareRunner(state),
+    );
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_BRANCH_EXISTS",
+      message: "Worktrunk could not create the worktree because the branch already exists.",
+      hint: expect.stringContaining("Project-root restoration also failed"),
+      cause: expect.objectContaining({ code: "WORKTRUNK_BRANCH_EXISTS" }),
+      diagnosticDetails: [
+        expect.objectContaining({ operation: "provider.worktrunk.switch" }),
+        expect.objectContaining({ operation: "provider.worktrunk.coreBare.restore" }),
+      ],
+    });
+  });
+
+  it("never writes when repository identity changes during a mutation", async () => {
+    const state = syntheticCoreBareState({ localBare: false });
+    let identity = "git-repository:before";
+    const provider = testProvider(
+      {
+        command: "wt",
+        resolveRepositoryIdentity: async () => identity,
+        runner: async (input) => {
+          setSyntheticCoreBare(state, true);
+          identity = "git-repository:after";
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        },
+      },
+      syntheticCoreBareRunner(state),
+    );
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      code: "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED",
+    });
+    expect(state.events).not.toContain("restore-false");
+    expect(state.localBare).toBe(true);
+  });
+
+  it("waits for timed-out mutation child settlement before restoring core.bare", async () => {
+    const state = syntheticCoreBareState({ localBare: false });
+    const provider = testProvider(
+      {
+        command: "wt",
+        timeoutMs: 10,
+        runner: async (input) =>
+          new Promise((_, reject) => {
+            const settle = () => {
+              setTimeout(() => {
+                setSyntheticCoreBare(state, true);
+                state.events.push("child-settled");
+                reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+              }, 10);
+            };
+            if (input.signal?.aborted === true) {
+              settle();
+            } else {
+              input.signal?.addEventListener("abort", settle, { once: true });
+            }
+          }),
+      },
+      syntheticCoreBareRunner(state),
+    );
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+      code: "WORKTRUNK_TIMEOUT",
+    });
+    expect(state.localBare).toBe(false);
+    expect(state.events.indexOf("child-settled")).toBeLessThan(
+      state.events.indexOf("restore-false"),
+    );
+  });
+
+  it("supports proven intentional bare roots without converting them", async () => {
+    const state = syntheticCoreBareState({ localBare: true, kind: "intentional-bare" });
+    let mutationCalls = 0;
+    const provider = testProvider(
+      {
+        command: "wt",
+        runner: async (input) => {
+          mutationCalls += 1;
+          return result(
+            input,
+            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+          );
+        },
+      },
+      syntheticCoreBareRunner(state),
+    );
+
+    await expect(provider.createWorktree({ project, branch: "feature" })).resolves.toMatchObject({
+      branch: "feature",
+    });
+    expect(mutationCalls).toBe(1);
+    expect(state.localBare).toBe(true);
+    expect(state.events.filter((event) => event.startsWith("restore-"))).toEqual([]);
+  });
+
+  it("restores a real disposable primary repository while retaining its linked worktree", async () => {
+    const fixture = await createDisposableLinkedRepository();
+    const fixtureProject: ProviderProjectConfig = {
+      ...project,
+      root: fixture.repository,
+    };
+    const productionGitCalls: ExternalCommandInput[] = [];
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git") {
+          productionGitCalls.push(input);
+          return nodeExternalCommandRunner(input);
+        }
+        await fixtureGit(fixture, fixture.repository, "config", "--local", "core.bare", "true");
+        return result(input, JSON.stringify([{ path: fixture.linkedWorktree, branch: "feature" }]));
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: fixtureProject, branch: "feature" }),
+      ).resolves.toMatchObject({ path: fixture.linkedWorktree, branch: "feature" });
+      await expect(
+        fixtureGitOutput(
+          fixture,
+          fixture.repository,
+          "config",
+          "--local",
+          "--type=bool",
+          "--get",
+          "core.bare",
+        ),
+      ).resolves.toBe("false");
+      const topology = await fixtureGitOutput(
+        fixture,
+        fixture.repository,
+        "worktree",
+        "list",
+        "--porcelain",
+      );
+      expect(topology.replaceAll("/private/var/", "/var/")).toContain(
+        `worktree ${fixture.repository}`,
+      );
+      expect(topology.replaceAll("/private/var/", "/var/")).toContain(
+        `worktree ${fixture.linkedWorktree}`,
+      );
+      expect(productionGitCalls.length).toBeGreaterThan(0);
+      expect(
+        productionGitCalls.every(
+          (call) =>
+            call.cwd === fixture.repository &&
+            gitLocalEnvironmentVariables.every((key) => call.unsetEnv?.includes(key) === true),
+        ),
+      ).toBe(true);
+    } finally {
+      await cleanupDisposableLinkedRepository(fixture);
+    }
+  });
+
   it("retains a created worktree when its Git registration cannot be verified", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new WorktrunkProvider({
+    const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       resolveRegistrationIdentity: async () => undefined,
@@ -1180,6 +1544,158 @@ describe("WorktrunkProvider", () => {
     expect(listCalls).toBe(2);
   });
 });
+
+function isCoreBareCommand(input: ExternalCommandInput): boolean {
+  return (
+    input.command === "git" &&
+    (input.args?.includes("--is-bare-repository") === true ||
+      input.args?.includes("core.bare") === true)
+  );
+}
+
+function healthySyntheticCoreBareRunner(input: ExternalCommandInput): ExternalCommandResult {
+  if (input.args?.includes("--is-bare-repository") === true) {
+    const root = input.cwd ?? project.root;
+    return result(input, `${join(root, ".git")}\n${join(root, ".git")}\nfalse\n`);
+  }
+  if (input.args?.includes("--get") === true) {
+    return result(input, "false\n");
+  }
+  return result(input, "");
+}
+
+type SyntheticCoreBareState = {
+  bare: boolean;
+  localBare: boolean | "absent";
+  kind: "checkout" | "intentional-bare";
+  failRestore: boolean;
+  events: string[];
+};
+
+function syntheticCoreBareState(input: {
+  localBare: boolean | "absent";
+  kind?: SyntheticCoreBareState["kind"];
+  failRestore?: boolean;
+}): SyntheticCoreBareState {
+  return {
+    bare: input.localBare === true,
+    localBare: input.localBare,
+    kind: input.kind ?? "checkout",
+    failRestore: input.failRestore ?? false,
+    events: [],
+  };
+}
+
+function setSyntheticCoreBare(state: SyntheticCoreBareState, bare: boolean): void {
+  state.bare = bare;
+  state.localBare = bare;
+}
+
+function syntheticCoreBareRunner(
+  state: SyntheticCoreBareState,
+): (input: ExternalCommandInput) => ExternalCommandResult {
+  return (input) => {
+    const args = input.args ?? [];
+    if (args.includes("--is-bare-repository")) {
+      const root = input.cwd ?? project.root;
+      const gitDirectory = state.kind === "intentional-bare" ? root : join(root, ".git");
+      return result(input, `${gitDirectory}\n${gitDirectory}\n${String(state.bare)}\n`);
+    }
+    if (args.includes("--get")) {
+      if (state.localBare === "absent") {
+        return { ...result(input, ""), exitCode: 1 };
+      }
+      return result(input, `${String(state.localBare)}\n`);
+    }
+    if (state.failRestore) {
+      throw Object.assign(new Error("restore failed"), {
+        code: 2,
+        stdout: "",
+        stderr: "restore failed",
+      });
+    }
+    if (args.includes("--unset-all")) {
+      state.localBare = "absent";
+      state.bare = false;
+      state.events.push("restore-unset");
+    } else {
+      state.localBare = false;
+      state.bare = false;
+      state.events.push("restore-false");
+    }
+    return result(input, "");
+  };
+}
+
+type DisposableLinkedRepository = {
+  root: string;
+  repository: string;
+  linkedWorktree: string;
+  env: NodeJS.ProcessEnv;
+};
+
+async function createDisposableLinkedRepository(): Promise<DisposableLinkedRepository> {
+  const root = await mkdtemp(join(tmpdir(), "station-worktrunk-root-"));
+  const repository = join(root, "repository");
+  const linkedWorktree = join(root, "linked-feature");
+  const env = environmentWithoutGitLocals(process.env);
+  const fixture = { root, repository, linkedWorktree, env };
+  await mkdir(repository, { recursive: true });
+  await fixtureGit(fixture, repository, "init", "-q", "-b", "main");
+  await fixtureGit(
+    fixture,
+    repository,
+    "-c",
+    "user.name=Station Test",
+    "-c",
+    "user.email=station@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "--allow-empty",
+    "-qm",
+    "initial",
+  );
+  await fixtureGit(fixture, repository, "config", "--local", "core.bare", "false");
+  await fixtureGit(fixture, repository, "worktree", "add", "-q", "-b", "feature", linkedWorktree);
+  return fixture;
+}
+
+async function fixtureGit(
+  fixture: DisposableLinkedRepository,
+  cwd: string,
+  ...args: string[]
+): Promise<ExternalCommandResult> {
+  return nodeExternalCommandRunner({
+    command: "git",
+    args,
+    cwd,
+    env: fixture.env,
+    unsetEnv: gitLocalEnvironmentVariables,
+  });
+}
+
+async function fixtureGitOutput(
+  fixture: DisposableLinkedRepository,
+  cwd: string,
+  ...args: string[]
+): Promise<string> {
+  return (await fixtureGit(fixture, cwd, ...args)).stdout.trim();
+}
+
+async function cleanupDisposableLinkedRepository(
+  fixture: DisposableLinkedRepository,
+): Promise<void> {
+  await fixtureGit(
+    fixture,
+    fixture.repository,
+    "worktree",
+    "remove",
+    "--force",
+    fixture.linkedWorktree,
+  ).catch(() => undefined);
+  await rm(fixture.root, { recursive: true, force: true });
+}
 
 function result(input: ExternalCommandInput, stdout: string): ExternalCommandResult {
   return {

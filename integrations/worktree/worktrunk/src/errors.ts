@@ -1,4 +1,4 @@
-import type { DiagnosticDetail, SafeError } from "@station/contracts";
+import { type DiagnosticDetail, DiagnosticDetailSchema, type SafeError } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 
 export type WorktrunkProviderErrorCode =
@@ -8,6 +8,9 @@ export type WorktrunkProviderErrorCode =
   | "WORKTRUNK_HOOK_APPROVAL_REQUIRED"
   | "WORKTRUNK_INVALID_OUTPUT"
   | "WORKTRUNK_BASE_MISSING"
+  | "WORKTRUNK_PROJECT_ROOT_BARE"
+  | "WORKTRUNK_PROJECT_ROOT_CHECK_FAILED"
+  | "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED"
   | "WORKTRUNK_SEED_FAILED"
   | "WORKTRUNK_TIMEOUT"
   | "WORKTRUNK_UNAVAILABLE"
@@ -40,6 +43,54 @@ export class WorktrunkProviderError extends Error implements SafeError {
     }
     if (options.diagnosticDetails !== undefined) {
       this.diagnosticDetails = options.diagnosticDetails;
+    }
+  }
+}
+
+export class WorktrunkOperationRepairError extends Error implements SafeError {
+  readonly tag: string;
+  readonly code: string;
+  readonly provider: string;
+  readonly hint?: string;
+  readonly commandId?: string;
+  readonly projectId?: string;
+  readonly worktreeId?: string;
+  readonly sessionId?: string;
+  readonly traceId?: string;
+  readonly diagnosticId?: string;
+  readonly diagnosticDetails?: DiagnosticDetail[];
+
+  constructor(operationError: unknown, repairError: WorktrunkProviderError) {
+    const primary = safeErrorFromUnknown(operationError, {
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_COMMAND_FAILED",
+      message: "Worktrunk mutation failed.",
+      provider: "worktrunk",
+    });
+    super(primary.message, { cause: operationError });
+    Object.defineProperty(this, "name", {
+      value: primary.tag,
+      enumerable: false,
+      configurable: true,
+    });
+    this.tag = primary.tag;
+    this.code = primary.code;
+    this.provider = primary.provider ?? "worktrunk";
+    const repairHint = `Project-root restoration also failed. ${repairError.hint ?? "Inspect the configured root before retrying."}`;
+    this.hint = primary.hint === undefined ? repairHint : `${primary.hint} ${repairHint}`;
+    if (primary.commandId !== undefined) this.commandId = primary.commandId;
+    if (primary.projectId !== undefined) this.projectId = primary.projectId;
+    if (primary.worktreeId !== undefined) this.worktreeId = primary.worktreeId;
+    if (primary.sessionId !== undefined) this.sessionId = primary.sessionId;
+    if (primary.traceId !== undefined) this.traceId = primary.traceId;
+    if (primary.diagnosticId !== undefined) this.diagnosticId = primary.diagnosticId;
+    const primaryDiagnostics = (primary.diagnosticDetails ?? []).flatMap((detail) => {
+      const parsed = DiagnosticDetailSchema.safeParse(detail);
+      return parsed.success ? [parsed.data] : [];
+    });
+    const diagnosticDetails = [...primaryDiagnostics, ...(repairError.diagnosticDetails ?? [])];
+    if (diagnosticDetails.length > 0) {
+      this.diagnosticDetails = diagnosticDetails;
     }
   }
 }
@@ -82,6 +133,13 @@ export class ProviderUnavailableError extends Error implements SafeError {
       this.diagnosticDetails = options.diagnosticDetails;
     }
   }
+}
+
+export function operationErrorWithWorktrunkRepairFailure(
+  operationError: unknown,
+  repairError: WorktrunkProviderError,
+): WorktrunkOperationRepairError {
+  return new WorktrunkOperationRepairError(operationError, repairError);
 }
 
 export function worktrunkSafeError(

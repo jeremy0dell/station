@@ -208,6 +208,14 @@ One entry per git-rooted project STATION manages. The array is required; an empt
 array is valid. Cross-field rules: unique `id`s, no alias/id collisions, no duplicate
 aliases, unique worktrunk managed roots, and **each `root` must exist at load time**.
 
+A Worktrunk-enabled `root` that identifies a checkout must remain non-bare. Station
+checks this before and after create/remove mutations and `stn doctor` warns when the
+checkout is marked `core.bare=true` or its Git topology cannot be verified. A proven
+intentional bare repository remains supported and is never converted. If an
+interrupted mutation leaves a checkout bare, inspect and repair it manually before
+retrying; Station cannot prove the prior local setting after a process or machine
+crash and therefore fails closed.
+
 | Key | Type | Notes |
 | --- | --- | --- |
 | `id` | string | **Required**, unique. Derived from root basename on `stn project add` if omitted. |

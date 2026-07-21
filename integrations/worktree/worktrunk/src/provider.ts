@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -26,8 +26,10 @@ import type {
 } from "@station/contracts";
 import { ExternalCommandDiagnosticDetailSchema } from "@station/contracts";
 import {
+  type ExternalCommandResult,
   type ExternalCommandRunner,
   gitLocalEnvironmentVariables,
+  nodeExternalCommandRunner,
   type RuntimeClock,
   runExternalCommand,
   runRuntimeBoundaryWithRetryAndTimeout,
@@ -36,6 +38,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { z } from "zod";
 import { missingWorktrunkAutomationFlagSupport, worktrunkAutomationMode } from "./automation.js";
 import {
   type CheckWorktrunkDependencyOptions,
@@ -44,6 +47,7 @@ import {
   worktrunkInstallHint,
 } from "./dependency.js";
 import {
+  operationErrorWithWorktrunkRepairFailure,
   ProviderUnavailableError,
   providerErrorFromUnknown,
   WorktrunkProviderError,
@@ -61,13 +65,63 @@ export type WorktrunkProviderOptions = {
   runner?: ExternalCommandRunner;
   clock?: RuntimeClock;
   resolveRegistrationIdentity?: (worktreePath: string) => Promise<string | undefined>;
+  resolveRepositoryIdentity?: (gitDirectory: string) => Promise<string | undefined>;
 };
 
 type WorktrunkRunPolicy = {
   retries?: number;
   signal?: AbortSignal;
   timeoutMs?: number;
+  settlement?: WorktrunkMutationSettlement;
 };
+
+type CoreBareValue = boolean | "absent";
+
+type ProjectRootTopology = {
+  gitDirectory: string;
+  commonDirectory: string;
+  bare: boolean;
+};
+
+type ProjectRootSnapshotBase = ProjectRootTopology & {
+  root: string;
+  repositoryIdentity: string;
+  effectiveBare: CoreBareValue;
+  localBare: CoreBareValue;
+};
+
+type ProjectRootSnapshot =
+  | (ProjectRootSnapshotBase & { kind: "checkout" })
+  | (ProjectRootSnapshotBase & { kind: "intentional-bare" });
+
+type CoreBareCommandResult = {
+  result: ExternalCommandResult;
+  durationMs: number;
+};
+
+const coreBareBooleanSchema = z.enum(["true", "false"]);
+const projectRootTopologySchema = z.tuple([
+  z.string().min(1).refine(isAbsolute),
+  z.string().min(1).refine(isAbsolute),
+  coreBareBooleanSchema,
+]);
+
+class WorktrunkMutationSettlement {
+  readonly #pending: Promise<void>[] = [];
+
+  track(command: Promise<ExternalCommandResult>): void {
+    this.#pending.push(
+      command.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+  }
+
+  async wait(): Promise<void> {
+    await Promise.all(this.#pending);
+  }
+}
 
 const defaultCapabilities: WorktreeCapabilities = {
   canCreate: true,
@@ -82,7 +136,7 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
- * Removal revalidates native Git registration identity, path, and branch immediately before invoking Worktrunk.
+ * Mutations serialize per configured root and restore its non-bare checkout invariant; removal also revalidates native Git identity, path, and branch immediately before invoking Worktrunk.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -94,8 +148,10 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
   readonly #resolveRegistrationIdentity: (worktreePath: string) => Promise<string | undefined>;
+  readonly #resolveRepositoryIdentity: (gitDirectory: string) => Promise<string | undefined>;
   readonly #observations = new Map<string, WorktreeObservation>();
   readonly #projects = new Map<string, ProviderProjectConfig>();
+  readonly #projectRootMutationChains = new Map<string, Promise<void>>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -106,6 +162,8 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#clock = options.clock ?? systemClock;
     this.#resolveRegistrationIdentity =
       options.resolveRegistrationIdentity ?? nativeGitRegistrationIdentity;
+    this.#resolveRepositoryIdentity =
+      options.resolveRepositoryIdentity ?? nativeGitRepositoryIdentity;
   }
 
   capabilities(): WorktreeCapabilities {
@@ -147,15 +205,23 @@ export class WorktrunkProvider implements WorktreeProvider {
     const budgetSignal = AbortSignal.timeout(workBudgetMs);
     const signal =
       context.signal === undefined ? budgetSignal : AbortSignal.any([context.signal, budgetSignal]);
-    const [automationCheck, staleChecks, hookCheck] = await Promise.all([
+    const projects = context.projects ?? [];
+    const [automationCheck, projectRootChecks, hookCheck] = await Promise.all([
       this.#automationCapabilityCheck({ signal, timeoutMs: workBudgetMs }),
-      this.#staleRegistrationChecks(context.projects ?? [], {
-        signal,
-        timeoutMs: workBudgetMs,
-      }),
+      this.#projectRootChecks(projects, { signal, timeoutMs: workBudgetMs }),
       this.#hookCheck(context),
     ]);
-    return [automationCheck, ...staleChecks, hookCheck];
+    const unsafeProjectIds = new Set(
+      projectRootChecks.flatMap((check) =>
+        check.error?.projectId === undefined ? [] : [check.error.projectId],
+      ),
+    );
+    // Worktrunk list diagnostics are meaningful only after Git topology is verified as a non-bare checkout.
+    const staleChecks = await this.#staleRegistrationChecks(
+      projects.filter((project) => !unsafeProjectIds.has(project.id)),
+      { signal, timeoutMs: workBudgetMs },
+    );
+    return [automationCheck, ...projectRootChecks, ...staleChecks, hookCheck];
   }
 
   async #hookCheck(context: ProviderDoctorContext): Promise<ProviderDoctorCheck> {
@@ -258,24 +324,30 @@ export class WorktrunkProvider implements WorktreeProvider {
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
     this.#projects.set(request.project.id, request.project);
     const base = request.base ?? request.project.worktrunk.base;
-    const output = await this.#run(
-      this.#args([
-        "switch",
-        ...this.#automationHookArgs(),
-        "--create",
-        request.branch,
-        ...(base === undefined ? [] : ["--base", base]),
-        "--no-cd",
-        "--format=json",
-      ]),
-      request.project.root,
-      {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to create a worktree.",
-        ...(base === undefined ? {} : { unresolvedBase: base }),
-      },
-      {},
-      worktreePathEnv(request.project, request.branch, request.path),
+    const output = await this.#withProjectRootMutation(request.project, () =>
+      this.#runGuardedProjectMutation(request.project, (settlement) =>
+        this.#run(
+          this.#args([
+            "switch",
+            ...this.#automationHookArgs(),
+            "--create",
+            request.branch,
+            ...(base === undefined ? [] : ["--base", base]),
+            "--no-cd",
+            "--format=json",
+          ]),
+          request.project.root,
+          {
+            code: "WORKTRUNK_COMMAND_FAILED",
+            message: "Worktrunk failed to create a worktree.",
+            ...(base === undefined ? {} : { unresolvedBase: base }),
+          },
+          { settlement },
+          worktreeEnvironmentWithoutGitLocals(
+            worktreePathEnv(request.project, request.branch, request.path),
+          ),
+        ),
+      ),
     );
 
     const commandObservations = parseCommandObservation(output.stdout, {
@@ -315,16 +387,22 @@ export class WorktrunkProvider implements WorktreeProvider {
       try {
         await this.#seedWorkingTree(request.seedFrom.path, found.path);
       } catch (seedError) {
-        // Seeding failed after the worktree was created. Remove it so callers never
-        // inherit a half-seeded worktree; best-effort, then rethrow the seed cause.
-        await this.removeWorktree({
-          worktreeId: found.id,
-          expectedPath: found.path,
-          expectedBranch: found.branch,
-          expectedRegistrationIdentity: found.registrationIdentity,
-          force: true,
-        }).catch(() => {});
-        this.#observations.delete(found.id);
+        // Keep a failed cleanup observable because its mutation or root repair may already have completed.
+        try {
+          await this.removeWorktree({
+            worktreeId: found.id,
+            expectedPath: found.path,
+            expectedBranch: found.branch,
+            expectedRegistrationIdentity: found.registrationIdentity,
+            force: true,
+          });
+          this.#observations.delete(found.id);
+        } catch (cleanupError) {
+          if (cleanupError instanceof WorktrunkProviderError) {
+            throw operationErrorWithWorktrunkRepairFailure(seedError, cleanupError);
+          }
+          throw cleanupError;
+        }
         throw seedError;
       }
       // Re-list so the seeded dirty state is observed before we return; listWorktrees
@@ -433,87 +511,466 @@ export class WorktrunkProvider implements WorktreeProvider {
       });
     }
 
-    const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
-    const identityMatches = currentWorktrees.filter(
-      (worktree) => worktree.id === request.worktreeId,
-    );
-    const pathMatches = currentWorktrees.filter((worktree) =>
-      samePath(worktree.path, request.expectedPath),
-    );
-    if (identityMatches.length === 0 && pathMatches.length === 0) {
-      throw worktreeRemovalRefusalError({
-        code: "WORKTRUNK_WORKTREE_NOT_FOUND",
-        message: "Worktrunk remove could not confirm that the selected worktree still exists.",
-        hint: "Run listWorktrees again before retrying removal.",
-        request,
-        projectId: project.id,
-        canonicalPath: request.expectedPath,
-        observedBranch: request.expectedBranch,
-        refusalReason: "missing_target",
-      });
-    }
-    const selected = identityMatches[0];
-    const pathMatch = pathMatches[0];
-    const finalRefusalReason =
-      identityMatches.length !== 1 || pathMatches.length !== 1
-        ? "ambiguous_identity"
-        : selected === undefined || pathMatch === undefined || selected.id !== pathMatch.id
-          ? "identity_changed"
-          : selected.state !== "exists"
-            ? "missing_target"
-            : changedRemovalIdentityReason(selected, request);
-    if (finalRefusalReason !== undefined || selected === undefined || pathMatch === undefined) {
-      throw worktreeRemovalRefusalError({
-        code: "WORKTRUNK_WORKTREE_CHANGED",
-        message: "The selected worktree changed before Worktrunk could remove it.",
-        hint: "Refresh and reselect the worktree before retrying removal.",
-        request,
-        projectId: project.id,
-        canonicalPath: selected?.path ?? pathMatch?.path ?? request.expectedPath,
-        observedBranch: selected?.branch ?? pathMatch?.branch ?? request.expectedBranch,
-        refusalReason: finalRefusalReason ?? "ambiguous_identity",
-      });
-    }
-    const branchIsShared =
-      !selected.branch.startsWith("detached:") &&
-      currentWorktrees.some(
-        (worktree) =>
-          worktree.state === "exists" &&
-          worktree.branch === selected.branch &&
-          !samePath(worktree.path, selected.path),
+    return this.#withProjectRootMutation(project, async () => {
+      const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
+      const identityMatches = currentWorktrees.filter(
+        (worktree) => worktree.id === request.worktreeId,
       );
-    const removalFlags: string[] = [];
-    if (request.force === true) {
-      removalFlags.push("--force");
+      const pathMatches = currentWorktrees.filter((worktree) =>
+        samePath(worktree.path, request.expectedPath),
+      );
+      if (identityMatches.length === 0 && pathMatches.length === 0) {
+        throw worktreeRemovalRefusalError({
+          code: "WORKTRUNK_WORKTREE_NOT_FOUND",
+          message: "Worktrunk remove could not confirm that the selected worktree still exists.",
+          hint: "Run listWorktrees again before retrying removal.",
+          request,
+          projectId: project.id,
+          canonicalPath: request.expectedPath,
+          observedBranch: request.expectedBranch,
+          refusalReason: "missing_target",
+        });
+      }
+      const selected = identityMatches[0];
+      const pathMatch = pathMatches[0];
+      const finalRefusalReason =
+        identityMatches.length !== 1 || pathMatches.length !== 1
+          ? "ambiguous_identity"
+          : selected === undefined || pathMatch === undefined || selected.id !== pathMatch.id
+            ? "identity_changed"
+            : selected.state !== "exists"
+              ? "missing_target"
+              : changedRemovalIdentityReason(selected, request);
+      if (finalRefusalReason !== undefined || selected === undefined || pathMatch === undefined) {
+        throw worktreeRemovalRefusalError({
+          code: "WORKTRUNK_WORKTREE_CHANGED",
+          message: "The selected worktree changed before Worktrunk could remove it.",
+          hint: "Refresh and reselect the worktree before retrying removal.",
+          request,
+          projectId: project.id,
+          canonicalPath: selected?.path ?? pathMatch?.path ?? request.expectedPath,
+          observedBranch: selected?.branch ?? pathMatch?.branch ?? request.expectedBranch,
+          refusalReason: finalRefusalReason ?? "ambiguous_identity",
+        });
+      }
+      const branchIsShared =
+        !selected.branch.startsWith("detached:") &&
+        currentWorktrees.some(
+          (worktree) =>
+            worktree.state === "exists" &&
+            worktree.branch === selected.branch &&
+            !samePath(worktree.path, selected.path),
+        );
+      const removalFlags: string[] = [];
+      if (request.force === true) {
+        removalFlags.push("--force");
+      }
+      if (branchIsShared) {
+        removalFlags.push("--no-delete-branch");
+      } else if (request.force === true) {
+        removalFlags.push("--force-delete");
+      }
+
+      // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
+      await this.#runGuardedProjectMutation(project, (settlement) =>
+        this.#run(
+          this.#args([
+            "-C",
+            selected.path,
+            "remove",
+            ...this.#automationHookArgs(),
+            ...removalFlags,
+            "--foreground",
+            "--format=json",
+          ]),
+          undefined,
+          {
+            code: "WORKTRUNK_COMMAND_FAILED",
+            message: "Worktrunk failed to remove a worktree.",
+          },
+          { settlement },
+        ),
+      );
+      this.#observations.delete(request.worktreeId);
+      return {
+        worktreeId: request.worktreeId,
+        removed: true,
+      };
+    });
+  }
+
+  async #withProjectRootMutation<T>(
+    project: ProviderProjectConfig,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    const key = await canonicalProjectRoot(project.root);
+    const previous = this.#projectRootMutationChains.get(key) ?? Promise.resolve();
+    const operation = previous.catch(() => undefined).then(task);
+    const tail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#projectRootMutationChains.set(key, tail);
+    try {
+      return await operation;
+    } finally {
+      if (this.#projectRootMutationChains.get(key) === tail) {
+        this.#projectRootMutationChains.delete(key);
+      }
     }
-    if (branchIsShared) {
-      removalFlags.push("--no-delete-branch");
-    } else if (request.force === true) {
-      removalFlags.push("--force-delete");
+  }
+
+  async #runGuardedProjectMutation<T>(
+    project: ProviderProjectConfig,
+    mutation: (settlement: WorktrunkMutationSettlement) => Promise<T>,
+  ): Promise<T> {
+    const preflight = await this.#inspectProjectRoot(project, {
+      signal: AbortSignal.timeout(this.#timeoutMs),
+      timeoutMs: this.#timeoutMs,
+    });
+    if (preflight.kind === "checkout" && preflight.bare) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_PROJECT_ROOT_BARE",
+        projectRootBareMessage(project),
+        { hint: projectRootInspectionHint(project.root) },
+      );
     }
 
-    // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
-    await this.#run(
-      this.#args([
-        "-C",
-        selected.path,
-        "remove",
-        ...this.#automationHookArgs(),
-        ...removalFlags,
-        "--foreground",
-        "--format=json",
-      ]),
-      undefined,
+    const settlement = new WorktrunkMutationSettlement();
+    let operationOutcome: { ok: true; value: T } | { ok: false; error: unknown } | undefined;
+    let repairError: WorktrunkProviderError | undefined;
+    try {
+      try {
+        operationOutcome = { ok: true, value: await mutation(settlement) };
+      } catch (error) {
+        operationOutcome = { ok: false, error };
+      }
+    } finally {
+      await settlement.wait();
+      // Postflight gets a fresh budget only after the mutation child has settled, so cancellation cannot race a config write against Worktrunk.
+      const postflightSignal = AbortSignal.timeout(this.#timeoutMs);
+      try {
+        await this.#restoreProjectRootAfterMutation(project, preflight, {
+          signal: postflightSignal,
+          timeoutMs: this.#timeoutMs,
+        });
+      } catch (cause) {
+        repairError = this.#projectRootRepairError(project, cause);
+      }
+    }
+
+    if (operationOutcome === undefined) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_COMMAND_FAILED",
+        "Worktrunk mutation did not produce an outcome.",
+      );
+    }
+    if (!operationOutcome.ok) {
+      if (repairError !== undefined) {
+        throw operationErrorWithWorktrunkRepairFailure(operationOutcome.error, repairError);
+      }
+      throw operationOutcome.error;
+    }
+    if (repairError !== undefined) {
+      throw repairError;
+    }
+    return operationOutcome.value;
+  }
+
+  async #restoreProjectRootAfterMutation(
+    project: ProviderProjectConfig,
+    preflight: ProjectRootSnapshot,
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<void> {
+    const postflight = await this.#inspectProjectRoot(project, options);
+    if (!sameRepositoryIdentity(preflight, postflight)) {
+      throw new Error("The configured project root changed repository identity during mutation.");
+    }
+    if (preflight.kind === "intentional-bare") {
+      if (postflight.kind !== "intentional-bare") {
+        throw new Error("The intentional bare repository changed shape during mutation.");
+      }
+      return;
+    }
+    if (projectRootMatchesPreimage(preflight, postflight)) {
+      return;
+    }
+
+    if (postflight.kind !== "checkout") {
+      throw new Error("The configured checkout changed repository shape before repair.");
+    }
+
+    let restoreError: WorktrunkProviderError | undefined;
+    try {
+      const args =
+        preflight.localBare === "absent"
+          ? ["config", "--local", "--unset-all", "core.bare"]
+          : ["config", "--local", "core.bare", "false"];
+      const allowedExitCodes = preflight.localBare === "absent" ? [0, 5] : undefined;
+      const command = await this.#runCoreBareCommand(project, args, {
+        operation: "provider.worktrunk.coreBare.restore",
+        code: "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED",
+        signal: options.signal,
+        timeoutMs: options.timeoutMs,
+        ...(allowedExitCodes === undefined ? {} : { allowedExitCodes }),
+      });
+      assertEmptyCoreBareCommandOutput(command.result);
+    } catch (cause) {
+      restoreError = this.#projectRootRepairError(project, cause);
+    }
+
+    let verification: ProjectRootSnapshot;
+    try {
+      verification = await this.#inspectProjectRoot(project, options);
+    } catch (cause) {
+      if (restoreError !== undefined) {
+        throw restoreError;
+      }
+      throw cause;
+    }
+    if (
+      sameRepositoryIdentity(preflight, verification) &&
+      projectRootMatchesPreimage(preflight, verification)
+    ) {
+      return;
+    }
+    if (restoreError !== undefined) {
+      throw restoreError;
+    }
+    throw new Error("The configured project root did not match its exact non-bare preimage.");
+  }
+
+  async #inspectProjectRoot(
+    project: ProviderProjectConfig,
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<ProjectRootSnapshot> {
+    const before = await this.#readProjectRootTopology(project, options);
+    const identityBefore = await this.#repositoryIdentity(project, before.gitDirectory);
+    const effectiveBare = await this.#readCoreBareValue(project, false, options);
+    const localBare = await this.#readCoreBareValue(project, true, options);
+    const after = await this.#readProjectRootTopology(project, options);
+    const identityAfter = await this.#repositoryIdentity(project, after.gitDirectory);
+
+    if (!sameTopology(before, after) || identityBefore !== identityAfter) {
+      throw this.#projectRootCheckError(
+        project,
+        new Error("Repository identity changed while Station inspected core.bare."),
+      );
+    }
+    if (effectiveBare !== "absent" && effectiveBare !== before.bare) {
+      throw this.#projectRootCheckError(
+        project,
+        new Error("Effective core.bare conflicts with Git repository mode."),
+      );
+    }
+    if (localBare !== "absent" && (effectiveBare === "absent" || localBare !== effectiveBare)) {
+      throw this.#projectRootCheckError(
+        project,
+        new Error("Repository-local core.bare conflicts with its effective value."),
+      );
+    }
+
+    const root = await canonicalProjectRoot(project.root);
+    const gitDirectoryIsRoot = samePath(before.gitDirectory, root);
+    const commonDirectoryIsRoot = samePath(before.commonDirectory, root);
+    let kind: ProjectRootSnapshot["kind"];
+    if (!gitDirectoryIsRoot) {
+      kind = "checkout";
+    } else if (commonDirectoryIsRoot && before.bare) {
+      kind = "intentional-bare";
+    } else {
+      throw this.#projectRootCheckError(
+        project,
+        new Error(
+          "Configured root is neither a checkout nor a proven intentional bare repository.",
+        ),
+      );
+    }
+
+    return {
+      kind,
+      root,
+      gitDirectory: before.gitDirectory,
+      commonDirectory: before.commonDirectory,
+      bare: before.bare,
+      repositoryIdentity: identityBefore,
+      effectiveBare,
+      localBare,
+    };
+  }
+
+  async #repositoryIdentity(project: ProviderProjectConfig, gitDirectory: string): Promise<string> {
+    try {
+      const identity = await this.#resolveRepositoryIdentity(gitDirectory);
+      if (identity !== undefined) {
+        return identity;
+      }
+      throw new Error("Git directory identity is unavailable.");
+    } catch (cause) {
+      throw this.#projectRootCheckError(project, cause);
+    }
+  }
+
+  async #readProjectRootTopology(
+    project: ProviderProjectConfig,
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<ProjectRootTopology> {
+    const args = [
+      "rev-parse",
+      "--path-format=absolute",
+      "--absolute-git-dir",
+      "--git-common-dir",
+      "--is-bare-repository",
+    ];
+    const command = await this.#runCoreBareCommand(project, args, {
+      operation: "provider.worktrunk.coreBare.inspect",
+      code: "WORKTRUNK_PROJECT_ROOT_CHECK_FAILED",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+    });
+    try {
+      return parseProjectRootTopology(command.result);
+    } catch (cause) {
+      throw this.#projectRootCheckError(
+        project,
+        cause,
+        coreBareResultDiagnostics({
+          operation: "provider.worktrunk.coreBare.inspect",
+          args,
+          cwd: project.root,
+          result: command.result,
+          durationMs: command.durationMs,
+        }),
+      );
+    }
+  }
+
+  async #readCoreBareValue(
+    project: ProviderProjectConfig,
+    local: boolean,
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<CoreBareValue> {
+    const args = ["config", ...(local ? ["--local"] : []), "--type=bool", "--get", "core.bare"];
+    const command = await this.#runCoreBareCommand(project, args, {
+      operation: "provider.worktrunk.coreBare.inspect",
+      code: "WORKTRUNK_PROJECT_ROOT_CHECK_FAILED",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+      allowedExitCodes: [0, 1],
+    });
+    try {
+      return parseCoreBareValue(command.result);
+    } catch (cause) {
+      throw this.#projectRootCheckError(
+        project,
+        cause,
+        coreBareResultDiagnostics({
+          operation: "provider.worktrunk.coreBare.inspect",
+          args,
+          cwd: project.root,
+          result: command.result,
+          durationMs: command.durationMs,
+        }),
+      );
+    }
+  }
+
+  async #runCoreBareCommand(
+    project: ProviderProjectConfig,
+    args: string[],
+    options: {
+      operation: "provider.worktrunk.coreBare.inspect" | "provider.worktrunk.coreBare.restore";
+      code: "WORKTRUNK_PROJECT_ROOT_CHECK_FAILED" | "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED";
+      signal: AbortSignal;
+      timeoutMs: number;
+      allowedExitCodes?: number[] | undefined;
+    },
+  ): Promise<CoreBareCommandResult> {
+    const startedAt = this.#clock.now().getTime();
+    try {
+      const result = await runExternalCommand(
+        {
+          command: "git",
+          args,
+          cwd: project.root,
+          unsetEnv: gitLocalEnvironmentVariables,
+          timeoutMs: options.timeoutMs,
+          signal: options.signal,
+          maxOutputChars: 4096,
+          ...(options.allowedExitCodes === undefined
+            ? {}
+            : { allowedExitCodes: options.allowedExitCodes }),
+        },
+        this.#runner,
+      );
+      return {
+        result,
+        durationMs: Math.max(0, this.#clock.now().getTime() - startedAt),
+      };
+    } catch (cause) {
+      const durationMs = Math.max(0, this.#clock.now().getTime() - startedAt);
+      const diagnostics = worktrunkCommandDiagnostics({
+        error: cause,
+        provider: this.id,
+        operation: options.operation,
+        command: "git",
+        args,
+        cwd: project.root,
+        durationMs,
+      });
+      if (options.code === "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED") {
+        throw this.#projectRootRepairError(project, cause, diagnostics);
+      }
+      throw this.#projectRootCheckError(project, cause, diagnostics);
+    }
+  }
+
+  #projectRootCheckError(
+    project: ProviderProjectConfig,
+    cause: unknown,
+    diagnosticDetails?: DiagnosticDetail[],
+  ): WorktrunkProviderError {
+    return new WorktrunkProviderError(
+      "WORKTRUNK_PROJECT_ROOT_CHECK_FAILED",
+      `Station could not verify project "${project.label}" configured root as a stable Git checkout.`,
       {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to remove a worktree.",
+        cause,
+        hint: projectRootInspectionHint(project.root),
+        ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
       },
     );
-    this.#observations.delete(request.worktreeId);
-    return {
-      worktreeId: request.worktreeId,
-      removed: true,
+  }
+
+  #projectRootRepairError(
+    project: ProviderProjectConfig,
+    cause: unknown,
+    diagnosticDetails?: DiagnosticDetail[],
+  ): WorktrunkProviderError {
+    if (
+      cause instanceof WorktrunkProviderError &&
+      cause.code === "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED"
+    ) {
+      return cause;
+    }
+    const inheritedDiagnostics =
+      cause instanceof WorktrunkProviderError ? cause.diagnosticDetails : undefined;
+    const combinedDiagnostics = diagnosticDetails ?? inheritedDiagnostics;
+    const errorOptions: {
+      cause: unknown;
+      hint: string;
+      diagnosticDetails?: DiagnosticDetail[];
+    } = {
+      cause,
+      hint: projectRootRepairHint(project.root),
     };
+    if (combinedDiagnostics !== undefined) {
+      errorOptions.diagnosticDetails = combinedDiagnostics;
+    }
+    return new WorktrunkProviderError(
+      "WORKTRUNK_PROJECT_ROOT_REPAIR_FAILED",
+      "Station could not restore the configured project root after the Worktrunk mutation; the mutation may already have completed.",
+      errorOptions,
+    );
   }
 
   async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {
@@ -610,6 +1067,76 @@ export class WorktrunkProvider implements WorktreeProvider {
       message: error.message,
       error,
     };
+  }
+
+  async #projectRootChecks(
+    projects: readonly ProviderProjectConfig[],
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<ProviderDoctorCheck[]> {
+    const enabledProjects = projects.filter((candidate) => candidate.worktrunk.enabled);
+    const checks: Array<ProviderDoctorCheck | undefined> = enabledProjects.map(() => undefined);
+    let completed = 0;
+    for (let offset = 0; offset < enabledProjects.length; offset += 4) {
+      const batch = enabledProjects.slice(offset, offset + 4);
+      await Promise.all(
+        batch.map(async (project, batchIndex) => {
+          if (options.signal.aborted) return;
+          const index = offset + batchIndex;
+          let snapshot: ProjectRootSnapshot;
+          try {
+            snapshot = await this.#inspectProjectRoot(project, options);
+            completed += 1;
+          } catch {
+            if (options.signal.aborted) return;
+            completed += 1;
+            const error: SafeError = {
+              tag: "WorktrunkProjectRootDiagnosticError",
+              code: "WORKTRUNK_PROJECT_ROOT_CHECK_FAILED",
+              message: `Station could not verify project "${project.label}" configured root Git mode.`,
+              hint: projectRootInspectionHint(project.root),
+              provider: this.id,
+              projectId: project.id,
+            };
+            checks[index] = {
+              name: `worktrunk-project-root-${project.id}`,
+              status: "warn",
+              message: error.message,
+              error,
+            };
+            return;
+          }
+          if (snapshot.kind !== "checkout" || !snapshot.bare) {
+            return;
+          }
+          const message = projectRootBareMessage(project);
+          checks[index] = {
+            name: `worktrunk-project-root-${project.id}`,
+            status: "warn",
+            message,
+            error: {
+              tag: "WorktrunkProjectRootDiagnosticError",
+              code: "WORKTRUNK_PROJECT_ROOT_BARE",
+              message,
+              hint: projectRootInspectionHint(project.root),
+              provider: this.id,
+              projectId: project.id,
+            },
+          };
+        }),
+      );
+      if (options.signal.aborted) break;
+    }
+    const completedChecks = checks.filter(
+      (check): check is ProviderDoctorCheck => check !== undefined,
+    );
+    if (options.signal.aborted && completed < enabledProjects.length) {
+      completedChecks.push({
+        name: "worktrunk-project-root-scan",
+        status: "warn",
+        message: `Worktrunk project-root diagnostics reached their time budget after checking ${completed} of ${enabledProjects.length} project(s).`,
+      });
+    }
+    return completedChecks;
   }
 
   async #staleRegistrationChecks(
@@ -731,8 +1258,15 @@ export class WorktrunkProvider implements WorktreeProvider {
             error.code !== "EXTERNAL_COMMAND_ABORTED",
         },
       },
-      ({ signal }) =>
-        runExternalCommand(
+      ({ signal }) => {
+        const runner =
+          policy.settlement === undefined
+            ? this.#runner
+            : trackedExternalCommandRunner(
+                this.#runner ?? nodeExternalCommandRunner,
+                policy.settlement,
+              );
+        return runExternalCommand(
           {
             command: this.#command,
             args,
@@ -742,8 +1276,9 @@ export class WorktrunkProvider implements WorktreeProvider {
             signal: mergeAbortSignals(signal, policy.signal),
             maxOutputChars: 512 * 1024,
           },
-          this.#runner,
-        ),
+          runner,
+        );
+      },
     );
 
     if (result.ok) {
@@ -792,6 +1327,149 @@ export class WorktrunkProvider implements WorktreeProvider {
       });
     }
   }
+}
+
+function trackedExternalCommandRunner(
+  runner: ExternalCommandRunner,
+  settlement: WorktrunkMutationSettlement,
+): ExternalCommandRunner {
+  return (input) => {
+    const command = Promise.resolve().then(() => runner(input));
+    settlement.track(command);
+    return command;
+  };
+}
+
+function parseProjectRootTopology(result: ExternalCommandResult): ProjectRootTopology {
+  assertEmptyStderr(result);
+  if (result.exitCode !== 0) {
+    throw new Error(`git rev-parse exited with ${result.exitCode}.`);
+  }
+  const parsed = projectRootTopologySchema.parse(strictOutputLines(result.stdout));
+  return {
+    gitDirectory: canonicalPathForComparison(parsed[0]),
+    commonDirectory: canonicalPathForComparison(parsed[1]),
+    bare: parsed[2] === "true",
+  };
+}
+
+function parseCoreBareValue(result: ExternalCommandResult): CoreBareValue {
+  assertEmptyStderr(result);
+  if (result.exitCode === 1) {
+    if (result.stdout.length !== 0) {
+      throw new Error("Absent core.bare returned unexpected output.");
+    }
+    return "absent";
+  }
+  if (result.exitCode !== 0) {
+    throw new Error(`git config exited with ${result.exitCode}.`);
+  }
+  return coreBareBooleanSchema.parse(singleStrictOutputLine(result.stdout)) === "true";
+}
+
+function strictOutputLines(stdout: string): string[] {
+  const withoutTerminator = stdout.replace(/\r?\n$/, "");
+  if (withoutTerminator.includes("\n") && stdout.endsWith("\n\n")) {
+    throw new Error("Git output contained an unexpected blank line.");
+  }
+  return withoutTerminator.split(/\r?\n/);
+}
+
+function singleStrictOutputLine(stdout: string): string {
+  const lines = strictOutputLines(stdout);
+  if (lines.length !== 1 || lines[0] === undefined) {
+    throw new Error("Git output did not contain exactly one value.");
+  }
+  return lines[0];
+}
+
+function assertEmptyStderr(result: ExternalCommandResult): void {
+  if (result.stderr.length !== 0) {
+    throw new Error("Git inspection returned unexpected stderr output.");
+  }
+}
+
+function assertEmptyCoreBareCommandOutput(result: ExternalCommandResult): void {
+  if (result.exitCode !== 0 && result.exitCode !== 5) {
+    throw new Error(`git config restore exited with ${result.exitCode}.`);
+  }
+  if (result.stdout.length !== 0 || result.stderr.length !== 0) {
+    throw new Error("Git config restore returned unexpected output.");
+  }
+}
+
+function coreBareResultDiagnostics(input: {
+  operation: "provider.worktrunk.coreBare.inspect" | "provider.worktrunk.coreBare.restore";
+  args: readonly string[];
+  cwd: string;
+  result: ExternalCommandResult;
+  durationMs: number;
+}): DiagnosticDetail[] {
+  const detail: ExternalCommandDiagnosticDetail = {
+    type: "external_command",
+    provider: "worktrunk",
+    operation: input.operation,
+    command: formatCommand("git", input.args),
+    cwd: input.cwd,
+    exitCode: input.result.exitCode,
+    durationMs: input.durationMs,
+  };
+  const stdoutSnippet = input.result.stdout.slice(0, 2000);
+  if (stdoutSnippet.length > 0) detail.stdoutSnippet = stdoutSnippet;
+  const stderrSnippet = input.result.stderr.slice(0, 2000);
+  if (stderrSnippet.length > 0) detail.stderrSnippet = stderrSnippet;
+  const parsed = ExternalCommandDiagnosticDetailSchema.safeParse(detail);
+  return parsed.success ? [parsed.data] : [];
+}
+
+function sameTopology(left: ProjectRootTopology, right: ProjectRootTopology): boolean {
+  return (
+    samePath(left.gitDirectory, right.gitDirectory) &&
+    samePath(left.commonDirectory, right.commonDirectory) &&
+    left.bare === right.bare
+  );
+}
+
+function sameRepositoryIdentity(left: ProjectRootSnapshot, right: ProjectRootSnapshot): boolean {
+  return (
+    samePath(left.root, right.root) &&
+    samePath(left.gitDirectory, right.gitDirectory) &&
+    samePath(left.commonDirectory, right.commonDirectory) &&
+    left.repositoryIdentity === right.repositoryIdentity
+  );
+}
+
+function projectRootMatchesPreimage(
+  preflight: ProjectRootSnapshot & { kind: "checkout" },
+  current: ProjectRootSnapshot,
+): boolean {
+  return (
+    current.kind === "checkout" &&
+    !current.bare &&
+    current.effectiveBare !== true &&
+    current.localBare === preflight.localBare
+  );
+}
+
+async function canonicalProjectRoot(path: string): Promise<string> {
+  try {
+    return canonicalPathForComparison(await realpath(path));
+  } catch {
+    return canonicalPathForComparison(resolve(path));
+  }
+}
+
+function projectRootBareMessage(project: ProviderProjectConfig): string {
+  return `Project "${project.label}" configured root ${shellQuote(project.root)} is marked bare (core.bare=true).`;
+}
+
+function projectRootInspectionHint(root: string): string {
+  const quotedRoot = shellQuote(root);
+  return `Inspect with git -C ${quotedRoot} config --show-origin --get core.bare. If this is the intended checkout, run git -C ${quotedRoot} config --local core.bare false; otherwise correct projects.root.`;
+}
+
+function projectRootRepairHint(root: string): string {
+  return `Refresh current worktree state and ${projectRootInspectionHint(root)} Do not retry the mutation until the configured root is non-bare.`;
 }
 
 function dependencyDiagnostics(status: WorktrunkDependencyStatus): Record<string, string> {
@@ -1059,6 +1737,15 @@ function isMainWorktree(project: ProviderProjectConfig, observation: WorktreeObs
   );
 }
 
+function worktreeEnvironmentWithoutGitLocals(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (env === undefined) return undefined;
+  const sanitized = { ...env };
+  for (const key of gitLocalEnvironmentVariables) delete sanitized[key];
+  return sanitized;
+}
+
 function worktreePathEnv(
   project: ProviderProjectConfig,
   branch: string,
@@ -1142,6 +1829,32 @@ function worktreeRemovalRefusalError(input: {
     hint: input.hint,
     diagnosticDetails: [detail],
   });
+}
+
+async function nativeGitRepositoryIdentity(gitDirectory: string): Promise<string | undefined> {
+  try {
+    const before = await lstat(gitDirectory, { bigint: true });
+    if (!before.isDirectory()) {
+      return undefined;
+    }
+    const after = await lstat(gitDirectory, { bigint: true });
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.birthtimeNs !== after.birthtimeNs ||
+      before.ctimeNs !== after.ctimeNs
+    ) {
+      return undefined;
+    }
+    const digest = createHash("sha256")
+      .update(
+        [before.dev.toString(), before.ino.toString(), before.birthtimeNs.toString()].join("\0"),
+      )
+      .digest("hex");
+    return `git-repository:${digest}`;
+  } catch {
+    return undefined;
+  }
 }
 
 async function nativeGitRegistrationIdentity(worktreePath: string): Promise<string | undefined> {
