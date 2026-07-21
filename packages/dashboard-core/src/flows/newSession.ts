@@ -116,6 +116,19 @@ export type NewSessionCreateValidation =
       error: SafeError;
     };
 
+export type NewSessionProjectResolution =
+  | {
+      kind: "available";
+      project: NonNullable<ReturnType<typeof selectNewSessionProject>>;
+    }
+  | {
+      kind: "blocked";
+      error: SafeError;
+    }
+  | {
+      kind: "missing";
+    };
+
 export function createNewSessionFlow(
   snapshot: StationSnapshot,
   token: string,
@@ -210,8 +223,8 @@ export function validateNewSessionCreate(
   snapshot: StationSnapshot,
   state: NewSessionFlowState,
 ): NewSessionCreateValidation {
-  const project = selectedProject(snapshot, state);
-  if (project === undefined) {
+  const resolution = resolveNewSessionProjectAvailability(selectedProject(snapshot, state));
+  if (resolution.kind === "missing") {
     return {
       ok: false,
       error: {
@@ -222,21 +235,13 @@ export function validateNewSessionCreate(
       },
     };
   }
-
-  if (project.health.status === "unavailable") {
+  if (resolution.kind === "blocked") {
     return {
       ok: false,
-      error:
-        project.health.lastError ??
-        ({
-          tag: "ProviderUnavailableError",
-          code: "WORKTREE_PROVIDER_UNAVAILABLE",
-          message: "The worktree provider is unavailable.",
-          hint: "Run station doctor for provider diagnostics.",
-          provider: project.health.providerId,
-        } satisfies SafeError),
+      error: resolution.error,
     };
   }
+  const project = resolution.project;
 
   const harness = selectNewSessionHarnessOptions(snapshot, project).find(
     (option) => option.id === state.selectedHarness,
@@ -262,6 +267,29 @@ export function validateNewSessionCreate(
     branch: state.branch,
     harnessProvider: state.selectedHarness,
   };
+}
+
+export function resolveNewSessionProjectAvailability(
+  project: ReturnType<typeof selectNewSessionProject>,
+): NewSessionProjectResolution {
+  if (project === undefined) {
+    return { kind: "missing" };
+  }
+  if (project.health.status === "unavailable") {
+    return {
+      kind: "blocked",
+      error:
+        project.health.lastError ??
+        ({
+          tag: "ProviderUnavailableError",
+          code: "WORKTREE_PROVIDER_UNAVAILABLE",
+          message: "The worktree provider is unavailable.",
+          hint: "Run station doctor for provider diagnostics.",
+          provider: project.health.providerId,
+        } satisfies SafeError),
+    };
+  }
+  return { kind: "available", project };
 }
 
 export function generatedSessionBranch(projectId: ProjectId, token: string): string {

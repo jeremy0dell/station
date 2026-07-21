@@ -116,8 +116,11 @@ intermediate repaint.
 
 Git-backed fixtures and child processes must clear Git's repository-local environment variables;
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`
-are inherited. Remove linked worktrees and other Git-created resources through Git before deleting
-their directories.
+are inherited. Lefthook commands run through `scripts/run-without-git-locals.mjs`, which removes
+the complete variable list reported by the installed Git before launching any hook descendants.
+This hook boundary is defense in depth: independently invoked Git-backed fixtures must still clear
+their own child environments. Remove linked worktrees and other Git-created resources through Git
+before deleting their directories.
 
 `pnpm build` computes one immutable Observer build identity from the current
 Git `HEAD`, the sorted production inputs from tracked plus untracked-nonignored

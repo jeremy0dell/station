@@ -41,6 +41,9 @@ describe("first-project default branch", () => {
         useLifecycleHooks: false,
         resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
         runner: async (input) => {
+          if (input.command === "git") {
+            return result(input, "false\n");
+          }
           calls.push(input);
           await mkdir(dirname(worktreePath), { recursive: true });
           await git(repo, "worktree", "add", "-b", "feature", worktreePath, defaultBranch);

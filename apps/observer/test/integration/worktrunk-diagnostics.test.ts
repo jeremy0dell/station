@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
@@ -148,6 +148,96 @@ describe("Worktrunk diagnostics", () => {
     sqlite.close();
   });
 
+  it("scopes corrupted-root diagnostics and preserves the typed project error", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-wt-diag-bare-root-"));
+    const clock = { now: () => new Date(now) };
+    const webRoot = join(stateDir, "web");
+    const apiRoot = join(stateDir, "api");
+    await Promise.all([
+      mkdir(join(webRoot, ".git"), { recursive: true }),
+      mkdir(join(apiRoot, ".git"), { recursive: true }),
+    ]);
+    const projects = [project("web", webRoot), project("api", apiRoot)];
+    const stationConfig = config(stateDir, projects);
+    const listCalls: ExternalCommandInput[] = [];
+    const providers = new ProviderRegistry({
+      worktree: new WorktrunkProvider({
+        command: "wt",
+        useLifecycleHooks: false,
+        clock,
+        runner: async (input) => {
+          if (input.command === "git") {
+            return commandResult(
+              input,
+              input.args?.includes(webRoot) === true ? "true\n" : "false\n",
+            );
+          }
+          if (input.args?.includes("list")) {
+            listCalls.push(input);
+            return commandResult(input, "[]");
+          }
+          return commandResult(
+            input,
+            input.args?.includes("--version") ? "wt 0.64.0" : "--no-hooks",
+          );
+        },
+      }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config: stationConfig,
+      providers,
+      clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
+    });
+
+    await core.reconcile("bare-root-diagnostics");
+    expect(
+      core.getSnapshot().projects.find((candidate) => candidate.id === "web")?.health,
+    ).toMatchObject({
+      status: "unavailable",
+      lastError: {
+        code: "WORKTRUNK_PROJECT_ROOT_BARE",
+        projectId: "web",
+        hint: expect.stringContaining("config --local core.bare false"),
+      },
+    });
+
+    listCalls.length = 0;
+    const report = await runDoctor(
+      {
+        config: stationConfig,
+        core,
+        persistence,
+        persistenceHealth: persistence,
+        providers,
+        paths: { stateDir },
+        clock,
+      },
+      { projectId: "web" },
+    );
+
+    expect(report.status).toBe("degraded");
+    expect(listCalls).toEqual([]);
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "worktrunk-project-root-web",
+          status: "warn",
+          error: expect.objectContaining({
+            code: "WORKTRUNK_PROJECT_ROOT_BARE",
+            projectId: "web",
+          }),
+        }),
+      ]),
+    );
+    expect(report.checks).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worktrunk-project-root-api" })]),
+    );
+    sqlite.close();
+  });
+
   it("returns partial stale evidence before the outer provider timeout", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-wt-diag-timeout-"));
     const clock = { now: () => new Date(now) };
@@ -258,11 +348,11 @@ function config(stateDir: string, projects: ProviderProjectConfig[] = []): Stati
   };
 }
 
-function project(id: string): ProviderProjectConfig {
+function project(id: string, root = `/tmp/station/${id}`): ProviderProjectConfig {
   return {
     id,
     label: id,
-    root: `/tmp/station/${id}`,
+    root,
     defaults: {
       harness: "fake-harness",
       terminal: "fake-terminal",

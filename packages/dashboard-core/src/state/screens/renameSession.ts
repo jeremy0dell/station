@@ -76,7 +76,17 @@ function submitRename(state: TuiState): TuiTransition {
     return { state };
   }
 
-  const title = state.screen.draftTitle.value.trim();
+  const draftTitle = state.screen.draftTitle.value;
+  if (draftTitle.length === 0) {
+    return {
+      state: {
+        ...state,
+        screen: { name: "dashboard" },
+      },
+    };
+  }
+
+  const title = draftTitle.trim();
   if (title.length === 0) {
     return {
       state: {

@@ -54,11 +54,13 @@ describeReal("real Worktrunk provider smoke", () => {
       autoStartFromHooks: false,
     };
     const branch = `station-real-${Date.now()}`;
+    const git = (...args: string[]) =>
+      execFileAsync("git", args, { cwd: repo, env: environmentWithoutGitLocals() });
     await mkdir(repo, { recursive: true });
-    await execFileAsync("git", ["init", "-b", "main"], { cwd: repo });
-    await execFileAsync("git", ["config", "user.email", "station@example.invalid"], { cwd: repo });
-    await execFileAsync("git", ["config", "user.name", "station"], { cwd: repo });
-    await execFileAsync("git", ["commit", "--allow-empty", "-m", "initial"], { cwd: repo });
+    await git("init", "-b", "main");
+    await git("config", "user.email", "station@example.invalid");
+    await git("config", "user.name", "station");
+    await git("commit", "--allow-empty", "-m", "initial");
 
     const provider = new WorktrunkProvider({
       command: wt,
@@ -202,6 +204,13 @@ describeReal("real Worktrunk provider smoke", () => {
       await expect(git("show-ref", "--verify", "refs/heads/duplicate")).resolves.toMatchObject({
         stdout: expect.stringContaining("refs/heads/duplicate"),
       });
+      await expect(git("config", "--local", "--get", "core.bare")).resolves.toMatchObject({
+        stdout: "false\n",
+      });
+      await expect(git("rev-parse", "--is-bare-repository")).resolves.toMatchObject({
+        stdout: "false\n",
+      });
+      await expect(git("status", "--porcelain=v1")).resolves.toMatchObject({ stdout: "" });
     } finally {
       await git("worktree", "remove", "--force", linked).catch(() => undefined);
       await rm(root, { recursive: true, force: true });

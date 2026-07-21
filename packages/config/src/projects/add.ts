@@ -1,3 +1,4 @@
+import { gitCheckoutBareRepairHint, isGitCheckoutConfiguredBare } from "@station/runtime";
 import { loadConfig, loadConfigFromToml } from "../load/index.js";
 import { projectConfigSafeError } from "./errors.js";
 import { detectGitDefaultBranch, findGitRoot, resolveExistingDirectory } from "./git.js";
@@ -31,6 +32,13 @@ export async function addProjectToConfig(
   }
 
   const root = gitRoot ?? selectedPath;
+  if (await isGitCheckoutConfiguredBare(root)) {
+    throw projectConfigSafeError({
+      code: "PROJECT_ROOT_BARE",
+      message: "Project checkout is configured as a bare repository.",
+      hint: gitCheckoutBareRepairHint(root),
+    });
+  }
   const existingProject = loaded.loaded.projects.find((project) => samePath(project.root, root));
   if (existingProject !== undefined) {
     return {
