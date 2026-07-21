@@ -1,15 +1,21 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import {
   addProjectToConfig,
   ConfigError,
+  doctorProject,
   loadConfig,
   removeProjectFromConfig,
   setProjectDefaultHarnessInConfig,
   setTuiWidgetsInConfig,
 } from "@station/config";
+import { environmentWithoutGitLocals } from "@station/runtime";
 import { describe, expect, it } from "vitest";
+
+const execFileAsync = promisify(execFile);
 
 async function makeTempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "station-project-config-"));
@@ -19,6 +25,17 @@ async function makeRepo(root: string, name: string): Promise<string> {
   const repo = join(root, name);
   await mkdir(join(repo, ".git"), { recursive: true });
   return repo;
+}
+
+async function makeGitRepo(root: string, name: string): Promise<string> {
+  const repo = join(root, name);
+  await mkdir(repo, { recursive: true });
+  await git(repo, ["init", "--quiet"]);
+  return repo;
+}
+
+async function git(root: string, args: string[]): Promise<void> {
+  await execFileAsync("git", args, { cwd: root, env: environmentWithoutGitLocals() });
 }
 
 async function writeBaseConfig(root: string, projectsToml = "projects = []"): Promise<string> {
@@ -95,6 +112,51 @@ describe("project config mutation", () => {
     expect(result.status).toBe("unchanged");
     const source = await readFile(configPath, "utf8");
     expect(source.match(/\[\[projects\]\]/g)).toHaveLength(1);
+  });
+
+  it("rejects a first add when the checkout is configured bare without changing TOML", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+    const repo = await makeGitRepo(tempDir, "bare-first-add");
+    await git(repo, ["config", "--local", "core.bare", "true"]);
+    const before = await readFile(configPath, "utf8");
+
+    await expect(
+      addProjectToConfig({ path: repo, configPath, homeDir: tempDir }),
+    ).rejects.toMatchObject({
+      tag: "ProjectConfigError",
+      code: "PROJECT_ROOT_BARE",
+      hint: expect.stringContaining("config --local core.bare false"),
+    });
+    await expect(readFile(configPath, "utf8")).resolves.toBe(before);
+  });
+
+  it("rejects a re-add when the checkout becomes bare and doctor clears after repair", async () => {
+    const tempDir = await makeTempDir();
+    const configPath = await writeBaseConfig(tempDir);
+    const repo = await makeGitRepo(tempDir, "bare-readd");
+    await addProjectToConfig({ path: repo, configPath, homeDir: tempDir });
+    await git(repo, ["config", "--local", "core.bare", "true"]);
+    const before = await readFile(configPath, "utf8");
+
+    await expect(
+      addProjectToConfig({ path: repo, configPath, homeDir: tempDir }),
+    ).rejects.toMatchObject({ code: "PROJECT_ROOT_BARE" });
+    await expect(readFile(configPath, "utf8")).resolves.toBe(before);
+
+    const loaded = await loadConfig({ configPath, homeDir: tempDir });
+    const project = loaded.projects[0];
+    if (project === undefined) throw new Error("project fixture missing");
+    await expect(doctorProject(project)).resolves.toMatchObject({
+      status: "warn",
+      messages: [
+        "Project checkout is configured as a bare repository.",
+        expect.stringContaining("config --show-origin --get core.bare"),
+      ],
+    });
+
+    await git(repo, ["config", "--local", "core.bare", "false"]);
+    await expect(doctorProject(project)).resolves.toMatchObject({ status: "ok", messages: [] });
   });
 
   it("suffixes generated IDs when a different root uses the same basename", async () => {

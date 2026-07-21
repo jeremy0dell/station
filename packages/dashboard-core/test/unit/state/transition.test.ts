@@ -755,6 +755,44 @@ describe("TUI screen transitions", () => {
     });
   });
 
+  it("surfaces the unavailable project's exact error on New Session submit", () => {
+    const snapshot = createDashboardSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "web");
+    if (project === undefined) throw new Error("project fixture missing");
+    const error = {
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_PROJECT_ROOT_BARE",
+      message: "Project checkout is configured as a bare repository.",
+      hint: `Inspect with git -C '${project.root}' config --show-origin --get core.bare. If this is the intended checkout, run git -C '${project.root}' config --local core.bare false; otherwise correct projects.root.`,
+      provider: "worktrunk",
+      projectId: project.id,
+    } as const;
+    const unavailable = {
+      ...snapshot,
+      projects: snapshot.projects.map((candidate) =>
+        candidate.id === project.id
+          ? {
+              ...candidate,
+              health: { ...candidate.health, status: "unavailable" as const, lastError: error },
+            }
+          : candidate,
+      ),
+    };
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: unavailable }), {
+      input: "N",
+    });
+
+    const submitted = handleTuiKey(opened.state, { input: "\r", return: true });
+
+    expect(submitted.operations).toBeUndefined();
+    expect(submitted.state.localRows.pendingCreate).toEqual([]);
+    expect(submitted.state.toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: error.message,
+      hint: error.hint,
+    });
+  });
+
   it("seeds and moves the new-session project cursor, committing the choice on enter", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const review = handleTuiKey(base, { input: "N" }).state;

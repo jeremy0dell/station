@@ -245,6 +245,18 @@ Nested project tables:
 | `[projects.local_config]` | `enabled` | bool | Required inside the table; only `true` reads the project-local file. |
 | `[projects.local_config]` | `path` | string | Required inside the table; `~/` expands against `$HOME`, anything else resolves against `project.root`. |
 
+`stn project add` refuses both a first add and an idempotent re-add when the
+checkout-style `root` has local `core.bare=true`; the failed mutation leaves the
+TOML unchanged. Existing config remains loadable so `stn project doctor <id>`
+and `stn doctor --project <id>` can report the damaged checkout. Station never
+rewrites this Git setting automatically. Inspect and repair an intended checkout
+manually, or correct `projects.root` when it points at the wrong repository:
+
+```bash
+git -C '<project-root>' config --show-origin --get core.bare
+git -C '<project-root>' config --local core.bare false
+```
+
 ### `[workspace]` — native Station UI behavior (optional, best-effort)
 
 Read **only by the native Station TUI** (the observer and CLI ignore it). A bad value

@@ -235,7 +235,9 @@ export async function buildWithIdentity(root, runBuildTask) {
 }
 
 async function build() {
-  await buildWithIdentity(repoRoot, () => run("pnpm", ["exec", "turbo", "run", "build"], repoRoot));
+  await buildWithIdentity(repoRoot, () =>
+    runBuildChild("pnpm", ["exec", "turbo", "run", "build"], repoRoot),
+  );
 }
 
 async function requireCurrentBuildIdentity(identity) {
@@ -246,10 +248,10 @@ async function requireCurrentBuildIdentity(identity) {
   }
 }
 
-async function run(command, args, cwd) {
+export async function runBuildChild(command, args, cwd, env = process.env) {
   const child = spawn(command, args, {
     cwd,
-    env: process.env,
+    env: environmentWithoutGitLocals(env),
     stdio: "inherit",
   });
   const exitCode = await new Promise((resolveExit, reject) => {
@@ -276,8 +278,8 @@ async function runGit(root, args) {
   return stdout;
 }
 
-function environmentWithoutGitLocals() {
-  const env = { ...process.env };
+function environmentWithoutGitLocals(source = process.env) {
+  const env = { ...source };
   for (const key of gitLocalEnvironmentVariables) delete env[key];
   return env;
 }
