@@ -2,8 +2,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
+import { createObserverClient } from "../../packages/protocol/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
 
 const shellIntegrationMarker = "# Worktrunk shell integration";
@@ -51,6 +51,41 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("keeps guided Worktrunk install and both doctor surfaces on one expectation", async () => {
+    const fixture = await createFixture({ harness: "codex" });
+    try {
+      const setup = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        // Decline launcher linking, accept Worktrunk hooks, decline Codex hooks,
+        // write config, then decline shell integration and popup binding.
+        answers: ["n", "y", "n", "y", "n", "n"],
+      });
+      expect(setup.exitCode).toBe(0);
+
+      const standalone = await runStation(
+        ["--config", fixture.configPath, "hooks", "doctor", "worktrunk"],
+        { cwd: fixture.repo, env: fixture.env, answers: [] },
+      );
+      expect(standalone.exitCode).toBe(0);
+      expect(JSON.parse(standalone.stdout)).toMatchObject({ status: "ok", installed: true });
+
+      const fullDoctor = await runStation(["--config", fixture.configPath, "doctor"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: [],
+      });
+      const report = JSON.parse(fullDoctor.stdout);
+      expect(report.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "worktrunk-hooks", status: "ok" }),
+        ]),
+      );
     } finally {
       await fixture.cleanup();
     }
@@ -474,7 +509,7 @@ function runStation(
       }
     });
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("close", (exitCode) => {
+    child.on("close", (exitCode: number | null) => {
       clearTimeout(timer);
       resolve({
         exitCode,

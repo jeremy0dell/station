@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput } from "@station/runtime";
 import { FakeHarnessProvider, FakeTerminalProvider } from "@station/testing";
@@ -254,6 +254,7 @@ function config(stateDir: string, projects: ProviderProjectConfig[] = []): Stati
       },
     },
     projects,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
   };
 }
 

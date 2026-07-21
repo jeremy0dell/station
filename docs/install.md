@@ -383,6 +383,7 @@ pnpm smoke:release -- --keep-temp
 During development, either use the repo-local command:
 
 ```bash
+pnpm stn hooks doctor worktrunk
 pnpm stn doctor
 pnpm stn reconcile --reason manual
 pnpm stn snapshot --json
@@ -407,4 +408,8 @@ mkdir -p ~/.config/station
 cp examples/local-real-config.toml ~/.config/station/config.toml
 ```
 
-Run `stn doctor` after editing the config. Doctor should report config diagnostics, Worktrunk availability and stale registrations, effective Worktrunk automation mode, hook setup status when hooks are expected, SQLite health, provider health, local-state retention, and debug-bundle availability.
+Run `stn hooks doctor worktrunk` and `stn doctor` after editing the config.
+Both surfaces validate the same canonical Worktrunk hook commands; full doctor
+additionally reports config diagnostics, Worktrunk availability and stale
+registrations, effective automation mode, SQLite health, provider health,
+local-state retention, and debug-bundle availability.

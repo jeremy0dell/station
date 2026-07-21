@@ -51,17 +51,20 @@ import { createStationHostController, StationTerminalProvider } from "@station/t
 import { TmuxProvider } from "@station/tmux";
 import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
 import { selfExecArgv } from "./selfExec.js";
+import { createWorktrunkHookExpectation } from "./worktrunkHookExpectation.js";
 
 export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
   piExtensionPath?: string | undefined;
+  providerHookIngressLauncher?: string | undefined;
 };
 
 /**
  * COMPOSITION ROOT
  *
  * Constructs concrete provider adapters, including the packaged Pi extension
- * path supplied by compiled CLI composition, and assigns their Observer roles.
+ * path and canonical provider-hook launcher supplied by compiled CLI composition,
+ * and assigns their Observer roles.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -70,7 +73,7 @@ export function createProviderRegistry(
   config: StationConfig,
   options: CreateProviderRegistryOptions = {},
 ): ProviderRegistry {
-  const worktree = createWorktreeProvider(config);
+  const worktree = createWorktreeProvider(config, options);
   const terminal = createTerminalProvider(config);
   const harnesses = createHarnessProviders(config, options);
   const repositories = createRepositoryProviders(config);
@@ -121,7 +124,10 @@ function resolveStationHostCommand() {
   ]);
 }
 
-function createWorktreeProvider(config: StationConfig): WorktreeProvider {
+function createWorktreeProvider(
+  config: StationConfig,
+  registryOptions: CreateProviderRegistryOptions,
+): WorktreeProvider {
   if (config.defaults.worktreeProvider === "worktrunk") {
     const options: ConstructorParameters<typeof WorktrunkProvider>[0] = {};
     if (config.worktree?.worktrunk?.command !== undefined) {
@@ -133,6 +139,10 @@ function createWorktreeProvider(config: StationConfig): WorktreeProvider {
     if (config.worktree?.worktrunk?.useLifecycleHooks !== undefined) {
       options.useLifecycleHooks = config.worktree.worktrunk.useLifecycleHooks;
     }
+    options.hookExpectation = createWorktrunkHookExpectation(config, {
+      stationConfigPath: registryOptions.configPath,
+      ingressLauncher: registryOptions.providerHookIngressLauncher,
+    });
     return new WorktrunkProvider(options);
   }
 

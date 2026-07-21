@@ -241,7 +241,14 @@ station --config /path/to/config.toml worktrunk hooks doctor
 station --config /path/to/config.toml worktrunk hooks uninstall --yes
 ```
 
-Generated hook bodies call `stn-ingress --socket <observer.sock> --state-dir <state> --spool-dir <state>/spool/hooks --config /path/to/config.toml worktrunk <event>` by default. They do not contain lifecycle logic. The installer backs up the Worktrunk config, preserves unrelated hook commands, and removes only generated STATION entries on uninstall.
+Generated hook bodies call the resolved absolute `stn-ingress` launcher with
+`--socket <observer.sock> --state-dir <state> --spool-dir <state>/spool/hooks
+--config /path/to/config.toml worktrunk <event>`. They do not contain lifecycle
+logic. The installer backs up the Worktrunk config, preserves unrelated hook
+commands, repairs exact legacy bare-launcher entries to the canonical absolute
+form, and removes only generated STATION entries on uninstall. Standalone and
+full doctor validate that same composed expectation, so normal verification
+never requires repeating `--hook-bin`.
 
 Generic aliases are also available for the Worktrunk hook setup surface:
 

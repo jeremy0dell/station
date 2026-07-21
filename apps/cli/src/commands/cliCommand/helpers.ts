@@ -4,6 +4,7 @@ import type { CliCommandRunContext } from "./types.js";
 export type LoadedCommandOptions = {
   config?: StationConfig;
   configPath?: string;
+  providerHookIngressLauncher?: string;
 };
 
 export function loadedCommandOptions(context: CliCommandRunContext): LoadedCommandOptions {
@@ -13,6 +14,9 @@ export function loadedCommandOptions(context: CliCommandRunContext): LoadedComma
   }
   if (context.resolvedConfigPath !== undefined) {
     options.configPath = context.resolvedConfigPath;
+  }
+  if (context.options.providerHookIngressLauncher !== undefined) {
+    options.providerHookIngressLauncher = context.options.providerHookIngressLauncher;
   }
   return options;
 }

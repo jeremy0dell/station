@@ -49,14 +49,14 @@ import {
   type WorktrunkHookPlan,
   type WorktrunkHookPlanOptions,
 } from "@station/worktrunk";
-import type { CliEnv } from "../env.js";
-import { buildCommonHookOptions, createProviderHooksRunner } from "./providerHooks.js";
+import { createWorktrunkHookExpectation } from "../worktrunkHookExpectation.js";
+import {
+  buildCommonHookOptions,
+  createProviderHooksRunner,
+  type ProviderHooksCommandOptions,
+} from "./providerHooks.js";
 
-export type ProviderHooksCommandOptions = {
-  config?: StationConfig;
-  configPath?: string;
-  env?: CliEnv;
-};
+export type { ProviderHooksCommandOptions } from "./providerHooks.js";
 
 export type ClaudeHooksCommandResult =
   | ClaudeHookPlan
@@ -242,15 +242,25 @@ export function runWorktrunkHooksCommand(
       uninstall: uninstallWorktrunkHooks,
       doctor: doctorWorktrunkHooks,
       buildOptions: (flags, context) => {
-        const options: WorktrunkHookPlanOptions = buildCommonHookOptions(context);
+        if (context.config === undefined) {
+          throw new Error("Worktrunk hook commands require loaded Station config.");
+        }
+        const expectation = createWorktrunkHookExpectation(context.config, {
+          stationConfigPath: context.configPath,
+          ingressLauncher: context.providerHookIngressLauncher,
+        });
+        if (flags.hookBin !== undefined) {
+          expectation.hookBin = flags.hookBin;
+        }
+        const options: WorktrunkHookPlanOptions = { expectation };
         // Fall back to the station-config worktrunk config_path when --worktrunk-config is absent.
         const worktrunkConfigPath =
-          flags.providerConfig ?? context.config?.worktree?.worktrunk?.configPath;
+          flags.providerConfig ?? context.config.worktree?.worktrunk?.configPath;
         if (worktrunkConfigPath !== undefined) {
           options.worktrunkConfigPath = worktrunkConfigPath;
         }
-        if (flags.hookBin !== undefined) {
-          options.hookBin = flags.hookBin;
+        if (context.env !== undefined) {
+          options.env = context.env;
         }
         return options;
       },

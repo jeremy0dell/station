@@ -4,13 +4,14 @@ import { type CreateProviderRegistryOptions, createProviderRegistry } from "./ob
 
 export type RunCliObserverMainOptions = {
   preparePiExtension?: (stateDir: string) => string | Promise<string>;
+  providerHookIngressLauncher?: string;
 };
 
 /**
  * ADAPTER
  *
- * Translates raw process arguments and optional compiled Pi asset preparation
- * into CLI-owned Observer provider composition.
+ * Translates raw process arguments plus compiled asset and provider-hook launcher
+ * inputs into CLI-owned Observer provider composition.
  */
 export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),
@@ -26,6 +27,9 @@ export async function runCliObserverMain(
         registryOptions.piExtensionPath = await options.preparePiExtension(
           providerOptions.stateDir,
         );
+      }
+      if (options.providerHookIngressLauncher !== undefined) {
+        registryOptions.providerHookIngressLauncher = options.providerHookIngressLauncher;
       }
       return createProviderRegistry(config, registryOptions);
     },

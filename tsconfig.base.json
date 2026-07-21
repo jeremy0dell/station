@@ -15,6 +15,7 @@
     "baseUrl": ".",
     "paths": {
       "@station/cli": ["apps/cli/src/index.ts"],
+      "@station/cli/ingress": ["apps/cli/src/ingress/index.ts"],
       "@station/cli/internal": ["apps/cli/src/internal.ts"],
       "@station/observer": ["apps/observer/src/index.ts"],
       "@station/observer/internal": ["apps/observer/src/internal.ts"],

@@ -530,6 +530,7 @@ repository, then run:
 ```sh
 stn --version
 stn setup check --json
+stn hooks doctor worktrunk
 stn doctor
 stn tui
 ```
@@ -575,7 +576,9 @@ manually verify the actual user experience, not a dashboard override:
    and connects to a healthy Observer.
 4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 5. Run `stn setup` from `HOME` or Desktop. Confirm it creates a zero-project
-   config without adopting that directory. In the open TUI, press `Enter` on
+   config without adopting that directory, then verify both
+   `stn hooks doctor worktrunk` and the `worktrunk-hooks` row in full
+   `stn doctor` are `ok` without `--hook-bin`. In the open TUI, press `Enter` on
    **Add your first project**, choose a Git repository, and confirm the TUI
    reconnects and shows it after activation on the same Observer socket.
 6. Accept the compiled install's optional popup binding and confirm
