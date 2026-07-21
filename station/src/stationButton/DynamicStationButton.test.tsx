@@ -1,7 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { useState } from "react";
 import { DynamicStationButton } from "./DynamicStationButton.js";
-import { ANIM_MS, STATION_ICON, type IslandDisplayInput } from "./layout.js";
+import {
+  ANIM_MS,
+  FRAME_MS,
+  type IslandCelebration,
+  type IslandDisplayInput,
+  islandDisplay,
+  STATION_ICON,
+  targetDims,
+} from "./layout.js";
 import type { StationButtonStatus } from "./status.js";
 
 // OpenTUI's reconciler commits async layout updates outside React's act(),
@@ -33,6 +42,16 @@ async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<str
   } finally {
     setup.renderer.destroy();
   }
+}
+
+function renderedButtonWidth(frame: string): number {
+  const top = frame.split("\n")[0] ?? "";
+  const left = top.indexOf("╭");
+  const right = top.indexOf("╮", left + 1);
+  if (left < 0 || right < 0) {
+    throw new Error("Station button border was not rendered.");
+  }
+  return right - left + 1;
 }
 
 describe("DynamicStationButton", () => {
@@ -103,6 +122,60 @@ describe("DynamicStationButton", () => {
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("✓ #42 merged");
+  });
+
+  it("tweens the merged notification in and out", async () => {
+    let updateCelebration: ((value: IslandCelebration | undefined) => void) | undefined;
+    function Harness() {
+      const [celebration, setCelebration] = useState<IslandCelebration>();
+      updateCelebration = setCelebration;
+      return <DynamicStationButton input={input({ idleCount: 3 }, { celebration })} />;
+    }
+
+    const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
+    const notifiedWidth = targetDims(
+      islandDisplay(input({ idleCount: 3 }, { celebration: { prNumber: 42 } }), false),
+    ).width;
+    const setup = await testRender(<Harness />, SURFACE);
+    try {
+      await setup.flush();
+      const setCelebration = updateCelebration;
+      if (setCelebration === undefined) {
+        throw new Error("Celebration harness did not mount.");
+      }
+      const waitForWidth = async (predicate: (width: number) => boolean): Promise<number> => {
+        const deadline = Date.now() + ANIM_MS * 4;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
+          await setup.renderOnce();
+          const width = renderedButtonWidth(setup.captureCharFrame());
+          if (predicate(width)) {
+            return width;
+          }
+        }
+        throw new Error("Station button did not reach the expected animated width.");
+      };
+
+      setCelebration({ prNumber: 42 });
+      const openingWidth = await waitForWidth(
+        (width) => width > restingWidth && width < notifiedWidth,
+      );
+      expect(openingWidth).toBeGreaterThan(restingWidth);
+      await waitForWidth((width) => width === notifiedWidth);
+      expect(setup.captureCharFrame()).toContain("✓ #42 merged");
+
+      setCelebration(undefined);
+      const closingWidth = await waitForWidth(
+        (width) => width > restingWidth && width < notifiedWidth,
+      );
+      expect(closingWidth).toBeLessThan(notifiedWidth);
+      await waitForWidth((width) => width === restingWidth);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).not.toContain("#42");
+    } finally {
+      setup.renderer.destroy();
+    }
   });
 
   it("attention wins over the celebration", async () => {
