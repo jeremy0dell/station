@@ -199,6 +199,7 @@ export type ProviderDoctorCheck = {
 
 export type ProviderDoctorContext = {
   stationConfigPath?: string;
+  providerHookIngressLauncher?: string;
   projects?: readonly ProviderProjectConfig[];
   signal?: AbortSignal;
   timeoutMs?: number;

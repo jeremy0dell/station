@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { CommandRecordSchema } from "./commands.js";
 import { ErrorEnvelopeSchema, SafeErrorSchema } from "./errors.js";
@@ -168,6 +169,9 @@ export const DoctorOptionsSchema = z
   .object({
     projectId: ProjectIdSchema.optional(),
     deep: z.boolean().optional(),
+    providerHookIngressLauncher: nonEmptyStringSchema
+      .refine(isAbsolute, "Provider hook ingress launcher must be an absolute path.")
+      .optional(),
   })
   .strict()
   .optional();

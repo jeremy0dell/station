@@ -368,7 +368,7 @@ and runner self-interruption against local fake release assets. Every child and
 the overall runner have deadlines. It does not contact GitHub or modify the real
 home directory.
 
-Guided setup writes a zero-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
+Guided setup writes a zero-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. Hook setup validates the active `stn` runtime and its exact `stn-ingress` sibling; an unrelated launcher elsewhere on `PATH` cannot satisfy that pair. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 
 Useful smoke options:
 

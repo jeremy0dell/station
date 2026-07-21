@@ -37,6 +37,9 @@ export function collectForCommand(
   if (deps.now !== undefined) collectOptions.now = deps.now;
   if (deps.platform !== undefined) collectOptions.platform = deps.platform;
   if (deps.compiled !== undefined) collectOptions.compiled = deps.compiled;
+  if (deps.providerHookIngressLauncher !== undefined) {
+    collectOptions.providerHookIngressLauncher = deps.providerHookIngressLauncher;
+  }
   if (deps.tmuxPopupOwnerRoot !== undefined) {
     collectOptions.tmuxPopupOwnerRoot = deps.tmuxPopupOwnerRoot;
   }

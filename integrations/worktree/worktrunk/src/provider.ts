@@ -79,8 +79,9 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
- * Hook diagnostics validate the canonical expectation supplied by composition. Checkout roots are validated
- * before Worktrunk runs, and removal revalidates native Git identity, path, and branch before mutation.
+ * Hook diagnostics use the requester launcher when supplied and retain the Observer composition expectation
+ * as a fallback. Checkout roots are validated before Worktrunk runs, and removal revalidates native Git
+ * identity, path, and branch before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -158,7 +159,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     return [automationCheck, ...staleChecks, hookCheck];
   }
 
-  async #hookCheck(_context: ProviderDoctorContext): Promise<ProviderDoctorCheck> {
+  async #hookCheck(context: ProviderDoctorContext): Promise<ProviderDoctorCheck> {
     if (this.#useLifecycleHooks === false) {
       return {
         name: "worktrunk-hooks",
@@ -184,8 +185,12 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
 
     try {
+      const expectation: WorktrunkHookExpectation = { ...this.#hookExpectation };
+      if (context.providerHookIngressLauncher !== undefined) {
+        expectation.hookBin = context.providerHookIngressLauncher;
+      }
       const hookOptions: Parameters<typeof doctorWorktrunkHooks>[0] = {
-        expectation: this.#hookExpectation,
+        expectation,
         enabled: true,
       };
       if (this.#configPath !== undefined) {

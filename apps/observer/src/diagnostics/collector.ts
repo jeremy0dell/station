@@ -453,6 +453,9 @@ async function collectProviderDoctorChecks(
   if (deps.configPath !== undefined) {
     context.stationConfigPath = deps.configPath;
   }
+  if (options?.providerHookIngressLauncher !== undefined) {
+    context.providerHookIngressLauncher = options.providerHookIngressLauncher;
+  }
   const providers = providerEntries(deps.providers);
 
   for (const { provider } of providers) {

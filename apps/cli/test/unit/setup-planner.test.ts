@@ -329,6 +329,29 @@ describe("setup planner", () => {
     ]);
   });
 
+  it("omits hook installation when the active runtime ingress sibling is missing", () => {
+    const base = facts();
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...base.launchers,
+          ingress: {
+            status: "missing",
+            source: "missing",
+            command: "/runtime/bin/stn-ingress",
+            checkoutPath: "/tmp/station/bin/stn-ingress",
+            message: "The active runtime ingress launcher is missing.",
+          },
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      status: "warning",
+    });
+    expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
+  });
+
   it("plans the exact popup command and preserved key for a reachable tmux server", () => {
     const plan = buildSetupPlan(
       facts({

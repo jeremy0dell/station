@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runCli } from "@station/cli";
 import { observerRuntimeFreshnessCheck, rendererRuntimeCheck } from "@station/cli/internal";
-import type { DiagnosticEvidenceIndex, DiagnosticSnapshot, DoctorReport } from "@station/contracts";
+import type {
+  DiagnosticEvidenceIndex,
+  DiagnosticSnapshot,
+  DoctorOptions,
+  DoctorReport,
+} from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
@@ -15,6 +20,8 @@ describe("CLI diagnostic commands", () => {
   it("routes doctor through the observer diagnostics API", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const providerHookIngressLauncher = "/checkout/requester/bin/stn-ingress";
+    let requestedDoctorOptions: DoctorOptions;
     const deps = {
       buildVersion: observerBuildVersion,
       clientFactory: () =>
@@ -26,13 +33,19 @@ describe("CLI diagnostic commands", () => {
             startedAt: now,
             version: observerBuildVersion,
           }),
-          runDoctor: async () => doctorReport(fixture.stateDir),
+          runDoctor: async (options?: DoctorOptions) => {
+            requestedDoctorOptions = options;
+            return doctorReport(fixture.stateDir);
+          },
         }) as never,
       sleep: async () => undefined,
     };
 
     await expect(
-      runCli(["--config", configPath, "doctor"], { observerDeps: deps }),
+      runCli(["--config", configPath, "doctor"], {
+        observerDeps: deps,
+        providerHookIngressLauncher,
+      }),
     ).resolves.toMatchObject({
       code: 0,
       output: {
@@ -43,6 +56,7 @@ describe("CLI diagnostic commands", () => {
         },
       },
     });
+    expect(requestedDoctorOptions).toEqual({ providerHookIngressLauncher });
   });
 
   it("reports stale local observer runtime evidence without restarting anything", async () => {

@@ -181,9 +181,9 @@ describe("setup guided feedback e2e", () => {
         cwd: fixture.repo,
         env: fixture.env,
         // Prompt order: install codex (y), decline cursor/opencode/pi/claude,
-        // decline Worktrunk-hooks + codex-hooks, accept Write config (y),
-        // decline shell-integration + popup.
-        answers: ["y", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
+        // decline linking the fixture's non-runtime launchers, Worktrunk hooks,
+        // and Codex hooks; accept Write config; decline shell integration + popup.
+        answers: ["y", "n", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -207,9 +207,9 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline Worktrunk and Codex hooks, write config, decline shell integration,
-        // then accept the popup binding.
-        answers: ["n", "n", "y", "n", "y"],
+        // Decline linking the fixture's non-runtime launchers, Worktrunk and Codex
+        // hooks; write config; decline shell integration; accept the popup binding.
+        answers: ["n", "n", "n", "y", "n", "y"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -217,7 +217,9 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain(
         "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
       );
-      expect(result.stdout).toContain("Direct fallback: stn popup");
+      expect(result.stdout).toContain(
+        `Direct fallback: ${join(process.cwd(), "bin", "stn")} popup`,
+      );
 
       const tmuxConfigPath = join(fixture.home, ".tmux.conf");
       const tmuxConfig = await readFile(tmuxConfigPath, "utf8");

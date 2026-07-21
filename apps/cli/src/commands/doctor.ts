@@ -17,10 +17,12 @@ import {
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
 import { isStationUiInstalled, stationUiInstallHint } from "../stationWorkspace.js";
+import { resolveDefaultIngressLauncher } from "../worktrunkHookExpectation.js";
 
 export type DoctorCommandOptions = {
   config?: StationConfig;
   configPath?: string;
+  providerHookIngressLauncher?: string;
   timeoutMs?: number;
 };
 
@@ -29,7 +31,12 @@ export async function runDoctorCommand(
   options: DoctorCommandOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<DoctorReport> {
-  const doctorOptions = parseDoctorOptions(args);
+  const parsedDoctorOptions = parseDoctorOptions(args);
+  const doctorOptions = DoctorOptionsSchema.parse({
+    ...(parsedDoctorOptions ?? {}),
+    providerHookIngressLauncher:
+      options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher(),
+  });
   const timeoutMs = options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);
   const observerOptions: Parameters<typeof startObserver>[0] = { paths, timeoutMs };

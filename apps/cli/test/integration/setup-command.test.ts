@@ -93,6 +93,43 @@ describe("CLI setup command", () => {
     expect(plan.actions.some((action) => action.id === "install-bun")).toBe(false);
   });
 
+  it("threads the process-owned launcher into setup instead of accepting a split PATH", async () => {
+    const root = await tempRoot(tempRoots);
+    const runtimeBin = join(root, "runtime");
+    const shadowBin = join(root, "shadow");
+    const providerHookIngressLauncher = join(runtimeBin, "stn-ingress");
+    const result = await runCli(["setup", "check", "--json"], {
+      providerHookIngressLauncher,
+      setupDeps: {
+        compiled: true,
+        cwd: root,
+        homeDir: join(root, "home"),
+        env: { PATH: shadowBin },
+        runner: fakeRunner([], {}),
+        access: fakeAccess([
+          join(runtimeBin, "stn"),
+          join(shadowBin, "stn"),
+          join(shadowBin, "stn-ingress"),
+          join(shadowBin, "stn-tmux-popup"),
+        ]),
+        fs: readOnlyFs({}),
+      },
+    });
+    const plan = result.output as {
+      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+      actions: Array<{ id: string }>;
+    };
+
+    expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      status: "warning",
+      details: {
+        station: join(runtimeBin, "stn"),
+        ingress: providerHookIngressLauncher,
+      },
+    });
+    expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
+  });
+
   it("generates the compiled binding from installed ownership while preserving its key", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

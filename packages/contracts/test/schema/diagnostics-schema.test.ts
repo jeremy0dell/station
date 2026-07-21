@@ -4,6 +4,7 @@ import {
   DiagnosticDetailSchema,
   DiagnosticEvidenceIndexSchema,
   DiagnosticSnapshotSchema,
+  DoctorOptionsSchema,
   DoctorReportSchema,
   LogRecordSchema,
   RedactionReportSchema,
@@ -135,6 +136,23 @@ describe("diagnostics schemas", () => {
       await loadJson("diagnostic-evidence-index.json"),
       "diagnostic evidence index",
     );
+  });
+
+  it("parses requester-scoped provider hook launchers strictly", () => {
+    expect(
+      DoctorOptionsSchema.parse({
+        providerHookIngressLauncher: "/checkout/station/bin/stn-ingress",
+      }),
+    ).toEqual({ providerHookIngressLauncher: "/checkout/station/bin/stn-ingress" });
+    expect(
+      DoctorOptionsSchema.safeParse({ providerHookIngressLauncher: "stn-ingress" }).success,
+    ).toBe(false);
+    expect(
+      DoctorOptionsSchema.safeParse({
+        providerHookIngressLauncher: "/checkout/station/bin/stn-ingress",
+        providerPrivateOption: true,
+      }).success,
+    ).toBe(false);
   });
 
   it("parses provider-neutral worktree removal refusal evidence strictly", () => {
