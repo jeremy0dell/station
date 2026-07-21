@@ -10,7 +10,8 @@ import {
   uninstallWorktrunkHooks,
   WorktrunkProvider,
 } from "@station/worktrunk";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { CleanupStack } from "../support/real-station/process";
 import { writeConfigToml } from "../support/temp-projects";
 
 const execFileAsync = promisify(execFile);
@@ -18,19 +19,32 @@ const runReal = process.env.STATION_REAL_WORKTRUNK === "1";
 const describeReal = runReal ? describe : describe.skip;
 
 describeReal("real Worktrunk provider smoke", () => {
+  let cleanup: CleanupStack | undefined;
+
+  afterEach(async () => {
+    const pendingCleanup = cleanup;
+    cleanup = undefined;
+    await pendingCleanup?.run();
+  });
+
   it("lists, creates, removes, and installs hooks against an isolated config", async () => {
     const wt = process.env.STATION_WORKTRUNK_BIN ?? "wt";
     await execFileAsync(wt, ["--version"]);
 
     const root = await mkdtemp(join(tmpdir(), "station-real-wt-"));
+    cleanup = new CleanupStack();
+    // LIFO teardown keeps the isolated root available for Observer and Worktrunk cleanup.
+    cleanup.defer(() => rm(root, { recursive: true, force: true }));
     const repo = join(root, "repo");
     const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+    const stationBin = join(process.cwd(), "bin", "stn");
     const stationIngressBin = join(process.cwd(), "bin", "stn-ingress");
+    const observerSocketPath = join(root, "run", "observer.sock");
     const stationConfigPath = await writeConfigToml(root, {
       schemaVersion: 1,
       observer: {
         stateDir: join(root, "station-state"),
-        socketPath: join(root, "run", "observer.sock"),
+        socketPath: observerSocketPath,
         autoStartFromHooks: false,
       },
       defaults: {
@@ -40,6 +54,14 @@ describeReal("real Worktrunk provider smoke", () => {
         layout: "agent-shell",
       },
       projects: [],
+    });
+    cleanup.defer(async () => {
+      const observerStarted = await access(observerSocketPath).then(
+        () => true,
+        () => false,
+      );
+      if (!observerStarted) return;
+      await execFileAsync(stationBin, ["--config", stationConfigPath, "observer", "stop"]);
     });
     const branch = `station-real-${Date.now()}`;
     const git = (...args: string[]) =>
@@ -70,51 +92,49 @@ describeReal("real Worktrunk provider smoke", () => {
       },
     };
 
-    await installWorktrunkHooks({
+    const hookOptions = {
       worktrunkConfigPath,
       stationConfigPath,
       hookBin: stationIngressBin,
+      autoStartFromHooks: false,
+    };
+    await installWorktrunkHooks(hookOptions);
+    cleanup.defer(async () => {
+      await uninstallWorktrunkHooks(hookOptions);
     });
 
     let createdForCleanup:
       | { id: string; path: string; branch: string; registrationIdentity: string }
       | undefined;
-    try {
-      await expect(provider.health()).resolves.toMatchObject({ status: "healthy" });
-      await expect(provider.listWorktrees(project)).resolves.toEqual(expect.any(Array));
-      const created = await provider.createWorktree({ project, branch });
-      if (created.registrationIdentity === undefined) {
-        throw new Error("Expected the created worktree registration identity.");
-      }
-      createdForCleanup = { ...created, registrationIdentity: created.registrationIdentity };
-      expect(created.branch).toBe(branch);
-      await expect(
-        provider.removeWorktree({
-          worktreeId: created.id,
-          expectedPath: created.path,
-          expectedBranch: created.branch,
-          expectedRegistrationIdentity: created.registrationIdentity,
-        }),
-      ).resolves.toMatchObject({ removed: true });
-      createdForCleanup = undefined;
-    } finally {
-      if (createdForCleanup !== undefined) {
-        await provider
-          .removeWorktree({
-            worktreeId: createdForCleanup.id,
-            expectedPath: createdForCleanup.path,
-            expectedBranch: createdForCleanup.branch,
-            expectedRegistrationIdentity: createdForCleanup.registrationIdentity,
-            force: true,
-          })
-          .catch(() => undefined);
-      }
-      await uninstallWorktrunkHooks({
-        worktrunkConfigPath,
-        stationConfigPath,
-        hookBin: stationIngressBin,
-      }).catch(() => undefined);
+    cleanup.defer(async () => {
+      if (createdForCleanup === undefined) return;
+      await provider.removeWorktree({
+        worktreeId: createdForCleanup.id,
+        expectedPath: createdForCleanup.path,
+        expectedBranch: createdForCleanup.branch,
+        expectedRegistrationIdentity: createdForCleanup.registrationIdentity,
+        force: true,
+      });
+    });
+
+    await expect(provider.health()).resolves.toMatchObject({ status: "healthy" });
+    await expect(provider.listWorktrees(project)).resolves.toEqual(expect.any(Array));
+    const created = await provider.createWorktree({ project, branch });
+    if (created.registrationIdentity === undefined) {
+      throw new Error("Expected the created worktree registration identity.");
     }
+    createdForCleanup = { ...created, registrationIdentity: created.registrationIdentity };
+    expect(created.branch).toBe(branch);
+    await expect(
+      provider.removeWorktree({
+        worktreeId: created.id,
+        expectedPath: created.path,
+        expectedBranch: created.branch,
+        expectedRegistrationIdentity: created.registrationIdentity,
+      }),
+    ).resolves.toMatchObject({ removed: true });
+    createdForCleanup = undefined;
+    await expect(access(observerSocketPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("removes only the selected linked checkout when the root shares its branch", async () => {
