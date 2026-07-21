@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 import type { TerminalFocusOrigin } from "./commands.js";
 import type { SafeError } from "./errors.js";
@@ -197,9 +198,27 @@ export type ProviderDoctorCheck = {
   error?: SafeError;
 };
 
+const providerHookAbsolutePathSchema = nonEmptyStringSchema.refine(
+  isAbsolute,
+  "Provider hook runtime paths must be absolute.",
+);
+
+export const ProviderHookRuntimeSchema = z
+  .object({
+    ingressLauncher: providerHookAbsolutePathSchema,
+    observerSocketPath: providerHookAbsolutePathSchema,
+    stateDir: providerHookAbsolutePathSchema,
+    hookSpoolDir: providerHookAbsolutePathSchema,
+    autoStartFromHooks: z.boolean(),
+    stationConfigPath: providerHookAbsolutePathSchema.optional(),
+  })
+  .strict();
+
+export type ProviderHookRuntime = z.infer<typeof ProviderHookRuntimeSchema>;
+
 export type ProviderDoctorContext = {
   stationConfigPath?: string;
-  providerHookIngressLauncher?: string;
+  providerHookRuntime?: ProviderHookRuntime;
   projects?: readonly ProviderProjectConfig[];
   signal?: AbortSignal;
   timeoutMs?: number;

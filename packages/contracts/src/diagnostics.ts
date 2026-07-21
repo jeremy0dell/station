@@ -1,4 +1,3 @@
-import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { CommandRecordSchema } from "./commands.js";
 import { ErrorEnvelopeSchema, SafeErrorSchema } from "./errors.js";
@@ -16,7 +15,7 @@ import {
   WorktreeIdSchema,
 } from "./ids.js";
 import { ObserverHealthSchema, ObserverSqliteHealthSummarySchema } from "./observer.js";
-import { ProviderHealthSchema } from "./providers.js";
+import { ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { StationSnapshotSchema } from "./snapshot.js";
 
@@ -169,9 +168,7 @@ export const DoctorOptionsSchema = z
   .object({
     projectId: ProjectIdSchema.optional(),
     deep: z.boolean().optional(),
-    providerHookIngressLauncher: nonEmptyStringSchema
-      .refine(isAbsolute, "Provider hook ingress launcher must be an absolute path.")
-      .optional(),
+    providerHookRuntime: ProviderHookRuntimeSchema.optional(),
   })
   .strict()
   .optional();

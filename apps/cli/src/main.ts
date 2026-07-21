@@ -17,6 +17,11 @@ import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 
+/**
+ * ADAPTER
+ *
+ * Translates CLI arguments and loaded configuration into registered command execution.
+ */
 export async function runCli(
   argv = process.argv.slice(2),
   options: CliRunOptions = {},
@@ -80,8 +85,10 @@ function defaultCommandEnv(options: CliRunOptions): CliEnv {
 }
 
 /**
- * Runs the CLI as a process adapter around `runCli`, composing the process-owned
- * provider-hook launcher before rendering output and applying exit policy.
+ * ADAPTER
+ *
+ * Translates process arguments, output, and exit semantics around `runCli` while composing
+ * process-owned provider-hook identity.
  */
 export async function runCliMain(
   argv: readonly string[] = process.argv.slice(2),

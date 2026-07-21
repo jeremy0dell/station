@@ -93,6 +93,7 @@ function command(options: ClaudeHarnessProviderOptions): string {
 
 function hookPathOptions(
   options: ClaudeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
 ): Parameters<typeof resolveClaudeSettingsArtifactPath>[0] {
   const pathOptions: Parameters<typeof resolveClaudeSettingsArtifactPath>[0] = {};
   if (options.claudeSettingsPath !== undefined) {
@@ -101,7 +102,7 @@ function hookPathOptions(
   if (options.claudeConfigDir !== undefined) {
     pathOptions.claudeConfigDir = options.claudeConfigDir;
   }
-  if (options.stateDir !== undefined) {
+  if (context?.providerHookRuntime === undefined && options.stateDir !== undefined) {
     pathOptions.stateDir = options.stateDir;
   }
   return pathOptions;
@@ -124,7 +125,7 @@ function claudeHookDoctorOptions(
   options: ClaudeHarnessProviderOptions,
   context?: ProviderDoctorContext,
 ): Parameters<typeof doctorClaudeHooks>[0] {
-  return { ...harnessHookDoctorOptions(options, context), ...hookPathOptions(options) };
+  return { ...harnessHookDoctorOptions(options, context), ...hookPathOptions(options, context) };
 }
 
 function buildLaunch(
@@ -244,6 +245,11 @@ async function hooksStatus(
   return harnessHooksStatusFrom("claude", options.installHooks === true, hookResult);
 }
 
+/**
+ * ADAPTER
+ *
+ * Supplies Claude launch, discovery, hook diagnostics, and event normalization through the harness port.
+ */
 export function createClaudeHarnessProvider(
   options: ClaudeHarnessProviderOptions = {},
 ): HarnessProvider {

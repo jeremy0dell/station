@@ -2,11 +2,13 @@ import type {
   HarnessEventObservation,
   HarnessLaunchPlan,
   HarnessStatusObservation,
+  ProviderDoctorContext,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
+  harnessHookDoctorOptions,
   type TerminalBoundHarnessProviderSpec,
 } from "../../src/provider";
 
@@ -206,5 +208,62 @@ describe("versionInfo", () => {
       },
     );
     await expect(provider.versionInfo?.()).resolves.toEqual({ installedVersion: "1.2.3" });
+  });
+});
+
+describe("harnessHookDoctorOptions", () => {
+  const incumbent = {
+    installHooks: true,
+    observerSocketPath: "/shared/observer.sock",
+    stateDir: "/checkout/A/state",
+    hookSpoolDir: "/checkout/A/state/spool/hooks",
+    autoStartFromHooks: true,
+  };
+  const requesterRuntime = {
+    ingressLauncher: "/checkout/B/bin/stn-ingress",
+    observerSocketPath: "/shared/observer.sock",
+    stateDir: "/checkout/B/state",
+    hookSpoolDir: "/checkout/B/state/spool/hooks",
+    autoStartFromHooks: false,
+    stationConfigPath: "/checkout/B/config.toml",
+  };
+
+  it("uses the whole requester hook runtime instead of mixing incumbent fields", () => {
+    const context: ProviderDoctorContext = {
+      stationConfigPath: "/checkout/A/config.toml",
+      providerHookRuntime: requesterRuntime,
+    };
+
+    expect(harnessHookDoctorOptions(incumbent, context)).toEqual({
+      enabled: true,
+      hookBin: requesterRuntime.ingressLauncher,
+      observerSocketPath: requesterRuntime.observerSocketPath,
+      stateDir: requesterRuntime.stateDir,
+      hookSpoolDir: requesterRuntime.hookSpoolDir,
+      autoStartFromHooks: requesterRuntime.autoStartFromHooks,
+      stationConfigPath: requesterRuntime.stationConfigPath,
+    });
+  });
+
+  it("does not retain the incumbent config path when the requester omits it", () => {
+    const context: ProviderDoctorContext = {
+      stationConfigPath: "/checkout/A/config.toml",
+      providerHookRuntime: {
+        ingressLauncher: requesterRuntime.ingressLauncher,
+        observerSocketPath: requesterRuntime.observerSocketPath,
+        stateDir: requesterRuntime.stateDir,
+        hookSpoolDir: requesterRuntime.hookSpoolDir,
+        autoStartFromHooks: requesterRuntime.autoStartFromHooks,
+      },
+    };
+
+    expect(harnessHookDoctorOptions(incumbent, context)).toEqual({
+      enabled: true,
+      hookBin: requesterRuntime.ingressLauncher,
+      observerSocketPath: requesterRuntime.observerSocketPath,
+      stateDir: requesterRuntime.stateDir,
+      hookSpoolDir: requesterRuntime.hookSpoolDir,
+      autoStartFromHooks: requesterRuntime.autoStartFromHooks,
+    });
   });
 });

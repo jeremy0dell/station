@@ -17,7 +17,10 @@ import {
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
 import { isStationUiInstalled, stationUiInstallHint } from "../stationWorkspace.js";
-import { resolveDefaultIngressLauncher } from "../worktrunkHookExpectation.js";
+import {
+  createProviderHookRuntime,
+  type ProviderHookRuntimeOptions,
+} from "../worktrunkHookExpectation.js";
 
 export type DoctorCommandOptions = {
   config?: StationConfig;
@@ -26,17 +29,34 @@ export type DoctorCommandOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * USE CASE
+ *
+ * Coordinates Observer diagnostics, requester hook identity, and local checks for one CLI request.
+ */
 export async function runDoctorCommand(
   args: string[],
   options: DoctorCommandOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<DoctorReport> {
   const parsedDoctorOptions = parseDoctorOptions(args);
-  const doctorOptions = DoctorOptionsSchema.parse({
-    ...(parsedDoctorOptions ?? {}),
-    providerHookIngressLauncher:
-      options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher(),
-  });
+  const hookRuntimeOptions: ProviderHookRuntimeOptions = {};
+  if (options.providerHookIngressLauncher !== undefined) {
+    hookRuntimeOptions.ingressLauncher = options.providerHookIngressLauncher;
+  }
+  if (options.configPath !== undefined) {
+    hookRuntimeOptions.stationConfigPath = options.configPath;
+  }
+  const doctorOptionsInput: NonNullable<DoctorOptions> = {
+    providerHookRuntime: createProviderHookRuntime(options.config, hookRuntimeOptions),
+  };
+  if (parsedDoctorOptions?.projectId !== undefined) {
+    doctorOptionsInput.projectId = parsedDoctorOptions.projectId;
+  }
+  if (parsedDoctorOptions?.deep !== undefined) {
+    doctorOptionsInput.deep = parsedDoctorOptions.deep;
+  }
+  const doctorOptions = DoctorOptionsSchema.parse(doctorOptionsInput);
   const timeoutMs = options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);
   const observerOptions: Parameters<typeof startObserver>[0] = { paths, timeoutMs };

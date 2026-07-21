@@ -523,11 +523,14 @@ fall through to a second local spawn.
 
 Doctor and diagnostic collection are direct query operations over current core
 health, persistence health, durable Observer records, config diagnostics,
-provider checks, and local runtime evidence. CLI full-doctor requests carry the
-requester's composed provider-hook ingress launcher through the strict diagnostic
-contract, so Worktrunk validates the same hook expectation as standalone CLI
-doctor even when an exact-build Observer from another checkout serves the request.
-Direct API callers retain the Observer composition expectation as the fallback.
+provider checks, and local runtime evidence. CLI full-doctor requests carry one
+strict provider-neutral hook-runtime context containing the requester's ingress
+launcher, socket, state and spool paths, auto-start policy, and optional Station
+config path. Provider hook adapters map the applicable fields from that context
+without mixing requester and Observer identities, so Worktrunk, Claude, Codex,
+Cursor, and OpenCode compare hook artifacts using the requester runtime identity
+even when an exact-build Observer from another checkout serves the request. Direct
+API callers retain the whole Observer composition expectation as the fallback.
 Provider adapters receive
 `PersistenceHealthSource` separately from the command and event journals, so
 neither use case needs a concrete SQLite handle. Collection must remain

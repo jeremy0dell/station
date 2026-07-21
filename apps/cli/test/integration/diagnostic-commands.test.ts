@@ -56,7 +56,16 @@ describe("CLI diagnostic commands", () => {
         },
       },
     });
-    expect(requestedDoctorOptions).toEqual({ providerHookIngressLauncher });
+    expect(requestedDoctorOptions).toEqual({
+      providerHookRuntime: {
+        ingressLauncher: providerHookIngressLauncher,
+        observerSocketPath: fixture.socketPath,
+        stateDir: fixture.stateDir,
+        hookSpoolDir: fixture.hookSpoolDir,
+        autoStartFromHooks: true,
+        stationConfigPath: configPath,
+      },
+    });
   });
 
   it("reports stale local observer runtime evidence without restarting anything", async () => {

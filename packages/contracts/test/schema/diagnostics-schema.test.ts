@@ -138,19 +138,43 @@ describe("diagnostics schemas", () => {
     );
   });
 
-  it("parses requester-scoped provider hook launchers strictly", () => {
+  it("parses requester-scoped provider hook runtimes strictly", () => {
+    const providerHookRuntime = {
+      ingressLauncher: "/checkout/station/bin/stn-ingress",
+      observerSocketPath: "/state/run/observer.sock",
+      stateDir: "/state",
+      hookSpoolDir: "/state/spool/hooks",
+      autoStartFromHooks: true,
+      stationConfigPath: "/checkout/station/config.toml",
+    };
+
+    expect(DoctorOptionsSchema.parse({ providerHookRuntime })).toEqual({ providerHookRuntime });
+    for (const field of [
+      "ingressLauncher",
+      "observerSocketPath",
+      "stateDir",
+      "hookSpoolDir",
+      "stationConfigPath",
+    ] as const) {
+      expect(
+        DoctorOptionsSchema.safeParse({
+          providerHookRuntime: { ...providerHookRuntime, [field]: "relative" },
+        }).success,
+      ).toBe(false);
+    }
     expect(
-      DoctorOptionsSchema.parse({
-        providerHookIngressLauncher: "/checkout/station/bin/stn-ingress",
-      }),
-    ).toEqual({ providerHookIngressLauncher: "/checkout/station/bin/stn-ingress" });
-    expect(
-      DoctorOptionsSchema.safeParse({ providerHookIngressLauncher: "stn-ingress" }).success,
+      DoctorOptionsSchema.safeParse({
+        providerHookRuntime: {
+          ingressLauncher: providerHookRuntime.ingressLauncher,
+          observerSocketPath: providerHookRuntime.observerSocketPath,
+          hookSpoolDir: providerHookRuntime.hookSpoolDir,
+          autoStartFromHooks: providerHookRuntime.autoStartFromHooks,
+        },
+      }).success,
     ).toBe(false);
     expect(
       DoctorOptionsSchema.safeParse({
-        providerHookIngressLauncher: "/checkout/station/bin/stn-ingress",
-        providerPrivateOption: true,
+        providerHookRuntime: { ...providerHookRuntime, providerPrivateOption: true },
       }).success,
     ).toBe(false);
   });

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type { ProviderProjectConfig } from "@station/contracts";
+import type { ProviderHookRuntime, ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput } from "@station/runtime";
 import { FakeHarnessProvider, FakeTerminalProvider } from "@station/testing";
 import {
@@ -17,28 +17,46 @@ import { createTestObserverCore } from "../support/testObserver";
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("Worktrunk diagnostics", () => {
-  it("uses the requester hook launcher while retaining the incumbent fallback", async () => {
+  it("uses the requester hook identity while retaining the incumbent fallback", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-wt-diag-requester-"));
-    const stateDir = join(root, "state");
-    const stationConfigPath = join(root, "config.toml");
+    const incumbentStateDir = join(root, "checkout-A", "state");
+    const requesterStateDir = join(root, "checkout-B", "state");
+    const incumbentStationConfigPath = join(root, "checkout-A", "config.toml");
+    const requesterStationConfigPath = join(root, "checkout-B", "config.toml");
+    const sharedObserverSocketPath = join(root, "shared", "observer.sock");
     const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
     const incumbentLauncher = "/checkout/A/bin/stn-ingress";
     const requesterLauncher = "/checkout/B/bin/stn-ingress";
-    await mkdir(stateDir, { recursive: true });
+    await mkdir(incumbentStateDir, { recursive: true });
     const hookExpectation: WorktrunkHookExpectation = {
       hookBin: incumbentLauncher,
-      observerSocketPath: join(root, "run", "observer.sock"),
-      stateDir,
-      hookSpoolDir: join(stateDir, "spool", "hooks"),
+      observerSocketPath: sharedObserverSocketPath,
+      stateDir: incumbentStateDir,
+      hookSpoolDir: join(incumbentStateDir, "spool", "hooks"),
       autoStartFromHooks: true,
-      stationConfigPath,
+      stationConfigPath: incumbentStationConfigPath,
+    };
+    const requesterHookRuntime: ProviderHookRuntime = {
+      ingressLauncher: requesterLauncher,
+      observerSocketPath: sharedObserverSocketPath,
+      stateDir: requesterStateDir,
+      hookSpoolDir: join(requesterStateDir, "spool", "hooks"),
+      autoStartFromHooks: false,
+      stationConfigPath: requesterStationConfigPath,
     };
     await installWorktrunkHooks({
-      expectation: { ...hookExpectation, hookBin: requesterLauncher },
+      expectation: {
+        hookBin: requesterHookRuntime.ingressLauncher,
+        observerSocketPath: requesterHookRuntime.observerSocketPath,
+        stateDir: requesterHookRuntime.stateDir,
+        hookSpoolDir: requesterHookRuntime.hookSpoolDir,
+        autoStartFromHooks: requesterHookRuntime.autoStartFromHooks,
+        stationConfigPath: requesterStationConfigPath,
+      },
       worktrunkConfigPath,
     });
     const clock = { now: () => new Date(now) };
-    const stationConfig = config(stateDir);
+    const stationConfig = config(incumbentStateDir);
     const providers = new ProviderRegistry({
       worktree: new WorktrunkProvider({
         command: "wt",
@@ -60,22 +78,22 @@ describe("Worktrunk diagnostics", () => {
       config: stationConfig,
       providers,
       clock,
-      sqlitePath: join(stateDir, "observer.sqlite"),
+      sqlitePath: join(incumbentStateDir, "observer.sqlite"),
     });
     await core.reconcile("diagnostics");
     const deps = {
       config: stationConfig,
-      configPath: stationConfigPath,
+      configPath: incumbentStationConfigPath,
       core,
       persistence,
       persistenceHealth: persistence,
       providers,
-      paths: { stateDir },
+      paths: { stateDir: incumbentStateDir },
       clock,
     };
 
     const requesterReport = await runDoctor(deps, {
-      providerHookIngressLauncher: requesterLauncher,
+      providerHookRuntime: requesterHookRuntime,
     });
     const incumbentReport = await runDoctor(deps);
 
@@ -86,6 +104,30 @@ describe("Worktrunk diagnostics", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "worktrunk-hooks", status: "warn" }),
       ]),
+    );
+
+    const requesterRuntimeWithoutConfig: ProviderHookRuntime = {
+      ingressLauncher: requesterHookRuntime.ingressLauncher,
+      observerSocketPath: requesterHookRuntime.observerSocketPath,
+      stateDir: requesterHookRuntime.stateDir,
+      hookSpoolDir: requesterHookRuntime.hookSpoolDir,
+      autoStartFromHooks: requesterHookRuntime.autoStartFromHooks,
+    };
+    await installWorktrunkHooks({
+      expectation: {
+        hookBin: requesterRuntimeWithoutConfig.ingressLauncher,
+        observerSocketPath: requesterRuntimeWithoutConfig.observerSocketPath,
+        stateDir: requesterRuntimeWithoutConfig.stateDir,
+        hookSpoolDir: requesterRuntimeWithoutConfig.hookSpoolDir,
+        autoStartFromHooks: requesterRuntimeWithoutConfig.autoStartFromHooks,
+      },
+      worktrunkConfigPath,
+    });
+    const requesterWithoutConfigReport = await runDoctor(deps, {
+      providerHookRuntime: requesterRuntimeWithoutConfig,
+    });
+    expect(requesterWithoutConfigReport.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worktrunk-hooks", status: "ok" })]),
     );
     sqlite.close();
   });

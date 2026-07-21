@@ -5,6 +5,7 @@ import type {
   HarnessPermissionMode,
   HarnessProvider,
   ProviderDoctorCheck,
+  ProviderDoctorContext,
 } from "@station/contracts";
 import {
   type CommonHarnessProviderOptions,
@@ -118,6 +119,7 @@ function buildLaunch(
 
 async function doctorChecks(
   options: OpenCodeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
 ): Promise<ProviderDoctorCheck[]> {
   const checks: ProviderDoctorCheck[] = [];
   const health = await harnessHealth(openCodeSpec, options);
@@ -144,14 +146,21 @@ async function doctorChecks(
       enabled: options.installHooks === true,
       env: options.env ?? process.env,
     };
-    if (options.observerSocketPath !== undefined) {
-      pluginOptions.observerSocketPath = options.observerSocketPath;
-    }
-    if (options.stateDir !== undefined) {
-      pluginOptions.stateDir = options.stateDir;
-    }
-    if (options.hookSpoolDir !== undefined) {
-      pluginOptions.hookSpoolDir = options.hookSpoolDir;
+    const requesterRuntime = context?.providerHookRuntime;
+    if (requesterRuntime !== undefined) {
+      pluginOptions.observerSocketPath = requesterRuntime.observerSocketPath;
+      pluginOptions.stateDir = requesterRuntime.stateDir;
+      pluginOptions.hookSpoolDir = requesterRuntime.hookSpoolDir;
+    } else {
+      if (options.observerSocketPath !== undefined) {
+        pluginOptions.observerSocketPath = options.observerSocketPath;
+      }
+      if (options.stateDir !== undefined) {
+        pluginOptions.stateDir = options.stateDir;
+      }
+      if (options.hookSpoolDir !== undefined) {
+        pluginOptions.hookSpoolDir = options.hookSpoolDir;
+      }
     }
     const pluginResult = await doctorOpenCodePlugin(pluginOptions);
     checks.push({
@@ -175,6 +184,11 @@ async function doctorChecks(
   return checks;
 }
 
+/**
+ * ADAPTER
+ *
+ * Supplies OpenCode launch, discovery, plugin diagnostics, and event normalization through the harness port.
+ */
 export function createOpenCodeHarnessProvider(
   options: OpenCodeHarnessProviderOptions = {},
 ): HarnessProvider {
