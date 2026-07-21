@@ -1,3 +1,4 @@
+import type { WorktreeRow } from "@station/contracts";
 import { createEditableTextInputState } from "../../components/EditableTextInput/editing.js";
 import {
   selectDashboardSessionRow,
@@ -29,7 +30,7 @@ export function openRenameEditForRow(
     rowId: resolved.id,
     sessionId: resolved.session.id,
     currentTitle,
-    draftTitle: createEditableTextInputState(currentTitle),
+    draftTitle: createEditableTextInputState(),
   };
   if (options.returnTo !== undefined) {
     screen.returnTo = options.returnTo;
@@ -50,7 +51,7 @@ function resolveCurrentRowSession(state: TuiState, rowId: string) {
     return undefined;
   }
   const direct = selectDashboardSessionRow(snapshot, rowId);
-  const worktree = snapshot.rows.find((candidate) => candidate.id === rowId);
+  const worktree = snapshot.rows.find((candidate: WorktreeRow) => candidate.id === rowId);
   const paneSession =
     worktree === undefined ? undefined : sessionForWorktreeRow(worktree, snapshot.sessions);
   const row =

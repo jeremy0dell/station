@@ -497,6 +497,7 @@ describe("TUI screen transitions", () => {
       rowId: "ses_wt_web_attention",
       sessionId: "ses_wt_web_attention",
       currentTitle: "checkout-copy",
+      draftTitle: { value: "", cursor: 0 },
     });
   });
 
@@ -540,6 +541,7 @@ describe("TUI screen transitions", () => {
       rowId: "ses_wt_web_idle",
       sessionId: "ses_wt_web_idle",
       currentTitle: "fix-nav-mobile",
+      draftTitle: { value: "", cursor: 0 },
     });
   });
 
@@ -561,23 +563,20 @@ describe("TUI screen transitions", () => {
     expect(openRenameEditForRow(state, "run_wt_web_idle")).toBe(state);
   });
 
-  it("edits the rename draft at the cursor position", () => {
+  it("starts a blank rename draft so typing replaces the current title", () => {
     const opened = handleTuiKey(
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "R",
       }).state,
       { input: "4" },
     ).state;
-    const left = handleTuiKey(opened, { input: "", leftArrow: true }).state;
-    const inserted = handleTuiKey(left, { input: "!" }).state;
+    const inserted = handleTuiKey(opened, { input: "!" }).state;
 
     expect(inserted.screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      draftTitle: {
-        value: "fix-nav-mobil!e",
-        cursor: "fix-nav-mobil!".length,
-      },
+      currentTitle: "fix-nav-mobile",
+      draftTitle: { value: "!", cursor: 1 },
     });
   });
 
@@ -683,25 +682,23 @@ describe("TUI screen transitions", () => {
       { input: "4" },
     ).state;
 
-    const typed = " updated"
+    const typed = "updated"
       .split("")
       .reduce((current, input) => handleTuiKey(current, { input }).state, state);
     const transition = handleTuiKey(typed, { input: "\r", return: true });
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.state.localRows.pendingRenameTitles?.ses_wt_web_idle?.title).toBe(
-      "fix-nav-mobile updated",
-    );
+    expect(transition.state.localRows.pendingRenameTitles?.ses_wt_web_idle?.title).toBe("updated");
     expect(transition.operations).toEqual([
       {
         type: "renameSession",
         sessionId: "ses_wt_web_idle",
-        title: "fix-nav-mobile updated",
+        title: "updated",
         command: {
           type: "session.rename",
           payload: {
             sessionId: "ses_wt_web_idle",
-            title: "fix-nav-mobile updated",
+            title: "updated",
           },
         },
       },

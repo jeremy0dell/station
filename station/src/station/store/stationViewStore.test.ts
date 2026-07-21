@@ -81,7 +81,7 @@ describe("createStationViewStore", () => {
     store.getState().handleKey({ input: "\r", return: true });
 
     expect(store.getState().localRows.pendingRenameTitles?.ses_wt_station_idle).toMatchObject({
-      title: "pty-bufferx",
+      title: "x",
     });
     await waitForMockRejectionToast(store);
   });

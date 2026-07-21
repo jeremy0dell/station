@@ -29,7 +29,7 @@ export function RenameSessionSheetView({ state, columns, rows }: RenameSessionSh
         width={contentWidth}
         label="Name"
         labelWidth={10}
-        value={<EditableTextInputView {...state.draftTitle} />}
+        value={<EditableTextInputView {...state.draftTitle} placeholder={state.currentTitle} />}
       />
       {state.validationError === undefined ? null : (
         <text fg={STATION_COLORS.red}>{truncateCells(` ${state.validationError}`, contentWidth)}</text>
