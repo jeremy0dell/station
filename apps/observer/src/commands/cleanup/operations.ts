@@ -137,7 +137,8 @@ export async function closeTerminalForWorktree(
       commandTimeoutMs: input.commandTimeoutMs,
     });
   } catch (error) {
-    if (input.force && terminalTargetMissing(error)) {
+    // A missing target already satisfies cleanup; force only governs destructive worktree guards.
+    if (terminalTargetMissing(error)) {
       return;
     }
     throw error;
