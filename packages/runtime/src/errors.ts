@@ -113,7 +113,7 @@ export function externalCommandDiagnosticFromSafeError(
     for (const detail of error.diagnosticDetails) {
       const parsed = ExternalCommandDiagnosticDetailSchema.safeParse(detail);
       if (parsed.success) {
-        return parsed.data;
+        return copyExternalCommandDiagnosticDetail(parsed.data);
       }
     }
   }
@@ -178,7 +178,22 @@ function inspectSafeErrorChain(error: unknown): SafeErrorChain {
 
 function safeErrorView(value: unknown): SafeError | undefined {
   const parsed = RuntimeSafeErrorViewSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) return undefined;
+
+  const safeError: SafeError = {
+    tag: parsed.data.tag,
+    code: parsed.data.code,
+    message: parsed.data.message,
+  };
+  if (parsed.data.hint !== undefined) safeError.hint = parsed.data.hint;
+  if (parsed.data.commandId !== undefined) safeError.commandId = parsed.data.commandId;
+  if (parsed.data.projectId !== undefined) safeError.projectId = parsed.data.projectId;
+  if (parsed.data.worktreeId !== undefined) safeError.worktreeId = parsed.data.worktreeId;
+  if (parsed.data.sessionId !== undefined) safeError.sessionId = parsed.data.sessionId;
+  if (parsed.data.provider !== undefined) safeError.provider = parsed.data.provider;
+  if (parsed.data.traceId !== undefined) safeError.traceId = parsed.data.traceId;
+  if (parsed.data.diagnosticId !== undefined) safeError.diagnosticId = parsed.data.diagnosticId;
+  return safeError;
 }
 
 function safeErrorFallback(fallback: RuntimeSafeErrorFallback): SafeError {
@@ -202,7 +217,7 @@ function diagnosticDetails(value: object): DiagnosticDetail[] {
   for (const detail of details) {
     const result = DiagnosticDetailSchema.safeParse(detail);
     if (result.success) {
-      parsed.push(result.data);
+      parsed.push(copyDiagnosticDetail(result.data));
     }
   }
   return parsed;
@@ -210,7 +225,15 @@ function diagnosticDetails(value: object): DiagnosticDetail[] {
 
 function externalCommandFields(value: unknown): ExternalCommandFields | undefined {
   const parsed = ExternalCommandFieldsSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) return undefined;
+
+  const fields: ExternalCommandFields = { command: parsed.data.command };
+  if (parsed.data.cwd !== undefined) fields.cwd = parsed.data.cwd;
+  if (parsed.data.exitCode !== undefined) fields.exitCode = parsed.data.exitCode;
+  if (parsed.data.signal !== undefined) fields.signal = parsed.data.signal;
+  if (parsed.data.stdoutSnippet !== undefined) fields.stdoutSnippet = parsed.data.stdoutSnippet;
+  if (parsed.data.stderrSnippet !== undefined) fields.stderrSnippet = parsed.data.stderrSnippet;
+  return fields;
 }
 
 function externalCommandDiagnostic(
@@ -241,6 +264,41 @@ function copyExternalCommandFields(
   if (fields.signal !== undefined) target.signal = fields.signal;
   if (fields.stdoutSnippet !== undefined) target.stdoutSnippet = fields.stdoutSnippet;
   if (fields.stderrSnippet !== undefined) target.stderrSnippet = fields.stderrSnippet;
+}
+
+function copyDiagnosticDetail(detail: DiagnosticDetail): DiagnosticDetail {
+  if (detail.type === "external_command") {
+    return copyExternalCommandDiagnosticDetail(detail);
+  }
+
+  const copied: WorktreeRemovalRefusalDiagnosticDetail = {
+    type: detail.type,
+    worktreeId: detail.worktreeId,
+    canonicalPath: detail.canonicalPath,
+    observedBranch: detail.observedBranch,
+    refusalReason: detail.refusalReason,
+  };
+  if (detail.provider !== undefined) copied.provider = detail.provider;
+  if (detail.projectId !== undefined) copied.projectId = detail.projectId;
+  return copied;
+}
+
+function copyExternalCommandDiagnosticDetail(
+  detail: ExternalCommandDiagnosticDetail,
+): ExternalCommandDiagnosticDetail {
+  const copied: ExternalCommandDiagnosticDetail = {
+    type: detail.type,
+    operation: detail.operation,
+    command: detail.command,
+  };
+  if (detail.provider !== undefined) copied.provider = detail.provider;
+  if (detail.cwd !== undefined) copied.cwd = detail.cwd;
+  if (detail.exitCode !== undefined) copied.exitCode = detail.exitCode;
+  if (detail.signal !== undefined) copied.signal = detail.signal;
+  if (detail.stdoutSnippet !== undefined) copied.stdoutSnippet = detail.stdoutSnippet;
+  if (detail.stderrSnippet !== undefined) copied.stderrSnippet = detail.stderrSnippet;
+  if (detail.durationMs !== undefined) copied.durationMs = detail.durationMs;
+  return copied;
 }
 
 function dedupeDiagnostics(diagnostics: readonly DiagnosticDetail[]): DiagnosticDetail[] {

@@ -1,6 +1,10 @@
-import { externalCommandErrorFromUnknown } from "@station/runtime";
+import { externalCommandErrorFromUnknown, publicSafeErrorFromUnknown } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { tmuxProviderErrorFromUnknown } from "../../src/errors.js";
+import {
+  TmuxTerminalProviderError,
+  tmuxProviderErrorFromUnknown,
+  tmuxSafeError,
+} from "../../src/errors.js";
 
 const fallback = {
   code: "TERMINAL_CAPTURE_FAILED" as const,
@@ -72,5 +76,21 @@ describe("tmux provider error mapping", () => {
       message: fallback.message,
       diagnosticDetails: [expect.objectContaining({ type: "external_command", exitCode: 1 })],
     });
+  });
+
+  it("omits unset optional fields from normalized provider errors", () => {
+    const error = new TmuxTerminalProviderError("TERMINAL_CAPTURE_FAILED", "capture failed");
+    const normalized = tmuxSafeError(error, fallback);
+    const projected = publicSafeErrorFromUnknown(error, {
+      tag: "TerminalProviderError",
+      code: fallback.code,
+      message: fallback.message,
+    });
+
+    for (const safeError of [normalized, projected]) {
+      expect(Object.keys(safeError).sort()).toEqual(["code", "message", "provider", "tag"]);
+      expect(Object.hasOwn(safeError, "hint")).toBe(false);
+      expect(Object.hasOwn(safeError, "projectId")).toBe(false);
+    }
   });
 });
