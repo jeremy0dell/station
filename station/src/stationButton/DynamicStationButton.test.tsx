@@ -54,6 +54,25 @@ function renderedButtonWidth(frame: string): number {
   return right - left + 1;
 }
 
+type ButtonFrame = { frame: string; width: number };
+
+async function waitForButtonFrame(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  predicate: (value: ButtonFrame) => boolean,
+): Promise<ButtonFrame> {
+  const deadline = Date.now() + ANIM_MS * 6;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
+    await setup.renderOnce();
+    const frame = setup.captureCharFrame();
+    const value = { frame, width: renderedButtonWidth(frame) };
+    if (predicate(value)) {
+      return value;
+    }
+  }
+  throw new Error("Station button did not reach the expected animated frame.");
+}
+
 describe("DynamicStationButton", () => {
   it("collapsed base shows only the station icon", async () => {
     const frame = await captureFrame(
@@ -143,36 +162,173 @@ describe("DynamicStationButton", () => {
       if (setCelebration === undefined) {
         throw new Error("Celebration harness did not mount.");
       }
-      const waitForWidth = async (predicate: (width: number) => boolean): Promise<number> => {
-        const deadline = Date.now() + ANIM_MS * 4;
-        while (Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
-          await setup.renderOnce();
-          const width = renderedButtonWidth(setup.captureCharFrame());
-          if (predicate(width)) {
-            return width;
-          }
-        }
-        throw new Error("Station button did not reach the expected animated width.");
-      };
-
       setCelebration({ prNumber: 42 });
-      const openingWidth = await waitForWidth(
-        (width) => width > restingWidth && width < notifiedWidth,
-      );
+      const openingWidth = (
+        await waitForButtonFrame(
+          setup,
+          ({ width }) => width > restingWidth && width < notifiedWidth,
+        )
+      ).width;
       expect(openingWidth).toBeGreaterThan(restingWidth);
-      await waitForWidth((width) => width === notifiedWidth);
+      await waitForButtonFrame(setup, ({ width }) => width === notifiedWidth);
       expect(setup.captureCharFrame()).toContain("✓ #42 merged");
 
       setCelebration(undefined);
-      const closingWidth = await waitForWidth(
-        (width) => width > restingWidth && width < notifiedWidth,
-      );
+      const closingWidth = (
+        await waitForButtonFrame(
+          setup,
+          ({ width }) => width > restingWidth && width < notifiedWidth,
+        )
+      ).width;
       expect(closingWidth).toBeLessThan(notifiedWidth);
-      await waitForWidth((width) => width === restingWidth);
+      await waitForButtonFrame(setup, ({ width }) => width === restingWidth);
       await new Promise((resolve) => setTimeout(resolve, 0));
       await setup.renderOnce();
       expect(setup.captureCharFrame()).not.toContain("#42");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  it("exits the current celebration before animating its replacement", async () => {
+    const first = { prNumber: 42 };
+    const second = { prNumber: 812, title: "second title" };
+    let updateCelebration: ((value: IslandCelebration | undefined) => void) | undefined;
+    function Harness() {
+      const [celebration, setCelebration] = useState<IslandCelebration | undefined>(first);
+      updateCelebration = setCelebration;
+      return <DynamicStationButton input={input({ idleCount: 3 }, { celebration })} />;
+    }
+
+    const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
+    const firstWidth = targetDims(
+      islandDisplay(input({ idleCount: 3 }, { celebration: first }), false),
+    ).width;
+    const secondWidth = targetDims(
+      islandDisplay(input({ idleCount: 3 }, { celebration: second }), false),
+    ).width;
+    const setup = await testRender(<Harness />, SURFACE);
+    try {
+      await setup.flush();
+      expect(renderedButtonWidth(setup.captureCharFrame())).toBe(firstWidth);
+      const setCelebration = updateCelebration;
+      if (setCelebration === undefined) {
+        throw new Error("Celebration replacement harness did not mount.");
+      }
+
+      setCelebration(second);
+      const exiting = await waitForButtonFrame(
+        setup,
+        ({ frame, width }) =>
+          frame.includes("#42") && width > restingWidth && width < firstWidth,
+      );
+      expect(exiting.frame).not.toContain("#812");
+      const entering = await waitForButtonFrame(
+        setup,
+        ({ frame, width }) =>
+          frame.includes("#812") && width > restingWidth && width < secondWidth,
+      );
+      expect(entering.width).toBeLessThan(secondWidth);
+      await waitForButtonFrame(
+        setup,
+        ({ frame, width }) => frame.includes("#812") && width === secondWidth,
+      );
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  it("starts a hidden celebration only after attention clears", async () => {
+    const celebration = { prNumber: 99 };
+    let setAttention: ((value: boolean) => void) | undefined;
+    let setCelebration: ((value: IslandCelebration | undefined) => void) | undefined;
+    function Harness() {
+      const [attention, updateAttention] = useState(true);
+      const [currentCelebration, updateCelebration] = useState<IslandCelebration>();
+      setAttention = updateAttention;
+      setCelebration = updateCelebration;
+      return (
+        <DynamicStationButton
+          input={input(
+            {
+              attention,
+              needsYouCount: attention ? 1 : 0,
+              sessionName: attention ? "hook-scope" : undefined,
+            },
+            { celebration: currentCelebration },
+          )}
+        />
+      );
+    }
+
+    const restingWidth = targetDims(islandDisplay(input(), false)).width;
+    const notifiedWidth = targetDims(islandDisplay(input({}, { celebration }), false)).width;
+    const setup = await testRender(<Harness />, SURFACE);
+    try {
+      await setup.flush();
+      if (setAttention === undefined || setCelebration === undefined) {
+        throw new Error("Attention celebration harness did not mount.");
+      }
+      setCelebration(celebration);
+      await new Promise((resolve) => setTimeout(resolve, ANIM_MS + FRAME_MS * 2));
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("!!!!");
+
+      setAttention(false);
+      const entering = await waitForButtonFrame(
+        setup,
+        ({ width }) => width > restingWidth && width < notifiedWidth,
+      );
+      expect(entering.width).toBeLessThan(notifiedWidth);
+      await waitForButtonFrame(
+        setup,
+        ({ frame, width }) => frame.includes("#99") && width === notifiedWidth,
+      );
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  it("starts a hidden celebration only after hover expansion ends", async () => {
+    const celebration = { prNumber: 44, title: "longer title" };
+    let setCelebration: ((value: IslandCelebration | undefined) => void) | undefined;
+    function Harness() {
+      const [currentCelebration, updateCelebration] = useState<IslandCelebration>();
+      setCelebration = updateCelebration;
+      return <DynamicStationButton input={input({ idleCount: 3 }, { celebration: currentCelebration })} />;
+    }
+
+    const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
+    const expandedWidth = targetDims(islandDisplay(input({ idleCount: 3 }), true)).width;
+    const notifiedWidth = targetDims(
+      islandDisplay(input({ idleCount: 3 }, { celebration }), false),
+    ).width;
+    const setup = await testRender(<Harness />, SURFACE);
+    try {
+      await setup.flush();
+      await setup.mockMouse.moveTo(SURFACE.width - 1, 0);
+      await waitForButtonFrame(setup, ({ width }) => width === expandedWidth);
+      if (setCelebration === undefined) {
+        throw new Error("Hover celebration harness did not mount.");
+      }
+      setCelebration(celebration);
+      await new Promise((resolve) => setTimeout(resolve, ANIM_MS + FRAME_MS * 2));
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("sessions idle");
+      expect(setup.captureCharFrame()).not.toContain("#44");
+
+      await setup.mockMouse.moveTo(0, SURFACE.height - 1);
+      const firstClosingFrame = await waitForButtonFrame(
+        setup,
+        ({ width }) => width !== expandedWidth,
+      );
+      expect(firstClosingFrame.width).toBeGreaterThan(restingWidth);
+      expect(firstClosingFrame.width).toBeLessThan(expandedWidth);
+      expect(firstClosingFrame.frame).not.toContain("#44");
+      await waitForButtonFrame(
+        setup,
+        ({ frame, width }) => frame.includes("#44") && width === notifiedWidth,
+      );
     } finally {
       setup.renderer.destroy();
     }

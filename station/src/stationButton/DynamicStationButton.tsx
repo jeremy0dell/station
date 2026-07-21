@@ -454,7 +454,12 @@ type ButtonTransition = {
 
 function useButtonTransition(input: IslandDisplayInput, expanded: boolean): ButtonTransition {
   const open = useTweenAmount(expanded ? 1 : 0);
-  const tweenedCelebration = useTweenedOptionalValue(input.celebration);
+  const collapsedDisplay = islandDisplay(input, false);
+  const celebrationPaintEligible = !expanded && collapsedDisplay.kind === "celebration";
+  const tweenedCelebration = useTweenedOptionalValue(
+    input.celebration,
+    celebrationPaintEligible,
+  );
   const collapsed = collapsedButtonState(
     input,
     tweenedCelebration.value,

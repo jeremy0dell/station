@@ -4,9 +4,9 @@ import { ANIM_MS, easeInOutCubic, FRAME_MS } from "../layout.js";
 
 /**
  * Tweens a scalar target through a manual interval because Station does not attach OpenTUI's
- * Timeline engine to the renderer.
+ * Timeline engine to the renderer. Disabled tweens release live rendering and resume in place.
  */
-export function useTweenAmount(target: number): number {
+export function useTweenAmount(target: number, enabled: boolean = true): number {
   const renderer = useRenderer();
   const [amount, setAmount] = useState(target);
   const fromRef = useRef(target);
@@ -16,6 +16,9 @@ export function useTweenAmount(target: number): number {
     if (!mounted.current) {
       mounted.current = true; // First paint sits at the target, with no entrance animation.
       fromRef.current = target;
+      return;
+    }
+    if (!enabled || fromRef.current === target) {
       return;
     }
     const from = fromRef.current;
@@ -48,8 +51,7 @@ export function useTweenAmount(target: number): number {
       clearInterval(id);
       dropLive();
     };
-  }, [target, renderer]);
+  }, [enabled, target, renderer]);
 
   return amount;
 }
-
