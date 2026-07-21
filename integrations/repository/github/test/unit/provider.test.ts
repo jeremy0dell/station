@@ -240,8 +240,41 @@ describe("GitHub repository provider", () => {
     await expect(
       aborted.discoverPullRequest({ remote, branch: "feature", signal: controller.signal }),
     ).rejects.toMatchObject({
+      tag: "RepositoryProviderError",
       code: "EXTERNAL_COMMAND_ABORTED",
+      provider: "github",
     });
+  });
+
+  it("throws rich typed failures while retaining only lean provider health", async () => {
+    const provider = providerWithFailure("authentication required");
+    let failure: unknown;
+    try {
+      await provider.discoverPullRequest({ remote, branch: "feature" });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({
+      tag: "RepositoryProviderError",
+      code: "GITHUB_AUTH_UNAVAILABLE",
+      diagnosticDetails: [
+        expect.objectContaining({
+          type: "external_command",
+          command: expect.stringContaining("gh pr list"),
+          stderrSnippet: "authentication required",
+        }),
+      ],
+    });
+    const health = await provider.health();
+    expect(health.lastError).toEqual({
+      tag: "RepositoryProviderError",
+      code: "GITHUB_AUTH_UNAVAILABLE",
+      message: "GitHub CLI authentication is unavailable.",
+      hint: "Run `gh auth status` or `gh auth login` to verify GitHub authentication.",
+      provider: "github",
+    });
+    expect(JSON.stringify(health.lastError)).not.toContain("diagnosticDetails");
   });
 });
 

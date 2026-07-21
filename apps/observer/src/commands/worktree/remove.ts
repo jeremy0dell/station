@@ -3,7 +3,7 @@ import {
   type WorktreeRemovalRefusalDiagnosticDetail,
   WorktreeRemovalRefusalDiagnosticDetailSchema,
 } from "@station/contracts";
-import type { RuntimeClock } from "@station/runtime";
+import { isSafeError, type RuntimeClock } from "@station/runtime";
 import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
@@ -179,14 +179,10 @@ export function createWorktreeRemoveHandler(
 function worktreeRemovalRefusalDiagnostic(
   error: unknown,
 ): WorktreeRemovalRefusalDiagnosticDetail | undefined {
-  if (typeof error !== "object" || error === null) {
+  if (!isSafeError(error)) {
     return undefined;
   }
-  const details = (error as { diagnosticDetails?: unknown }).diagnosticDetails;
-  if (!Array.isArray(details)) {
-    return undefined;
-  }
-  for (const detail of details) {
+  for (const detail of error.diagnosticDetails ?? []) {
     const parsed = WorktreeRemovalRefusalDiagnosticDetailSchema.safeParse(detail);
     if (parsed.success) {
       return parsed.data;

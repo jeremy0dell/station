@@ -1,4 +1,5 @@
 export * from "./automation.js";
+export * from "./commandFailure.js";
 export * from "./dependency.js";
 export * from "./errors.js";
 export * from "./hookAdapter.js";

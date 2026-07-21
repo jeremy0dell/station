@@ -1,44 +1,20 @@
-export type RuntimeSafeError = {
-  tag: string;
-  code: string;
-  message: string;
-  hint?: string;
-  commandId?: string;
-  projectId?: string;
-  worktreeId?: string;
-  sessionId?: string;
-  provider?: string;
-  traceId?: string;
-  diagnosticId?: string;
-  diagnosticDetails?: RuntimeDiagnosticDetail[];
-};
+import {
+  type DiagnosticDetail,
+  DiagnosticDetailSchema,
+  type ExternalCommandDiagnosticDetail,
+  ExternalCommandDiagnosticDetailSchema,
+  type SafeError,
+  SafeErrorSchema,
+  type WorktreeRemovalRefusalDiagnosticDetail,
+} from "@station/contracts";
 
-export type RuntimeExternalCommandDiagnosticDetail = {
-  type: "external_command";
-  provider?: string;
-  operation: string;
-  command: string;
-  cwd?: string;
-  exitCode?: number;
-  signal?: string;
-  stdoutSnippet?: string;
-  stderrSnippet?: string;
-  durationMs?: number;
-};
+export type RuntimeDiagnosticDetail = DiagnosticDetail;
+export type RuntimeExternalCommandDiagnosticDetail = ExternalCommandDiagnosticDetail;
+export type RuntimeWorktreeRemovalRefusalDiagnosticDetail = WorktreeRemovalRefusalDiagnosticDetail;
 
-export type RuntimeWorktreeRemovalRefusalDiagnosticDetail = {
-  type: "worktree_removal_refusal";
-  provider?: string;
-  projectId?: string;
-  worktreeId: string;
-  canonicalPath: string;
-  observedBranch: string;
-  refusalReason: string;
+export type RuntimeSafeError = SafeError & {
+  diagnosticDetails?: DiagnosticDetail[];
 };
-
-export type RuntimeDiagnosticDetail =
-  | RuntimeExternalCommandDiagnosticDetail
-  | RuntimeWorktreeRemovalRefusalDiagnosticDetail;
 
 export type RuntimeSafeErrorFallback = {
   tag: string;
@@ -67,119 +43,222 @@ export type ExternalCommandError = RuntimeSafeError & {
   stderrSnippet?: string;
 };
 
-export function isSafeError(value: unknown): value is RuntimeSafeError {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+type SafeErrorChain = {
+  safeError?: SafeError;
+  externalCommand?: ExternalCommandFields;
+  diagnostics: DiagnosticDetail[];
+};
 
-  const candidate = value as Partial<RuntimeSafeError>;
-  return (
-    typeof candidate.tag === "string" &&
-    candidate.tag.length > 0 &&
-    typeof candidate.code === "string" &&
-    candidate.code.length > 0 &&
-    typeof candidate.message === "string" &&
-    candidate.message.length > 0
-  );
+type ExternalCommandFields = Pick<
+  ExternalCommandDiagnosticDetail,
+  "command" | "cwd" | "exitCode" | "signal" | "stdoutSnippet" | "stderrSnippet"
+>;
+
+const RuntimeSafeErrorViewSchema = SafeErrorSchema.strip();
+const RuntimeSafeErrorSchema = SafeErrorSchema.extend({
+  diagnosticDetails: DiagnosticDetailSchema.array().optional(),
+}).strip();
+const ExternalCommandFieldsSchema = ExternalCommandDiagnosticDetailSchema.omit({
+  type: true,
+  provider: true,
+  operation: true,
+  durationMs: true,
+}).strip();
+
+export function isSafeError(value: unknown): value is RuntimeSafeError {
+  return RuntimeSafeErrorSchema.safeParse(value).success;
 }
 
 export function safeErrorFromUnknown(
   error: unknown,
   fallback: RuntimeSafeErrorFallback,
 ): RuntimeSafeError {
-  if (isSafeError(error)) {
-    return copySafeError(error);
+  const chain = inspectSafeErrorChain(error);
+  const safeError = chain.safeError ?? safeErrorFallback(fallback);
+  const normalized: RuntimeSafeError = { ...safeError };
+
+  if (chain.diagnostics.length > 0) {
+    normalized.diagnosticDetails = chain.diagnostics;
   }
-  const cause = safeErrorCause(error);
-  if (cause !== undefined) {
-    return copySafeError(cause);
+  if (safeError.tag === "ExternalCommandError" && chain.externalCommand !== undefined) {
+    copyExternalCommandFields(normalized as ExternalCommandError, chain.externalCommand);
   }
 
-  const safeError: RuntimeSafeError = {
+  return normalized;
+}
+
+/**
+ * Projects an unknown failure onto the lean shared SafeError contract.
+ *
+ * Runtime-only diagnostic evidence, command fields, raw output, and causes are omitted.
+ */
+export function publicSafeErrorFromUnknown(
+  error: unknown,
+  fallback: RuntimeSafeErrorFallback,
+): SafeError {
+  const normalized = safeErrorFromUnknown(error, fallback);
+  return safeErrorView(normalized) ?? safeErrorFallback(fallback);
+}
+
+/** Returns whether a normalized runtime failure contains typed external-command fields. */
+export function isExternalCommandError(error: RuntimeSafeError): error is ExternalCommandError {
+  return error.tag === "ExternalCommandError" && externalCommandFields(error) !== undefined;
+}
+
+/** Extracts redacted external-command evidence without exposing process-error shapes. */
+export function externalCommandDiagnosticFromSafeError(
+  error: RuntimeSafeError,
+): ExternalCommandDiagnosticDetail | undefined {
+  if (Array.isArray(error.diagnosticDetails)) {
+    for (const detail of error.diagnosticDetails) {
+      const parsed = ExternalCommandDiagnosticDetailSchema.safeParse(detail);
+      if (parsed.success) {
+        return parsed.data;
+      }
+    }
+  }
+
+  if (!isExternalCommandError(error)) {
+    return undefined;
+  }
+  const fields = externalCommandFields(error);
+  if (fields === undefined) {
+    return undefined;
+  }
+  const detail: ExternalCommandDiagnosticDetail = {
+    type: "external_command",
+    operation: `externalCommand.${error.command.split(" ")[0] ?? "command"}`,
+    ...fields,
+  };
+  if (error.provider !== undefined) {
+    detail.provider = error.provider;
+  }
+  return ExternalCommandDiagnosticDetailSchema.parse(detail);
+}
+
+function inspectSafeErrorChain(error: unknown): SafeErrorChain {
+  const seen = new Set<unknown>();
+  const diagnostics: DiagnosticDetail[] = [];
+  let safeError: SafeError | undefined;
+  let externalCommand: ExternalCommandFields | undefined;
+  let current: unknown = error;
+
+  while (current !== null && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const parsed = safeErrorView(current);
+    if (parsed !== undefined) {
+      if (safeError === undefined) {
+        safeError = parsed;
+        if (parsed.tag === "ExternalCommandError") {
+          externalCommand = externalCommandFields(current);
+        }
+      }
+      const currentDiagnostics = diagnosticDetails(current);
+      diagnostics.push(...currentDiagnostics);
+      if (
+        parsed.tag === "ExternalCommandError" &&
+        !currentDiagnostics.some((detail) => detail.type === "external_command")
+      ) {
+        const commandDiagnostic = externalCommandDiagnostic(current, parsed);
+        if (commandDiagnostic !== undefined) {
+          diagnostics.push(commandDiagnostic);
+        }
+      }
+    }
+    current = runtimeErrorProperty(current, "cause");
+  }
+
+  const result: SafeErrorChain = {
+    diagnostics: dedupeDiagnostics(diagnostics),
+  };
+  if (safeError !== undefined) result.safeError = safeError;
+  if (externalCommand !== undefined) result.externalCommand = externalCommand;
+  return result;
+}
+
+function safeErrorView(value: unknown): SafeError | undefined {
+  const parsed = RuntimeSafeErrorViewSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function safeErrorFallback(fallback: RuntimeSafeErrorFallback): SafeError {
+  const candidate: Record<string, unknown> = {
     tag: fallback.tag,
     code: fallback.code,
     message: fallback.message,
   };
-
-  if (fallback.hint !== undefined) {
-    safeError.hint = fallback.hint;
-  }
-  if (fallback.provider !== undefined) {
-    safeError.provider = fallback.provider;
-  }
-  if (fallback.traceId !== undefined) {
-    safeError.traceId = fallback.traceId;
-  }
-
-  return safeError;
+  if (fallback.hint !== undefined) candidate.hint = fallback.hint;
+  if (fallback.provider !== undefined) candidate.provider = fallback.provider;
+  if (fallback.traceId !== undefined) candidate.traceId = fallback.traceId;
+  return SafeErrorSchema.parse(candidate);
 }
 
-function copySafeError(input: RuntimeSafeError): RuntimeSafeError {
-  const safeError: RuntimeSafeError = {
-    tag: input.tag,
-    code: input.code,
-    message: input.message,
-  };
-  if (input.hint !== undefined) safeError.hint = input.hint;
-  if (input.commandId !== undefined) safeError.commandId = input.commandId;
-  if (input.projectId !== undefined) safeError.projectId = input.projectId;
-  if (input.worktreeId !== undefined) safeError.worktreeId = input.worktreeId;
-  if (input.sessionId !== undefined) safeError.sessionId = input.sessionId;
-  if (input.provider !== undefined) safeError.provider = input.provider;
-  if (input.traceId !== undefined) safeError.traceId = input.traceId;
-  if (input.diagnosticId !== undefined) safeError.diagnosticId = input.diagnosticId;
-  if (input.diagnosticDetails !== undefined) {
-    safeError.diagnosticDetails = input.diagnosticDetails.map(copyDiagnosticDetail);
+function diagnosticDetails(value: object): DiagnosticDetail[] {
+  const details = runtimeErrorProperty(value, "diagnosticDetails");
+  if (!Array.isArray(details)) {
+    return [];
   }
-  if (input.tag === "ExternalCommandError") {
-    const source = input as Partial<ExternalCommandError>;
-    const target = safeError as ExternalCommandError;
-    if (typeof source.command === "string") target.command = source.command;
-    if (typeof source.cwd === "string") target.cwd = source.cwd;
-    if (typeof source.exitCode === "number") target.exitCode = source.exitCode;
-    if (typeof source.signal === "string") target.signal = source.signal;
-    if (typeof source.stdoutSnippet === "string") target.stdoutSnippet = source.stdoutSnippet;
-    if (typeof source.stderrSnippet === "string") target.stderrSnippet = source.stderrSnippet;
+  const parsed: DiagnosticDetail[] = [];
+  for (const detail of details) {
+    const result = DiagnosticDetailSchema.safeParse(detail);
+    if (result.success) {
+      parsed.push(result.data);
+    }
   }
-  return safeError;
+  return parsed;
 }
 
-function safeErrorCause(error: unknown, seen = new Set<unknown>()): RuntimeSafeError | undefined {
-  if (!error || typeof error !== "object" || seen.has(error)) {
+function externalCommandFields(value: unknown): ExternalCommandFields | undefined {
+  const parsed = ExternalCommandFieldsSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function externalCommandDiagnostic(
+  value: unknown,
+  safeError: SafeError,
+): ExternalCommandDiagnosticDetail | undefined {
+  const fields = externalCommandFields(value);
+  if (fields === undefined) {
     return undefined;
   }
-  seen.add(error);
-  const cause = (error as { cause?: unknown }).cause;
-  if (isSafeError(cause)) {
-    return cause;
-  }
-  return safeErrorCause(cause, seen);
+  const detail: ExternalCommandDiagnosticDetail = {
+    type: "external_command",
+    operation: `externalCommand.${fields.command.split(" ")[0] ?? "command"}`,
+    ...fields,
+  };
+  if (safeError.provider !== undefined) detail.provider = safeError.provider;
+  const parsed = ExternalCommandDiagnosticDetailSchema.safeParse(detail);
+  return parsed.success ? parsed.data : undefined;
 }
 
-function copyDiagnosticDetail(detail: RuntimeDiagnosticDetail): RuntimeDiagnosticDetail {
-  if (detail.type === "worktree_removal_refusal") {
-    const copied: RuntimeWorktreeRemovalRefusalDiagnosticDetail = {
-      type: detail.type,
-      worktreeId: detail.worktreeId,
-      canonicalPath: detail.canonicalPath,
-      observedBranch: detail.observedBranch,
-      refusalReason: detail.refusalReason,
-    };
-    if (detail.provider !== undefined) copied.provider = detail.provider;
-    if (detail.projectId !== undefined) copied.projectId = detail.projectId;
-    return copied;
+function copyExternalCommandFields(
+  target: ExternalCommandError,
+  fields: ExternalCommandFields,
+): void {
+  target.command = fields.command;
+  if (fields.cwd !== undefined) target.cwd = fields.cwd;
+  if (fields.exitCode !== undefined) target.exitCode = fields.exitCode;
+  if (fields.signal !== undefined) target.signal = fields.signal;
+  if (fields.stdoutSnippet !== undefined) target.stdoutSnippet = fields.stdoutSnippet;
+  if (fields.stderrSnippet !== undefined) target.stderrSnippet = fields.stderrSnippet;
+}
+
+function dedupeDiagnostics(diagnostics: readonly DiagnosticDetail[]): DiagnosticDetail[] {
+  const seen = new Set<string>();
+  const deduped: DiagnosticDetail[] = [];
+  for (const diagnostic of diagnostics) {
+    const key = JSON.stringify(diagnostic);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(diagnostic);
   }
-  const copied: RuntimeExternalCommandDiagnosticDetail = {
-    type: "external_command",
-    operation: detail.operation,
-    command: detail.command,
-  };
-  if (detail.provider !== undefined) copied.provider = detail.provider;
-  if (detail.cwd !== undefined) copied.cwd = detail.cwd;
-  if (detail.exitCode !== undefined) copied.exitCode = detail.exitCode;
-  if (detail.signal !== undefined) copied.signal = detail.signal;
-  if (detail.stdoutSnippet !== undefined) copied.stdoutSnippet = detail.stdoutSnippet;
-  if (detail.stderrSnippet !== undefined) copied.stderrSnippet = detail.stderrSnippet;
-  if (detail.durationMs !== undefined) copied.durationMs = detail.durationMs;
-  return copied;
+  return deduped;
+}
+
+function runtimeErrorProperty(value: object, key: string): unknown {
+  try {
+    return Reflect.get(value, key);
+  } catch {
+    return undefined;
+  }
 }

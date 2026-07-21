@@ -298,6 +298,43 @@ describe("boundary inventory guard", () => {
 
     expect([...violations].sort()).toEqual([]);
   });
+
+  it("centralizes safe-error and external-command shape inspection in runtime", async () => {
+    const files = await sourceFiles();
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      const path = relative(process.cwd(), file);
+      const isRuntimeNormalization = path === "packages/runtime/src/errors.ts";
+
+      if (!isRuntimeNormalization && /\b(?:function|const)\s+isSafeError(?:Like)?\b/.test(source)) {
+        violations.push(`${path}: local SafeError guard`);
+      }
+      if (!isRuntimeNormalization && /\bsafeErrorCause\b/.test(source)) {
+        violations.push(`${path}: local SafeError cause traversal`);
+      }
+      if (/\b(?:stringFieldDeep|numberFieldDeep)\b/.test(source)) {
+        violations.push(`${path}: recursive arbitrary-field probing`);
+      }
+      if (/try\s*\{\s*throw\s+[^;]+;?\s*\}\s*catch/s.test(source)) {
+        violations.push(`${path}: artificial throw/catch normalization`);
+      }
+      if (/diagnosticDetails\s*\?\s*:\s*unknown/.test(source)) {
+        violations.push(`${path}: untyped diagnosticDetails cast`);
+      }
+      if (
+        !path.startsWith("packages/runtime/src/") &&
+        /(?:command|cwd|exitCode|signal|stdout|stderr|stdoutSnippet|stderrSnippet)\s*\?\s*:\s*unknown/.test(
+          source,
+        )
+      ) {
+        violations.push(`${path}: arbitrary external-command field inspection`);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
 });
 
 async function noSqliteImportViolations(entryPath: string): Promise<string[]> {
