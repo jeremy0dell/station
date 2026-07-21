@@ -73,6 +73,34 @@ function snapshotWithHarness(projectId: string, harness: string): StationSnapsho
   };
 }
 
+function snapshotWithBareProject(projectId: string): StationSnapshot {
+  const base = manyProjectsSnapshot();
+  const project = base.projects.find((candidate) => candidate.id === projectId);
+  if (project === undefined) throw new Error(`no fixture project ${projectId}`);
+  return {
+    ...base,
+    projects: base.projects.map((candidate) =>
+      candidate.id === projectId
+        ? {
+            ...candidate,
+            health: {
+              ...candidate.health,
+              status: "unavailable",
+              lastError: {
+                tag: "WorktreeProviderError",
+                code: "WORKTRUNK_PROJECT_ROOT_BARE",
+                message: "Project checkout is configured as a bare repository.",
+                hint: `Inspect with git -C '${candidate.root}' config --show-origin --get core.bare. If this is the intended checkout, run git -C '${candidate.root}' config --local core.bare false; otherwise correct projects.root.`,
+                provider: "worktrunk",
+                projectId,
+              },
+            },
+          }
+        : candidate,
+    ),
+  };
+}
+
 describe("routeStationMouse", () => {
   it("launches the row's primary agent (managed) on a dashboard row click", () => {
     const store = makeStore();
@@ -445,6 +473,25 @@ describe("routeStationMouse", () => {
       expect(outcome.harness).toBe("codex"); // project.defaults.harness
       expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
     }
+  });
+
+  it("shows the blocked Quick Session error without emitting a launch outcome", () => {
+    const store = makeStore(snapshotWithBareProject("station"));
+
+    expect(
+      routeStationMouse(
+        { kind: "quickSessionForProject", projectId: "station" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.getState().localRows.pendingCreate).toEqual([]);
+    const toast = store.getState().toasts.at(-1)?.toast;
+    expect(toast).toMatchObject({
+      kind: "error",
+      message: "Project checkout is configured as a bare repository.",
+    });
+    expect(toast?.hint).toContain("config --local core.bare false");
   });
 
   it("gates quick-session and default-agent picker to dashboard mode", () => {

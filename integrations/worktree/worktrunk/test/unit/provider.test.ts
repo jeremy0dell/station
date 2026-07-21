@@ -930,6 +930,99 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("refuses corrupted checkout roots before invoking Worktrunk", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-bare-root-"));
+    await mkdir(join(root, ".git"));
+    const bareProject = { ...project, root };
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, input.command === "git" ? "true\n" : "[]");
+      },
+    });
+
+    await expect(provider.listWorktrees(bareProject)).rejects.toMatchObject({
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_PROJECT_ROOT_BARE",
+      projectId: "web",
+      hint: expect.stringContaining("config --local core.bare false"),
+    });
+    await expect(
+      provider.createWorktree({ project: bareProject, branch: "feature" }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_PROJECT_ROOT_BARE",
+      projectId: "web",
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => call.command === "git")).toBe(true);
+
+    calls.length = 0;
+    const checks = await provider.doctorChecks({ projects: [bareProject] });
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "worktrunk-project-root-web",
+          status: "warn",
+          message: expect.stringContaining("config --show-origin --get core.bare"),
+          error: expect.objectContaining({
+            code: "WORKTRUNK_PROJECT_ROOT_BARE",
+            projectId: "web",
+            hint: expect.stringContaining("config --local core.bare false"),
+          }),
+        }),
+      ]),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls.every((call) => call.command === "git")).toBe(true);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("rechecks the configured root before removing a previously listed worktree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-remove-bare-root-"));
+    await mkdir(join(root, ".git"));
+    const guardedProject = { ...project, root };
+    const calls: ExternalCommandInput[] = [];
+    let configuredBare = false;
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        return result(
+          input,
+          input.command === "git"
+            ? `${configuredBare}\n`
+            : JSON.stringify([{ path: join(root, "feature"), branch: "feature" }]),
+        );
+      },
+    });
+    const listed = await provider.listWorktrees(guardedProject);
+    const selected = listed[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("worktree fixture missing registration identity");
+    }
+    calls.length = 0;
+    configuredBare = true;
+
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_PROJECT_ROOT_BARE",
+      projectId: "web",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.command).toBe("git");
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("warns about missing registrations with safe prune commands", async () => {
     const provider = testProvider({
       command: "wt",

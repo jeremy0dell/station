@@ -1,12 +1,16 @@
+import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { runCli } from "@station/cli";
 import { addProjectToConfig, removeProjectFromConfig } from "@station/config";
 import type { CommandReceipt, CommandRecord, StationCommand } from "@station/contracts";
+import { environmentWithoutGitLocals } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
+const execFileAsync = promisify(execFile);
 
 describe("CLI project commands", () => {
   it("lists configured projects", async () => {
@@ -88,12 +92,46 @@ describe("CLI project commands", () => {
       },
     });
   });
+
+  it("reports a configured bare checkout with safe manual repair guidance", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const repo = await makeGitRepo(fixture.root, "bare-project");
+    await addProjectToConfig({ path: repo, configPath, homeDir: fixture.root });
+    await git(repo, ["config", "--local", "core.bare", "true"]);
+
+    const result = await runCli(["--config", configPath, "project", "doctor", "bare-project"]);
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        action: "doctor",
+        status: "warn",
+        project: { id: "bare-project", root: repo },
+        messages: [
+          "Project checkout is configured as a bare repository.",
+          expect.stringContaining("config --local core.bare false"),
+        ],
+      },
+    });
+  });
 });
 
 async function makeRepo(root: string, name: string): Promise<string> {
   const repo = join(root, name);
   await mkdir(join(repo, ".git"), { recursive: true });
   return repo;
+}
+
+async function makeGitRepo(root: string, name: string): Promise<string> {
+  const repo = join(root, name);
+  await mkdir(repo, { recursive: true });
+  await git(repo, ["init", "--quiet"]);
+  return repo;
+}
+
+async function git(root: string, args: string[]): Promise<void> {
+  await execFileAsync("git", args, { cwd: root, env: environmentWithoutGitLocals() });
 }
 
 function runningObserverDeps(options: {

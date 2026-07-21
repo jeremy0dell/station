@@ -11,12 +11,14 @@
 import type { StoreApi } from "zustand/vanilla";
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
+  addTuiToast,
   choiceValueByKey,
   newSessionIntentForInput,
   focusProjectSettingsItem as focusProjectSettingsItemState,
   openProjectDefaultAgentPicker,
   openWidgetSettings as openWidgetSettingsState,
   resolveQuickSessionIntent,
+  safeErrorToToast,
   selectAddProjectRow as selectAddProjectRowState,
   selectDashboardItems,
   selectDashboardSessionRow,
@@ -350,8 +352,8 @@ export function resolveKeyForkSessionSubmit(
 /**
  * Resolve a project header's quick-session click to its create target. Uses
  * the project's default harness and a generated branch name — no wizard, no
- * review screen. Returns `none` if the project is unavailable or missing, so
- * the click is an inert miss.
+ * review screen. Blocked projects preserve their provider error as a toast;
+ * only a missing or stale project is an inert miss.
  */
 export type QuickSessionSubmitTarget =
   | { kind: "submit"; projectId: string; branch: string; harness: ProviderId }
@@ -362,7 +364,11 @@ export function resolveQuickSessionSubmit(
   projectId: string,
 ): QuickSessionSubmitTarget {
   const intent = resolveQuickSessionIntent(store.getState(), projectId);
-  if (intent === undefined) return { kind: "none" };
+  if (intent.kind === "missing") return { kind: "none" };
+  if (intent.kind === "blocked") {
+    store.setState(addTuiToast(store.getState(), safeErrorToToast(intent.error)));
+    return { kind: "none" };
+  }
   return {
     kind: "submit",
     projectId: intent.projectId,

@@ -109,6 +109,15 @@ expected; explicitly disabled hooks are reported as the skip-hooks automation
 mode instead. Provider command failures from `wt` are recorded through provider
 health, command records, logs, debug traces, and debug bundle evidence.
 
+A checkout-style configured root with local `core.bare=true` is reported as
+`WORKTRUNK_PROJECT_ROOT_BARE`. `stn project doctor <projectId>` reports the
+configuration-side warning, while `stn doctor --project <projectId>` reports the
+scoped Worktrunk project check and degraded project health. Worktrunk list,
+create, and remove operations are blocked before `wt` runs. Station does not
+repair Git config automatically; use the reported commands to inspect the
+setting and either set local `core.bare=false` for the intended checkout or
+correct `projects.root`.
+
 Doctor also reports Worktrunk registrations whose working directories are
 missing or prunable. `stn doctor --project <id>` limits this scan to one project;
 the unscoped command scans configured projects with bounded concurrency and
