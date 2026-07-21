@@ -4,7 +4,8 @@ Station is a terminal workspace for running AI coding agents in isolated Git wor
 
 ## Start Here
 
-- [Install Station](install.md) — install and verify the authenticated binary.
+- [Install Station](install.md) — install the public stable binary or the
+  current authenticated preview.
 - [Agent-led install prompt](install.md#let-your-agent-install-and-validate-station) — let a coding agent install the binary and validate `stn setup` safely.
 - [Quick start](quick-start.md) — add a project and create your first agent session.
 - [Overview](overview.md) — understand projects, worktrees, sessions, providers, and the observer.

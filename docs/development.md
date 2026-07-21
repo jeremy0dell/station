@@ -185,7 +185,8 @@ pnpm smoke:install
 ```
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
-authenticated GitHub responses and temporary homes, including startup-file
+public curl downloads, authenticated draft GitHub responses, and temporary
+homes, including startup-file
 non-interaction, safely evaluated minimal-PATH guidance, physical launcher
 resolution, and normalized-colon preflight coverage. It is deterministic, does
 not download a real release, and does not read or modify real shell startup
@@ -301,7 +302,12 @@ must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
 
-## Private Binary Release
+## Binary Release
+
+The draft-acceptance mechanics below remain the executable release foundation.
+For repository publication, unauthenticated distribution, signing/notarization,
+and the public Homebrew source channel, also complete the
+[Public release checklist](public-release-checklist.md).
 
 Before tagging, an administrator must enable GitHub immutable releases; the
 workflow token cannot read that administration setting. The workflow validates
@@ -311,18 +317,23 @@ and have no existing GitHub release. Pushing a `v*` tag runs the callable
 standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
 for all four supported targets, archive/checksum assembly, and an authenticated
 installer smoke against the resulting GitHub release draft. The four native
-release builds use one archive-packaging helper, and the draft-install jobs
-consume those exact uploaded archives. Draft acceptance revalidates the tag but
-fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
-with `--version`; a moved tag cannot substitute different installer code. After
-all four native installs pass, the workflow re-downloads the five draft assets,
-verifies them against the build checksum, and uploads an immutable
+release builds use one archive-packaging helper. Draft creation stamps the exact
+tag into `install.sh`, includes that script in `SHA256SUMS`, and uploads it with
+the four archives. The draft-install jobs download that exact installer asset by
+release ID and consume the uploaded archive for their platform; a moved tag
+cannot substitute different installer code. After all four native installs
+pass, the workflow re-downloads the six draft assets, verifies them against the
+build checksum, and uploads an immutable
 `accepted-release-candidate-*` Actions artifact containing the commit, release
 ID, asset IDs, and checksums. Draft install and candidate-recording jobs use
 contents write permission because GitHub exposes draft releases only to
 identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
-workflow never publishes the draft automatically.
+workflow never publishes the draft automatically. Promotion publishes only the
+accepted draft, then a four-platform matrix downloads the public stamped
+installer without GitHub credentials and verifies the installed runtime. A
+post-publication smoke cannot undo an immutable release; failure requires
+rollback guidance and a superseding version.
 
 The current immutable binary candidate is `v0.7.1-rc.4`. `v0.7.1-rc.3` is the
 prior published binary, and `v0.7.1-rc.2` remains an older published rollback;
@@ -375,9 +386,9 @@ The staged binary's `--version` probe must finish within 10 seconds. Its
 watchdog returns 124 for timeout and 125 for timer failure, bounds output at the
 filesystem level, TERM/KILLs and reaps the probe, removes common GitHub and
 Actions token variables from the child environment, and shows at most 4096
-sanitized bytes of compatibility stderr. Every potentially blocking `gh`
-operation is a tracked file-backed child; HUP, INT, and TERM forward to that
-child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
+sanitized bytes of compatibility stderr. Every potentially blocking curl or
+`gh` operation is a tracked file-backed child; HUP, INT, and TERM forward to
+that child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
 
 The verified `stn` rename is the sole runtime commit point. Immediately before
 it, both aliases must still be exact symlinks to `stn` and binary/license
@@ -505,13 +516,18 @@ promotion will verify:
     ''|*[!0-9]*) echo "candidate release ID must be numeric" >&2; exit 1 ;;
   esac
   test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq '.sha')" = "$commit"
-  gh api --method GET \
-    -H 'Accept: application/vnd.github.raw+json' \
-    -f ref="$commit" \
-    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
+  asset_ids="$candidate_dir/asset-ids.txt"
+  test -f "$asset_ids"
+  installer_asset_id="$(awk -F= '$1 == "install.sh" { print $2 }' "$asset_ids")"
+  case "$installer_asset_id" in
+    ''|*[!0-9]*) echo "candidate installer asset ID must be numeric" >&2; exit 1 ;;
+  esac
+  gh api -H 'Accept: application/octet-stream' \
+    "repos/jeremy0dell/station/releases/assets/$installer_asset_id" > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer" --version "$tag"
+  grep -Fx "embedded_version=\"$tag\"" "$installer"
+  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer"
 )
 ```
 

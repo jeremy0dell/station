@@ -34,58 +34,37 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
 
 ## Install the binary
 
-This procedure installs Station from authenticated GitHub release assets and
-assumes your GitHub account can read the private `jeremy0dell/station`
-repository. Install the [GitHub CLI](https://cli.github.com/) first. The binary
-does not require Node.js, pnpm, Bun, or a source checkout.
-
-### 1. Authenticate GitHub CLI
+The public stable release installs with curl and does not require a GitHub
+account, Node.js, pnpm, Bun, Homebrew, or a source checkout:
 
 ```sh
-gh auth login --hostname github.com
-gh auth status --hostname github.com
-gh repo view jeremy0dell/station --json nameWithOwner --jq '.nameWithOwner'
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://github.com/jeremy0dell/station/releases/latest/download/install.sh | sh
 ```
 
-If GitHub CLI is already authenticated, skip the login command. The repository
-check should print `jeremy0dell/station`; a not-found response means the active
-account cannot read the private repository. The commands below use the existing
-authentication, so do not paste credentials into the install command.
+This command becomes live when the first public stable release is published.
+It follows GitHub's latest stable release to a version-stamped `install.sh`,
+which downloads the matching native archive, verifies `SHA256SUMS`, and installs
+`stn`, `stn-ingress`, and `stn-tmux-popup` under `~/.local/bin` by default.
 
-### 2. Install the current preview candidate
-
-Run this from any directory:
+To inspect the same installer before running it:
 
 ```sh
-(
-  set -eu
-  umask 077
-  export GH_HOST=github.com
-  tag=v0.7.1-rc.4
-  # After the first stable release, use:
-  # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  gh api --method GET \
-    -H 'Accept: application/vnd.github.raw+json' \
-    -f ref="$tag" \
-    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
-  test -s "$installer"
-  sh -n "$installer"
-  sh "$installer" --version "$tag"
-)
+installer="$(mktemp)"
+trap 'rm -f "$installer"' EXIT
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://github.com/jeremy0dell/station/releases/latest/download/install.sh \
+  -o "$installer"
+sh -n "$installer"
+less "$installer"
+sh "$installer"
 ```
 
-`v0.7.1-rc.4` is the current private-binary candidate. `v0.7.1-rc.3` remains
-published as its immutable rollback; the earlier `v0.7.0` and `v0.7.1-rc.1`
-candidates remained unpublished. Run the recipe after the candidate is
-published. It fetches the installer and binary from the same immutable release
-tag, verifies the release checksum, and installs `stn`, `stn-ingress`, and
-`stn-tmux-popup` in `~/.local/bin` by default. It does not expose or print your
-GitHub credentials. After the first stable release, the commented assignment
-resolves the latest stable tag.
+The currently published private preview still uses the authenticated exact-tag
+procedure in [Install](docs/install.md) until a new release contains the stamped
+installer asset.
 
-### 3. Verify and start Station
+### Verify and start Station
 
 The installer prints an exact PATH command if `~/.local/bin` is not visible in
 the current shell. For the default install directory, run:
@@ -113,21 +92,18 @@ Paste this prompt into a coding agent running on the machine where you want
 Station installed:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.4 and validate setup on this machine.
-
-Use the private GitHub repository jeremy0dell/station through GitHub CLI.
+Install the latest public stable Station release and validate setup on this machine.
 
 Safety and scope:
-- First run `gh auth status --hostname github.com`, then verify repository
-  access with `gh repo view jeremy0dell/station`. Never ask me to paste,
-  extract, or print credentials. If authentication or repository access fails,
-  stop and ask me to run `gh auth login --hostname github.com` myself.
-- Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.4`, read `docs/install.md` from that same tag with authenticated
-  `gh api`, and follow its temporary-file installer procedure. If that release
-  is not published yet, stop instead of falling back to another ref.
-- Never fetch installer code from `main` and never pipe network output directly
-  into a shell.
+- Do not clone the repository or build from source. Download
+  `https://github.com/jeremy0dell/station/releases/latest/download/install.sh`
+  into a private temporary file with curl, require the download to succeed, run
+  `sh -n` on it, and then execute that file. Do not fall back to `main`.
+- Do not request, extract, print, or pass GitHub credentials; public installation
+  must work without authentication.
+- Do not pipe network output directly into a shell in this agent-led path; use
+  the inspectable temporary file even though the documented human convenience
+  command supports `curl | sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. Apply PATH changes only to the current shell and show me
   the exact export I can add later.

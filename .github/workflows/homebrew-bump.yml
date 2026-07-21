@@ -1,26 +1,155 @@
-name: Bump Homebrew formula
+name: Prepare Homebrew formula update
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published Station source tag to package
+        description: Published stable Station tag to package
         required: true
         type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: homebrew-bump-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
-  bump-formula:
-    runs-on: ubuntu-latest
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: mislav/bump-homebrew-formula-action@ccf2332299a883f6af50a1d2d41e5df7904dd769 # v4.1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          formula-name: station
-          homebrew-tap: jeremy0dell/homebrew-station
-          push-to: jeremy0dell/homebrew-station
-          tag-name: ${{ inputs.tag }}
-          download-url: https://github.com/jeremy0dell/station.git
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.x
+      - name: Validate public stable release
+        id: release
         env:
-          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TAP_REPOSITORY: jeremy0dell/homebrew-station
+        run: |
+          node -e '
+            const tag = process.argv[1];
+            const stable = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+            if (!stable.test(tag)) throw new Error(`Homebrew requires a stable release tag: ${tag}`);
+          ' "$TAG"
+
+          version="$(node -p 'require("./package.json").version')"
+          test "$TAG" = "v$version"
+          commit="$(git rev-parse "$TAG^{commit}")"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)" = public
+          test "$(gh api "repos/$TAP_REPOSITORY" --jq .visibility)" = public
+
+          release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
+          test "$(jq -r .draft <<<"$release_json")" = false
+          test "$(jq -r .prerelease <<<"$release_json")" = false
+          test "$(jq -r .immutable <<<"$release_json")" = true
+          test "$(jq -r .tag_name <<<"$release_json")" = "$TAG"
+
+          comparison_status="$(
+            gh api "repos/$GITHUB_REPOSITORY/compare/$commit...main" --jq .status
+          )"
+          case "$comparison_status" in
+            ahead|identical) ;;
+            *) echo "Release commit $commit is not on main." >&2; exit 1 ;;
+          esac
+
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  open-formula-pr:
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: station
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: jeremy0dell/homebrew-station
+          path: tap
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.x
+      - name: Render and push formula branch
+        id: formula
+        env:
+          BRANCH: automation/station-${{ needs.validate.outputs.version }}
+          GH_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+          REVISION: ${{ needs.validate.outputs.commit }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          test -n "$GH_TOKEN"
+          gh auth setup-git
+          base="$(git -C tap branch --show-current)"
+          base_sha="$(git -C tap rev-parse HEAD)"
+          test -n "$base"
+          git -C tap config user.name station-release
+          git -C tap config user.email station@example.invalid
+
+          if git -C tap ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git -C tap fetch origin "$BRANCH"
+            git -C tap checkout -B "$BRANCH" FETCH_HEAD
+            git -C tap rebase "$base_sha"
+          else
+            git -C tap checkout -b "$BRANCH" "$base_sha"
+          fi
+
+          node station/scripts/release/render-homebrew-formula.mjs \
+            --template station/packaging/homebrew/station.rb.template \
+            --output tap/Formula/station.rb \
+            --tag "$TAG" \
+            --revision "$REVISION"
+          ruby -c tap/Formula/station.rb
+
+          if ! git -C tap diff --quiet -- Formula/station.rb; then
+            git -C tap add Formula/station.rb
+            git -C tap commit -m "station $VERSION"
+          fi
+          if git -C tap diff --quiet "$base_sha...HEAD"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -C tap push --set-upstream origin "$BRANCH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Open or locate formula pull request
+        if: steps.formula.outputs.changed == 'true'
+        env:
+          BRANCH: automation/station-${{ needs.validate.outputs.version }}
+          GH_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          TAP_REPOSITORY: jeremy0dell/homebrew-station
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          existing="$(
+            gh pr list --repo "$TAP_REPOSITORY" --head "$BRANCH" --state open \
+              --json url --jq '.[0].url // empty'
+          )"
+          if [[ -n "$existing" ]]; then
+            printf 'Formula pull request: %s\n' "$existing"
+            exit 0
+          fi
+
+          base="$(gh repo view "$TAP_REPOSITORY" --json defaultBranchRef --jq .defaultBranchRef.name)"
+          gh pr create \
+            --repo "$TAP_REPOSITORY" \
+            --base "$base" \
+            --head "$BRANCH" \
+            --title "station $VERSION" \
+            --body "Package immutable public release \`$TAG\`. Merge only after the Homebrew test-bot matrix passes."
