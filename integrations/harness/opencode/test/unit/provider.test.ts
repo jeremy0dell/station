@@ -251,6 +251,51 @@ describe("OpenCodeHarnessProvider", () => {
     );
   });
 
+  it("checks plugin identity against the complete requester hook runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-provider-runtime-"));
+    const opencodeConfigDir = join(root, "opencode");
+    const requesterStateDir = join(root, "requester", "state");
+    const requesterHookSpoolDir = join(requesterStateDir, "spool", "hooks");
+    const requesterObserverSocketPath = join(root, "requester", "run", "observer.sock");
+
+    await installOpenCodePlugin({
+      opencodeConfigDir,
+      observerSocketPath: requesterObserverSocketPath,
+      stateDir: requesterStateDir,
+      hookSpoolDir: requesterHookSpoolDir,
+    });
+
+    const provider = createOpenCodeHarnessProvider({
+      command: "opencode-test",
+      installHooks: true,
+      observerSocketPath: join(root, "incumbent", "run", "observer.sock"),
+      stateDir: join(root, "incumbent", "state"),
+      hookSpoolDir: join(root, "incumbent", "state", "spool", "hooks"),
+      env: { OPENCODE_CONFIG_DIR: opencodeConfigDir },
+      runner: async (input) => result(input, "1.15.12\n"),
+    });
+
+    await expect(
+      provider.doctorChecks({
+        providerHookRuntime: {
+          ingressLauncher: join(root, "requester", "bin", "stn-ingress"),
+          observerSocketPath: requesterObserverSocketPath,
+          stateDir: requesterStateDir,
+          hookSpoolDir: requesterHookSpoolDir,
+          autoStartFromHooks: false,
+          stationConfigPath: join(root, "requester", "config.toml"),
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "opencode-plugin",
+          status: "ok",
+        }),
+      ]),
+    );
+  });
+
   it("classifies and ingests OpenCode observations through provider-local parsing", async () => {
     const provider = createOpenCodeHarnessProvider({ now: () => new Date(now) });
 

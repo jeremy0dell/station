@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_WORKSPACE_CONFIG } from "@station/config";
 import { sameObservedPath } from "@station/contracts";
 import { environmentWithoutGitLocals } from "@station/runtime";
 import {
@@ -39,11 +40,12 @@ describeReal("real Worktrunk provider smoke", () => {
     const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
     const stationBin = join(process.cwd(), "bin", "stn");
     const stationIngressBin = join(process.cwd(), "bin", "stn-ingress");
+    const stateDir = join(root, "station-state");
     const observerSocketPath = join(root, "run", "observer.sock");
     const stationConfigPath = await writeConfigToml(root, {
       schemaVersion: 1,
       observer: {
-        stateDir: join(root, "station-state"),
+        stateDir,
         socketPath: observerSocketPath,
         autoStartFromHooks: false,
       },
@@ -54,7 +56,16 @@ describeReal("real Worktrunk provider smoke", () => {
         layout: "agent-shell",
       },
       projects: [],
+      workspace: DEFAULT_WORKSPACE_CONFIG,
     });
+    const hookExpectation = {
+      hookBin: stationIngressBin,
+      stationConfigPath,
+      observerSocketPath,
+      stateDir,
+      hookSpoolDir: join(stateDir, "spool", "hooks"),
+      autoStartFromHooks: false,
+    };
     cleanup.defer(async () => {
       const observerStarted = await access(observerSocketPath).then(
         () => true,
@@ -76,6 +87,7 @@ describeReal("real Worktrunk provider smoke", () => {
       command: wt,
       configPath: worktrunkConfigPath,
       timeoutMs: 15000,
+      hookExpectation,
     });
     const project = {
       id: "real",
@@ -94,9 +106,7 @@ describeReal("real Worktrunk provider smoke", () => {
 
     const hookOptions = {
       worktrunkConfigPath,
-      stationConfigPath,
-      hookBin: stationIngressBin,
-      autoStartFromHooks: false,
+      expectation: hookExpectation,
     };
     await installWorktrunkHooks(hookOptions);
     cleanup.defer(async () => {

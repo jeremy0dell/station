@@ -155,7 +155,9 @@ Observer API -> use cases and policies -> application-owned ports
 Composition is intentionally split:
 
 1. `apps/cli/src/observerProviders.ts` constructs concrete integrations,
-   assigns provider roles, and supplies a `ProviderRegistry` factory.
+   assigns provider roles, composes the fallback Worktrunk provider-hook
+   expectation from resolved runtime paths and the Observer ingress launcher, and
+   supplies a `ProviderRegistry` factory.
 2. `apps/observer/src/runtime/main.ts` loads config and constructs Observer-
    private infrastructure: SQLite, persistence, logging and project-config adapters, event bus, command
    queue, core, handlers, ingress queues, schedulers, API, and protocol server.
@@ -521,7 +523,15 @@ fall through to a second local spawn.
 
 Doctor and diagnostic collection are direct query operations over current core
 health, persistence health, durable Observer records, config diagnostics,
-provider checks, and local runtime evidence. They receive
+provider checks, and local runtime evidence. CLI full-doctor requests carry one
+strict provider-neutral hook-runtime context containing the requester's ingress
+launcher, socket, state and spool paths, auto-start policy, and optional Station
+config path. Provider hook adapters map the applicable fields from that context
+without mixing requester and Observer identities, so Worktrunk, Claude, Codex,
+Cursor, and OpenCode compare hook artifacts using the requester runtime identity
+even when an exact-build Observer from another checkout serves the request. Direct
+API callers retain the whole Observer composition expectation as the fallback.
+Provider adapters receive
 `PersistenceHealthSource` separately from the command and event journals, so
 neither use case needs a concrete SQLite handle. Collection must remain
 read-only with respect to product state. Provider doctor calls receive an

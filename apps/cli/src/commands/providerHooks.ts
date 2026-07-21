@@ -28,6 +28,7 @@ type HookCommandContext = {
   config?: StationConfig;
   configPath?: string;
   env?: CliEnv;
+  providerHookIngressLauncher?: string;
 };
 
 type ParsedHookFlags = {
@@ -50,6 +51,7 @@ export type ProviderHooksCommandOptions = {
   config?: StationConfig;
   configPath?: string;
   env?: CliEnv;
+  providerHookIngressLauncher?: string;
 };
 
 export type ProviderHooksCommandResult = unknown;

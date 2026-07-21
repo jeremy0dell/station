@@ -1,5 +1,5 @@
 import { constants as fsConstants } from "node:fs";
-import { access as nodeAccess, stat as nodeStat } from "node:fs/promises";
+import { access as nodeAccess, stat as nodeStat, realpath } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CliEnv } from "../../../env.js";
@@ -9,6 +9,8 @@ export type CheckSetupLaunchersOptions = {
   env?: CliEnv;
   access?: (path: string) => Promise<void>;
   packageRoot?: string;
+  compiled?: boolean;
+  providerHookIngressLauncher?: string;
 };
 
 const launcherDefinitions = {
@@ -32,6 +34,25 @@ export async function checkSetupLaunchers(
   const env = options.env ?? process.env;
   const packageRoot = options.packageRoot ?? setupPackageRoot();
   const access = options.access ?? executableAccess;
+  if (options.providerHookIngressLauncher !== undefined) {
+    const runtimeRoot = dirname(options.providerHookIngressLauncher);
+    const source = options.compiled === true ? "installed" : "checkout";
+    const [station, ingress, tmuxPopup] = await Promise.all([
+      checkRuntimeLauncher(launcherDefinitions.station, join(runtimeRoot, "stn"), source, {
+        access,
+        env,
+        packageRoot,
+      }),
+      checkRuntimeLauncher(
+        launcherDefinitions.ingress,
+        options.providerHookIngressLauncher,
+        source,
+        { access, env, packageRoot },
+      ),
+      checkLauncher(launcherDefinitions.tmuxPopup, { access, env, packageRoot }),
+    ]);
+    return { packageRoot, station, ingress, tmuxPopup };
+  }
   const [station, ingress, tmuxPopup] = await Promise.all([
     checkLauncher(launcherDefinitions.station, { access, env, packageRoot }),
     checkLauncher(launcherDefinitions.ingress, { access, env, packageRoot }),
@@ -43,6 +64,56 @@ export async function checkSetupLaunchers(
     ingress,
     tmuxPopup,
   };
+}
+
+async function checkRuntimeLauncher(
+  definition: (typeof launcherDefinitions)["station" | "ingress"],
+  runtimePath: string,
+  runtimeSource: "installed" | "checkout",
+  options: {
+    access: (path: string) => Promise<void>;
+    env: CliEnv | NodeJS.ProcessEnv;
+    packageRoot: string;
+  },
+): Promise<SetupLauncherFact> {
+  const checkoutPath = join(options.packageRoot, definition.relativePath);
+  try {
+    await options.access(runtimePath);
+  } catch {
+    return {
+      status: "missing",
+      source: "missing",
+      command: runtimePath,
+      checkoutPath,
+      message: `The active ${definition.command} runtime launcher is missing or not executable at ${runtimePath}.`,
+    };
+  }
+
+  const pathMatch = await resolveOnPath(definition.command, options.env.PATH, options.access);
+  const onPath =
+    pathMatch !== undefined && (await pathsResolveToSameLauncher(pathMatch, runtimePath));
+  const launcher: SetupLauncherFact = {
+    status: "ok",
+    source: onPath ? "path" : runtimeSource,
+    command: runtimePath,
+    resolvedPath: runtimePath,
+    checkoutPath,
+  };
+  if (pathMatch !== undefined && !onPath) {
+    launcher.message = `${definition.command} on PATH belongs to a different runtime; setup will use ${runtimePath}.`;
+  } else if (pathMatch === undefined && runtimeSource === "checkout") {
+    launcher.message = `${definition.command} is not on PATH; setup will use the current checkout launcher.`;
+  }
+  return launcher;
+}
+
+async function pathsResolveToSameLauncher(left: string, right: string): Promise<boolean> {
+  if (resolve(left) === resolve(right)) return true;
+  try {
+    return (await realpath(left)) === (await realpath(right));
+  } catch {
+    return false;
+  }
 }
 
 export function setupLauncherExecutable(launcher: SetupLauncherFact): string {

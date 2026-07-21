@@ -2,57 +2,16 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { createHookSetupFileOps, providerHookCommandLine } from "@station/runtime";
 import { parse, stringify } from "smol-toml";
-
-export const WORKTRUNK_HOOK_NAMES = [
-  "post-create",
-  "post-switch",
-  "pre-remove",
-  "post-remove",
-] as const;
-
-export type WorktrunkHookName = (typeof WORKTRUNK_HOOK_NAMES)[number];
-
-export type WorktrunkHookPlanOptions = {
-  worktrunkConfigPath?: string;
-  stationConfigPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
-  autoStartFromHooks?: boolean;
-  hookBin?: string;
-  env?: NodeJS.ProcessEnv;
-  homeDir?: string;
-};
-
-export type WorktrunkHookPlan = {
-  provider: "worktrunk";
-  configPath: string;
-  commands: Record<WorktrunkHookName, string>;
-  missing: WorktrunkHookName[];
-  changed: boolean;
-  before: string;
-  after: string;
-};
-
-export type WorktrunkHookInstallResult = WorktrunkHookPlan & {
-  installed: boolean;
-  backupPath?: string;
-};
-
-export type WorktrunkHookDoctorResult = {
-  provider: "worktrunk";
-  configPath: string;
-  status: "ok" | "warn";
-  installed: boolean;
-  missing: WorktrunkHookName[];
-  commands: Record<WorktrunkHookName, string>;
-  message: string;
-};
-
-export type WorktrunkHookSetupErrorCode =
-  | "WORKTRUNK_HOOK_CONFIG_UNREADABLE"
-  | "WORKTRUNK_HOOK_INVALID_TOML"
-  | "WORKTRUNK_HOOK_WRITE_FAILED";
+import {
+  WORKTRUNK_HOOK_NAMES,
+  type WorktrunkHookDoctorResult,
+  type WorktrunkHookExpectation,
+  type WorktrunkHookInstallResult,
+  type WorktrunkHookName,
+  type WorktrunkHookPlan,
+  type WorktrunkHookPlanOptions,
+  type WorktrunkHookSetupErrorCode,
+} from "./types.js";
 
 export class WorktrunkHookSetupError extends Error {
   readonly tag = "WorktrunkHookSetupError";
@@ -95,16 +54,19 @@ const fileOps = createHookSetupFileOps(({ operation, cause }) => {
 });
 
 export async function planWorktrunkHooks(
-  options: WorktrunkHookPlanOptions = {},
+  options: WorktrunkHookPlanOptions,
 ): Promise<WorktrunkHookPlan> {
   const configPath = resolveWorktrunkConfigPath(options);
   const before = await fileOps.readOptionalFile(configPath);
-  const commands = expectedWorktrunkHookCommands(options);
+  const commands = expectedWorktrunkHookCommands(options.expectation);
+  const legacyCommands = legacyBareWorktrunkHookCommands(options.expectation);
   const document = parseTomlDocument(before);
   const missing = WORKTRUNK_HOOK_NAMES.filter(
     (hookName) => !hookContainsCommand(document, hookName, commands[hookName]),
   );
-  const afterDocument = installCommands(document, commands);
+  // Bare commands from earlier builds are repair inputs, not healthy expectations.
+  const withoutLegacy = uninstallCommands(document, legacyCommands);
+  const afterDocument = installCommands(withoutLegacy, commands);
   const after = stringifyTomlDocument(afterDocument);
 
   return {
@@ -119,7 +81,7 @@ export async function planWorktrunkHooks(
 }
 
 export async function installWorktrunkHooks(
-  options: WorktrunkHookPlanOptions = {},
+  options: WorktrunkHookPlanOptions,
 ): Promise<WorktrunkHookInstallResult> {
   const plan = await planWorktrunkHooks(options);
   if (!plan.changed) {
@@ -139,13 +101,15 @@ export async function installWorktrunkHooks(
 }
 
 export async function uninstallWorktrunkHooks(
-  options: WorktrunkHookPlanOptions = {},
+  options: WorktrunkHookPlanOptions,
 ): Promise<WorktrunkHookInstallResult> {
   const configPath = resolveWorktrunkConfigPath(options);
   const before = await fileOps.readOptionalFile(configPath);
-  const commands = expectedWorktrunkHookCommands(options);
+  const commands = expectedWorktrunkHookCommands(options.expectation);
+  const legacyCommands = legacyBareWorktrunkHookCommands(options.expectation);
   const document = parseTomlDocument(before);
-  const afterDocument = uninstallCommands(document, commands);
+  const withoutCanonical = uninstallCommands(document, commands);
+  const afterDocument = uninstallCommands(withoutCanonical, legacyCommands);
   const after = stringifyTomlDocument(afterDocument);
   const missing = WORKTRUNK_HOOK_NAMES.filter(
     (hookName) => !hookContainsCommand(afterDocument, hookName, commands[hookName]),
@@ -181,7 +145,7 @@ export async function uninstallWorktrunkHooks(
 }
 
 export async function doctorWorktrunkHooks(
-  options: WorktrunkHookPlanOptions & { enabled?: boolean } = {},
+  options: WorktrunkHookPlanOptions & { enabled?: boolean },
 ): Promise<WorktrunkHookDoctorResult> {
   const plan = await planWorktrunkHooks(options);
   if (options.enabled === false) {
@@ -211,7 +175,9 @@ export async function doctorWorktrunkHooks(
   };
 }
 
-export function resolveWorktrunkConfigPath(options: WorktrunkHookPlanOptions = {}): string {
+export function resolveWorktrunkConfigPath(
+  options: Pick<WorktrunkHookPlanOptions, "worktrunkConfigPath" | "env" | "homeDir"> = {},
+): string {
   if (options.worktrunkConfigPath !== undefined) {
     return resolvePath(options.worktrunkConfigPath, options.homeDir ?? homedir());
   }
@@ -222,23 +188,23 @@ export function resolveWorktrunkConfigPath(options: WorktrunkHookPlanOptions = {
 }
 
 export function expectedWorktrunkHookCommands(
-  options: Pick<
-    WorktrunkHookPlanOptions,
-    | "stationConfigPath"
-    | "observerSocketPath"
-    | "stateDir"
-    | "hookSpoolDir"
-    | "autoStartFromHooks"
-    | "hookBin"
-  > = {},
+  expectation: WorktrunkHookExpectation,
 ): Record<WorktrunkHookName, string> {
-  const hookBin = options.hookBin ?? "stn-ingress";
   return Object.fromEntries(
     WORKTRUNK_HOOK_NAMES.map((hookName) => [
       hookName,
-      providerHookCommandLine("worktrunk", { ...options, hookBin }, hookName),
+      providerHookCommandLine("worktrunk", expectation, hookName),
     ]),
   ) as Record<WorktrunkHookName, string>;
+}
+
+function legacyBareWorktrunkHookCommands(
+  expectation: WorktrunkHookExpectation,
+): Record<WorktrunkHookName, string> {
+  if (expectation.hookBin === "stn-ingress") {
+    return expectedWorktrunkHookCommands(expectation);
+  }
+  return expectedWorktrunkHookCommands({ ...expectation, hookBin: "stn-ingress" });
 }
 
 export function normalizeWorktrunkLifecycleEvent(event: string): string {

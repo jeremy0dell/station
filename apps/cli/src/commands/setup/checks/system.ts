@@ -32,7 +32,11 @@ import { setupEnv } from "./env.js";
 import { type CheckGitOptions, checkSetupGit } from "./git.js";
 import { checkSetupGitDelta } from "./gitDelta.js";
 import { type CheckHarnessesOptions, checkSetupHarnesses } from "./harnesses.js";
-import { checkSetupLaunchers, setupLauncherExecutable } from "./launchers.js";
+import {
+  type CheckSetupLaunchersOptions,
+  checkSetupLaunchers,
+  setupLauncherExecutable,
+} from "./launchers.js";
 import { checkSetupStateDir, type SetupStateDirFileSystem } from "./stateDir.js";
 import { checkSetupTmux } from "./tmux.js";
 import { checkSetupTmuxBinding, tmuxPopupRunShellCommand } from "./tmuxBinding.js";
@@ -63,6 +67,7 @@ export type CollectSetupFactsOptions = {
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
   compiled?: boolean;
+  providerHookIngressLauncher?: string;
   tmuxPopupOwnerRoot?: string;
   stateDirExecute?: (path: string) => Promise<void>;
   stateDirFs?: SetupStateDirFileSystem;
@@ -90,6 +95,10 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   if (options.runner !== undefined) dependencyInput.runner = options.runner;
   if (options.access !== undefined) dependencyInput.access = options.access;
   const dependencyOptions = dependencyCheckOptions(dependencyInput);
+  const launcherOptions: CheckSetupLaunchersOptions = { ...dependencyOptions, compiled };
+  if (options.providerHookIngressLauncher !== undefined) {
+    launcherOptions.providerHookIngressLauncher = options.providerHookIngressLauncher;
+  }
   const git = await checkSetupGit(commandOptions);
   const gitRoot = git.status === "ok" ? git.root : undefined;
   const setupConfigInput: {
@@ -136,7 +145,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
       : checkSetupXcode(xcodeOptions),
     checkSetupHarnesses(commandOptions),
     checkSetupConfig({ ...configPathOptions, configPath }),
-    checkSetupLaunchers(dependencyOptions),
+    checkSetupLaunchers(launcherOptions),
   ]);
   const worktrunkAutomation = await checkSetupWorktrunkAutomation({
     worktrunk,

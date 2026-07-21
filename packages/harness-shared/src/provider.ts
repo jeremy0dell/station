@@ -237,6 +237,7 @@ export type HarnessHookDoctorOptionsInput = {
 
 export type CommonHookDoctorOptions = {
   enabled: boolean;
+  hookBin?: string;
   observerSocketPath?: string;
   stateDir?: string;
   hookSpoolDir?: string;
@@ -244,12 +245,24 @@ export type CommonHookDoctorOptions = {
   stationConfigPath?: string;
 };
 
-/** The hook-doctor option subset shared by claude/codex/cursor; adapters spread-and-extend. */
+/** Maps the whole requester hook runtime or preserves the incumbent provider options. */
 export function harnessHookDoctorOptions(
   options: HarnessHookDoctorOptionsInput,
   context?: ProviderDoctorContext,
 ): CommonHookDoctorOptions {
   const result: CommonHookDoctorOptions = { enabled: options.installHooks === true };
+  const runtime = context?.providerHookRuntime;
+  if (runtime !== undefined) {
+    result.hookBin = runtime.ingressLauncher;
+    result.observerSocketPath = runtime.observerSocketPath;
+    result.stateDir = runtime.stateDir;
+    result.hookSpoolDir = runtime.hookSpoolDir;
+    result.autoStartFromHooks = runtime.autoStartFromHooks;
+    if (runtime.stationConfigPath !== undefined) {
+      result.stationConfigPath = runtime.stationConfigPath;
+    }
+    return result;
+  }
   if (options.observerSocketPath !== undefined) {
     result.observerSocketPath = options.observerSocketPath;
   }

@@ -2,6 +2,7 @@ import {
   actionNeedsYes,
   hookCommandExitCode,
   loadedCommandOptions,
+  loadedConfigCommandOptions,
 } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import type { EventHooksCommandOptions } from "../eventHooks.js";
@@ -57,7 +58,7 @@ async function runProviderHookCliCommand(context: CliCommandRunContext) {
   const hookArgs = [hookAction, ...context.args.slice(1)];
   switch (hookTarget) {
     case "worktrunk": {
-      const result = await runWorktrunkHooksCommand(hookArgs, loadedCommandOptions(context));
+      const result = await runWorktrunkHooksCommand(hookArgs, loadedConfigCommandOptions(context));
       return { code: hookCommandExitCode(result), output: result };
     }
     case "claude": {

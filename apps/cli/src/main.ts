@@ -13,13 +13,20 @@ import {
 } from "./commandRegistry.js";
 import type { CliEnv } from "./env.js";
 import { isCliHelpFlag, renderCliHelpFromArgs } from "./help.js";
+import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 
+/**
+ * ADAPTER
+ *
+ * Translates CLI arguments and loaded configuration into registered command execution.
+ */
 export async function runCli(
   argv = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<CliRunResult> {
+  const commandOptions = withProviderHookSetupComposition(options);
   const { args, configPath } = parseGlobalOptions(argv);
   const help = renderCliHelpFromArgs(args);
   if (help !== undefined) {
@@ -28,7 +35,7 @@ export async function runCli(
   if (args.length === 1 && args[0] === "--version") {
     return { code: 0, output: stationBuildInfo().version, outputFormat: "text" };
   }
-  const command = args[0] ?? defaultCommand(defaultCommandEnv(options));
+  const command = args[0] ?? defaultCommand(defaultCommandEnv(commandOptions));
   const commandArgs = args[0] === undefined ? [] : args.slice(1);
   const route = resolveCliCommandRoute(command, commandArgs);
   if (route === undefined) {
@@ -49,7 +56,7 @@ export async function runCli(
       cliEntryPath: fileURLToPath(import.meta.url),
       renderHelpTopic: renderCliCommandHelpTopic,
       ...(configPath === undefined ? {} : { configPath }),
-      options,
+      options: commandOptions,
     });
     if (handled !== undefined) {
       return handled;
@@ -65,7 +72,7 @@ export async function runCli(
     ...(configPath === undefined ? {} : { configPath }),
     ...(loaded?.config === undefined ? {} : { config: loaded.config }),
     ...(loaded?.configPath === undefined ? {} : { resolvedConfigPath: loaded.configPath }),
-    options,
+    options: commandOptions,
   });
 }
 
@@ -78,13 +85,16 @@ function defaultCommandEnv(options: CliRunOptions): CliEnv {
 }
 
 /**
- * Runs the CLI as a process adapter around `runCli`, rendering output and errors
- * and applying the existing command-specific exit policy.
+ * ADAPTER
+ *
+ * Translates process arguments, output, and exit semantics around `runCli` while composing
+ * process-owned provider-hook identity.
  */
 export async function runCliMain(
   argv: readonly string[] = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<void> {
+  const processOptions = withProcessComposition(options);
   let suppressOutput = false;
   try {
     suppressOutput = shouldSuppressCliProcessOutput(parseGlobalOptions([...argv]).args);
@@ -92,7 +102,7 @@ export async function runCliMain(
     suppressOutput = false;
   }
   try {
-    const result = await runCli([...argv], options);
+    const result = await runCli([...argv], processOptions);
     if (!suppressOutput && result.output !== undefined) {
       process.stdout.write(formatCliOutput(result));
     }
@@ -107,6 +117,26 @@ export async function runCliMain(
     process.stderr.write(`${formatCliError(error)}\n`);
     process.exitCode = 1;
   }
+}
+
+function withProcessComposition(options: CliRunOptions): CliRunOptions {
+  const providerHookIngressLauncher =
+    options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher();
+  return {
+    ...options,
+    providerHookIngressLauncher,
+  };
+}
+
+function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions {
+  if (options.providerHookIngressLauncher === undefined) return options;
+  return {
+    ...options,
+    setupDeps: {
+      ...options.setupDeps,
+      providerHookIngressLauncher: options.providerHookIngressLauncher,
+    },
+  };
 }
 
 if (import.meta.main) {
