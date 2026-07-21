@@ -64,6 +64,13 @@ const tmuxCapabilities: TerminalCapabilities = {
   canDisplayPopup: true,
 };
 
+/**
+ * ADAPTER
+ *
+ * Translates Station terminal operations into tmux-owned topology and commands.
+ *
+ * Operational failures retain diagnostic evidence while provider health exposes only the lean public projection.
+ */
 export class TmuxProvider implements TerminalProvider {
   readonly id: ProviderId = "tmux";
 
