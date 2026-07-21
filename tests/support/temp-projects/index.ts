@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 
 const tempRoots = new Set<string>();
 let exitCleanupRegistered = false;
@@ -39,6 +39,7 @@ export async function createTempState(): Promise<{
         layout: "agent-shell",
       },
       projects: [],
+      workspace: DEFAULT_WORKSPACE_CONFIG,
     },
     cleanup: () => cleanupTempRoot(root),
   };
@@ -105,6 +106,10 @@ function tuiConfigToml(config: StationConfig): string[] {
           : [`time_format = ${JSON.stringify(widget.timeFormat)}`]),
         "",
       ];
+    }
+
+    if (widget.type !== "weather") {
+      return ["[[tui.widgets]]", `type = ${JSON.stringify(widget.type)}`, ""];
     }
 
     return [

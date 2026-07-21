@@ -761,8 +761,6 @@ function hookSetupActions(
         "install",
         "worktrunk",
         "--yes",
-        "--hook-bin",
-        setupLauncherExecutable(facts.launchers.ingress),
       ],
       data: { setupRole: "hook" },
     });

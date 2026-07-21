@@ -47,16 +47,11 @@ import { WorktrunkProviderError, type WorktrunkProviderErrorCode } from "./error
 import { doctorWorktrunkHooks } from "./hooks.js";
 import { applyRecoveryBreadcrumbMetadata } from "./metadata.js";
 import { parseWorktrunkListJson, parseWorktrunkListPayload } from "./parse.js";
-
-export type WorktrunkProviderOptions = {
-  command?: string;
-  configPath?: string;
-  useLifecycleHooks?: boolean;
-  timeoutMs?: number;
-  runner?: ExternalCommandRunner;
-  clock?: RuntimeClock;
-  resolveRegistrationIdentity?: (worktreePath: string) => Promise<string | undefined>;
-};
+import {
+  WORKTRUNK_HOOK_NAMES,
+  type WorktrunkHookExpectation,
+  type WorktrunkProviderOptions,
+} from "./types.js";
 
 type WorktrunkRunPolicy = {
   retries?: number;
@@ -77,7 +72,9 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
- * Checkout roots are validated before Worktrunk runs, and removal revalidates native Git registration identity, path, and branch immediately before mutation.
+ * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
+ * expectation as a fallback. Checkout roots are validated before Worktrunk runs, and removal revalidates
+ * native Git identity, path, and branch before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -85,6 +82,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #command: string;
   readonly #configPath: string | undefined;
   readonly #useLifecycleHooks: boolean | undefined;
+  readonly #hookExpectation: WorktrunkHookExpectation | undefined;
   readonly #timeoutMs: number;
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
@@ -96,6 +94,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
     this.#configPath = options.configPath;
     this.#useLifecycleHooks = options.useLifecycleHooks;
+    this.#hookExpectation = options.hookExpectation;
     this.#timeoutMs = options.timeoutMs ?? 5000;
     this.#runner = options.runner;
     this.#clock = options.clock ?? systemClock;
@@ -159,14 +158,55 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async #hookCheck(context: ProviderDoctorContext): Promise<ProviderDoctorCheck> {
+    if (this.#useLifecycleHooks === false) {
+      return {
+        name: "worktrunk-hooks",
+        status: "ok",
+        message:
+          "Worktrunk lifecycle hooks are disabled in station config; automated mutations skip hooks.",
+      };
+    }
+    if (this.#hookExpectation === undefined) {
+      const message = `Worktrunk lifecycle hooks are missing: ${WORKTRUNK_HOOK_NAMES.join(", ")}.`;
+      const error: SafeError = {
+        tag: "WorktrunkHookSetupError",
+        code: "WORKTRUNK_HOOKS_MISSING",
+        message,
+        provider: this.id,
+      };
+      return {
+        name: "worktrunk-hooks",
+        status: "warn",
+        message,
+        error,
+      };
+    }
+
     try {
-      const result = await doctorWorktrunkHooks({
-        ...(this.#configPath === undefined ? {} : { worktrunkConfigPath: this.#configPath }),
-        ...(context.stationConfigPath === undefined
-          ? {}
-          : { stationConfigPath: context.stationConfigPath }),
-        enabled: this.#useLifecycleHooks !== false,
-      });
+      const runtime = context.providerHookRuntime;
+      let expectation: WorktrunkHookExpectation;
+      if (runtime === undefined) {
+        expectation = { ...this.#hookExpectation };
+      } else {
+        expectation = {
+          hookBin: runtime.ingressLauncher,
+          observerSocketPath: runtime.observerSocketPath,
+          stateDir: runtime.stateDir,
+          hookSpoolDir: runtime.hookSpoolDir,
+          autoStartFromHooks: runtime.autoStartFromHooks,
+        };
+        if (runtime.stationConfigPath !== undefined) {
+          expectation.stationConfigPath = runtime.stationConfigPath;
+        }
+      }
+      const hookOptions: Parameters<typeof doctorWorktrunkHooks>[0] = {
+        expectation,
+        enabled: true,
+      };
+      if (this.#configPath !== undefined) {
+        hookOptions.worktrunkConfigPath = this.#configPath;
+      }
+      const result = await doctorWorktrunkHooks(hookOptions);
       const check: ProviderDoctorCheck = {
         name: "worktrunk-hooks",
         status: result.status,

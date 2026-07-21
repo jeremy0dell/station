@@ -4,6 +4,7 @@ import {
   DiagnosticDetailSchema,
   DiagnosticEvidenceIndexSchema,
   DiagnosticSnapshotSchema,
+  DoctorOptionsSchema,
   DoctorReportSchema,
   LogRecordSchema,
   RedactionReportSchema,
@@ -135,6 +136,47 @@ describe("diagnostics schemas", () => {
       await loadJson("diagnostic-evidence-index.json"),
       "diagnostic evidence index",
     );
+  });
+
+  it("parses requester-scoped provider hook runtimes strictly", () => {
+    const providerHookRuntime = {
+      ingressLauncher: "/checkout/station/bin/stn-ingress",
+      observerSocketPath: "/state/run/observer.sock",
+      stateDir: "/state",
+      hookSpoolDir: "/state/spool/hooks",
+      autoStartFromHooks: true,
+      stationConfigPath: "/checkout/station/config.toml",
+    };
+
+    expect(DoctorOptionsSchema.parse({ providerHookRuntime })).toEqual({ providerHookRuntime });
+    for (const field of [
+      "ingressLauncher",
+      "observerSocketPath",
+      "stateDir",
+      "hookSpoolDir",
+      "stationConfigPath",
+    ] as const) {
+      expect(
+        DoctorOptionsSchema.safeParse({
+          providerHookRuntime: { ...providerHookRuntime, [field]: "relative" },
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      DoctorOptionsSchema.safeParse({
+        providerHookRuntime: {
+          ingressLauncher: providerHookRuntime.ingressLauncher,
+          observerSocketPath: providerHookRuntime.observerSocketPath,
+          hookSpoolDir: providerHookRuntime.hookSpoolDir,
+          autoStartFromHooks: providerHookRuntime.autoStartFromHooks,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      DoctorOptionsSchema.safeParse({
+        providerHookRuntime: { ...providerHookRuntime, providerPrivateOption: true },
+      }).success,
+    ).toBe(false);
   });
 
   it("parses provider-neutral worktree removal refusal evidence strictly", () => {

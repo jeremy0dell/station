@@ -16,11 +16,7 @@ describe("Worktrunk hook setup", () => {
 
     const plan = await planWorktrunkHooks({
       worktrunkConfigPath: configPath,
-      stationConfigPath: "/tmp/station/config.toml",
-      observerSocketPath: "/tmp/station/run/observer.sock",
-      stateDir: "/tmp/station/state",
-      hookSpoolDir: "/tmp/station/state/spool/hooks",
-      hookBin: "/usr/local/bin/stn-ingress",
+      expectation: hookExpectation("/usr/local/bin/stn-ingress"),
     });
 
     expect(plan.changed).toBe(true);
@@ -42,17 +38,11 @@ describe("Worktrunk hook setup", () => {
 
     const installed = await installWorktrunkHooks({
       worktrunkConfigPath: configPath,
-      stationConfigPath: "/tmp/station/config.toml",
-      observerSocketPath: "/tmp/station/run/observer.sock",
-      stateDir: "/tmp/station/state",
-      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      expectation: hookExpectation(),
     });
     const second = await installWorktrunkHooks({
       worktrunkConfigPath: configPath,
-      stationConfigPath: "/tmp/station/config.toml",
-      observerSocketPath: "/tmp/station/run/observer.sock",
-      stateDir: "/tmp/station/state",
-      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      expectation: hookExpectation(),
     });
     const contents = await readFile(configPath, "utf8");
 
@@ -64,10 +54,7 @@ describe("Worktrunk hook setup", () => {
     await expect(
       doctorWorktrunkHooks({
         worktrunkConfigPath: configPath,
-        stationConfigPath: "/tmp/station/config.toml",
-        observerSocketPath: "/tmp/station/run/observer.sock",
-        stateDir: "/tmp/station/state",
-        hookSpoolDir: "/tmp/station/state/spool/hooks",
+        expectation: hookExpectation(),
       }),
     ).resolves.toMatchObject({
       status: "ok",
@@ -80,18 +67,12 @@ describe("Worktrunk hook setup", () => {
     const configPath = join(root, "config.toml");
     await installWorktrunkHooks({
       worktrunkConfigPath: configPath,
-      stationConfigPath: "/tmp/station/config.toml",
-      observerSocketPath: "/tmp/station/run/observer.sock",
-      stateDir: "/tmp/station/state",
-      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      expectation: hookExpectation(),
     });
 
     const removed = await uninstallWorktrunkHooks({
       worktrunkConfigPath: configPath,
-      stationConfigPath: "/tmp/station/config.toml",
-      observerSocketPath: "/tmp/station/run/observer.sock",
-      stateDir: "/tmp/station/state",
-      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      expectation: hookExpectation(),
     });
     const contents = await readFile(configPath, "utf8");
 
@@ -107,7 +88,7 @@ describe("Worktrunk hook setup", () => {
     await expect(
       planWorktrunkHooks({
         worktrunkConfigPath: configPath,
-        stationConfigPath: "/tmp/station/config.toml",
+        expectation: hookExpectation(),
       }),
     ).rejects.toMatchObject({
       tag: "WorktrunkHookSetupError",
@@ -115,4 +96,45 @@ describe("Worktrunk hook setup", () => {
       provider: "worktrunk",
     });
   });
+
+  it("repairs exact legacy bare commands to the canonical absolute launcher", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-hooks-"));
+    const configPath = join(root, "config.toml");
+    await installWorktrunkHooks({
+      worktrunkConfigPath: configPath,
+      expectation: hookExpectation(),
+    });
+
+    await expect(
+      doctorWorktrunkHooks({
+        worktrunkConfigPath: configPath,
+        expectation: hookExpectation("/opt/station/stn-ingress"),
+      }),
+    ).resolves.toMatchObject({ status: "warn", installed: false });
+
+    await installWorktrunkHooks({
+      worktrunkConfigPath: configPath,
+      expectation: hookExpectation("/opt/station/stn-ingress"),
+    });
+    const contents = await readFile(configPath, "utf8");
+    expect(contents).toContain("/opt/station/stn-ingress");
+    expect(contents).not.toMatch(/= "stn-ingress --socket/);
+    await expect(
+      doctorWorktrunkHooks({
+        worktrunkConfigPath: configPath,
+        expectation: hookExpectation("/opt/station/stn-ingress"),
+      }),
+    ).resolves.toMatchObject({ status: "ok", installed: true });
+  });
 });
+
+function hookExpectation(hookBin = "stn-ingress") {
+  return {
+    hookBin,
+    stationConfigPath: "/tmp/station/config.toml",
+    observerSocketPath: "/tmp/station/run/observer.sock",
+    stateDir: "/tmp/station/state",
+    hookSpoolDir: "/tmp/station/state/spool/hooks",
+    autoStartFromHooks: true,
+  };
+}

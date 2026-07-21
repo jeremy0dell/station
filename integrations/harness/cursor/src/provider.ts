@@ -91,7 +91,11 @@ async function doctorChecks(
 ): Promise<ProviderDoctorCheck[]> {
   try {
     const hookOptions = harnessHookDoctorOptions(options, context);
-    if (hookOptions.stationConfigPath === undefined && options.configPath !== undefined) {
+    if (
+      context?.providerHookRuntime === undefined &&
+      hookOptions.stationConfigPath === undefined &&
+      options.configPath !== undefined
+    ) {
       hookOptions.stationConfigPath = options.configPath;
     }
     const hookResult = await doctorCursorHooks(hookOptions);
@@ -119,6 +123,11 @@ async function doctorChecks(
   }
 }
 
+/**
+ * ADAPTER
+ *
+ * Supplies Cursor launch, discovery, hook diagnostics, and event normalization through the harness port.
+ */
 export function createCursorHarnessProvider(
   options: CursorHarnessProviderOptions = {},
 ): HarnessProvider {

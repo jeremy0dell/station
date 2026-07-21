@@ -15,7 +15,7 @@ import {
   WorktreeIdSchema,
 } from "./ids.js";
 import { ObserverHealthSchema, ObserverSqliteHealthSummarySchema } from "./observer.js";
-import { ProviderHealthSchema } from "./providers.js";
+import { ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { StationSnapshotSchema } from "./snapshot.js";
 
@@ -168,6 +168,7 @@ export const DoctorOptionsSchema = z
   .object({
     projectId: ProjectIdSchema.optional(),
     deep: z.boolean().optional(),
+    providerHookRuntime: ProviderHookRuntimeSchema.optional(),
   })
   .strict()
   .optional();

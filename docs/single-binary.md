@@ -169,8 +169,9 @@ stn (bun build --compile, per platform, no ambient env)
 - **SQLite** = `apps/observer/src/sqlite/driver.ts`, runtime-branched
   (`bun:sqlite` under bun, `node:sqlite` under Node), with the **full
   contract** below (F2).
-- **Hooks** keep the PATH-name `stn-ingress` default; every channel ships
-  the symlink.
+- **Hooks** persist the resolved absolute `stn-ingress` sibling supplied by
+  compiled composition; every channel ships that symlink, and standalone/full
+  doctor validate the same generated command expectation.
 
 ## `launchReady` vs `workflowReady` (F11 — don't weaken setup truth)
 

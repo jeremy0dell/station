@@ -1246,6 +1246,42 @@ scroll_on_output = "teleport"
     });
   });
 
+  it("rejects a split PATH when the active runtime ingress sibling is missing", async () => {
+    const root = await tempRoot(tempRoots);
+    const runtimeBin = join(root, "runtime");
+    const shadowBin = join(root, "shadow");
+    await Promise.all([
+      mkdir(runtimeBin, { recursive: true }),
+      mkdir(shadowBin, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(runtimeBin, "stn"), "#!/bin/sh\n"),
+      writeFile(join(shadowBin, "stn-ingress"), "#!/bin/sh\n"),
+    ]);
+    await Promise.all([
+      chmod(join(runtimeBin, "stn"), 0o755),
+      chmod(join(shadowBin, "stn-ingress"), 0o755),
+    ]);
+    const runtimeIngress = join(runtimeBin, "stn-ingress");
+
+    const launchers = await checkSetupLaunchers({
+      env: { PATH: `${runtimeBin}${delimiter}${shadowBin}` },
+      packageRoot: join(root, "empty-checkout"),
+      providerHookIngressLauncher: runtimeIngress,
+    });
+
+    expect(launchers.station).toMatchObject({
+      status: "ok",
+      resolvedPath: join(runtimeBin, "stn"),
+    });
+    expect(launchers.ingress).toMatchObject({
+      status: "missing",
+      command: runtimeIngress,
+      message: expect.stringContaining(runtimeIngress),
+    });
+    expect(launchers.ingress).not.toMatchObject({ resolvedPath: join(shadowBin, "stn-ingress") });
+  });
+
   it("skips executable directories that shadow launcher names on PATH", async () => {
     const root = await tempRoot(tempRoots);
     const shadowDir = join(root, "shadow");

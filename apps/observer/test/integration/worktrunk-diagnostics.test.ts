@@ -1,11 +1,15 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
-import type { ProviderProjectConfig } from "@station/contracts";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import type { ProviderHookRuntime, ProviderProjectConfig } from "@station/contracts";
 import type { ExternalCommandInput } from "@station/runtime";
 import { FakeHarnessProvider, FakeTerminalProvider } from "@station/testing";
-import { WorktrunkProvider } from "@station/worktrunk";
+import {
+  installWorktrunkHooks,
+  type WorktrunkHookExpectation,
+  WorktrunkProvider,
+} from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 import { ProviderRegistry, runDoctor } from "../../src/internal";
 import { createTestObserverCore } from "../support/testObserver";
@@ -13,6 +17,121 @@ import { createTestObserverCore } from "../support/testObserver";
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("Worktrunk diagnostics", () => {
+  it("uses the requester hook identity while retaining the incumbent fallback", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-diag-requester-"));
+    const incumbentStateDir = join(root, "checkout-A", "state");
+    const requesterStateDir = join(root, "checkout-B", "state");
+    const incumbentStationConfigPath = join(root, "checkout-A", "config.toml");
+    const requesterStationConfigPath = join(root, "checkout-B", "config.toml");
+    const sharedObserverSocketPath = join(root, "shared", "observer.sock");
+    const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+    const incumbentLauncher = "/checkout/A/bin/stn-ingress";
+    const requesterLauncher = "/checkout/B/bin/stn-ingress";
+    await mkdir(incumbentStateDir, { recursive: true });
+    const hookExpectation: WorktrunkHookExpectation = {
+      hookBin: incumbentLauncher,
+      observerSocketPath: sharedObserverSocketPath,
+      stateDir: incumbentStateDir,
+      hookSpoolDir: join(incumbentStateDir, "spool", "hooks"),
+      autoStartFromHooks: true,
+      stationConfigPath: incumbentStationConfigPath,
+    };
+    const requesterHookRuntime: ProviderHookRuntime = {
+      ingressLauncher: requesterLauncher,
+      observerSocketPath: sharedObserverSocketPath,
+      stateDir: requesterStateDir,
+      hookSpoolDir: join(requesterStateDir, "spool", "hooks"),
+      autoStartFromHooks: false,
+      stationConfigPath: requesterStationConfigPath,
+    };
+    await installWorktrunkHooks({
+      expectation: {
+        hookBin: requesterHookRuntime.ingressLauncher,
+        observerSocketPath: requesterHookRuntime.observerSocketPath,
+        stateDir: requesterHookRuntime.stateDir,
+        hookSpoolDir: requesterHookRuntime.hookSpoolDir,
+        autoStartFromHooks: requesterHookRuntime.autoStartFromHooks,
+        stationConfigPath: requesterStationConfigPath,
+      },
+      worktrunkConfigPath,
+    });
+    const clock = { now: () => new Date(now) };
+    const stationConfig = config(incumbentStateDir);
+    const providers = new ProviderRegistry({
+      worktree: new WorktrunkProvider({
+        command: "wt",
+        configPath: worktrunkConfigPath,
+        hookExpectation,
+        clock,
+        runner: async (input) => ({
+          command: input.command,
+          args: input.args ?? [],
+          stdout: input.args?.includes("--version") ? "wt 0.68.0" : "--no-hooks --yes",
+          stderr: "",
+          exitCode: 0,
+        }),
+      }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config: stationConfig,
+      providers,
+      clock,
+      sqlitePath: join(incumbentStateDir, "observer.sqlite"),
+    });
+    await core.reconcile("diagnostics");
+    const deps = {
+      config: stationConfig,
+      configPath: incumbentStationConfigPath,
+      core,
+      persistence,
+      persistenceHealth: persistence,
+      providers,
+      paths: { stateDir: incumbentStateDir },
+      clock,
+    };
+
+    const requesterReport = await runDoctor(deps, {
+      providerHookRuntime: requesterHookRuntime,
+    });
+    const incumbentReport = await runDoctor(deps);
+
+    expect(requesterReport.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worktrunk-hooks", status: "ok" })]),
+    );
+    expect(incumbentReport.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "worktrunk-hooks", status: "warn" }),
+      ]),
+    );
+
+    const requesterRuntimeWithoutConfig: ProviderHookRuntime = {
+      ingressLauncher: requesterHookRuntime.ingressLauncher,
+      observerSocketPath: requesterHookRuntime.observerSocketPath,
+      stateDir: requesterHookRuntime.stateDir,
+      hookSpoolDir: requesterHookRuntime.hookSpoolDir,
+      autoStartFromHooks: requesterHookRuntime.autoStartFromHooks,
+    };
+    await installWorktrunkHooks({
+      expectation: {
+        hookBin: requesterRuntimeWithoutConfig.ingressLauncher,
+        observerSocketPath: requesterRuntimeWithoutConfig.observerSocketPath,
+        stateDir: requesterRuntimeWithoutConfig.stateDir,
+        hookSpoolDir: requesterRuntimeWithoutConfig.hookSpoolDir,
+        autoStartFromHooks: requesterRuntimeWithoutConfig.autoStartFromHooks,
+      },
+      worktrunkConfigPath,
+    });
+    const requesterWithoutConfigReport = await runDoctor(deps, {
+      providerHookRuntime: requesterRuntimeWithoutConfig,
+    });
+    expect(requesterWithoutConfigReport.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worktrunk-hooks", status: "ok" })]),
+    );
+    sqlite.close();
+  });
+
   it("reports provider failures and missing hook setup in doctor data", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-wt-diag-"));
     const clock = { now: () => new Date(now) };
@@ -344,6 +463,7 @@ function config(stateDir: string, projects: ProviderProjectConfig[] = []): Stati
       },
     },
     projects,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
   };
 }
 

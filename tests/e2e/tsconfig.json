@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node", "vitest/globals"]
+  },
+  "files": [
+    "setup-guided-feedback.test.ts",
+    "worktrunk-real.test.ts",
+    "real/real-worktrunk-hooks.test.ts"
+  ]
+}
