@@ -455,7 +455,8 @@ type ButtonTransition = {
 function useButtonTransition(input: IslandDisplayInput, expanded: boolean): ButtonTransition {
   const open = useTweenAmount(expanded ? 1 : 0);
   const collapsedDisplay = islandDisplay(input, false);
-  const celebrationPaintEligible = !expanded && collapsedDisplay.kind === "celebration";
+  const celebrationPaintEligible =
+    !expanded && open === 0 && collapsedDisplay.kind === "celebration";
   const tweenedCelebration = useTweenedOptionalValue(
     input.celebration,
     celebrationPaintEligible,
@@ -490,7 +491,8 @@ function collapsedButtonState(
     restingInput.restCounts = input.restCounts;
   }
   const collapsedInput: IslandDisplayInput = { ...restingInput };
-  if (celebration !== undefined) {
+  // Keep queued celebrations out of the display tree until their entrance actually starts.
+  if (celebration !== undefined && amount > 0) {
     collapsedInput.celebration = celebration;
   }
   const resting = targetDims(islandDisplay(restingInput, false));

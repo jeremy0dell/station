@@ -318,17 +318,51 @@ describe("DynamicStationButton", () => {
       expect(setup.captureCharFrame()).not.toContain("#44");
 
       await setup.mockMouse.moveTo(0, SURFACE.height - 1);
-      const firstClosingFrame = await waitForButtonFrame(
-        setup,
-        ({ width }) => width !== expandedWidth,
-      );
-      expect(firstClosingFrame.width).toBeGreaterThan(restingWidth);
-      expect(firstClosingFrame.width).toBeLessThan(expandedWidth);
-      expect(firstClosingFrame.frame).not.toContain("#44");
-      await waitForButtonFrame(
-        setup,
-        ({ frame, width }) => frame.includes("#44") && width === notifiedWidth,
-      );
+      const closingWidths: number[] = [];
+      const collapseDeadline = Date.now() + ANIM_MS * 3;
+      while (Date.now() < collapseDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
+        await setup.renderOnce();
+        const frame = setup.captureCharFrame();
+        const width = renderedButtonWidth(frame);
+        closingWidths.push(width);
+        if (width === restingWidth) {
+          break;
+        }
+        expect(frame).not.toContain("✓");
+      }
+      expect(closingWidths.at(-1)).toBe(restingWidth);
+      expect(
+        closingWidths.some((width) => width > restingWidth && width < expandedWidth),
+      ).toBe(true);
+      expect(
+        closingWidths.every(
+          (width, index) => index === 0 || width <= (closingWidths[index - 1] ?? width),
+        ),
+      ).toBe(true);
+
+      const enteringWidths: number[] = [];
+      const entranceDeadline = Date.now() + ANIM_MS * 3;
+      while (Date.now() < entranceDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
+        await setup.renderOnce();
+        const frame = setup.captureCharFrame();
+        const width = renderedButtonWidth(frame);
+        enteringWidths.push(width);
+        if (frame.includes("#44") && width === notifiedWidth) {
+          break;
+        }
+      }
+      expect(enteringWidths.at(-1)).toBe(notifiedWidth);
+      expect(
+        enteringWidths.some((width) => width > restingWidth && width < notifiedWidth),
+      ).toBe(true);
+      expect(
+        enteringWidths.every(
+          (width, index) => index === 0 || width >= (enteringWidths[index - 1] ?? width),
+        ),
+      ).toBe(true);
+      expect(setup.captureCharFrame()).toContain("#44");
     } finally {
       setup.renderer.destroy();
     }
