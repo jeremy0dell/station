@@ -23,7 +23,9 @@ import type {
 } from "@station/contracts";
 import {
   type ExternalCommandRunner,
+  gitCheckoutBareRepairHint,
   gitLocalEnvironmentVariables,
+  isGitCheckoutConfiguredBare,
   publicSafeErrorFromUnknown,
   type RuntimeClock,
   runExternalCommand,
@@ -75,7 +77,7 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
- * Removal revalidates native Git registration identity, path, and branch immediately before invoking Worktrunk.
+ * Checkout roots are validated before Worktrunk runs, and removal revalidates native Git registration identity, path, and branch immediately before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -215,6 +217,7 @@ export class WorktrunkProvider implements WorktreeProvider {
       return [];
     }
     this.#projects.set(project.id, project);
+    await this.#assertProjectRootUsable(project, policy);
 
     const observations = await this.#readWorktrees(project, policy);
     const managedObservations = observations.filter((observation) =>
@@ -256,6 +259,7 @@ export class WorktrunkProvider implements WorktreeProvider {
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
     this.#projects.set(request.project.id, request.project);
+    await this.#assertProjectRootUsable(request.project);
     const base = request.base ?? request.project.worktrunk.base;
     const output = await this.#run(
       this.#args([
@@ -431,6 +435,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         refusalReason: "protection_unverified",
       });
     }
+    await this.#assertProjectRootUsable(project);
 
     const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
     const identityMatches = currentWorktrees.filter(
@@ -542,6 +547,21 @@ export class WorktrunkProvider implements WorktreeProvider {
     return [];
   }
 
+  async #assertProjectRootUsable(
+    project: ProviderProjectConfig,
+    policy: WorktrunkRunPolicy = {},
+  ): Promise<void> {
+    if (
+      await isGitCheckoutConfiguredBare(project.root, {
+        ...(this.#runner === undefined ? {} : { runner: this.#runner }),
+        ...(policy.signal === undefined ? {} : { signal: policy.signal }),
+        timeoutMs: policy.timeoutMs ?? this.#timeoutMs,
+      })
+    ) {
+      throw projectRootBareError(project);
+    }
+  }
+
   async #automationCapabilityCheck(options: {
     signal: AbortSignal;
     timeoutMs: number;
@@ -624,6 +644,31 @@ export class WorktrunkProvider implements WorktreeProvider {
         batch.map(async (project, batchIndex) => {
           if (options.signal.aborted) return;
           const index = offset + batchIndex;
+          if (
+            await isGitCheckoutConfiguredBare(project.root, {
+              ...(this.#runner === undefined ? {} : { runner: this.#runner }),
+              signal: options.signal,
+              timeoutMs: options.timeoutMs,
+            })
+          ) {
+            const providerError = projectRootBareError(project);
+            const error: SafeError = {
+              tag: providerError.tag,
+              code: providerError.code,
+              message: providerError.message,
+              provider: providerError.provider,
+              projectId: project.id,
+            };
+            if (providerError.hint !== undefined) error.hint = providerError.hint;
+            checks[index] = {
+              name: `worktrunk-project-root-${project.id}`,
+              status: "warn",
+              message: `${providerError.message} ${providerError.hint}`,
+              error,
+            };
+            completed += 1;
+            return;
+          }
           let missing: WorktreeObservation[];
           try {
             missing = (
@@ -761,6 +806,17 @@ export class WorktrunkProvider implements WorktreeProvider {
       installHint: worktrunkInstallHint(this.#command),
     });
   }
+}
+
+function projectRootBareError(project: ProviderProjectConfig): WorktrunkProviderError {
+  return new WorktrunkProviderError(
+    "WORKTRUNK_PROJECT_ROOT_BARE",
+    "Project checkout is configured as a bare repository.",
+    {
+      projectId: project.id,
+      hint: gitCheckoutBareRepairHint(project.root),
+    },
+  );
 }
 
 function dependencyDiagnostics(status: WorktrunkDependencyStatus): Record<string, string> {

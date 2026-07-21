@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import {
   computeBuildIdentity,
   publishBuildIdentity,
   readBuildIdentity,
+  runBuildChild,
   verifyBuildIdentity,
 } from "../../../../scripts/build-identity.mjs";
 import { environmentWithoutGitLocals } from "../../src/gitEnvironment.js";
@@ -144,6 +145,45 @@ describe("build identity", () => {
 
     await expect(readBuildIdentity(root)).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("isolates spawned build children from a linked-worktree Git environment", async () => {
+    const victim = await createRepository();
+    const fixture = await createRepository();
+    const victimLinked = `${victim}-linked`;
+    const fixtureLinked = `${fixture}-linked`;
+    roots.push(victim, fixture, victimLinked, fixtureLinked);
+    git(victim, ["branch", "victim-linked"]);
+    git(victim, ["worktree", "add", victimLinked, "victim-linked"]);
+
+    const before = {
+      config: await readFile(join(victim, ".git", "config"), "utf8"),
+      head: gitOutput(victimLinked, ["rev-parse", "HEAD"]),
+      status: gitOutput(victimLinked, ["status", "--porcelain=v2", "--branch"]),
+      worktrees: gitOutput(victim, ["worktree", "list", "--porcelain"]),
+    };
+    const hostileGitDir = gitOutput(victimLinked, ["rev-parse", "--absolute-git-dir"]).trim();
+    const childScript = `
+      const { execFileSync } = require("node:child_process");
+      const linked = process.argv[1];
+      execFileSync("git", ["config", "--local", "station.fixture", "isolated"]);
+      execFileSync("git", ["commit", "--allow-empty", "-m", "fixture child"]);
+      execFileSync("git", ["worktree", "add", "-b", "fixture-child", linked]);
+    `;
+
+    await runBuildChild(process.execPath, ["-e", childScript, fixtureLinked], fixture, {
+      ...environmentWithoutGitLocals(),
+      GIT_DIR: hostileGitDir,
+      GIT_WORK_TREE: victimLinked,
+    });
+
+    await expect(readFile(join(victim, ".git", "config"), "utf8")).resolves.toBe(before.config);
+    expect(gitOutput(victimLinked, ["rev-parse", "HEAD"])).toBe(before.head);
+    expect(gitOutput(victimLinked, ["status", "--porcelain=v2", "--branch"])).toBe(before.status);
+    expect(gitOutput(victim, ["worktree", "list", "--porcelain"])).toBe(before.worktrees);
+    expect(gitOutput(fixture, ["config", "--local", "--get", "station.fixture"]).trim()).toBe(
+      "isolated",
+    );
+  });
 });
 
 async function createRepository(): Promise<string> {
@@ -180,5 +220,13 @@ function git(root: string, args: string[]): void {
     cwd: root,
     env: environmentWithoutGitLocals(),
     stdio: "ignore",
+  });
+}
+
+function gitOutput(root: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: root,
+    env: environmentWithoutGitLocals(),
+    encoding: "utf8",
   });
 }

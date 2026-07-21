@@ -7,6 +7,7 @@ export type WorktrunkProviderErrorCode =
   | "WORKTRUNK_HOOK_APPROVAL_REQUIRED"
   | "WORKTRUNK_INVALID_OUTPUT"
   | "WORKTRUNK_BASE_MISSING"
+  | "WORKTRUNK_PROJECT_ROOT_BARE"
   | "WORKTRUNK_SEED_FAILED"
   | "WORKTRUNK_TIMEOUT"
   | "WORKTRUNK_UNAVAILABLE"
@@ -20,12 +21,18 @@ export class WorktrunkProviderError extends Error implements SafeError {
   readonly provider = "worktrunk";
   readonly code: WorktrunkProviderErrorCode;
   readonly hint?: string;
+  readonly projectId?: string;
   readonly diagnosticDetails?: DiagnosticDetail[];
 
   constructor(
     code: WorktrunkProviderErrorCode,
     message: string,
-    options: { hint?: string; cause?: unknown; diagnosticDetails?: DiagnosticDetail[] } = {},
+    options: {
+      hint?: string;
+      projectId?: string;
+      cause?: unknown;
+      diagnosticDetails?: DiagnosticDetail[];
+    } = {},
   ) {
     super(message, { cause: options.cause });
     Object.defineProperty(this, "name", {
@@ -36,6 +43,9 @@ export class WorktrunkProviderError extends Error implements SafeError {
     this.code = code;
     if (options.hint !== undefined) {
       this.hint = options.hint;
+    }
+    if (options.projectId !== undefined) {
+      this.projectId = options.projectId;
     }
     if (options.diagnosticDetails !== undefined) {
       this.diagnosticDetails = options.diagnosticDetails;

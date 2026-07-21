@@ -399,7 +399,8 @@ function fromPaneTarget(target: OpenPaneTarget | undefined): StationMouseOutcome
 /**
  * Map a quick-session submit to an outcome: `submit` surfaces a
  * `launch-new-session` router outcome (the executor creates the worktree and
- * hosts the agent), `none` (no project / unavailable) is an inert click.
+ * hosts the agent). Blocked projects have already emitted an error toast;
+ * `none` means only a stale or missing target and remains inert.
  */
 function fromQuickSessionSubmit(
   result: ReturnType<typeof resolveQuickSessionSubmit>,

@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { gitCheckoutBareRepairHint, isGitCheckoutConfiguredBare } from "@station/runtime";
 import type { ProjectConfig } from "../schema.js";
 import { findGitRoot } from "./git.js";
 import type { ProjectDoctorResult } from "./types.js";
@@ -20,6 +21,10 @@ export async function doctorProject(project: ProjectConfig): Promise<ProjectDoct
   const gitRoot = rootExists ? await findGitRoot(project.root) : undefined;
   if (gitRoot === undefined) {
     messages.push("Git root was not detected from the project root.");
+  }
+  if (rootExists && (await isGitCheckoutConfiguredBare(project.root))) {
+    messages.push("Project checkout is configured as a bare repository.");
+    messages.push(gitCheckoutBareRepairHint(project.root));
   }
 
   return {
