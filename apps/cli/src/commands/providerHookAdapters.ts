@@ -78,6 +78,10 @@ export type OpenCodeHooksCommandResult =
   | OpenCodePluginInstallResult
   | OpenCodePluginDoctorResult;
 
+export type WorktrunkHooksCommandOptions = ProviderHooksCommandOptions & {
+  config: StationConfig;
+};
+
 export type WorktrunkHooksCommandResult =
   | WorktrunkHookPlan
   | WorktrunkHookInstallResult
@@ -232,8 +236,9 @@ export function runOpenCodeHooksCommand(
 
 export function runWorktrunkHooksCommand(
   args: string[],
-  options: ProviderHooksCommandOptions = {},
+  options: WorktrunkHooksCommandOptions,
 ): Promise<WorktrunkHooksCommandResult> {
+  const config = options.config;
   const runner = createProviderHooksRunner<WorktrunkHookPlanOptions>(
     {
       provider: "worktrunk",
@@ -242,27 +247,23 @@ export function runWorktrunkHooksCommand(
       uninstall: uninstallWorktrunkHooks,
       doctor: doctorWorktrunkHooks,
       buildOptions: (flags, context) => {
-        if (context.config === undefined) {
-          throw new Error("Worktrunk hook commands require loaded Station config.");
-        }
-        const expectation = createWorktrunkHookExpectation(context.config, {
+        const expectation = createWorktrunkHookExpectation(config, {
           stationConfigPath: context.configPath,
           ingressLauncher: context.providerHookIngressLauncher,
         });
         if (flags.hookBin !== undefined) {
           expectation.hookBin = flags.hookBin;
         }
-        const options: WorktrunkHookPlanOptions = { expectation };
+        const planOptions: WorktrunkHookPlanOptions = { expectation };
         // Fall back to the station-config worktrunk config_path when --worktrunk-config is absent.
-        const worktrunkConfigPath =
-          flags.providerConfig ?? context.config.worktree?.worktrunk?.configPath;
+        const worktrunkConfigPath = flags.providerConfig ?? config.worktree?.worktrunk?.configPath;
         if (worktrunkConfigPath !== undefined) {
-          options.worktrunkConfigPath = worktrunkConfigPath;
+          planOptions.worktrunkConfigPath = worktrunkConfigPath;
         }
         if (context.env !== undefined) {
-          options.env = context.env;
+          planOptions.env = context.env;
         }
-        return options;
+        return planOptions;
       },
       isEnabled: isWorktrunkEnabled,
     },

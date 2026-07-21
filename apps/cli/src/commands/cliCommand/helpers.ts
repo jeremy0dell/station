@@ -1,10 +1,15 @@
 import type { StationConfig } from "@station/config";
+import type { SafeError } from "@station/contracts";
 import type { CliCommandRunContext } from "./types.js";
 
 export type LoadedCommandOptions = {
   config?: StationConfig;
   configPath?: string;
   providerHookIngressLauncher?: string;
+};
+
+type LoadedConfigCommandOptions = LoadedCommandOptions & {
+  config: StationConfig;
 };
 
 export function loadedCommandOptions(context: CliCommandRunContext): LoadedCommandOptions {
@@ -19,6 +24,19 @@ export function loadedCommandOptions(context: CliCommandRunContext): LoadedComma
     options.providerHookIngressLauncher = context.options.providerHookIngressLauncher;
   }
   return options;
+}
+
+export function loadedConfigCommandOptions(
+  context: CliCommandRunContext,
+): LoadedConfigCommandOptions {
+  if (context.config === undefined) {
+    throw {
+      tag: "CliCommandError",
+      code: "CLI_CONFIG_NOT_LOADED",
+      message: `Station config was not loaded for the ${context.path.join(" ")} command.`,
+    } satisfies SafeError;
+  }
+  return { ...loadedCommandOptions(context), config: context.config };
 }
 
 export function hookCommandExitCode(result: object): number {

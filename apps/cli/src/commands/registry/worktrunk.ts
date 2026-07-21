@@ -2,7 +2,7 @@ import {
   actionNeedsYes,
   capitalize,
   hookCommandExitCode,
-  loadedCommandOptions,
+  loadedConfigCommandOptions,
 } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { runWorktrunkHooksCommand } from "../providerHookAdapters.js";
@@ -41,7 +41,7 @@ export const worktrunkCliCommand: CliCommandNode = {
 };
 
 async function runWorktrunkHooksCliCommand(context: CliCommandRunContext) {
-  const result = await runWorktrunkHooksCommand(context.args, loadedCommandOptions(context));
+  const result = await runWorktrunkHooksCommand(context.args, loadedConfigCommandOptions(context));
   return { code: hookCommandExitCode(result), output: result };
 }
 
