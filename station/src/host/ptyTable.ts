@@ -137,9 +137,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
       const cols = Math.max(MIN_COLS, params.cols);
       const rows = Math.max(MIN_ROWS, params.rows);
-      // A persistent Host can outlive or reattach through renderers, so no inherited or launch-plan tmux pair is authoritative.
       const env: Record<string, string | undefined> = {
         ...params.env,
+        // A Host may inherit styling controls from a headless provider hook, so only launch-request values are authoritative for its PTYs.
+        FORCE_COLOR: params.env?.FORCE_COLOR,
+        NO_COLOR: params.env?.NO_COLOR,
+        // A persistent Host can outlive or reattach through renderers, so no inherited or launch-plan tmux pair is authoritative.
         TMUX: undefined,
         TMUX_PANE: undefined,
       };

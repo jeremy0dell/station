@@ -25,10 +25,14 @@ if (SMOKE) {
     it("keeps a spawned PTY alive with no client attached and captures output", async () => {
       const table = createPtyTable();
       try {
+        const inheritedForceColor = process.env.FORCE_COLOR;
+        const inheritedNoColor = process.env.NO_COLOR;
         const inheritedTmux = process.env.TMUX;
         const inheritedTmuxPane = process.env.TMUX_PANE;
         let ptyId: string;
         try {
+          process.env.FORCE_COLOR = "0";
+          process.env.NO_COLOR = "1";
           process.env.TMUX = "/tmp/tmux-501/stale-host,111,0";
           process.env.TMUX_PANE = "%3";
           ({ ptyId } = table.spawn({
@@ -51,8 +55,6 @@ if (SMOKE) {
               KITTY_WINDOW_ID: "7",
               WEZTERM_PANE: "4",
               __CFBundleIdentifier: "com.mitchellh.ghostty",
-              NO_COLOR: "1",
-              FORCE_COLOR: "0",
               CURSOR_TRACE_ID: "provider-trace",
               VSCODE_GIT_ASKPASS_MAIN: "/opt/vscode/askpass-main.js",
               TMUX: "/tmp/tmux-501/stale-launch,222,0",
@@ -63,6 +65,10 @@ if (SMOKE) {
             rows: 24,
           }));
         } finally {
+          if (inheritedForceColor === undefined) delete process.env.FORCE_COLOR;
+          else process.env.FORCE_COLOR = inheritedForceColor;
+          if (inheritedNoColor === undefined) delete process.env.NO_COLOR;
+          else process.env.NO_COLOR = inheritedNoColor;
           if (inheritedTmux === undefined) delete process.env.TMUX;
           else process.env.TMUX = inheritedTmux;
           if (inheritedTmuxPane === undefined) delete process.env.TMUX_PANE;
@@ -87,8 +93,8 @@ if (SMOKE) {
           "TMUX_PANE=unset",
           "STATION_OUTER_TMUX=unset",
           "STATION_OUTER_TMUX_PANE=unset",
-          "NO_COLOR=1",
-          "FORCE_COLOR=0",
+          "NO_COLOR=unset",
+          "FORCE_COLOR=unset",
           "VSCODE_GIT_ASKPASS_MAIN=/opt/vscode/askpass-main.js",
           "CURSOR_TRACE_ID=provider-trace",
           "USER_SETTING=ordinary",

@@ -41,7 +41,7 @@ function singleTable() {
 }
 
 describe("createPtyTable", () => {
-  it("fails closed on tmux provenance for persistent Host spawns", () => {
+  it("fails closed on daemon color controls and tmux provenance for persistent Host spawns", () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     let received: StationTerminalSpawnOptions | undefined;
     const table = createPtyTable({
@@ -61,9 +61,37 @@ describe("createPtyTable", () => {
     });
 
     expect(received?.env).toEqual({
+      FORCE_COLOR: undefined,
+      NO_COLOR: undefined,
       TMUX: undefined,
       TMUX_PANE: undefined,
       USER_SETTING: "ordinary",
+    });
+    expect(Object.hasOwn(received?.env ?? {}, "FORCE_COLOR")).toBe(true);
+    expect(Object.hasOwn(received?.env ?? {}, "NO_COLOR")).toBe(true);
+  });
+
+  it("preserves color controls explicitly carried by the launch request", () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    let received: StationTerminalSpawnOptions | undefined;
+    const table = createPtyTable({
+      createTerminal: (options) => {
+        received = options;
+        return scripted.terminal;
+      },
+    });
+
+    table.spawn({
+      ...baseParams,
+      env: {
+        FORCE_COLOR: "0",
+        NO_COLOR: "1",
+      },
+    });
+
+    expect(received?.env).toMatchObject({
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
     });
   });
 
