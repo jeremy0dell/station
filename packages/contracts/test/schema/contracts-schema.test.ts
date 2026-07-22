@@ -40,6 +40,7 @@ import {
   ProviderTypeSchema,
   parseStationHookIdentityPayload,
   ReconcileReceiptSchema,
+  RecoveryBreadcrumbSchema,
   RepositoryCapabilitiesSchema,
   RepositoryChecksRequestSchema,
   RepositoryPullRequestRequestSchema,
@@ -1502,6 +1503,31 @@ describe("contract schemas", () => {
         },
       },
       "provider project config",
+    );
+    expectParses(
+      RecoveryBreadcrumbSchema,
+      {
+        schemaVersion: 1,
+        projectId: "api",
+        worktreeId: "wt_api_task",
+        sessionId: "ses_api_task",
+        createdBy: "station",
+        createdAt: "2026-05-20T12:00:00.000Z",
+        provider: "worktrunk",
+        note: "created by lifecycle hook",
+      },
+      "recovery breadcrumb",
+    );
+    expectFails(
+      RecoveryBreadcrumbSchema,
+      {
+        schemaVersion: 1,
+        projectId: "api",
+        createdBy: "station",
+        createdAt: "2026-05-20T12:00:00.000Z",
+        prompt: "unsafe extra data",
+      },
+      "recovery breadcrumb with unsupported field",
     );
     expectFails(
       ProviderProjectConfigSchema,

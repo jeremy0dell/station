@@ -627,26 +627,6 @@ describe("tmux popup", () => {
     );
   });
 
-  it("enters the workbench before displaying the popup", async () => {
-    const fake = createPopupTmux({ root: "/opt/station/bin" });
-    await openTmuxPopup({
-      checkoutRoot: fake.root,
-      enterWorkbench: true,
-      env: { TMUX: "/tmp/tmux/default,1,0" },
-      runner: fake.runner,
-    });
-    const switchIndex = fake.calls.findIndex((call) => call.args?.[0] === "switch-client");
-    const displayIndex = fake.calls.findIndex(claimedPopupAction);
-    expect(fake.calls[switchIndex]?.args).toEqual([
-      "switch-client",
-      "-c",
-      "/dev/ttys001",
-      "-t",
-      "station",
-    ]);
-    expect(switchIndex).toBeLessThan(displayIndex);
-  });
-
   it("guards compatibility open and legacy focus cleanup against claims", async () => {
     for (const claim of ["valid", "malformed"] as const) {
       const fake = createPopupTmux({ activeClaim: claim === "valid" });

@@ -26,19 +26,18 @@ STATION_SOURCE=mock STATION_SCENARIO=disconnected bun run station
 Ctrl-O or header click toggles STATION mode; the shell pane survives underneath.
 Ctrl-Q always exits Station (reserved chords pierce the overlay).
 
-## Keymap
+## Input
 
-The keymap is data over the shared transition machine
-(`input/stationKeymap.ts`): per-mode binding tables that drive the help overlay
-and the mouse vocabulary. Runtime keyboard dispatch always goes through the
-machine — a table omission cannot change behavior; it fails
-`input/stationKeymap.test.ts` instead (machine-coverage, stale-binding, and
-declared-vs-derived-outcome checks).
+Runtime keyboard dispatch goes through the shared dashboard-core transition
+machine. Station keeps only sequence translation and the managed-pane overrides
+needed for row activation, new sessions, and forks; help copy and semantic mouse
+targets do not mirror every screen's key handling in a second table.
 
 ## Acceptance suite
 
 - `bun run test` — everything below; `bun run typecheck`.
-- Keymap anti-drift: `input/stationKeymap.test.ts`.
+- Dashboard binding behavior:
+  `../../../packages/dashboard-core/test/unit/state/keymap.test.ts`.
 - Sequence translation: `input/sequenceToTuiKey.test.ts`.
 - Mouse guard matrix + click/key equivalence: `input/stationMouse.test.ts`.
 - Router/runtime conformance (reserved chords, modal swallow, paste,
@@ -74,7 +73,7 @@ through the command-completion waits on the focus and operation paths.
 
 ## Known not-yet
 
-- Footer hint chips and help rows are not click targets (routing supports
-  `footerHint` and is tested; the footer renders as one truncated string).
+- Footer hint chips and help rows are not click targets; the footer renders as
+  one truncated string.
 - The attention marker is static red `!` per the visual notes
   recommendation (pulse deferred).

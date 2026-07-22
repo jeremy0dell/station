@@ -1,5 +1,9 @@
 import type { TuiKey, TuiState } from "@station/dashboard-core";
-import { createInitialTuiState, handleTuiKey, selectProjectChoices } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  handleTuiKey,
+  selectProjectChooserChoices,
+} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
@@ -21,7 +25,7 @@ function drive(state: TuiState, keys: TuiKey[]): TuiState {
 function firstProject(state: TuiState) {
   const snapshot = state.snapshot;
   if (snapshot === undefined) throw new Error("snapshot missing");
-  const [choice] = selectProjectChoices(snapshot, state);
+  const [choice] = selectProjectChooserChoices(snapshot);
   if (choice === undefined) throw new Error("no projects in fixture");
   return choice;
 }

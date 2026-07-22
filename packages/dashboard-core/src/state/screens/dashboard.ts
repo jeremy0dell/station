@@ -8,7 +8,7 @@ import {
   moveDashboardFocus,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
-import { matchTuiBinding, type TuiBinding } from "../keymap.js";
+import { matchDashboardBinding, type TuiDashboardBinding } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
@@ -30,7 +30,7 @@ export function handleDashboardKey(
     };
   }
 
-  const binding = matchTuiBinding("dashboard", key);
+  const binding = matchDashboardBinding(key);
   if (binding === undefined) {
     return { state };
   }
@@ -41,7 +41,7 @@ export function handleDashboardKey(
 function handleDashboardBinding(
   state: TuiState,
   key: TuiKey,
-  binding: TuiBinding<"dashboard">,
+  binding: TuiDashboardBinding,
   context: TuiKeyRuntimeContext,
 ): TuiTransition {
   switch (binding.action) {

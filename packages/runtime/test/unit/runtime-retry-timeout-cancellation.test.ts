@@ -1,16 +1,14 @@
 import {
-  createCancellationController,
   Effect,
   runRuntimeBoundaryWithRetry,
   runRuntimeBoundaryWithTimeout,
   runtimeBoundaryWithRetryEffect,
-  runWithCancellation,
 } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 
 const now = "2026-05-20T12:00:00.000Z";
 
-describe("runtime retry, timeout, and cancellation helpers", () => {
+describe("runtime retry and timeout helpers", () => {
   it("retries a failing boundary and preserves trace context", async () => {
     let attempts = 0;
     const result = await runRuntimeBoundaryWithRetry(
@@ -43,7 +41,7 @@ describe("runtime retry, timeout, and cancellation helpers", () => {
     expect(attempts).toBe(2);
   });
 
-  it("maps timeout and cancellation to typed safe errors", async () => {
+  it("maps timeout to a typed safe error", async () => {
     let timeoutAborted = false;
     const timeout = await runRuntimeBoundaryWithTimeout(
       {
@@ -72,25 +70,6 @@ describe("runtime retry, timeout, and cancellation helpers", () => {
       },
     });
     expect(timeoutAborted).toBe(true);
-
-    const controller = createCancellationController();
-    let cancellationAborted = false;
-    const cancelled = runWithCancellation(
-      controller.token,
-      async ({ signal }) =>
-        new Promise((resolve) => {
-          signal.addEventListener("abort", () => {
-            cancellationAborted = true;
-          });
-          setTimeout(resolve, 20);
-        }),
-    );
-    controller.cancel({ code: "CANCELLED_TEST", message: "Test cancelled." });
-    await expect(cancelled).rejects.toMatchObject({
-      tag: "CancellationError",
-      code: "CANCELLED_TEST",
-    });
-    expect(cancellationAborted).toBe(true);
   });
 
   it("keeps retry delays interruptible through the Effect boundary", async () => {

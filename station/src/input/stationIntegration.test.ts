@@ -214,7 +214,7 @@ describe("station input through the station runtime", () => {
     });
   });
 
-  it("routes view mouse targets and closes the overlay on dismiss hints", () => {
+  it("routes view mouse targets through the active overlay", () => {
     const { view, station, runtime } = makeRuntime(true);
 
     expect(
@@ -224,17 +224,7 @@ describe("station input through the station runtime", () => {
       ),
     ).toBe(true);
     expect([...view.getState().collapsedProjectIds]).toEqual(["station"]);
-
-    expect(
-      runtime.dispatchMouse(
-        {
-          kind: "station",
-          target: { kind: "footerHint", bindingId: "station.dashboard.dismiss" },
-        },
-        LEFT_DOWN,
-      ),
-    ).toBe(true);
-    expect(station.getState().input.activeOverlay).toBeNull();
+    expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
   });
 
   it("closes STATION from the backdrop through the runtime path", () => {

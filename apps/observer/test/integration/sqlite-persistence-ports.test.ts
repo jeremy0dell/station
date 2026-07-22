@@ -179,6 +179,65 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
+  it("drops obsolete recovery breadcrumb storage from fresh and version-14 databases", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-recovery-breadcrumb-migration-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.filter(({ version }) => version < 15)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      legacyDatabase
+        .prepare(`
+          INSERT INTO recovery_breadcrumbs
+            (id, project_id, worktree_id, session_id, location, path, payload_json,
+             created_at, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          "breadcrumb_legacy",
+          "web",
+          "wt_web_main",
+          "ses_web_main",
+          "external",
+          "/tmp/recovery.json",
+          "{}",
+          now,
+          now,
+        );
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      expect(upgraded.health().schemaVersion).toBe(latestSchemaVersion);
+      expect(
+        upgraded.database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+          .get("recovery_breadcrumbs"),
+      ).toBeUndefined();
+    } finally {
+      upgraded.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+
+    const fresh = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    try {
+      expect(fresh.health().schemaVersion).toBe(latestSchemaVersion);
+      expect(
+        fresh.database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+          .get("recovery_breadcrumbs"),
+      ).toBeUndefined();
+    } finally {
+      fresh.close();
+    }
+  });
+
   it("repairs the pre-merge native binding migration collision without losing bindings", async () => {
     const directory = await mkdtemp(join(tmpdir(), "station-native-binding-migration-"));
     const path = join(directory, "observer.sqlite");
@@ -235,6 +294,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [12, "session_lifecycle"],
         [13, "session_harness_executions"],
         [14, "native_binding_ingress_claims"],
+        [15, "drop_recovery_breadcrumbs"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

@@ -2,7 +2,7 @@
 // "overlay" priority slot that shipped as a read-only swallow placeholder.
 // catchAll (not bindings[]) because dashboard keys are mode-dependent — "N"
 // opens a sheet in dashboard mode but is text in search mode; the per-mode
-// truth lives in the keymap tables + shared machine (stationKeymap.ts), and
+// truth lives in the shared transition machine, and
 // reserved chords (Ctrl-O/Ctrl-Q) pierce any catchAll by stack rule. Every
 // sequence is consumed (modal); dismiss/exit intents surface as the
 // overlay-close outcome so the coordination store owns visibility and focus

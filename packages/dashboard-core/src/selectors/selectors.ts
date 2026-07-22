@@ -128,13 +128,6 @@ export function selectProjectGroups(
   });
 }
 
-export function selectVisibleRows(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
-): DashboardSessionRow[] {
-  return selectProjectGroups(snapshot, state).flatMap((group) => group.rows);
-}
-
 export function selectDashboardSessionRows(snapshot: StationSnapshot): DashboardSessionRow[] {
   const worktreesById = new Map(snapshot.rows.map((row) => [row.id, row]));
   return snapshot.sessions.flatMap((session) => {
@@ -151,13 +144,6 @@ export function selectDashboardSessionRow(
   sessionId: SessionId,
 ): DashboardSessionRow | undefined {
   return selectDashboardSessionRows(snapshot).find((row) => row.id === sessionId);
-}
-
-export function selectProjectChoices(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
-): Array<KeyedChoice<ProjectView>> {
-  return keyChoices(selectProjectGroups(snapshot, state).map((group) => group.project));
 }
 
 /**
@@ -254,18 +240,6 @@ export function sessionForWorktreeRow(
     if (external !== undefined) return external;
   }
   return sessions.find((session) => session.worktreeId === row.id);
-}
-
-export function worktreeRowDisplayTitle(
-  row: WorktreeRow,
-  sessions: readonly SessionView[],
-  localRows: TuiLocalRows,
-): string {
-  const session = sessionForWorktreeRow(row, sessions);
-  if (session === undefined) {
-    return row.branch;
-  }
-  return pendingRenameTitles(localRows)[session.id]?.title ?? session.title;
 }
 
 export function sessionRowDisplayTitle(

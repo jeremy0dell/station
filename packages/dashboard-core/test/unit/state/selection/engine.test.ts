@@ -9,7 +9,6 @@ import {
   type ListSpec,
   moveCursor,
   resolveListKey,
-  selectableListBindings,
   selectionMiddleware,
   type TuiState,
 } from "@station/dashboard-core";
@@ -159,27 +158,6 @@ describe("flatPickerSpec", () => {
       { key: "1", value: "x" },
       { key: "2", value: "y" },
     ]);
-  });
-});
-
-describe("selectableListBindings", () => {
-  it("produces up/down/return/slot bindings with literal action strings", () => {
-    const bindings = selectableListBindings("tui.example");
-    expect(bindings.map((binding) => binding.id)).toEqual([
-      "tui.example.cursorUp",
-      "tui.example.cursorDown",
-      "tui.example.activate",
-      "tui.example.slot",
-    ]);
-    expect(bindings.map((binding) => binding.pattern.kind)).toEqual([
-      "named",
-      "named",
-      "named",
-      "slot",
-    ]);
-    expect(bindings.every((binding) => binding.outcome === "handled")).toBe(true);
-    // No text catch-all: a selectable list never eats arbitrary printables.
-    expect(bindings.some((binding) => binding.pattern.kind === "text")).toBe(false);
   });
 });
 
