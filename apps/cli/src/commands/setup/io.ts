@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import type { SetupRenderOptions } from "./theme.js";
-import type { SetupCommandDeps, SetupPromptAdapter } from "./types.js";
+import type { SetupCommandDeps, SetupPromptAdapter, SetupPromptChoice } from "./types.js";
 
 export async function write(deps: SetupCommandDeps, chunk: string): Promise<void> {
   const writer = deps.writeStdout ?? defaultWriteStdout;
@@ -36,8 +36,29 @@ export function defaultPrompt(): SetupPromptAdapter {
       const index = Number(answer.trim()) - 1;
       return choices[index]?.value ?? choices[0]?.value ?? "";
     },
+    async selectMany(message, choices) {
+      const labels = choices.map((choice, index) => `${index + 1}. ${choice.label}`).join("\n");
+      const answer = await readline.question(`${message}\n${labels}\n> `);
+      return parseMultiSelectAnswer(answer, choices);
+    },
     close() {
       readline.close();
     },
   };
+}
+
+export function parseMultiSelectAnswer(
+  answer: string,
+  choices: readonly SetupPromptChoice[],
+): string[] {
+  const selected: string[] = [];
+  for (const token of answer.split(",")) {
+    const trimmed = token.trim();
+    const index = /^\d+$/.test(trimmed) ? Number(trimmed) - 1 : -1;
+    const value = Number.isInteger(index) ? choices[index]?.value : undefined;
+    if (value !== undefined && !selected.includes(value)) selected.push(value);
+  }
+  if (selected.length > 0) return selected;
+  const fallback = choices[0]?.value;
+  return fallback === undefined ? [] : [fallback];
 }

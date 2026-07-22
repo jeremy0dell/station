@@ -290,6 +290,7 @@ export type SetupFacts = {
   config: SetupConfigFact;
   tmuxBinding: SetupTmuxBindingFact;
   selectedHarness?: SupportedHarnessId;
+  selectedHarnesses?: readonly SupportedHarnessId[];
 };
 
 export type ConfigWritePlan =

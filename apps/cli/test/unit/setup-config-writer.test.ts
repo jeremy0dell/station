@@ -107,6 +107,40 @@ describe("setup config writer", () => {
     expect(write.content).toContain("install_hooks = true");
   });
 
+  it("writes every selected harness while preserving the first as the default", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const facts = setupFacts(repo, {
+      selectedHarness: "codex",
+      selectedHarnesses: ["codex", "opencode"],
+      harnesses: [
+        { id: "codex", label: "Codex", status: "ok", command: "codex" },
+        { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
+      ],
+      config: {
+        status: "missing",
+        path: join(root, "config.toml"),
+        message: "missing",
+      },
+    });
+
+    const write = await planSetupConfigWrite(facts, {
+      installHarnessHooks: ["codex"],
+    });
+
+    expect(write.operation).toBe("create");
+    if (write.operation !== "create") throw new Error("expected create plan");
+    const loaded = await loadConfigFromToml(write.content, {
+      configPath: write.path,
+      homeDir: root,
+    });
+    expect(loaded.config.defaults.harness).toBe("codex");
+    expect(Object.keys(loaded.config.harness ?? {})).toEqual(["codex", "opencode"]);
+    expect(loaded.config.harness?.codex?.installHooks).toBe(true);
+    expect(loaded.config.harness?.opencode?.installHooks).toBeUndefined();
+  });
+
   it("appends only a missing harness block to a valid existing config", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -245,6 +279,252 @@ describe("setup config writer", () => {
     await expect(planSetupConfigWrite(facts)).resolves.toEqual({
       operation: "none",
       reason: "Config already includes the selected harness and core defaults.",
+    });
+  });
+
+  it("enables hooks in an existing harness while appending another hook-enabled provider", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const source = existingConfigToml(root, { projectRoot: repo, includeHarness: true }).replace(
+      'command = "codex"\n',
+      'command = "codex"\ninstall_hooks = false # enable during setup\n',
+    );
+    const facts = setupFacts(repo, {
+      selectedHarness: "codex",
+      selectedHarnesses: ["codex", "opencode"],
+      harnesses: [
+        { id: "codex", label: "Codex", status: "ok", command: "codex" },
+        { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
+      ],
+      config: {
+        status: "valid",
+        path: join(root, "config.toml"),
+        source,
+        observerStateDir: join(root, "state"),
+        hasProjectForRoot: false,
+        configuredHarnesses: ["codex"],
+        configuredHookHarnesses: [],
+        defaults: {
+          worktreeProvider: "worktrunk",
+          terminal: "tmux",
+          harness: "codex",
+        },
+      },
+    });
+
+    const write = await planSetupConfigWrite(facts, {
+      installHarnessHooks: ["codex", "opencode"],
+    });
+
+    expect(write.operation).toBe("append");
+    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.content.match(/\[harness\.codex\]/g)).toHaveLength(1);
+    expect(write.content.match(/\[harness\.opencode\]/g)).toHaveLength(1);
+    expect(write.content.match(/install_hooks = true/g)).toHaveLength(2);
+    expect(write.content).toContain("install_hooks = true # enable during setup");
+    expect(write.content).not.toContain("install_hooks = false # enable during setup");
+    expect(write.appendedText).toContain("[harness.opencode]");
+    expect(write.appendedText).toContain("install_hooks = true");
+    expect(write.content).toContain(
+      '[defaults]\nworktree_provider = "worktrunk"\nterminal = "tmux"\nharness = "codex"',
+    );
+    const loaded = await loadConfigFromToml(write.content, {
+      configPath: write.path,
+      homeDir: root,
+    });
+    expect(loaded.config.harness?.codex?.installHooks).toBe(true);
+    expect(loaded.config.harness?.opencode?.installHooks).toBe(true);
+
+    await expect(
+      planSetupConfigWrite(
+        {
+          ...facts,
+          config: {
+            ...facts.config,
+            source: write.content,
+            configuredHarnesses: ["codex", "opencode"],
+            configuredHookHarnesses: ["codex", "opencode"],
+          },
+        },
+        { installHarnessHooks: ["opencode"] },
+      ),
+    ).resolves.toEqual({
+      operation: "none",
+      reason: "Config already includes the selected harnesses and core defaults.",
+    });
+  });
+
+  it("preserves an existing available default that was not selected", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const source = existingConfigToml(root, { projectRoot: repo, includeHarness: true });
+    const write = await planSetupConfigWrite(
+      setupFacts(repo, {
+        selectedHarness: "pi",
+        selectedHarnesses: ["pi"],
+        harnesses: [
+          { id: "codex", label: "Codex", status: "ok", command: "codex" },
+          { id: "pi", label: "Pi", status: "ok", command: "pi" },
+        ],
+        config: {
+          status: "valid",
+          path: join(root, "config.toml"),
+          source,
+          hasProjectForRoot: false,
+          configuredHarnesses: ["codex"],
+          configuredHookHarnesses: [],
+          defaults: {
+            worktreeProvider: "worktrunk",
+            terminal: "tmux",
+            harness: "codex",
+          },
+        },
+      }),
+    );
+
+    expect(write.operation).toBe("append");
+    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.content).toContain('harness = "codex"');
+    expect(write.content.match(/\[harness\.codex\]/g)).toHaveLength(1);
+    expect(write.content.match(/\[harness\.pi\]/g)).toHaveLength(1);
+  });
+
+  it("preserves an unavailable existing default while appending an available provider", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const source = existingConfigToml(root, { projectRoot: repo, includeHarness: true });
+    const facts = setupFacts(repo, {
+      selectedHarness: "pi",
+      selectedHarnesses: ["pi"],
+      harnesses: [
+        { id: "codex", label: "Codex", status: "missing", command: "codex" },
+        { id: "pi", label: "Pi", status: "ok", command: "pi" },
+      ],
+      config: {
+        status: "valid",
+        path: join(root, "config.toml"),
+        source,
+        hasProjectForRoot: false,
+        configuredHarnesses: ["codex"],
+        configuredHookHarnesses: [],
+        defaults: {
+          worktreeProvider: "worktrunk",
+          terminal: "tmux",
+          harness: "codex",
+        },
+      },
+    });
+
+    const write = await planSetupConfigWrite(facts);
+
+    expect(write.operation).toBe("append");
+    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.content.startsWith(source.trimEnd())).toBe(true);
+    expect(write.content).toContain('harness = "codex"');
+    expect(write.content.match(/\[harness\.codex\]/g)).toHaveLength(1);
+    expect(write.content.match(/\[harness\.pi\]/g)).toHaveLength(1);
+  });
+
+  it("updates a quoted table while ignoring fake tables in multiline TOML strings", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const source = [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[defaults]",
+      'worktree_provider = "worktrunk"',
+      'terminal = "tmux"',
+      "harness = 'codex'",
+      'layout = "agent-shell"',
+      "",
+      '["harness"."codex"]',
+      "enabled = true",
+      'command = """codex',
+      "[harness.opencode]",
+      'install_hooks = false"""',
+      "",
+    ].join("\n");
+    const facts = setupFacts(repo, {
+      selectedHarness: "codex",
+      selectedHarnesses: ["codex", "opencode"],
+      harnesses: [
+        { id: "codex", label: "Codex", status: "ok", command: "codex" },
+        { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
+      ],
+      config: {
+        status: "valid",
+        path: join(root, "config.toml"),
+        source,
+        observerStateDir: join(root, "state"),
+        hasProjectForRoot: false,
+        configuredHarnesses: ["codex"],
+        configuredHookHarnesses: [],
+        defaults: {
+          worktreeProvider: "worktrunk",
+          terminal: "tmux",
+          harness: "codex",
+        },
+      },
+    });
+
+    const write = await planSetupConfigWrite(facts, {
+      installHarnessHooks: ["codex", "opencode"],
+    });
+
+    expect(write.operation).toBe("append");
+    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.content.match(/\["harness"\."codex"\]/g)).toHaveLength(1);
+    expect(write.content).toContain(
+      '["harness"."codex"]\ninstall_hooks = true\nenabled = true\ncommand = """codex\n[harness.opencode]\ninstall_hooks = false"""',
+    );
+    expect(write.content.match(/install_hooks = true/g)).toHaveLength(2);
+    expect(write.content.match(/install_hooks = false/g)).toHaveLength(1);
+    expect(write.appendedText).toContain("[harness.opencode]");
+    expect(write.appendedText).toContain("install_hooks = true");
+    await expect(
+      loadConfigFromToml(write.content, { configPath: write.path, homeDir: root }),
+    ).resolves.toBeDefined();
+  });
+
+  it("adds hook intent to an existing harness block", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const source = existingConfigToml(root, { projectRoot: repo, includeHarness: true });
+    const facts = setupFacts(repo, {
+      config: {
+        status: "valid",
+        path: join(root, "config.toml"),
+        source,
+        observerStateDir: join(root, "state"),
+        hasProjectForRoot: false,
+        configuredHarnesses: ["codex"],
+        configuredHookHarnesses: [],
+        defaults: {
+          worktreeProvider: "worktrunk",
+          terminal: "tmux",
+          harness: "codex",
+        },
+      },
+    });
+
+    const write = await planSetupConfigWrite(facts, { installHarnessHooks: ["codex"] });
+
+    expect(write.operation).toBe("append");
+    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.appendedText).toBe("");
+    expect(write.content).toContain(
+      '[harness.codex]\ninstall_hooks = true\nenabled = true\ncommand = "codex"',
+    );
+    await expect(
+      loadConfigFromToml(write.content, { configPath: write.path, homeDir: root }),
+    ).resolves.toMatchObject({
+      config: { harness: { codex: { installHooks: true } } },
     });
   });
 

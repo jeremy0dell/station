@@ -321,6 +321,155 @@ describe("guided setup command", () => {
     expect(fs.files[configPath]).toBe(configuredProjectToml(repo));
   });
 
+  it("enables and installs hooks for an already-configured harness", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
+    const calls: ExternalCommandInput[] = [];
+    let activations = 0;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+          [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]:
+            "",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+        },
+        prompt: {
+          async confirm(message) {
+            return (
+              message.includes("Codex agent hooks") || message.includes("Write core STATION config")
+            );
+          },
+          async select() {
+            return "codex";
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(activations).toBe(1);
+    expect(fs.files[configPath]).toContain(
+      '[harness.codex]\ninstall_hooks = true\nenabled = true\ncommand = "codex"',
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        command: "/fake/bin/stn",
+        args: [
+          "--config",
+          configPath,
+          "hooks",
+          "install",
+          "codex",
+          "--yes",
+          "--hook-bin",
+          "/fake/bin/stn-ingress",
+        ],
+      }),
+    );
+  });
+
+  it("scopes hook prompts and actions to current selections while preserving the configured default", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
+    const calls: ExternalCommandInput[] = [];
+    const prompts: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+          "opencode --version": "opencode 1.0.0\n",
+          [`stn --config ${configPath} hooks install opencode --yes`]: "",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            prompts.push(message);
+            return (
+              message.includes("OpenCode agent hooks") ||
+              message.includes("Write core STATION config")
+            );
+          },
+          async select() {
+            return "opencode";
+          },
+          async selectMany() {
+            return ["opencode"];
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(prompts).toContain("Install OpenCode agent hooks?");
+    expect(prompts).not.toContain("Install Codex agent hooks?");
+    expect(
+      calls
+        .filter((call) => call.command === "/fake/bin/stn" && call.args?.[2] === "hooks")
+        .map((call) => call.args?.[4]),
+    ).toEqual(["opencode"]);
+    expect(fs.files[configPath].match(/^harness = "codex"$/gm)).toHaveLength(1);
+    expect(fs.files[configPath].match(/^\[harness\.codex\]$/gm)).toHaveLength(1);
+    expect(fs.files[configPath].match(/^\[harness\.opencode\]$/gm)).toHaveLength(1);
+    expect(fs.files[configPath]).toContain(
+      '[harness.opencode]\nenabled = true\ncommand = "opencode"\ninstall_hooks = true',
+    );
+  });
+
   it("does not activate when the config write fails", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -404,7 +553,7 @@ describe("guided setup command", () => {
     expect(output).not.toContain("Core setup complete.");
   });
 
-  it("selects among multiple available harnesses", async () => {
+  it("writes every selected harness and keeps the first as the new-config default", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -434,14 +583,18 @@ describe("guided setup command", () => {
         ]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
-        prompt: prompt({ confirms: [false, false, true, false, false], selects: ["opencode"] }),
+        prompt: prompt({
+          confirms: [false, false, false, true, false, false],
+          multiSelects: [["opencode", "codex"]],
+        }),
         writeStdout: () => undefined,
       },
     );
 
-    expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain(
-      "[harness.opencode]",
-    );
+    const config = fs.files[join(root, "home/.config/station/config.toml")];
+    expect(config).toContain('harness = "opencode"');
+    expect(config).toContain("[harness.opencode]");
+    expect(config).toContain("[harness.codex]");
   });
 
   it("installs the optional tmux popup binding when accepted", async () => {
@@ -647,8 +800,10 @@ describe("guided setup command", () => {
       "wt --version": "worktrunk 1.2.3\n",
       "tmux -V": "tmux 3.5a\n",
       "codex --version": "codex 0.1.0\n",
+      "opencode --version": "opencode 1.0.0\n",
       [`stn --config ${configPath} hooks install worktrunk --yes`]: "",
       [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]: "",
+      [`stn --config ${configPath} hooks install opencode --yes`]: "",
     });
 
     const result = await runSetupCommand(
@@ -679,15 +834,18 @@ describe("guided setup command", () => {
         activateObserverConfig: async () => {
           order.push("activate");
         },
-        prompt: prompt({ confirms: [true, true, true, false, false] }),
+        prompt: prompt({
+          confirms: [true, true, true, true, false, false],
+          multiSelects: [["codex", "opencode"]],
+        }),
         writeStdout: () => undefined,
       },
     );
 
     expect(result.code).toBe(0);
-    expect(order).toEqual(["hook:worktrunk", "hook:codex", "activate"]);
+    expect(order).toEqual(["hook:worktrunk", "hook:codex", "hook:opencode", "activate"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
-    expect(fs.files[configPath]).toContain("install_hooks = true");
+    expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
     expect(calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -707,6 +865,11 @@ describe("guided setup command", () => {
             "--hook-bin",
             "/fake/bin/stn-ingress",
           ],
+          stdio: "inherit",
+        }),
+        expect.objectContaining({
+          command: "/fake/bin/stn",
+          args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
           stdio: "inherit",
         }),
       ]),
@@ -764,6 +927,86 @@ describe("guided setup command", () => {
     expect(output).toContain("Hook install failed.");
     expect(output).toContain("Observer configuration active.");
     expect(output).not.toContain("Core setup complete.");
+  });
+
+  it("continues after one agent hook fails and retries enabled hooks on the next run", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    let codexHookAttempts = 0;
+    const baseRunner = fakeRunner(calls, {
+      "git rev-parse --show-toplevel": repo,
+      "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "codex --version": "codex 0.1.0\n",
+      "opencode --version": "opencode 1.0.0\n",
+      [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]: "",
+      [`stn --config ${configPath} hooks install opencode --yes`]: "",
+    });
+    const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
+      if (input.command === "/fake/bin/stn" && input.args?.[4] === "codex") {
+        calls.push(input);
+        codexHookAttempts += 1;
+        if (codexHookAttempts === 1) {
+          throw new Error("synthetic Codex hook failure");
+        }
+        return commandResult(input, "");
+      }
+      return baseRunner(input);
+    };
+    const promptAdapter: SetupPromptAdapter = {
+      async confirm(message) {
+        return (
+          message.includes("Codex agent hooks") ||
+          message.includes("OpenCode agent hooks") ||
+          message.includes("Write core STATION config")
+        );
+      },
+      async select() {
+        return "codex";
+      },
+      async selectMany() {
+        return ["codex", "opencode"];
+      },
+    };
+    const deps = {
+      cwd: repo,
+      homeDir,
+      env: { PATH: "/fake/bin" },
+      runner,
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+        "/fake/bin/stn",
+        "/fake/bin/stn-ingress",
+        "/fake/bin/stn-tmux-popup",
+      ]),
+      fs,
+      activateObserverConfig: noopActivateObserverConfig,
+      prompt: promptAdapter,
+      writeStdout: () => undefined,
+    };
+
+    const first = await runSetupCommand([], {}, deps);
+    const second = await runSetupCommand([], {}, deps);
+
+    expect(first.code).toBe(1);
+    expect(second.code).toBe(0);
+    expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
+    expect(
+      calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "codex"),
+    ).toHaveLength(2);
+    expect(
+      calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "opencode"),
+    ).toHaveLength(2);
   });
 
   it("installs a selected agent CLI when no harness is available, then continues", async () => {
@@ -1260,15 +1503,23 @@ async function tempRoot(tempRoots: string[]): Promise<string> {
   return root;
 }
 
-function prompt(input: { confirms: boolean[]; selects?: string[] }): SetupPromptAdapter {
+function prompt(input: {
+  confirms: boolean[];
+  selects?: string[];
+  multiSelects?: string[][];
+}): SetupPromptAdapter {
   const confirms = [...input.confirms];
   const selects = [...(input.selects ?? [])];
+  const multiSelects = [...(input.multiSelects ?? [])];
   return {
     async confirm() {
       return confirms.shift() ?? false;
     },
     async select() {
       return selects.shift() ?? "codex";
+    },
+    async selectMany() {
+      return multiSelects.shift() ?? [selects.shift() ?? "codex"];
     },
   };
 }
