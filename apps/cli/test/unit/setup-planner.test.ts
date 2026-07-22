@@ -475,6 +475,39 @@ describe("setup planner", () => {
     expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
   });
 
+  it("warns when setup can use installed launchers that are not on PATH", () => {
+    const base = facts();
+    const installedRoot = "/tmp/home/.local/bin";
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...base.launchers,
+          station: {
+            ...base.launchers.station,
+            source: "installed",
+            resolvedPath: `${installedRoot}/stn`,
+          },
+          ingress: {
+            ...base.launchers.ingress,
+            source: "installed",
+            resolvedPath: `${installedRoot}/stn-ingress`,
+          },
+          tmuxPopup: {
+            ...base.launchers.tmuxPopup,
+            source: "installed",
+            resolvedPath: `${installedRoot}/stn-tmux-popup`,
+          },
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      status: "warning",
+      message:
+        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup.",
+    });
+  });
+
   it("plans the exact popup command and preserved key for a reachable tmux server", () => {
     const plan = buildSetupPlan(
       facts({
@@ -555,15 +588,41 @@ describe("setup planner", () => {
   });
 
   it("plans Worktrunk shell integration with Worktrunk's approval prompt disabled", () => {
-    const plan = buildSetupPlan(facts());
+    const plan = buildSetupPlan(
+      facts({
+        worktrunk: {
+          status: "ok",
+          command: "wt",
+          resolvedPath: "/opt/homebrew/bin/wt",
+        },
+      }),
+    );
 
     expect(
       plan.actions.find((action) => action.id === "worktrunk-shell-integration"),
     ).toMatchObject({
       kind: "run-command",
       selected: false,
-      command: ["wt", "-y", "config", "shell", "install"],
+      command: ["/opt/homebrew/bin/wt", "-y", "config", "shell", "install"],
     });
+  });
+
+  it("does not offer a broad Worktrunk shell install when the active shell is unsupported", () => {
+    const plan = buildSetupPlan(
+      facts({
+        worktrunkShellIntegration: {
+          status: "warning",
+          message: "Could not determine an active bash or zsh shell for Worktrunk integration.",
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "worktrunk-shell-integration")).toMatchObject({
+      status: "warning",
+    });
+    expect(
+      plan.actions.find((action) => action.id === "worktrunk-shell-integration"),
+    ).toBeUndefined();
   });
 
   it("installs checkout launchers through the pnpm 11-compatible package script", () => {
@@ -739,6 +798,12 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       flag: "--yes",
       message:
         "Lifecycle hooks are enabled; automated Worktrunk mutations pass --yes to pre-approve prompts.",
+    },
+    worktrunkShellIntegration: {
+      status: "warning",
+      shell: "zsh",
+      rcPath: "/tmp/home/.zshrc",
+      message: "Worktrunk shell integration is not installed for zsh.",
     },
     tmux: {
       status: "ok",

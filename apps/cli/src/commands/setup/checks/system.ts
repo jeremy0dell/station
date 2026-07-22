@@ -36,11 +36,16 @@ import {
   type CheckSetupLaunchersOptions,
   checkSetupLaunchers,
   setupLauncherExecutable,
+  setupLauncherPathsMatch,
 } from "./launchers.js";
 import { checkSetupStateDir, type SetupStateDirFileSystem } from "./stateDir.js";
 import { checkSetupTmux } from "./tmux.js";
 import { checkSetupTmuxBinding, tmuxPopupRunShellCommand } from "./tmuxBinding.js";
-import { checkSetupWorktrunk, checkSetupWorktrunkAutomation } from "./worktrunk.js";
+import {
+  checkSetupWorktrunk,
+  checkSetupWorktrunkAutomation,
+  checkSetupWorktrunkShellIntegration,
+} from "./worktrunk.js";
 import { type CheckXcodeOptions, checkSetupXcode } from "./xcode.js";
 
 export type SetupDependencyCheckOptions = {
@@ -111,6 +116,14 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   const configPathOptions = setupConfigOptions(setupConfigInput);
   const configPath = setupConfigPath(configPathOptions);
   const configPromise = checkSetupConfig({ ...configPathOptions, configPath });
+  const worktrunkPromise = configPromise.then((config) =>
+    checkSetupWorktrunk({
+      ...dependencyOptions,
+      ...(config.status === "valid" && config.worktrunkCommand !== undefined
+        ? { command: config.worktrunkCommand }
+        : {}),
+    }),
+  );
   const harnessesPromise = configPromise.then((config) => {
     const harnessOptions: CheckHarnessesOptions = { ...commandOptions };
     if (config.status === "valid") {
@@ -140,7 +153,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
       ...(options.platform === undefined ? {} : { platform: options.platform }),
       ...(options.access === undefined ? {} : { access: options.access }),
     }),
-    checkSetupWorktrunk(dependencyOptions),
+    worktrunkPromise,
     checkSetupTmux(dependencyOptions),
     compiled
       ? Promise.resolve({ status: "ok" as const, command: "bun" })
@@ -158,18 +171,30 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     configPromise,
     checkSetupLaunchers(launcherOptions),
   ]);
-  const worktrunkAutomation = await checkSetupWorktrunkAutomation({
-    worktrunk,
-    configReady: config.status === "valid",
-    ...(config.status === "valid" && config.worktrunkUseLifecycleHooks !== undefined
-      ? { useLifecycleHooks: config.worktrunkUseLifecycleHooks }
-      : {}),
-    ...(options.runner === undefined ? {} : { runner: options.runner }),
-  });
+  const [worktrunkAutomation, worktrunkShellIntegration] = await Promise.all([
+    checkSetupWorktrunkAutomation({
+      worktrunk,
+      configReady: config.status === "valid",
+      ...(config.status === "valid" && config.worktrunkUseLifecycleHooks !== undefined
+        ? { useLifecycleHooks: config.worktrunkUseLifecycleHooks }
+        : {}),
+      ...(options.runner === undefined ? {} : { runner: options.runner }),
+    }),
+    checkSetupWorktrunkShellIntegration({
+      worktrunk,
+      homeDir,
+      env,
+      ...(options.runner === undefined ? {} : { runner: options.runner }),
+    }),
+  ]);
   const launcherCommand =
     options.tmuxPopupOwnerRoot === undefined
       ? setupLauncherExecutable(launchers.tmuxPopup)
       : join(options.tmuxPopupOwnerRoot, "stn-tmux-popup");
+  const popupOnPath =
+    launchers.tmuxPopup.source === "path" &&
+    launchers.tmuxPopup.resolvedPath !== undefined &&
+    (await setupLauncherPathsMatch(launchers.tmuxPopup.resolvedPath, launcherCommand));
   const resolvedLaunchers =
     options.tmuxPopupOwnerRoot === undefined
       ? launchers
@@ -178,7 +203,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
           tmuxPopup: (await canExecute(launcherCommand, options.access))
             ? {
                 status: "ok" as const,
-                source: "installed" as const,
+                source: popupOnPath ? ("path" as const) : ("installed" as const),
                 command: launchers.tmuxPopup.command,
                 resolvedPath: launcherCommand,
                 checkoutPath: launchers.tmuxPopup.checkoutPath,
@@ -245,6 +270,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     socketEvidence,
     worktrunk,
     worktrunkAutomation,
+    worktrunkShellIntegration,
     tmux,
     bun,
     stationUi,

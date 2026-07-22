@@ -645,6 +645,12 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
       message:
         "Lifecycle hooks are enabled; automated Worktrunk mutations pass --yes to pre-approve prompts.",
     },
+    worktrunkShellIntegration: {
+      status: "warning",
+      shell: "zsh",
+      rcPath: "/tmp/home/.zshrc",
+      message: "Worktrunk shell integration is not installed for zsh.",
+    },
     tmux: { status: "ok", command: "tmux" },
     bun: { status: "ok", command: "bun" },
     stationUi: { status: "installed" },

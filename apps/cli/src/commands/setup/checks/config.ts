@@ -92,6 +92,9 @@ export async function checkSetupConfig(
     if (loaded.config.worktree?.worktrunk?.useLifecycleHooks !== undefined) {
       fact.worktrunkUseLifecycleHooks = loaded.config.worktree.worktrunk.useLifecycleHooks;
     }
+    if (loaded.config.worktree?.worktrunk?.command !== undefined) {
+      fact.worktrunkCommand = loaded.config.worktree.worktrunk.command;
+    }
     if (matchedProject !== undefined) {
       fact.matchedProject = {
         id: matchedProject.id,

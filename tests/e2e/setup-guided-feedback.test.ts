@@ -31,7 +31,8 @@ describe("setup guided feedback e2e", () => {
   });
 
   it("prints config and Worktrunk shell integration feedback and exits", async () => {
-    const fixture = await createFixture({ harness: "codex" });
+    const fixture = await createFixture({ harness: "codex", shell: "zsh" });
+    await writeFile(shellRcPath(fixture.home, "zsh"), "# existing zsh config\n", "utf8");
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
@@ -46,7 +47,9 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Install Codex agent hooks?");
       expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
-      expect(result.stdout).toContain("Running: wt -y config shell install");
+      expect(result.stdout).toContain(
+        `Running: ${join(fixture.bin, "wt")} -y config shell install zsh`,
+      );
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
@@ -189,7 +192,7 @@ describe("setup guided feedback e2e", () => {
         );
         expect(result.stdout).toContain(`Active ${shell} rc file not found: ${rcPath}`);
         expect(result.stdout).toContain(
-          `Run: touch ${rcPath} && wt -y config shell install ${shell}`,
+          `Run: touch ${rcPath} && ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
         );
         expect(result.stdout).not.toContain("Failed: Install Worktrunk shell integration");
         expect(result.stdout).not.toContain("fake shell integration installed");
@@ -215,13 +218,28 @@ describe("setup guided feedback e2e", () => {
         const second = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
           env: fixture.env,
-          answers: ["n", "n", "y", "n"],
+          answers: ["n", "n", "n", "n"],
         });
 
         expect(first.exitCode).toBe(0);
         expect(second.exitCode).toBe(0);
-        expect(first.stdout).toContain(`Running: wt -y config shell install ${shell}`);
-        expect(second.stdout).toContain(`Running: wt -y config shell install ${shell}`);
+        expect(first.stdout).toContain(
+          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
+        );
+        expect(second.stdout).not.toContain("Install Worktrunk shell integration?");
+        expect(second.stdout).not.toContain(
+          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
+        );
+        const check = await runStation(
+          ["--config", fixture.configPath, "setup", "check", "--json"],
+          { cwd: fixture.repo, env: fixture.env, answers: [] },
+        );
+        expect(check.exitCode).toBe(0);
+        expect(JSON.parse(check.stdout).checks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: "worktrunk-shell-integration", status: "ok" }),
+          ]),
+        );
         const contents = await readFile(rcPath, "utf8");
         expect(contents.startsWith(original)).toBe(true);
         expect(contents.split(shellIntegrationMarker)).toHaveLength(2);
@@ -287,9 +305,8 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline linking the fixture's non-runtime launchers, Worktrunk and Codex
-        // hooks; write config; decline shell integration; accept the popup binding.
-        answers: ["n", "n", "n", "y", "n", "y"],
+        // Decline launcher linking and hooks; write config; accept popup (no shell prompt without a supported active shell).
+        answers: ["n", "n", "n", "y", "y"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -403,6 +420,17 @@ async function createFixture(input: {
     [
       'if [ "$1" = "--version" ]; then echo "worktrunk 1.2.3"; exit 0; fi',
       'if [ "$1 $2 $3 $4" = "-y config shell install" ]; then',
+      '  if [ "$5" = "--dry-run" ]; then',
+      '    case "$6" in',
+      '      zsh) rc="$HOME/.zshrc" ;;',
+      '      bash) rc="$HOME/.bashrc" ;;',
+      '      *) echo "unexpected shell $6" >&2; exit 2 ;;',
+      "    esac",
+      `    marker=${shellQuote(shellIntegrationMarker)}`,
+      '    if [ -f "$rc" ] && grep -F -x "$marker" "$rc" >/dev/null 2>&1; then exit 0; fi',
+      '    echo "shell integration update pending"',
+      "    exit 0",
+      "  fi",
       '  if [ "$#" -ge 5 ]; then',
       '    case "$5" in',
       '      zsh) rc="$HOME/.zshrc" ;;',

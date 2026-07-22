@@ -40,6 +40,7 @@ describe("guided setup command", () => {
           "git rev-parse --show-toplevel": repo,
           "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
           "wt --version": "worktrunk 1.2.3\n",
+          "wt -y config shell install --dry-run zsh": "shell integration update pending\n",
           "tmux -V": "tmux 3.5a\n",
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
@@ -94,6 +95,7 @@ describe("guided setup command", () => {
           "git rev-parse --show-toplevel": repo,
           "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
           "wt --version": "worktrunk 1.2.3\n",
+          "wt -y config shell install --dry-run zsh": "shell integration update pending\n",
           "tmux -V": "tmux 3.5a\n",
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
@@ -357,12 +359,19 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(calls.find((call) => call.command === "wt" && call.args?.[0] === "-y")).toMatchObject({
+    expect(
+      calls.find(
+        (call) =>
+          call.command === "/fake/bin/wt" &&
+          call.args?.[0] === "-y" &&
+          !call.args.includes("--dry-run"),
+      ),
+    ).toMatchObject({
       args: ["-y", "config", "shell", "install", "zsh"],
       stdio: "inherit",
     });
     expect(fs.files[zshrc]).toBe("# existing zsh config\n");
-    expect(chunks.join("")).toContain("Running: wt -y config shell install zsh");
+    expect(chunks.join("")).toContain("Running: /fake/bin/wt -y config shell install zsh");
     expect(chunks.join("")).toContain("Completed: Install Worktrunk shell integration");
   });
 
@@ -412,14 +421,21 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(calls.find((call) => call.command === "wt" && call.args?.[0] === "-y")).toMatchObject({
+    expect(
+      calls.find(
+        (call) =>
+          call.command === "/fake/bin/wt" &&
+          call.args?.[0] === "-y" &&
+          !call.args.includes("--dry-run"),
+      ),
+    ).toMatchObject({
       args: ["-y", "config", "shell", "install", "zsh"],
     });
     expect(fs.files[zshrc]).toBe("# existing zsh config\n");
     expect(chunks.join("")).toContain(
       "Optional Worktrunk shell integration was not installed; core setup is complete.",
     );
-    expect(chunks.join("")).toContain("Run: wt -y config shell install zsh");
+    expect(chunks.join("")).toContain("Run: /fake/bin/wt -y config shell install zsh");
     expect(chunks.join("")).not.toContain("Failed: Install Worktrunk shell integration");
   });
 
@@ -805,7 +821,7 @@ describe("guided setup command", () => {
         ]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
-        prompt: prompt({ confirms: [false, false, true, false, true] }),
+        prompt: popupInstallPrompt,
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -868,7 +884,7 @@ describe("guided setup command", () => {
         ]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
-        prompt: prompt({ confirms: [false, false, true, false, true] }),
+        prompt: popupInstallPrompt,
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -940,7 +956,7 @@ describe("guided setup command", () => {
         ]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
-        prompt: prompt({ confirms: [false, false, true, false, true] }),
+        prompt: popupInstallPrompt,
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -1684,6 +1700,17 @@ function prompt(input: { confirms: boolean[]; multiSelects?: string[][] }): Setu
     },
   };
 }
+
+const popupInstallPrompt: SetupPromptAdapter = {
+  async confirm(message) {
+    return (
+      message === "Write core STATION config?" || message === "Install or load tmux popup binding?"
+    );
+  },
+  async selectMany() {
+    return ["codex"];
+  },
+};
 
 function readySetupDeps(repo: string) {
   return {

@@ -1,18 +1,24 @@
+import { basename, join } from "node:path";
+import { runExternalCommand } from "@station/runtime";
 import {
   checkWorktrunkDependency,
   missingWorktrunkAutomationFlagSupport,
   worktrunkAutomationMode,
 } from "@station/worktrunk";
-import type { SetupDependencyFact, SetupWorktrunkAutomationFact } from "../model.js";
+import type {
+  SetupDependencyFact,
+  SetupWorktrunkAutomationFact,
+  SetupWorktrunkShellIntegrationFact,
+} from "../model.js";
 import { setupProbeTimeoutMs } from "./constants.js";
-import { setupEnv } from "./env.js";
+import { commandEnv, setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";
 
 export async function checkSetupWorktrunk(
-  options: SetupDependencyCheckOptions = {},
+  options: SetupDependencyCheckOptions & { command?: string } = {},
 ): Promise<SetupDependencyFact> {
   const env = setupEnv(options.env);
-  const command = env.STATION_WORKTRUNK_BIN ?? "wt";
+  const command = options.command ?? env.STATION_WORKTRUNK_BIN ?? "wt";
   const dependencyOptions: Parameters<typeof checkWorktrunkDependency>[0] = {
     command,
     timeoutMs: setupProbeTimeoutMs,
@@ -101,6 +107,68 @@ export async function checkSetupWorktrunkAutomation(input: {
       message: `Could not verify that the installed wt supports ${mode.flag} for automated Worktrunk mutations.`,
     };
   }
+}
+
+export async function checkSetupWorktrunkShellIntegration(input: {
+  worktrunk: SetupDependencyFact;
+  homeDir: string;
+  env: SetupDependencyCheckOptions["env"];
+  runner?: SetupDependencyCheckOptions["runner"];
+}): Promise<SetupWorktrunkShellIntegrationFact> {
+  if (input.worktrunk.status !== "ok") {
+    return {
+      status: "skipped",
+      message: "Skipped until Worktrunk is available.",
+    };
+  }
+
+  const shell = activeShell(input.env?.SHELL);
+  if (shell === undefined) {
+    return {
+      status: "warning",
+      message: "Could not determine an active bash or zsh shell for Worktrunk integration.",
+    };
+  }
+
+  const rcPath = join(input.homeDir, shell === "bash" ? ".bashrc" : ".zshrc");
+  const command = input.worktrunk.resolvedPath ?? input.worktrunk.command;
+  try {
+    const result = await runExternalCommand(
+      {
+        command,
+        args: ["-y", "config", "shell", "install", "--dry-run", shell],
+        env: { ...commandEnv(input.env), HOME: input.homeDir },
+        timeoutMs: setupProbeTimeoutMs,
+      },
+      input.runner,
+    );
+    if (`${result.stdout}${result.stderr}`.trim().length === 0) {
+      return {
+        status: "ok",
+        shell,
+        rcPath,
+        message: `Worktrunk shell integration is installed for ${shell}.`,
+      };
+    }
+    return {
+      status: "warning",
+      shell,
+      rcPath,
+      message: `Worktrunk shell integration is not installed for ${shell}.`,
+    };
+  } catch {
+    return {
+      status: "warning",
+      shell,
+      rcPath,
+      message: `Could not verify Worktrunk shell integration for ${shell}.`,
+    };
+  }
+}
+
+function activeShell(shellCommand: string | undefined): "bash" | "zsh" | undefined {
+  const shell = basename(shellCommand ?? "");
+  return shell === "bash" || shell === "zsh" ? shell : undefined;
 }
 
 function setupAutomationMessage(
