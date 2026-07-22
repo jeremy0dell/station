@@ -171,21 +171,22 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     configPromise,
     checkSetupLaunchers(launcherOptions),
   ]);
+  const worktrunkAutomationInput: Parameters<typeof checkSetupWorktrunkAutomation>[0] = {
+    worktrunk,
+    configReady: config.status === "valid",
+  };
+  if (config.status === "valid" && config.worktrunkUseLifecycleHooks !== undefined) {
+    worktrunkAutomationInput.useLifecycleHooks = config.worktrunkUseLifecycleHooks;
+  }
+  if (options.runner !== undefined) worktrunkAutomationInput.runner = options.runner;
+
+  const worktrunkShellIntegrationInput: Parameters<typeof checkSetupWorktrunkShellIntegration>[0] =
+    { worktrunk, homeDir, env };
+  if (options.runner !== undefined) worktrunkShellIntegrationInput.runner = options.runner;
+
   const [worktrunkAutomation, worktrunkShellIntegration] = await Promise.all([
-    checkSetupWorktrunkAutomation({
-      worktrunk,
-      configReady: config.status === "valid",
-      ...(config.status === "valid" && config.worktrunkUseLifecycleHooks !== undefined
-        ? { useLifecycleHooks: config.worktrunkUseLifecycleHooks }
-        : {}),
-      ...(options.runner === undefined ? {} : { runner: options.runner }),
-    }),
-    checkSetupWorktrunkShellIntegration({
-      worktrunk,
-      homeDir,
-      env,
-      ...(options.runner === undefined ? {} : { runner: options.runner }),
-    }),
+    checkSetupWorktrunkAutomation(worktrunkAutomationInput),
+    checkSetupWorktrunkShellIntegration(worktrunkShellIntegrationInput),
   ]);
   const launcherCommand =
     options.tmuxPopupOwnerRoot === undefined
