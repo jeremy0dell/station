@@ -7,7 +7,7 @@ import {
 } from "../../src/observerReap.js";
 
 const SOCK = "/Users/u/.local/state/station/observer.sock";
-const OTHER = "/Users/u/.local/state/wosm/observer.sock";
+const OTHER = "/Users/u/.local/state/unrelated/observer.sock";
 
 function proc(
   pid: number,
