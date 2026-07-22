@@ -20,6 +20,7 @@ function syncPointer(renderer: ReturnType<typeof useRenderer>): void {
 
 type HoverPointerOptions = {
   enabled?: boolean | undefined;
+  acquireOnMouseOver?: boolean | undefined;
   onHoverChange?: ((hover: boolean) => void) | undefined;
 };
 
@@ -67,6 +68,15 @@ export function useHoverPointer(options: HoverPointerOptions = {}) {
     }, 0);
   }, [clearLeaveTimer, options.onHoverChange, renderer]);
 
+  const handleMouseOver = useCallback(() => {
+    // OpenTUI also emits `over` when layout moves under a stationary pointer; callers can
+    // require a real `move` while still using `over` to cancel an in-region deferred leave.
+    if (options.acquireOnMouseOver === false && !hovered.current) {
+      return;
+    }
+    activate();
+  }, [activate, options.acquireOnMouseOver]);
+
   useEffect(
     // Unmount-while-hovered (hot reload, state swap) never fires `out`; drop the
     // region so the pointer can't get stuck on for the whole terminal.
@@ -81,6 +91,6 @@ export function useHoverPointer(options: HoverPointerOptions = {}) {
   return {
     onMouseMove: activate,
     onMouseOut: deactivate,
-    onMouseOver: activate,
+    onMouseOver: handleMouseOver,
   };
 }

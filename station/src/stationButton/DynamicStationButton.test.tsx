@@ -368,6 +368,43 @@ describe("DynamicStationButton", () => {
     }
   });
 
+  it("does not acquire hover when a notification grows under a stationary pointer", async () => {
+    const celebration = { prNumber: 812, title: "1234567890123456789012345678" };
+    const hoverChanges: boolean[] = [];
+    let setCelebration: ((value: IslandCelebration | undefined) => void) | undefined;
+    function Harness() {
+      const [currentCelebration, updateCelebration] = useState<IslandCelebration>();
+      setCelebration = updateCelebration;
+      return (
+        <DynamicStationButton
+          input={input({}, { celebration: currentCelebration })}
+          onHoverChange={(hovered) => hoverChanges.push(hovered)}
+        />
+      );
+    }
+
+    const surface = { width: 100, height: 20 };
+    const notifiedWidth = targetDims(islandDisplay(input({}, { celebration }), false)).width;
+    const setup = await testRender(<Harness />, surface);
+    try {
+      await setup.flush();
+      await setup.mockMouse.moveTo(60, 1);
+      if (setCelebration === undefined) {
+        throw new Error("Stationary-pointer celebration harness did not mount.");
+      }
+      setCelebration(celebration);
+
+      const settled = await waitForButtonFrame(
+        setup,
+        ({ frame, width }) => frame.includes("#812") && width === notifiedWidth,
+      );
+      expect(settled.frame).toContain("✓ #812 merged");
+      expect(hoverChanges).toEqual([]);
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   it("attention wins over the celebration", async () => {
     const frame = await captureFrame(
       <DynamicStationButton

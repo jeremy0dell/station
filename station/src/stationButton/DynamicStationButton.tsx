@@ -63,7 +63,10 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
     setInternalHover(hovering);
     onHoverChange?.(hovering);
   };
-  const pointerProps = useHoverPointer({ onHoverChange: handleHoverChange });
+  const pointerProps = useHoverPointer({
+    acquireOnMouseOver: false,
+    onHoverChange: handleHoverChange,
+  });
 
   const { open, dims, display, textReveal, celebrationReveal } = useButtonTransition(
     input,
