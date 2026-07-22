@@ -4,6 +4,7 @@ import type {
   OpenWorkspaceResult,
   ProviderHealth,
   ProviderId,
+  SafeError,
   TerminalCapabilities,
   TerminalCapture,
   TerminalFocusContext,
@@ -23,7 +24,11 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { runTmuxCommand, type TmuxCommandInput } from "./command.js";
-import { TmuxTerminalProviderError, tmuxProviderErrorFromUnknown } from "./errors.js";
+import {
+  isTmuxNoServerListError,
+  TmuxTerminalProviderError,
+  tmuxProviderErrorFromUnknown,
+} from "./errors.js";
 import { buildRespawnPaneLaunchArgs, resolveLaunchPaneTarget } from "./launch.js";
 import { parseTmuxTargetLines, tmuxListTargetsFormat } from "./parse.js";
 import { resolveFocusPopupClient } from "./popup/state.js";
@@ -69,7 +74,8 @@ const tmuxCapabilities: TerminalCapabilities = {
  *
  * Translates Station terminal operations into tmux-owned topology and commands.
  *
- * Operational failures retain diagnostic evidence while provider health exposes only the lean public projection.
+ * An absent tmux server is empty topology; other operational failures retain diagnostic evidence while
+ * provider health exposes only the lean public projection.
  */
 export class TmuxProvider implements TerminalProvider {
   readonly id: ProviderId = "tmux";
@@ -133,17 +139,26 @@ export class TmuxProvider implements TerminalProvider {
   }
 
   async listTargets(): Promise<TerminalTargetObservation[]> {
-    const output = await this.#run(["list-panes", "-a", "-F", tmuxListTargetsFormat], {
-      operation: "provider.tmux.listTargets",
-      fallback: {
-        code: "TERMINAL_LIST_FAILED",
-        message: "tmux failed to list terminal targets.",
-      },
-      retries: 1,
-    });
-    return parseTmuxTargetLines(output.stdout, {
-      observedAt: toIsoTimestamp(this.#clock.now()),
-    });
+    const fallback = {
+      code: "TERMINAL_LIST_FAILED",
+      message: "tmux failed to list terminal targets.",
+    } as const;
+    try {
+      const output = await this.#run(["list-panes", "-a", "-F", tmuxListTargetsFormat], {
+        operation: "provider.tmux.listTargets",
+        fallback,
+        retries: 1,
+        mapErrors: false,
+        shouldRetry: (error) =>
+          error.code !== "TERMINAL_TMUX_TIMEOUT" && !isTmuxNoServerListError(error),
+      });
+      return parseTmuxTargetLines(output.stdout, {
+        observedAt: toIsoTimestamp(this.#clock.now()),
+      });
+    } catch (error) {
+      if (isTmuxNoServerListError(error)) return [];
+      throw tmuxProviderErrorFromUnknown(error, fallback, { classifyMissingTarget: false });
+    }
   }
 
   async openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult> {
@@ -597,6 +612,7 @@ export class TmuxProvider implements TerminalProvider {
       };
       retries?: number;
       mapErrors?: boolean;
+      shouldRetry?: (error: SafeError) => boolean;
     },
   ) {
     try {
@@ -624,7 +640,7 @@ export class TmuxProvider implements TerminalProvider {
         },
         retries: options.retries ?? 0,
         delayMs: 10,
-        shouldRetry: (error) => error.code !== "TERMINAL_TMUX_TIMEOUT",
+        shouldRetry: options.shouldRetry ?? ((error) => error.code !== "TERMINAL_TMUX_TIMEOUT"),
         maxOutputChars: 512 * 1024,
       });
     } catch (error) {

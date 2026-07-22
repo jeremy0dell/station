@@ -1,5 +1,6 @@
 import type { DiagnosticDetail, SafeError } from "@station/contracts";
 import {
+  externalCommandDiagnosticFromSafeError,
   isExternalCommandError,
   type RuntimeSafeError,
   safeErrorFromUnknown,
@@ -82,10 +83,11 @@ export function tmuxProviderErrorFromUnknown(
     message: string;
     hint?: string;
   },
+  options: { classifyMissingTarget?: boolean } = {},
 ): TmuxTerminalProviderError {
   const normalized = tmuxSafeError(error, fallback);
   const diagnosticDetails = normalized.diagnosticDetails;
-  if (isMissingTarget(normalized)) {
+  if (options.classifyMissingTarget !== false && isMissingTarget(normalized)) {
     return new TmuxTerminalProviderError(
       "TERMINAL_TARGET_MISSING",
       "The terminal target no longer exists.",
@@ -122,6 +124,24 @@ export function tmuxProviderErrorFromUnknown(
     ...(hint === undefined ? {} : { hint }),
     ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
   });
+}
+
+export function isTmuxNoServerListError(error: unknown): boolean {
+  const normalized = tmuxSafeError(error, {
+    code: "TERMINAL_LIST_FAILED",
+    message: "tmux failed to list terminal targets.",
+  });
+  const diagnostic = externalCommandDiagnosticFromSafeError(normalized);
+  if (
+    diagnostic?.exitCode !== 1 ||
+    diagnostic.stderrSnippet === undefined ||
+    !/(?:^|\s)list-panes\s+-a(?:\s|$)/.test(diagnostic.command)
+  ) {
+    return false;
+  }
+  return /^(?:no server running on .+|error connecting to .+ \(No such file or directory\))$/.test(
+    diagnostic.stderrSnippet.trim(),
+  );
 }
 
 function isGenericExternalCommandFailure(error: RuntimeSafeError): boolean {

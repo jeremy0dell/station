@@ -188,6 +188,95 @@ describe("observer reconcile persistence", () => {
     sqlite.close();
   });
 
+  it("persists lean provider health when a read failure carries command diagnostics", async () => {
+    const terminal = new FakeTerminalProvider({ now });
+    terminal.listTargets = async () => {
+      throw {
+        tag: "TerminalProviderError",
+        code: "TERMINAL_LIST_FAILED",
+        message: "tmux failed to list terminal targets.",
+        provider: "fake-terminal",
+        diagnosticDetails: [
+          {
+            type: "external_command",
+            provider: "fake-terminal",
+            operation: "provider.fake-terminal.listTargets",
+            command: "tmux list-panes -a",
+            exitCode: 1,
+            stderrSnippet: "tmux list failed",
+          },
+        ],
+      };
+    };
+    const clock = { now: () => new Date(now) };
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const logErrors: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const core = createObserverCore({
+      config,
+      providers: new ProviderRegistry({
+        worktree: new FakeWorktreeProvider({ now }),
+        terminal,
+        harnesses: [new FakeHarnessProvider({ now })],
+      }),
+      persistence,
+      clock,
+      logger: {
+        info: async () => undefined,
+        warn: async () => undefined,
+        error: async (message, attributes) => {
+          logErrors.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+        },
+      },
+    });
+
+    const snapshot = await core.reconcile("diagnostic-rich-provider-failure");
+
+    expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(snapshot.observer.healthy).toBe(false);
+    expect(snapshot.providerHealth["fake-terminal"]).toMatchObject({
+      status: "unavailable",
+      lastError: {
+        code: "TERMINAL_LIST_FAILED",
+        provider: "fake-terminal",
+      },
+    });
+    expect(snapshot.providerHealth["fake-terminal"]?.lastError).not.toHaveProperty(
+      "diagnosticDetails",
+    );
+    expect(core.getHealth().lastReconcile?.errors[0]).not.toHaveProperty("diagnosticDetails");
+    expect(logErrors).toEqual([
+      {
+        message: "Terminal provider list failed.",
+        attributes: expect.objectContaining({
+          error: expect.objectContaining({
+            diagnosticDetails: [
+              expect.objectContaining({
+                type: "external_command",
+                command: "tmux list-panes -a",
+                stderrSnippet: "tmux list failed",
+              }),
+            ],
+          }),
+        }),
+      },
+    ]);
+    const terminalHealth = (await persistence.listProviderObservations()).find(
+      (observation) =>
+        observation.entityKind === "provider_health" &&
+        observation.payload.providerId === "fake-terminal",
+    );
+    expect(terminalHealth).toMatchObject({
+      entityKind: "provider_health",
+      payload: {
+        status: "unavailable",
+        lastError: { code: "TERMINAL_LIST_FAILED" },
+      },
+    });
+    expect(terminalHealth?.payload.lastError).not.toHaveProperty("diagnosticDetails");
+    sqlite.close();
+  });
+
   it("does not hydrate the live graph from stale SQLite records", async () => {
     const dbPath = await tempDbPath();
     const {

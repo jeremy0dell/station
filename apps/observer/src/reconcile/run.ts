@@ -18,9 +18,9 @@ import {
   durationMs,
   forEachConcurrent,
   pathIsSameOrInside,
+  publicSafeErrorFromUnknown,
   type RuntimeClock,
   runRuntimeBoundaryWithRetryAndTimeout,
-  safeErrorFromUnknown,
   toIsoTimestamp,
 } from "@station/runtime";
 import {
@@ -1063,7 +1063,14 @@ async function recordProviderReadFailure(input: {
   errors: SafeError[];
   logger: StationLogger | undefined;
 }): Promise<void> {
-  input.errors.push(input.error);
+  input.errors.push(
+    publicSafeErrorFromUnknown(input.error, {
+      tag: input.error.tag,
+      code: input.error.code,
+      message: input.error.message,
+      provider: input.providerId,
+    }),
+  );
   await input.logger?.error(input.message, {
     provider: input.providerId,
     error: input.error,
@@ -1096,7 +1103,7 @@ function failedProviderHealth(input: {
     providerId: input.providerId,
     providerType: input.providerType,
     lastCheckedAt: input.lastCheckedAt,
-    lastError: safeErrorFromUnknown(input.lastError, {
+    lastError: publicSafeErrorFromUnknown(input.lastError, {
       tag: input.lastError.tag,
       code: input.lastError.code,
       message: input.lastError.message,
