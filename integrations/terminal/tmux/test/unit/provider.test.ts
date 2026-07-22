@@ -559,6 +559,49 @@ describe("TmuxProvider", () => {
     ]);
   });
 
+  it.each([
+    ["macOS", "error connecting to /private/tmp/tmux-501/default (No such file or directory)"],
+    ["Linux", "no server running on /tmp/tmux-1000/default"],
+  ])("treats %s no-server output as empty topology without retry", async (_platform, stderr) => {
+    let calls = 0;
+    const provider = new TmuxProvider({
+      runner: async () => {
+        calls += 1;
+        throw Object.assign(new Error("tmux has no server"), { code: 1, stderr });
+      },
+    });
+
+    await expect(provider.listTargets()).resolves.toEqual([]);
+    expect(calls).toBe(1);
+  });
+
+  it.each([
+    ["permission failure", 1, "error connecting to /tmp/tmux-1000/default (Permission denied)"],
+    ["a different exit code", 2, "no server running on /tmp/tmux-1000/default"],
+    ["target-shaped stderr", 1, "can't find pane: %12"],
+    ["additional stderr", 1, "warning: bad config\nno server running on /tmp/tmux-1000/default"],
+    [
+      "noisy macOS stderr",
+      1,
+      "warning: bad config\nerror connecting to /private/tmp/tmux-501/default (No such file or directory)",
+    ],
+  ])("does not normalize %s while listing targets", async (_case, code, stderr) => {
+    let calls = 0;
+    const provider = new TmuxProvider({
+      runner: async () => {
+        calls += 1;
+        throw Object.assign(new Error("tmux list failed"), { code, stderr });
+      },
+    });
+
+    await expect(provider.listTargets()).rejects.toMatchObject({
+      tag: "TerminalProviderError",
+      code: "TERMINAL_LIST_FAILED",
+      provider: "tmux",
+    });
+    expect(calls).toBe(2);
+  });
+
   it("maps stale target focus to a typed TerminalProviderError", async () => {
     const provider = new TmuxProvider({
       runner: async () => {

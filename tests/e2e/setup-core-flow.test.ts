@@ -80,7 +80,15 @@ describe("setup core flow e2e", () => {
       await writeShim(
         bin,
         "tmux",
-        'if [ "$1" = "-V" ]; then echo "tmux 3.5a"; exit 0; fi\nexit 0\n',
+        [
+          'if [ "$1" = "-V" ]; then echo "tmux 3.5a"; exit 0; fi',
+          'if [ "$1" = "list-panes" ]; then',
+          '  echo "no server running on /tmp/tmux-1000/default" >&2',
+          "  exit 1",
+          "fi",
+          "exit 0",
+          "",
+        ].join("\n"),
       );
       await writeShim(
         bin,
@@ -131,9 +139,12 @@ describe("setup core flow e2e", () => {
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
 
       const observer = createObserverClient({ socketPath: observerSocket, timeoutMs: 1000 });
-      const health = await observer.health();
+      const health = await waitForStartupReconcile(observer);
       const snapshot = await observer.getSnapshot();
       expect(health.pid).toBeTypeOf("number");
+      expect(health.lastReconcile?.reason).toBe("observer.startup");
+      expect(health.lastReconcile?.errors).toEqual([]);
+      expect(snapshot.observer.healthy).toBe(true);
       expect(snapshot.projects).toEqual([]);
       expect(snapshot.counts.projects).toBe(0);
 
@@ -542,6 +553,16 @@ async function stopObserverCandidates(socketPaths: readonly string[]): Promise<v
     await client.stop().catch(() => undefined);
     await waitForSocketClosed(socketPath, { timeoutMs: 5000 });
   }
+}
+
+async function waitForStartupReconcile(observer: ReturnType<typeof createObserverClient>) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const health = await observer.health();
+    if (health.lastReconcile?.reason === "observer.startup") return health;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("Observer startup reconcile did not finish within 5 seconds.");
 }
 
 function processIsAlive(pid: number | undefined): boolean {
