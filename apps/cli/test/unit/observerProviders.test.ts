@@ -1,7 +1,11 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import {
+  DEFAULT_WORKSPACE_CONFIG,
+  HarnessProvidersConfigSchema,
+  type StationConfig,
+} from "@station/config";
 import * as contracts from "@station/contracts";
 import { installCursorHooks } from "@station/cursor";
 import { openCodeHookAdapter } from "@station/opencode";
@@ -547,13 +551,13 @@ describe("observer providers", () => {
   it("passes Claude config defaults into the Claude harness provider", async () => {
     const registry = createProviderRegistry({
       ...config,
-      harness: {
+      harness: HarnessProvidersConfigSchema.parse({
         claude: {
           command: "claude-custom",
           profile: "team-profile",
           permissionMode: "auto",
         },
-      },
+      }),
     });
     const provider = registry.harnesses.get("claude");
     const project = config.projects[0];
@@ -865,6 +869,7 @@ const config: StationConfig = {
     harness: "codex",
     layout: "agent-shell",
   },
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   projects: [
     {
       id: "web",

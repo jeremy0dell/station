@@ -42,7 +42,7 @@ describeReal("real Worktrunk hook ingestion", () => {
     cleanup.defer(async () => {
       await runStationJson(env, {
         configPath: config.configPath,
-        args: ["hooks", "uninstall", "worktrunk", "--yes", "--hook-bin", env.stationIngressBin],
+        args: ["hooks", "uninstall", "worktrunk", "--yes"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
@@ -52,20 +52,20 @@ describeReal("real Worktrunk hook ingestion", () => {
     await expect(
       runStationJson(env, {
         configPath: config.configPath,
-        args: ["hooks", "install", "worktrunk", "--yes", "--hook-bin", env.stationIngressBin],
+        args: ["hooks", "install", "worktrunk", "--yes"],
         timeoutMs: 30_000,
       }),
     ).resolves.toMatchObject({ installed: true });
     await expect(
       runStationJson(env, {
         configPath: config.configPath,
-        args: ["hooks", "doctor", "worktrunk", "--hook-bin", env.stationIngressBin],
+        args: ["hooks", "doctor", "worktrunk"],
       }),
     ).resolves.toMatchObject({ status: "ok" });
     await expect(
       runStationJson(env, {
         configPath: config.configPath,
-        args: ["hooks", "uninstall", "worktrunk", "--yes", "--hook-bin", env.stationIngressBin],
+        args: ["hooks", "uninstall", "worktrunk", "--yes"],
       }),
     ).resolves.toMatchObject({ installed: false });
   }, 120_000);
@@ -169,6 +169,9 @@ async function runWorktrunkIngress(
       observerEntryPath: join(env.repoRoot, "apps", "cli", "dist", "observerMain.js"),
     },
   );
+  if (receipt.status === "ignored") {
+    throw new Error("Worktrunk ingress cannot ignore a lifecycle event.");
+  }
   return {
     hookId: receipt.hookId,
     status: receipt.status,

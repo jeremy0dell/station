@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BuildHarnessLaunchRequest } from "@station/contracts";
+import type { BuildHarnessLaunchRequest, ProviderHookRuntime } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installClaudeHooks } from "../../src/hooks";
@@ -173,6 +173,46 @@ describe("ClaudeHarnessProvider", () => {
       requested: true,
       installed: true,
     });
+  });
+
+  it("uses the requester state directory after shared hook-runtime mapping", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-claude-requester-"));
+    const incumbentStateDir = join(root, "checkout-A", "state");
+    const requesterStateDir = join(root, "checkout-B", "state");
+    const claudeConfigDir = join(root, "claude-home");
+    const requesterStationConfigPath = join(root, "checkout-B", "config.toml");
+    const providerHookRuntime: ProviderHookRuntime = {
+      ingressLauncher: "/checkout/B/bin/stn-ingress",
+      observerSocketPath: join(root, "shared", "observer.sock"),
+      stateDir: requesterStateDir,
+      hookSpoolDir: join(requesterStateDir, "spool", "hooks"),
+      autoStartFromHooks: false,
+      stationConfigPath: requesterStationConfigPath,
+    };
+    await installClaudeHooks({
+      hookBin: providerHookRuntime.ingressLauncher,
+      observerSocketPath: providerHookRuntime.observerSocketPath,
+      stateDir: providerHookRuntime.stateDir,
+      hookSpoolDir: providerHookRuntime.hookSpoolDir,
+      autoStartFromHooks: providerHookRuntime.autoStartFromHooks,
+      stationConfigPath: requesterStationConfigPath,
+      claudeConfigDir,
+    });
+    const provider = createClaudeHarnessProvider({
+      installHooks: true,
+      observerSocketPath: providerHookRuntime.observerSocketPath,
+      stateDir: incumbentStateDir,
+      hookSpoolDir: join(incumbentStateDir, "spool", "hooks"),
+      autoStartFromHooks: true,
+      claudeConfigDir,
+    });
+
+    await expect(
+      provider.hooksStatus?.({
+        stationConfigPath: join(root, "checkout-A", "config.toml"),
+        providerHookRuntime,
+      }),
+    ).resolves.toMatchObject({ installed: true });
   });
 
   it("hooksStatus reports installed:false when hooks are requested but not installed", async () => {

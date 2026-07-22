@@ -1,4 +1,5 @@
 export * from "./automation.js";
+export * from "./commandFailure.js";
 export * from "./dependency.js";
 export * from "./errors.js";
 export * from "./hookAdapter.js";
@@ -6,3 +7,4 @@ export * from "./hooks.js";
 export * from "./metadata.js";
 export * from "./parse.js";
 export * from "./provider.js";
+export * from "./types.js";

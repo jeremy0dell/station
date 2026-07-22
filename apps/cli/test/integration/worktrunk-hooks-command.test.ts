@@ -1,9 +1,11 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
+import { loadConfig } from "@station/config";
 import { providerHookCommandLine } from "@station/runtime";
 import { describe, expect, it } from "vitest";
+import { createProviderRegistry } from "../../src/observerProviders";
 
 describe("CLI Worktrunk hook commands", () => {
   it("plans Worktrunk hook changes without applying them", async () => {
@@ -92,6 +94,67 @@ describe("CLI Worktrunk hook commands", () => {
     });
   });
 
+  it("uses one composed expectation for install and standalone doctor", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-wt-hooks-"));
+    const worktrunkCommand = join(root, "wt");
+    await writeFile(
+      worktrunkCommand,
+      '#!/bin/sh\ncase "$*" in\n  "--version") echo "wt 0.68.0" ;;\n  *) echo "--no-hooks --yes" ;;\nesac\n',
+    );
+    await chmod(worktrunkCommand, 0o700);
+    const configPath = await writeConfig(root, worktrunkCommand);
+    const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+    const ingressLauncher = join(root, "installed", "stn-ingress");
+    const cliOptions = { providerHookIngressLauncher: ingressLauncher };
+
+    const installed = await runCli(
+      [
+        "--config",
+        configPath,
+        "hooks",
+        "install",
+        "worktrunk",
+        "--yes",
+        "--worktrunk-config",
+        worktrunkConfigPath,
+      ],
+      cliOptions,
+    );
+    const doctored = await runCli(
+      [
+        "--config",
+        configPath,
+        "hooks",
+        "doctor",
+        "worktrunk",
+        "--worktrunk-config",
+        worktrunkConfigPath,
+      ],
+      cliOptions,
+    );
+
+    expect(installed).toMatchObject({ code: 0, output: { installed: true } });
+    expect(doctored).toMatchObject({
+      code: 0,
+      output: {
+        status: "ok",
+        commands: {
+          "post-create": expect.stringContaining(ingressLauncher),
+        },
+      },
+    });
+    await expect(readFile(worktrunkConfigPath, "utf8")).resolves.toContain(ingressLauncher);
+
+    const loaded = await loadConfig(configPath);
+    const registry = createProviderRegistry(loaded.config, {
+      configPath: loaded.configPath,
+      providerHookIngressLauncher: ingressLauncher,
+    });
+    await expect(registry.worktree.doctorChecks?.()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worktrunk-hooks", status: "ok" })]),
+    );
+  });
+
   it("installs through both worktrunk hooks and generic hooks aliases", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-wt-hooks-"));
     const configPath = await writeConfig(root);
@@ -173,7 +236,7 @@ describe("CLI Worktrunk hook commands", () => {
   });
 });
 
-async function writeConfig(root: string): Promise<string> {
+async function writeConfig(root: string, worktrunkCommand = "wt"): Promise<string> {
   const configPath = join(root, "config.toml");
   await mkdir(join(root, "state"), { recursive: true });
   await writeFile(
@@ -193,7 +256,8 @@ async function writeConfig(root: string): Promise<string> {
       'layout = "agent-shell"',
       "",
       "[worktree.worktrunk]",
-      'command = "wt"',
+      `command = ${JSON.stringify(worktrunkCommand)}`,
+      `config_path = ${JSON.stringify(join(root, "worktrunk", "config.toml"))}`,
       "",
     ].join("\n"),
   );

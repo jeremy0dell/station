@@ -121,6 +121,60 @@ describe("observability helpers", () => {
     expect(envelope.redacted).toBe(true);
   });
 
+  it("keeps nested provider errors lean while retaining typed envelope evidence", () => {
+    const commandError = Object.assign(new Error("External command failed."), {
+      tag: "ExternalCommandError",
+      code: "EXTERNAL_COMMAND_FAILED",
+      command: "wt switch feature",
+      diagnosticDetails: [
+        {
+          type: "external_command",
+          provider: "worktrunk",
+          operation: "provider.worktrunk.switch",
+          command: "wt switch feature",
+          stderrSnippet: "OPENAI_TOKEN=secret-value branch already exists",
+        },
+      ],
+    });
+    const providerError = Object.assign(new Error("Worktrunk failed to switch worktrees."), {
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_COMMAND_FAILED",
+      provider: "worktrunk",
+      cause: commandError,
+    });
+
+    const safeError = toSafeError(providerError, {
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_COMMAND_FAILED",
+      message: "Worktrunk failed to switch worktrees.",
+    });
+    const envelope = createErrorEnvelope({
+      id: "err_nested",
+      error: providerError,
+      fallback: {
+        tag: "WorktreeProviderError",
+        code: "WORKTRUNK_COMMAND_FAILED",
+        message: "Worktrunk failed to switch worktrees.",
+      },
+      createdAt: now,
+    });
+
+    expect(safeError).toEqual({
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_COMMAND_FAILED",
+      message: "Worktrunk failed to switch worktrees.",
+      provider: "worktrunk",
+    });
+    expect(envelope.diagnostics).toEqual([
+      expect.objectContaining({
+        type: "external_command",
+        operation: "provider.worktrunk.switch",
+        stderrSnippet: "OPENAI_TOKEN=[REDACTED] branch already exists",
+      }),
+    ]);
+    expect(JSON.stringify(envelope)).not.toContain("secret-value");
+  });
+
   it("merges retention defaults and scans local state usage", async () => {
     const dir = await mkdtemp(join(tmpdir(), "station-retention-"));
     await mkdir(join(dir, "logs"), { recursive: true });

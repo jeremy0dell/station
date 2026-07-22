@@ -49,14 +49,14 @@ import {
   type WorktrunkHookPlan,
   type WorktrunkHookPlanOptions,
 } from "@station/worktrunk";
-import type { CliEnv } from "../env.js";
-import { buildCommonHookOptions, createProviderHooksRunner } from "./providerHooks.js";
+import { createWorktrunkHookExpectation } from "../worktrunkHookExpectation.js";
+import {
+  buildCommonHookOptions,
+  createProviderHooksRunner,
+  type ProviderHooksCommandOptions,
+} from "./providerHooks.js";
 
-export type ProviderHooksCommandOptions = {
-  config?: StationConfig;
-  configPath?: string;
-  env?: CliEnv;
-};
+export type { ProviderHooksCommandOptions } from "./providerHooks.js";
 
 export type ClaudeHooksCommandResult =
   | ClaudeHookPlan
@@ -77,6 +77,10 @@ export type OpenCodeHooksCommandResult =
   | OpenCodePluginPlan
   | OpenCodePluginInstallResult
   | OpenCodePluginDoctorResult;
+
+export type WorktrunkHooksCommandOptions = ProviderHooksCommandOptions & {
+  config: StationConfig;
+};
 
 export type WorktrunkHooksCommandResult =
   | WorktrunkHookPlan
@@ -232,8 +236,9 @@ export function runOpenCodeHooksCommand(
 
 export function runWorktrunkHooksCommand(
   args: string[],
-  options: ProviderHooksCommandOptions = {},
+  options: WorktrunkHooksCommandOptions,
 ): Promise<WorktrunkHooksCommandResult> {
+  const config = options.config;
   const runner = createProviderHooksRunner<WorktrunkHookPlanOptions>(
     {
       provider: "worktrunk",
@@ -242,17 +247,23 @@ export function runWorktrunkHooksCommand(
       uninstall: uninstallWorktrunkHooks,
       doctor: doctorWorktrunkHooks,
       buildOptions: (flags, context) => {
-        const options: WorktrunkHookPlanOptions = buildCommonHookOptions(context);
-        // Fall back to the station-config worktrunk config_path when --worktrunk-config is absent.
-        const worktrunkConfigPath =
-          flags.providerConfig ?? context.config?.worktree?.worktrunk?.configPath;
-        if (worktrunkConfigPath !== undefined) {
-          options.worktrunkConfigPath = worktrunkConfigPath;
-        }
+        const expectation = createWorktrunkHookExpectation(config, {
+          stationConfigPath: context.configPath,
+          ingressLauncher: context.providerHookIngressLauncher,
+        });
         if (flags.hookBin !== undefined) {
-          options.hookBin = flags.hookBin;
+          expectation.hookBin = flags.hookBin;
         }
-        return options;
+        const planOptions: WorktrunkHookPlanOptions = { expectation };
+        // Fall back to the station-config worktrunk config_path when --worktrunk-config is absent.
+        const worktrunkConfigPath = flags.providerConfig ?? config.worktree?.worktrunk?.configPath;
+        if (worktrunkConfigPath !== undefined) {
+          planOptions.worktrunkConfigPath = worktrunkConfigPath;
+        }
+        if (context.env !== undefined) {
+          planOptions.env = context.env;
+        }
+        return planOptions;
       },
       isEnabled: isWorktrunkEnabled,
     },

@@ -279,13 +279,18 @@ describe("setup planner", () => {
   });
 
   it("plans the optional tmux popup binding with the preserved key and exact command", () => {
-    const base = facts();
     const plan = buildSetupPlan(
       facts({
         tmuxBinding: {
-          ...base.tmuxBinding,
-          bindingKey: "C-s",
+          status: "missing",
+          path: "/tmp/home/.tmux.conf",
+          marker: "# >>> station popup binding >>>",
+          launcherCommand: "/tmp/bin/stn-tmux-popup",
           runShellCommand: "managed-fast-command",
+          bindingKey: "C-s",
+          insideTmux: false,
+          liveStatus: "unknown",
+          message: "Optional tmux popup binding is not installed.",
         },
       }),
     );
@@ -310,8 +315,6 @@ describe("setup planner", () => {
       "install",
       "worktrunk",
       "--yes",
-      "--hook-bin",
-      "/tmp/bin/stn-ingress",
     ]);
     expect(plan.actions.find((action) => action.id === "codex-hooks")?.command).toEqual([
       "/tmp/bin/stn",
@@ -324,6 +327,29 @@ describe("setup planner", () => {
       "--hook-bin",
       "/tmp/bin/stn-ingress",
     ]);
+  });
+
+  it("omits hook installation when the active runtime ingress sibling is missing", () => {
+    const base = facts();
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...base.launchers,
+          ingress: {
+            status: "missing",
+            source: "missing",
+            command: "/runtime/bin/stn-ingress",
+            checkoutPath: "/tmp/station/bin/stn-ingress",
+            message: "The active runtime ingress launcher is missing.",
+          },
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      status: "warning",
+    });
+    expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
   });
 
   it("plans the exact popup command and preserved key for a reachable tmux server", () => {
@@ -394,7 +420,7 @@ describe("setup planner", () => {
             message: "missing",
           },
         },
-        tmuxBinding: { ...base.tmuxBinding, insideTmux: true, liveStatus: "missing" },
+        tmuxBinding: { ...base.tmuxBinding, insideTmux: true, liveStatus: "unknown" },
       }),
     );
 

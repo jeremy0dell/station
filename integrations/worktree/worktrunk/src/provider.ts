@@ -2,11 +2,8 @@ import { createHash } from "node:crypto";
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
-import { stripVTControlCharacters } from "node:util";
 import type {
   CreateWorktreeRequest,
-  DiagnosticDetail,
-  ExternalCommandDiagnosticDetail,
   GetWorktreeRequest,
   ProviderDoctorCheck,
   ProviderDoctorContext,
@@ -24,12 +21,12 @@ import type {
   WorktreeRemovalRefusalDiagnosticDetail,
   WorktreeRemovalRefusalReason,
 } from "@station/contracts";
-import { ExternalCommandDiagnosticDetailSchema } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   gitCheckoutBareRepairHint,
   gitLocalEnvironmentVariables,
   isGitCheckoutConfiguredBare,
+  publicSafeErrorFromUnknown,
   type RuntimeClock,
   runExternalCommand,
   runRuntimeBoundaryWithRetryAndTimeout,
@@ -39,31 +36,22 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { missingWorktrunkAutomationFlagSupport, worktrunkAutomationMode } from "./automation.js";
+import { worktrunkCommandFailure } from "./commandFailure.js";
 import {
   type CheckWorktrunkDependencyOptions,
   checkWorktrunkDependency,
   type WorktrunkDependencyStatus,
   worktrunkInstallHint,
 } from "./dependency.js";
-import {
-  ProviderUnavailableError,
-  providerErrorFromUnknown,
-  WorktrunkProviderError,
-  type WorktrunkProviderErrorCode,
-} from "./errors.js";
+import { WorktrunkProviderError, type WorktrunkProviderErrorCode } from "./errors.js";
 import { doctorWorktrunkHooks } from "./hooks.js";
 import { applyRecoveryBreadcrumbMetadata } from "./metadata.js";
 import { parseWorktrunkListJson, parseWorktrunkListPayload } from "./parse.js";
-
-export type WorktrunkProviderOptions = {
-  command?: string;
-  configPath?: string;
-  useLifecycleHooks?: boolean;
-  timeoutMs?: number;
-  runner?: ExternalCommandRunner;
-  clock?: RuntimeClock;
-  resolveRegistrationIdentity?: (worktreePath: string) => Promise<string | undefined>;
-};
+import {
+  WORKTRUNK_HOOK_NAMES,
+  type WorktrunkHookExpectation,
+  type WorktrunkProviderOptions,
+} from "./types.js";
 
 type WorktrunkRunPolicy = {
   retries?: number;
@@ -84,7 +72,9 @@ const defaultCapabilities: WorktreeCapabilities = {
  * ADAPTER
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
- * Checkout roots are validated before Worktrunk runs, and removal revalidates native Git registration identity, path, and branch immediately before mutation.
+ * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
+ * expectation as a fallback. Checkout roots are validated before Worktrunk runs, and removal revalidates
+ * native Git identity, path, and branch before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -92,6 +82,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #command: string;
   readonly #configPath: string | undefined;
   readonly #useLifecycleHooks: boolean | undefined;
+  readonly #hookExpectation: WorktrunkHookExpectation | undefined;
   readonly #timeoutMs: number;
   readonly #runner: ExternalCommandRunner | undefined;
   readonly #clock: RuntimeClock;
@@ -103,6 +94,7 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
     this.#configPath = options.configPath;
     this.#useLifecycleHooks = options.useLifecycleHooks;
+    this.#hookExpectation = options.hookExpectation;
     this.#timeoutMs = options.timeoutMs ?? 5000;
     this.#runner = options.runner;
     this.#clock = options.clock ?? systemClock;
@@ -138,7 +130,12 @@ export class WorktrunkProvider implements WorktreeProvider {
       providerType: "worktree",
       status: "unavailable",
       lastCheckedAt: checkedAt,
-      lastError: dependency.error,
+      lastError: publicSafeErrorFromUnknown(dependency.error, {
+        tag: "ProviderUnavailableError",
+        code: "WORKTRUNK_UNAVAILABLE",
+        message: "Worktrunk is not available.",
+        provider: this.id,
+      }),
       capabilities: this.capabilities(),
       diagnostics: dependencyDiagnostics(dependency),
     };
@@ -161,14 +158,55 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async #hookCheck(context: ProviderDoctorContext): Promise<ProviderDoctorCheck> {
+    if (this.#useLifecycleHooks === false) {
+      return {
+        name: "worktrunk-hooks",
+        status: "ok",
+        message:
+          "Worktrunk lifecycle hooks are disabled in station config; automated mutations skip hooks.",
+      };
+    }
+    if (this.#hookExpectation === undefined) {
+      const message = `Worktrunk lifecycle hooks are missing: ${WORKTRUNK_HOOK_NAMES.join(", ")}.`;
+      const error: SafeError = {
+        tag: "WorktrunkHookSetupError",
+        code: "WORKTRUNK_HOOKS_MISSING",
+        message,
+        provider: this.id,
+      };
+      return {
+        name: "worktrunk-hooks",
+        status: "warn",
+        message,
+        error,
+      };
+    }
+
     try {
-      const result = await doctorWorktrunkHooks({
-        ...(this.#configPath === undefined ? {} : { worktrunkConfigPath: this.#configPath }),
-        ...(context.stationConfigPath === undefined
-          ? {}
-          : { stationConfigPath: context.stationConfigPath }),
-        enabled: this.#useLifecycleHooks !== false,
-      });
+      const runtime = context.providerHookRuntime;
+      let expectation: WorktrunkHookExpectation;
+      if (runtime === undefined) {
+        expectation = { ...this.#hookExpectation };
+      } else {
+        expectation = {
+          hookBin: runtime.ingressLauncher,
+          observerSocketPath: runtime.observerSocketPath,
+          stateDir: runtime.stateDir,
+          hookSpoolDir: runtime.hookSpoolDir,
+          autoStartFromHooks: runtime.autoStartFromHooks,
+        };
+        if (runtime.stationConfigPath !== undefined) {
+          expectation.stationConfigPath = runtime.stationConfigPath;
+        }
+      }
+      const hookOptions: Parameters<typeof doctorWorktrunkHooks>[0] = {
+        expectation,
+        enabled: true,
+      };
+      if (this.#configPath !== undefined) {
+        hookOptions.worktrunkConfigPath = this.#configPath;
+      }
+      const result = await doctorWorktrunkHooks(hookOptions);
       const check: ProviderDoctorCheck = {
         name: "worktrunk-hooks",
         status: result.status,
@@ -184,12 +222,13 @@ export class WorktrunkProvider implements WorktreeProvider {
       }
       return check;
     } catch (cause) {
-      const error = safeErrorFromUnknown(cause, {
+      const fallback = {
         tag: "WorktrunkHookSetupError",
         code: "WORKTRUNK_HOOK_DIAGNOSTIC_FAILED",
         message: "Worktrunk hook diagnostics failed.",
         provider: this.id,
-      });
+      };
+      const error = publicSafeErrorFromUnknown(cause, fallback);
       return {
         name: "worktrunk-hooks",
         status: "error",
@@ -593,7 +632,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         message: "Worktrunk automation capability diagnostics failed.",
         provider: this.id,
       });
-      const missingBinary = isMissingBinary(cause);
+      const missingBinary = fallback.code === "ENOENT";
       const error = {
         tag: missingBinary ? "ProviderUnavailableError" : "WorktrunkAutomationDiagnosticError",
         code: missingBinary ? "WORKTRUNK_UNAVAILABLE" : fallback.code,
@@ -795,47 +834,17 @@ export class WorktrunkProvider implements WorktreeProvider {
       return result.value;
     }
 
-    try {
-      throw result.error;
-    } catch (cause) {
-      const diagnosticDetails = worktrunkCommandDiagnostics({
-        error: cause,
-        provider: this.id,
-        operation,
-        command: this.#command,
-        args,
-        cwd,
-        durationMs: result.timing.durationMs,
-      });
-      if (isMissingBinary(cause)) {
-        throw new ProviderUnavailableError("Worktrunk is not available.", {
-          hint: worktrunkInstallHint(this.#command),
-          command: this.#command,
-          installHint: worktrunkInstallHint(this.#command),
-          cause,
-          diagnosticDetails,
-        });
-      }
-      if (isTimeout(cause)) {
-        throw new WorktrunkProviderError("WORKTRUNK_TIMEOUT", "Worktrunk command timed out.", {
-          cause,
-          diagnosticDetails,
-        });
-      }
-      if (isAbort(cause)) {
-        throw new WorktrunkProviderError(
-          "WORKTRUNK_CANCELLED",
-          "Worktrunk command was cancelled.",
-          {
-            cause,
-            diagnosticDetails,
-          },
-        );
-      }
-      throw providerErrorFromUnknown(cause, classifyWorktrunkFailure(cause, fallback), {
-        diagnosticDetails,
-      });
-    }
+    throw worktrunkCommandFailure({
+      error: result.error,
+      provider: this.id,
+      operation,
+      command: this.#command,
+      args,
+      cwd,
+      durationMs: result.timing.durationMs,
+      fallback,
+      installHint: worktrunkInstallHint(this.#command),
+    });
   }
 }
 
@@ -869,182 +878,6 @@ function doctorWorkBudgetMs(timeoutMs: number): number {
 
 function mergeAbortSignals(primary: AbortSignal, secondary: AbortSignal | undefined): AbortSignal {
   return secondary === undefined ? primary : AbortSignal.any([primary, secondary]);
-}
-
-function worktrunkCommandDiagnostics(input: {
-  error: unknown;
-  provider: ProviderId;
-  operation: string;
-  command: string;
-  args: readonly string[];
-  cwd?: string | undefined;
-  durationMs: number;
-}): DiagnosticDetail[] {
-  const detail: ExternalCommandDiagnosticDetail = {
-    type: "external_command",
-    provider: input.provider,
-    operation: input.operation,
-    command: stringFieldDeep(input.error, "command") ?? formatCommand(input.command, input.args),
-  };
-  const cwd = stringFieldDeep(input.error, "cwd") ?? input.cwd;
-  if (cwd !== undefined) detail.cwd = cwd;
-  const exitCode = numberFieldDeep(input.error, "exitCode");
-  if (exitCode !== undefined) detail.exitCode = exitCode;
-  const signal = stringFieldDeep(input.error, "signal");
-  if (signal !== undefined) detail.signal = signal;
-  const stdoutSnippet = stringFieldDeep(input.error, "stdoutSnippet");
-  if (stdoutSnippet !== undefined && stdoutSnippet.length > 0) {
-    detail.stdoutSnippet = stdoutSnippet;
-  }
-  const stderrSnippet = stringFieldDeep(input.error, "stderrSnippet");
-  if (stderrSnippet !== undefined && stderrSnippet.length > 0) {
-    detail.stderrSnippet = stderrSnippet;
-  }
-  detail.durationMs = input.durationMs;
-  const parsed = ExternalCommandDiagnosticDetailSchema.safeParse(detail);
-  return parsed.success ? [parsed.data] : [];
-}
-
-function classifyWorktrunkFailure(
-  error: unknown,
-  fallback: {
-    code: "WORKTRUNK_COMMAND_FAILED" | "WORKTRUNK_UNAVAILABLE";
-    message: string;
-    unresolvedBase?: string;
-  },
-): { code: WorktrunkProviderErrorCode; message: string; hint?: string } {
-  if (fallback.code !== "WORKTRUNK_COMMAND_FAILED") {
-    return fallback;
-  }
-
-  const diagnostic = stripVTControlCharacters(diagnosticText(error));
-  const text = diagnostic.toLowerCase();
-  if (isUnsupportedFlagText(text)) {
-    return {
-      code: "WORKTRUNK_UNSUPPORTED_FLAG",
-      message: "Worktrunk rejected an automation flag used by STATION.",
-      hint: "Upgrade Worktrunk or adjust worktree.worktrunk.use_lifecycle_hooks in STATION config.",
-    };
-  }
-
-  if (isHookApprovalText(text)) {
-    return {
-      code: "WORKTRUNK_HOOK_APPROVAL_REQUIRED",
-      message:
-        "Worktrunk lifecycle hooks needed interactive approval during automated STATION work.",
-      hint: "Set worktree.worktrunk.use_lifecycle_hooks to false to skip hooks or true to pre-approve hook prompts.",
-    };
-  }
-
-  if (isDuplicateBranchText(text)) {
-    return {
-      code: "WORKTRUNK_BRANCH_EXISTS",
-      message: "Worktrunk could not create the worktree because the branch already exists.",
-      hint: "Choose a different branch name or start/focus the existing worktree.",
-    };
-  }
-
-  if (isDuplicateWorktreeText(text)) {
-    return {
-      code: "WORKTRUNK_WORKTREE_EXISTS",
-      message: "Worktrunk could not create the worktree because the worktree path already exists.",
-      hint: "Choose a different branch/path or remove the stale worktree path.",
-    };
-  }
-
-  if (
-    fallback.unresolvedBase !== undefined &&
-    unresolvedNamedReference(diagnostic) === fallback.unresolvedBase
-  ) {
-    return {
-      code: "WORKTRUNK_BASE_MISSING",
-      message: `Base \`${fallback.unresolvedBase}\` does not resolve to a commit.`,
-      hint: "Create its first commit or choose another base.",
-    };
-  }
-
-  if (isMissingBaseText(text)) {
-    return {
-      code: "WORKTRUNK_BASE_MISSING",
-      message: "Worktrunk could not find the requested base for the new worktree.",
-      hint: "Fetch the base branch or set a valid worktree.worktrunk.base/default branch in STATION config.",
-    };
-  }
-
-  return fallback;
-}
-
-function isUnsupportedFlagText(text: string): boolean {
-  return (
-    /unknown (?:argument|flag|option).*--(?:no-hooks|yes)/.test(text) ||
-    /unrecognized (?:argument|flag|option).*--(?:no-hooks|yes)/.test(text) ||
-    /unexpected (?:argument|flag|option).*--(?:no-hooks|yes)/.test(text) ||
-    /found argument ['"]--(?:no-hooks|yes)['"].*(?:not expected|wasn't expected)/.test(text) ||
-    /invalid (?:argument|flag|option).*--(?:no-hooks|yes)/.test(text)
-  );
-}
-
-function isHookApprovalText(text: string): boolean {
-  return (
-    /(?:approval|confirm|confirmation|prompt).*(?:required|needed)/.test(text) ||
-    /(?:requires|needs).*(?:approval|confirmation|interactive)/.test(text) ||
-    /(?:use|pass).*(?:--yes|-y).*(?:approve|confirm|continue)/.test(text) ||
-    /not a tty/.test(text) ||
-    /hook.*(?:cancelled|aborted|declined|refused)/.test(text)
-  );
-}
-
-function isDuplicateBranchText(text: string): boolean {
-  return (
-    /branch\b.*\balready exists/.test(text) ||
-    /\balready exists\b.*\bbranch\b/.test(text) ||
-    /refs\/heads\/[^\s]+.*\balready exists/.test(text)
-  );
-}
-
-function isDuplicateWorktreeText(text: string): boolean {
-  return (
-    /worktree\b.*\balready exists/.test(text) ||
-    /\balready exists\b.*\bworktree\b/.test(text) ||
-    /\bpath\b.*\balready exists/.test(text) ||
-    /\bdestination\b.*\balready exists/.test(text)
-  );
-}
-
-function unresolvedNamedReference(text: string): string | undefined {
-  return /no branch, tag, or commit named ['"]?([^'"\s]+)['"]?/i.exec(text)?.[1];
-}
-
-function isMissingBaseText(text: string): boolean {
-  return (
-    /base\b.*\b(?:not found|missing|does not exist|unknown)/.test(text) ||
-    /(?:not found|missing|does not exist|unknown)\b.*\bbase\b/.test(text) ||
-    /could(?:n't| not) find remote ref/.test(text) ||
-    /invalid reference/.test(text) ||
-    /not a valid object name/.test(text) ||
-    /unknown revision/.test(text)
-  );
-}
-
-function diagnosticText(error: unknown, seen = new Set<unknown>()): string {
-  if (!error || typeof error !== "object" || seen.has(error)) {
-    return "";
-  }
-  seen.add(error);
-  const record = error as Record<string, unknown>;
-  const parts: string[] = [];
-  for (const key of ["message", "stdoutSnippet", "stderrSnippet", "command"]) {
-    const value = record[key];
-    if (typeof value === "string") {
-      parts.push(value);
-    }
-  }
-  parts.push(diagnosticText(record.cause, seen));
-  return parts.join("\n");
-}
-
-function formatCommand(command: string, args: readonly string[]): string {
-  return [command, ...args].join(" ");
 }
 
 function worktrunkSubcommand(args: readonly string[]): string {
@@ -1245,67 +1078,6 @@ function canonicalPathForComparison(path: string): string {
   return normalized;
 }
 
-function isMissingBinary(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-  const cause = error as { code?: unknown; cause?: unknown };
-  if (cause.code === "EXTERNAL_COMMAND_CWD_NOT_FOUND") return false;
-  return cause.code === "ENOENT" || isMissingBinary(cause.cause);
-}
-
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-function stringFieldDeep(
-  error: unknown,
-  key: "command" | "cwd" | "signal" | "stdoutSnippet" | "stderrSnippet",
-  seen = new Set<unknown>(),
-): string | undefined {
-  if (!error || typeof error !== "object" || seen.has(error)) {
-    return undefined;
-  }
-  seen.add(error);
-  const record = error as Record<string, unknown>;
-  const value = record[key];
-  if (typeof value === "string") {
-    return value;
-  }
-  return stringFieldDeep(record.cause, key, seen);
-}
-
-function numberFieldDeep(
-  error: unknown,
-  key: "exitCode",
-  seen = new Set<unknown>(),
-): number | undefined {
-  if (!error || typeof error !== "object" || seen.has(error)) {
-    return undefined;
-  }
-  seen.add(error);
-  const record = error as Record<string, unknown>;
-  const value = record[key];
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  return numberFieldDeep(record.cause, key, seen);
-}
-
-function isTimeout(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "WORKTRUNK_TIMEOUT"
-  );
-}
-
-function isAbort(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "WORKTRUNK_CANCELLED" || error.code === "EXTERNAL_COMMAND_ABORTED")
-  );
 }

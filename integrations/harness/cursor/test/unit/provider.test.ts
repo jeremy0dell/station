@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type {
   BuildHarnessLaunchRequest,
   HarnessRunObservation,
+  ProviderHookRuntime,
   RawHarnessEvent,
 } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
@@ -95,6 +96,48 @@ describe("CursorHarnessProvider", () => {
           name: "cursor-hooks",
           status: "ok",
         }),
+      );
+    } finally {
+      if (previousCursorHome === undefined) {
+        delete process.env.STATION_CURSOR_HOME;
+      } else {
+        process.env.STATION_CURSOR_HOME = previousCursorHome;
+      }
+    }
+  });
+
+  it("does not re-add the incumbent config when the requester omits it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-requester-"));
+    const incumbentStateDir = join(root, "checkout-A", "state");
+    const requesterStateDir = join(root, "checkout-B", "state");
+    const providerHookRuntime: ProviderHookRuntime = {
+      ingressLauncher: "/checkout/B/bin/stn-ingress",
+      observerSocketPath: join(root, "shared", "observer.sock"),
+      stateDir: requesterStateDir,
+      hookSpoolDir: join(requesterStateDir, "spool", "hooks"),
+      autoStartFromHooks: false,
+    };
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = root;
+    try {
+      await installCursorHooks({
+        hookBin: providerHookRuntime.ingressLauncher,
+        observerSocketPath: providerHookRuntime.observerSocketPath,
+        stateDir: providerHookRuntime.stateDir,
+        hookSpoolDir: providerHookRuntime.hookSpoolDir,
+        autoStartFromHooks: providerHookRuntime.autoStartFromHooks,
+      });
+      const provider = createCursorHarnessProvider({
+        installHooks: true,
+        configPath: join(root, "checkout-A", "config.toml"),
+        observerSocketPath: providerHookRuntime.observerSocketPath,
+        stateDir: incumbentStateDir,
+        hookSpoolDir: join(incumbentStateDir, "spool", "hooks"),
+        autoStartFromHooks: true,
+      });
+
+      await expect(provider.doctorChecks?.({ providerHookRuntime })).resolves.toContainEqual(
+        expect.objectContaining({ name: "cursor-hooks", status: "ok" }),
       );
     } finally {
       if (previousCursorHome === undefined) {

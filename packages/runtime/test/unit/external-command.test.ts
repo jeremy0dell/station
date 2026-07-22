@@ -3,10 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createFakeExternalCommandRunner,
+  externalCommandDiagnosticFromSafeError,
   externalCommandErrorFromUnknown,
+  isExternalCommandError,
   nodeExternalCommandRunner,
   resolveExecutablePath,
   runExternalCommand,
+  safeErrorFromUnknown,
 } from "@station/runtime";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -188,6 +191,42 @@ describe("runtime external command boundary", () => {
     expect(JSON.stringify(second)).not.toContain("sk-secret");
     expect(JSON.stringify(second)).not.toContain("secret-value");
     expect(JSON.stringify(second)).not.toContain("abcdefghijklmnop");
+  });
+
+  it("preserves typed command fields and evidence through runtime normalization", () => {
+    const commandError = externalCommandErrorFromUnknown(
+      {
+        code: 7,
+        signal: "SIGTERM",
+        stdout: "stdout",
+        stderr: "stderr",
+      },
+      { command: "fake", args: ["run"], cwd: "/tmp/project" },
+    );
+    const normalized = safeErrorFromUnknown(commandError, {
+      tag: "RuntimeError",
+      code: "RUNTIME_FAILED",
+      message: "Runtime failed.",
+    });
+
+    expect(isExternalCommandError(normalized)).toBe(true);
+    expect(normalized).toMatchObject({
+      command: "fake run",
+      cwd: "/tmp/project",
+      exitCode: 7,
+      signal: "SIGTERM",
+      stdoutSnippet: "stdout",
+      stderrSnippet: "stderr",
+    });
+    expect(externalCommandDiagnosticFromSafeError(normalized)).toMatchObject({
+      type: "external_command",
+      command: "fake run",
+      cwd: "/tmp/project",
+      exitCode: 7,
+      signal: "SIGTERM",
+      stdoutSnippet: "stdout",
+      stderrSnippet: "stderr",
+    });
   });
 
   it("redacts secrets from rendered command strings", () => {

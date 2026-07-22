@@ -55,6 +55,26 @@ describe("TmuxProvider", () => {
     });
   });
 
+  it("keeps provider health errors lean while command evidence stays internal", async () => {
+    const provider = new TmuxProvider({
+      clock: { now: () => new Date(now) },
+      runner: async () => {
+        throw Object.assign(new Error("failed"), { code: 1, stderr: "tmux probe failed" });
+      },
+    });
+
+    const health = await provider.health();
+
+    expect(health.lastError).toEqual({
+      tag: "TerminalProviderError",
+      code: "TERMINAL_TMUX_UNAVAILABLE",
+      message: "tmux is not available.",
+      hint: "Install tmux or choose a different terminal provider.",
+      provider: "tmux",
+    });
+    expect(JSON.stringify(health.lastError)).not.toContain("diagnosticDetails");
+  });
+
   it("opens or reuses a workbench window and binds the primary pane identity", async () => {
     const calls: ExternalCommandInput[] = [];
     const provider = new TmuxProvider({
@@ -583,12 +603,10 @@ describe("TmuxProvider", () => {
     const provider = new TmuxProvider({
       runner: async (input) => {
         calls.push(input);
+        const args = input.args ?? [];
         // The popup launcher publishes the originating client in this option;
         // the persistent popup can't pass it in the focus command directly.
-        if (
-          input.args[0] === "show-options" &&
-          input.args.includes("@station_popup_focus_client")
-        ) {
+        if (args[0] === "show-options" && args.includes("@station_popup_focus_client")) {
           return tmuxCommandResult(input, "client_live\n");
         }
         return tmuxCommandResult(input, "");
