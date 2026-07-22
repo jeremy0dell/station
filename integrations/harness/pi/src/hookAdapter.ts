@@ -14,11 +14,9 @@ import {
   ProviderHookEventSchema,
   parseStationHookIdentityPayload,
 } from "@station/contracts";
-import {
-  compactPiHookPayload,
-  normalizePiEventType,
-  piHookPayloadToHarnessEventReport,
-} from "./event/index.js";
+import { normalizePiEventType } from "./event/compactEvent.js";
+import { compactPiHookPayload } from "./event/compaction.js";
+import { piHookPayloadToHarnessEventReport } from "./event/mapping.js";
 
 export const piHookAdapter: ProviderHookAdapter = {
   provider: "pi",

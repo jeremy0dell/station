@@ -266,13 +266,6 @@ export function buildRemoveProjectCommand(
   };
 }
 
-export function buildReconcileCommand(reason?: string): StationCommand {
-  return {
-    type: "observer.reconcile",
-    payload: reason === undefined ? {} : { reason },
-  };
-}
-
 function commandLayout(layout: string): TerminalLayout {
   if (layout === "default" || layout === "agent-only" || layout === "agent-build-shell") {
     return layout;

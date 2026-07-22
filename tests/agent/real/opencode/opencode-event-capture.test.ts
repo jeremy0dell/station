@@ -136,7 +136,6 @@ describeRealOpenCode("real OpenCode event capture", () => {
       socketPath,
       api,
       clock,
-      drainOnStart: false,
     });
     cleanupTasks.push(async () => {
       await server.close();

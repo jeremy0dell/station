@@ -61,12 +61,6 @@ export type KeyedChoice<T> = {
   value: T;
 };
 
-export type ProjectGroup = {
-  project: ProjectView;
-  rows: DashboardSessionRow[];
-  collapsed: boolean;
-};
-
 export type DashboardSessionRow = {
   /** Dashboard identity is the canonical session id, never the checkout id. */
   id: SessionId;
@@ -106,10 +100,7 @@ export function isSelectionKey(input: string): input is SelectionKey {
   return SELECTION_KEYS.includes(input as SelectionKey);
 }
 
-export function selectProjectGroups(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
-): ProjectGroup[] {
+export function selectProjectGroups(snapshot: StationSnapshot, state: TuiViewState) {
   const query = normalizeSearch(state.searchQuery);
   const sessionRows = selectDashboardSessionRows(snapshot);
   return snapshot.projects.map((project) => {

@@ -1,6 +1,6 @@
 import { access, chmod } from "node:fs/promises";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { createObserverClient } from "@station/protocol";
 import {
   createFakeWorktree,
@@ -59,7 +59,6 @@ describe("observer protocol server", () => {
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
-      drainOnStart: false,
     });
     try {
       await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({
@@ -102,7 +101,6 @@ describe("observer protocol server", () => {
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
-      drainOnStart: false,
     });
     const stateDir = join(dir, "refused-state");
     const providerRegistryFactory = vi.fn(() => {
@@ -145,16 +143,30 @@ describe("observer protocol server", () => {
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
-      drainOnStart: false,
     });
     const client = createObserverClient({ socketPath, requestId: ids("req") });
     const lifecycle = createObserverLifecycleClient({ timeoutMs: 1000 });
 
     await expect(lifecycle.socketListening(socketPath, { timeoutMs: 1000 })).resolves.toBe(true);
-    await expect(lifecycle.health(socketPath, { timeoutMs: 1000 })).resolves.toMatchObject({
+    const lifecycleHealth = await lifecycle.health(socketPath, { timeoutMs: 1000 });
+    expect(lifecycleHealth).toMatchObject({
       status: "healthy",
       socketPath,
     });
+    if (
+      lifecycleHealth.pid === undefined ||
+      lifecycleHealth.startedAt === undefined ||
+      lifecycleHealth.version === undefined ||
+      lifecycleHealth.socketPath === undefined
+    ) {
+      throw new Error("Expected lifecycle health to include Observer process identity.");
+    }
+    const expectedObserver = {
+      pid: lifecycleHealth.pid,
+      startedAt: lifecycleHealth.startedAt,
+      version: lifecycleHealth.version,
+      socketPath: lifecycleHealth.socketPath,
+    };
     await expect(client.health()).resolves.toMatchObject({
       status: "healthy",
       socketPath,
@@ -204,7 +216,9 @@ describe("observer protocol server", () => {
       id: "cmd_1",
       status: "succeeded",
     });
-    await expect(lifecycle.stop(socketPath, { timeoutMs: 1000 })).resolves.toMatchObject({
+    await expect(
+      lifecycle.stop(socketPath, { timeoutMs: 1000, expectedObserver }),
+    ).resolves.toMatchObject({
       stopped: true,
     });
 
@@ -277,6 +291,7 @@ const config: StationConfig = {
     harness: "fake-harness",
     layout: "agent-shell",
   },
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   projects: [
     {
       id: "web",

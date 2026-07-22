@@ -114,21 +114,9 @@ export type EvaluatedFeatureFlags = EvaluatedFeatureFlagsForDefinitions<
 >;
 export type ClientFeatureFlags = ClientFeatureFlagsForDefinitions<typeof FeatureFlagDefinitions>;
 
-export const FEATURE_FLAG_KEYS = featureFlagKeys(FeatureFlagDefinitions) as FeatureFlagKey[];
-export const CLIENT_FEATURE_FLAG_KEYS = clientFeatureFlagKeys(
-  FeatureFlagDefinitions,
-) as ClientFeatureFlagKey[];
-export const SERVER_FEATURE_FLAG_KEYS = serverFeatureFlagKeys(
-  FeatureFlagDefinitions,
-) as ServerFeatureFlagKey[];
-
 export const FeatureFlagConfigSchema = createFeatureFlagConfigSchema(
   FeatureFlagDefinitions,
 ) as z.ZodType<FeatureFlagConfig>;
-
-export const EvaluatedFeatureFlagsSchema = createEvaluatedFeatureFlagsSchema(
-  FeatureFlagDefinitions,
-) as z.ZodType<EvaluatedFeatureFlags>;
 
 export const ClientFeatureFlagsSchema = createClientFeatureFlagsSchema(
   FeatureFlagDefinitions,
@@ -178,25 +166,8 @@ export function clientFeatureFlagKeys<Definitions extends FeatureFlagDefinitions
   );
 }
 
-export function serverFeatureFlagKeys<Definitions extends FeatureFlagDefinitionsMap>(
-  definitions: Definitions,
-): Array<ServerFeatureFlagKeyForDefinitions<Definitions>> {
-  return featureFlagKeys(definitions).filter(
-    (key): key is ServerFeatureFlagKeyForDefinitions<Definitions> =>
-      definitions[key]?.exposure === "server",
-  );
-}
-
-export function isClientFeatureFlagKey(key: FeatureFlagKey): key is ClientFeatureFlagKey {
-  return (FeatureFlagDefinitions as FeatureFlagDefinitionsMap)[key]?.exposure === "client";
-}
-
-export function defaultFeatureFlagValue(key: FeatureFlagKey): boolean {
-  return (FeatureFlagDefinitions as FeatureFlagDefinitionsMap)[key]?.defaultValue ?? false;
-}
-
 export function defaultClientFeatureFlagValue(key: ClientFeatureFlagKey): boolean {
-  return defaultFeatureFlagValue(key);
+  return FeatureFlagDefinitions[key].defaultValue;
 }
 
 function clientFeatureFlagDefinitions(

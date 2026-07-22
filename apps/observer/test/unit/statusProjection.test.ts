@@ -12,12 +12,12 @@ import {
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { buildStationSnapshot } from "../../src/reconcile/graph";
-import { observerHarnessRunFromRun } from "../../src/reconcile/harnessEventStatus";
 import {
   projectHarnessEventReportOntoSnapshot,
   withSessionCorrelationFromSnapshot,
   withWorktreeCorrelationFromCwd,
 } from "../../src/reconcile/statusProjection";
+import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const now = "2026-05-21T12:00:00.000Z";
 const eventAt = "2026-05-21T12:00:01.000Z";

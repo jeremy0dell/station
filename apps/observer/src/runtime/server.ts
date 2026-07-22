@@ -26,7 +26,6 @@ export type StartObserverServerOptions = {
   socketPath: string;
   api: ObserverApi;
   clock?: RuntimeClock;
-  drainOnStart?: boolean;
   /** Rejects application operations that were not admitted before shutdown. */
   guardOperation?: () => void;
 };
@@ -140,9 +139,6 @@ export async function startObserverServer(
   }
 
   const server = started.value;
-  if (options.drainOnStart !== false) {
-    await options.api.reconcile("observer.startup");
-  }
 
   return {
     socketPath: options.socketPath,
