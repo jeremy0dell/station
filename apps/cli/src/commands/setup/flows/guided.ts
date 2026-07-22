@@ -19,7 +19,12 @@ import {
   isHarnessInstallAction,
   missingHarnessInstallActions,
 } from "../harnessInstall.js";
-import { isSupportedHarnessId, selectSetupHarnesses } from "../harnessSelection.js";
+import {
+  harnessSupportsSetupHooks,
+  isSupportedHarnessId,
+  resolveSetupHarnessSelection,
+  type SetupHarnessSelection,
+} from "../harnessSelection.js";
 import { defaultPrompt, renderOptions, write } from "../io.js";
 import type { SetupAction, SetupFacts, SetupPlan, SupportedHarnessId } from "../model.js";
 import { buildSetupPlan } from "../planner.js";
@@ -105,41 +110,41 @@ async function runGuidedSetupWithPrompt(
     await write(deps, renderSetupApplyResult(noHarnessPlan, renderOptions(deps)));
     return { code: 1 };
   }
-  let selectedHarnesses: SupportedHarnessId[];
-  if (availableHarnesses.length > 1) {
-    const choices = availableHarnesses.map((harness) => ({
-      value: harness.id,
-      label: harness.label,
-    }));
-    const selected =
-      prompt.selectMany === undefined
-        ? [await prompt.select("Select the agent CLI to enable.", choices)]
-        : await prompt.selectMany(
+  const selectedIds =
+    availableHarnesses.length > 1
+      ? (
+          await prompt.selectMany(
             "Select agent CLIs to enable (comma-separated; first is the default for new configs).",
-            choices,
-          );
-    selectedHarnesses = selected.filter(isSupportedHarnessId);
-  } else {
-    selectedHarnesses = availableHarnesses.map((harness) => harness.id);
-  }
-  const configuredDefault =
-    facts.config.status === "valid" && isSupportedHarnessId(facts.config.defaults.harness)
-      ? facts.config.defaults.harness
-      : undefined;
-  const defaultHarness = configuredDefault ?? selectedHarnesses[0];
-  if (defaultHarness !== undefined) {
-    facts = {
-      ...facts,
-      selectedHarness: defaultHarness,
-      selectedHarnesses,
-    };
+            availableHarnesses.map((harness) => ({
+              value: harness.id,
+              label: harness.label,
+            })),
+          )
+        ).filter(isSupportedHarnessId)
+      : availableHarnesses.map((harness) => harness.id);
+  if (selectedIds.length === 0) {
+    await write(deps, "Select at least one available agent CLI.\n");
+    return { code: 1 };
   }
 
   facts = await maybeLinkStationLaunchers(facts, options, deps, prompt);
+  const harnessSelection = resolveSetupHarnessSelection(facts, selectedIds);
+  const refreshedIds = new Set(harnessSelection.selected.map((harness) => harness.id));
+  const unavailableIds = [...new Set(selectedIds)].filter((id) => !refreshedIds.has(id));
+  if (unavailableIds.length > 0) {
+    await write(
+      deps,
+      `Selected agent CLIs are no longer available: ${unavailableIds.join(", ")}.\n`,
+    );
+    return { code: 1 };
+  }
 
-  const hookPreferences = await promptHookPreferences(facts, prompt);
-  const configWrite = await planSetupConfigWrite(facts, hookPreferences);
-  plan = buildSetupPlan(facts, { configWrite, ...hookPreferences });
+  const hookPreferences = await promptHookPreferences(facts, prompt, harnessSelection);
+  const configWrite = await planSetupConfigWrite(facts, {
+    harnessSelection,
+    ...hookPreferences,
+  });
+  plan = buildSetupPlan(facts, { configWrite, harnessSelection, ...hookPreferences });
   if (!coreReadyForConfigWrite(plan)) {
     await write(deps, renderSetupApplyResult(plan, renderOptions(deps)));
     return { code: 1 };
@@ -514,13 +519,9 @@ async function maybeLinkStationLaunchers(
 async function promptHookPreferences(
   facts: SetupFacts,
   prompt: SetupPromptAdapter,
+  harnessSelection: SetupHarnessSelection,
 ): Promise<HookPreferences> {
   const preferences: HookPreferences = {};
-  const selectedHarnesses = selectSetupHarnesses(
-    facts.harnesses,
-    facts.selectedHarnesses,
-    facts.selectedHarness,
-  );
   if (
     facts.worktrunk.status === "ok" &&
     (facts.config.status === "missing" ||
@@ -529,8 +530,8 @@ async function promptHookPreferences(
     preferences.installWorktrunkHooks = await prompt.confirm("Install Worktrunk lifecycle hooks?");
   }
   const installHarnessHooks: SupportedHarnessId[] = [];
-  for (const harness of selectedHarnesses) {
-    if (!harnessSupportsHooks(harness.id) || !canInstallHarnessHooks(facts)) {
+  for (const harness of harnessSelection.selected) {
+    if (!harnessSupportsSetupHooks(harness.id) || facts.config.status === "invalid") {
       continue;
     }
     if (await prompt.confirm(`Install ${harness.label} agent hooks?`)) {
@@ -541,16 +542,6 @@ async function promptHookPreferences(
     preferences.installHarnessHooks = installHarnessHooks;
   }
   return preferences;
-}
-
-function canInstallHarnessHooks(facts: SetupFacts): boolean {
-  return facts.config.status === "missing" || facts.config.status === "valid";
-}
-
-function harnessSupportsHooks(harness: string): boolean {
-  return (
-    harness === "claude" || harness === "codex" || harness === "cursor" || harness === "opencode"
-  );
 }
 
 function shouldPromptLauncherLink(facts: SetupFacts): boolean {

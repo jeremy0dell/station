@@ -118,8 +118,8 @@ describe("guided setup command", () => {
               message.includes("Install or load tmux popup binding")
             );
           },
-          async select() {
-            return "codex";
+          async selectMany() {
+            return ["codex"];
           },
         },
         writeStdout: (chunk) => {
@@ -138,6 +138,181 @@ describe("guided setup command", () => {
     );
     expect(chunks.join("")).toContain(`Direct fallback: ${join(packageRoot, "bin/stn")} popup`);
     expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("projects = []");
+  });
+
+  it("preserves every selected harness after linking checkout launchers", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const packageRoot = setupPackageRoot();
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+          "opencode --version": "opencode 1.0.0\n",
+          [`pnpm --dir ${packageRoot} station:link`]: "",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          join(packageRoot, "bin/stn"),
+          join(packageRoot, "bin/stn-ingress"),
+          join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            return (
+              message.includes("Link STATION launchers") ||
+              message.includes("Write core STATION config")
+            );
+          },
+          async selectMany() {
+            return ["codex", "opencode"];
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(calls.find((call) => call.command === "pnpm")).toMatchObject({
+      args: ["--dir", packageRoot, "station:link"],
+      stdio: "inherit",
+    });
+    expect(fs.files[configPath].match(/^\[harness\.(codex|opencode)\]$/gm)).toHaveLength(2);
+  });
+
+  it("does not silently drop a selected harness after linking checkout launchers", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const packageRoot = setupPackageRoot();
+    let codexProbes = 0;
+    const baseRunner = fakeRunner(calls, {
+      "git rev-parse --show-toplevel": repo,
+      "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "opencode --version": "opencode 1.0.0\n",
+      [`pnpm --dir ${packageRoot} station:link`]: "",
+    });
+    const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
+      if (input.command === "codex" && input.args?.[0] === "--version") {
+        calls.push(input);
+        codexProbes += 1;
+        if (codexProbes === 1) return commandResult(input, "codex 0.1.0\n");
+        throw Object.assign(new Error("Codex disappeared"), { code: "ENOENT" });
+      }
+      return baseRunner(input);
+    };
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner,
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          join(packageRoot, "bin/stn"),
+          join(packageRoot, "bin/stn-ingress"),
+          join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            return message.includes("Link STATION launchers");
+          },
+          async selectMany() {
+            return ["codex", "opencode"];
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(codexProbes).toBe(2);
+    expect(fs.files[configPath]).toBeUndefined();
+  });
+
+  it("adds an available harness while preserving an unavailable existing default", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "pi --version": "pi 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            return message.includes("Write core STATION config");
+          },
+          async selectMany() {
+            return ["pi"];
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(fs.files[configPath]).toContain('harness = "codex"');
+    expect(fs.files[configPath].match(/^\[harness\.(codex|pi)\]$/gm)).toHaveLength(2);
   });
 
   it("runs Worktrunk shell integration non-interactively after the STATION prompt", async () => {
@@ -367,8 +542,8 @@ describe("guided setup command", () => {
               message.includes("Codex agent hooks") || message.includes("Write core STATION config")
             );
           },
-          async select() {
-            return "codex";
+          async selectMany() {
+            return ["codex"];
           },
         },
         writeStdout: () => undefined,
@@ -442,9 +617,6 @@ describe("guided setup command", () => {
               message.includes("OpenCode agent hooks") ||
               message.includes("Write core STATION config")
             );
-          },
-          async select() {
-            return "opencode";
           },
           async selectMany() {
             return ["opencode"];
@@ -967,9 +1139,6 @@ describe("guided setup command", () => {
           message.includes("Write core STATION config")
         );
       },
-      async select() {
-        return "codex";
-      },
       async selectMany() {
         return ["codex", "opencode"];
       },
@@ -1060,8 +1229,8 @@ describe("guided setup command", () => {
               message.includes("Install Codex?") || message.includes("Write core STATION config")
             );
           },
-          async select() {
-            return "codex";
+          async selectMany() {
+            return ["codex"];
           },
         },
         writeStdout: (chunk) => {
@@ -1357,8 +1526,8 @@ describe("guided setup command", () => {
               message.includes("Write core STATION config")
             );
           },
-          async select() {
-            return "codex";
+          async selectMany() {
+            return ["codex"];
           },
         },
         writeStdout: () => undefined,
@@ -1481,8 +1650,8 @@ describe("guided setup command", () => {
               message.includes("Write core STATION config")
             );
           },
-          async select() {
-            return "codex";
+          async selectMany() {
+            return ["codex"];
           },
         },
         writeStdout: () => undefined,
@@ -1503,23 +1672,15 @@ async function tempRoot(tempRoots: string[]): Promise<string> {
   return root;
 }
 
-function prompt(input: {
-  confirms: boolean[];
-  selects?: string[];
-  multiSelects?: string[][];
-}): SetupPromptAdapter {
+function prompt(input: { confirms: boolean[]; multiSelects?: string[][] }): SetupPromptAdapter {
   const confirms = [...input.confirms];
-  const selects = [...(input.selects ?? [])];
   const multiSelects = [...(input.multiSelects ?? [])];
   return {
     async confirm() {
       return confirms.shift() ?? false;
     },
-    async select() {
-      return selects.shift() ?? "codex";
-    },
     async selectMany() {
-      return multiSelects.shift() ?? [selects.shift() ?? "codex"];
+      return multiSelects.shift() ?? ["codex"];
     },
   };
 }

@@ -30,12 +30,6 @@ export function defaultPrompt(): SetupPromptAdapter {
       const answer = await readline.question(`${message} [y/N] `);
       return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
     },
-    async select(message, choices) {
-      const labels = choices.map((choice, index) => `${index + 1}. ${choice.label}`).join("\n");
-      const answer = await readline.question(`${message}\n${labels}\n> `);
-      const index = Number(answer.trim()) - 1;
-      return choices[index]?.value ?? choices[0]?.value ?? "";
-    },
     async selectMany(message, choices) {
       const labels = choices.map((choice, index) => `${index + 1}. ${choice.label}`).join("\n");
       const answer = await readline.question(`${message}\n${labels}\n> `);

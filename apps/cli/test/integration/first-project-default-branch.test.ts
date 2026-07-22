@@ -239,12 +239,14 @@ async function withFreshConfig(
   try {
     await writeFile(
       configPath,
-      renderNewSetupConfig({
-        id: "codex",
-        label: "Codex",
-        status: "ok",
-        command: "codex",
-      }),
+      renderNewSetupConfig([
+        {
+          id: "codex",
+          label: "Codex",
+          status: "ok",
+          command: "codex",
+        },
+      ]),
       "utf8",
     );
     await run({ root, configPath, repo });

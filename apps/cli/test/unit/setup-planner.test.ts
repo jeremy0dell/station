@@ -17,7 +17,6 @@ describe("setup planner", () => {
       requiredOk: true,
       requiredMissing: 0,
       selectedActions: 0,
-      selectedHarness: "codex",
     });
     expect(plan.checks.map((check) => [check.id, check.status])).toEqual([
       ["state-dir", "ok"],
@@ -222,37 +221,42 @@ describe("setup planner", () => {
   });
 
   it("respects an explicit selected harness when multiple are available", () => {
-    const plan = buildSetupPlan(
-      facts({
-        selectedHarness: "opencode",
-        harnesses: harnesses(["codex", "opencode"]),
-        config: {
-          status: "missing",
-          path: "/tmp/config.toml",
-          message: "Config missing.",
-        },
-      }),
-    );
+    const input = facts({
+      harnesses: harnesses(["codex", "opencode"]),
+      config: {
+        status: "missing",
+        path: "/tmp/config.toml",
+        message: "Config missing.",
+      },
+    });
+    const plan = buildSetupPlan(input, {
+      harnessSelection: {
+        defaultHarness: "opencode",
+        selected: input.harnesses.filter((harness) => harness.id === "opencode"),
+      },
+    });
 
     expect(plan.summary.selectedHarness).toBe("opencode");
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
-      selected: "opencode",
+      default: "opencode",
     });
   });
 
   it("keeps the first selected harness as default while planning each supported hook", () => {
-    const plan = buildSetupPlan(
-      facts({
-        selectedHarness: "codex",
-        selectedHarnesses: ["codex", "opencode", "pi"],
-        harnesses: harnesses(["codex", "opencode", "pi"]),
-      }),
-      { installHarnessHooks: ["codex", "opencode"] },
-    );
+    const input = facts({
+      harnesses: harnesses(["codex", "opencode", "pi"]),
+    });
+    const plan = buildSetupPlan(input, {
+      harnessSelection: {
+        defaultHarness: "codex",
+        selected: input.harnesses.filter((harness) => harness.status === "ok"),
+      },
+      installHarnessHooks: ["codex", "opencode"],
+    });
 
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
-      selected: "codex",
+      default: "codex",
       enabled: "codex,opencode,pi",
     });
     expect(
@@ -278,7 +282,7 @@ describe("setup planner", () => {
     );
 
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
-      selected: "codex",
+      default: "codex",
       enabled: "codex,opencode,pi",
     });
     expect(plan.checks.find((check) => check.id === "harness-hooks")).toMatchObject({
@@ -295,8 +299,6 @@ describe("setup planner", () => {
   it("reports an unavailable persisted default without substituting an available provider", () => {
     const plan = buildSetupPlan(
       facts({
-        selectedHarness: "codex",
-        selectedHarnesses: ["codex", "opencode"],
         harnesses: harnesses(["opencode"]),
         config: validConfigFact({
           configuredHarnesses: ["codex", "opencode"],
@@ -310,8 +312,8 @@ describe("setup planner", () => {
       status: "ok",
       message: expect.stringContaining("codex remains configured as the default"),
       details: {
-        selected: "codex",
-        selectedStatus: "unavailable",
+        default: "codex",
+        defaultStatus: "unavailable",
         enabled: "codex,opencode",
         available: "opencode",
       },
@@ -338,16 +340,17 @@ describe("setup planner", () => {
 
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
-      status: "ok",
-      message: expect.stringContaining("another supported agent CLI is available"),
+      status: "missing",
+      message: expect.stringContaining("no configured agent CLI is available"),
       details: {
-        selected: "codex",
-        selectedStatus: "unavailable",
+        default: "codex",
+        defaultStatus: "unavailable",
         enabled: "codex",
         available: "opencode",
       },
     });
     expect(plan.checks.find((check) => check.id === "harness-hooks")?.status).toBe("skipped");
+    expect(plan.summary.requiredOk).toBe(false);
   });
 
   it("plans config creation for a new config", () => {
@@ -606,22 +609,20 @@ describe("setup planner", () => {
     });
   });
 
-  it("plans a safe append for an existing config", () => {
+  it("plans a safe update for an existing config", () => {
     const plan = buildSetupPlan(facts(), {
       configWrite: {
-        operation: "append",
+        operation: "update",
         path: "/tmp/config.toml",
         content: "schema_version = 1\n",
-        appendedText: "\n[[projects]]\n",
       },
     });
 
-    expect(plan.actions.find((action) => action.id === "append-config")).toMatchObject({
+    expect(plan.actions.find((action) => action.id === "update-config")).toMatchObject({
       kind: "write-config",
       selected: true,
       data: {
-        operation: "append",
-        appendedText: "\n[[projects]]\n",
+        operation: "update",
       },
     });
   });

@@ -491,6 +491,113 @@ describe("setup dependency checks", () => {
     expect(plan.summary.selectedHarness).toBe("cursor");
   });
 
+  it.each([
+    {
+      name: "does not substitute a global binary for a missing configured command",
+      configuredCommand: "/missing/opencode",
+      outputs: { "opencode --version": "opencode 1.0.0\n" },
+      expectedStatus: "missing" as const,
+    },
+    {
+      name: "detects a configured custom command when the global binary is missing",
+      configuredCommand: "/custom/opencode",
+      outputs: { "/custom/opencode --version": "opencode 1.0.0\n" },
+      expectedStatus: "ok" as const,
+    },
+  ])("$name", async ({ configuredCommand, outputs, expectedStatus }) => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const config = [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[defaults]",
+      'worktree_provider = "worktrunk"',
+      'terminal = "tmux"',
+      'harness = "codex"',
+      'layout = "agent-shell"',
+      "",
+      "[harness.opencode]",
+      "enabled = true",
+      `command = ${JSON.stringify(configuredCommand)}`,
+      "",
+    ].join("\n");
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: join(root, "home"),
+      configPath,
+      compiled: true,
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        ...outputs,
+      }),
+      access: fakeAccess([]),
+      fs: readOnlyFs({ [configPath]: config }),
+    });
+
+    expect(facts.harnesses.find((harness) => harness.id === "opencode")).toMatchObject({
+      status: expectedStatus,
+      command: configuredCommand,
+    });
+    expect(calls.some((call) => call.command === "opencode")).toBe(false);
+  });
+
+  it.each([
+    { name: "an implicit built-in command", harnessBlock: [] },
+    {
+      name: "an explicit bare command",
+      harnessBlock: ["[harness.cursor]", "enabled = true", 'command = "agent"', ""],
+    },
+  ])("probes $name exactly as runtime will execute it", async ({ harnessBlock }) => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const config = [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[defaults]",
+      'worktree_provider = "worktrunk"',
+      'terminal = "tmux"',
+      'harness = "cursor"',
+      'layout = "agent-shell"',
+      "",
+      ...harnessBlock,
+    ].join("\n");
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: home,
+      configPath,
+      compiled: true,
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        [`${home}/.local/bin/agent --version`]: "cursor-agent 1.0.0\n",
+      }),
+      access: fakeAccess([]),
+      fs: readOnlyFs({ [configPath]: config }),
+    });
+
+    expect(facts.harnesses.find((harness) => harness.id === "cursor")).toMatchObject({
+      status: "missing",
+      command: "agent",
+    });
+    expect(calls.some((call) => call.command === `${home}/.local/bin/agent`)).toBe(false);
+  });
+
   it("ignores Crush when choosing a supported harness", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

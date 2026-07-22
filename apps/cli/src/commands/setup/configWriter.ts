@@ -1,5 +1,10 @@
 import { setHarnessInstallHooksInToml } from "@station/config";
-import { isSupportedHarnessId, selectSetupHarnesses } from "./harnessSelection.js";
+import {
+  harnessSupportsSetupHooks,
+  isSupportedHarnessId,
+  resolveSetupHarnessSelection,
+  type SetupHarnessSelection,
+} from "./harnessSelection.js";
 import type {
   ConfigWritePlan,
   SetupConfigFact,
@@ -9,18 +14,17 @@ import type {
 } from "./model.js";
 
 export type PlanSetupConfigWriteOptions = {
-  selectedHarness?: SetupHarnessFact;
+  harnessSelection?: SetupHarnessSelection;
   installWorktrunkHooks?: boolean;
-  installHarnessHooks?: boolean | readonly SupportedHarnessId[];
+  installHarnessHooks?: readonly SupportedHarnessId[];
 };
 
 export async function planSetupConfigWrite(
   facts: SetupFacts,
   options: PlanSetupConfigWriteOptions = {},
 ): Promise<ConfigWritePlan> {
-  const selectedHarnesses = resolveConfigWriteHarnesses(facts, options.selectedHarness);
-  const defaultHarness = selectedHarnesses[0];
-  if (defaultHarness === undefined) {
+  const harnessSelection = options.harnessSelection ?? resolveSetupHarnessSelection(facts);
+  if (harnessSelection.selected.length === 0) {
     return {
       operation: "blocked",
       path: facts.configPath,
@@ -31,7 +35,7 @@ export async function planSetupConfigWrite(
     return {
       operation: "create",
       path: facts.configPath,
-      content: renderNewSetupConfig(defaultHarness, facts, options, selectedHarnesses),
+      content: renderNewSetupConfig(harnessSelection.selected, facts, options),
     };
   }
 
@@ -43,15 +47,16 @@ export async function planSetupConfigWrite(
     };
   }
 
-  return planExistingConfigAppend(facts.config, selectedHarnesses, options, facts.homeDir);
+  return planExistingConfigUpdate(facts.config, harnessSelection.selected, options, facts.homeDir);
 }
 
 export function renderNewSetupConfig(
-  harness: SetupHarnessFact,
+  harnesses: readonly SetupHarnessFact[],
   facts?: Pick<SetupFacts, "worktrunk" | "tmux">,
   options: Pick<PlanSetupConfigWriteOptions, "installWorktrunkHooks" | "installHarnessHooks"> = {},
-  harnesses: readonly SetupHarnessFact[] = [harness],
 ): string {
+  const defaultHarness = harnesses[0];
+  if (defaultHarness === undefined) throw new Error("New setup config requires an agent CLI.");
   const worktrunkCommand =
     facts?.worktrunk === undefined ? "wt" : detectedCommand(facts.worktrunk, "wt");
   const tmuxCommand =
@@ -67,7 +72,7 @@ export function renderNewSetupConfig(
     "[defaults]",
     'worktree_provider = "worktrunk"',
     'terminal = "tmux"',
-    `harness = ${tomlString(harness.id)}`,
+    `harness = ${tomlString(defaultHarness.id)}`,
     'layout = "agent-shell"',
     "",
     "[worktree.worktrunk]",
@@ -89,38 +94,20 @@ export function renderNewSetupConfig(
     ...harnesses.flatMap((selectedHarness) => [
       ...renderHarnessBlock(
         selectedHarness,
-        installHarnessHookRequested(options.installHarnessHooks, selectedHarness.id, harness.id),
+        options.installHarnessHooks?.includes(selectedHarness.id) === true,
       ).split("\n"),
       "",
     ]),
   ].join("\n");
 }
 
-function resolveConfigWriteHarnesses(
-  facts: SetupFacts,
-  fallback: SetupHarnessFact | undefined,
-): SetupHarnessFact[] {
-  const configuredHarnesses =
-    facts.config.status === "valid"
-      ? [facts.config.defaults.harness, ...facts.config.configuredHarnesses]
-          .filter(isSupportedHarnessId)
-          .filter((harness, index, all) => all.indexOf(harness) === index)
-      : undefined;
-  const selectedHarnesses = selectSetupHarnesses(
-    facts.harnesses,
-    facts.selectedHarnesses ?? configuredHarnesses,
-    facts.selectedHarness ?? fallback?.id,
-  );
-  return selectedHarnesses;
-}
-
-async function planExistingConfigAppend(
+async function planExistingConfigUpdate(
   config: Extract<SetupConfigFact, { status: "valid" }>,
   harnesses: readonly SetupHarnessFact[],
   options: Pick<PlanSetupConfigWriteOptions, "installHarnessHooks">,
   homeDir: string,
 ): Promise<ConfigWritePlan> {
-  const coreProblem = existingConfigAppendCoreProblem(config);
+  const coreProblem = existingConfigUpdateCoreProblem(config);
   if (coreProblem !== undefined) {
     return {
       operation: "blocked",
@@ -134,7 +121,7 @@ async function planExistingConfigAppend(
     if (
       config.configuredHarnesses.includes(harness.id) &&
       !config.configuredHookHarnesses.includes(harness.id) &&
-      installHarnessHookRequested(options.installHarnessHooks, harness.id, harnesses[0]?.id)
+      options.installHarnessHooks?.includes(harness.id) === true
     ) {
       content = await setHarnessInstallHooksInToml(content, {
         harness: harness.id,
@@ -148,7 +135,6 @@ async function planExistingConfigAppend(
   const appendedText = renderAppendText(
     harnesses.filter((harness) => !config.configuredHarnesses.includes(harness.id)),
     options.installHarnessHooks,
-    harnesses[0]?.id,
     preferredNewline(config.source),
   );
   if (appendedText.length > 0) {
@@ -164,14 +150,13 @@ async function planExistingConfigAppend(
     };
   }
   return {
-    operation: "append",
+    operation: "update",
     path: config.path,
     content,
-    appendedText,
   };
 }
 
-function existingConfigAppendCoreProblem(
+function existingConfigUpdateCoreProblem(
   config: Extract<SetupConfigFact, { status: "valid" }>,
 ): string | undefined {
   if (config.defaults.worktreeProvider !== "worktrunk") {
@@ -188,16 +173,15 @@ function existingConfigAppendCoreProblem(
 
 function renderAppendText(
   harnesses: readonly SetupHarnessFact[],
-  installHarnessHooks: boolean | readonly SupportedHarnessId[] | undefined,
-  defaultHarness: SupportedHarnessId | undefined,
+  installHarnessHooks: readonly SupportedHarnessId[] | undefined,
   newline = "\n",
 ): string {
   if (harnesses.length === 0) return "";
   const blocks = harnesses.map((harness) =>
-    renderHarnessBlock(
-      harness,
-      installHarnessHookRequested(installHarnessHooks, harness.id, defaultHarness),
-    ).replaceAll("\n", newline),
+    renderHarnessBlock(harness, installHarnessHooks?.includes(harness.id) === true).replaceAll(
+      "\n",
+      newline,
+    ),
   );
   return `${newline}${blocks.join(`${newline}${newline}`)}${newline}`;
 }
@@ -207,18 +191,8 @@ function renderHarnessBlock(harness: SetupHarnessFact, installHooks: boolean): s
     `[harness.${harness.id}]`,
     "enabled = true",
     `command = ${tomlString(harness.command)}`,
-    ...(installHooks && harnessSupportsHooks(harness.id) ? ["install_hooks = true"] : []),
+    ...(installHooks && harnessSupportsSetupHooks(harness.id) ? ["install_hooks = true"] : []),
   ].join("\n");
-}
-
-function installHarnessHookRequested(
-  requested: boolean | readonly SupportedHarnessId[] | undefined,
-  harness: SupportedHarnessId,
-  defaultHarness: SupportedHarnessId | undefined,
-): boolean {
-  return Array.isArray(requested)
-    ? requested.includes(harness)
-    : requested === true && harness === defaultHarness;
 }
 
 function tomlString(value: string): string {
@@ -227,12 +201,6 @@ function tomlString(value: string): string {
 
 function preferredNewline(source: string): "\n" | "\r\n" {
   return source.includes("\r\n") ? "\r\n" : "\n";
-}
-
-function harnessSupportsHooks(harness: string): boolean {
-  return (
-    harness === "claude" || harness === "codex" || harness === "cursor" || harness === "opencode"
-  );
 }
 
 function detectedCommand(

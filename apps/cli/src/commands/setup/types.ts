@@ -11,8 +11,7 @@ export type SetupPromptChoice = {
 
 export type SetupPromptAdapter = {
   confirm(message: string): Promise<boolean>;
-  select(message: string, choices: readonly SetupPromptChoice[]): Promise<string>;
-  selectMany?(message: string, choices: readonly SetupPromptChoice[]): Promise<readonly string[]>;
+  selectMany(message: string, choices: readonly SetupPromptChoice[]): Promise<readonly string[]>;
   close?(): void | Promise<void>;
 };
 

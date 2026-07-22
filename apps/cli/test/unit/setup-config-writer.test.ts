@@ -97,7 +97,7 @@ describe("setup config writer", () => {
 
     const write = await planSetupConfigWrite(facts, {
       installWorktrunkHooks: true,
-      installHarnessHooks: true,
+      installHarnessHooks: ["codex"],
     });
 
     expect(write.operation).toBe("create");
@@ -112,8 +112,6 @@ describe("setup config writer", () => {
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
     const facts = setupFacts(repo, {
-      selectedHarness: "codex",
-      selectedHarnesses: ["codex", "opencode"],
       harnesses: [
         { id: "codex", label: "Codex", status: "ok", command: "codex" },
         { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
@@ -126,6 +124,10 @@ describe("setup config writer", () => {
     });
 
     const write = await planSetupConfigWrite(facts, {
+      harnessSelection: {
+        defaultHarness: "codex",
+        selected: facts.harnesses,
+      },
       installHarnessHooks: ["codex"],
     });
 
@@ -167,14 +169,14 @@ describe("setup config writer", () => {
     const write = await planSetupConfigWrite(facts);
 
     expect(write).toMatchObject({
-      operation: "append",
+      operation: "update",
       path: join(root, "config.toml"),
     });
-    if (write.operation !== "append") throw new Error("expected append plan");
+    if (write.operation !== "update") throw new Error("expected update plan");
     expect(write.content.startsWith(source.trimEnd())).toBe(true);
-    expect(write.appendedText).toContain("[harness.codex]");
-    expect(write.appendedText).not.toContain("[[projects]]");
-    expect(write.appendedText).not.toContain("[defaults]");
+    expect(write.content).toContain("[harness.codex]");
+    expect(write.content.match(/\[\[projects\]\]/g)).toHaveLength(1);
+    expect(write.content.match(/\[defaults\]/g)).toHaveLength(1);
   });
 
   it("creates a zero-project config when setup is run outside a repository", async () => {
@@ -291,8 +293,6 @@ describe("setup config writer", () => {
       'command = "codex"\ninstall_hooks = false # enable during setup\n',
     );
     const facts = setupFacts(repo, {
-      selectedHarness: "codex",
-      selectedHarnesses: ["codex", "opencode"],
       harnesses: [
         { id: "codex", label: "Codex", status: "ok", command: "codex" },
         { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
@@ -314,18 +314,20 @@ describe("setup config writer", () => {
     });
 
     const write = await planSetupConfigWrite(facts, {
+      harnessSelection: {
+        defaultHarness: "codex",
+        selected: facts.harnesses,
+      },
       installHarnessHooks: ["codex", "opencode"],
     });
 
-    expect(write.operation).toBe("append");
-    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.operation).toBe("update");
+    if (write.operation !== "update") throw new Error("expected update plan");
     expect(write.content.match(/\[harness\.codex\]/g)).toHaveLength(1);
     expect(write.content.match(/\[harness\.opencode\]/g)).toHaveLength(1);
     expect(write.content.match(/install_hooks = true/g)).toHaveLength(2);
     expect(write.content).toContain("install_hooks = true # enable during setup");
     expect(write.content).not.toContain("install_hooks = false # enable during setup");
-    expect(write.appendedText).toContain("[harness.opencode]");
-    expect(write.appendedText).toContain("install_hooks = true");
     expect(write.content).toContain(
       '[defaults]\nworktree_provider = "worktrunk"\nterminal = "tmux"\nharness = "codex"',
     );
@@ -347,7 +349,13 @@ describe("setup config writer", () => {
             configuredHookHarnesses: ["codex", "opencode"],
           },
         },
-        { installHarnessHooks: ["opencode"] },
+        {
+          harnessSelection: {
+            defaultHarness: "codex",
+            selected: facts.harnesses,
+          },
+          installHarnessHooks: ["opencode"],
+        },
       ),
     ).resolves.toEqual({
       operation: "none",
@@ -362,8 +370,6 @@ describe("setup config writer", () => {
     const source = existingConfigToml(root, { projectRoot: repo, includeHarness: true });
     const write = await planSetupConfigWrite(
       setupFacts(repo, {
-        selectedHarness: "pi",
-        selectedHarnesses: ["pi"],
         harnesses: [
           { id: "codex", label: "Codex", status: "ok", command: "codex" },
           { id: "pi", label: "Pi", status: "ok", command: "pi" },
@@ -382,10 +388,16 @@ describe("setup config writer", () => {
           },
         },
       }),
+      {
+        harnessSelection: {
+          defaultHarness: "codex",
+          selected: [{ id: "pi", label: "Pi", status: "ok", command: "pi" }],
+        },
+      },
     );
 
-    expect(write.operation).toBe("append");
-    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.operation).toBe("update");
+    if (write.operation !== "update") throw new Error("expected update plan");
     expect(write.content).toContain('harness = "codex"');
     expect(write.content.match(/\[harness\.codex\]/g)).toHaveLength(1);
     expect(write.content.match(/\[harness\.pi\]/g)).toHaveLength(1);
@@ -397,8 +409,6 @@ describe("setup config writer", () => {
     await mkdir(repo, { recursive: true });
     const source = existingConfigToml(root, { projectRoot: repo, includeHarness: true });
     const facts = setupFacts(repo, {
-      selectedHarness: "pi",
-      selectedHarnesses: ["pi"],
       harnesses: [
         { id: "codex", label: "Codex", status: "missing", command: "codex" },
         { id: "pi", label: "Pi", status: "ok", command: "pi" },
@@ -418,10 +428,15 @@ describe("setup config writer", () => {
       },
     });
 
-    const write = await planSetupConfigWrite(facts);
+    const write = await planSetupConfigWrite(facts, {
+      harnessSelection: {
+        defaultHarness: "codex",
+        selected: [{ id: "pi", label: "Pi", status: "ok", command: "pi" }],
+      },
+    });
 
-    expect(write.operation).toBe("append");
-    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.operation).toBe("update");
+    if (write.operation !== "update") throw new Error("expected update plan");
     expect(write.content.startsWith(source.trimEnd())).toBe(true);
     expect(write.content).toContain('harness = "codex"');
     expect(write.content.match(/\[harness\.codex\]/g)).toHaveLength(1);
@@ -450,8 +465,6 @@ describe("setup config writer", () => {
       "",
     ].join("\n");
     const facts = setupFacts(repo, {
-      selectedHarness: "codex",
-      selectedHarnesses: ["codex", "opencode"],
       harnesses: [
         { id: "codex", label: "Codex", status: "ok", command: "codex" },
         { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
@@ -473,19 +486,21 @@ describe("setup config writer", () => {
     });
 
     const write = await planSetupConfigWrite(facts, {
+      harnessSelection: {
+        defaultHarness: "codex",
+        selected: facts.harnesses,
+      },
       installHarnessHooks: ["codex", "opencode"],
     });
 
-    expect(write.operation).toBe("append");
-    if (write.operation !== "append") throw new Error("expected append plan");
+    expect(write.operation).toBe("update");
+    if (write.operation !== "update") throw new Error("expected update plan");
     expect(write.content.match(/\["harness"\."codex"\]/g)).toHaveLength(1);
     expect(write.content).toContain(
       '["harness"."codex"]\ninstall_hooks = true\nenabled = true\ncommand = """codex\n[harness.opencode]\ninstall_hooks = false"""',
     );
     expect(write.content.match(/install_hooks = true/g)).toHaveLength(2);
     expect(write.content.match(/install_hooks = false/g)).toHaveLength(1);
-    expect(write.appendedText).toContain("[harness.opencode]");
-    expect(write.appendedText).toContain("install_hooks = true");
     await expect(
       loadConfigFromToml(write.content, { configPath: write.path, homeDir: root }),
     ).resolves.toBeDefined();
@@ -515,9 +530,8 @@ describe("setup config writer", () => {
 
     const write = await planSetupConfigWrite(facts, { installHarnessHooks: ["codex"] });
 
-    expect(write.operation).toBe("append");
-    if (write.operation !== "append") throw new Error("expected append plan");
-    expect(write.appendedText).toBe("");
+    expect(write.operation).toBe("update");
+    if (write.operation !== "update") throw new Error("expected update plan");
     expect(write.content).toContain(
       '[harness.codex]\ninstall_hooks = true\nenabled = true\ncommand = "codex"',
     );

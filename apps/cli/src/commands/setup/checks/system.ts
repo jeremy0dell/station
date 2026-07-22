@@ -110,6 +110,17 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   if (gitRoot !== undefined) setupConfigInput.gitRoot = gitRoot;
   const configPathOptions = setupConfigOptions(setupConfigInput);
   const configPath = setupConfigPath(configPathOptions);
+  const configPromise = checkSetupConfig({ ...configPathOptions, configPath });
+  const harnessesPromise = configPromise.then((config) => {
+    const harnessOptions: CheckHarnessesOptions = { ...commandOptions };
+    if (config.status === "valid") {
+      harnessOptions.configuredHarnesses = [config.defaults.harness, ...config.configuredHarnesses];
+      if (config.configuredHarnessCommands !== undefined) {
+        harnessOptions.configuredCommands = config.configuredHarnessCommands;
+      }
+    }
+    return checkSetupHarnesses(harnessOptions);
+  });
   const xcodeOptions: CheckXcodeOptions = { ...commandOptions };
   if (options.platform !== undefined) xcodeOptions.platform = options.platform;
   const [
@@ -143,8 +154,8 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     compiled
       ? Promise.resolve({ status: "ok" as const, applicable: false })
       : checkSetupXcode(xcodeOptions),
-    checkSetupHarnesses(commandOptions),
-    checkSetupConfig({ ...configPathOptions, configPath }),
+    harnessesPromise,
+    configPromise,
     checkSetupLaunchers(launcherOptions),
   ]);
   const worktrunkAutomation = await checkSetupWorktrunkAutomation({

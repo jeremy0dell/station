@@ -103,7 +103,7 @@ describe("CLI setup command", () => {
       checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
     };
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
-      selected: "codex",
+      default: "codex",
       enabled: "codex,opencode",
     });
     expect(plan.checks.find((check) => check.id === "harness-hooks")).toMatchObject({
@@ -149,13 +149,55 @@ describe("CLI setup command", () => {
       summary: { selectedHarness?: string };
       checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
     };
+    expect(result.code).toBe(0);
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
       status: "ok",
       details: {
-        selected: "codex",
-        selectedStatus: "unavailable",
+        default: "codex",
+        defaultStatus: "unavailable",
         enabled: "codex,opencode",
+        available: "opencode",
+      },
+    });
+  });
+
+  it("does not count an unconfigured installed CLI as workflow ready", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const source = setupConfigToml(repo, { includeHarness: true });
+
+    const result = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "opencode --version": "opencode 1.0.0\n",
+        }),
+        access: readySetupAccess(),
+        fs: readOnlyFs({ [configPath]: source }),
+      },
+    });
+
+    const plan = result.output as {
+      summary: { requiredOk: boolean };
+      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+    };
+    expect(result.code).toBe(1);
+    expect(plan.summary.requiredOk).toBe(false);
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "missing",
+      details: {
+        default: "codex",
+        defaultStatus: "unavailable",
+        enabled: "codex",
         available: "opencode",
       },
     });

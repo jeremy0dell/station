@@ -1,7 +1,12 @@
 import { stationUiInstallHint } from "../../stationWorkspace.js";
 import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
-import { isSupportedHarnessId, selectSetupHarnesses } from "./harnessSelection.js";
+import {
+  harnessSupportsSetupHooks,
+  isSupportedHarnessId,
+  resolveSetupHarnessSelection,
+  type SetupHarnessSelection,
+} from "./harnessSelection.js";
 import type {
   ConfigWritePlan,
   SetupAction,
@@ -15,33 +20,15 @@ import { SetupPlanSchema } from "./model.js";
 
 export type BuildSetupPlanOptions = {
   configWrite?: ConfigWritePlan;
+  harnessSelection?: SetupHarnessSelection;
   installWorktrunkHooks?: boolean;
-  installHarnessHooks?: boolean | readonly SupportedHarnessId[];
+  installHarnessHooks?: readonly SupportedHarnessId[];
 };
 
 export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions = {}): SetupPlan {
-  const configuredHarnesses =
-    facts.config.status === "valid"
-      ? [facts.config.defaults.harness, ...facts.config.configuredHarnesses]
-          .filter(isSupportedHarnessId)
-          .filter((harness, index, all) => all.indexOf(harness) === index)
-      : undefined;
-  const selectedHarnesses = selectSetupHarnesses(
-    facts.harnesses,
-    facts.selectedHarnesses ??
-      (facts.selectedHarness === undefined ? configuredHarnesses : undefined),
-    facts.selectedHarness,
-  );
-  const persistedDefaultHarness =
-    facts.config.status === "valid" && isSupportedHarnessId(facts.config.defaults.harness)
-      ? facts.config.defaults.harness
-      : undefined;
-  const selectedHarness = persistedDefaultHarness ?? selectedHarnesses[0]?.id;
-  const checks = setupChecks(
-    facts,
-    selectedHarnesses.map((harness) => harness.id),
-  );
-  const actions = setupActions(facts, selectedHarnesses, options.configWrite, options);
+  const harnessSelection = options.harnessSelection ?? resolveSetupHarnessSelection(facts);
+  const checks = setupChecks(facts, harnessSelection);
+  const actions = setupActions(facts, harnessSelection.selected, options.configWrite, options);
   const requiredMissing = checks.filter(
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
@@ -57,7 +44,9 @@ export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions
     warnings,
     selectedActions: actions.filter((action) => action.selected).length,
     configPath: facts.configPath,
-    ...(selectedHarness === undefined ? {} : { selectedHarness }),
+    ...(harnessSelection.defaultHarness === undefined
+      ? {}
+      : { selectedHarness: harnessSelection.defaultHarness }),
   };
   const plan = {
     generatedAt: facts.generatedAt,
@@ -70,10 +59,7 @@ export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions
   return SetupPlanSchema.parse(plan);
 }
 
-function setupChecks(
-  facts: SetupFacts,
-  selectedHarnesses: readonly SupportedHarnessId[],
-): SetupCheck[] {
+function setupChecks(facts: SetupFacts, harnessSelection: SetupHarnessSelection): SetupCheck[] {
   return [
     stateDirCheck(facts),
     socketEvidenceCheck(facts),
@@ -102,7 +88,7 @@ function setupChecks(
           }),
         ]),
     gitCheck(facts),
-    harnessCheck(facts, selectedHarnesses),
+    harnessCheck(facts, harnessSelection),
     configCheck(facts),
     ...configDiagnosticsChecks(facts),
     launcherCheck(facts),
@@ -119,7 +105,10 @@ function setupChecks(
     },
     tmuxPopupBindingCheck(facts),
     worktrunkHooksCheck(facts),
-    harnessHooksCheck(facts, selectedHarnesses),
+    harnessHooksCheck(
+      facts,
+      harnessSelection.selected.map((harness) => harness.id),
+    ),
     diffnavCheck(facts),
     gitDeltaCheck(facts),
     {
@@ -363,7 +352,7 @@ function harnessHooksCheck(
   facts: SetupFacts,
   selectedHarnesses: readonly SupportedHarnessId[],
 ): SetupCheck {
-  const hookHarnesses = selectedHarnesses.filter(harnessSupportsHooks);
+  const hookHarnesses = selectedHarnesses.filter(harnessSupportsSetupHooks);
   if (hookHarnesses.length === 0) {
     return {
       id: "harness-hooks",
@@ -531,10 +520,7 @@ function gitCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function harnessCheck(
-  facts: SetupFacts,
-  selectedHarnesses: readonly SupportedHarnessId[],
-): SetupCheck {
+function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection): SetupCheck {
   const available = facts.harnesses.filter((harness) => harness.status === "ok");
   if (available.length === 0) {
     return {
@@ -547,21 +533,23 @@ function harnessCheck(
   }
   const configuredHarnesses =
     facts.config.status === "valid"
-      ? [facts.config.defaults.harness, ...facts.config.configuredHarnesses]
-          .filter(isSupportedHarnessId)
-          .filter((harness, index, all) => all.indexOf(harness) === index)
+      ? [facts.config.defaults.harness, ...facts.config.configuredHarnesses].filter(
+          (harness, index, all) => all.indexOf(harness) === index,
+        )
       : [];
-  const enabledHarnesses = [...configuredHarnesses, ...selectedHarnesses].filter(
-    (harness, index, all) => all.indexOf(harness) === index,
-  );
-  const selectedId = configuredHarnesses[0] ?? selectedHarnesses[0] ?? available[0]?.id;
-  const selected = available.find((harness) => harness.id === selectedId);
+  const enabledHarnesses = [
+    ...configuredHarnesses,
+    ...harnessSelection.selected.map((harness) => harness.id),
+  ].filter((harness, index, all) => all.indexOf(harness) === index);
+  const defaultHarness = harnessSelection.defaultHarness;
+  const selected = available.find((harness) => harness.id === defaultHarness);
+  const usableHarness = selected ?? harnessSelection.selected[0];
   const details: Record<string, string> = {
     available: available.map((harness) => harness.id).join(","),
   };
-  if (selectedId !== undefined) {
-    details.selected = selectedId;
-    details.selectedStatus = selected === undefined ? "unavailable" : "available";
+  if (defaultHarness !== undefined) {
+    details.default = defaultHarness;
+    details.defaultStatus = selected === undefined ? "unavailable" : "available";
     details.enabled = enabledHarnesses.join(",");
   }
   if (selected !== undefined) {
@@ -570,13 +558,15 @@ function harnessCheck(
   return {
     id: "harness",
     tier: "required",
-    status: "ok",
+    status: usableHarness === undefined ? "missing" : "ok",
     label: "Agent CLI",
     message:
-      selectedId === undefined
+      defaultHarness === undefined
         ? "A supported harness CLI is available."
         : selected === undefined
-          ? `${selectedId} remains configured as the default agent CLI, but it is unavailable; another supported agent CLI is available.`
+          ? usableHarness === undefined
+            ? `${defaultHarness} remains configured as the default agent CLI, but no configured agent CLI is available.`
+            : `${defaultHarness} remains configured as the default agent CLI, but it is unavailable; another supported agent CLI is available.`
           : `${selected.label} is selected as the default agent CLI.`,
     details,
   };
@@ -768,7 +758,7 @@ function setupActions(
 
   actions.push(...hookSetupActions(facts, selectedHarnesses, options));
 
-  const configActions = configWriteActions(selectedHarnesses[0], configWrite);
+  const configActions = configWriteActions(configWrite, selectedHarnesses.length > 0);
   actions.push(...configActions);
   return actions;
 }
@@ -809,16 +799,12 @@ function hookSetupActions(
     });
   }
   for (const selectedHarness of selectedHarnesses) {
-    if (!harnessSupportsHooks(selectedHarness.id)) continue;
+    if (!harnessSupportsSetupHooks(selectedHarness.id)) continue;
     actions.push({
       id: `${selectedHarness.id}-hooks`,
       kind: "run-command",
       tier: "recommended",
-      selected: harnessHookSelected(
-        options.installHarnessHooks,
-        selectedHarness.id,
-        selectedHarnesses[0]?.id,
-      ),
+      selected: options.installHarnessHooks?.includes(selectedHarness.id) === true,
       label: `Install ${selectedHarness.label} hooks`,
       message: `Install ${selectedHarness.label} hooks that report agent activity to STATION.`,
       command: harnessHookInstallCommand(facts, selectedHarness.id),
@@ -826,16 +812,6 @@ function hookSetupActions(
     });
   }
   return actions;
-}
-
-function harnessHookSelected(
-  selected: boolean | readonly SupportedHarnessId[] | undefined,
-  harness: SupportedHarnessId,
-  defaultHarness: SupportedHarnessId | undefined,
-): boolean {
-  return Array.isArray(selected)
-    ? selected.includes(harness)
-    : selected === true && harness === defaultHarness;
 }
 
 function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessId): string[] {
@@ -852,14 +828,6 @@ function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessI
     command.push("--hook-bin", setupLauncherExecutable(facts.launchers.ingress));
   }
   return command;
-}
-
-function harnessSupportsHooks(
-  harness: string,
-): harness is "claude" | "codex" | "cursor" | "opencode" {
-  return (
-    harness === "claude" || harness === "codex" || harness === "cursor" || harness === "opencode"
-  );
 }
 
 function installAction(
@@ -885,12 +853,10 @@ function installAction(
 }
 
 function configWriteActions(
-  selectedHarness: SetupHarnessFact | undefined,
   configWrite: ConfigWritePlan | undefined,
+  hasSelectedHarness: boolean,
 ): SetupAction[] {
-  if (selectedHarness === undefined) {
-    return [];
-  }
+  if (!hasSelectedHarness) return [];
   if (configWrite === undefined || configWrite.operation === "none") {
     return [];
   }
@@ -917,7 +883,7 @@ function configWriteActions(
     path: configWrite.path,
   };
   const writeAction: SetupAction = {
-    id: configWrite.operation === "create" ? "write-config" : "append-config",
+    id: configWrite.operation === "create" ? "write-config" : "update-config",
     kind: "write-config",
     tier: "required",
     selected: true,
@@ -930,7 +896,6 @@ function configWriteActions(
     data: {
       operation: configWrite.operation,
       content: configWrite.content,
-      ...(configWrite.operation === "append" ? { appendedText: configWrite.appendedText } : {}),
       ...(configWrite.backupPath === undefined ? {} : { backupPath: configWrite.backupPath }),
     },
   };
