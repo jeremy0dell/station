@@ -43,7 +43,7 @@ describe("station view import boundaries", () => {
   it("finds the station tree", () => {
     const relFiles = new Set(files.map((file) => relative(STATION_ROOT, file)));
     expect(relFiles.has("StationOverlay.tsx")).toBe(true);
-    expect(relFiles.has("input/stationKeymap.ts")).toBe(true);
+    expect(relFiles.has("input/stationOverlayLayer.ts")).toBe(true);
     expect(relFiles.has("view/DashboardView.tsx")).toBe(true);
   });
 

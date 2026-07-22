@@ -8,7 +8,7 @@ import {
   runPopupCommand,
   shouldSuppressCliProcessOutput,
 } from "@station/cli/internal";
-import type { TmuxPopupOptions } from "@station/tmux";
+import type { TmuxPopupOptions, TmuxPopupResult } from "@station/tmux";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
@@ -18,6 +18,7 @@ const repoRoot = realpathSync(fileURLToPath(new URL("../../../../", import.meta.
   /\/$/,
   "",
 );
+const openedPopup = async (): Promise<TmuxPopupResult> => ({ opened: true });
 
 describe("CLI popup command", () => {
   it("ensures the observer before opening a config-less first-run popup", async () => {
@@ -77,15 +78,15 @@ describe("CLI popup command", () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
     let spawned = false;
-    let markSpawned = () => undefined;
-    let releaseHealth = () => undefined;
+    let markSpawned = (): void => {};
+    let releaseHealth = (): void => {};
     const observerSpawned = new Promise<void>((resolve) => {
-      markSpawned = resolve;
+      markSpawned = () => resolve();
     });
     const healthReady = new Promise<void>((resolve) => {
-      releaseHealth = resolve;
+      releaseHealth = () => resolve();
     });
-    const openTmuxPopup = vi.fn(async () => ({ opened: true }));
+    const openTmuxPopup = vi.fn(openedPopup);
     const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     vi.useFakeTimers();
 
@@ -160,7 +161,7 @@ describe("CLI popup command", () => {
   it("keeps warm observer attachment silent", async () => {
     const fixture = await createTempState();
     fixture.config.defaults.terminal = "tmux";
-    const openTmuxPopup = vi.fn(async () => ({ opened: true }));
+    const openTmuxPopup = vi.fn(openedPopup);
     const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     try {
@@ -223,7 +224,7 @@ describe("CLI popup command", () => {
 
   it("does not open a first-run popup when the observer exits during startup", async () => {
     const fixture = await createTempState();
-    const openTmuxPopup = vi.fn(async () => ({ opened: true }));
+    const openTmuxPopup = vi.fn(openedPopup);
 
     const result = await withIsolatedHome(fixture.root, () =>
       runCli([], {
@@ -322,7 +323,6 @@ describe("CLI popup command", () => {
           popupHeight: "80%",
           popupPosition: "C",
         },
-        enterWorkbench: false,
         env: {
           TMUX: "/tmp/tmux-501/default,123,0",
           STATION_PANE: "1",

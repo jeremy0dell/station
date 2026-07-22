@@ -637,9 +637,11 @@ failure shape rather than disappearing from a projection.
 
 The persistence surface contains only production conversations. Remembered
 harness selection is one project-scoped `SessionStore` query with direct
-worktree identity and normalized observed-path continuity semantics. Historical
-tables and migrations may remain after a dead public operation is removed; an
-applied migration is still immutable.
+worktree identity and normalized observed-path continuity semantics. Recovery
+breadcrumb metadata remains provider-owned evidence parsed by the Worktrunk
+adapter; Observer persistence does not retain a recovery-breadcrumb
+table. Historical applied migrations remain immutable even when a later
+migration removes storage that no production conversation uses.
 
 SQLite/core isolation and storage substitution are complete. One shared
 seven-port behavioral contract proves both adapters' atomicity, ordering,

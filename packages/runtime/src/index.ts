@@ -10,4 +10,3 @@ export * from "./hookSetup.js";
 export * from "./names.js";
 export * from "./objects.js";
 export * from "./paths.js";
-export * from "./shutdown.js";

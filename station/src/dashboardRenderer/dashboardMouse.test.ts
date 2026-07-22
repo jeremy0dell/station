@@ -36,7 +36,6 @@ const TEST_EFFECTS: DashboardMouseEffects = {
 const DASHBOARD_MOUSE_TARGET_KINDS = {
   addProjectRow: true,
   body: true,
-  footerHint: true,
   link: true,
   openShellForProject: true,
   openShellForRow: true,
@@ -252,23 +251,6 @@ describe("routeDashboardMouse", () => {
     store.setState(addTuiToast(store.getState(), { kind: "info", message: "hello" }));
     routeDashboardMouse({ kind: "toast" }, LEFT_DOWN, store);
     expect(store.getState().toasts).toEqual([]);
-  });
-
-  it("dispatches active footer hints and leaves stale hints inert", () => {
-    const store = makeStore();
-
-    routeDashboardMouse(
-      { kind: "footerHint", bindingId: "station.dashboard.help" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.getState().screen).toEqual({ name: "help" });
-    routeDashboardMouse(
-      { kind: "footerHint", bindingId: "station.dashboard.search" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.getState().screen).toEqual({ name: "help" });
   });
 
   it("routes project shell, quick-session, and agent-picker actions", async () => {

@@ -1,6 +1,7 @@
-import type { TuiKey, TuiStore } from "@station/dashboard-core";
+import type { TuiStore } from "@station/dashboard-core";
 import {
   clampDashboardStateScroll,
+  deriveTuiInputMode,
   focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
@@ -14,6 +15,7 @@ import {
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
+  type TuiInputMode,
 } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -21,12 +23,6 @@ import {
   wheelDirection,
   type StationMouseEvent,
 } from "../input/mouse.js";
-import {
-  deriveStationMode,
-  STATION_KEYMAP,
-  type StationBinding,
-  type StationInputMode,
-} from "../station/input/stationKeymap.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 
 export type DashboardMouseEffects = {
@@ -34,7 +30,7 @@ export type DashboardMouseEffects = {
   openUrl(url: string): void;
 };
 
-const ROW_INTERACTIVE_MODES: ReadonlySet<StationInputMode> = new Set([
+const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
   "removeChooseSlot",
   "renameChooseSlot",
@@ -43,19 +39,6 @@ const ROW_INTERACTIVE_MODES: ReadonlySet<StationInputMode> = new Set([
 const SHEET_CHOICE_MODES: ReadonlySet<string> = new Set(Object.keys(LIST_REGISTRY));
 const SCROLL_PAGE_ROWS = 5;
 const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
-const NAMED_BINDING_KEYS: Record<
-  Extract<StationBinding["pattern"], { kind: "named" }>["named"],
-  TuiKey
-> = {
-  return: { input: "\r", return: true },
-  escape: { input: "", escape: true },
-  backspace: { input: "", backspace: true },
-  delete: { input: "", delete: true },
-  up: { input: "", upArrow: true },
-  down: { input: "", downArrow: true },
-  left: { input: "", leftArrow: true },
-  right: { input: "", rightArrow: true },
-};
 
 /** Translates standalone semantic targets into shared dashboard actions and renderer effects. */
 export function routeDashboardMouse(
@@ -64,7 +47,7 @@ export function routeDashboardMouse(
   store: StoreApi<TuiStore>,
   effects: DashboardMouseEffects,
 ): void {
-  const mode = deriveStationMode(store.getState());
+  const mode = deriveTuiInputMode(store.getState());
   const scrollDirection = wheelDirection(event);
   if (scrollDirection !== null) {
     if (target.kind !== "sheetBackdrop" && ROW_INTERACTIVE_MODES.has(mode)) {
@@ -88,7 +71,7 @@ export function routeDashboardMouse(
 function routeSurfaceClick(
   target: StationMouseTarget,
   store: StoreApi<TuiStore>,
-  mode: StationInputMode,
+  mode: TuiInputMode,
   effects: DashboardMouseEffects,
 ): boolean {
   switch (target.kind) {
@@ -120,9 +103,6 @@ function routeSurfaceClick(
     case "scrollIndicator":
       pageInMode(store, target.direction, mode);
       return true;
-    case "footerHint":
-      dispatchFooterHint(store, target.bindingId, mode);
-      return true;
     case "toast":
       store.getState().dismissToasts();
       return true;
@@ -136,7 +116,7 @@ function routeSurfaceClick(
 function activateRowInMode(
   store: StoreApi<TuiStore>,
   rowId: string,
-  mode: StationInputMode,
+  mode: TuiInputMode,
 ): void {
   if (ROW_INTERACTIVE_MODES.has(mode)) {
     activateCurrentRow(store, rowId);
@@ -146,7 +126,7 @@ function activateRowInMode(
 function toggleProjectInMode(
   store: StoreApi<TuiStore>,
   projectId: string,
-  mode: StationInputMode,
+  mode: TuiInputMode,
 ): void {
   if (mode === "dashboard") {
     toggleCurrentProject(store, projectId);
@@ -155,7 +135,7 @@ function toggleProjectInMode(
 
 function openLinkInMode(
   url: string,
-  mode: StationInputMode,
+  mode: TuiInputMode,
   effects: DashboardMouseEffects,
 ): void {
   if (mode === "dashboard") {
@@ -166,7 +146,7 @@ function openLinkInMode(
 function openRowShellInMode(
   store: StoreApi<TuiStore>,
   rowId: string,
-  mode: StationInputMode,
+  mode: TuiInputMode,
   effects: DashboardMouseEffects,
 ): void {
   if (mode !== "dashboard") return;
@@ -183,7 +163,7 @@ function openRowShellInMode(
 function openProjectShellInMode(
   store: StoreApi<TuiStore>,
   projectId: string,
-  mode: StationInputMode,
+  mode: TuiInputMode,
   effects: DashboardMouseEffects,
 ): void {
   if (mode !== "dashboard") return;
@@ -198,7 +178,7 @@ function openProjectShellInMode(
 function pageInMode(
   store: StoreApi<TuiStore>,
   direction: "up" | "down",
-  mode: StationInputMode,
+  mode: TuiInputMode,
 ): void {
   if (!ROW_INTERACTIVE_MODES.has(mode)) {
     return;
@@ -208,22 +188,10 @@ function pageInMode(
   );
 }
 
-function dispatchFooterHint(
-  store: StoreApi<TuiStore>,
-  bindingId: string,
-  mode: StationInputMode,
-): void {
-  const binding = STATION_KEYMAP[mode].find((candidate) => candidate.id === bindingId);
-  const key = binding === undefined ? undefined : representativeKey(binding);
-  if (key !== undefined) {
-    store.getState().handleKey(key);
-  }
-}
-
 function routeModalClick(
   target: StationMouseTarget,
   store: StoreApi<TuiStore>,
-  mode: StationInputMode,
+  mode: TuiInputMode,
 ): boolean {
   if (target.kind === "sheetBackdrop") {
     return true;
@@ -262,7 +230,7 @@ function routeModalClick(
   }
 }
 
-function confirmProjectRemoval(store: StoreApi<TuiStore>, mode: StationInputMode): void {
+function confirmProjectRemoval(store: StoreApi<TuiStore>, mode: TuiInputMode): void {
   const screen = store.getState().screen;
   if (
     mode === "projectSettings" &&
@@ -276,7 +244,7 @@ function confirmProjectRemoval(store: StoreApi<TuiStore>, mode: StationInputMode
 function routeWidgetClick(
   target: StationMouseTarget,
   store: StoreApi<TuiStore>,
-  mode: StationInputMode,
+  mode: TuiInputMode,
 ): boolean {
   switch (target.kind) {
     case "widgetSettingsOpen":
@@ -350,12 +318,4 @@ function toggleCurrentProject(store: StoreApi<TuiStore>, projectId: string): voi
 
 function showNotice(store: StoreApi<TuiStore>, message: string): void {
   store.getState().pushToast({ kind: "info", message });
-}
-
-function representativeKey(binding: StationBinding): TuiKey | undefined {
-  const pattern = binding.pattern;
-  if (pattern.kind === "char") {
-    return pattern.ctrl === true ? { input: pattern.char, ctrl: true } : { input: pattern.char };
-  }
-  return pattern.kind === "named" ? NAMED_BINDING_KEYS[pattern.named] : undefined;
 }

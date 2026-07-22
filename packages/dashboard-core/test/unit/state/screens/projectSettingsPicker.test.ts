@@ -1,5 +1,9 @@
 import type { TuiKey, TuiState } from "@station/dashboard-core";
-import { createInitialTuiState, handleTuiKey, selectProjectChoices } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  handleTuiKey,
+  selectProjectChooserChoices,
+} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
@@ -31,8 +35,7 @@ describe("project settings picker", () => {
     const { snapshot } = base;
     expect(snapshot).toBeDefined();
     if (snapshot === undefined) return;
-    const picker = drive(base, [P]);
-    const [first] = selectProjectChoices(snapshot, picker);
+    const [first] = selectProjectChooserChoices(snapshot);
     expect(first).toBeDefined();
     if (first === undefined) return;
 

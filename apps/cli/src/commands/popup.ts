@@ -13,7 +13,6 @@ export type PopupCommandDeps = Partial<
   Pick<
     TmuxPopupOptions,
     | "checkoutRoot"
-    | "enterWorkbench"
     | "env"
     | "preferRegisteredDevPopup"
     | "registeredDevPopupRoot"
@@ -33,7 +32,6 @@ export type PopupCommandOptions = {
   checkoutRoot?: TmuxPopupOptions["checkoutRoot"];
   timeoutMs?: number;
   runner?: TmuxPopupOptions["runner"];
-  enterWorkbench?: TmuxPopupOptions["enterWorkbench"];
   env?: TmuxPopupOptions["env"];
   observer?: ObserverProcessDeps;
   preferRegisteredDevPopup?: TmuxPopupOptions["preferRegisteredDevPopup"];
@@ -70,7 +68,6 @@ export async function runPopupCommand(
 
   const runner = options.runner ?? deps.runner;
   const checkoutRoot = options.checkoutRoot ?? deps.checkoutRoot;
-  const enterWorkbench = options.enterWorkbench ?? deps.enterWorkbench ?? false;
   const env = options.env ?? deps.env;
   const preferRegisteredDevPopup =
     options.preferRegisteredDevPopup ?? deps.preferRegisteredDevPopup;
@@ -86,7 +83,6 @@ export async function runPopupCommand(
     ...(options.config?.terminal?.tmux === undefined
       ? {}
       : { config: options.config.terminal.tmux }),
-    enterWorkbench,
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     ...(checkoutRoot === undefined ? {} : { checkoutRoot }),
     ...(env === undefined ? {} : { env }),

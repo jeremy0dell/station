@@ -42,7 +42,6 @@ import {
 } from "./state.js";
 import type {
   BuildTmuxPopupArgsOptions,
-  PopupWorkbenchFocusInput,
   TmuxClientIdentity,
   TmuxCurrentClientInput,
   TmuxPersistentPopupSessionOptions,
@@ -55,7 +54,6 @@ import type {
   TmuxPopupResult,
   TmuxPopupState,
 } from "./types.js";
-import { enterWorkbenchForPopup } from "./workbenchFocus.js";
 
 export { buildTmuxPopupArgs } from "./args.js";
 export type { BuildManagedFastPopupRunShellCommandOptions } from "./fastBinding.js";
@@ -139,21 +137,6 @@ function dismissOptions(
     input.timeoutMs = options.timeoutMs;
   }
   return input;
-}
-
-function enterWorkbenchInput(
-  input: TmuxCommandInput,
-  clientId: string,
-  config: TmuxConfig | undefined,
-): PopupWorkbenchFocusInput {
-  const enterInput: PopupWorkbenchFocusInput = {
-    ...input,
-    clientId,
-  };
-  if (config !== undefined) {
-    enterInput.config = config;
-  }
-  return enterInput;
 }
 
 function persistentSessionOptions(
@@ -630,11 +613,6 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
         registrationNonce,
         state: "open",
       });
-      if (options.enterWorkbench === true) {
-        await enterWorkbenchForPopup(
-          enterWorkbenchInput(tmuxCommand, focusClientId, options.config),
-        );
-      }
       const replaced = await compareAndSetActivePopupClaim(tmuxCommand, {
         ...(claimState.kind === "absent" ? {} : { expected: claimState.raw }),
         replacement: nextClaim,

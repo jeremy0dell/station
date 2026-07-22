@@ -3,8 +3,6 @@ import type {
   HarnessRunId,
   SafeError,
   SessionView,
-  TerminalProvider,
-  TerminalTargetId,
   WorktreeRow,
 } from "@station/contracts";
 import { isRunningAgentState, SafeErrorSchema } from "@station/contracts";
@@ -143,37 +141,6 @@ export async function closeTerminalForWorktree(
     }
     throw error;
   }
-}
-
-export async function closeTerminalTarget(
-  input: {
-    terminal: TerminalProvider;
-    targetId: TerminalTargetId;
-    context: CommandHandlerContext;
-  } & CleanupRuntime,
-): Promise<void> {
-  await runProviderMutation(
-    {
-      operation: `provider.${input.terminal.id}.closeTarget`,
-      clock: input.clock,
-      commandTimeoutMs: input.commandTimeoutMs,
-      signal: input.context.signal,
-      trace: input.context.trace,
-      fallback: {
-        tag: "TerminalProviderError",
-        code: "TERMINAL_CLOSE_FAILED",
-        message: "The terminal provider failed to close the target.",
-        provider: input.terminal.id,
-      },
-      timeoutFallback: {
-        tag: "TimeoutError",
-        code: "TERMINAL_CLOSE_TIMEOUT",
-        message: "The terminal provider timed out while closing the target.",
-        provider: input.terminal.id,
-      },
-    },
-    () => input.terminal.closeTarget(input.targetId),
-  );
 }
 
 export async function removeWorktreeThroughProvider(

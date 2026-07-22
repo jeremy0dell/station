@@ -204,7 +204,9 @@ characterization fails before input reaches the renderer.
 The native workspace lives under `station/src/`; the shared, render-framework-free dashboard behavior lives in `@station/dashboard-core` (`packages/dashboard-core`).
 
 - `station/src/sources/` and `station/src/state/` hold observer-source wiring, runtime state, and command dispatch (live mode dispatches through the single shared `@station/client` service).
-- `station/src/input/` holds the router and keymap plumbing; runtime keyboard dispatch goes through the shared transition machine, with data-driven binding tables.
+- `station/src/input/` holds the router and sequence plumbing; runtime keyboard
+  dispatch goes through the shared transition machine, while only the dashboard
+  keeps a binding table because its screen handler executes those actions directly.
 - `station/src/station/` holds the STATION overlay (the dashboard surface): `view/` is the OpenTUI render layer over `@station/dashboard-core`, `input/` is the overlay keymap and mouse routing, and `store/` is the overlay store.
 - `station/src/terminal/` is the app-local PTY boundary (VT parser/screen model under `terminal/vt/`); `station/src/host/` is the PTY-host client for warm/cold reattach.
 - In `@station/dashboard-core`: `selectors/` for snapshot-to-view grouping/filtering, `state/commandBuilders.ts` for typed observer command construction, `state/screens/*` for pure screen-owned key transitions, `state/observerBridge.ts` and `state/operations/*` for command/operation flow, and `components/`/`widgets/` for shared layout/content logic.
@@ -215,7 +217,11 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 Station uses `bun test` (colocated `*.test.ts` / `*.test.tsx`), not vitest. `@station/dashboard-core` pure logic is unit-tested in `packages/dashboard-core/test`. For Station changes, choose the narrowest tests that prove the behavior, then add broader coverage only when the change crosses layers.
 
 - Pure selectors, screen transitions, command builders, reducers, safe-error mapping, and state helpers belong in unit tests in `@station/dashboard-core`.
-- Keymap and input behavior is anti-drift tested through the transition machine: `station/src/station/input/stationKeymap.test.ts` (machine-coverage, stale-binding, declared-vs-derived-outcome), sequence translation in `input/sequenceToTuiKey.test.ts`, and mouse guard/click-key equivalence in `input/stationMouse.test.ts`.
+- Key and input behavior is tested at its behavioral owners: dashboard binding
+  dispatch in `packages/dashboard-core/test/unit/state/keymap.test.ts`, screen
+  transitions in dashboard-core, sequence translation in
+  `input/sequenceToTuiKey.test.ts`, and mouse guard/click-key equivalence in
+  `input/stationMouse.test.ts`.
 - Router/runtime conformance (reserved chords, modal swallow, paste, overlay-close) lives in `station/src/input/stationIntegration.test.ts`.
 - Live command dispatch through the shared client (focus, jump-to-session, convergence, recovery) lives in `station/src/station/store/stationCommandDispatch.test.ts`.
 - Rendering correctness uses golden frames: `station/src/station/view/dashboard.golden.test.tsx` (scenario × size matrix) and `view/modals.golden.test.tsx`. Use golden frames when exact terminal text, spacing, layout, footer placement, or clipping matters.
@@ -227,7 +233,7 @@ Useful focused commands:
 
 ```bash
 cd station
-bun test src/station/input/stationKeymap.test.ts
+bun test src/station/input/stationMouse.test.ts
 bun test src/station/view/dashboard.golden.test.tsx
 bun test src/station/importBoundaries.test.ts
 bun run test:vt          # terminal VT model

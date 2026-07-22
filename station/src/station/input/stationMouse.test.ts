@@ -338,37 +338,6 @@ describe("routeStationMouse", () => {
     expect(store.getState().screen).toMatchObject({ name: "search", value: "" });
   });
 
-  it("dispatches footer hints as their binding's key, active mode only", () => {
-    const store = makeStore();
-
-    const helpClick = routeStationMouse(
-      { kind: "footerHint", bindingId: "station.dashboard.help" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(helpClick).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({ name: "help" });
-
-    // The dashboard hint is stale while help is open: it must not fire.
-    const stale = routeStationMouse(
-      { kind: "footerHint", bindingId: "station.dashboard.search" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(stale).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({ name: "help" });
-  });
-
-  it("reports close-overlay for dismiss hints so the router can close STATION mode", () => {
-    const store = makeStore();
-    const outcome = routeStationMouse(
-      { kind: "footerHint", bindingId: "station.dashboard.dismiss" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(outcome).toEqual({ kind: "close-overlay" });
-  });
-
   it("treats right-click as inert at the STATION router layer", () => {
     const store = makeStore();
     const before = store.getState().screen;

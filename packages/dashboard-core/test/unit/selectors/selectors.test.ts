@@ -1,4 +1,4 @@
-import type { ProviderId } from "@station/contracts";
+import type { ProviderId, StationSnapshot } from "@station/contracts";
 import type { TuiViewState } from "@station/dashboard-core";
 import {
   choiceValueByKey,
@@ -6,17 +6,21 @@ import {
   isSelectionKey,
   keyChoices,
   SELECTION_KEYS,
+  selectDashboardSessionRows,
   selectNewSessionHarnessChoices,
   selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
-  selectProjectChoices,
+  selectProjectChooserChoices,
   selectProjectGroups,
-  selectVisibleRows,
   sessionForWorktreeRow,
-  worktreeRowDisplayTitle,
+  sessionRowDisplayTitle,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
+
+function visibleRows(snapshot: StationSnapshot, state: TuiViewState) {
+  return selectProjectGroups(snapshot, state).flatMap((group) => group.rows);
+}
 
 describe("TUI selectors", () => {
   it("assigns selection keys in order without 0 or uppercase keys and caps at 35", () => {
@@ -181,22 +185,24 @@ describe("TUI selectors", () => {
     );
   });
 
-  it("resolves row labels from session titles with branch fallback and pending overrides", () => {
+  it("resolves session row labels from titles with pending overrides", () => {
     const snapshot = createDashboardSnapshot();
-    const row = snapshot.rows.find((candidate) => candidate.id === "wt_web_idle");
-    if (row === undefined) throw new Error("missing fixture row");
     const titled = {
       ...snapshot,
       sessions: snapshot.sessions.map((session) =>
         session.id === "ses_wt_web_idle" ? { ...session, title: "Readable feature task" } : session,
       ),
     };
+    const row = selectDashboardSessionRows(titled).find(
+      (candidate) => candidate.id === "ses_wt_web_idle",
+    );
+    if (row === undefined) throw new Error("missing fixture session row");
 
-    expect(worktreeRowDisplayTitle(row, titled.sessions, createInitialTuiState().localRows)).toBe(
+    expect(sessionRowDisplayTitle(row, createInitialTuiState().localRows)).toBe(
       "Readable feature task",
     );
     expect(
-      worktreeRowDisplayTitle(row, titled.sessions, {
+      sessionRowDisplayTitle(row, {
         pendingCreate: [],
         failedCreate: [],
         pendingRemove: [],
@@ -210,9 +216,6 @@ describe("TUI selectors", () => {
         },
       }),
     ).toBe("Optimistic readable title");
-    expect(
-      worktreeRowDisplayTitle({ ...row, agent: undefined }, [], createInitialTuiState().localRows),
-    ).toBe(row.branch);
   });
 
   it("resolves an external row by run identity before retained Station membership", () => {
@@ -238,7 +241,7 @@ describe("TUI selectors", () => {
       localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
       selection: new Map(),
     };
-    expect(selectVisibleRows(snapshot, searched).map((candidate) => candidate.id)).toEqual([
+    expect(visibleRows(snapshot, searched).map((candidate) => candidate.id)).toEqual([
       "ses_wt_web_idle",
     ]);
 
@@ -253,7 +256,7 @@ describe("TUI selectors", () => {
     const groups = selectProjectGroups(snapshot, collapsed);
     expect(groups.find((group) => group.project.id === "web")?.collapsed).toBe(true);
     expect(
-      selectVisibleRows(snapshot, collapsed).map((candidate) => candidate.worktree.projectId),
+      visibleRows(snapshot, collapsed).map((candidate) => candidate.worktree.projectId),
     ).toEqual(["api"]);
   });
 
@@ -268,7 +271,7 @@ describe("TUI selectors", () => {
       selection: new Map(),
     };
 
-    expect(selectVisibleRows(snapshot, searched)).toEqual([]);
+    expect(visibleRows(snapshot, searched)).toEqual([]);
   });
 
   it("searches by resolved session title while sorting uses resolved titles", () => {
@@ -290,7 +293,7 @@ describe("TUI selectors", () => {
       selection: new Map(),
     };
 
-    expect(selectVisibleRows(titled, searched).map((candidate) => candidate.id)).toEqual([
+    expect(visibleRows(titled, searched).map((candidate) => candidate.id)).toEqual([
       "ses_wt_web_stuck",
     ]);
 
@@ -302,8 +305,7 @@ describe("TUI selectors", () => {
 
   it("assigns project choices from rendered project headers", () => {
     const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState({ collapsedProjectIds: ["web"] });
-    const choices = selectProjectChoices(snapshot, state);
+    const choices = selectProjectChooserChoices(snapshot);
 
     expect(choices.map((choice) => [choice.key, choice.value.id])).toEqual([
       ["1", "web"],

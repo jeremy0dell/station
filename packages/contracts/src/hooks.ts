@@ -60,8 +60,6 @@ export const ProviderHookReceiptSchema = z
   .strict();
 
 export type ProviderHookReceipt = z.infer<typeof ProviderHookReceiptSchema>;
-export const HookReceiptSchema = ProviderHookReceiptSchema;
-export type HookReceipt = ProviderHookReceipt;
 
 export const HarnessEventReportCorrelationSchema = z
   .object({
@@ -131,8 +129,6 @@ export const ProviderHookPayloadSummarySchema = z
   .strict();
 
 export type ProviderHookPayloadSummary = z.infer<typeof ProviderHookPayloadSummarySchema>;
-export const HookPayloadSummarySchema = ProviderHookPayloadSummarySchema;
-export type HookPayloadSummary = ProviderHookPayloadSummary;
 
 export const StationHookIdentityPayloadSchema = z
   .object({
@@ -177,8 +173,6 @@ export type ProviderHookScopeDecision =
       action: "ignore";
       reason: "missing-station-env" | "event-not-forwarded";
     };
-export type HookScopeDecision = ProviderHookScopeDecision;
-
 export type ProviderHookPayloadEnrichmentInput = {
   payload: unknown;
   env: Record<string, string | undefined>;
@@ -253,8 +247,6 @@ export const ProviderHookSpoolRecordSchema = z
   .strict();
 
 export type ProviderHookSpoolRecord = z.infer<typeof ProviderHookSpoolRecordSchema>;
-export const HookSpoolRecordSchema = ProviderHookSpoolRecordSchema;
-export type HookSpoolRecord = ProviderHookSpoolRecord;
 
 export const HarnessEventReportSpoolRecordSchema = z
   .object({
@@ -279,8 +271,6 @@ export const ObserverEventHookFilterSchema = z
   .strict();
 
 export type ObserverEventHookFilter = z.infer<typeof ObserverEventHookFilterSchema>;
-export const EventHookFilterSchema = ObserverEventHookFilterSchema;
-export type EventHookFilter = ObserverEventHookFilter;
 
 export const ObserverEventHookConfigSchema = z
   .object({
@@ -294,8 +284,6 @@ export const ObserverEventHookConfigSchema = z
   .strict();
 
 export type ObserverEventHookConfig = z.infer<typeof ObserverEventHookConfigSchema>;
-export const EventHookConfigSchema = ObserverEventHookConfigSchema;
-export type EventHookConfig = ObserverEventHookConfig;
 
 export const ObserverEventHookInvocationSchema = z
   .object({
@@ -307,5 +295,3 @@ export const ObserverEventHookInvocationSchema = z
   .strict();
 
 export type ObserverEventHookInvocation = z.infer<typeof ObserverEventHookInvocationSchema>;
-export const EventHookInvocationSchema = ObserverEventHookInvocationSchema;
-export type EventHookInvocation = ObserverEventHookInvocation;
