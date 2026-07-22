@@ -1,6 +1,5 @@
 import type { MouseEvent as OpenTuiMouseEvent } from "@opentui/core";
-import { useRenderer } from "@opentui/react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   isPrimaryMouseEvent,
   isRightMouseEvent,
@@ -13,7 +12,6 @@ import { Throbber } from "../station/view/Throbber.js";
 import { lerpColor, type StationButtonStateColors, stationButtonColors } from "./colors.js";
 import type { ProjectRollupEntry, ProjectRollupStatus } from "./status.js";
 import {
-  ANIM_MS,
   ATTENTION_MARK,
   attentionLines,
   celebrationText,
@@ -22,8 +20,6 @@ import {
   COLLAPSED_BASE_COLS,
   CONTENT_INDENT,
   type Dims,
-  easeInOutCubic,
-  FRAME_MS,
   GRADIENT_EDGE,
   ICON_COLS,
   ICON_PAD,
@@ -39,6 +35,8 @@ import {
   STATION_ICON,
   targetDims,
 } from "./layout.js";
+import { useTweenAmount } from "./hooks/useTweenAmount.js";
+import { useTweenedOptionalValue } from "./hooks/useTweenedOptionalValue.js";
 
 export type DynamicStationButtonProps = {
   /** Everything the display ladder needs; islandDisplay decides what paints. */
@@ -65,16 +63,15 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
     setInternalHover(hovering);
     onHoverChange?.(hovering);
   };
-  const pointerProps = useHoverPointer({ onHoverChange: handleHoverChange });
+  const pointerProps = useHoverPointer({
+    acquireOnMouseOver: false,
+    onHoverChange: handleHoverChange,
+  });
 
-  const open = useOpenAmount(expanded ? 1 : 0);
-  const collapsed = targetDims(islandDisplay(input, false));
-  const opened = targetDims(islandDisplay(input, true));
-  const dims: Dims = {
-    width: Math.round(lerp(collapsed.width, opened.width, open)),
-    height: Math.round(lerp(collapsed.height, opened.height, open)),
-  };
-  const display = islandDisplay(input, expanded);
+  const { open, dims, display, textReveal, celebrationReveal } = useButtonTransition(
+    input,
+    expanded,
+  );
 
   // Border/icon morph between the two state colors; expanded text fades up from
   // the background while collapsed marks/icon stay fully visible.
@@ -82,9 +79,6 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
   const to = stationButtonColors(attention, true);
   const border = lerpColor(from.border, to.border, open);
   const icon = lerpColor(from.icon, to.icon, open);
-  // Held invisible until the box has opened enough to hold it; expanded text
-  // then reveals per-character (GradientText), collapsed marks just morph color.
-  const textReveal = Math.min(1, Math.max(0, (open - 0.35) / 0.65));
   const color: StationButtonStateColors = expanded
     ? { border, icon, text: to.text }
     : { border, icon, text: lerpColor(from.text, to.text, open) };
@@ -137,6 +131,7 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
         iconPadX={iconPadX}
         iconPadY={iconPadY}
         reveal={textReveal}
+        celebrationReveal={celebrationReveal}
       />
       {/* Keeps one stable hit target above morphing text/icon children during expand/collapse. */}
       <box
@@ -158,8 +153,9 @@ function StationButtonContent(props: {
   iconPadX: number;
   iconPadY: number;
   reveal: number;
+  celebrationReveal: number;
 }): ReactNode {
-  const { display, color, iconPadX, iconPadY, reveal } = props;
+  const { display, color, iconPadX, iconPadY, reveal, celebrationReveal } = props;
   switch (display.kind) {
     case "mark":
       return <CollapsedBase color={color} iconPadX={iconPadX} iconPadY={iconPadY} />;
@@ -174,7 +170,13 @@ function StationButtonContent(props: {
         />
       );
     case "celebration":
-      return <CollapsedCelebration celebration={display.celebration} />;
+      return (
+        <CollapsedCelebration
+          celebration={display.celebration}
+          color={color}
+          reveal={celebrationReveal}
+        />
+      );
     case "alertCard":
       return (
         <ExpandedAttention
@@ -318,11 +320,23 @@ function CollapsedCounts(props: {
   );
 }
 
-function CollapsedCelebration({ celebration }: { celebration: IslandCelebration }): ReactNode {
+function CollapsedCelebration({
+  celebration,
+  color,
+  reveal,
+}: {
+  celebration: IslandCelebration;
+  color: StationButtonStateColors;
+  reveal: number;
+}): ReactNode {
   return (
     <box flexDirection="row" paddingLeft={ICON_PAD}>
-      <IconGlyph color={STATION_COLORS.green} />
-      <text fg={STATION_COLORS.green}>{` ${celebrationText(celebration)}`}</text>
+      <IconGlyph color={lerpColor(color.icon, STATION_COLORS.green, reveal)} />
+      <GradientText
+        text={` ${celebrationText(celebration)}`}
+        reveal={reveal}
+        color={STATION_COLORS.green}
+      />
     </box>
   );
 }
@@ -433,51 +447,69 @@ function ExpandedAttention(props: {
   );
 }
 
-// Manual interval tween, not OpenTUI's Timeline: nothing in Station attaches the Timeline engine
-// to the renderer, so useTimeline would never advance a frame here.
-function useOpenAmount(target: number): number {
-  const renderer = useRenderer();
-  const [open, setOpen] = useState(target);
-  const fromRef = useRef(target);
-  const mounted = useRef(false);
+type ButtonTransition = {
+  open: number;
+  dims: Dims;
+  display: IslandDisplay;
+  textReveal: number;
+  celebrationReveal: number;
+};
 
-  useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true; // first paint sits at the target, no animation
-      fromRef.current = target;
-      return;
-    }
-    const from = fromRef.current;
-    // OpenTUI is on-demand; without requesting "live" it won't paint the
-    // in-between frames of this timer-driven tween (it would snap to the end).
-    renderer.requestLive();
-    let live = true;
-    const dropLive = (): void => {
-      if (live) {
-        live = false;
-        renderer.dropLive();
-      }
-    };
-    let elapsed = 0;
-    const id = setInterval(() => {
-      elapsed += FRAME_MS;
-      const t = Math.min(1, elapsed / ANIM_MS);
-      if (t >= 1) {
-        clearInterval(id);
-        fromRef.current = target;
-        setOpen(target);
-        dropLive();
-        return;
-      }
-      const value = from + (target - from) * easeInOutCubic(t);
-      fromRef.current = value;
-      setOpen(value);
-    }, FRAME_MS);
-    return () => {
-      clearInterval(id);
-      dropLive();
-    };
-  }, [target, renderer]);
+function useButtonTransition(input: IslandDisplayInput, expanded: boolean): ButtonTransition {
+  const open = useTweenAmount(expanded ? 1 : 0);
+  const collapsedDisplay = islandDisplay(input, false);
+  const celebrationPaintEligible =
+    !expanded && open === 0 && collapsedDisplay.kind === "celebration";
+  const tweenedCelebration = useTweenedOptionalValue(
+    input.celebration,
+    celebrationPaintEligible,
+  );
+  const collapsed = collapsedButtonState(
+    input,
+    tweenedCelebration.value,
+    tweenedCelebration.amount,
+  );
+  const opened = targetDims(islandDisplay(input, true));
+  const dims: Dims = {
+    width: Math.round(lerp(collapsed.dims.width, opened.width, open)),
+    height: Math.round(lerp(collapsed.dims.height, opened.height, open)),
+  };
+  return {
+    open,
+    dims,
+    display: expanded ? islandDisplay(input, true) : collapsed.display,
+    // Both text surfaces stay hidden until their box has enough width to hold them.
+    textReveal: contentReveal(open),
+    celebrationReveal: contentReveal(tweenedCelebration.amount),
+  };
+}
 
-  return open;
+function collapsedButtonState(
+  input: IslandDisplayInput,
+  celebration: IslandCelebration | undefined,
+  amount: number,
+): { dims: Dims; display: IslandDisplay } {
+  const restingInput: IslandDisplayInput = { status: input.status };
+  if (input.restCounts !== undefined) {
+    restingInput.restCounts = input.restCounts;
+  }
+  const collapsedInput: IslandDisplayInput = { ...restingInput };
+  // Keep queued celebrations out of the display tree until their entrance actually starts.
+  if (celebration !== undefined && amount > 0) {
+    collapsedInput.celebration = celebration;
+  }
+  const resting = targetDims(islandDisplay(restingInput, false));
+  const display = islandDisplay(collapsedInput, false);
+  const notified = targetDims(display);
+  return {
+    dims: {
+      width: Math.round(lerp(resting.width, notified.width, amount)),
+      height: Math.round(lerp(resting.height, notified.height, amount)),
+    },
+    display,
+  };
+}
+
+function contentReveal(amount: number): number {
+  return Math.min(1, Math.max(0, (amount - 0.35) / 0.65));
 }
