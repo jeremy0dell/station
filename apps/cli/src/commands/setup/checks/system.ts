@@ -16,6 +16,8 @@ import type {
   SetupConfigFact,
   SetupDependencyFact,
   SetupFacts,
+  SetupLauncherFact,
+  SetupLaunchersFact,
   SetupMode,
   SetupStationUiFact,
 } from "../model.js";
@@ -36,11 +38,16 @@ import {
   type CheckSetupLaunchersOptions,
   checkSetupLaunchers,
   setupLauncherExecutable,
+  setupLauncherPathsMatch,
 } from "./launchers.js";
 import { checkSetupStateDir, type SetupStateDirFileSystem } from "./stateDir.js";
 import { checkSetupTmux } from "./tmux.js";
 import { checkSetupTmuxBinding, tmuxPopupRunShellCommand } from "./tmuxBinding.js";
-import { checkSetupWorktrunk, checkSetupWorktrunkAutomation } from "./worktrunk.js";
+import {
+  checkSetupWorktrunk,
+  checkSetupWorktrunkAutomation,
+  checkSetupWorktrunkShellIntegration,
+} from "./worktrunk.js";
 import { type CheckXcodeOptions, checkSetupXcode } from "./xcode.js";
 
 export type SetupDependencyCheckOptions = {
@@ -111,6 +118,15 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   const configPathOptions = setupConfigOptions(setupConfigInput);
   const configPath = setupConfigPath(configPathOptions);
   const configPromise = checkSetupConfig({ ...configPathOptions, configPath });
+  const worktrunkPromise = configPromise.then((config) => {
+    const worktrunkOptions: Parameters<typeof checkSetupWorktrunk>[0] = {
+      ...dependencyOptions,
+    };
+    if (config.status === "valid" && config.worktrunkCommand !== undefined) {
+      worktrunkOptions.command = config.worktrunkCommand;
+    }
+    return checkSetupWorktrunk(worktrunkOptions);
+  });
   const harnessesPromise = configPromise.then((config) => {
     const harnessOptions: CheckHarnessesOptions = { ...commandOptions };
     if (config.status === "valid") {
@@ -140,7 +156,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
       ...(options.platform === undefined ? {} : { platform: options.platform }),
       ...(options.access === undefined ? {} : { access: options.access }),
     }),
-    checkSetupWorktrunk(dependencyOptions),
+    worktrunkPromise,
     checkSetupTmux(dependencyOptions),
     compiled
       ? Promise.resolve({ status: "ok" as const, command: "bun" })
@@ -158,39 +174,53 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     configPromise,
     checkSetupLaunchers(launcherOptions),
   ]);
-  const worktrunkAutomation = await checkSetupWorktrunkAutomation({
+  const worktrunkAutomationInput: Parameters<typeof checkSetupWorktrunkAutomation>[0] = {
     worktrunk,
     configReady: config.status === "valid",
-    ...(config.status === "valid" && config.worktrunkUseLifecycleHooks !== undefined
-      ? { useLifecycleHooks: config.worktrunkUseLifecycleHooks }
-      : {}),
-    ...(options.runner === undefined ? {} : { runner: options.runner }),
-  });
+  };
+  if (config.status === "valid" && config.worktrunkUseLifecycleHooks !== undefined) {
+    worktrunkAutomationInput.useLifecycleHooks = config.worktrunkUseLifecycleHooks;
+  }
+  if (options.runner !== undefined) worktrunkAutomationInput.runner = options.runner;
+
+  const worktrunkShellIntegrationInput: Parameters<typeof checkSetupWorktrunkShellIntegration>[0] =
+    { worktrunk, homeDir, env };
+  if (options.runner !== undefined) worktrunkShellIntegrationInput.runner = options.runner;
+
+  const [worktrunkAutomation, worktrunkShellIntegration] = await Promise.all([
+    checkSetupWorktrunkAutomation(worktrunkAutomationInput),
+    checkSetupWorktrunkShellIntegration(worktrunkShellIntegrationInput),
+  ]);
   const launcherCommand =
     options.tmuxPopupOwnerRoot === undefined
       ? setupLauncherExecutable(launchers.tmuxPopup)
       : join(options.tmuxPopupOwnerRoot, "stn-tmux-popup");
-  const resolvedLaunchers =
-    options.tmuxPopupOwnerRoot === undefined
-      ? launchers
-      : {
-          ...launchers,
-          tmuxPopup: (await canExecute(launcherCommand, options.access))
-            ? {
-                status: "ok" as const,
-                source: "installed" as const,
-                command: launchers.tmuxPopup.command,
-                resolvedPath: launcherCommand,
-                checkoutPath: launchers.tmuxPopup.checkoutPath,
-              }
-            : {
-                status: "missing" as const,
-                source: "missing" as const,
-                command: launchers.tmuxPopup.command,
-                checkoutPath: launchers.tmuxPopup.checkoutPath,
-                message: `The installed stn-tmux-popup alias is missing or not executable at ${launcherCommand}.`,
-              },
-        };
+  let resolvedLaunchers: SetupLaunchersFact = launchers;
+  if (options.tmuxPopupOwnerRoot !== undefined) {
+    let tmuxPopup: SetupLauncherFact;
+    if (await canExecute(launcherCommand, options.access)) {
+      const popupOnPath =
+        launchers.tmuxPopup.source === "path" &&
+        launchers.tmuxPopup.resolvedPath !== undefined &&
+        (await setupLauncherPathsMatch(launchers.tmuxPopup.resolvedPath, launcherCommand));
+      tmuxPopup = {
+        status: "ok",
+        source: popupOnPath ? "path" : "installed",
+        command: launchers.tmuxPopup.command,
+        resolvedPath: launcherCommand,
+        checkoutPath: launchers.tmuxPopup.checkoutPath,
+      };
+    } else {
+      tmuxPopup = {
+        status: "missing",
+        source: "missing",
+        command: launchers.tmuxPopup.command,
+        checkoutPath: launchers.tmuxPopup.checkoutPath,
+        message: `The installed stn-tmux-popup alias is missing or not executable at ${launcherCommand}.`,
+      };
+    }
+    resolvedLaunchers = { ...launchers, tmuxPopup };
+  }
   const tmuxBindingOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
     homeDir,
     env,
@@ -245,6 +275,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     socketEvidence,
     worktrunk,
     worktrunkAutomation,
+    worktrunkShellIntegration,
     tmux,
     bun,
     stationUi,

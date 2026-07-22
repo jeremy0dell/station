@@ -93,16 +93,7 @@ function setupChecks(facts: SetupFacts, harnessSelection: SetupHarnessSelection)
     ...configDiagnosticsChecks(facts),
     launcherCheck(facts),
     ...(facts.compiled ? [] : [stationUiCheck(facts)]),
-    {
-      id: "worktrunk-shell-integration",
-      tier: "recommended",
-      status: facts.worktrunk.status === "ok" ? "warning" : "skipped",
-      label: "Worktrunk shell integration",
-      message:
-        facts.worktrunk.status === "ok"
-          ? "Recommended after core setup: wt config shell install."
-          : "Skipped until Worktrunk is available.",
-    },
+    worktrunkShellIntegrationCheck(facts),
     tmuxPopupBindingCheck(facts),
     worktrunkHooksCheck(facts),
     harnessHooksCheck(
@@ -220,41 +211,39 @@ function stateDirCheck(facts: SetupFacts): SetupCheck {
 function launcherCheck(facts: SetupFacts): SetupCheck {
   const launchers = [facts.launchers.station, facts.launchers.ingress, facts.launchers.tmuxPopup];
   const missing = launchers.filter((launcher) => launcher.status === "missing");
-  const checkout = launchers.filter((launcher) => launcher.source === "checkout");
-  const installed = launchers.filter((launcher) => launcher.source === "installed");
+  const launcherEntries = [
+    ["stn", facts.launchers.station],
+    ["stn-ingress", facts.launchers.ingress],
+    ["stn-tmux-popup", facts.launchers.tmuxPopup],
+  ] as const;
+  const checkoutOutsidePath = launcherEntries
+    .filter((entry) => entry[1].source === "checkout")
+    .map((entry) => entry[0]);
+  const installedOutsidePath = launcherEntries
+    .filter((entry) => entry[1].source === "installed")
+    .map((entry) => entry[0]);
   const details = {
     station: setupLauncherExecutable(facts.launchers.station),
     ingress: setupLauncherExecutable(facts.launchers.ingress),
     tmuxPopup: setupLauncherExecutable(facts.launchers.tmuxPopup),
   };
+  let warningMessage: string | undefined;
   if (missing.length > 0) {
+    warningMessage = `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`;
+  } else if (checkoutOutsidePath.length > 0 && installedOutsidePath.length > 0) {
+    warningMessage = `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}.`;
+  } else if (checkoutOutsidePath.length > 0) {
+    warningMessage = `These bare launchers do not resolve to this checkout on PATH: ${checkoutOutsidePath.join(", ")}; setup will use their current-checkout paths.`;
+  } else if (installedOutsidePath.length > 0) {
+    warningMessage = `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}.`;
+  }
+  if (warningMessage !== undefined) {
     return {
       id: "station-launchers",
       tier: "recommended",
       status: "warning",
       label: "STATION launchers",
-      message: `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`,
-      details,
-    };
-  }
-  if (checkout.length > 0) {
-    return {
-      id: "station-launchers",
-      tier: "recommended",
-      status: "warning",
-      label: "STATION launchers",
-      message:
-        "Bare station launchers are not on PATH; setup will use current-checkout launcher paths.",
-      details,
-    };
-  }
-  if (installed.length > 0) {
-    return {
-      id: "station-launchers",
-      tier: "recommended",
-      status: "ok",
-      label: "STATION launchers",
-      message: "STATION launchers are available from PATH or the installed artifact.",
+      message: warningMessage,
       details,
     };
   }
@@ -266,6 +255,22 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
     message: "stn, stn-ingress, and stn-tmux-popup are available on PATH.",
     details,
   };
+}
+
+function worktrunkShellIntegrationCheck(facts: SetupFacts): SetupCheck {
+  const integration = facts.worktrunkShellIntegration;
+  const details: Record<string, string> = {};
+  if (integration.shell !== undefined) details.shell = integration.shell;
+  if (integration.rcPath !== undefined) details.rcPath = integration.rcPath;
+  const check: SetupCheck = {
+    id: "worktrunk-shell-integration",
+    tier: "recommended",
+    status: integration.status,
+    label: "Worktrunk shell integration",
+    message: integration.message,
+  };
+  if (integration.shell !== undefined || integration.rcPath !== undefined) check.details = details;
+  return check;
 }
 
 function stationUiCheck(facts: SetupFacts): SetupCheck {
@@ -699,15 +704,27 @@ function setupActions(
       command: ["pnpm", "--dir", facts.launchers.packageRoot, "station:link"],
     });
   }
-  actions.push({
-    id: "worktrunk-shell-integration",
-    kind: "run-command",
-    tier: "recommended",
-    selected: false,
-    label: "Install Worktrunk shell integration",
-    message: "Run wt config shell install after core setup if you want Worktrunk shell helpers.",
-    command: [facts.worktrunk.command, "-y", "config", "shell", "install"],
-  });
+  if (
+    facts.worktrunk.status === "ok" &&
+    facts.worktrunkShellIntegration.status !== "ok" &&
+    facts.worktrunkShellIntegration.shell !== undefined
+  ) {
+    actions.push({
+      id: "worktrunk-shell-integration",
+      kind: "run-command",
+      tier: "recommended",
+      selected: false,
+      label: "Install Worktrunk shell integration",
+      message: "Run wt config shell install after core setup if you want Worktrunk shell helpers.",
+      command: [
+        facts.worktrunk.resolvedPath ?? facts.worktrunk.command,
+        "-y",
+        "config",
+        "shell",
+        "install",
+      ],
+    });
+  }
   if (
     facts.tmux.status === "ok" &&
     facts.launchers.tmuxPopup.status === "ok" &&
