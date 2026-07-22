@@ -327,22 +327,23 @@ identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
 workflow never publishes the draft automatically.
 
-The current immutable binary candidate is `v0.7.1-rc.4`. `v0.7.1-rc.3` is the
-prior published binary, and `v0.7.1-rc.2` remains an older published rollback;
-the earlier `v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished:
+The current immutable binary candidate is `v0.7.1-rc.5`. `v0.7.1-rc.4` is the
+prior published binary, and `v0.7.1-rc.2` and `v0.7.1-rc.3` remain older
+published rollbacks; the earlier `v0.7.0` and `v0.7.1-rc.1` candidates remained
+unpublished:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.7.1-rc.4`, then create and
-   push `v0.7.1-rc.4`.
+   with `package.json` and runtime reporting at `0.7.1-rc.5`, then create and
+   push `v0.7.1-rc.5`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.7.1-rc.4-attempt-*` artifact.
+   `accepted-release-candidate-0.7.1-rc.5-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
-4. Install `v0.7.1-rc.3`, upgrade to the accepted candidate, explicitly
-   reinstall `v0.7.1-rc.3`, then reinstall the candidate. Confirm the complete
+4. Install `v0.7.1-rc.4`, upgrade to the accepted candidate, explicitly
+   reinstall `v0.7.1-rc.4`, then reinstall the candidate. Confirm the complete
    version and all three launchers after every transition.
 5. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.7.1-rc.4`, and the manual-acceptance confirmation. It rechecks the
+   `v0.7.1-rc.5`, and the manual-acceptance confirmation. It rechecks the
    successful run SHA, immutable candidate manifest, tag commit, release ID,
    asset IDs, and all archive hashes immediately before publishing that exact
    draft.
@@ -455,7 +456,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.4
+  tag=v0.7.1-rc.5
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -597,11 +598,11 @@ manually verify the actual user experience, not a dashboard override:
    live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
-   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.4`:
+   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.5`:
    never command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat the same checks while alternating the draft
-   with published `v0.7.1-rc.3` in both directions.
+   with published `v0.7.1-rc.4` in both directions.
 10. In an isolated home, test abandoned locks separately at
     `<install-dir>/.station-install.lock` and
     `<data-home>/station/.station-install.lock` with representative owner
