@@ -219,10 +219,10 @@ stn tui
 ```
 
 Setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta;
-requires one supported agent CLI; writes a valid zero-project
+requires at least one supported agent CLI; lets you enable one or more detected CLIs; writes a valid zero-project
 `~/.config/station/config.toml`; starts or restarts the Observer; and offers to
-install provider hooks, Worktrunk shell integration, and the `Ctrl-b Space`
-tmux popup binding. Complete the selected agent CLI's own sign-in before
+install provider-specific hooks, Worktrunk shell integration, and the `Ctrl-b Space`
+tmux popup binding. The first selection is the default in a new config; an existing config keeps its current default while setup adds missing selected providers. Complete each enabled agent CLI's own sign-in before
 starting a real session.
 
 If setup writes the config but cannot activate it, it leaves the config and the

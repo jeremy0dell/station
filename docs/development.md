@@ -436,7 +436,7 @@ exporting a token. If scoped host access is unavailable, run the exact tagged
 temporary-file installer in the host Terminal and let the agent resume through
 the absolute installed `stn` path.
 
-Start the selected agent CLI once and complete its normal sign-in. Then create
+Start each agent CLI you plan to select once and complete its normal sign-in. Then create
 a disposable Git project for the acceptance run:
 
 ```sh
@@ -535,8 +535,11 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select the
-authenticated agent, and enable the desired provider hooks and tmux binding.
+guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+more authenticated agents, and enable the desired provider hooks and tmux binding.
+Confirm the first selection becomes the default while every selection receives
+its own harness block and every hook-capable selection receives its own prompt
+when setup can safely persist or reuse that hook intent.
 Confirm setup writes a zero-project config without adopting the disposable
 repository, then run:
 

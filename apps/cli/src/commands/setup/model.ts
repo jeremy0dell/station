@@ -200,6 +200,7 @@ export type SetupConfigFact =
       observerStateDir: string;
       hasProjectForRoot: boolean;
       configuredHarnesses: readonly string[];
+      configuredHarnessCommands?: Readonly<Record<string, string>>;
       configuredHookHarnesses: readonly string[];
       defaults: SetupConfigDefaultsFact;
       tmux?: TmuxConfig;
@@ -289,7 +290,6 @@ export type SetupFacts = {
   harnesses: readonly SetupHarnessFact[];
   config: SetupConfigFact;
   tmuxBinding: SetupTmuxBindingFact;
-  selectedHarness?: SupportedHarnessId;
 };
 
 export type ConfigWritePlan =
@@ -304,10 +304,9 @@ export type ConfigWritePlan =
       backupPath?: string;
     }
   | {
-      operation: "append";
+      operation: "update";
       path: string;
       content: string;
-      appendedText: string;
       backupPath?: string;
     }
   | {

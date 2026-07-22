@@ -62,6 +62,147 @@ describe("CLI setup command", () => {
     expect(calls.map((call) => call.command)).not.toContain("gh");
   });
 
+  it("reports every configured harness and hook on a later setup check", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const source = setupConfigToml(repo, { includeHarness: true }).replace(
+      "[[projects]]",
+      [
+        "install_hooks = true",
+        "",
+        "[harness.opencode]",
+        "enabled = true",
+        'command = "opencode"',
+        "install_hooks = true",
+        "",
+        "[[projects]]",
+      ].join("\n"),
+    );
+
+    const result = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+          "opencode --version": "opencode 1.0.0\n",
+        }),
+        access: readySetupAccess(),
+        fs: readOnlyFs({ [configPath]: source }),
+      },
+    });
+
+    const plan = result.output as {
+      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+    };
+    expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
+      default: "codex",
+      enabled: "codex,opencode",
+    });
+    expect(plan.checks.find((check) => check.id === "harness-hooks")).toMatchObject({
+      status: "ok",
+      details: { harnesses: "codex,opencode" },
+    });
+  });
+
+  it("keeps the persisted default visible when only a secondary configured CLI is available", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const source = setupConfigToml(repo, { includeHarness: true }).replace(
+      "[[projects]]",
+      ["[harness.opencode]", "enabled = true", 'command = "opencode"', "", "[[projects]]"].join(
+        "\n",
+      ),
+    );
+
+    const result = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: {
+          PATH: "/fake/bin",
+          STATION_CODEX_BIN: "/missing/codex",
+          STATION_OPENCODE_BIN: "opencode",
+        },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "opencode --version": "opencode 1.0.0\n",
+        }),
+        access: readySetupAccess(),
+        fs: readOnlyFs({ [configPath]: source }),
+      },
+    });
+
+    const plan = result.output as {
+      summary: { selectedHarness?: string };
+      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+    };
+    expect(result.code).toBe(0);
+    expect(plan.summary.selectedHarness).toBe("codex");
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "ok",
+      details: {
+        default: "codex",
+        defaultStatus: "unavailable",
+        enabled: "codex,opencode",
+        available: "opencode",
+      },
+    });
+  });
+
+  it("does not count an unconfigured installed CLI as workflow ready", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const source = setupConfigToml(repo, { includeHarness: true });
+
+    const result = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "opencode --version": "opencode 1.0.0\n",
+        }),
+        access: readySetupAccess(),
+        fs: readOnlyFs({ [configPath]: source }),
+      },
+    });
+
+    const plan = result.output as {
+      summary: { requiredOk: boolean };
+      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+    };
+    expect(result.code).toBe(1);
+    expect(plan.summary.requiredOk).toBe(false);
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "missing",
+      details: {
+        default: "codex",
+        defaultStatus: "unavailable",
+        enabled: "codex",
+        available: "opencode",
+      },
+    });
+  });
+
   it("reports compiled launch readiness independently from workflow readiness", async () => {
     const root = await tempRoot(tempRoots);
     const result = await runCli(["setup", "check", "--json"], {

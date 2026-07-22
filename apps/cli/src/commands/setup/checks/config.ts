@@ -50,6 +50,12 @@ export async function checkSetupConfig(
       gitRoot === undefined
         ? undefined
         : loaded.config.projects.find((project) => pathIsSame(project.root, gitRoot));
+    const configuredHarnessCommands: Record<string, string> = {};
+    for (const [id, providerConfig] of Object.entries(loaded.config.harness ?? {})) {
+      if (providerConfig?.command !== undefined) {
+        configuredHarnessCommands[id] = providerConfig.command;
+      }
+    }
     const fact: SetupConfigFact = {
       status: "valid",
       path,
@@ -66,6 +72,9 @@ export async function checkSetupConfig(
         harness: loaded.config.defaults.harness,
       },
     };
+    if (Object.keys(configuredHarnessCommands).length > 0) {
+      fact.configuredHarnessCommands = configuredHarnessCommands;
+    }
     if (loaded.config.terminal?.tmux !== undefined) {
       fact.tmux = loaded.config.terminal.tmux;
     }

@@ -135,6 +135,10 @@ The only loosely-typed provider table: `[harness.claude]` is known, and any othe
 (`codex`, `opencode`, …) is accepted via a catchall — so a **misspelled harness id
 is silently accepted** as an unused harness.
 
+Multiple `[harness.<id>]` tables may be configured at once. `[defaults].harness`
+remains the single default used when a project does not override it; the other
+configured harnesses remain available for explicit selection.
+
 | Key | Type | Notes |
 | --- | --- | --- |
 | `enabled` | bool | |
