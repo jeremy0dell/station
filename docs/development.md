@@ -427,6 +427,15 @@ gh auth status --hostname github.com
 gh repo view jeremy0dell/station
 ```
 
+When validating the agent-led install prompt on macOS, start the agent in its
+normal sandbox after these host-Terminal checks succeed. A sandbox-only auth
+failure must remain inconclusive until the agent retries with scoped
+host/Keychain access; all later authenticated `gh repo` and `gh api` operations
+must use that same access context without reading, printing, requesting, or
+exporting a token. If scoped host access is unavailable, run the exact tagged
+temporary-file installer in the host Terminal and let the agent resume through
+the absolute installed `stn` path.
+
 Start the selected agent CLI once and complete its normal sign-in. Then create
 a disposable Git project for the acceptance run:
 
@@ -553,7 +562,10 @@ edit shell startup files. Copy the one future-shell export it printed into a
 shell configuration you choose,
 open a new login shell, and verify all three physical launcher resolutions and
 `stn --version`. The installer, not the user-facing PATH text alone, must have
-verified those launchers after installation.
+verified those launchers after installation. An agent must use the absolute
+installed `stn` path for continuation and report future-shell PATH as unverified
+until this new-shell check passes; its own `command -v` result is not user-shell
+evidence.
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
