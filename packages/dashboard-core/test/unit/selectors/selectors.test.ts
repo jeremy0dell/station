@@ -318,8 +318,7 @@ describe("TUI selectors", () => {
       ...createDashboardSnapshot(),
       harnesses: [
         { id: "codex", label: "codex" },
-        { id: "opencode", label: "opencode" },
-        { id: "scripted", label: "scripted" },
+        { id: "pi", label: "pi" },
       ],
     };
     const api = snapshot.projects.find((project) => project.id === "api");
@@ -335,8 +334,7 @@ describe("TUI selectors", () => {
       selectNewSessionHarnessChoices(snapshot, api).map((choice) => [choice.key, choice.value.id]),
     ).toEqual([
       ["1", "codex"],
-      ["2", "opencode"],
-      ["3", "scripted"],
+      ["2", "pi"],
     ]);
   });
 });

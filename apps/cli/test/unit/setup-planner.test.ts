@@ -17,7 +17,6 @@ describe("setup planner", () => {
       requiredOk: true,
       requiredMissing: 0,
       selectedActions: 0,
-      selectedHarness: "codex",
     });
     expect(plan.checks.map((check) => [check.id, check.status])).toEqual([
       ["state-dir", "ok"],
@@ -210,6 +209,11 @@ describe("setup planner", () => {
     const plan = buildSetupPlan(
       facts({
         harnesses: harnesses(["cursor", "opencode", "pi"]),
+        config: {
+          status: "missing",
+          path: "/tmp/config.toml",
+          message: "Config missing.",
+        },
       }),
     );
 
@@ -217,17 +221,136 @@ describe("setup planner", () => {
   });
 
   it("respects an explicit selected harness when multiple are available", () => {
-    const plan = buildSetupPlan(
-      facts({
-        selectedHarness: "opencode",
-        harnesses: harnesses(["codex", "opencode"]),
-      }),
-    );
+    const input = facts({
+      harnesses: harnesses(["codex", "opencode"]),
+      config: {
+        status: "missing",
+        path: "/tmp/config.toml",
+        message: "Config missing.",
+      },
+    });
+    const plan = buildSetupPlan(input, {
+      harnessSelection: {
+        defaultHarness: "opencode",
+        selected: input.harnesses.filter((harness) => harness.id === "opencode"),
+      },
+    });
 
     expect(plan.summary.selectedHarness).toBe("opencode");
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
-      selected: "opencode",
+      default: "opencode",
     });
+  });
+
+  it("keeps the first selected harness as default while planning each supported hook", () => {
+    const input = facts({
+      harnesses: harnesses(["codex", "opencode", "pi"]),
+    });
+    const plan = buildSetupPlan(input, {
+      harnessSelection: {
+        defaultHarness: "codex",
+        selected: input.harnesses.filter((harness) => harness.status === "ok"),
+      },
+      installHarnessHooks: ["codex", "opencode"],
+    });
+
+    expect(plan.summary.selectedHarness).toBe("codex");
+    expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
+      default: "codex",
+      enabled: "codex,opencode,pi",
+    });
+    expect(
+      plan.actions
+        .filter((action) => action.data?.setupRole === "hook" && action.data.harness !== undefined)
+        .map((action) => [action.id, action.selected]),
+    ).toEqual([
+      ["codex-hooks", true],
+      ["opencode-hooks", true],
+    ]);
+    expect(plan.actions.some((action) => action.id === "pi-hooks")).toBe(false);
+  });
+
+  it("derives every configured harness and hook after setup selection facts are gone", () => {
+    const plan = buildSetupPlan(
+      facts({
+        harnesses: harnesses(["codex", "opencode", "pi"]),
+        config: validConfigFact({
+          configuredHarnesses: ["codex", "opencode", "pi"],
+          configuredHookHarnesses: ["codex", "opencode"],
+        }),
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
+      default: "codex",
+      enabled: "codex,opencode,pi",
+    });
+    expect(plan.checks.find((check) => check.id === "harness-hooks")).toMatchObject({
+      status: "ok",
+      details: { harnesses: "codex,opencode" },
+    });
+    expect(
+      plan.actions
+        .filter((action) => action.data?.harness !== undefined)
+        .map((action) => action.id),
+    ).toEqual(["codex-hooks", "opencode-hooks"]);
+  });
+
+  it("reports an unavailable persisted default without substituting an available provider", () => {
+    const plan = buildSetupPlan(
+      facts({
+        harnesses: harnesses(["opencode"]),
+        config: validConfigFact({
+          configuredHarnesses: ["codex", "opencode"],
+          configuredHookHarnesses: ["opencode"],
+        }),
+      }),
+    );
+
+    expect(plan.summary.selectedHarness).toBe("codex");
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "ok",
+      message: expect.stringContaining("codex remains configured as the default"),
+      details: {
+        default: "codex",
+        defaultStatus: "unavailable",
+        enabled: "codex,opencode",
+        available: "opencode",
+      },
+    });
+    expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
+      status: "ok",
+      details: {
+        harness: "codex",
+        configuredHarnesses: "codex,opencode",
+      },
+    });
+  });
+
+  it("does not report an unconfigured available CLI as enabled", () => {
+    const plan = buildSetupPlan(
+      facts({
+        harnesses: harnesses(["opencode"]),
+        config: validConfigFact({
+          configuredHarnesses: ["codex"],
+          configuredHookHarnesses: [],
+        }),
+      }),
+    );
+
+    expect(plan.summary.selectedHarness).toBe("codex");
+    expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
+      status: "missing",
+      message: expect.stringContaining("no configured agent CLI is available"),
+      details: {
+        default: "codex",
+        defaultStatus: "unavailable",
+        enabled: "codex",
+        available: "opencode",
+      },
+    });
+    expect(plan.checks.find((check) => check.id === "harness-hooks")?.status).toBe("skipped");
+    expect(plan.summary.requiredOk).toBe(false);
   });
 
   it("plans config creation for a new config", () => {
@@ -352,6 +475,39 @@ describe("setup planner", () => {
     expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
   });
 
+  it("warns when setup can use installed launchers that are not on PATH", () => {
+    const base = facts();
+    const installedRoot = "/tmp/home/.local/bin";
+    const plan = buildSetupPlan(
+      facts({
+        launchers: {
+          ...base.launchers,
+          station: {
+            ...base.launchers.station,
+            source: "installed",
+            resolvedPath: `${installedRoot}/stn`,
+          },
+          ingress: {
+            ...base.launchers.ingress,
+            source: "installed",
+            resolvedPath: `${installedRoot}/stn-ingress`,
+          },
+          tmuxPopup: {
+            ...base.launchers.tmuxPopup,
+            source: "installed",
+            resolvedPath: `${installedRoot}/stn-tmux-popup`,
+          },
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      status: "warning",
+      message:
+        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup.",
+    });
+  });
+
   it("plans the exact popup command and preserved key for a reachable tmux server", () => {
     const plan = buildSetupPlan(
       facts({
@@ -432,15 +588,41 @@ describe("setup planner", () => {
   });
 
   it("plans Worktrunk shell integration with Worktrunk's approval prompt disabled", () => {
-    const plan = buildSetupPlan(facts());
+    const plan = buildSetupPlan(
+      facts({
+        worktrunk: {
+          status: "ok",
+          command: "wt",
+          resolvedPath: "/opt/homebrew/bin/wt",
+        },
+      }),
+    );
 
     expect(
       plan.actions.find((action) => action.id === "worktrunk-shell-integration"),
     ).toMatchObject({
       kind: "run-command",
       selected: false,
-      command: ["wt", "-y", "config", "shell", "install"],
+      command: ["/opt/homebrew/bin/wt", "-y", "config", "shell", "install"],
     });
+  });
+
+  it("does not offer a broad Worktrunk shell install when the active shell is unsupported", () => {
+    const plan = buildSetupPlan(
+      facts({
+        worktrunkShellIntegration: {
+          status: "warning",
+          message: "Could not determine an active bash or zsh shell for Worktrunk integration.",
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "worktrunk-shell-integration")).toMatchObject({
+      status: "warning",
+    });
+    expect(
+      plan.actions.find((action) => action.id === "worktrunk-shell-integration"),
+    ).toBeUndefined();
   });
 
   it("installs checkout launchers through the pnpm 11-compatible package script", () => {
@@ -486,22 +668,20 @@ describe("setup planner", () => {
     });
   });
 
-  it("plans a safe append for an existing config", () => {
+  it("plans a safe update for an existing config", () => {
     const plan = buildSetupPlan(facts(), {
       configWrite: {
-        operation: "append",
+        operation: "update",
         path: "/tmp/config.toml",
         content: "schema_version = 1\n",
-        appendedText: "\n[[projects]]\n",
       },
     });
 
-    expect(plan.actions.find((action) => action.id === "append-config")).toMatchObject({
+    expect(plan.actions.find((action) => action.id === "update-config")).toMatchObject({
       kind: "write-config",
       selected: true,
       data: {
-        operation: "append",
-        appendedText: "\n[[projects]]\n",
+        operation: "update",
       },
     });
   });
@@ -618,6 +798,12 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       flag: "--yes",
       message:
         "Lifecycle hooks are enabled; automated Worktrunk mutations pass --yes to pre-approve prompts.",
+    },
+    worktrunkShellIntegration: {
+      status: "warning",
+      shell: "zsh",
+      rcPath: "/tmp/home/.zshrc",
+      message: "Worktrunk shell integration is not installed for zsh.",
     },
     tmux: {
       status: "ok",

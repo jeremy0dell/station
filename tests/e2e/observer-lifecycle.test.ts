@@ -174,6 +174,11 @@ describe("observer lifecycle e2e", () => {
     const originalSocket = await stat(fixture.socketPath);
     const originalPidfile = await stat(pidfilePath);
     const originalPidfileBytes = await readFile(pidfilePath);
+    // Health can become ready before the listener is visible to the Linux socket scan.
+    await waitFor(
+      async () => (await socketHolders(fixture.socketPath)).includes(originalPid),
+      3000,
+    );
     const originalHolders = await socketHolders(fixture.socketPath);
     let restored = false;
     const spawnObserver = vi.fn(async () => {

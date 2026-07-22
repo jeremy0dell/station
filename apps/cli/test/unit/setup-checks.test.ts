@@ -24,6 +24,7 @@ import {
   tmuxPopupBindingBlock,
   tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
+import { checkSetupWorktrunkShellIntegration } from "../../src/commands/setup/checks/worktrunk.js";
 import { checkSetupXcode } from "../../src/commands/setup/checks/xcode.js";
 import { buildSetupPlan } from "../../src/commands/setup/planner.js";
 
@@ -57,6 +58,51 @@ describe("setup dependency checks", () => {
     await expect(
       checkSetupSocketEvidence({ platform: "darwin", access: fakeAccess([]) }),
     ).resolves.toEqual({ status: "missing", command: "/usr/sbin/lsof" });
+  });
+
+  it("detects active-shell Worktrunk integration through its read-only dry run", async () => {
+    const pendingCalls: ExternalCommandInput[] = [];
+    const input = {
+      worktrunk: {
+        status: "ok" as const,
+        command: "wt",
+        resolvedPath: "/fake/bin/wt",
+      },
+      homeDir: "/tmp/home",
+      env: { PATH: "/fake/bin", SHELL: "/bin/zsh" },
+    };
+
+    await expect(
+      checkSetupWorktrunkShellIntegration({
+        ...input,
+        runner: fakeRunner(pendingCalls, {
+          "wt -y config shell install --dry-run zsh": "shell integration update pending\n",
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: "warning",
+      shell: "zsh",
+      rcPath: "/tmp/home/.zshrc",
+    });
+    expect(pendingCalls).toContainEqual(
+      expect.objectContaining({
+        command: "/fake/bin/wt",
+        args: ["-y", "config", "shell", "install", "--dry-run", "zsh"],
+        env: expect.objectContaining({ HOME: "/tmp/home" }),
+      }),
+    );
+
+    await expect(
+      checkSetupWorktrunkShellIntegration({
+        ...input,
+        runner: fakeRunner([], {
+          "wt -y config shell install --dry-run zsh": "",
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      message: "Worktrunk shell integration is installed for zsh.",
+    });
   });
 
   it("executes the compiled asset probe from the state directory", async () => {
@@ -165,7 +211,7 @@ describe("setup dependency checks", () => {
       cwd: repo,
       compiled: true,
       tmuxPopupOwnerRoot: installedRoot,
-      env: { PATH: "/fake/bin" },
+      env: { PATH: `${installedRoot}:/fake/bin` },
       runner: fakeRunner([], {
         "git rev-parse --show-toplevel": repo,
         "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
@@ -219,7 +265,7 @@ describe("setup dependency checks", () => {
 
     expect(facts.launchers.tmuxPopup).toMatchObject({
       status: "ok",
-      source: "installed",
+      source: "path",
       resolvedPath: popupAlias,
     });
     expect(facts.tmuxBinding).toMatchObject({
@@ -491,6 +537,113 @@ describe("setup dependency checks", () => {
     expect(plan.summary.selectedHarness).toBe("cursor");
   });
 
+  it.each([
+    {
+      name: "does not substitute a global binary for a missing configured command",
+      configuredCommand: "/missing/opencode",
+      outputs: { "opencode --version": "opencode 1.0.0\n" },
+      expectedStatus: "missing" as const,
+    },
+    {
+      name: "detects a configured custom command when the global binary is missing",
+      configuredCommand: "/custom/opencode",
+      outputs: { "/custom/opencode --version": "opencode 1.0.0\n" },
+      expectedStatus: "ok" as const,
+    },
+  ])("$name", async ({ configuredCommand, outputs, expectedStatus }) => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const config = [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[defaults]",
+      'worktree_provider = "worktrunk"',
+      'terminal = "tmux"',
+      'harness = "codex"',
+      'layout = "agent-shell"',
+      "",
+      "[harness.opencode]",
+      "enabled = true",
+      `command = ${JSON.stringify(configuredCommand)}`,
+      "",
+    ].join("\n");
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: join(root, "home"),
+      configPath,
+      compiled: true,
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        ...outputs,
+      }),
+      access: fakeAccess([]),
+      fs: readOnlyFs({ [configPath]: config }),
+    });
+
+    expect(facts.harnesses.find((harness) => harness.id === "opencode")).toMatchObject({
+      status: expectedStatus,
+      command: configuredCommand,
+    });
+    expect(calls.some((call) => call.command === "opencode")).toBe(false);
+  });
+
+  it.each([
+    { name: "an implicit built-in command", harnessBlock: [] },
+    {
+      name: "an explicit bare command",
+      harnessBlock: ["[harness.cursor]", "enabled = true", 'command = "agent"', ""],
+    },
+  ])("probes $name exactly as runtime will execute it", async ({ harnessBlock }) => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const config = [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[defaults]",
+      'worktree_provider = "worktrunk"',
+      'terminal = "tmux"',
+      'harness = "cursor"',
+      'layout = "agent-shell"',
+      "",
+      ...harnessBlock,
+    ].join("\n");
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: home,
+      configPath,
+      compiled: true,
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        [`${home}/.local/bin/agent --version`]: "cursor-agent 1.0.0\n",
+      }),
+      access: fakeAccess([]),
+      fs: readOnlyFs({ [configPath]: config }),
+    });
+
+    expect(facts.harnesses.find((harness) => harness.id === "cursor")).toMatchObject({
+      status: "missing",
+      command: "agent",
+    });
+    expect(calls.some((call) => call.command === `${home}/.local/bin/agent`)).toBe(false);
+  });
+
   it("ignores Crush when choosing a supported harness", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -608,6 +761,57 @@ describe("setup dependency checks", () => {
         automationMode: "skip-hooks",
       },
     });
+  });
+
+  it("uses the configured Worktrunk command for readiness and shell checks", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const worktrunkCommand = "/custom/bin/wt";
+    const calls: ExternalCommandInput[] = [];
+    await mkdir(repo, { recursive: true });
+
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: home,
+      env: {
+        PATH: "/fake/bin",
+        SHELL: "/bin/zsh",
+        STATION_WORKTRUNK_BIN: "/environment/bin/wt",
+      },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        [`${worktrunkCommand} --version`]: "worktrunk 1.2.3\n",
+        [`${worktrunkCommand} -y config shell install --dry-run zsh`]: "",
+        "tmux -V": "tmux 3.5a\n",
+        "codex --version": "codex 0.1.0\n",
+      }),
+      access: fakeAccess([
+        worktrunkCommand,
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
+      fs: readOnlyFs({
+        [join(home, ".config/station/config.toml")]: configToml(repo, {
+          worktrunkCommand,
+        }),
+      }),
+      noBrew: true,
+    });
+
+    expect(facts.worktrunk).toMatchObject({
+      status: "ok",
+      command: worktrunkCommand,
+      resolvedPath: worktrunkCommand,
+    });
+    expect(facts.worktrunkShellIntegration.status).toBe("ok");
+    expect(calls.filter((call) => call.command.includes("wt")).map((call) => call.command)).toEqual(
+      [worktrunkCommand, worktrunkCommand],
+    );
   });
 
   it("derives Worktrunk hook pre-approval mode from existing config", async () => {
@@ -1787,6 +1991,7 @@ function configToml(
     worktreeProvider?: string;
     terminal?: string;
     harness?: string;
+    worktrunkCommand?: string;
     useLifecycleHooks?: boolean;
     popupWidth?: string;
     popupHeight?: string;
@@ -1812,12 +2017,15 @@ function configToml(
     `root = ${JSON.stringify(repo)}`,
     "",
   ];
-  if (options.useLifecycleHooks !== undefined) {
-    lines.push(
-      "[worktree.worktrunk]",
-      `use_lifecycle_hooks = ${options.useLifecycleHooks ? "true" : "false"}`,
-      "",
-    );
+  if (options.worktrunkCommand !== undefined || options.useLifecycleHooks !== undefined) {
+    lines.push("[worktree.worktrunk]");
+    if (options.worktrunkCommand !== undefined) {
+      lines.push(`command = ${JSON.stringify(options.worktrunkCommand)}`);
+    }
+    if (options.useLifecycleHooks !== undefined) {
+      lines.push(`use_lifecycle_hooks = ${options.useLifecycleHooks ? "true" : "false"}`);
+    }
+    lines.push("");
   }
   if (
     options.popupWidth !== undefined ||

@@ -31,7 +31,8 @@ describe("setup guided feedback e2e", () => {
   });
 
   it("prints config and Worktrunk shell integration feedback and exits", async () => {
-    const fixture = await createFixture({ harness: "codex" });
+    const fixture = await createFixture({ harness: "codex", shell: "zsh" });
+    await writeFile(shellRcPath(fixture.home, "zsh"), "# existing zsh config\n", "utf8");
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
@@ -40,17 +41,99 @@ describe("setup guided feedback e2e", () => {
       });
 
       expect(result.timedOut).toBe(false);
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex agent hooks?");
       expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
-      expect(result.stdout).toContain("Running: wt -y config shell install");
+      expect(result.stdout).toContain(
+        `Running: ${join(fixture.bin, "wt")} -y config shell install zsh`,
+      );
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("writes multiple selected agent CLIs, installs both hooks, and passes both doctors", async () => {
+    const fixture = await createFixture({ harness: "codex-opencode" });
+    try {
+      const result = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["1,2", "n", "n", "y", "y", "y", "n", "n"],
+      });
+
+      expect(result.timedOut).toBe(false);
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain(
+        "Select agent CLIs to enable (comma-separated; first is the default for new configs).",
+      );
+      expect(result.stdout).toContain("Install Codex agent hooks?");
+      expect(result.stdout).toContain("Install OpenCode agent hooks?");
+      expect(result.stdout).toContain("Completed: Install Codex hooks");
+      expect(result.stdout).toContain("Completed: Install OpenCode hooks");
+      const config = await readFile(fixture.configPath, "utf8");
+      expect(config).toContain('harness = "codex"');
+      expect(config).toContain("[harness.codex]");
+      expect(config).toContain("[harness.opencode]");
+      expect(config.match(/install_hooks = true/g)).toHaveLength(2);
+
+      for (const provider of ["codex", "opencode"]) {
+        const doctorArgs = ["--config", fixture.configPath, "hooks", "doctor", provider];
+        if (provider === "codex") {
+          doctorArgs.push("--hook-bin", join(process.cwd(), "bin", "stn-ingress"));
+        }
+        const doctor = await runStation(doctorArgs, {
+          cwd: fixture.repo,
+          env: fixture.env,
+          answers: [],
+        });
+        expect(doctor.exitCode, `${doctor.stdout}\n${doctor.stderr}`).toBe(0);
+        expect(JSON.parse(doctor.stdout)).toMatchObject({ provider, status: "ok" });
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("keeps a clean Codex and Pi setup idempotent and visible in the Observer snapshot", async () => {
+    const fixture = await createFixture({ harness: "codex-pi" });
+    try {
+      const first = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["1,2", "n", "n", "y", "y", "n", "n"],
+      });
+      expect(first.exitCode, `${first.stdout}\n${first.stderr}`).toBe(0);
+      const firstConfig = await readFile(fixture.configPath, "utf8");
+
+      const second = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["1,2", "n", "n", "n", "n"],
+      });
+      expect(second.exitCode, `${second.stdout}\n${second.stderr}`).toBe(0);
+      const secondConfig = await readFile(fixture.configPath, "utf8");
+
+      expect(secondConfig).toBe(firstConfig);
+      expect(secondConfig.match(/^harness = "codex"$/gm)).toHaveLength(1);
+      expect(secondConfig.match(/^\[harness\.codex\]$/gm)).toHaveLength(1);
+      expect(secondConfig.match(/^\[harness\.pi\]$/gm)).toHaveLength(1);
+
+      const snapshotResult = await runStation(
+        ["--config", fixture.configPath, "snapshot", "--json"],
+        { cwd: fixture.repo, env: fixture.env, answers: [] },
+      );
+      expect(snapshotResult.exitCode, `${snapshotResult.stdout}\n${snapshotResult.stderr}`).toBe(0);
+      const snapshot = JSON.parse(snapshotResult.stdout) as {
+        harnesses?: Array<{ id: string }>;
+      };
+      expect(snapshot.harnesses?.map((harness) => harness.id)).toEqual(["codex", "pi"]);
     } finally {
       await fixture.cleanup();
     }
@@ -109,7 +192,7 @@ describe("setup guided feedback e2e", () => {
         );
         expect(result.stdout).toContain(`Active ${shell} rc file not found: ${rcPath}`);
         expect(result.stdout).toContain(
-          `Run: touch ${rcPath} && wt -y config shell install ${shell}`,
+          `Run: touch ${rcPath} && ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
         );
         expect(result.stdout).not.toContain("Failed: Install Worktrunk shell integration");
         expect(result.stdout).not.toContain("fake shell integration installed");
@@ -135,13 +218,28 @@ describe("setup guided feedback e2e", () => {
         const second = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
           env: fixture.env,
-          answers: ["n", "y", "n"],
+          answers: ["n", "n", "n", "n"],
         });
 
         expect(first.exitCode).toBe(0);
         expect(second.exitCode).toBe(0);
-        expect(first.stdout).toContain(`Running: wt -y config shell install ${shell}`);
-        expect(second.stdout).toContain(`Running: wt -y config shell install ${shell}`);
+        expect(first.stdout).toContain(
+          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
+        );
+        expect(second.stdout).not.toContain("Install Worktrunk shell integration?");
+        expect(second.stdout).not.toContain(
+          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
+        );
+        const check = await runStation(
+          ["--config", fixture.configPath, "setup", "check", "--json"],
+          { cwd: fixture.repo, env: fixture.env, answers: [] },
+        );
+        expect(check.exitCode).toBe(0);
+        expect(JSON.parse(check.stdout).checks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: "worktrunk-shell-integration", status: "ok" }),
+          ]),
+        );
         const contents = await readFile(rcPath, "utf8");
         expect(contents.startsWith(original)).toBe(true);
         expect(contents.split(shellIntegrationMarker)).toHaveLength(2);
@@ -207,9 +305,8 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline linking the fixture's non-runtime launchers, Worktrunk and Codex
-        // hooks; write config; decline shell integration; accept the popup binding.
-        answers: ["n", "n", "n", "y", "n", "y"],
+        // Decline launcher linking and hooks; write config; accept popup (no shell prompt without a supported active shell).
+        answers: ["n", "n", "n", "y", "y"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -264,7 +361,7 @@ describe("setup guided feedback e2e", () => {
   });
 });
 
-type HarnessMode = "codex" | "installable-codex" | "missing";
+type HarnessMode = "codex" | "codex-opencode" | "codex-pi" | "installable-codex" | "missing";
 
 type Fixture = {
   root: string;
@@ -323,6 +420,17 @@ async function createFixture(input: {
     [
       'if [ "$1" = "--version" ]; then echo "worktrunk 1.2.3"; exit 0; fi',
       'if [ "$1 $2 $3 $4" = "-y config shell install" ]; then',
+      '  if [ "$5" = "--dry-run" ]; then',
+      '    case "$6" in',
+      '      zsh) rc="$HOME/.zshrc" ;;',
+      '      bash) rc="$HOME/.bashrc" ;;',
+      '      *) echo "unexpected shell $6" >&2; exit 2 ;;',
+      "    esac",
+      `    marker=${shellQuote(shellIntegrationMarker)}`,
+      '    if [ -f "$rc" ] && grep -F -x "$marker" "$rc" >/dev/null 2>&1; then exit 0; fi',
+      '    echo "shell integration update pending"',
+      "    exit 0",
+      "  fi",
       '  if [ "$#" -ge 5 ]; then',
       '    case "$5" in',
       '      zsh) rc="$HOME/.zshrc" ;;',
@@ -352,8 +460,26 @@ async function createFixture(input: {
   await writeShim(bin, "delta", "exit 0\n");
   await writeShim(bin, "bun", "exit 0\n");
   await writeShim(bin, "npm", "echo 0.1.0\n");
-  if (input.harness === "codex") {
+  if (
+    input.harness === "codex" ||
+    input.harness === "codex-opencode" ||
+    input.harness === "codex-pi"
+  ) {
     await writeCodexShim(bin);
+  }
+  if (input.harness === "codex-opencode") {
+    await writeShim(
+      bin,
+      "opencode",
+      'if [ "$1" = "--version" ]; then echo "opencode 1.0.0"; exit 0; fi\nexit 0\n',
+    );
+  }
+  if (input.harness === "codex-pi") {
+    await writeShim(
+      bin,
+      "pi",
+      'if [ "$1" = "--version" ]; then echo "pi 0.80.5"; exit 0; fi\nexit 0\n',
+    );
   }
   if (input.launchers === "complex") {
     await writeShim(launcherBin, "stn", "exit 0\n");
@@ -406,8 +532,8 @@ async function createFixture(input: {
     // searches the brew prefix) can't pick up a real one from the dev machine.
     STATION_CODEX_BIN: input.harness === "missing" ? "/missing/codex" : "codex",
     STATION_CURSOR_AGENT_BIN: "/missing/agent",
-    STATION_OPENCODE_BIN: "/missing/opencode",
-    STATION_PI_BIN: "/missing/pi",
+    STATION_OPENCODE_BIN: input.harness === "codex-opencode" ? "opencode" : "/missing/opencode",
+    STATION_PI_BIN: input.harness === "codex-pi" ? "pi" : "/missing/pi",
     STATION_CLAUDE_BIN: "/missing/claude",
   };
   if (input.shell !== undefined) env.SHELL = `/bin/${input.shell}`;

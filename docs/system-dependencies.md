@@ -6,7 +6,7 @@ Station integrates with Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, and Ope
 stn setup
 ```
 
-This configures the core local workflow: the required tools, an agent CLI, and a zero-project config. Add the first project explicitly in Station. Optional integrations can be added later.
+This configures the core local workflow: the required tools, one or more detected agent CLIs, and a zero-project config. The first CLI selected for a new config becomes its default. Add the first project explicitly in Station. Optional integrations can be added later.
 
 The compiled `stn` launches its TUI and Observer without Node.js, pnpm, or Bun. A local source checkout expects Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14 for development. Real-provider test lanes remain opt-in.
 `stn setup system --check` reports those versions, but it does not change the active Node or pnpm
@@ -46,7 +46,7 @@ workflow, not for launch:
 - Bun — only a source-checkout launcher shells out to `bun run`; the compiled binary embeds the renderer
 - diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
 - git (the binary); select an existing git repository explicitly after setup
-- one supported agent CLI: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
+- at least one supported agent CLI: Claude Code, Codex, Cursor Agent, OpenCode, or Pi; guided setup can enable several
 
 On macOS, the Command Line Tools provide git and the compilers Homebrew needs.
 `stn setup` detects a missing-git binary distinctly from "not inside a repo". The
@@ -205,11 +205,16 @@ the renderer and does not require that runtime.
 
 ## Hooks
 
-Guided `stn setup` can enable and install Worktrunk lifecycle hooks plus the selected Claude, Codex,
-Cursor, or OpenCode agent hooks. Worktrunk lifecycle hooks are optional when automation is
+Guided `stn setup` can enable and install Worktrunk lifecycle hooks plus hooks for each selected
+Claude, Codex, Cursor, or OpenCode agent. Worktrunk lifecycle hooks are optional when automation is
 configured to skip them. `worktree.worktrunk.use_lifecycle_hooks = false` makes automated Worktrunk
 mutations use `--no-hooks`; `true` makes them use `--yes`; unset leaves Worktrunk's default prompt
 behavior in place.
+
+Setup adds or enables `install_hooks` in each selected harness block while preserving unrelated TOML
+source, then validates the candidate through the canonical config loader before writing it. If a hook
+installer fails, that persisted intent lets a later setup run retry the provider without suppressing
+the other selected providers.
 `stn setup check --json` and `stn doctor` report the effective mode and validate that the installed
 `wt` supports any required automation flag. The hook commands are generated from one canonical expectation containing the
 resolved STATION config path, observer socket, state directory, spool directory,

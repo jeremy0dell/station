@@ -39,9 +39,15 @@ Use the private GitHub repository jeremy0dell/station through GitHub CLI.
 
 Safety and scope:
 - First run `gh auth status --hostname github.com`, then verify repository
-  access with `gh repo view jeremy0dell/station`. Never ask me to paste,
-  extract, or print credentials. If authentication or repository access fails,
-  stop and ask me to run `gh auth login --hostname github.com` myself.
+  access with `gh repo view jeremy0dell/station`. On macOS, a failure inside a
+  restricted agent sandbox is inconclusive because GitHub CLI credentials may
+  be stored in the Keychain. Retry both checks with scoped host/Keychain access
+  before asking me to authenticate, and run every later authenticated `gh repo`
+  or `gh api` command in that same access context. Never ask me to paste,
+  extract, print, request, or export a GitHub token. If scoped host access is
+  unavailable, ask me to run the auth checks and exact tagged temporary-file
+  installer block from the page that supplied this prompt in my Terminal, then
+  resume using the absolute installed `stn` path.
 - Do not clone the repository or build from source. Use release tag
   `v0.7.1-rc.5`, read `docs/install.md` from that same tag with authenticated
   `gh api`, and follow its temporary-file installer procedure. If that release
@@ -49,22 +55,31 @@ Safety and scope:
 - Never fetch installer code from `main` and never pipe network output directly
   into a shell.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
-  shell startup file. Apply PATH changes only to the current shell and show me
-  the exact export I can add later.
+  shell startup file. If the installer reports a PATH mismatch, do not assume
+  an export persists across agent tool calls or reaches my Terminal. Use the
+  absolute installed `stn` path for every remaining agent command, show me the
+  exact future-shell export, and treat it as an unfinished manual step until I
+  verify all three launchers in a new shell.
 - Do not infer or add the current directory as a Station project.
 
 Validation:
-1. Verify `command -v stn`, `command -v stn-ingress`, and
-   `command -v stn-tmux-popup`, then run `stn --version`.
-2. Run `stn setup plan --json`, summarize every proposed install or write, and
-   ask for approval before applying it.
-3. Run the guided `stn setup` and let me answer its choices. If you cannot pass
-   through an interactive prompt, ask me to run it, then continue afterward.
-4. Run `stn setup check --json` and `stn doctor`.
+1. Verify all three absolute installed launcher paths and run `stn --version`
+   through the absolute installed path. Record `command -v stn`,
+   `command -v stn-ingress`, and `command -v stn-tmux-popup` only as evidence
+   about the current agent execution context.
+2. Run `stn setup plan --json` through the absolute installed `stn` path,
+   summarize every proposed install or write, and ask for approval before
+   applying it.
+3. Run the guided `stn setup` through the absolute installed path and let me
+   answer its choices. If you cannot pass through an interactive prompt, ask me
+   to run it, then continue afterward.
+4. Run `stn setup check --json` and `stn doctor` through the absolute installed
+   path.
 5. Report the installed path and version, whether setup reports
-   `summary.requiredOk: true`, doctor health, and any remaining manual steps.
-   A valid zero-project config is acceptable. Do not claim success while a
-   required check is failing.
+   `summary.requiredOk: true`, doctor health, future-shell verification state,
+   and any remaining manual steps. A valid zero-project config is acceptable.
+   Do not claim success while a required check is failing or future-shell PATH
+   remains unverified.
 ```
 
 The agent should stop at authentication or approval boundaries rather than
@@ -84,6 +99,11 @@ If GitHub CLI is already authenticated, skip the login command. The repository
 check should print `jeremy0dell/station`; a not-found response means the active
 account cannot read the private repository. GitHub CLI supplies its stored
 authentication to the API calls below, so do not add credentials to the recipe.
+On macOS, a failure observed only inside a restricted agent sandbox may mean
+that sandbox cannot read Keychain-backed credentials. Retry the checks from a
+normal Terminal or with scoped host/Keychain access, and keep the later
+authenticated `gh api` calls in that same context; do not move the token into
+the sandbox or reauthenticate solely because of a sandbox-only failure.
 
 ## 2. Install the Current Preview Candidate
 
@@ -156,7 +176,11 @@ use the exact PATH block or the `Absolute fallback` printed by the installer.
 
 The PATH assignment affects only the current shell. Copy the installer's exact
 export into the chosen shell configuration if you want it applied in future
-shells. The installer does not read, create, or edit shell startup files.
+shells. If an agent runs the assignment, it does not change your Terminal or a
+later login shell; the agent should continue through the absolute installed
+`stn` path and report future-shell PATH as unverified until you check all three
+launchers in a new shell. The installer does not read, create, or edit shell
+startup files.
 
 ## Install an Exact Version
 
@@ -195,10 +219,10 @@ stn tui
 ```
 
 Setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta;
-requires one supported agent CLI; writes a valid zero-project
+requires at least one supported agent CLI; lets you enable one or more detected CLIs; writes a valid zero-project
 `~/.config/station/config.toml`; starts or restarts the Observer; and offers to
-install provider hooks, Worktrunk shell integration, and the `Ctrl-b Space`
-tmux popup binding. Complete the selected agent CLI's own sign-in before
+install provider-specific hooks, Worktrunk shell integration, and the `Ctrl-b Space`
+tmux popup binding. The first selection is the default in a new config; an existing config keeps its current default while setup adds missing selected providers. Complete each enabled agent CLI's own sign-in before
 starting a real session.
 
 If setup writes the config but cannot activate it, it leaves the config and the

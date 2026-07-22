@@ -90,8 +90,7 @@ async function checkRuntimeLauncher(
   }
 
   const pathMatch = await resolveOnPath(definition.command, options.env.PATH, options.access);
-  const onPath =
-    pathMatch !== undefined && (await pathsResolveToSameLauncher(pathMatch, runtimePath));
+  const onPath = pathMatch !== undefined && (await setupLauncherPathsMatch(pathMatch, runtimePath));
   const launcher: SetupLauncherFact = {
     status: "ok",
     source: onPath ? "path" : runtimeSource,
@@ -107,7 +106,7 @@ async function checkRuntimeLauncher(
   return launcher;
 }
 
-async function pathsResolveToSameLauncher(left: string, right: string): Promise<boolean> {
+export async function setupLauncherPathsMatch(left: string, right: string): Promise<boolean> {
   if (resolve(left) === resolve(right)) return true;
   try {
     return (await realpath(left)) === (await realpath(right));

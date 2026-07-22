@@ -427,7 +427,16 @@ gh auth status --hostname github.com
 gh repo view jeremy0dell/station
 ```
 
-Start the selected agent CLI once and complete its normal sign-in. Then create
+When validating the agent-led install prompt on macOS, start the agent in its
+normal sandbox after these host-Terminal checks succeed. A sandbox-only auth
+failure must remain inconclusive until the agent retries with scoped
+host/Keychain access; all later authenticated `gh repo` and `gh api` operations
+must use that same access context without reading, printing, requesting, or
+exporting a token. If scoped host access is unavailable, run the exact tagged
+temporary-file installer in the host Terminal and let the agent resume through
+the absolute installed `stn` path.
+
+Start each agent CLI you plan to select once and complete its normal sign-in. Then create
 a disposable Git project for the acceptance run:
 
 ```sh
@@ -526,8 +535,11 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select the
-authenticated agent, and enable the desired provider hooks and tmux binding.
+guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+more authenticated agents, and enable the desired provider hooks and tmux binding.
+Confirm the first selection becomes the default while every selection receives
+its own harness block and every hook-capable selection receives its own prompt
+when setup can safely persist or reuse that hook intent.
 Confirm setup writes a zero-project config without adopting the disposable
 repository, then run:
 
@@ -553,7 +565,10 @@ edit shell startup files. Copy the one future-shell export it printed into a
 shell configuration you choose,
 open a new login shell, and verify all three physical launcher resolutions and
 `stn --version`. The installer, not the user-facing PATH text alone, must have
-verified those launchers after installation.
+verified those launchers after installation. An agent must use the absolute
+installed `stn` path for continuation and report future-shell PATH as unverified
+until this new-shell check passes; its own `command -v` result is not user-shell
+evidence.
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 

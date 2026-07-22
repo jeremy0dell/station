@@ -33,6 +33,8 @@ export type CheckHarnessesOptions = {
   env?: CliEnv;
   cwd?: string;
   homeDir?: string;
+  configuredHarnesses?: readonly string[];
+  configuredCommands?: Readonly<Partial<Record<SupportedHarnessId, string>>>;
 };
 
 export async function checkSetupHarnesses(
@@ -46,17 +48,21 @@ export async function checkSetupHarnesses(
   return facts;
 }
 
-function harnessCommand(definition: HarnessDefinition, env: CliEnv): string {
-  return env[definition.envKey] ?? definition.defaultCommand;
-}
-
 async function checkHarness(
   definition: HarnessDefinition,
   env: CliEnv,
   options: CheckHarnessesOptions,
 ): Promise<SetupHarnessFact> {
-  const command = harnessCommand(definition, env);
-  for (const candidate of harnessCommandCandidates(command, options.homeDir)) {
+  const configuredCommand = options.configuredCommands?.[definition.id];
+  const environmentCommand = env[definition.envKey];
+  const command = configuredCommand ?? environmentCommand ?? definition.defaultCommand;
+  const defaultCommandHomeDir =
+    options.configuredHarnesses?.includes(definition.id) !== true &&
+    configuredCommand === undefined &&
+    environmentCommand === undefined
+      ? options.homeDir
+      : undefined;
+  for (const candidate of harnessCommandCandidates(command, defaultCommandHomeDir)) {
     try {
       const input: ExternalCommandInput = {
         command: candidate,

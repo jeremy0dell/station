@@ -105,6 +105,13 @@ export type SetupWorktrunkAutomationFact = {
   missingSubcommands?: readonly string[];
 };
 
+export type SetupWorktrunkShellIntegrationFact = {
+  status: "ok" | "warning" | "skipped";
+  message: string;
+  shell?: "bash" | "zsh";
+  rcPath?: string;
+};
+
 export type SetupBrewFact = {
   status: "ok" | "missing" | "skipped";
   command: string;
@@ -200,9 +207,11 @@ export type SetupConfigFact =
       observerStateDir: string;
       hasProjectForRoot: boolean;
       configuredHarnesses: readonly string[];
+      configuredHarnessCommands?: Readonly<Record<string, string>>;
       configuredHookHarnesses: readonly string[];
       defaults: SetupConfigDefaultsFact;
       tmux?: TmuxConfig;
+      worktrunkCommand?: string;
       worktrunkUseLifecycleHooks?: boolean;
       matchedProject?: SetupConfigProjectFact;
       // Non-fatal load diagnostics (broken project-local file, bad
@@ -277,6 +286,7 @@ export type SetupFacts = {
   socketEvidence: SetupDependencyFact;
   worktrunk: SetupDependencyFact;
   worktrunkAutomation: SetupWorktrunkAutomationFact;
+  worktrunkShellIntegration: SetupWorktrunkShellIntegrationFact;
   tmux: SetupDependencyFact;
   bun: SetupDependencyFact;
   stationUi: SetupStationUiFact;
@@ -289,7 +299,6 @@ export type SetupFacts = {
   harnesses: readonly SetupHarnessFact[];
   config: SetupConfigFact;
   tmuxBinding: SetupTmuxBindingFact;
-  selectedHarness?: SupportedHarnessId;
 };
 
 export type ConfigWritePlan =
@@ -304,10 +313,9 @@ export type ConfigWritePlan =
       backupPath?: string;
     }
   | {
-      operation: "append";
+      operation: "update";
       path: string;
       content: string;
-      appendedText: string;
       backupPath?: string;
     }
   | {
