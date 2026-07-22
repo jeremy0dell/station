@@ -227,43 +227,23 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
     ingress: setupLauncherExecutable(facts.launchers.ingress),
     tmuxPopup: setupLauncherExecutable(facts.launchers.tmuxPopup),
   };
+  let warningMessage: string | undefined;
   if (missing.length > 0) {
-    return {
-      id: "station-launchers",
-      tier: "recommended",
-      status: "warning",
-      label: "STATION launchers",
-      message: `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`,
-      details,
-    };
+    warningMessage = `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`;
+  } else if (checkoutOutsidePath.length > 0 && installedOutsidePath.length > 0) {
+    warningMessage = `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}.`;
+  } else if (checkoutOutsidePath.length > 0) {
+    warningMessage = `These bare launchers do not resolve to this checkout on PATH: ${checkoutOutsidePath.join(", ")}; setup will use their current-checkout paths.`;
+  } else if (installedOutsidePath.length > 0) {
+    warningMessage = `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}.`;
   }
-  if (checkoutOutsidePath.length > 0 && installedOutsidePath.length > 0) {
+  if (warningMessage !== undefined) {
     return {
       id: "station-launchers",
       tier: "recommended",
       status: "warning",
       label: "STATION launchers",
-      message: `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}.`,
-      details,
-    };
-  }
-  if (checkoutOutsidePath.length > 0) {
-    return {
-      id: "station-launchers",
-      tier: "recommended",
-      status: "warning",
-      label: "STATION launchers",
-      message: `These bare launchers do not resolve to this checkout on PATH: ${checkoutOutsidePath.join(", ")}; setup will use their current-checkout paths.`,
-      details,
-    };
-  }
-  if (installedOutsidePath.length > 0) {
-    return {
-      id: "station-launchers",
-      tier: "recommended",
-      status: "warning",
-      label: "STATION launchers",
-      message: `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}.`,
+      message: warningMessage,
       details,
     };
   }

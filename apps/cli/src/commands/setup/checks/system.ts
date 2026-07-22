@@ -16,6 +16,8 @@ import type {
   SetupConfigFact,
   SetupDependencyFact,
   SetupFacts,
+  SetupLauncherFact,
+  SetupLaunchersFact,
   SetupMode,
   SetupStationUiFact,
 } from "../model.js";
@@ -116,14 +118,15 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   const configPathOptions = setupConfigOptions(setupConfigInput);
   const configPath = setupConfigPath(configPathOptions);
   const configPromise = checkSetupConfig({ ...configPathOptions, configPath });
-  const worktrunkPromise = configPromise.then((config) =>
-    checkSetupWorktrunk({
+  const worktrunkPromise = configPromise.then((config) => {
+    const worktrunkOptions: Parameters<typeof checkSetupWorktrunk>[0] = {
       ...dependencyOptions,
-      ...(config.status === "valid" && config.worktrunkCommand !== undefined
-        ? { command: config.worktrunkCommand }
-        : {}),
-    }),
-  );
+    };
+    if (config.status === "valid" && config.worktrunkCommand !== undefined) {
+      worktrunkOptions.command = config.worktrunkCommand;
+    }
+    return checkSetupWorktrunk(worktrunkOptions);
+  });
   const harnessesPromise = configPromise.then((config) => {
     const harnessOptions: CheckHarnessesOptions = { ...commandOptions };
     if (config.status === "valid") {
@@ -192,31 +195,32 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     options.tmuxPopupOwnerRoot === undefined
       ? setupLauncherExecutable(launchers.tmuxPopup)
       : join(options.tmuxPopupOwnerRoot, "stn-tmux-popup");
-  const popupOnPath =
-    launchers.tmuxPopup.source === "path" &&
-    launchers.tmuxPopup.resolvedPath !== undefined &&
-    (await setupLauncherPathsMatch(launchers.tmuxPopup.resolvedPath, launcherCommand));
-  const resolvedLaunchers =
-    options.tmuxPopupOwnerRoot === undefined
-      ? launchers
-      : {
-          ...launchers,
-          tmuxPopup: (await canExecute(launcherCommand, options.access))
-            ? {
-                status: "ok" as const,
-                source: popupOnPath ? ("path" as const) : ("installed" as const),
-                command: launchers.tmuxPopup.command,
-                resolvedPath: launcherCommand,
-                checkoutPath: launchers.tmuxPopup.checkoutPath,
-              }
-            : {
-                status: "missing" as const,
-                source: "missing" as const,
-                command: launchers.tmuxPopup.command,
-                checkoutPath: launchers.tmuxPopup.checkoutPath,
-                message: `The installed stn-tmux-popup alias is missing or not executable at ${launcherCommand}.`,
-              },
-        };
+  let resolvedLaunchers: SetupLaunchersFact = launchers;
+  if (options.tmuxPopupOwnerRoot !== undefined) {
+    let tmuxPopup: SetupLauncherFact;
+    if (await canExecute(launcherCommand, options.access)) {
+      const popupOnPath =
+        launchers.tmuxPopup.source === "path" &&
+        launchers.tmuxPopup.resolvedPath !== undefined &&
+        (await setupLauncherPathsMatch(launchers.tmuxPopup.resolvedPath, launcherCommand));
+      tmuxPopup = {
+        status: "ok",
+        source: popupOnPath ? "path" : "installed",
+        command: launchers.tmuxPopup.command,
+        resolvedPath: launcherCommand,
+        checkoutPath: launchers.tmuxPopup.checkoutPath,
+      };
+    } else {
+      tmuxPopup = {
+        status: "missing",
+        source: "missing",
+        command: launchers.tmuxPopup.command,
+        checkoutPath: launchers.tmuxPopup.checkoutPath,
+        message: `The installed stn-tmux-popup alias is missing or not executable at ${launcherCommand}.`,
+      };
+    }
+    resolvedLaunchers = { ...launchers, tmuxPopup };
+  }
   const tmuxBindingOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
     homeDir,
     env,
