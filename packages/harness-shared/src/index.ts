@@ -28,6 +28,11 @@ export {
   worktreeForPath,
 } from "./events.js";
 export {
+  createHarnessHookAdapter,
+  type HarnessHookAdapterSpec,
+  type HarnessHookReportMapperInput,
+} from "./hookAdapter.js";
+export {
   assignDefined,
   type CommonLaunchEnvOptions,
   type CommonProviderDataInput,
