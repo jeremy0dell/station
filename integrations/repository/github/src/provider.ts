@@ -19,14 +19,19 @@ import {
 } from "@station/contracts";
 import {
   type ExternalCommandRunner,
+  externalCommandErrorFromUnknown,
+  publicSafeErrorFromUnknown,
   type RuntimeClock,
-  redactCommandOutput,
   runExternalCommand,
-  safeErrorFromUnknown,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
 import { z } from "zod";
+import {
+  githubErrorHealthStatus,
+  githubRepositoryError,
+  githubRepositoryErrorFromUnknown,
+} from "./errors.js";
 
 export type GithubRepositoryProviderOptions = {
   command?: string;
@@ -134,8 +139,9 @@ export class GithubRepositoryProvider implements RepositoryProvider {
         },
       ];
     } catch (error) {
-      const safeError = githubRepositoryErrorFromUnknown(error);
-      this.#recordHealth(errorHealthStatus(safeError), safeError);
+      const providerError = githubRepositoryErrorFromUnknown(error);
+      const safeError = githubPublicError(providerError);
+      this.#recordHealth(githubErrorHealthStatus(safeError), safeError);
       return [
         {
           name: "github.auth",
@@ -190,9 +196,10 @@ export class GithubRepositoryProvider implements RepositoryProvider {
             toWorktreePullRequest(selected, parsed.remote, this.#now()),
           );
     } catch (error) {
-      const safeError = githubRepositoryErrorFromUnknown(error);
-      this.#recordHealth(errorHealthStatus(safeError), safeError);
-      throw safeError;
+      const providerError = githubRepositoryErrorFromUnknown(error);
+      const safeError = githubPublicError(providerError);
+      this.#recordHealth(githubErrorHealthStatus(safeError), safeError);
+      throw providerError;
     }
   }
 
@@ -216,9 +223,10 @@ export class GithubRepositoryProvider implements RepositoryProvider {
       this.#recordHealth("healthy");
       return WorktreeChecksSummarySchema.parse(toChecksSummary(checks, this.#now()));
     } catch (error) {
-      const safeError = githubRepositoryErrorFromUnknown(error);
-      this.#recordHealth(errorHealthStatus(safeError), safeError);
-      throw safeError;
+      const providerError = githubRepositoryErrorFromUnknown(error);
+      const safeError = githubPublicError(providerError);
+      this.#recordHealth(githubErrorHealthStatus(safeError), safeError);
+      throw providerError;
     }
   }
 
@@ -233,7 +241,19 @@ export class GithubRepositoryProvider implements RepositoryProvider {
     if (options.allowedExitCodes !== undefined) {
       input.allowedExitCodes = options.allowedExitCodes;
     }
-    return runExternalCommand(input, this.#runner);
+    const result = await runExternalCommand(input, this.#runner);
+    // gh uses selected nonzero exits for check status, but stderr-only exits remain command failures.
+    if (result.exitCode !== 0 && result.stdout.trim().length === 0 && result.stderr.length > 0) {
+      throw externalCommandErrorFromUnknown(
+        {
+          code: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+        { command: this.#command, args },
+      );
+    }
+    return result;
   }
 
   #now(): string {
@@ -469,98 +489,13 @@ function checksState(counts: CheckCounts): WorktreeChecksState {
   return "unknown";
 }
 
-function githubRepositoryErrorFromUnknown(error: unknown): SafeError {
-  if (isSafeError(error) && error.tag === "RepositoryProviderError") {
-    return error;
-  }
-  if (isSafeError(error) && error.code === "EXTERNAL_COMMAND_TIMEOUT") {
-    return githubRepositoryError("GITHUB_COMMAND_TIMEOUT", "GitHub CLI command timed out.");
-  }
-  if (isSafeError(error) && error.code === "EXTERNAL_COMMAND_ABORTED") {
-    return error;
-  }
-
-  const text = errorText(error);
-  if (text.match(/rate limit|secondary rate limit|http 429/i)) {
-    return githubRepositoryError(
-      "GITHUB_RATE_LIMITED",
-      "GitHub CLI request was rate limited.",
-      "Wait for the GitHub rate limit to reset, then refresh metadata again.",
-    );
-  }
-  if (text.match(/authentication|not logged in|gh auth login|http 401|http 403/i)) {
-    return githubRepositoryError(
-      "GITHUB_AUTH_UNAVAILABLE",
-      "GitHub CLI authentication is unavailable.",
-      "Run `gh auth status` or `gh auth login` to verify GitHub authentication.",
-    );
-  }
-  if (text.match(/could not resolve|network|timed out|econnreset|enotfound|tls|http 5\d\d/i)) {
-    return githubRepositoryError("GITHUB_NETWORK_FAILED", "GitHub CLI network request failed.");
-  }
-  if (text.match(/enoent|not found/i)) {
-    return githubRepositoryError(
-      "GITHUB_COMMAND_UNAVAILABLE",
-      "GitHub CLI command is unavailable.",
-      "Install `gh` or configure repository.github.command.",
-    );
-  }
-
-  const safe = safeErrorFromUnknown(error, {
+function githubPublicError(error: unknown): SafeError {
+  return publicSafeErrorFromUnknown(error, {
     tag: "RepositoryProviderError",
     code: "GITHUB_COMMAND_FAILED",
     message: "GitHub CLI command failed.",
     provider: "github",
   });
-  return {
-    tag: "RepositoryProviderError",
-    code: safe.code === "EXTERNAL_COMMAND_TIMEOUT" ? "GITHUB_COMMAND_TIMEOUT" : safe.code,
-    message: redactCommandOutput(safe.message),
-    provider: "github",
-  };
-}
-
-function githubRepositoryError(code: string, message: string, hint?: string): SafeError {
-  const error: SafeError = {
-    tag: "RepositoryProviderError",
-    code,
-    message,
-    provider: "github",
-  };
-  if (hint !== undefined) error.hint = hint;
-  return error;
-}
-
-function errorHealthStatus(error: SafeError): ProviderHealth["status"] {
-  if (error.code === "GITHUB_COMMAND_UNAVAILABLE" || error.code === "GITHUB_AUTH_UNAVAILABLE") {
-    return "unavailable";
-  }
-  return "degraded";
-}
-
-function isSafeError(value: unknown): value is SafeError {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const record = value as Partial<SafeError>;
-  return (
-    typeof record.tag === "string" &&
-    typeof record.code === "string" &&
-    typeof record.message === "string"
-  );
-}
-
-function errorText(error: unknown): string {
-  if (typeof error === "string") {
-    return error;
-  }
-  if (typeof error !== "object" || error === null) {
-    return "";
-  }
-  const record = error as Record<string, unknown>;
-  return [record.message, record.code, record.stderr, record.stderrSnippet, record.stdoutSnippet]
-    .filter((value): value is string => typeof value === "string")
-    .join("\n");
 }
 
 function repositoryNameWithOwner(value: unknown): {

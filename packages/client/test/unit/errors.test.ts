@@ -69,6 +69,33 @@ describe("client SafeError mapping", () => {
     expect(JSON.stringify(notice)).not.toContain("/tmp/station-test.sock");
   });
 
+  it("strips runtime diagnostics and raw causes from client errors and notices", () => {
+    const rich = Object.assign(new Error("The operation failed."), {
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_COMMAND_FAILED",
+      diagnosticDetails: [
+        {
+          type: "external_command",
+          provider: "worktrunk",
+          operation: "provider.worktrunk.switch",
+          command: "wt switch feature",
+          stderrSnippet: "raw provider output",
+        },
+      ],
+      cause: new Error("raw cause"),
+    });
+
+    const safe = toSafeError(rich);
+    const notice = safeErrorToNotice(safe);
+
+    expect(safe).toEqual({
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_COMMAND_FAILED",
+      message: "The operation failed.",
+    });
+    expect(JSON.stringify(notice)).not.toMatch(/diagnosticDetails|raw provider output|raw cause/);
+  });
+
   it("labels unknown failures when a client label is provided", () => {
     const safe = toSafeError(new Error("raw failure"), { clientLabel: "Station" });
 

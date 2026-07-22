@@ -1,5 +1,5 @@
 import type { SafeError } from "@station/contracts";
-import type { RuntimeSafeErrorFallback } from "@station/runtime";
+import { publicSafeErrorFromUnknown, type RuntimeSafeErrorFallback } from "@station/runtime";
 import { isObserverConnectError, observerConnectNotice } from "./connectionState.js";
 import type { ClientNotice } from "./types.js";
 
@@ -23,18 +23,11 @@ export type ToSafeErrorOptions = {
 };
 
 export function toSafeError(error: unknown, options: ToSafeErrorOptions = {}): SafeError {
-  if (isSafeError(error)) {
-    return error;
-  }
-  const cause = safeErrorCause(error);
-  if (cause !== undefined) {
-    return cause;
-  }
-  return {
+  return publicSafeErrorFromUnknown(error, {
     tag: "ClientObserverError",
     code: "CLIENT_OBSERVER_OPERATION_FAILED",
     message: `${clientSubject(options.clientLabel)} could not complete the observer operation.`,
-  };
+  });
 }
 
 export function safeErrorToNotice(error: SafeError): ClientNotice {
@@ -69,35 +62,8 @@ export function timeoutErrorFallback(code: string, message: string): RuntimeSafe
   };
 }
 
-function isSafeError(value: unknown): value is SafeError {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Partial<SafeError>;
-  return (
-    typeof candidate.tag === "string" &&
-    candidate.tag.length > 0 &&
-    typeof candidate.code === "string" &&
-    candidate.code.length > 0 &&
-    typeof candidate.message === "string" &&
-    candidate.message.length > 0
-  );
-}
-
 function clientSubject(clientLabel: string | undefined): string {
   return clientLabel === undefined || clientLabel.length === 0
     ? "The client"
     : `The ${clientLabel}`;
-}
-
-function safeErrorCause(error: unknown, seen = new Set<unknown>()): SafeError | undefined {
-  if (!error || typeof error !== "object" || seen.has(error)) {
-    return undefined;
-  }
-  seen.add(error);
-  const cause = (error as { cause?: unknown }).cause;
-  if (isSafeError(cause)) {
-    return cause;
-  }
-  return safeErrorCause(cause, seen);
 }

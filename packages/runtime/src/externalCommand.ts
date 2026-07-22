@@ -50,15 +50,15 @@ export type ResolveExecutablePathOptions = {
   access?: (path: string) => Promise<void>;
 };
 
-type ExternalCommandErrorLike = {
-  code?: unknown;
-  exitCode?: unknown;
-  name?: unknown;
-  signal?: unknown;
-  stderr?: unknown;
-  stderrSnippet?: unknown;
-  stdout?: unknown;
-  stdoutSnippet?: unknown;
+type NormalizedProcessError = {
+  code?: string | number;
+  exitCode?: number;
+  name?: string;
+  signal?: string;
+  stderr?: string;
+  stderrSnippet?: string;
+  stdout?: string;
+  stdoutSnippet?: string;
 };
 
 export async function runExternalCommand(
@@ -271,7 +271,7 @@ export function externalCommandErrorFromUnknown(
 ): ExternalCommandError {
   const fallback = externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed.");
   const safeError = safeErrorFromUnknown(error, fallback);
-  const cause = externalCommandErrorLike(error);
+  const cause = normalizeProcessError(error);
   const normalized: ExternalCommandError = {
     tag: "ExternalCommandError",
     code: cwdMissing
@@ -287,22 +287,21 @@ export function externalCommandErrorFromUnknown(
     normalized.cwd = input.cwd;
   }
 
-  const exitCode = numericField(cause, "exitCode") ?? numericField(cause, "code");
+  const exitCode = cause.exitCode ?? (typeof cause.code === "number" ? cause.code : undefined);
   if (exitCode !== undefined) {
     normalized.exitCode = exitCode;
   }
 
-  const signal = externalCommandStringValue(cause, "signal");
-  if (signal !== undefined) {
-    normalized.signal = signal;
+  if (cause.signal !== undefined) {
+    normalized.signal = cause.signal;
   }
 
-  const stdoutSnippet = outputSnippet(cause, "stdout", "stdoutSnippet");
+  const stdoutSnippet = commandOutputSnippet(cause.stdout ?? cause.stdoutSnippet);
   if (stdoutSnippet !== undefined) {
     normalized.stdoutSnippet = stdoutSnippet;
   }
 
-  const stderrSnippet = outputSnippet(cause, "stderr", "stderrSnippet");
+  const stderrSnippet = commandOutputSnippet(cause.stderr ?? cause.stderrSnippet);
   if (stderrSnippet !== undefined) {
     normalized.stderrSnippet = stderrSnippet;
   }
@@ -322,17 +321,14 @@ function externalCommandEnvironment(input: Pick<ExternalCommandInput, "env" | "u
 }
 
 async function missingWorkingDirectory(error: unknown, cwd: string | undefined): Promise<boolean> {
-  if (
-    cwd === undefined ||
-    externalCommandStringValue(externalCommandErrorLike(error), "code") !== "ENOENT"
-  ) {
+  if (cwd === undefined || normalizeProcessError(error).code !== "ENOENT") {
     return false;
   }
   try {
     await defaultAccess(cwd);
     return false;
   } catch (cause) {
-    return externalCommandStringValue(externalCommandErrorLike(cause), "code") === "ENOENT";
+    return normalizeProcessError(cause).code === "ENOENT";
   }
 }
 
@@ -346,13 +342,13 @@ function externalCommandFallback(code: string, message: string): RuntimeSafeErro
 
 function externalCommandCode(
   error: unknown,
-  cause: ExternalCommandErrorLike,
+  cause: NormalizedProcessError,
   safeError: RuntimeSafeError,
 ): string {
   if (isAbortLikeError(error)) {
     return "EXTERNAL_COMMAND_ABORTED";
   }
-  return externalCommandStringValue(cause, "code") ?? safeError.code;
+  return typeof cause.code === "string" ? cause.code : safeError.code;
 }
 
 function externalCommandMessage(error: unknown, safeError: RuntimeSafeError): string {
@@ -376,29 +372,7 @@ function formatCommandForError(input: Pick<ExternalCommandInput, "command" | "ar
   return redacted.join(" ");
 }
 
-function numericField(
-  record: ExternalCommandErrorLike,
-  key: "exitCode" | "code",
-): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function externalCommandStringValue(
-  record: ExternalCommandErrorLike,
-  key: keyof ExternalCommandErrorLike,
-): string | undefined {
-  const value = record[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function outputSnippet(
-  cause: ExternalCommandErrorLike,
-  rawKey: "stdout" | "stderr",
-  snippetKey: "stdoutSnippet" | "stderrSnippet",
-): string | undefined {
-  const value =
-    externalCommandStringValue(cause, rawKey) ?? externalCommandStringValue(cause, snippetKey);
+function commandOutputSnippet(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -413,9 +387,9 @@ function allowedExitCodeResultFromUnknown(
   if (isAbortLikeError(error)) {
     return undefined;
   }
-  const cause = externalCommandErrorLike(error);
+  const cause = normalizeProcessError(error);
 
-  const exitCode = numericField(cause, "exitCode") ?? numericField(cause, "code");
+  const exitCode = cause.exitCode ?? (typeof cause.code === "number" ? cause.code : undefined);
   if (exitCode === undefined || input.allowedExitCodes?.includes(exitCode) !== true) {
     return undefined;
   }
@@ -423,8 +397,8 @@ function allowedExitCodeResultFromUnknown(
   return {
     command: input.command,
     args: input.args ?? [],
-    stdout: externalCommandStringValue(cause, "stdout") ?? "",
-    stderr: externalCommandStringValue(cause, "stderr") ?? "",
+    stdout: cause.stdout ?? "",
+    stderr: cause.stderr ?? "",
     exitCode,
   };
 }
@@ -533,7 +507,7 @@ function isAbortLikeError(error: unknown): boolean {
   if (isSafeError(error)) {
     return error.tag === "CancellationError" || error.code === "EXTERNAL_COMMAND_ABORTED";
   }
-  const cause = externalCommandErrorLike(error);
+  const cause = normalizeProcessError(error);
   return cause.name === "AbortError" || cause.code === "ABORT_ERR";
 }
 
@@ -550,6 +524,30 @@ export function redactCommandOutput(value: string): string {
     );
 }
 
-function externalCommandErrorLike(error: unknown): ExternalCommandErrorLike {
-  return error === null || error === undefined ? {} : (Object(error) as ExternalCommandErrorLike);
+function normalizeProcessError(error: unknown): NormalizedProcessError {
+  if (error === null || error === undefined) {
+    return {};
+  }
+  const source = Object(error) as Record<string, unknown>;
+  const normalized: NormalizedProcessError = {};
+  if (
+    (typeof source.code === "string" && source.code.length > 0) ||
+    (typeof source.code === "number" && Number.isFinite(source.code))
+  ) {
+    normalized.code = source.code;
+  }
+  if (typeof source.exitCode === "number" && Number.isFinite(source.exitCode)) {
+    normalized.exitCode = source.exitCode;
+  }
+  if (typeof source.name === "string") normalized.name = source.name;
+  if (typeof source.signal === "string") normalized.signal = source.signal;
+  if (typeof source.stderr === "string") normalized.stderr = source.stderr;
+  if (typeof source.stderrSnippet === "string") {
+    normalized.stderrSnippet = source.stderrSnippet;
+  }
+  if (typeof source.stdout === "string") normalized.stdout = source.stdout;
+  if (typeof source.stdoutSnippet === "string") {
+    normalized.stdoutSnippet = source.stdoutSnippet;
+  }
+  return normalized;
 }

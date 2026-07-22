@@ -381,6 +381,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@station/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       effect:
         specifier: ^3.21.2
         version: 3.21.2

@@ -17,6 +17,7 @@ import {
   type ExternalCommandRunner,
   pathIsSame,
   pathIsSameOrInside,
+  publicSafeErrorFromUnknown,
   type RuntimeClock,
   systemClock,
   toIsoTimestamp,
@@ -63,6 +64,13 @@ const tmuxCapabilities: TerminalCapabilities = {
   canDisplayPopup: true,
 };
 
+/**
+ * ADAPTER
+ *
+ * Translates Station terminal operations into tmux-owned topology and commands.
+ *
+ * Operational failures retain diagnostic evidence while provider health exposes only the lean public projection.
+ */
 export class TmuxProvider implements TerminalProvider {
   readonly id: ProviderId = "tmux";
 
@@ -103,15 +111,21 @@ export class TmuxProvider implements TerminalProvider {
         capabilities: this.capabilities(),
       };
     } catch (cause) {
+      const error = tmuxProviderErrorFromUnknown(cause, {
+        code: "TERMINAL_TMUX_UNAVAILABLE",
+        message: "tmux is not available.",
+        hint: "Install tmux or choose a different terminal provider.",
+      });
       return {
         providerId: this.id,
         providerType: "terminal",
         status: "unavailable",
         lastCheckedAt: checkedAt,
-        lastError: tmuxProviderErrorFromUnknown(cause, {
+        lastError: publicSafeErrorFromUnknown(error, {
+          tag: "TerminalProviderError",
           code: "TERMINAL_TMUX_UNAVAILABLE",
           message: "tmux is not available.",
-          hint: "Install tmux or choose a different terminal provider.",
+          provider: this.id,
         }),
         capabilities: this.capabilities(),
       };

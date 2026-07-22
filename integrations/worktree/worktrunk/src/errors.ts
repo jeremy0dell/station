@@ -1,5 +1,4 @@
 import type { DiagnosticDetail, SafeError } from "@station/contracts";
-import { safeErrorFromUnknown } from "@station/runtime";
 
 export type WorktrunkProviderErrorCode =
   | "WORKTRUNK_BRANCH_EXISTS"
@@ -92,52 +91,4 @@ export class ProviderUnavailableError extends Error implements SafeError {
       this.diagnosticDetails = options.diagnosticDetails;
     }
   }
-}
-
-export function worktrunkSafeError(
-  error: unknown,
-  fallback: {
-    code: WorktrunkProviderErrorCode;
-    message: string;
-    hint?: string;
-  },
-): SafeError {
-  return safeErrorFromUnknown(error, {
-    tag:
-      fallback.code === "WORKTRUNK_UNAVAILABLE"
-        ? "ProviderUnavailableError"
-        : "WorktreeProviderError",
-    code: fallback.code,
-    message: fallback.message,
-    provider: "worktrunk",
-    ...(fallback.hint === undefined ? {} : { hint: fallback.hint }),
-  });
-}
-
-export function providerErrorFromUnknown(
-  error: unknown,
-  fallback: {
-    code: WorktrunkProviderErrorCode;
-    message: string;
-    hint?: string;
-  },
-  options: { diagnosticDetails?: DiagnosticDetail[] } = {},
-): WorktrunkProviderError | ProviderUnavailableError {
-  const safeError = worktrunkSafeError(error, fallback);
-  const hint = safeError.hint ?? fallback.hint;
-  const diagnosticDetails = options.diagnosticDetails;
-  const message = safeError.code === fallback.code ? safeError.message : fallback.message;
-  if (safeError.tag === "ProviderUnavailableError" || fallback.code === "WORKTRUNK_UNAVAILABLE") {
-    return new ProviderUnavailableError(message, {
-      cause: error,
-      ...(hint === undefined ? {} : { hint }),
-      ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
-    });
-  }
-
-  return new WorktrunkProviderError(fallback.code, message, {
-    cause: error,
-    ...(hint === undefined ? {} : { hint }),
-    ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
-  });
 }
