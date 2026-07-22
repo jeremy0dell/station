@@ -28,11 +28,10 @@ agent CLIs) gates *features*, never launch — captured precisely by the
 
 Non-goals:
 
-- **Public distribution.** The repo is private; binaries ship as private
-  GitHub release assets fetched by an authenticated install script. A
-  binary Homebrew formula is **deferred** until a tested private-asset
-  download strategy exists (see A5); the authenticated script is the only
-  binary channel meanwhile.
+- **Binary Homebrew distribution.** Public binaries ship through a
+  version-stamped GitHub release installer; the supported Homebrew channel is a
+  separate source formula. Publishing Homebrew bottles from these native
+  archives remains out of scope.
 - **Windows targets.**
 - **Any observer replacement / eviction in this roadmap.** Coordinated
   single-observer behavior is owned entirely by
@@ -391,50 +390,44 @@ Every archive contains exactly `stn`, the `stn-ingress` and
 `stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
 duplicate targets, emits a stably sorted `SHA256SUMS`, and creates a GitHub
 release **draft** without clobbering an existing release. A second native
-matrix revalidates the tag, fetches the installer by the validated commit SHA
-through the authenticated Contents API, invokes it with the explicit tag against
-that real draft, and verifies the binary version, both argv0 aliases, license,
-and launch without Node or Bun on the runtime PATH. The four native builds use
-one archive-packaging helper, and the draft-install matrix consumes those exact
-uploaded archives. Publication remains a manual decision after the real-TTY
-acceptance below. GitHub's tag endpoint
-exposes published releases only, so the workflow captures the new draft's
-numeric release ID from the authenticated release list and passes it only to
-these acceptance jobs; normal installs keep using the latest/published-tag
-endpoints.
+matrix revalidates the tag, downloads the version-stamped `install.sh` from the
+captured draft release ID, and verifies the binary version, both argv0 aliases,
+license, and launch without Node or Bun on the runtime PATH. The four native
+builds use one archive-packaging helper, and the draft-install matrix consumes
+those exact uploaded archives. Publication remains a manual decision after the
+real-TTY acceptance below. GitHub exposes draft assets only to identities with
+push access, so the workflow passes the numeric release ID only to these
+acceptance jobs; normal published installs use unauthenticated HTTPS.
 
 After all native acceptance jobs pass, the release workflow re-downloads the
-five draft assets, checks them against the build-generated `SHA256SUMS`, and
+six draft assets, checks them against the build-generated `SHA256SUMS`, and
 uploads an immutable `accepted-release-candidate-*` Actions artifact containing
 the validated commit, workflow run/attempt, release ID, asset IDs, and checksums.
 The manually dispatched `promote-release.yml` downloads that exact artifact,
 rechecks the successful run, tag commit, draft identity, asset IDs, and hashes,
 then publishes the unchanged draft. Draft assets cannot drift between acceptance
-and promotion without failing that workflow.
+and promotion without failing that workflow. Publication is followed by a
+four-platform unauthenticated install of the actual public stamped script.
 
 `SHA256SUMS` is unsigned in A5 because no signing-key infrastructure exists;
-the trust chain is authenticated GitHub access plus immutable release assets.
+the current trust chain is HTTPS plus immutable GitHub release assets while the
+public signing/notarization gate is completed.
 The pipeline pins inputs, gates, targets, names, and manifest, but does not
 claim bit-for-bit reproducible Bun executables or archives.
 
 `scripts/install.sh` supports latest stable, explicit `--version`, and
-`--install-dir` (default `~/.local/bin`). The supported binary-install baseline
-starts at `v0.7.1-rc.2`; the earlier `v0.7.0` and `v0.7.1-rc.1` candidates
-remained unpublished.
-Explicit installs set a tag, fetch
-`scripts/install.sh` from that tag through the authenticated Contents API, and
-invoke it with `--version` set to the same tag. Latest install first resolves
-the latest stable tag, then performs the same tagged fetch and explicit invoke.
-There is no silent `main` fallback, so installer code and release artifacts are
-always paired. `v0.7.1-rc.2` is the first published binary,
-`v0.7.1-rc.3` is the latest published binary, and publishing `v0.7.1-rc.4`
-makes immutable rollback to `v0.7.1-rc.3` available.
+`--install-dir` (default `~/.local/bin`). Release assembly stamps the selected
+immutable tag into the uploaded `install.sh`; an explicit CLI version can still
+override it for rollback and testing. The generic source script resolves latest
+stable through GitHub's HTTPS redirect. Neither path falls back to `main`, so
+installer code and release artifacts remain paired.
 
-The installer uses authenticated `gh api` release endpoints, accepts only the
-four supported targets, verifies the one matching `SHA256SUMS` entry and exact
-archive manifest before touching an existing install, and stages replacement
-on each destination filesystem. Every potentially blocking `gh` operation is a
-tracked file-backed child rather than a command substitution.
+Published installation uses curl with HTTPS-only redirect policy and accepts
+only the four supported targets. Authenticated `gh api` remains isolated to the
+captured draft-release acceptance path. Both transports run as tracked,
+file-backed children. The installer verifies the one matching `SHA256SUMS`
+entry and exact archive manifest before touching an existing install, then
+stages replacement on each destination filesystem.
 
 The staged binary's `--version` probe has a 10-second supervised deadline and
 a POSIX file-size limit on stdout/stderr. Watchdog exit 124 reports timeout;
@@ -484,8 +477,9 @@ still gives coherent process-level visibility to continuous readers. Power loss
 is not equivalent: the installer does not fsync files or containing directories
 and therefore makes no post-power-loss durability guarantee; old/new
 cross-filesystem `LICENSE` metadata may also remain. The deterministic
-`smoke:install` suite exercises this boundary with fake authenticated release
-assets and is part of `test:all`.
+`smoke:install` exercises this boundary with fake public curl downloads,
+authenticated draft assets, and a rendered version-stamped installer; it is part
+of `test:all`.
 
 After success, all three bare launchers are resolved physically. If every one
 points into the new install directory, the installer prints only
@@ -513,9 +507,10 @@ the unchanged tag workflow rerun; a source fix uses a new prerelease tag, while
 published releases are never deleted or mutated.
 
 The source-based Homebrew formula remains separate and manually dispatched.
-The default release `GITHUB_TOKEN` cannot trigger another workflow, and the tap
-`COMMITTER_TOKEN` is intentionally not configured for A5; no binary Homebrew
-formula is claimed until private asset authentication is proven there.
+The default release `GITHUB_TOKEN` cannot trigger another workflow; the
+fine-grained tap token opens a reviewed formula pull request only after a
+public, stable, immutable release is verified. No binary Homebrew formula is
+claimed.
 
 Implementation sources: the target and manifest policy above; the existing
 [`build:binary` staging](../scripts/build-binary.mjs),

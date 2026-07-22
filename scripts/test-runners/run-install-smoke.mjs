@@ -32,12 +32,14 @@ if (!/^(?:[1-9]|10)$/.test(timeoutScaleText)) {
 }
 const timeoutScale = Number(timeoutScaleText);
 const root = mkdtempSync(join(tmpdir(), "station-install-smoke-"));
+const stampedInstaller = join(root, "stamped-install.sh");
 const releasesDir = join(root, "releases");
 const fakeBinDir = join(root, "bin");
 const homeDir = join(root, "home");
 const dataDir = join(root, "data");
 const tempDir = join(root, "tmp");
 const ghLogsDir = join(root, "gh-logs");
+const curlLogsDir = join(root, "curl-logs");
 const stableTag = "v1.2.3";
 const rollbackTag = "v1.2.3-rc.1";
 const removedPersistenceOption = ["--persist", "path"].join("-");
@@ -85,9 +87,9 @@ try {
     await scenarioDefaultHomeAndPathResolution();
     await scenarioPathGuidanceAndStartupFileNonOwnership();
     await scenarioExplicitRollbackAndDraft();
-    await scenarioStrictGhFlows();
+    await scenarioStrictDownloadFlows();
     await scenarioAuthenticatedReleaseValidation();
-    await scenarioGhFailuresAndRetries();
+    await scenarioDownloadFailuresAndRetries();
     await scenarioArtifactValidation();
     await scenarioStrictVersionValidation();
     await scenarioCliParsing();
@@ -104,7 +106,7 @@ try {
     await scenarioManagedPathReplacement();
     await scenarioContinuousReaders();
     await scenarioCaughtSignals();
-    await scenarioGhSignalSupervision();
+    await scenarioDownloadSignalSupervision();
     await scenarioRepeatedSignalCleanup();
     await scenarioAliasCreationSignal();
     await scenarioSignalDuringLockAcquisition();
@@ -121,10 +123,23 @@ try {
 }
 
 function prepareFixtures() {
-  for (const path of [releasesDir, fakeBinDir, homeDir, dataDir, tempDir, ghLogsDir]) {
+  for (const path of [releasesDir, fakeBinDir, homeDir, dataDir, tempDir, ghLogsDir, curlLogsDir]) {
     makeDirectory(path);
   }
   writeFakeCommands();
+  spawnChecked(
+    process.execPath,
+    [
+      join(repoRoot, "scripts", "release", "render-release-installer.mjs"),
+      "--source",
+      installer,
+      "--output",
+      stampedInstaller,
+      "--version",
+      stableTag.slice(1),
+    ],
+    "render stamped installer fixture",
+  );
 
   createRelease(
     stableTag,
@@ -385,6 +400,7 @@ function scenarioPathGuidanceAndStartupFileNonOwnership() {
   assertFailure(colon, "install directory cannot contain ':'", "normalized colon preflight");
   assertIncludes(colon.stderr, "PATH uses ':' to separate entries", "normalized colon rationale");
   assertEqual(ghCalls(colon), [], "normalized colon preflight makes no gh calls");
+  assertEqual(curlCalls(colon), [], "normalized colon preflight makes no curl calls");
   assert(
     !existsSync(colonInstallDir),
     "normalized colon preflight does not create install directory",
@@ -459,21 +475,29 @@ function scenarioExplicitRollbackAndDraft() {
   assertInstalled({ installDir: draftDir, tag: rollbackTag, target: "linux-x64" });
 }
 
-function scenarioStrictGhFlows() {
-  const latest = runInstaller({
-    installDir: join(root, "strict-gh-latest-bin"),
+function scenarioStrictDownloadFlows() {
+  const stamped = runInstaller({
+    installDir: join(root, "strict-stamped-bin"),
+    installerPath: stampedInstaller,
     platform: linuxX64(),
   });
-  assertSuccess(latest, "strict gh latest flow");
-  assertStrictGhFlow(latest, { tag: stableTag, target: "linux-x64", latest: true });
+  assertSuccess(stamped, "strict stamped installer flow");
+  assertStrictPublicFlow(stamped, { tag: stableTag, target: "linux-x64" });
+
+  const latest = runInstaller({
+    installDir: join(root, "strict-public-latest-bin"),
+    platform: linuxX64(),
+  });
+  assertSuccess(latest, "strict public latest flow");
+  assertStrictPublicFlow(latest, { tag: stableTag, target: "linux-x64", latest: true });
 
   const explicit = runInstaller({
-    installDir: join(root, "strict-gh-explicit-bin"),
+    installDir: join(root, "strict-public-explicit-bin"),
     platform: linuxX64(),
     version: rollbackTag,
   });
-  assertSuccess(explicit, "strict gh explicit flow");
-  assertStrictGhFlow(explicit, { tag: rollbackTag, target: "linux-x64" });
+  assertSuccess(explicit, "strict public explicit flow");
+  assertStrictPublicFlow(explicit, { tag: rollbackTag, target: "linux-x64" });
 
   const draft = runInstaller({
     installDir: join(root, "strict-gh-draft-bin"),
@@ -508,11 +532,6 @@ function scenarioAuthenticatedReleaseValidation() {
       options: { version: "v1.2.6" },
     },
     {
-      label: "duplicate asset rejection",
-      expected: "exactly one",
-      options: { version: stableTag, duplicateArchiveAsset: true },
-    },
-    {
       label: "duplicate draft asset rejection",
       expected: "exactly one",
       options: {
@@ -539,7 +558,7 @@ function scenarioAuthenticatedReleaseValidation() {
     {
       label: "authentication failure",
       expected: "gh auth login",
-      options: { auth: false },
+      options: { auth: false, releaseId: "42", version: stableTag },
     },
     {
       label: "unsupported platform",
@@ -558,24 +577,38 @@ function scenarioAuthenticatedReleaseValidation() {
   }
 }
 
-function scenarioGhFailuresAndRetries() {
-  const noGhBin = join(root, "no-gh-bin");
-  makeDirectory(noGhBin);
-  symlinkSync(join(fakeBinDir, "uname"), join(noGhBin, "uname"));
+function scenarioDownloadFailuresAndRetries() {
+  const noDownloadBin = join(root, "no-download-bin");
+  makeDirectory(noDownloadBin);
+  symlinkSync(join(fakeBinDir, "uname"), join(noDownloadBin, "uname"));
+  const missingCurl = runInstaller({
+    installDir: join(root, "missing-curl-install"),
+    platform: linuxX64(),
+    pathEntries: [noDownloadBin],
+  });
+  assertFailure(missingCurl, "curl is required", "missing curl");
+  assertEqual(curlCalls(missingCurl), [], "missing curl makes no curl calls");
+
+  const curlOnlyBin = join(root, "curl-only-bin");
+  makeDirectory(curlOnlyBin);
+  symlinkSync(join(fakeBinDir, "curl"), join(curlOnlyBin, "curl"));
+  symlinkSync(resolveCommand("grep"), join(curlOnlyBin, "grep"));
+  symlinkSync(join(fakeBinDir, "uname"), join(curlOnlyBin, "uname"));
   const missingGh = runInstaller({
     installDir: join(root, "missing-gh-install"),
     platform: linuxX64(),
-    pathEntries: [noGhBin],
+    pathEntries: [curlOnlyBin],
+    releaseId: "42",
+    version: stableTag,
   });
-  assertFailure(missingGh, "GitHub CLI is required", "missing gh");
-  assertEqual(ghCalls(missingGh), [], "missing gh makes no gh calls");
+  assertFailure(missingGh, "GitHub CLI is required", "missing draft gh");
+  assertEqual(ghCalls(missingGh), [], "missing draft gh makes no gh calls");
 
-  const installDir = join(root, "gh-failure-bin");
+  const installDir = join(root, "download-failure-bin");
   const dataHome = join(root, "gh-failure-data");
   seedInstallation({ installDir, dataHome, tag: "v0.9.0" });
   const failures = [
     ["latest", {}, "latest release API failure"],
-    ["release", { version: stableTag }, "release asset API failure"],
     ["release", { version: stableTag, releaseId: "42" }, "draft release API failure"],
     ["archive-download", { version: stableTag }, "archive download failure"],
     ["checksums-download", { version: stableTag }, "checksum download failure"],
@@ -607,6 +640,7 @@ function scenarioGhFailuresAndRetries() {
       installDir,
       platform: linuxX64(),
       version: stableTag,
+      releaseId: "42",
       dataHome,
       environment,
     });
@@ -617,7 +651,7 @@ function scenarioGhFailuresAndRetries() {
   }
 
   const retry = runInstaller({ installDir, platform: linuxX64(), version: stableTag, dataHome });
-  assertSuccess(retry, "retry after gh failures");
+  assertSuccess(retry, "retry after download failures");
   assertInstalled({ installDir, dataHome, tag: stableTag, target: "linux-x64" });
 }
 
@@ -674,6 +708,7 @@ function scenarioStrictVersionValidation() {
     "1.2.3",
     "v01.2.3",
     "v1.2.3+build.1",
+    "v1.2.3-01",
     "v1.2.3 ",
     "v1.2.3\r",
     "v1.2.3\nv9.9.9",
@@ -683,6 +718,11 @@ function scenarioStrictVersionValidation() {
     const result = runInstaller({ installDir, platform: linuxX64(), version });
     assertFailure(result, "v-prefixed SemVer", `invalid version ${JSON.stringify(version)}`);
     assertEqual(ghCalls(result).length, 0, `invalid version ${JSON.stringify(version)} gh calls`);
+    assertEqual(
+      curlCalls(result).length,
+      0,
+      `invalid version ${JSON.stringify(version)} curl calls`,
+    );
   }
 
   const duplicateEmpty = runInstaller({
@@ -693,18 +733,24 @@ function scenarioStrictVersionValidation() {
   });
   assertFailure(duplicateEmpty, "only once", "duplicate version after empty value");
   assertEqual(ghCalls(duplicateEmpty).length, 0, "duplicate version after empty value gh calls");
+  assertEqual(
+    curlCalls(duplicateEmpty).length,
+    0,
+    "duplicate version after empty value curl calls",
+  );
 
-  for (const apiTag of ["v1.2.3\nv9.9.9", "v1.2.3\n"]) {
+  for (const apiTag of ["v1.2.3\nv9.9.9"]) {
     const apiResult = runInstaller({
       installDir,
       platform: linuxX64(),
       environment: { FAKE_LATEST_TAG: apiTag },
     });
     assertFailure(apiResult, "invalid tag", `invalid latest API tag ${JSON.stringify(apiTag)}`);
+    assertEqual(ghCalls(apiResult), [], `invalid latest tag ${JSON.stringify(apiTag)} gh calls`);
     assertEqual(
-      ghCalls(apiResult).filter((call) => call.startsWith("api ")).length,
+      curlCalls(apiResult).length,
       1,
-      `invalid latest API tag ${JSON.stringify(apiTag)} stops after lookup`,
+      `invalid latest tag ${JSON.stringify(apiTag)} stops after redirect lookup`,
     );
   }
 }
@@ -737,6 +783,7 @@ function scenarioCliParsing() {
     });
     assertFailure(result, expected, label);
     assertEqual(ghCalls(result), [], `${label} makes no gh calls`);
+    assertEqual(curlCalls(result), [], `${label} makes no curl calls`);
   }
   assert(!existsSync(installDir), "CLI parsing failures do not create the install directory");
 }
@@ -1503,12 +1550,17 @@ async function scenarioManagedPathReplacement() {
       },
     });
     await waitForPath(replacementMarker, `${resource} revalidation point`);
-    const replacementPath =
-      resource === "popup"
-        ? join(replacementInstallDir, "stn-tmux-popup")
-        : resource === "binary"
-          ? join(replacementInstallDir, "stn")
-          : join(replacementDataHome, "station", "LICENSE");
+    let replacementPath;
+    switch (resource) {
+      case "popup":
+        replacementPath = join(replacementInstallDir, "stn-tmux-popup");
+        break;
+      case "binary":
+        replacementPath = join(replacementInstallDir, "stn");
+        break;
+      default:
+        replacementPath = join(replacementDataHome, "station", "LICENSE");
+    }
     rmSync(replacementPath, { recursive: true, force: true });
     if (resource === "popup") symlinkSync("external-stn", replacementPath);
     else makeDirectory(replacementPath);
@@ -1664,25 +1716,36 @@ async function scenarioCaughtSignals() {
   }
 }
 
-async function scenarioGhSignalSupervision() {
+async function scenarioDownloadSignalSupervision() {
   const phases = [
-    { name: "auth", version: stableTag },
     { name: "latest" },
-    { name: "published-archive-asset", version: stableTag },
-    { name: "published-checksum-asset", version: stableTag },
     { name: "archive-download", version: stableTag },
     { name: "checksum-download", version: stableTag },
+    { draft: true, label: "draft-auth", name: "auth", version: rollbackTag },
     { draft: true, name: "draft-release", version: rollbackTag },
     { draft: true, name: "draft-archive-asset", version: rollbackTag },
     { draft: true, name: "draft-checksum-asset", version: rollbackTag },
+    {
+      draft: true,
+      label: "draft-archive-download",
+      name: "archive-download",
+      version: rollbackTag,
+    },
+    {
+      draft: true,
+      label: "draft-checksum-download",
+      name: "checksum-download",
+      version: rollbackTag,
+    },
   ];
 
   for (const phase of phases) {
-    const installDir = join(root, `gh-${phase.name}-signal-bin`);
-    const dataHome = join(root, `gh-${phase.name}-signal-data`);
-    const marker = join(root, `gh-${phase.name}-signal.ready`);
-    const childPidFile = join(root, `gh-${phase.name}-signal.pid`);
-    const releaseFile = join(root, `gh-${phase.name}-signal.release`);
+    const label = phase.label ?? phase.name;
+    const installDir = join(root, `${label}-signal-bin`);
+    const dataHome = join(root, `${label}-signal-data`);
+    const marker = join(root, `${label}-signal.ready`);
+    const childPidFile = join(root, `${label}-signal.pid`);
+    const releaseFile = join(root, `${label}-signal.release`);
     seedInstallation({ installDir, dataHome, tag: "v0.9.0" });
     const running = runInstaller({
       installDir,
@@ -1698,14 +1761,14 @@ async function scenarioGhSignalSupervision() {
         FAKE_BLOCK_RELEASE: releaseFile,
       },
     });
-    await waitForPath(marker, `${phase.name} signal injection point`);
-    await waitForPath(childPidFile, `${phase.name} child PID`);
+    await waitForPath(marker, `${label} signal injection point`);
+    await waitForPath(childPidFile, `${label} child PID`);
     running.child.kill("SIGTERM");
-    const result = await settleWithin(running, 5_000, `${phase.name} signal cleanup`);
-    assertExactStatus(result, 143, `${phase.name} parent-only SIGTERM`);
-    assertProcessGone(Number(readFileSync(childPidFile, "utf8")), `${phase.name} gh child`);
-    assertRuntimeVersion(installDir, "v0.9.0", `${phase.name} runtime preservation`);
-    assertLicense(dataHome, "v0.9.0", `${phase.name} license preservation`);
+    const result = await settleWithin(running, 5_000, `${label} signal cleanup`);
+    assertExactStatus(result, 143, `${label} parent-only SIGTERM`);
+    assertProcessGone(Number(readFileSync(childPidFile, "utf8")), `${label} download child`);
+    assertRuntimeVersion(installDir, "v0.9.0", `${label} runtime preservation`);
+    assertLicense(dataHome, "v0.9.0", `${label} license preservation`);
     assertNoInstallerResidue(installDir, dataHome);
   }
 }
@@ -2419,12 +2482,80 @@ function writeFakeCommands() {
       "",
     ].join("\n"),
   );
+  writeExecutable(
+    join(fakeBinDir, "curl"),
+    [
+      "#!/bin/sh",
+      "set -eu",
+      'printf \'%s\\n\' "$*" >> "$FAKE_CURL_LOG"',
+      "{",
+      "  printf 'CALL\\n'",
+      "  for argument do printf 'ARG=%s\\n' \"$argument\"; done",
+      "  printf 'END\\n'",
+      '} >> "$FAKE_CURL_ARGV_LOG"',
+      'chmod 600 "$FAKE_CURL_LOG" "$FAKE_CURL_ARGV_LOG"',
+      "block_phase() {",
+      "  phase=$1",
+      `  if [ "\${FAKE_GH_BLOCK_PHASE:-}" != "$phase" ]; then`,
+      `    if [ "$phase" != archive-download ] || [ "\${FAKE_GH_BLOCK_DOWNLOAD:-0}" != 1 ]; then return 0; fi`,
+      "  fi",
+      '  : > "$FAKE_BLOCK_MARKER"',
+      '  chmod 600 "$FAKE_BLOCK_MARKER"',
+      `  if [ -n "\${FAKE_BLOCK_PID_FILE:-}" ]; then printf "%s\\n" "$$" > "$FAKE_BLOCK_PID_FILE"; chmod 600 "$FAKE_BLOCK_PID_FILE"; fi`,
+      "  trap 'exit 129' HUP",
+      "  trap 'exit 130' INT",
+      "  trap 'exit 143' TERM",
+      '  while [ ! -e "$FAKE_BLOCK_RELEASE" ]; do /bin/sleep 0.02; done',
+      "}",
+      'output=""',
+      'write_out=""',
+      'url=""',
+      'while [ "$#" -gt 0 ]; do',
+      '  case "$1" in',
+      "    --fail|--silent|--show-error|--location|--tlsv1.2) shift ;;",
+      '    --proto|--proto-redir|--output|--write-out) [ "$#" -ge 2 ]; name=$1; value=$2; shift 2; case "$name" in --output) output=$value ;; --write-out) write_out=$value ;; esac ;;',
+      '    https://*) [ -z "$url" ]; url=$1; shift ;;',
+      "    *) exit 2 ;;",
+      "  esac",
+      "done",
+      'case "$url" in',
+      '  "https://github.com/jeremy0dell/station/releases/latest")',
+      '    [ "$output" = /dev/null ]',
+      '    [ "$write_out" = "%{url_effective}" ]',
+      `    [ "\${FAKE_GH_FAIL_PHASE:-}" != latest ] || exit 74`,
+      "    block_phase latest",
+      '    printf "https://github.com/jeremy0dell/station/releases/tag/%s" "$FAKE_LATEST_TAG"',
+      "    ;;",
+      '  "https://github.com/jeremy0dell/station/releases/download/$FAKE_TAG/$FAKE_ARCHIVE")',
+      '    [ -z "$output" ] && [ -z "$write_out" ]',
+      `    case "\${FAKE_GH_FAIL_PHASE:-}" in`,
+      "      archive-download) exit 74 ;;",
+      "      partial-archive) printf 'partial archive'; exit 74 ;;",
+      "    esac",
+      "    block_phase archive-download",
+      '    cat "$FAKE_RELEASES/$FAKE_TAG/$FAKE_ARCHIVE"',
+      "    ;;",
+      '  "https://github.com/jeremy0dell/station/releases/download/$FAKE_TAG/SHA256SUMS")',
+      '    [ -z "$output" ] && [ -z "$write_out" ]',
+      `    case "\${FAKE_GH_FAIL_PHASE:-}" in`,
+      "      checksums-download) exit 74 ;;",
+      "      partial-checksums) printf 'partial checksum'; exit 74 ;;",
+      "    esac",
+      "    block_phase checksum-download",
+      '    cat "$FAKE_RELEASES/$FAKE_TAG/SHA256SUMS"',
+      "    ;;",
+      "  *) exit 2 ;;",
+      "esac",
+      "",
+    ].join("\n"),
+  );
 }
 
 function runInstaller({
   installDir,
   platform,
   version,
+  installerPath = installer,
   auth = true,
   duplicateArchiveAsset = false,
   includeInstallDirOnPath = false,
@@ -2457,6 +2588,8 @@ function runInstaller({
   }
   const ghLog = join(ghLogsDir, `${++invocationCount}.log`);
   const ghArgvLog = join(ghLogsDir, `${invocationCount}.argv.log`);
+  const curlLog = join(curlLogsDir, `${invocationCount}.log`);
+  const curlArgvLog = join(curlLogsDir, `${invocationCount}.argv.log`);
   const env = applyEnvironmentOverrides(
     {
       HOME: home,
@@ -2466,6 +2599,8 @@ function runInstaller({
       XDG_DATA_HOME: unsetXdgDataHome ? undefined : dataHome,
       FAKE_ARCHIVE: archive,
       FAKE_DUPLICATE_ARCHIVE: duplicateArchiveAsset ? "1" : "0",
+      FAKE_CURL_ARGV_LOG: curlArgvLog,
+      FAKE_CURL_LOG: curlLog,
       FAKE_GH_AUTH: auth ? "1" : "0",
       FAKE_GH_ARGV_LOG: ghArgvLog,
       FAKE_GH_LOG: ghLog,
@@ -2481,7 +2616,7 @@ function runInstaller({
     environment,
   );
   if (releaseId !== undefined) env.STATION_INSTALL_RELEASE_ID = releaseId;
-  const invocation = buildShellInvocation(childShell, args, umask);
+  const invocation = buildShellInvocation(childShell, installerPath, args, umask);
   const options = { cwd, env };
 
   if (!asynchronous) {
@@ -2523,7 +2658,7 @@ function runInstaller({
       );
     }
     for (const path of [supervisorPidFile, stdoutFile, stderrFile]) rmSync(path, { force: true });
-    return { ...result, ghArgvLog, ghLog, stderr, stdout };
+    return { ...result, curlArgvLog, curlLog, ghArgvLog, ghLog, stderr, stdout };
   }
 
   const child = spawn(invocation.command, invocation.args, {
@@ -2531,10 +2666,16 @@ function runInstaller({
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return trackChild(child, { ghArgvLog, ghLog, label: `installer ${tag}` });
+  return trackChild(child, {
+    curlArgvLog,
+    curlLog,
+    ghArgvLog,
+    ghLog,
+    label: `installer ${tag}`,
+  });
 }
 
-function trackChild(child, { ghArgvLog, ghLog, label }) {
+function trackChild(child, { curlArgvLog, curlLog, ghArgvLog, ghLog, label }) {
   activeChildren.add(child);
   let stdout = "";
   let stderr = "";
@@ -2558,7 +2699,7 @@ function trackChild(child, { ghArgvLog, ghLog, label }) {
     dumpHarnessState(`${label} exceeded ${timeoutMs}ms`);
     signalProcessGroup(child, "SIGKILL");
   }, timeoutMs);
-  const running = { child, ghArgvLog, ghLog, label, settled: false };
+  const running = { child, curlArgvLog, curlLog, ghArgvLog, ghLog, label, settled: false };
   running.completion = new Promise((resolveCompletion) => {
     child.on("close", (status, signal) => {
       clearTimeout(timeout);
@@ -2570,6 +2711,8 @@ function trackChild(child, { ghArgvLog, ghLog, label }) {
         });
       }
       resolveCompletion({
+        curlArgvLog,
+        curlLog,
         error: spawnError,
         ghArgvLog,
         ghLog,
@@ -2600,9 +2743,9 @@ function remainingOverallTime() {
   return remaining;
 }
 
-function buildShellInvocation(childShell, installerArgs, umask) {
+function buildShellInvocation(childShell, installerPath, installerArgs, umask) {
   if (umask === undefined) {
-    return { command: childShell, args: [installer, ...installerArgs] };
+    return { command: childShell, args: [installerPath, ...installerArgs] };
   }
   return {
     command: childShell,
@@ -2612,7 +2755,7 @@ function buildShellInvocation(childShell, installerArgs, umask) {
       "station-install",
       umask,
       childShell,
-      installer,
+      installerPath,
       ...installerArgs,
     ],
   };
@@ -2855,6 +2998,7 @@ function makeNoChecksumBin() {
   ]) {
     symlinkSync(resolveCommand(command), join(directory, command));
   }
+  symlinkSync(join(fakeBinDir, "curl"), join(directory, "curl"));
   symlinkSync(join(fakeBinDir, "gh"), join(directory, "gh"));
   symlinkSync(join(fakeBinDir, "uname"), join(directory, "uname"));
   return directory;
@@ -3152,48 +3296,84 @@ function ghCalls(result) {
   return readFileSync(result.ghLog, "utf8").trimEnd().split("\n");
 }
 
+function curlCalls(result) {
+  if (!existsSync(result.curlLog)) return [];
+  return readFileSync(result.curlLog, "utf8").trimEnd().split("\n");
+}
+
+function curlInvocations(result) {
+  if (!result.curlArgvLog || !existsSync(result.curlArgvLog)) return [];
+  return parseInvocationLog(result.curlArgvLog, "curl");
+}
+
 function ghInvocations(result) {
   if (!result.ghArgvLog || !existsSync(result.ghArgvLog)) return [];
+  return parseInvocationLog(result.ghArgvLog, "gh");
+}
+
+function parseInvocationLog(path, command) {
   const invocations = [];
   let current;
-  for (const line of readFileSync(result.ghArgvLog, "utf8").trimEnd().split("\n")) {
+  for (const line of readFileSync(path, "utf8").trimEnd().split("\n")) {
     if (line === "CALL") {
-      assert(current === undefined, "fake gh argv log does not nest calls");
+      assert(current === undefined, `fake ${command} argv log does not nest calls`);
       current = [];
     } else if (line === "END") {
-      assert(current !== undefined, "fake gh argv log ends a call after CALL");
+      assert(current !== undefined, `fake ${command} argv log ends a call after CALL`);
       invocations.push(current);
       current = undefined;
     } else if (line.startsWith("ARG=")) {
-      assert(current !== undefined, "fake gh argv log records arguments inside a call");
+      assert(current !== undefined, `fake ${command} argv log records arguments inside a call`);
       current.push(line.slice(4));
     } else if (line !== "") {
-      throw new Error(`unexpected fake gh argv log line: ${line}`);
+      throw new Error(`unexpected fake ${command} argv log line: ${line}`);
     }
   }
-  assert(current === undefined, "fake gh argv log closes every call");
+  assert(current === undefined, `fake ${command} argv log closes every call`);
   return invocations;
 }
 
-function assertStrictGhFlow(result, { draftId, latest = false, tag, target }) {
+function assertStrictPublicFlow(result, { latest = false, tag, target }) {
+  const baseUrl = `https://github.com/jeremy0dell/station/releases`;
+  const archiveName = `stn-${tag}-${target}.tar.gz`;
+  const common = [
+    "--fail",
+    "--silent",
+    "--show-error",
+    "--location",
+    "--proto",
+    "=https",
+    "--proto-redir",
+    "=https",
+    "--tlsv1.2",
+  ];
+  const expected = [];
+  if (latest) {
+    expected.push([
+      ...common,
+      "--output",
+      "/dev/null",
+      "--write-out",
+      "%{url_effective}",
+      `${baseUrl}/latest`,
+    ]);
+  }
+  expected.push([...common, `${baseUrl}/download/${tag}/${archiveName}`]);
+  expected.push([...common, `${baseUrl}/download/${tag}/SHA256SUMS`]);
+  assertEqual(curlInvocations(result), expected, `${tag} strict public curl argv flow`);
+  assertEqual(ghInvocations(result), [], `${tag} public flow makes no gh calls`);
+}
+
+function assertStrictGhFlow(result, { draftId, tag, target }) {
   const repository = "repos/jeremy0dell/station";
   const archiveName = `stn-${tag}-${target}.tar.gz`;
-  const tagEndpoint = `${repository}/releases/tags/${tag}`;
-  const archiveFilter = `.assets[] | select(.name == "${archiveName}") | .id`;
-  const checksumFilter = '.assets[] | select(.name == "SHA256SUMS") | .id';
   const expected = [["auth", "status", "--hostname", "github.com"]];
-  if (latest) expected.push(["api", `${repository}/releases/latest`, "--jq", ".tag_name"]);
-  if (draftId === undefined) {
-    expected.push(["api", tagEndpoint, "--jq", archiveFilter]);
-    expected.push(["api", tagEndpoint, "--jq", checksumFilter]);
-  } else {
-    const endpoint = `${repository}/releases/${draftId}`;
-    const match = `select(.draft == true and .id == ${draftId} and .tag_name == "${tag}")`;
-    const prefix = ["api", "-H", "X-GitHub-Api-Version: 2022-11-28", endpoint, "--jq"];
-    expected.push([...prefix, `${match} | .id`]);
-    expected.push([...prefix, `${match} | .assets[] | select(.name == "${archiveName}") | .id`]);
-    expected.push([...prefix, `${match} | .assets[] | select(.name == "SHA256SUMS") | .id`]);
-  }
+  const endpoint = `${repository}/releases/${draftId}`;
+  const match = `select(.draft == true and .id == ${draftId} and .tag_name == "${tag}")`;
+  const prefix = ["api", "-H", "X-GitHub-Api-Version: 2022-11-28", endpoint, "--jq"];
+  expected.push([...prefix, `${match} | .id`]);
+  expected.push([...prefix, `${match} | .assets[] | select(.name == "${archiveName}") | .id`]);
+  expected.push([...prefix, `${match} | .assets[] | select(.name == "SHA256SUMS") | .id`]);
   expected.push([
     "api",
     "-H",
@@ -3207,6 +3387,7 @@ function assertStrictGhFlow(result, { draftId, latest = false, tag, target }) {
     `${repository}/releases/assets/2`,
   ]);
   assertEqual(ghInvocations(result), expected, `${tag} strict gh argv flow`);
+  assertEqual(curlInvocations(result), [], `${tag} draft flow makes no curl calls`);
 }
 
 function assertNoGhApiCalls(result, label) {
@@ -3215,6 +3396,7 @@ function assertNoGhApiCalls(result, label) {
     [],
     `${label} release API calls`,
   );
+  assertEqual(curlCalls(result), [], `${label} public release requests`);
 }
 
 function spawnChecked(command, args, label) {

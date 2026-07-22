@@ -1,15 +1,9 @@
-# Draft formula for the upstream Station tap.
+# Source formula for the upstream Station tap.
 #
-# station is a PRIVATE repo. There is no built-in Homebrew download strategy
-# for private-repo archive tarballs (verified against Homebrew 6.x source --
-# no such strategy exists). Instead this clones via git+https, which
-# transparently authenticates using whatever git credentials the installing
-# user already has for github.com (SSH key, or `gh auth login`'s git
-# credential helper) -- no extra token/env var needed. This formula is for
-# internal/team use, not public onboarding, until the repo goes public.
-#
-# Copy this file to Formula/station.rb in the tap and replace the tag/revision
-# placeholders with a new tagged release before publishing.
+# The Git tag and full revision are intentional: Station's deterministic build
+# identity consumes repository metadata that GitHub-generated source archives
+# do not contain. Source access to the upstream repository is required during
+# installation and upgrade.
 class Station < Formula
   desc "Terminal-native control plane for AI-agent worktree sessions"
   homepage "https://github.com/jeremy0dell/station"
@@ -23,6 +17,7 @@ class Station < Formula
   depends_on "python" => :build
   depends_on "bun"
   depends_on "diffnav"
+  depends_on "git-delta"
   depends_on "node@24"
   depends_on "tmux"
   depends_on "worktrunk"
@@ -64,18 +59,18 @@ class Station < Formula
 
   def caveats
     <<~EOS
-      Homebrew installed the Station launchers. Configure the first project explicitly:
-        cd /path/to/first/git/project
+      Homebrew installed the Station launchers. Complete setup from any directory:
         stn setup
         stn doctor
         stn
 
+      Add the first Git project explicitly from Station after setup.
+
       Runtime config: ~/.config/station/config.toml
       Runtime state:  ~/.local/state/station
 
-      station is a private repo. Installing or upgrading this formula requires
-      git access to jeremy0dell/station (SSH key, or `gh auth login`'s git
-      credential helper).
+      Source access to https://github.com/jeremy0dell/station is required when
+      installing or upgrading this formula.
     EOS
   end
 
@@ -84,7 +79,10 @@ class Station < Formula
     ENV["XDG_RUNTIME_DIR"] = testpath/"run"
     mkdir_p ENV["XDG_RUNTIME_DIR"]
 
+    assert_equal version.to_s, shell_output("#{bin}/stn --version").strip
+
     output = shell_output("#{bin}/stn setup check --json", 1)
+    assert_match "\"station-launchers\"", output
     assert_match "\"requiredOk\": false", output
     assert_match "\"configPath\"", output
   end

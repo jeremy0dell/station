@@ -57,9 +57,11 @@ describe("release readiness docs", () => {
     for (const document of documents) {
       const normalized = document.replace(/\s+/g, " ").toLowerCase();
       expect(normalized).toContain("let your agent install and validate station");
-      expect(document).toContain("gh auth status --hostname github.com");
-      expect(document).toContain("gh repo view jeremy0dell/station");
-      expect(document).toContain("docs/install.md");
+      expect(document).toContain(
+        "https://github.com/jeremy0dell/station/releases/latest/download/install.sh",
+      );
+      expect(normalized).toContain("without authentication");
+      expect(normalized).toContain("private temporary file");
       expect(document).toContain("stn setup plan --json");
       expect(document).toContain("stn setup check --json");
       expect(document).toContain("stn doctor");
@@ -89,7 +91,7 @@ describe("release readiness docs", () => {
     expect(packageManifest.engines.node).toBe(">=24.2 <25");
   });
 
-  it("documents the authenticated private binary release contract", async () => {
+  it("documents the public binary release and authenticated draft contract", async () => {
     const [readme, install, development, singleBinary, homebrew, release, promote] =
       await Promise.all(
         [
@@ -104,9 +106,10 @@ describe("release readiness docs", () => {
       );
     const packageJson = await readPackageManifest();
 
-    expect(readme).toContain("authenticated GitHub release assets");
-    expect(readme).toContain("does not require Node.js, pnpm, Bun");
-    expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
+    const normalizedReadme = readme.replace(/\s+/g, " ");
+    expect(normalizedReadme).toContain("public stable release");
+    expect(normalizedReadme).toContain("does not require a GitHub account");
+    expect(install.replace(/\s+/g, " ")).toContain("latest stable release");
     expect(install).toContain("tag=v0.7.1-rc.4");
     for (const [path, document] of [
       ["README.md", readme],
@@ -115,43 +118,15 @@ describe("release readiness docs", () => {
       expect(document, path).not.toContain("ref=main");
       expect(document, path).not.toContain("gh auth token");
       expect(document, path).not.toContain("Authorization: Bearer");
-      expect(document, path).not.toContain("curl");
-      const recipes = shellBlocks(document).filter((block) =>
-        block.includes("repos/jeremy0dell/station/contents/scripts/install.sh"),
+      expect(document, path).toContain(
+        "https://github.com/jeremy0dell/station/releases/latest/download/install.sh",
       );
-      expect(recipes, path).toHaveLength(1);
-      for (const recipe of recipes) {
-        expect(recipe, path).not.toContain("cd /path/to/your/git-project");
-        expect(recipe, path).toContain("umask 077");
-        expect(recipe, path).toContain("export GH_HOST=github.com");
-        expect(recipe, path).toContain("releases/latest");
-        expect(recipe.indexOf("export GH_HOST=github.com"), path).toBeLessThan(
-          recipe.indexOf("gh api --method GET"),
-        );
-        expect(recipe, path).toContain('installer="$(mktemp)"');
-        expect(recipe, path).toContain("trap 'rm -f \"$installer\"' EXIT");
-        expect(recipe, path).toContain('test -s "$installer"');
-        expect(recipe, path).toContain('sh -n "$installer"');
-        expect(recipe, path).toContain('sh "$installer" --version "$tag"');
-
-        const installerFetches = continuedShellCommands(recipe).filter((command) =>
-          command.includes("contents/scripts/install.sh"),
-        );
-        expect(installerFetches, path).toHaveLength(1);
-        const command = installerFetches[0] ?? "";
-        expect(command, path).toContain("gh api --method GET");
-        expect(command, path).toContain("Accept: application/vnd.github.raw+json");
-        expect(command, path).toContain('-f ref="$tag"');
-        expect(command, path).toContain(
-          'repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"',
-        );
-        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
-      }
+      expect(document, path).toContain("curl --proto '=https' --tlsv1.2 -fsSL");
+      expect(document, path).toContain("sh -n");
+      expect(document, path).toContain("curl | sh");
+      expect(document, path).not.toContain("cd /path/to/your/git-project");
     }
-    expect(install).toContain(
-      'tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest',
-    );
-    expect(install.replace(/\s+/g, " ")).toContain("installer code and artifacts");
+    expect(install).toContain("version-stamped `install.sh`");
     expect(install).toContain("SHA256SUMS");
     expect(install).toContain("stn-tmux-popup");
     for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
@@ -180,11 +155,18 @@ describe("release readiness docs", () => {
     expect(acceptanceRecipe).toContain(
       'test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq \'.sha\')" = "$commit"',
     );
-    expect(acceptanceRecipe).toContain('-f ref="$commit"');
+    expect(acceptanceRecipe).toContain('asset_ids="$candidate_dir/asset-ids.txt"');
+    expect(acceptanceRecipe).toContain(
+      '"repos/jeremy0dell/station/releases/assets/$installer_asset_id"',
+    );
+    expect(acceptanceRecipe).toContain('grep -Fx "embedded_version=\\"$tag\\""');
+    expect(acceptanceRecipe).toContain('STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer"');
+    expect(acceptanceRecipe).not.toContain('sh "$installer" --version');
     expect(acceptanceRecipe).not.toContain(
       'commit="$(gh api "repos/jeremy0dell/station/commits/$tag"',
     );
-    expect(release).toContain('-f ref="$COMMIT"');
+    expect(release).toContain("render-release-installer.mjs");
+    expect(release).toContain("release/install.sh");
     expect(release).toContain("persist-credentials: false");
     const validateRelease = release.slice(
       release.indexOf("      - name: Validate release tag"),
@@ -205,6 +187,7 @@ describe("release readiness docs", () => {
     expect(createDraft).toContain('[[ "$release_id" =~ ^[0-9]+$ ]] && break');
     expect(createDraft).not.toContain("releases?per_page=100");
     expect(createDraft).toContain('--argjson releaseId "$release_id"');
+    expect(createDraft).toContain("install.sh");
     expect(release).toContain("accepted-release-candidate-");
     const installDraft = release.slice(
       release.indexOf("  install-draft:"),
@@ -214,6 +197,7 @@ describe("release readiness docs", () => {
     for (const job of [installDraft, recordCandidate]) {
       expect(job).toContain("contents: write");
       expect(job).not.toContain("contents: read");
+      expect(job).toContain("install.sh");
     }
     expect(promote).toContain("workflow_dispatch");
     expect(promote).toContain("manual_acceptance");
@@ -221,10 +205,14 @@ describe("release readiness docs", () => {
     expect(promote).toContain("actions/workflows/$workflow_id");
     expect(promote).toContain("compare/$commit...main");
     expect(promote).toContain('prerelease="$expected_prerelease"');
+    expect(promote).toContain("verify-public-install");
+    expect(promote).toContain("releases/latest/download/install.sh");
     expect(packageJson.version).toBe("0.7.1-rc.4");
     expect(development).toContain("HOST_UPGRADE_BLOCKED");
-    expect(homebrew).toContain("`workflow_dispatch` only");
-    expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
+    expect(homebrew).toContain("manually dispatch");
+    expect(homebrew).toContain("It never commits directly to the tap's default branch");
+    expect(homebrew).toContain("`COMMITTER_TOKEN` must be configured");
+    expect(homebrew).toContain("fine-grained token");
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
@@ -372,14 +360,6 @@ async function readPackageManifest(): Promise<PackageManifest> {
   } catch (cause) {
     throw new Error("package.json must contain valid JSON", { cause });
   }
-}
-
-function continuedShellCommands(document: string): string[] {
-  return document
-    .replace(/\\\r?\n\s*/g, " ")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^(?:[A-Z_]+=[^ ]+\s+)*(?:curl|gh)\s/.test(line));
 }
 
 function shellBlocks(document: string): string[] {

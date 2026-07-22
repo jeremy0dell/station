@@ -16,9 +16,7 @@ on:
         required: true
         type: boolean
 
-permissions:
-  actions: read
-  contents: write
+permissions: {}
 
 concurrency:
   group: promote-release-${{ inputs.tag }}
@@ -28,6 +26,9 @@ jobs:
   promote:
     if: inputs.manual_acceptance
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
     steps:
       - name: Verify accepted candidate and publish its draft
         env:
@@ -103,6 +104,7 @@ jobs:
 
           expected=(
             SHA256SUMS
+            install.sh
             "stn-v$version-darwin-arm64.tar.gz"
             "stn-v$version-darwin-x64.tar.gz"
             "stn-v$version-linux-arm64.tar.gz"
@@ -147,3 +149,75 @@ jobs:
             jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$published_release_json"
           )" = "$current_ids"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"
+
+  verify-public-install:
+    name: verify public install (${{ matrix.target }})
+    needs: promote
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Download public installer
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          installer="$RUNNER_TEMP/station-install.sh"
+          tagged_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/install.sh"
+          for attempt in {1..12}; do
+            if env -u GH_TOKEN -u GITHUB_TOKEN curl \
+              --fail --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --output "$installer" "$tagged_url"; then
+              break
+            fi
+            test "$attempt" -lt 12
+            sleep 5
+          done
+          test -s "$installer"
+          /bin/sh -n "$installer"
+          grep -Fx "embedded_version=\"$TAG\"" "$installer"
+
+          case "$TAG" in
+            *-*) ;;
+            *)
+              latest_installer="$RUNNER_TEMP/station-install-latest.sh"
+              env -u GH_TOKEN -u GITHUB_TOKEN curl \
+                --fail --silent --show-error --location \
+                --proto '=https' --proto-redir '=https' --tlsv1.2 \
+                --output "$latest_installer" \
+                "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/install.sh"
+              cmp "$installer" "$latest_installer"
+              ;;
+          esac
+      - name: Install and verify public artifact
+        env:
+          EXPECTED_VERSION: ${{ inputs.tag }}
+        run: |
+          version="${EXPECTED_VERSION#v}"
+          install_home="$RUNNER_TEMP/public-install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          mkdir -p "$install_home"
+
+          env -u GH_TOKEN -u GITHUB_TOKEN \
+            HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            PATH="/usr/bin:/bin" \
+            /bin/sh "$RUNNER_TEMP/station-install.sh" --install-dir "$bin_dir"
+
+          test "$("$bin_dir/stn" --version)" = "$version"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          test -f "$data_home/station/LICENSE"
