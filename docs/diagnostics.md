@@ -109,6 +109,15 @@ expected; explicitly disabled hooks are reported as the skip-hooks automation
 mode instead. Provider command failures from `wt` are recorded through provider
 health, command records, logs, debug traces, and debug bundle evidence.
 
+A checkout-style configured root with local `core.bare=true` is reported as
+`WORKTRUNK_PROJECT_ROOT_BARE`. `stn project doctor <projectId>` reports the
+configuration-side warning, while `stn doctor --project <projectId>` reports the
+scoped Worktrunk project check and degraded project health. Worktrunk list,
+create, and remove operations are blocked before `wt` runs. Station does not
+repair Git config automatically; use the reported commands to inspect the
+setting and either set local `core.bare=false` for the intended checkout or
+correct `projects.root`.
+
 Doctor also reports Worktrunk registrations whose working directories are
 missing or prunable. `stn doctor --project <id>` limits this scan to one project;
 the unscoped command scans configured projects with bounded concurrency and
@@ -241,7 +250,14 @@ station --config /path/to/config.toml worktrunk hooks doctor
 station --config /path/to/config.toml worktrunk hooks uninstall --yes
 ```
 
-Generated hook bodies call `stn-ingress --socket <observer.sock> --state-dir <state> --spool-dir <state>/spool/hooks --config /path/to/config.toml worktrunk <event>` by default. They do not contain lifecycle logic. The installer backs up the Worktrunk config, preserves unrelated hook commands, and removes only generated STATION entries on uninstall.
+Generated hook bodies call the resolved absolute `stn-ingress` launcher with
+`--socket <observer.sock> --state-dir <state> --spool-dir <state>/spool/hooks
+--config /path/to/config.toml worktrunk <event>`. They do not contain lifecycle
+logic. The installer backs up the Worktrunk config, preserves unrelated hook
+commands, repairs exact legacy bare-launcher entries to the canonical absolute
+form, and removes only generated STATION entries on uninstall. Standalone and
+full doctor validate that same composed expectation, so normal verification
+never requires repeating `--hook-bin`.
 
 Generic aliases are also available for the Worktrunk hook setup surface:
 

@@ -209,6 +209,43 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         "compiled persisted popup command round trip",
       );
 
+      const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+      await writeWorktrunkHookSmokeConfig(configPath, stateDir, socketPath, worktrunkConfigPath);
+      const hookInstall = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "install", "worktrunk", "--yes"],
+        { env: childEnv },
+      );
+      assertEqual(JSON.parse(hookInstall.stdout).installed, true, "compiled hook install");
+      assertIncludes(
+        await readFile(worktrunkConfigPath, "utf8"),
+        join(installedRoot, "stn-ingress"),
+        "compiled hook absolute ingress launcher",
+      );
+      const standaloneHookDoctor = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "doctor", "worktrunk"],
+        { env: childEnv },
+      );
+      assertEqual(
+        JSON.parse(standaloneHookDoctor.stdout).status,
+        "ok",
+        "compiled standalone hook doctor",
+      );
+      const fullHookDoctor = await run(binaryPath, ["--config", configPath, "doctor"], {
+        env: childEnv,
+        allowedExitCodes: [0, 1],
+      });
+      const fullHookReport = JSON.parse(fullHookDoctor.stdout);
+      const fullHookCheck = fullHookReport.checks?.find(
+        (check) => check.name === "worktrunk-hooks",
+      );
+      assertEqual(fullHookCheck?.status, "ok", "compiled full hook doctor");
+      const hookObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      await hookObserverClient.stop();
+      await waitForMissing(socketPath);
+      await writeSmokeConfig(configPath, stateDir, socketPath);
+
       observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
       await runObserverStart(
         binaryPath,
@@ -1128,6 +1165,33 @@ async function waitForDirectoryFileCount(directory, expected) {
     await delay(25);
   }
   fail(`directory file count did not reach ${expected}: ${directory}`);
+}
+
+async function writeWorktrunkHookSmokeConfig(path, state, socket, worktrunkConfigPath) {
+  await writeFile(
+    path,
+    [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[observer]",
+      `state_dir = ${JSON.stringify(state)}`,
+      `socket_path = ${JSON.stringify(socket)}`,
+      "",
+      "[defaults]",
+      'worktree_provider = "worktrunk"',
+      'terminal = "noop-terminal"',
+      'harness = "noop-harness"',
+      'layout = "agent-shell"',
+      "",
+      "[worktree.worktrunk]",
+      'command = "/usr/bin/true"',
+      `config_path = ${JSON.stringify(worktrunkConfigPath)}`,
+      "use_lifecycle_hooks = true",
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
 }
 
 async function writeSmokeConfig(path, state, socket, terminal = "noop-terminal") {

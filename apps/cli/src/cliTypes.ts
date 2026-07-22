@@ -21,4 +21,5 @@ export type CliRunOptions = {
   notifyDeps?: NotifyCommandDeps;
   observeDeps?: ObserveCommandDeps;
   setupDeps?: SetupCommandDeps;
+  providerHookIngressLauncher?: string;
 };

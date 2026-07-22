@@ -57,7 +57,9 @@ describe("guided setup command", () => {
           activations.push(input);
         },
         prompt: prompt({ confirms: [false, false, true, false, false] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
         now: () => new Date("2026-06-08T12:00:00.000Z"),
       },
     );
@@ -120,7 +122,9 @@ describe("guided setup command", () => {
             return "codex";
           },
         },
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -171,7 +175,9 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -224,7 +230,9 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -337,7 +345,9 @@ describe("guided setup command", () => {
           activations += 1;
         },
         prompt: prompt({ confirms: [false, false, true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -375,7 +385,9 @@ describe("guided setup command", () => {
           };
         },
         prompt: prompt({ confirms: [false, false, true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -469,7 +481,9 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -530,7 +544,9 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -600,7 +616,9 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, false, true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -615,7 +633,7 @@ describe("guided setup command", () => {
     ).toHaveLength(3);
   });
 
-  it("installs accepted Worktrunk and agent hooks with resolved ingress launcher", async () => {
+  it("delegates Worktrunk launcher composition while resolving the agent ingress launcher", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -629,8 +647,7 @@ describe("guided setup command", () => {
       "wt --version": "worktrunk 1.2.3\n",
       "tmux -V": "tmux 3.5a\n",
       "codex --version": "codex 0.1.0\n",
-      [`stn --config ${configPath} hooks install worktrunk --yes --hook-bin /fake/bin/stn-ingress`]:
-        "",
+      [`stn --config ${configPath} hooks install worktrunk --yes`]: "",
       [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]: "",
     });
 
@@ -675,16 +692,7 @@ describe("guided setup command", () => {
       expect.arrayContaining([
         expect.objectContaining({
           command: "/fake/bin/stn",
-          args: [
-            "--config",
-            configPath,
-            "hooks",
-            "install",
-            "worktrunk",
-            "--yes",
-            "--hook-bin",
-            "/fake/bin/stn-ingress",
-          ],
+          args: ["--config", configPath, "hooks", "install", "worktrunk", "--yes"],
           stdio: "inherit",
         }),
         expect.objectContaining({
@@ -743,7 +751,9 @@ describe("guided setup command", () => {
           activations += 1;
         },
         prompt: prompt({ confirms: [true, false, true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -811,7 +821,9 @@ describe("guided setup command", () => {
             return "codex";
           },
         },
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -860,7 +872,9 @@ describe("guided setup command", () => {
             closed = true;
           },
         },
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -899,7 +913,9 @@ describe("guided setup command", () => {
         access: fakeAccess([]),
         fs,
         prompt: prompt({ confirms: [true] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -939,7 +955,9 @@ describe("guided setup command", () => {
         access: fakeAccess([]),
         fs,
         prompt: prompt({ confirms: [false] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
@@ -978,7 +996,9 @@ describe("guided setup command", () => {
         access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/delta"]),
         fs,
         prompt: prompt({ confirms: [false] }),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 

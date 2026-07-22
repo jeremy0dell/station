@@ -147,6 +147,11 @@ export async function collectDiagnosticSnapshot(
   return DiagnosticSnapshotSchema.parse(diagnosticSnapshot);
 }
 
+/**
+ * USE CASE
+ *
+ * Aggregates current runtime, persistence, and provider evidence into the read-only health report.
+ */
 export async function runDoctor(
   deps: ObserverDiagnosticsDeps,
   options: DoctorOptions = {},
@@ -450,8 +455,15 @@ async function collectProviderDoctorChecks(
         ? deps.config.projects
         : deps.config.projects.filter((project) => project.id === options.projectId),
   };
-  if (deps.configPath !== undefined) {
-    context.stationConfigPath = deps.configPath;
+  if (options?.providerHookRuntime === undefined) {
+    if (deps.configPath !== undefined) {
+      context.stationConfigPath = deps.configPath;
+    }
+  } else {
+    context.providerHookRuntime = options.providerHookRuntime;
+    if (options.providerHookRuntime.stationConfigPath !== undefined) {
+      context.stationConfigPath = options.providerHookRuntime.stationConfigPath;
+    }
   }
   const providers = providerEntries(deps.providers);
 

@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { dispatchSelfExec, type SelfExecRunners } from "@station/cli/self-exec";
 import cttyHelperAsset from "../../dist/ctty-helper" with { type: "file" };
 import piExtensionAsset from "../../dist/piExtension.mjs" with { type: "file" };
@@ -19,7 +19,9 @@ function popupArgv(argv: readonly string[]): readonly string[] {
 }
 
 function compiledRunners(installedRoot: string): SelfExecRunners {
+  const providerHookIngressLauncher = join(installedRoot, "stn-ingress");
   const cliOptions = {
+    providerHookIngressLauncher,
     popupDeps: {
       checkoutRoot: installedRoot,
       preferRegisteredDevPopup: false,
@@ -34,6 +36,7 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
       const { runCliObserverMain } = await import("@station/cli/observer-main");
       process.exitCode = await runCliObserverMain(argv, {
         preparePiExtension: prepareCompiledPiExtension,
+        providerHookIngressLauncher,
       });
     },
     ingress: async (argv) => (await import("@station/cli/ingress-main")).runCliIngressMain(argv),
@@ -54,8 +57,8 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
 /**
  * COMPOSITION ROOT
  *
- * Binds compiled raw arguments to lazy process entries, packaged runtime assets, and
- * installed popup ownership and setup wiring.
+ * Binds compiled raw arguments to lazy process entries, packaged runtime assets,
+ * installed launcher identity, popup ownership, and setup wiring.
  */
 export async function runStationBinaryMain(): Promise<void> {
   const installedRoot = dirname(realpathSync(process.execPath));

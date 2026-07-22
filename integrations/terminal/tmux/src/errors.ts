@@ -1,5 +1,9 @@
-import type { SafeError } from "@station/contracts";
-import { safeErrorFromUnknown } from "@station/runtime";
+import type { DiagnosticDetail, SafeError } from "@station/contracts";
+import {
+  isExternalCommandError,
+  type RuntimeSafeError,
+  safeErrorFromUnknown,
+} from "@station/runtime";
 
 export type TmuxTerminalProviderErrorCode =
   | "TERMINAL_CAPTURE_FAILED"
@@ -23,6 +27,7 @@ export class TmuxTerminalProviderError extends Error implements SafeError {
   readonly projectId?: string;
   readonly worktreeId?: string;
   readonly sessionId?: string;
+  readonly diagnosticDetails?: DiagnosticDetail[];
 
   constructor(
     code: TmuxTerminalProviderErrorCode,
@@ -33,6 +38,7 @@ export class TmuxTerminalProviderError extends Error implements SafeError {
       projectId?: string;
       worktreeId?: string;
       sessionId?: string;
+      diagnosticDetails?: DiagnosticDetail[];
     } = {},
   ) {
     super(message, { cause: options.cause });
@@ -42,17 +48,12 @@ export class TmuxTerminalProviderError extends Error implements SafeError {
       configurable: true,
     });
     this.code = code;
-    if (options.hint !== undefined) {
-      this.hint = options.hint;
-    }
-    if (options.projectId !== undefined) {
-      this.projectId = options.projectId;
-    }
-    if (options.worktreeId !== undefined) {
-      this.worktreeId = options.worktreeId;
-    }
-    if (options.sessionId !== undefined) {
-      this.sessionId = options.sessionId;
+    if (options.hint !== undefined) this.hint = options.hint;
+    if (options.projectId !== undefined) this.projectId = options.projectId;
+    if (options.worktreeId !== undefined) this.worktreeId = options.worktreeId;
+    if (options.sessionId !== undefined) this.sessionId = options.sessionId;
+    if (options.diagnosticDetails !== undefined) {
+      this.diagnosticDetails = options.diagnosticDetails;
     }
   }
 }
@@ -64,7 +65,7 @@ export function tmuxSafeError(
     message: string;
     hint?: string;
   },
-): SafeError {
+): RuntimeSafeError {
   return safeErrorFromUnknown(error, {
     tag: "TerminalProviderError",
     code: fallback.code,
@@ -82,82 +83,68 @@ export function tmuxProviderErrorFromUnknown(
     hint?: string;
   },
 ): TmuxTerminalProviderError {
-  if (isMissingTarget(error)) {
+  const normalized = tmuxSafeError(error, fallback);
+  const diagnosticDetails = normalized.diagnosticDetails;
+  if (isMissingTarget(normalized)) {
     return new TmuxTerminalProviderError(
       "TERMINAL_TARGET_MISSING",
       "The terminal target no longer exists.",
       {
         hint: "Refresh the dashboard or reopen the worktree.",
-        cause: error,
+        cause: normalized,
+        ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
       },
     );
   }
-  if (isMissingBinary(error)) {
+  if (normalized.code === "ENOENT") {
     return new TmuxTerminalProviderError("TERMINAL_TMUX_UNAVAILABLE", "tmux is not available.", {
       hint: "Install tmux or choose a different terminal provider.",
-      cause: error,
+      cause: normalized,
+      ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
     });
   }
-  if (isTimeout(error)) {
+  if (
+    normalized.code === "TERMINAL_TMUX_TIMEOUT" ||
+    normalized.code === "EXTERNAL_COMMAND_TIMEOUT"
+  ) {
     return new TmuxTerminalProviderError("TERMINAL_TMUX_TIMEOUT", "tmux command timed out.", {
-      cause: error,
+      cause: normalized,
+      ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
     });
   }
 
-  const safeError = tmuxSafeError(error, fallback);
-  const hint = safeError.hint ?? fallback.hint;
-  const message = isGenericExternalCommandFailure(safeError) ? fallback.message : safeError.message;
+  const hint = normalized.hint ?? fallback.hint;
+  const message = isGenericExternalCommandFailure(normalized)
+    ? fallback.message
+    : normalized.message;
   return new TmuxTerminalProviderError(fallback.code, message, {
-    cause: error,
+    cause: normalized,
     ...(hint === undefined ? {} : { hint }),
+    ...(diagnosticDetails === undefined ? {} : { diagnosticDetails }),
   });
 }
 
-function isGenericExternalCommandFailure(error: SafeError): boolean {
+function isGenericExternalCommandFailure(error: RuntimeSafeError): boolean {
   return (
-    error.tag === "ExternalCommandError" &&
+    isExternalCommandError(error) &&
     (error.code === "EXTERNAL_COMMAND_FAILED" ||
       error.code === "EXTERNAL_COMMAND_TIMEOUT" ||
       error.code === "EXTERNAL_COMMAND_ABORTED")
   );
 }
 
-function isMissingBinary(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
+function isMissingTarget(error: RuntimeSafeError): boolean {
+  if (error.code === "TERMINAL_TARGET_MISSING") {
+    return true;
   }
-  const cause = error as { code?: unknown; cause?: unknown };
-  return cause.code === "ENOENT" || isMissingBinary(cause.cause);
-}
-
-function isTimeout(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "TERMINAL_TMUX_TIMEOUT"
-  );
-}
-
-function isMissingTarget(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
+  const text = [error.message];
+  for (const detail of error.diagnosticDetails ?? []) {
+    if (detail.type !== "external_command") continue;
+    text.push(detail.command);
+    if (detail.stdoutSnippet !== undefined) text.push(detail.stdoutSnippet);
+    if (detail.stderrSnippet !== undefined) text.push(detail.stderrSnippet);
   }
-  const candidate = error as {
-    code?: unknown;
-    message?: unknown;
-    stderrSnippet?: unknown;
-    stderr?: unknown;
-    cause?: unknown;
-  };
-  const message = [
-    typeof candidate.message === "string" ? candidate.message : "",
-    typeof candidate.stderrSnippet === "string" ? candidate.stderrSnippet : "",
-    typeof candidate.stderr === "string" ? candidate.stderr : "",
-  ].join("\n");
-  return (
-    candidate.code === "TERMINAL_TARGET_MISSING" ||
-    /can't find|cannot find|no such|not found|missing pane|missing window/i.test(message) ||
-    isMissingTarget(candidate.cause)
+  return /can't find|cannot find|no such|not found|missing pane|missing window/i.test(
+    text.join("\n"),
   );
 }

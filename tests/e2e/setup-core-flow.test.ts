@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadConfig } from "@station/config";
 import { createObserverClient } from "@station/protocol";
+import { environmentWithoutGitLocals } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { waitForSocketClosed } from "../support/sockets";
 
@@ -350,7 +351,10 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
-      run("git", ["init", "-b", "main"], { cwd: repo });
+      run("git", ["init", "-b", "main"], {
+        cwd: repo,
+        env: environmentWithoutGitLocals(),
+      });
 
       const env = {
         ...process.env,
@@ -410,7 +414,10 @@ describe("setup core flow e2e", () => {
         "codex",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
-      run("git", ["init", "-b", "main"], { cwd: repo });
+      run("git", ["init", "-b", "main"], {
+        cwd: repo,
+        env: environmentWithoutGitLocals(),
+      });
 
       const result = runStation(["--config", configPath, "setup", "check", "--json"], {
         cwd: repo,
@@ -561,7 +568,7 @@ function run(
 ): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
-    env: options.env,
+    env: environmentWithoutGitLocals(options.env),
     encoding: "utf8",
   });
   if (options.allowFailure !== true && result.status !== 0) {

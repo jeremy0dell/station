@@ -116,8 +116,11 @@ intermediate repaint.
 
 Git-backed fixtures and child processes must clear Git's repository-local environment variables;
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`
-are inherited. Remove linked worktrees and other Git-created resources through Git before deleting
-their directories.
+are inherited. Lefthook commands run through `scripts/run-without-git-locals.mjs`, which removes
+the complete variable list reported by the installed Git before launching any hook descendants.
+This hook boundary is defense in depth: independently invoked Git-backed fixtures must still clear
+their own child environments. Remove linked worktrees and other Git-created resources through Git
+before deleting their directories.
 
 `pnpm build` computes one immutable Observer build identity from the current
 Git `HEAD`, the sorted production inputs from tracked plus untracked-nonignored
@@ -546,6 +549,7 @@ repository, then run:
 ```sh
 stn --version
 stn setup check --json
+stn hooks doctor worktrunk
 stn doctor
 stn tui
 ```
@@ -591,7 +595,9 @@ manually verify the actual user experience, not a dashboard override:
    and connects to a healthy Observer.
 4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 5. Run `stn setup` from `HOME` or Desktop. Confirm it creates a zero-project
-   config without adopting that directory. In the open TUI, press `Enter` on
+   config without adopting that directory, then verify both
+   `stn hooks doctor worktrunk` and the `worktrunk-hooks` row in full
+   `stn doctor` are `ok` without `--hook-bin`. In the open TUI, press `Enter` on
    **Add your first project**, choose a Git repository, and confirm the TUI
    reconnects and shows it after activation on the same Observer socket.
 6. Accept the compiled install's optional popup binding and confirm

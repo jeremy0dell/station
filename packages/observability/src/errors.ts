@@ -6,6 +6,11 @@ import {
   type SafeError,
   SafeErrorSchema,
 } from "@station/contracts";
+import {
+  publicSafeErrorFromUnknown,
+  type RuntimeSafeError,
+  safeErrorFromUnknown,
+} from "@station/runtime";
 import { redact } from "./redaction.js";
 
 export type SafeErrorFallback = {
@@ -42,22 +47,20 @@ export function toSafeError(
     >
   > = {},
 ): SafeError {
-  const knownSafeError = isSafeErrorLike(error) ? error : safeErrorCause(error);
-  const known = knownSafeError ?? fallback;
-  const safeMessage = redact(known.message).value;
+  const projected = publicSafeErrorFromUnknown(error, fallback);
   const safeError: SafeError = {
-    tag: known.tag,
-    code: known.code,
-    message: safeMessage,
+    tag: projected.tag,
+    code: projected.code,
+    message: redact(projected.message).value,
   };
-  if (known.hint !== undefined) safeError.hint = redact(known.hint).value;
-  if (known.provider !== undefined) safeError.provider = known.provider;
-  if (knownSafeError?.projectId !== undefined) safeError.projectId = knownSafeError.projectId;
-  if (knownSafeError?.worktreeId !== undefined) safeError.worktreeId = knownSafeError.worktreeId;
-  if (knownSafeError?.sessionId !== undefined) safeError.sessionId = knownSafeError.sessionId;
-  if (knownSafeError?.diagnosticId !== undefined) {
-    safeError.diagnosticId = knownSafeError.diagnosticId;
-  }
+  if (projected.hint !== undefined) safeError.hint = redact(projected.hint).value;
+  if (projected.commandId !== undefined) safeError.commandId = projected.commandId;
+  if (projected.projectId !== undefined) safeError.projectId = projected.projectId;
+  if (projected.worktreeId !== undefined) safeError.worktreeId = projected.worktreeId;
+  if (projected.sessionId !== undefined) safeError.sessionId = projected.sessionId;
+  if (projected.provider !== undefined) safeError.provider = projected.provider;
+  if (projected.traceId !== undefined) safeError.traceId = projected.traceId;
+  if (projected.diagnosticId !== undefined) safeError.diagnosticId = projected.diagnosticId;
   applySafeErrorContext(safeError, context);
   return SafeErrorSchema.parse(safeError);
 }
@@ -75,14 +78,15 @@ export function createErrorEnvelope(input: ErrorEnvelopeInput): ErrorEnvelope {
   if (input.sessionId !== undefined) context.sessionId = input.sessionId;
   if (input.traceId !== undefined) context.traceId = input.traceId;
 
-  const safeError = toSafeError(input.error, input.fallback, context);
+  const normalized = safeErrorFromUnknown(input.error, input.fallback);
+  const safeError = toSafeError(normalized, input.fallback, context);
   const errorObject = input.error instanceof Error ? input.error : undefined;
   const provider = input.provider ?? safeError.provider;
   const redactedCause = redact(errorObject?.message ?? input.error).value;
   const redactedStack =
     errorObject?.stack === undefined ? undefined : redact(errorObject.stack).value;
   const redactedRaw = input.raw === undefined ? undefined : redact(input.raw).value;
-  const redactedDiagnostics = diagnosticsFromUnknown(input.error);
+  const redactedDiagnostics = diagnosticsFromRuntimeError(normalized);
 
   const envelope: ErrorEnvelope = {
     id: input.id,
@@ -108,86 +112,16 @@ export function createErrorEnvelope(input: ErrorEnvelopeInput): ErrorEnvelope {
   return ErrorEnvelopeSchema.parse(envelope);
 }
 
-function isSafeErrorLike(value: unknown): value is SafeError {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Partial<SafeError>;
-  return (
-    typeof candidate.tag === "string" &&
-    typeof candidate.code === "string" &&
-    typeof candidate.message === "string"
-  );
-}
-
-function safeErrorCause(error: unknown, seen = new Set<unknown>()): SafeError | undefined {
-  if (!error || typeof error !== "object" || seen.has(error)) {
-    return undefined;
-  }
-  seen.add(error);
-  const cause = (error as { cause?: unknown }).cause;
-  if (isSafeErrorLike(cause)) {
-    return cause;
-  }
-  return safeErrorCause(cause, seen);
-}
-
-function diagnosticsFromUnknown(error: unknown, seen = new Set<unknown>()): DiagnosticDetail[] {
-  if (!error || typeof error !== "object" || seen.has(error)) {
-    return [];
-  }
-  seen.add(error);
+function diagnosticsFromRuntimeError(error: RuntimeSafeError): DiagnosticDetail[] {
   const diagnostics: DiagnosticDetail[] = [];
-  const record = error as {
-    diagnosticDetails?: unknown;
-    cause?: unknown;
-  };
-
-  if (Array.isArray(record.diagnosticDetails)) {
-    for (const detail of record.diagnosticDetails) {
-      const redacted = redact(detail).value;
-      const parsed = DiagnosticDetailSchema.safeParse(redacted);
-      if (parsed.success) {
-        diagnostics.push(parsed.data);
-      }
+  for (const detail of error.diagnosticDetails ?? []) {
+    const redacted = redact(detail).value;
+    const parsed = DiagnosticDetailSchema.safeParse(redacted);
+    if (parsed.success) {
+      diagnostics.push(parsed.data);
     }
   }
-
-  const externalDetail = externalCommandDiagnosticFromUnknown(error);
-  if (externalDetail !== undefined) {
-    diagnostics.push(externalDetail);
-  }
-
-  diagnostics.push(...diagnosticsFromUnknown(record.cause, seen));
   return dedupeDiagnostics(diagnostics);
-}
-
-function externalCommandDiagnosticFromUnknown(error: unknown): DiagnosticDetail | undefined {
-  if (!error || typeof error !== "object") {
-    return undefined;
-  }
-  const record = error as Record<string, unknown>;
-  if (record.tag !== "ExternalCommandError" || typeof record.command !== "string") {
-    return undefined;
-  }
-
-  const detail: DiagnosticDetail = {
-    type: "external_command",
-    operation: `externalCommand.${record.command.split(" ")[0] ?? "command"}`,
-    command: record.command,
-  };
-  if (typeof record.provider === "string") detail.provider = record.provider;
-  if (typeof record.cwd === "string") detail.cwd = record.cwd;
-  if (typeof record.exitCode === "number") detail.exitCode = record.exitCode;
-  if (typeof record.signal === "string") detail.signal = record.signal;
-  if (typeof record.stdoutSnippet === "string" && record.stdoutSnippet.length > 0) {
-    detail.stdoutSnippet = record.stdoutSnippet;
-  }
-  if (typeof record.stderrSnippet === "string" && record.stderrSnippet.length > 0) {
-    detail.stderrSnippet = record.stderrSnippet;
-  }
-  const parsed = DiagnosticDetailSchema.safeParse(redact(detail).value);
-  return parsed.success ? parsed.data : undefined;
 }
 
 function dedupeDiagnostics(diagnostics: readonly DiagnosticDetail[]): DiagnosticDetail[] {
@@ -195,9 +129,7 @@ function dedupeDiagnostics(diagnostics: readonly DiagnosticDetail[]): Diagnostic
   const deduped: DiagnosticDetail[] = [];
   for (const diagnostic of diagnostics) {
     const key = JSON.stringify(diagnostic);
-    if (seen.has(key)) {
-      continue;
-    }
+    if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(diagnostic);
   }

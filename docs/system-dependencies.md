@@ -163,7 +163,7 @@ The upstream Worktrunk install docs currently recommend:
 brew install worktrunk && wt config shell install
 ```
 
-See https://worktrunk.dev/worktrunk/#install for other package managers.
+See <https://worktrunk.dev/worktrunk/#install> for other package managers.
 
 ## Resolution Order
 
@@ -211,9 +211,12 @@ configured to skip them. `worktree.worktrunk.use_lifecycle_hooks = false` makes 
 mutations use `--no-hooks`; `true` makes them use `--yes`; unset leaves Worktrunk's default prompt
 behavior in place.
 `stn setup check --json` and `stn doctor` report the effective mode and validate that the installed
-`wt` supports any required automation flag. The hook commands are generated with the resolved STATION
-config path, observer socket, state directory, spool directory, and `stn-ingress` launcher. If you
-decline hook setup but later want hook delivery, install later with:
+`wt` supports any required automation flag. The hook commands are generated from one canonical expectation containing the
+resolved STATION config path, observer socket, state directory, spool directory,
+auto-start mode, and absolute `stn-ingress` launcher. Both
+`stn hooks doctor worktrunk` and full `stn doctor` validate that same expectation
+without requiring `--hook-bin`. If you decline hook setup but later want hook
+delivery, install later with:
 
 ```bash
 stn hooks install worktrunk --yes
