@@ -72,6 +72,26 @@ log read.
 
 `stn doctor` connects to the observer, asks the observer for runtime health, and reports config, SQLite, provider health, hook spool, snapshot, logs, local state usage, and retention status. If the config cannot be loaded, `doctor` does not start the observer; it returns a local SafeError report with diagnostic id `config-load`.
 
+### Doctor health semantics
+
+Doctor's top-level status is the worst severity among the current checks in the
+final report, including checks appended by the CLI. Retained command failures
+remain diagnostic evidence under `recentErrors`; they do not determine current
+health.
+
+| Any current `error` check? | Any current `warn` check? | Historical errors present? | Top-level status |
+| --- | --- | --- | --- |
+| Yes | Either | Either | `unavailable` |
+| No | Yes | Either | `degraded` |
+| No | No | No | `healthy` |
+| No | No | Yes | `healthy` |
+
+Invalid configuration remains `unavailable` because its current config check is
+an error. A local-state size overage remains `degraded` because the current
+retention check is a warning. The `recentErrors` field means retained historical
+evidence: Doctor can be `healthy` while that array is non-empty, and the same
+errors remain available in diagnostic snapshots and debug evidence.
+
 `stn snapshot --json` asks the observer for the current normalized graph. Use
 `--include-debug` when row-level diagnostic fields are needed for support
 evidence.
@@ -241,7 +261,7 @@ max_bundles = 10
 max_days = 30
 ```
 
-File retention is enforced for logs and bundles created by this diagnostic surface. SQLite over-limit status is reported, but SQLite rows are not pruned by this retention pass.
+File retention is enforced for logs and bundles created by this diagnostic surface. SQLite over-limit status is reported, but SQLite rows are not pruned by this retention pass. The SQLite age settings do not determine Doctor's top-level status, prune command-error rows, or filter those rows from `recentErrors`.
 
 ## Redaction
 
