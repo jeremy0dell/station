@@ -1,10 +1,51 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { runCli } from "@station/cli";
+import { runCli as runCliBase } from "@station/cli";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+
+async function runCli(...args: Parameters<typeof runCliBase>) {
+  const options = args[1] ?? {};
+  const deps = options.setupDeps;
+  if (deps === undefined || deps.probeHarnessHooksStatus !== undefined) {
+    return runCliBase(...args);
+  }
+  return runCliBase(args[0], {
+    ...options,
+    setupDeps: {
+      ...deps,
+      async probeHarnessHooksStatus(harnessId, configPath) {
+        if (harnessId === "pi") return undefined;
+        let source = "";
+        try {
+          source = (await deps.fs?.readFile(configPath)) ?? "";
+        } catch {
+          source = "";
+        }
+        const block = setupHarnessBlock(source, harnessId);
+        const requested = /(?:^|\n)install_hooks\s*=\s*true(?:\n|$)/.test(block);
+        return {
+          provider: harnessId,
+          requested,
+          installed: requested,
+          missing: requested ? [] : ["tracking artifact"],
+          message: requested ? "Tracking artifacts are installed." : "Tracking is disabled.",
+        };
+      },
+    },
+  });
+}
+
+function setupHarnessBlock(source: string, harnessId: string): string {
+  const marker = `[harness.${harnessId}]`;
+  const start = source.indexOf(marker);
+  if (start < 0) return "";
+  const contentStart = start + marker.length;
+  const end = source.indexOf("\n[", contentStart);
+  return source.slice(contentStart, end < 0 ? source.length : end);
+}
 
 describe("CLI setup command", () => {
   const tempRoots: string[] = [];
@@ -104,11 +145,17 @@ describe("CLI setup command", () => {
     };
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
       default: "codex",
-      enabled: "codex,opencode",
+      enabled: "codex",
     });
-    expect(plan.checks.find((check) => check.id === "harness-hooks")).toMatchObject({
+    expect(plan.checks.find((check) => check.id === "harness-tracking:codex")).toMatchObject({
+      tier: "required",
       status: "ok",
-      details: { harnesses: "codex,opencode" },
+      details: { state: "prepared" },
+    });
+    expect(plan.checks.find((check) => check.id === "harness-tracking:opencode")).toMatchObject({
+      tier: "recommended",
+      status: "ok",
+      details: { state: "prepared" },
     });
   });
 
@@ -149,14 +196,14 @@ describe("CLI setup command", () => {
       summary: { selectedHarness?: string };
       checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
     };
-    expect(result.code).toBe(0);
+    expect(result.code).toBe(1);
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
-      status: "ok",
+      status: "missing",
       details: {
         default: "codex",
         defaultStatus: "unavailable",
-        enabled: "codex,opencode",
+        enabled: "codex",
         available: "opencode",
       },
     });
@@ -364,7 +411,9 @@ describe("CLI setup command", () => {
           "/fake/bin/delta",
         ]),
         fs: readOnlyFs({}),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     });
 
@@ -419,6 +468,93 @@ describe("CLI setup command", () => {
     expect(activationCount).toBe(0);
   });
 
+  it("blocks ambiguous noninteractive setup without mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const setupDeps = {
+      cwd: repo,
+      homeDir: join(root, "home"),
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        "wt --version": "worktrunk 1.2.3\n",
+        "tmux -V": "tmux 3.5a\n",
+        "codex --version": "codex 0.1.0\n",
+        "opencode --version": "opencode 1.0.0\n",
+      }),
+      access: readySetupAccess(),
+      fs,
+      writeStdout: () => undefined,
+    };
+
+    const plan = await runCli(["--config", configPath, "setup", "plan", "--json"], {
+      setupDeps,
+    });
+    const dryRun = await runCli(["--config", configPath, "setup", "apply", "--dry-run"], {
+      setupDeps,
+    });
+    const apply = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps,
+    });
+
+    expect(plan.code).toBe(0);
+    expect(plan.output).toMatchObject({
+      summary: { selectionSource: "unresolved", requiredOk: false },
+    });
+    expect(dryRun.code).toBe(1);
+    expect(apply.code).toBe(1);
+    expect(fs.files).toEqual({});
+    expect(
+      calls.some(
+        (call) =>
+          (call.command === "brew" && call.args?.[0] === "install") ||
+          ((call.args ?? []).includes("hooks") && (call.args ?? []).includes("install")),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps apply non-ready when the final artifact re-probe fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    let activations = 0;
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs,
+        activateObserverConfig: async () => {
+          activations += 1;
+        },
+        async probeHarnessHooksStatus(harnessId) {
+          return {
+            provider: harnessId,
+            requested: true,
+            installed: false,
+            missing: ["tracking artifact"],
+            message: "Tracking artifact disappeared before final verification.",
+          };
+        },
+        writeStdout: () => undefined,
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(activations).toBe(1);
+    expect(fs.files[configPath]).toContain("install_hooks = true");
+  });
+
   it("does not append or activate the current repository during setup", async () => {
     const root = await tempRoot(tempRoots);
     const home = join(root, "home");
@@ -427,7 +563,10 @@ describe("CLI setup command", () => {
     const configPath = join(home, "station", "config.toml");
     await mkdir(repo, { recursive: true });
     await mkdir(otherRepo, { recursive: true });
-    const original = setupConfigToml(otherRepo, { includeHarness: true });
+    const original = setupConfigToml(otherRepo, { includeHarness: true }).replace(
+      'command = "codex"',
+      'command = "codex"\ninstall_hooks = true',
+    );
     const fs = fakeFs({ [configPath]: original });
     const activations: Array<{ configPath: string; homeDir: string }> = [];
 
@@ -439,7 +578,9 @@ describe("CLI setup command", () => {
         runner: readySetupRunner(repo),
         access: readySetupAccess(),
         fs,
-        activateObserverConfig: async (input) => activations.push(input),
+        activateObserverConfig: async (input) => {
+          activations.push(input);
+        },
         writeStdout: () => undefined,
       },
     });
@@ -504,7 +645,9 @@ describe("CLI setup command", () => {
             hint: "Inspect the observer boot log.",
           };
         },
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     });
 
@@ -514,7 +657,8 @@ describe("CLI setup command", () => {
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: OBSERVER_EXITED_ON_START");
     expect(output).toContain("Hint: Inspect the observer boot log.");
-    expect(output).toContain("Setup does not need to be rerun; the config is saved.");
+    expect(output).toContain("The config is saved; remaining setup actions were not applied.");
+    expect(output).toContain(`Then rerun: stn --config '${configPath}' setup apply --yes`);
     expect(output).toContain("Resolve the error above, then activate it with:");
     expect(output).toContain(`Run: stn --config '${configPath}' observer restart`);
     expect(output).not.toContain("Core setup complete.");
@@ -595,7 +739,9 @@ describe("CLI setup command", () => {
           "/fake/bin/diffnav",
           "/fake/bin/delta",
         ]),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     });
 
@@ -615,7 +761,9 @@ describe("CLI setup command", () => {
     const result = await runCli(["setup", "system", "--check", "--yes"], {
       setupDeps: {
         runner: fakeRunner(calls, {}),
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     });
 
@@ -669,7 +817,9 @@ describe("CLI setup command", () => {
             throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
           }
         },
-        writeStdout: (chunk) => chunks.push(chunk),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     });
 
@@ -702,7 +852,13 @@ function fakeRunner(
     calls.push(input);
     const key = `${input.command} ${(input.args ?? []).join(" ")}`;
     // Synthetic machines have macOS Command Line Tools unless a test overrides it.
-    const stdout = outputs[key] ?? fakeBinOutput(input, outputs) ?? defaultProbeOutput(key);
+    const stdout =
+      outputs[key] ??
+      fakeBinOutput(input, outputs) ??
+      ((input.args ?? []).includes("hooks") && (input.args ?? []).includes("install")
+        ? ""
+        : undefined) ??
+      defaultProbeOutput(key);
     if (stdout === undefined) {
       throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
     }
@@ -767,6 +923,9 @@ function readySetupAccess(): (path: string) => Promise<void> {
     "/fake/bin/bun",
     "/fake/bin/diffnav",
     "/fake/bin/delta",
+    "/fake/bin/stn",
+    "/fake/bin/stn-ingress",
+    "/fake/bin/stn-tmux-popup",
   ]);
 }
 
@@ -791,12 +950,30 @@ function setupConfigToml(projectRoot: string, options: { includeHarness?: boolea
   ].join("\n");
 }
 
-function readOnlyFs(files: Record<string, string>) {
+function readOnlyFs(initial: Record<string, string>) {
+  const files = { ...initial };
   return {
+    async mkdir() {
+      return undefined;
+    },
     async readFile(path: string) {
       const source = files[path];
       if (source === undefined) throw Object.assign(new Error("missing"), { code: "ENOENT" });
       return source;
+    },
+    async writeFile(path: string, content: string) {
+      files[path] = content;
+    },
+    async rename(from: string, to: string) {
+      const source = files[from];
+      if (source === undefined) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      files[to] = source;
+      delete files[from];
+    },
+    async access(path: string) {
+      if (files[path] === undefined) {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
     },
   };
 }

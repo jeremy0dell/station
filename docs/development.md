@@ -536,10 +536,12 @@ and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
 guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
-more authenticated agents, and enable the desired provider hooks and tmux binding.
-Confirm the first selection becomes the default while every selection receives
-its own harness block and every hook-capable selection receives its own prompt
-when setup can safely persist or reuse that hook intent.
+more authenticated agents, consent to required Station tracking artifacts, and
+optionally install the tmux binding. Confirm the first selection becomes the
+default only for a new config, every explicit selection receives its own harness
+block, and each unprepared artifact-backed selection receives a required consent
+prompt before config or provider mutation. Verify final output says Prepared,
+not runtime Ready; for Codex it must also name possible `/hooks` review.
 Confirm setup writes a zero-project config without adopting the disposable
 repository, then run:
 
@@ -569,6 +571,16 @@ verified those launchers after installation. An agent must use the absolute
 installed `stn` path for continuation and report future-shell PATH as unverified
 until this new-shell check passes; its own `command -v` result is not user-shell
 evidence.
+Repeat isolated first-run acceptance for Claude, Codex, Cursor, and OpenCode,
+using separate provider homes and verifying missing, current, drifted, and probe-
+failure artifacts. Each current artifact must permit the first managed launch;
+each missing or drifted artifact must block setup and new launch. Run a Pi-only
+lane to prove no external hook artifact is required. In a multiple-CLI lane,
+check/plan must report selection required and dry-run/apply must perform zero
+writes. For Codex, verify setup does not mutate trust or `[features] hooks`, the
+Prepared output names `/hooks` review, and approving the current definition can
+produce a Station event.
+
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 

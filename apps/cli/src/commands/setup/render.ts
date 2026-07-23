@@ -26,6 +26,7 @@ export function renderSetupPlan(plan: SetupPlan, options: SetupRenderOptions = {
   const theme = setupTheme(options);
   const lines: string[] = [];
   lines.push(theme.bold(theme.cyan(`stn setup ${plan.mode}`)));
+  lines.push(`Harness selection: ${plan.summary.selectionSource}`);
   lines.push("");
   for (const tier of ["required", "recommended", "optional"] as const) {
     const checks = plan.checks.filter((check) => check.tier === tier);
@@ -63,8 +64,22 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
     // plan.nextSteps is computed before apply, so on a freshly-completed setup it
     // can still read "resolve the missing items". Show the completion steps here.
     const nextSteps = ["stn doctor", "stn"];
+    const prepared = preparedHarnesses(plan);
+    const completion =
+      prepared.length === 0
+        ? "Core setup complete."
+        : `Core setup complete. Station tracking artifacts are prepared for ${prepared
+            .map((harness) => harness.label)
+            .join(" and ")}.`;
+    const codexNotice = prepared.some((harness) => harness.id === "codex")
+      ? [
+          "",
+          "Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.",
+        ]
+      : [];
     return [
-      theme.bold(theme.green("Core setup complete.")),
+      theme.bold(theme.green(completion)),
+      ...codexNotice,
       "",
       sectionHeading("Next", theme),
       "",
@@ -92,11 +107,10 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
     );
   }
   if (missing?.id === "harness") {
-    return missingResult(
-      "No supported agent CLI is available.",
-      "Install claude, codex, cursor agent, opencode, or pi, then run:",
-      theme,
-    );
+    return missingResult(missing.message, "Resolve the agent selection, then run:", theme);
+  }
+  if (missing?.id.startsWith("harness-tracking:") === true) {
+    return missingResult(missing.message, "Prepare that selected agent, then run:", theme);
   }
   if (missing?.id === "diffnav") {
     return missingResult(
@@ -179,7 +193,12 @@ function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[
     "root",
     "defaultBranch",
     "selected",
+    "selectionSource",
     "available",
+    "state",
+    "capability",
+    "requested",
+    "installed",
     "automationMode",
     "flag",
     "missingSubcommands",
@@ -197,6 +216,20 @@ function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[
     lines.push(`  ${"".padEnd(statusColumnWidth)} ${theme.dim(`${key} ${value}`)}`);
   }
   return lines;
+}
+
+function preparedHarnesses(plan: SetupPlan): { id: string; label: string }[] {
+  const displayNames: Record<string, string> = {
+    claude: "Claude",
+    codex: "Codex",
+    cursor: "Cursor",
+    opencode: "OpenCode",
+  };
+  return plan.checks.flatMap((check) => {
+    const id = check.details?.harness;
+    if (check.details?.state !== "prepared" || id === undefined) return [];
+    return [{ id, label: displayNames[id] ?? id }];
+  });
 }
 
 function colorStatus(label: string, status: SetupCheck["status"], theme: SetupTheme): string {

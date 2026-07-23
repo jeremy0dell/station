@@ -513,11 +513,19 @@ patch.
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. A managed
-launch result may include an opaque attachment that Station resolves to its
-host mechanics. An absent attachment permits Station's local launch path; once
-an attachment is advertised, resolution or later attachment failure must not
-fall through to a second local spawn.
+opaquely, and request reconcile after relevant lifecycle changes. Before a new
+managed harness session is launched, the use case calls the provider-neutral
+optional `hooksStatus()` capability and fails closed when requested Station
+tracking artifacts are absent or drifted. Claude, Codex, Cursor, and OpenCode —
+the four providers whose external artifacts setup installs — implement this
+capability. Providers without an equivalent managed external artifact retain
+the deliberate fail-open behavior; Pi is not forced through this gate. Focusing
+an existing session precedes the gate.
+
+A managed launch result may include an opaque attachment that Station resolves
+to its host mechanics. An absent attachment permits Station's local launch path;
+once an attachment is advertised, resolution or later attachment failure must
+not fall through to a second local spawn.
 
 ### Diagnostics
 

@@ -1,16 +1,16 @@
 import { applySetupPlan } from "../apply.js";
-import { planSetupConfigWrite } from "../configWriter.js";
 import {
   activateCompletedConfigWrite,
   applyOptions,
-  collectForCommand,
+  collectSetupPlanForCommand,
   coreReadyForConfigWrite,
+  depsWithBrewBinPath,
   isConfigAction,
+  isHookSetupAction,
   isInstallAction,
   markRequiredIncomplete,
 } from "../flowUtils.js";
 import { renderOptions, write } from "../io.js";
-import { buildSetupPlan } from "../planner.js";
 import { renderSetupApplyResult, renderSetupPlan } from "../render.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
@@ -19,18 +19,24 @@ export async function runNonInteractiveApply(
   deps: SetupCommandDeps,
   flags: { dryRun: boolean; noBrew: boolean },
 ): Promise<SetupCommandResult> {
-  const initialFacts = await collectForCommand("apply", options, deps, { noBrew: flags.noBrew });
-  const initialConfigWrite = await planSetupConfigWrite(initialFacts);
-  const initialPlan = buildSetupPlan(initialFacts, { configWrite: initialConfigWrite });
+  const initial = await collectSetupPlanForCommand("apply", options, deps, {
+    noBrew: flags.noBrew,
+    planConfigWrite: true,
+  });
 
   if (flags.dryRun) {
-    const dryRun = await applySetupPlan(initialPlan, applyOptions(deps, { dryRun: true }));
+    const dryRun = await applySetupPlan(initial.plan, applyOptions(deps, { dryRun: true }));
     await write(deps, renderSetupPlan(dryRun.plan, renderOptions(deps)));
-    return { code: 0 };
+    return { code: initial.harnessSelection.source === "unresolved" ? 1 : 0 };
+  }
+
+  if (initial.harnessSelection.source === "unresolved") {
+    await write(deps, renderSetupApplyResult(initial.plan, renderOptions(deps)));
+    return { code: 1 };
   }
 
   const installResult = await applySetupPlan(
-    initialPlan,
+    initial.plan,
     applyOptions(deps, {
       actionFilter: isInstallAction,
       announceActions: true,
@@ -45,17 +51,19 @@ export async function runNonInteractiveApply(
     return { code: 1 };
   }
 
-  const refreshedFacts = await collectForCommand("apply", options, deps, { noBrew: flags.noBrew });
-  const configWrite = await planSetupConfigWrite(refreshedFacts);
-  const refreshedPlan = buildSetupPlan(refreshedFacts, { configWrite });
-  if (!coreReadyForConfigWrite(refreshedPlan)) {
-    await write(deps, renderSetupApplyResult(refreshedPlan, renderOptions(deps)));
+  const reprobeDeps = depsWithBrewBinPath(deps);
+  const refreshed = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
+    noBrew: flags.noBrew,
+    planConfigWrite: true,
+  });
+  if (!coreReadyForConfigWrite(refreshed.plan)) {
+    await write(deps, renderSetupApplyResult(refreshed.plan, renderOptions(deps)));
     return { code: 1 };
   }
 
   const writeResult = await applySetupPlan(
-    refreshedPlan,
-    applyOptions(deps, { actionFilter: isConfigAction, announceActions: true }),
+    refreshed.plan,
+    applyOptions(reprobeDeps, { actionFilter: isConfigAction, announceActions: true }),
   );
   if (writeResult.failedAction !== undefined) {
     await write(deps, renderSetupApplyResult(writeResult.plan, renderOptions(deps)));
@@ -64,17 +72,36 @@ export async function runNonInteractiveApply(
 
   const activationError = await activateCompletedConfigWrite(
     writeResult.plan,
-    refreshedFacts.homeDir,
-    deps,
+    refreshed.facts.homeDir,
+    reprobeDeps,
   );
   if (activationError !== undefined) {
     return { code: 1 };
   }
 
-  const outputPlan = {
-    ...writeResult.plan,
-    summary: { ...writeResult.plan.summary, workflowReady: true, requiredOk: true },
-  };
-  await write(deps, renderSetupApplyResult(outputPlan, renderOptions(deps)));
-  return { code: 0 };
+  const trackingPlan = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
+    noBrew: flags.noBrew,
+  });
+  const trackingResult = await applySetupPlan(
+    trackingPlan.plan,
+    applyOptions(reprobeDeps, {
+      actionFilter: isHookSetupAction,
+      announceActions: true,
+      showCommandOutput: true,
+    }),
+  );
+  if (trackingResult.failedAction !== undefined) {
+    await write(
+      deps,
+      renderSetupApplyResult(markRequiredIncomplete(trackingResult.plan), renderOptions(deps)),
+    );
+    return { code: 1 };
+  }
+
+  // Successful actions do not prove readiness; rebuild the plan from current config and artifacts.
+  const final = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
+    noBrew: flags.noBrew,
+  });
+  await write(deps, renderSetupApplyResult(final.plan, renderOptions(deps)));
+  return { code: final.plan.summary.requiredOk ? 0 : 1 };
 }

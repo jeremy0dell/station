@@ -13,12 +13,14 @@ import {
 import {
   type ClaudeHarnessProviderConfig,
   type HarnessProviderConfig,
+  loadConfig,
   resolveObserverPaths,
   type StationConfig,
   stationHostSocketPath,
 } from "@station/config";
 import type {
   HarnessCapabilities,
+  HarnessHooksStatus,
   HarnessPermissionMode,
   HarnessProvider,
   HarnessRunObservation,
@@ -45,19 +47,68 @@ import {
   openCodeHookAdapter,
 } from "@station/opencode";
 import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
-import { systemClock, toIsoTimestamp } from "@station/runtime";
+import { safeErrorFromUnknown, systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
 import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
+import type { SupportedHarnessId } from "./commands/setup/model.js";
 import { selfExecArgv } from "./selfExec.js";
-import { createWorktrunkHookExpectation } from "./worktrunkHookExpectation.js";
+import {
+  createProviderHookRuntime,
+  createWorktrunkHookExpectation,
+  type ProviderHookRuntimeOptions,
+} from "./worktrunkHookExpectation.js";
 
 export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
   piExtensionPath?: string | undefined;
   providerHookIngressLauncher?: string | undefined;
 };
+
+/**
+ * ADAPTER
+ *
+ * Inspects one configured harness's Station-owned tracking artifacts read-only without starting
+ * or contacting the Observer.
+ */
+export async function probeHarnessHooksStatus(
+  harnessId: SupportedHarnessId,
+  configPath: string,
+  runtimeOptions: ProviderHookRuntimeOptions = {},
+): Promise<HarnessHooksStatus | undefined> {
+  try {
+    const loaded = await loadConfig(configPath);
+    const providerHookRuntime = createProviderHookRuntime(loaded.config, {
+      ...runtimeOptions,
+      stationConfigPath: loaded.configPath,
+    });
+    const provider = createHarnessProvider(harnessId, loaded.config, {
+      configPath: loaded.configPath,
+      providerHookIngressLauncher: providerHookRuntime.ingressLauncher,
+    });
+    if (provider.hooksStatus === undefined) {
+      return undefined;
+    }
+    return await provider.hooksStatus({
+      stationConfigPath: loaded.configPath,
+      providerHookRuntime,
+    });
+  } catch (cause) {
+    const normalized = safeErrorFromUnknown(cause, {
+      tag: "SetupHarnessTrackingError",
+      code: "SETUP_HARNESS_TRACKING_PROBE_FAILED",
+      message: "Harness tracking status could not be inspected.",
+      provider: harnessId,
+    });
+    throw {
+      tag: "SetupHarnessTrackingError",
+      code: "SETUP_HARNESS_TRACKING_PROBE_FAILED",
+      message: normalized.message,
+      provider: harnessId,
+    };
+  }
+}
 
 /**
  * COMPOSITION ROOT

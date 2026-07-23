@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SetupAction, SetupPlan } from "../../src/commands/setup/model.js";
-import { renderActionStart, renderSetupPlan } from "../../src/commands/setup/render.js";
+import {
+  renderActionStart,
+  renderSetupApplyResult,
+  renderSetupPlan,
+} from "../../src/commands/setup/render.js";
 
 describe("setup renderer", () => {
   it("renders a spaced checklist without color by default", () => {
@@ -39,6 +43,37 @@ describe("setup renderer", () => {
       "Applying: Write STATION config (/tmp/station/config.toml)",
     );
     expect(renderActionStart(action, { color: true })).toContain("\u001B[1mApplying:\u001B[0m");
+  });
+
+  it("renders prepared artifacts without claiming runtime readiness", () => {
+    const output = renderSetupApplyResult({
+      ...plan(),
+      checks: [
+        {
+          id: "harness-tracking:codex",
+          tier: "required",
+          status: "ok",
+          label: "Codex tracking",
+          message: "Codex Station tracking artifacts are prepared on disk.",
+          details: { harness: "codex", state: "prepared" },
+        },
+      ],
+      actions: [],
+      summary: {
+        ...plan().summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toContain("Station tracking artifacts are prepared for Codex");
+    expect(output).toContain("Codex may require review");
+    expect(output).toContain("/hooks");
+    expect(output).toContain("did not bypass or verify that review");
+    expect(output).not.toContain("Codex is Ready");
+    expect(output).not.toContain("runtime Ready");
   });
 
   it("renders the effective Worktrunk automation mode", () => {
@@ -128,6 +163,7 @@ function plan(): SetupPlan {
       requiredMissing: 1,
       warnings: 0,
       selectedActions: 2,
+      selectionSource: "inferred",
       configPath: "/tmp/station/config.toml",
     },
     nextSteps: ["stn setup check"],

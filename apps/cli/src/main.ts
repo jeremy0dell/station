@@ -13,6 +13,7 @@ import {
 } from "./commandRegistry.js";
 import type { CliEnv } from "./env.js";
 import { isCliHelpFlag, renderCliHelpFromArgs } from "./help.js";
+import { probeHarnessHooksStatus } from "./observerProviders.js";
 import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type { CliRunOptions, CliRunResult } from "./cliTypes.js";
@@ -129,13 +130,21 @@ function withProcessComposition(options: CliRunOptions): CliRunOptions {
 }
 
 function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions {
-  if (options.providerHookIngressLauncher === undefined) return options;
+  const setupDeps = { ...options.setupDeps };
+  if (options.providerHookIngressLauncher !== undefined) {
+    setupDeps.providerHookIngressLauncher = options.providerHookIngressLauncher;
+  }
+  setupDeps.probeHarnessHooksStatus ??= (harnessId, configPath) =>
+    probeHarnessHooksStatus(
+      harnessId,
+      configPath,
+      options.providerHookIngressLauncher === undefined
+        ? {}
+        : { ingressLauncher: options.providerHookIngressLauncher },
+    );
   return {
     ...options,
-    setupDeps: {
-      ...options.setupDeps,
-      providerHookIngressLauncher: options.providerHookIngressLauncher,
-    },
+    setupDeps,
   };
 }
 

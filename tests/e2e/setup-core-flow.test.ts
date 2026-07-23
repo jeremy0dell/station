@@ -12,10 +12,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadConfig } from "@station/config";
-import { createObserverClient } from "@station/protocol";
-import { environmentWithoutGitLocals } from "@station/runtime";
 import { describe, expect, it } from "vitest";
+import { loadConfig } from "../../packages/config/src/index.js";
+import { createObserverClient } from "../../packages/protocol/src/index.js";
+import { environmentWithoutGitLocals } from "../../packages/runtime/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
 
 describe("setup core flow e2e", () => {
@@ -99,6 +99,7 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "delta", "exit 0\n");
       const env = {
         ...process.env,
+        ...codexOnlyHarnessEnv(bin),
         HOME: home,
         PNPM_HOME: pnpmHome,
         XDG_CONFIG_HOME: join(root, "xdg-config"),
@@ -214,8 +215,9 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "diffnav", "exit 0\n");
       await writeShim(bin, "delta", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
-      const env = {
+      const env: NodeJS.ProcessEnv = {
         ...process.env,
+        ...codexOnlyHarnessEnv(bin),
         HOME: home,
         XDG_RUNTIME_DIR: runtimeDir,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -269,10 +271,14 @@ describe("setup core flow e2e", () => {
       expect(apply.status).toBe(1);
       expect(apply.stdout).toContain("Config was written, but observer activation failed.");
       expect(apply.stdout).toContain("Code: OBSERVER_SOCKET_INACCESSIBLE");
-      expect(apply.stdout).toContain("Setup does not need to be rerun; the config is saved.");
+      expect(apply.stdout).toContain(
+        "The config is saved; remaining setup actions were not applied.",
+      );
       expect(apply.stdout).toContain(`Run: stn --config ${configPath} observer restart`);
+      expect(apply.stdout).toContain(`Then rerun: stn --config ${configPath} setup apply --yes`);
       expect(apply.stdout).not.toContain("Core setup complete.");
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
+      await expect(readFile(join(home, ".codex", "station.config.toml"), "utf8")).rejects.toThrow();
 
       expect(processIsAlive(beforeHealth.pid)).toBe(true);
       const blockedSocket = await stat(observerSocket);
@@ -290,6 +296,11 @@ describe("setup core flow e2e", () => {
         env,
       });
       expect(activate.stdout).toContain('"status": "running"');
+      const finishSetup = runStation(
+        ["--config", configPath, "setup", "apply", "--yes", "--no-brew"],
+        { cwd: setupCwd, env },
+      );
+      expect(finishSetup.stdout).toContain("Station tracking artifacts are prepared for Codex.");
       const afterHealth = await observer.health();
       const afterSnapshot = await observer.getSnapshot();
       expect(afterHealth.pid).toBeTypeOf("number");
@@ -369,6 +380,7 @@ describe("setup core flow e2e", () => {
 
       const env = {
         ...process.env,
+        ...codexOnlyHarnessEnv(bin),
         HOME: home,
         XDG_RUNTIME_DIR: runtimeDir,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -526,6 +538,16 @@ describe("setup core flow e2e", () => {
     }
   });
 });
+
+function codexOnlyHarnessEnv(bin: string): NodeJS.ProcessEnv {
+  return {
+    STATION_CODEX_BIN: join(bin, "codex"),
+    STATION_CURSOR_AGENT_BIN: join(bin, "missing-cursor"),
+    STATION_OPENCODE_BIN: join(bin, "missing-opencode"),
+    STATION_PI_BIN: join(bin, "missing-pi"),
+    STATION_CLAUDE_BIN: join(bin, "missing-claude"),
+  };
+}
 
 async function findGlobalStationLink(pnpmHome: string): Promise<string> {
   const globalRoot = join(pnpmHome, "global", "v11");

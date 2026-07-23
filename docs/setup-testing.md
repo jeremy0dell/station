@@ -6,7 +6,7 @@ doc describes the three-tier test environment that lets agents and maintainers r
 the setup flow against machines in those varied states.
 
 The setup engine is dependency-injected end to end (`runner`, `access`, `fs`,
-`env`, `platform`, `now`, `noBrew`, `prompt`), so most coverage is free and
+`env`, `platform`, `now`, `noBrew`, `prompt`, `probeHarnessHooksStatus`), so most coverage is free and
 in-process. The few states that need a real OS (real `brew install`, a truly
 CLT-absent Mac) run in a VM.
 
@@ -21,7 +21,8 @@ comparisons are structural diffs, not log scraping.
 
 ```
 profile { name, state: { platform, xcodeClt, git, insideRepo, brew, worktrunk,
-                         tmux, bun, diffnav, gitDelta, harnesses[], configToml? },
+                         tmux, bun, diffnav, gitDelta, harnesses[],
+                         harnessTracking?, configToml? },
           expect: { exitCode, requiredOk, checks: { <id>: <status> } } }
 ```
 
@@ -33,6 +34,8 @@ asserting exit code + `requiredOk` + per-check status. Runs in the existing
 `pnpm test:integration` lane (so it is already in `pnpm test:all`, the
 pre-push gate, and hosted CI). This is the backbone and the canonical contract; it covers every
 profile, including the darwin `no-xcode-clt` case via an injected `platform`.
+Hook-status fixtures return deterministic prepared, missing/drifted, probe-failed,
+or unsupported results and never inspect a developer's real provider homes.
 
 ```bash
 pnpm test:integration   # includes setup-profiles
@@ -97,7 +100,9 @@ deprivation states.
 For each profile an agent: (1) provisions/selects an environment — nothing for
 tier 1, `docker build --target` for tier 2, `tart clone` for tier 3; (2) runs the
 read-only, machine-readable surfaces (`stn setup check --json`, `stn setup plan
---json`, `stn setup apply --dry-run`); (3) captures stdout + exit code; (4)
+--json`, `stn setup apply --dry-run`); verifies that several runnable CLIs leave
+selection unresolved and that no read-only mode mutates config, provider homes,
+Observer state, sockets, or tmux; (3) captures stdout + exit code; (4)
 structurally diffs the JSON plan + exit code against the profile's `expect`; (5)
 iterates on setup code and re-runs. Tier 1 reruns in milliseconds, tier 2 in
 seconds, tier 3 in low minutes. Every artifact (profile, captured JSON, diff) is
@@ -106,7 +111,9 @@ machine.
 
 ## Adding a profile
 
-Add it to `packages/testing/src/setupProfiles.ts` (it is picked up by tier 1
+Profiles with valid artifact-backed defaults must include matching
+`harnessTracking` facts and assert the required `harness-tracking:<id>` row.
+Add the profile to `packages/testing/src/setupProfiles.ts` (it is picked up by tier 1
 automatically). If it is Linux-coverable, add a `--target` stage in the Dockerfile
 and an entry in `run-setup-container.mjs`. If it needs real brew/CLT, add it to
 `run-setup-macos.mjs` with the appropriate base image.

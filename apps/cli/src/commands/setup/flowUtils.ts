@@ -9,8 +9,16 @@ import {
   collectSetupFacts,
   type SetupDependencyCheckOptions,
 } from "./checks/system.js";
+import { planSetupConfigWrite } from "./configWriter.js";
+import {
+  harnessSupportsSetupHooks,
+  resolveSetupHarnessSelection,
+  type SetupHarnessSelection,
+} from "./harnessSelection.js";
 import { renderOptions, write } from "./io.js";
-import type { SetupAction, SetupFacts, SetupMode, SetupPlan } from "./model.js";
+import type { SetupAction, SetupFacts, SetupMode, SetupPlan, SupportedHarnessId } from "./model.js";
+import { SetupHarnessTrackingFactSchema } from "./model.js";
+import { buildSetupPlan } from "./planner.js";
 import {
   formatCommand,
   renderActionComplete,
@@ -48,6 +56,126 @@ export function collectForCommand(
   if (flags.noBrew !== undefined) collectOptions.noBrew = flags.noBrew;
   return collectSetupFacts(collectOptions);
 }
+
+export type CollectedSetupPlan = {
+  facts: SetupFacts;
+  harnessSelection: SetupHarnessSelection;
+  plan: SetupPlan;
+};
+
+export async function collectSetupPlanForCommand(
+  mode: SetupMode,
+  options: SetupCommandOptions,
+  deps: SetupCommandDeps,
+  input: {
+    noBrew?: boolean;
+    selectedHarnessIds?: readonly SupportedHarnessId[];
+    planConfigWrite?: boolean;
+    installWorktrunkHooks?: boolean;
+  } = {},
+): Promise<CollectedSetupPlan> {
+  const baseFacts = await collectForCommand(mode, options, deps, {
+    ...(input.noBrew === undefined ? {} : { noBrew: input.noBrew }),
+  });
+  const harnessSelection = resolveSetupHarnessSelection(baseFacts, input.selectedHarnessIds);
+  const facts = await collectHarnessTrackingFacts(baseFacts, harnessSelection, deps);
+  const installHarnessHooks = harnessSelection.requiredHarnessIds.filter(harnessSupportsSetupHooks);
+  const plannerOptions: Parameters<typeof buildSetupPlan>[1] = { harnessSelection };
+  if (input.installWorktrunkHooks !== undefined) {
+    plannerOptions.installWorktrunkHooks = input.installWorktrunkHooks;
+  }
+  if (installHarnessHooks.length > 0) {
+    plannerOptions.installHarnessHooks = installHarnessHooks;
+  }
+  if (input.planConfigWrite === true) {
+    plannerOptions.configWrite = await planSetupConfigWrite(facts, {
+      harnessSelection,
+      installHarnessHooks,
+      ...(input.installWorktrunkHooks === undefined
+        ? {}
+        : { installWorktrunkHooks: input.installWorktrunkHooks }),
+    });
+  }
+  return {
+    facts,
+    harnessSelection,
+    plan: buildSetupPlan(facts, plannerOptions),
+  };
+}
+
+async function collectHarnessTrackingFacts(
+  facts: SetupFacts,
+  harnessSelection: SetupHarnessSelection,
+  deps: SetupCommandDeps,
+): Promise<SetupFacts> {
+  const configuredIds =
+    facts.config.status === "valid"
+      ? [facts.config.defaults.harness, ...facts.config.configuredHarnesses]
+      : [];
+  const ids = [...harnessSelection.requiredHarnessIds, ...configuredIds]
+    .filter((id): id is SupportedHarnessId => facts.harnesses.some((harness) => harness.id === id))
+    .filter((id, index, all) => all.indexOf(id) === index);
+  const harnessTracking = await Promise.all(
+    ids.map(async (harnessId) => {
+      if (!harnessSupportsSetupHooks(harnessId)) {
+        return SetupHarnessTrackingFactSchema.parse({
+          harnessId,
+          capability: "unsupported",
+          detail: "This harness has no Station-managed external tracking artifact.",
+        });
+      }
+      if (facts.config.status !== "valid") {
+        return SetupHarnessTrackingFactSchema.parse({
+          harnessId,
+          capability: "supported",
+          requested: false,
+          detail: "Station config does not currently request tracking artifacts.",
+        });
+      }
+      try {
+        if (deps.probeHarnessHooksStatus === undefined) {
+          throw setupHarnessProbeUnavailable;
+        }
+        const status = await deps.probeHarnessHooksStatus(harnessId, facts.config.path);
+        if (status === undefined) {
+          return SetupHarnessTrackingFactSchema.parse({
+            harnessId,
+            capability: "unsupported",
+            detail: "The provider does not expose hook-status inspection.",
+          });
+        }
+        return SetupHarnessTrackingFactSchema.parse({
+          harnessId,
+          capability: "supported",
+          requested: status.requested,
+          installed: status.installed,
+          detail: status.message,
+        });
+      } catch (error) {
+        const safeError = safeErrorFromUnknown(error, setupHarnessProbeFailed);
+        return SetupHarnessTrackingFactSchema.parse({
+          harnessId,
+          capability: "supported",
+          detail: `${safeError.message} (${safeError.code})`,
+          probeFailed: true,
+        });
+      }
+    }),
+  );
+  return { ...facts, harnessTracking };
+}
+
+const setupHarnessProbeUnavailable: RuntimeSafeError = {
+  tag: "SetupHarnessTrackingError",
+  code: "SETUP_HARNESS_TRACKING_PROBE_UNAVAILABLE",
+  message: "Harness tracking status probe is unavailable.",
+};
+
+const setupHarnessProbeFailed: RuntimeSafeError = {
+  tag: "SetupHarnessTrackingError",
+  code: "SETUP_HARNESS_TRACKING_PROBE_FAILED",
+  message: "Harness tracking status could not be inspected.",
+};
 
 export function applyOptions(
   deps: SetupCommandDeps,
@@ -154,13 +282,33 @@ function renderObserverActivationFailure(
     configPath === undefined
       ? formatCommand(["stn", "observer", "restart"])
       : formatCommand(["stn", "--config", configPath, "observer", "restart"]);
+  const setupCommand =
+    configPath === undefined
+      ? formatCommand(["stn", "setup", "apply", "--yes"])
+      : formatCommand(["stn", "--config", configPath, "setup", "apply", "--yes"]);
   lines.push(
-    "Setup does not need to be rerun; the config is saved.",
+    "The config is saved; remaining setup actions were not applied.",
     "Resolve the error above, then activate it with:",
     `Run: ${restartCommand}`,
+    `Then rerun: ${setupCommand}`,
     "",
   );
   return lines.join("\n");
+}
+
+const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
+
+export function depsWithBrewBinPath(deps: SetupCommandDeps): SetupCommandDeps {
+  const env = { ...(deps.env ?? process.env) };
+  env.PATH = brewBinDirs.reduce((path, dir) => appendPath(path, dir), env.PATH);
+  return { ...deps, env };
+}
+
+function appendPath(existing: string | undefined, path: string): string {
+  if (existing === undefined || existing.length === 0) {
+    return path;
+  }
+  return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
 }
 
 export function dependencyOptionsForCommand(
@@ -207,9 +355,19 @@ export function markRequiredIncomplete(plan: SetupPlan): SetupPlan {
 }
 
 export function coreReadyForConfigWrite(plan: SetupPlan): boolean {
-  const nonConfigMissing = plan.checks.some(
-    (check) => check.tier === "required" && check.id !== "config" && check.status !== "ok",
-  );
+  const nonConfigMissing = plan.checks.some((check) => {
+    if (check.tier !== "required" || check.id === "config" || check.status === "ok") {
+      return false;
+    }
+    if (!check.id.startsWith("harness-tracking:")) {
+      return true;
+    }
+    const harness = check.details?.harness;
+    return !plan.actions.some(
+      (action) =>
+        action.selected && action.data?.setupRole === "hook" && action.data.harness === harness,
+    );
+  });
   if (nonConfigMissing) {
     return false;
   }

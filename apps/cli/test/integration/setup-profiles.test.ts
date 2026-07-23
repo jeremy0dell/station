@@ -125,11 +125,41 @@ function profileToSetupDeps(
       if (!presentPaths.has(path)) throw enoent(path);
     },
     fs: {
+      async mkdir() {
+        return undefined;
+      },
       async readFile(path: string) {
         const content = files[path];
         if (content === undefined) throw enoent(path);
         return content;
       },
+      async writeFile(path: string, content: string) {
+        files[path] = content;
+      },
+      async rename(from: string, to: string) {
+        const content = files[from];
+        if (content === undefined) throw enoent(from);
+        files[to] = content;
+        delete files[from];
+      },
+      async access(path: string) {
+        if (files[path] === undefined) throw enoent(path);
+      },
+    },
+    async probeHarnessHooksStatus(harnessId: "codex" | "cursor" | "opencode" | "pi" | "claude") {
+      const tracking = state.harnessTracking?.[harnessId];
+      if (tracking === "unsupported" || harnessId === "pi") return undefined;
+      if (tracking === "probe-failed") throw new Error("synthetic tracking probe failure");
+      const installed = tracking === "prepared";
+      return {
+        provider: harnessId,
+        requested: tracking !== undefined,
+        installed,
+        missing: installed ? [] : ["tracking artifact"],
+        message: installed
+          ? "Tracking artifacts are installed."
+          : "Tracking artifacts are missing.",
+      };
     },
     now: () => new Date("2026-06-08T12:00:00.000Z"),
   };

@@ -1,8 +1,10 @@
+import type { HarnessHooksStatus } from "@station/contracts";
 import type { ExternalCommandRunner } from "@station/runtime";
 import type { CliEnv } from "../../env.js";
 import type { SetupApplyFileSystem } from "./apply.js";
 import type { SetupFileSystemReader } from "./checks/config.js";
 import type { SetupStateDirFileSystem } from "./checks/stateDir.js";
+import type { SupportedHarnessId } from "./model.js";
 
 export type SetupPromptChoice = {
   value: string;
@@ -31,6 +33,14 @@ export type SetupCommandDeps = {
   platform?: NodeJS.Platform;
   compiled?: boolean;
   providerHookIngressLauncher?: string;
+  /**
+   * Inspects Station-owned tracking artifacts without contacting the Observer.
+   * An absent result means the provider does not support hook-status inspection.
+   */
+  probeHarnessHooksStatus?: (
+    harnessId: SupportedHarnessId,
+    configPath: string,
+  ) => Promise<HarnessHooksStatus | undefined>;
   tmuxPopupOwnerRoot?: string;
   stateDirExecute?: (path: string) => Promise<void>;
   stateDirFs?: SetupStateDirFileSystem;

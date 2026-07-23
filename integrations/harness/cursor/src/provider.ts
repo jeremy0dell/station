@@ -1,6 +1,7 @@
 import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
+  HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessProvider,
   ProviderDoctorCheck,
@@ -11,6 +12,7 @@ import {
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHookDoctorOptions,
+  harnessHooksStatusFrom,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { safeErrorFromUnknown } from "@station/runtime";
@@ -71,6 +73,7 @@ const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>
     normalize: (event, context) => normalizeCursorRawEvent(event, context),
   },
   doctorChecks,
+  hooksStatus,
 };
 
 function command(options: CursorHarnessProviderOptions): string {
@@ -90,15 +93,7 @@ async function doctorChecks(
   context?: ProviderDoctorContext,
 ): Promise<ProviderDoctorCheck[]> {
   try {
-    const hookOptions = harnessHookDoctorOptions(options, context);
-    if (
-      context?.providerHookRuntime === undefined &&
-      hookOptions.stationConfigPath === undefined &&
-      options.configPath !== undefined
-    ) {
-      hookOptions.stationConfigPath = options.configPath;
-    }
-    const hookResult = await doctorCursorHooks(hookOptions);
+    const hookResult = await doctorCursorHooks(cursorHookDoctorOptions(options, context));
     return [
       {
         name: "cursor-hooks",
@@ -123,10 +118,34 @@ async function doctorChecks(
   }
 }
 
+function cursorHookDoctorOptions(
+  options: CursorHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Parameters<typeof doctorCursorHooks>[0] {
+  const hookOptions = harnessHookDoctorOptions(options, context);
+  if (
+    context?.providerHookRuntime === undefined &&
+    hookOptions.stationConfigPath === undefined &&
+    options.configPath !== undefined
+  ) {
+    hookOptions.stationConfigPath = options.configPath;
+  }
+  return hookOptions;
+}
+
+async function hooksStatus(
+  options: CursorHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<HarnessHooksStatus> {
+  const hookResult = await doctorCursorHooks(cursorHookDoctorOptions(options, context));
+  return harnessHooksStatusFrom("cursor", options.installHooks === true, hookResult);
+}
+
 /**
  * ADAPTER
  *
- * Supplies Cursor launch, discovery, hook diagnostics, and event normalization through the harness port.
+ * Supplies Cursor launch, discovery, hook-installation status, diagnostics, and event normalization
+ * through the harness port.
  */
 export function createCursorHarnessProvider(
   options: CursorHarnessProviderOptions = {},

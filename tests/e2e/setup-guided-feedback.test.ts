@@ -37,14 +37,14 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["n", "n", "n", "y", "y", "n"],
+        answers: ["n", "n", "y", "y", "y", "n"],
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
-      expect(result.stdout).toContain("Install Codex agent hooks?");
+      expect(result.stdout).toContain("Install Codex tracking?");
       expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
       expect(result.stdout).toContain(
@@ -59,7 +59,7 @@ describe("setup guided feedback e2e", () => {
     }
   });
 
-  it("writes multiple selected agent CLIs, installs both hooks, and passes both doctors", async () => {
+  it("writes multiple selected agent CLIs, prepares tracking, and passes both doctors", async () => {
     const fixture = await createFixture({ harness: "codex-opencode" });
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
@@ -71,12 +71,12 @@ describe("setup guided feedback e2e", () => {
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain(
-        "Select agent CLIs to enable (comma-separated; first is the default for new configs).",
+        "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
       );
-      expect(result.stdout).toContain("Install Codex agent hooks?");
-      expect(result.stdout).toContain("Install OpenCode agent hooks?");
-      expect(result.stdout).toContain("Completed: Install Codex hooks");
-      expect(result.stdout).toContain("Completed: Install OpenCode hooks");
+      expect(result.stdout).toContain("Install Codex tracking?");
+      expect(result.stdout).toContain("Install OpenCode tracking?");
+      expect(result.stdout).toContain("Completed: Install Codex tracking");
+      expect(result.stdout).toContain("Completed: Install OpenCode tracking");
       const config = await readFile(fixture.configPath, "utf8");
       expect(config).toContain('harness = "codex"');
       expect(config).toContain("[harness.codex]");
@@ -145,9 +145,9 @@ describe("setup guided feedback e2e", () => {
       const setup = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline launcher linking, accept Worktrunk hooks, decline Codex hooks,
+        // Decline launcher linking, accept Worktrunk hooks and required Codex tracking,
         // write config, then decline shell integration and popup binding.
-        answers: ["n", "y", "n", "y", "n", "n"],
+        answers: ["n", "y", "y", "y", "n", "n"],
       });
       expect(setup.exitCode).toBe(0);
 
@@ -182,7 +182,7 @@ describe("setup guided feedback e2e", () => {
         const result = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
           env: fixture.env,
-          answers: ["n", "n", "n", "y", "y", "n"],
+          answers: ["n", "n", "y", "y", "y", "n"],
         });
 
         expect(result.timedOut).toBe(false);
@@ -213,7 +213,7 @@ describe("setup guided feedback e2e", () => {
         const first = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
           env: fixture.env,
-          answers: ["n", "n", "n", "y", "y", "n"],
+          answers: ["n", "n", "y", "y", "y", "n"],
         });
         const second = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
@@ -259,7 +259,7 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["n", "n", "n", "y", "n", "n"],
+        answers: ["n", "n", "y", "y", "n", "n"],
       });
 
       expect(result.exitCode).toBe(0);
@@ -279,9 +279,9 @@ describe("setup guided feedback e2e", () => {
         cwd: fixture.repo,
         env: fixture.env,
         // Prompt order: install codex (y), decline cursor/opencode/pi/claude,
-        // decline linking the fixture's non-runtime launchers, Worktrunk hooks,
-        // and Codex hooks; accept Write config; decline shell integration + popup.
-        answers: ["y", "n", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
+        // decline linking the fixture's non-runtime launchers and Worktrunk hooks,
+        // accept required Codex tracking and Write config; decline shell integration + popup.
+        answers: ["y", "n", "n", "n", "n", "n", "n", "y", "y", "n", "n"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -290,7 +290,7 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Running: sh -c");
       expect(result.stdout).toContain("fake codex installer ran");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
-      expect(result.stdout).toContain("Install Codex agent hooks?");
+      expect(result.stdout).toContain("Install Codex tracking?");
       expect(result.stdout).toContain("Applying: Write STATION config");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
@@ -305,8 +305,9 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline launcher linking and hooks; write config; accept popup (no shell prompt without a supported active shell).
-        answers: ["n", "n", "n", "y", "y"],
+        // Decline launcher linking and Worktrunk hooks, accept required Codex tracking,
+        // write config, then accept popup (no shell prompt without a supported active shell).
+        answers: ["n", "n", "y", "y", "y"],
       });
 
       expect(result.timedOut).toBe(false);

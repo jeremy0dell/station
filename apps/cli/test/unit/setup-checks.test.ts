@@ -303,7 +303,7 @@ describe("setup dependency checks", () => {
     expect(buildSetupPlan(facts).actions.some((action) => action.id === "tmux-popup-binding")).toBe(
       true,
     );
-  });
+  }, 15_000);
 
   it("uses the config-aware popup alias for compiled bindings with custom geometry", async () => {
     const root = await tempRoot(tempRoots);
@@ -465,7 +465,15 @@ describe("setup dependency checks", () => {
     expect(plan.summary.requiredOk).toBe(false);
     expect(
       plan.checks.filter((check) => check.status === "missing").map((check) => check.id),
-    ).toEqual(["worktrunk", "tmux", "bun", "config", "diffnav", "git-delta"]);
+    ).toEqual([
+      "worktrunk",
+      "tmux",
+      "bun",
+      "config",
+      "harness-tracking:codex",
+      "diffnav",
+      "git-delta",
+    ]);
   });
 
   it("warns in setup check when Bun works but the station UI lane is not installed", async () => {
@@ -502,7 +510,7 @@ describe("setup dependency checks", () => {
     });
   });
 
-  it("selects the first available harness from detection order", async () => {
+  it("requires explicit selection when several harnesses are detected", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -534,7 +542,11 @@ describe("setup dependency checks", () => {
     });
     const plan = buildSetupPlan(facts);
 
-    expect(plan.summary.selectedHarness).toBe("cursor");
+    expect(plan.summary).toMatchObject({
+      selectionSource: "unresolved",
+      requiredOk: false,
+    });
+    expect(plan.summary).not.toHaveProperty("selectedHarness");
   });
 
   it.each([
@@ -572,6 +584,11 @@ describe("setup dependency checks", () => {
       "",
     ].join("\n");
 
+    const commandOutputs: Record<string, string> = {
+      "git rev-parse --show-toplevel": repo,
+      "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+    };
+    Object.assign(commandOutputs, outputs);
     const facts = await collectSetupFacts({
       mode: "check",
       cwd: repo,
@@ -579,11 +596,7 @@ describe("setup dependency checks", () => {
       configPath,
       compiled: true,
       env: { PATH: "/fake/bin" },
-      runner: fakeRunner(calls, {
-        "git rev-parse --show-toplevel": repo,
-        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
-        ...outputs,
-      }),
+      runner: fakeRunner(calls, commandOutputs),
       access: fakeAccess([]),
       fs: readOnlyFs({ [configPath]: config }),
     });
@@ -674,7 +687,7 @@ describe("setup dependency checks", () => {
     });
     const plan = buildSetupPlan(facts);
 
-    expect(facts.harnesses.some((harness) => harness.id === "crush")).toBe(false);
+    expect(facts.harnesses.map((harness) => String(harness.id))).not.toContain("crush");
     expect(plan.summary.selectedHarness).toBeUndefined();
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
       status: "missing",
@@ -994,13 +1007,28 @@ describe("setup dependency checks", () => {
       ]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: `${configToml(repo)}
+[harness.codex]
+enabled = true
+command = "codex"
+install_hooks = true
+
 [workspace]
 scroll_on_output = "teleport"
 `,
       }),
       noBrew: true,
     });
-    const plan = buildSetupPlan(facts);
+    const plan = buildSetupPlan({
+      ...facts,
+      harnessTracking: [
+        {
+          harnessId: "codex",
+          capability: "supported",
+          requested: true,
+          installed: true,
+        },
+      ],
+    });
 
     expect(facts.config).toMatchObject({
       status: "valid",

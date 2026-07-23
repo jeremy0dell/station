@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveSetupHarnessSelection } from "../../src/commands/setup/harnessSelection.js";
 import type {
   ConfigWritePlan,
   SetupFacts,
@@ -32,11 +33,82 @@ describe("setup planner", () => {
       ["worktrunk-shell-integration", "warning"],
       ["tmux-popup-binding", "warning"],
       ["worktrunk-hooks", "ok"],
-      ["harness-hooks", "warning"],
+      ["harness-tracking:codex", "ok"],
       ["diffnav", "ok"],
       ["git-delta", "ok"],
       ["doctor", "warning"],
     ]);
+  });
+
+  it.each([
+    {
+      name: "disabled config intent",
+      configHooks: [] as string[],
+      tracking: { requested: false },
+      state: "disabled",
+    },
+    {
+      name: "missing or drifted artifact",
+      configHooks: ["codex"],
+      tracking: { requested: true, installed: false },
+      state: "artifact-missing-or-drifted",
+    },
+    {
+      name: "status probe failure",
+      configHooks: ["codex"],
+      tracking: { probeFailed: true, detail: "Probe failed." },
+      state: "probe-failed",
+    },
+  ])("requires tracking preparation for $name", ({ configHooks, tracking, state }) => {
+    const plan = buildSetupPlan(
+      facts({
+        config: validConfigFact({ configuredHookHarnesses: configHooks }),
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            ...tracking,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "harness-tracking:codex")).toMatchObject({
+      tier: "required",
+      status: "missing",
+      details: { state },
+    });
+    expect(plan.actions.find((action) => action.id === "codex-hooks")).toMatchObject({
+      tier: "required",
+      selected: true,
+    });
+    expect(plan.summary.requiredOk).toBe(false);
+  });
+
+  it("keeps providers without managed artifacts non-blocking", () => {
+    const plan = buildSetupPlan(
+      facts({
+        harnesses: harnesses(["pi"]),
+        harnessTracking: [{ harnessId: "pi", capability: "unsupported" }],
+        config: validConfigFact({
+          configuredHarnesses: ["pi"],
+          configuredHookHarnesses: [],
+          defaults: {
+            worktreeProvider: "worktrunk",
+            terminal: "tmux",
+            harness: "pi",
+          },
+        }),
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "harness-tracking:pi")).toMatchObject({
+      tier: "required",
+      status: "ok",
+      details: { state: "not-applicable" },
+    });
+    expect(plan.summary.requiredOk).toBe(true);
+    expect(plan.actions.some((action) => action.id === "pi-hooks")).toBe(false);
   });
 
   it("warns without socket evidence without blocking fresh setup", () => {
@@ -205,7 +277,7 @@ describe("setup planner", () => {
     expect(plan.actions.some((action) => action.kind === "write-config")).toBe(false);
   });
 
-  it("selects the first available harness in stable detection order", () => {
+  it("requires explicit selection when several harnesses are available", () => {
     const plan = buildSetupPlan(
       facts({
         harnesses: harnesses(["cursor", "opencode", "pi"]),
@@ -217,7 +289,8 @@ describe("setup planner", () => {
       }),
     );
 
-    expect(plan.summary.selectedHarness).toBe("cursor");
+    expect(plan.summary).toMatchObject({ selectionSource: "unresolved", requiredOk: false });
+    expect(plan.summary.selectedHarness).toBeUndefined();
   });
 
   it("respects an explicit selected harness when multiple are available", () => {
@@ -233,6 +306,8 @@ describe("setup planner", () => {
       harnessSelection: {
         defaultHarness: "opencode",
         selected: input.harnesses.filter((harness) => harness.id === "opencode"),
+        requiredHarnessIds: ["opencode"],
+        source: "explicit",
       },
     });
 
@@ -242,14 +317,43 @@ describe("setup planner", () => {
     });
   });
 
+  it("does not let explicit selection replace an unsupported configured default", () => {
+    const input = facts({
+      harnesses: harnesses(["codex", "opencode"]),
+      config: validConfigFact({
+        defaults: {
+          worktreeProvider: "worktrunk",
+          terminal: "tmux",
+          harness: "custom-provider",
+        },
+      }),
+    });
+
+    expect(resolveSetupHarnessSelection(input, ["codex"])).toEqual({
+      selected: [],
+      requiredHarnessIds: [],
+      source: "unresolved",
+    });
+  });
+
   it("keeps the first selected harness as default while planning each supported hook", () => {
     const input = facts({
       harnesses: harnesses(["codex", "opencode", "pi"]),
+      harnessTracking: [
+        {
+          harnessId: "codex",
+          capability: "supported",
+          requested: true,
+          installed: false,
+        },
+      ],
     });
     const plan = buildSetupPlan(input, {
       harnessSelection: {
         defaultHarness: "codex",
         selected: input.harnesses.filter((harness) => harness.status === "ok"),
+        requiredHarnessIds: ["codex", "opencode", "pi"],
+        source: "explicit",
       },
       installHarnessHooks: ["codex", "opencode"],
     });
@@ -274,6 +378,21 @@ describe("setup planner", () => {
     const plan = buildSetupPlan(
       facts({
         harnesses: harnesses(["codex", "opencode", "pi"]),
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: true,
+          },
+          {
+            harnessId: "opencode",
+            capability: "supported",
+            requested: true,
+            installed: true,
+          },
+          { harnessId: "pi", capability: "unsupported" },
+        ],
         config: validConfigFact({
           configuredHarnesses: ["codex", "opencode", "pi"],
           configuredHookHarnesses: ["codex", "opencode"],
@@ -283,17 +402,19 @@ describe("setup planner", () => {
 
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
       default: "codex",
-      enabled: "codex,opencode,pi",
+      enabled: "codex",
     });
-    expect(plan.checks.find((check) => check.id === "harness-hooks")).toMatchObject({
+    expect(plan.checks.find((check) => check.id === "harness-tracking:opencode")).toMatchObject({
+      tier: "recommended",
       status: "ok",
-      details: { harnesses: "codex,opencode" },
+      details: { state: "prepared" },
     });
-    expect(
-      plan.actions
-        .filter((action) => action.data?.harness !== undefined)
-        .map((action) => action.id),
-    ).toEqual(["codex-hooks", "opencode-hooks"]);
+    expect(plan.checks.find((check) => check.id === "harness-tracking:pi")).toMatchObject({
+      tier: "recommended",
+      status: "skipped",
+      details: { state: "not-applicable" },
+    });
+    expect(plan.actions.filter((action) => action.data?.harness !== undefined)).toEqual([]);
   });
 
   it("reports an unavailable persisted default without substituting an available provider", () => {
@@ -309,12 +430,12 @@ describe("setup planner", () => {
 
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
-      status: "ok",
-      message: expect.stringContaining("codex remains configured as the default"),
+      status: "missing",
+      message: expect.stringContaining("another agent CLI cannot satisfy that default"),
       details: {
         default: "codex",
         defaultStatus: "unavailable",
-        enabled: "codex,opencode",
+        enabled: "codex",
         available: "opencode",
       },
     });
@@ -341,7 +462,7 @@ describe("setup planner", () => {
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
       status: "missing",
-      message: expect.stringContaining("no configured agent CLI is available"),
+      message: expect.stringContaining("another agent CLI cannot satisfy that default"),
       details: {
         default: "codex",
         defaultStatus: "unavailable",
@@ -349,7 +470,10 @@ describe("setup planner", () => {
         available: "opencode",
       },
     });
-    expect(plan.checks.find((check) => check.id === "harness-hooks")?.status).toBe("skipped");
+    expect(plan.checks.find((check) => check.id === "harness-tracking:codex")).toMatchObject({
+      tier: "required",
+      status: "missing",
+    });
     expect(plan.summary.requiredOk).toBe(false);
   });
 
@@ -404,6 +528,14 @@ describe("setup planner", () => {
   it("plans the optional tmux popup binding with the preserved key and exact command", () => {
     const plan = buildSetupPlan(
       facts({
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+          },
+        ],
         tmuxBinding: {
           status: "missing",
           path: "/tmp/home/.tmux.conf",
@@ -867,6 +999,15 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       repoName: "repo",
     },
     harnesses: harnesses(["codex"]),
+    harnessTracking: [
+      {
+        harnessId: "codex",
+        capability: "supported",
+        requested: true,
+        installed: true,
+        detail: "Codex hooks are installed.",
+      },
+    ],
     config: {
       ...validConfigFact(),
     },
@@ -896,7 +1037,7 @@ function validConfigFact(
     observerStateDir: "/tmp/home/.local/state/station",
     hasProjectForRoot: true,
     configuredHarnesses: ["codex"],
-    configuredHookHarnesses: [],
+    configuredHookHarnesses: ["codex"],
     defaults: {
       worktreeProvider: "worktrunk",
       terminal: "tmux",

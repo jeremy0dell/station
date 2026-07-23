@@ -219,18 +219,31 @@ stn tui
 ```
 
 Setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta;
-requires at least one supported agent CLI; lets you enable one or more detected CLIs; writes a valid zero-project
-`~/.config/station/config.toml`; starts or restarts the Observer; and offers to
-install provider-specific hooks, Worktrunk shell integration, and the `Ctrl-b Space`
-tmux popup binding. The first selection is the default in a new config; an existing config keeps its current default while setup adds missing selected providers. Complete each enabled agent CLI's own sign-in before
-starting a real session.
+requires a runnable supported agent CLI; writes a valid zero-project
+`~/.config/station/config.toml`; starts or restarts the Observer; and offers
+Worktrunk shell integration and the `Ctrl-b Space` tmux popup binding. With no
+config, exactly one runnable agent CLI is inferred and identified; several
+runnable CLIs require explicit guided selection. Check, plan, dry-run, and
+noninteractive apply never choose the catalog-first CLI in that ambiguous case.
+An existing config always preserves its global default, even when another CLI is
+available.
+
+For required Claude, Codex, Cursor, and OpenCode selections, guided setup
+explains that Station needs tracking and asks for consent before changing config
+or provider files. Declining stops before a new config or `install_hooks` intent
+is written. Noninteractive `apply --yes` is consent for these Station-owned
+artifacts, not for provider trust bypass or unrelated hook changes. Setup
+re-probes config and artifacts after applying and exits from those fresh facts.
+Pi has no external hook artifact requirement. Complete each enabled agent CLI's
+own sign-in before starting a real session.
 
 If setup writes the config but cannot activate it, it leaves the config and the
-incumbent Observer untouched, prints the exact error and recovery command, and
-exits nonzero. Restore the socket access/evidence named by that error, then run
-the printed `stn --config ... observer restart`; setup does not need to be
-rerun. Restoring a live socket to mode `0600` lets Station reconnect to its
-original process.
+incumbent Observer untouched, prints the exact error and recovery commands, and
+exits nonzero before installing remaining tracking artifacts. Restore the socket
+access/evidence named by that error, run the printed
+`stn --config ... observer restart`, then run the printed setup command to
+finish and re-probe those artifacts. Restoring a live socket to mode `0600`
+lets Station reconnect to its original process.
 
 Setup never adopts its current directory or an ancestor repository. On the
 empty dashboard, choose **Add your first project**, select a folder inside an
@@ -393,7 +406,7 @@ and runner self-interruption against local fake release assets. Every child and
 the overall runner have deadlines. It does not contact GitHub or modify the real
 home directory.
 
-Guided setup writes a zero-project config, can enable Worktrunk and selected-agent hooks, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. Hook setup validates the active `stn` runtime and its exact `stn-ingress` sibling; an unrelated launcher elsewhere on `PATH` cannot satisfy that pair. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
+Guided setup writes a zero-project config, can enable optional Worktrunk hooks, requires prepared tracking artifacts for selected/default Claude, Codex, Cursor, and OpenCode harnesses, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. Hook setup validates the active `stn` runtime and its exact `stn-ingress` sibling; an unrelated launcher elsewhere on `PATH` cannot satisfy that pair. Successful output describes these artifacts as **Prepared**, not runtime Ready. Codex may still require `/hooks` review; setup does not mutate trust state, enable unrelated hooks, or claim delivery was verified. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
 
 Useful smoke options:
 

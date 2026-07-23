@@ -6,7 +6,9 @@ import {
   activateCompletedConfigWrite,
   applyOptions,
   collectForCommand,
+  collectSetupPlanForCommand,
   coreReadyForConfigWrite,
+  depsWithBrewBinPath,
   isConfigAction,
   isHookSetupAction,
   isInstallAction,
@@ -18,12 +20,7 @@ import {
   isHarnessInstallAction,
   missingHarnessInstallActions,
 } from "../harnessInstall.js";
-import {
-  harnessSupportsSetupHooks,
-  isSupportedHarnessId,
-  resolveSetupHarnessSelection,
-  type SetupHarnessSelection,
-} from "../harnessSelection.js";
+import { isSupportedHarnessId } from "../harnessSelection.js";
 import { defaultPrompt, renderOptions, write } from "../io.js";
 import type { SetupAction, SetupFacts, SetupPlan, SupportedHarnessId } from "../model.js";
 import { buildSetupPlan } from "../planner.js";
@@ -102,6 +99,7 @@ async function runGuidedSetupWithPrompt(
     return { code: 1 };
   }
   facts = harnessFacts;
+  const reprobeDeps = depsWithBrewBinPath(depsWithUserBinPath(deps, facts));
 
   const availableHarnesses = facts.harnesses.filter((harness) => harness.status === "ok");
   if (availableHarnesses.length === 0) {
@@ -109,41 +107,52 @@ async function runGuidedSetupWithPrompt(
     await write(deps, renderSetupApplyResult(noHarnessPlan, renderOptions(deps)));
     return { code: 1 };
   }
-  const selectedIds =
-    availableHarnesses.length > 1
-      ? (
-          await prompt.selectMany(
-            "Select agent CLIs to enable (comma-separated; first is the default for new configs).",
-            availableHarnesses.map((harness) => ({
-              value: harness.id,
-              label: harness.label,
-            })),
-          )
-        ).filter(isSupportedHarnessId)
-      : availableHarnesses.map((harness) => harness.id);
-  if (selectedIds.length === 0) {
-    await write(deps, "Select at least one available agent CLI.\n");
-    return { code: 1 };
+  let selectedIds: readonly SupportedHarnessId[] | undefined;
+  const shouldSelect =
+    (facts.config.status === "missing" && availableHarnesses.length > 1) ||
+    (facts.config.status === "valid" && availableHarnesses.length > 1);
+  if (shouldSelect) {
+    const configuredDefault =
+      facts.config.status === "valid" ? facts.config.defaults.harness : undefined;
+    const orderedHarnesses = [...availableHarnesses].sort((left, right) => {
+      if (left.id === configuredDefault) return -1;
+      if (right.id === configuredDefault) return 1;
+      return 0;
+    });
+    selectedIds = (
+      await prompt.selectMany(
+        "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
+        orderedHarnesses.map((harness) => ({
+          value: harness.id,
+          label: harness.label,
+        })),
+      )
+    ).filter(isSupportedHarnessId);
+    if (selectedIds.length === 0) {
+      await write(deps, "Select at least one available agent CLI.\n");
+      return { code: 1 };
+    }
   }
 
-  facts = await maybeLinkStationLaunchers(facts, options, deps, prompt);
-  const harnessSelection = resolveSetupHarnessSelection(facts, selectedIds);
-  const refreshedIds = new Set(harnessSelection.selected.map((harness) => harness.id));
-  const unavailableIds = [...new Set(selectedIds)].filter((id) => !refreshedIds.has(id));
-  if (unavailableIds.length > 0) {
-    await write(
-      deps,
-      `Selected agent CLIs are no longer available: ${unavailableIds.join(", ")}.\n`,
-    );
-    return { code: 1 };
-  }
-
-  const hookPreferences = await promptHookPreferences(facts, prompt, harnessSelection);
-  const configWrite = await planSetupConfigWrite(facts, {
-    harnessSelection,
+  facts = await maybeLinkStationLaunchers(facts, options, reprobeDeps, prompt);
+  const hookPreferences = await promptHookPreferences(facts, prompt);
+  const preparedState = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
+    ...(selectedIds === undefined ? {} : { selectedHarnessIds: selectedIds }),
+    planConfigWrite: true,
     ...hookPreferences,
   });
-  plan = buildSetupPlan(facts, { configWrite, harnessSelection, ...hookPreferences });
+  facts = preparedState.facts;
+  plan = preparedState.plan;
+  const unavailableIds = preparedState.harnessSelection.requiredHarnessIds.filter(
+    (id) => !preparedState.harnessSelection.selected.some((harness) => harness.id === id),
+  );
+  if (unavailableIds.length > 0) {
+    await write(deps, `Required agent CLIs are unavailable: ${unavailableIds.join(", ")}.\n`);
+    return { code: 1 };
+  }
+  if (!(await confirmRequiredHarnessTracking(plan, prompt, deps))) {
+    return { code: 1 };
+  }
   if (!coreReadyForConfigWrite(plan)) {
     await write(deps, renderSetupApplyResult(plan, renderOptions(deps)));
     return { code: 1 };
@@ -168,6 +177,14 @@ async function runGuidedSetupWithPrompt(
     writtenPlan = writeResult.plan;
   }
 
+  const activationError =
+    writtenPlan === undefined
+      ? undefined
+      : await activateCompletedConfigWrite(writtenPlan, facts.homeDir, deps);
+  if (activationError !== undefined) {
+    return { code: 1 };
+  }
+
   const hookActions = plan.actions.filter(isHookSetupAction).filter((action) => action.selected);
   let hookInstallFailed = false;
   // Hook providers are independent; one failed installer must not suppress the rest.
@@ -185,21 +202,20 @@ async function runGuidedSetupWithPrompt(
   }
   if (hookInstallFailed) {
     await write(deps, "Hook install failed. Fix the install error, then run: stn setup\n");
-  }
-
-  const activationError =
-    writtenPlan === undefined
-      ? undefined
-      : await activateCompletedConfigWrite(writtenPlan, facts.homeDir, deps);
-  if (hookInstallFailed || activationError !== undefined) {
     return { code: 1 };
   }
 
   let tmuxPopupFacts = facts;
   let tmuxPopupPlan = plan;
   if (writtenPlan !== undefined) {
-    tmuxPopupFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
-    tmuxPopupPlan = buildSetupPlan(tmuxPopupFacts);
+    const tmuxPopupState = await collectSetupPlanForCommand(
+      "apply",
+      options,
+      reprobeDeps,
+      selectedIds === undefined ? {} : { selectedHarnessIds: selectedIds },
+    );
+    tmuxPopupFacts = tmuxPopupState.facts;
+    tmuxPopupPlan = tmuxPopupState.plan;
   }
 
   const shellIntegration = plan.actions.find(
@@ -280,14 +296,15 @@ async function runGuidedSetupWithPrompt(
     await write(deps, tmuxPopupFeedback);
   }
 
-  await write(
-    deps,
-    renderSetupApplyResult(
-      { ...plan, summary: { ...plan.summary, workflowReady: true, requiredOk: true } },
-      renderOptions(deps),
-    ),
+  // Successful actions do not prove readiness; rebuild the plan from current config and artifacts.
+  const finalState = await collectSetupPlanForCommand(
+    "apply",
+    options,
+    reprobeDeps,
+    selectedIds === undefined ? {} : { selectedHarnessIds: selectedIds },
   );
-  return { code: 0 };
+  await write(deps, renderSetupApplyResult(finalState.plan, renderOptions(deps)));
+  return { code: finalState.plan.summary.requiredOk ? 0 : 1 };
 }
 
 async function installWorktrunkShellIntegration(
@@ -366,7 +383,6 @@ function renderTmuxPopupFeedback(
 
 type HookPreferences = {
   installWorktrunkHooks?: boolean;
-  installHarnessHooks?: readonly SupportedHarnessId[];
 };
 
 // Kicks the macOS bootstrap installers (Command Line Tools, then Homebrew) behind
@@ -509,7 +525,6 @@ async function maybeLinkStationLaunchers(
 async function promptHookPreferences(
   facts: SetupFacts,
   prompt: SetupPromptAdapter,
-  harnessSelection: SetupHarnessSelection,
 ): Promise<HookPreferences> {
   const preferences: HookPreferences = {};
   if (
@@ -519,19 +534,30 @@ async function promptHookPreferences(
   ) {
     preferences.installWorktrunkHooks = await prompt.confirm("Install Worktrunk lifecycle hooks?");
   }
-  const installHarnessHooks: SupportedHarnessId[] = [];
-  for (const harness of harnessSelection.selected) {
-    if (!harnessSupportsSetupHooks(harness.id) || facts.config.status === "invalid") {
-      continue;
-    }
-    if (await prompt.confirm(`Install ${harness.label} agent hooks?`)) {
-      installHarnessHooks.push(harness.id);
-    }
-  }
-  if (installHarnessHooks.length > 0) {
-    preferences.installHarnessHooks = installHarnessHooks;
-  }
   return preferences;
+}
+
+async function confirmRequiredHarnessTracking(
+  plan: SetupPlan,
+  prompt: SetupPromptAdapter,
+  deps: SetupCommandDeps,
+): Promise<boolean> {
+  const trackingActions = plan.actions.filter(
+    (action) => action.selected && action.tier === "required" && action.data?.setupRole === "hook",
+  );
+  for (const action of trackingActions) {
+    const accepted = await prompt.confirm(
+      `${action.label}? Station requires tracking to observe the selected agent's activity.`,
+    );
+    if (!accepted) {
+      await write(
+        deps,
+        "Required agent tracking was declined; config and provider tracking artifacts were not changed.\n",
+      );
+      return false;
+    }
+  }
+  return true;
 }
 
 function shouldPromptLauncherLink(facts: SetupFacts): boolean {
@@ -626,33 +652,9 @@ function depsWithUserBinPath(deps: SetupCommandDeps, facts: SetupFacts): SetupCo
   return { ...deps, env };
 }
 
-// Standard Homebrew prefix bin dirs: Apple Silicon, Intel, and Linuxbrew. A fresh
-// shell or GUI-launched process usually has none of these on PATH right after the
-// installer runs, so a re-probe would not see brew or the tools it just installed.
-const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
-
-// Make the brew prefixes resolvable for re-probes that follow `brew install`. Without
-// this, a fresh Apple-Silicon Mac reports brew (and every brew-installed core tool)
-// still missing right after a successful install, and the guided run exits 1.
-// APPEND (not prepend): the caller's existing PATH keeps precedence, so we only add a
-// fallback for tools that were just installed and aren't already resolvable elsewhere
-// — this avoids shadowing the caller's chosen tools with brew's copies.
-function depsWithBrewBinPath(deps: SetupCommandDeps): SetupCommandDeps {
-  const env = { ...(deps.env ?? process.env) };
-  env.PATH = brewBinDirs.reduce((path, dir) => appendPath(path, dir), env.PATH);
-  return { ...deps, env };
-}
-
 function prependPath(path: string, existing: string | undefined): string {
   if (existing === undefined || existing.length === 0) {
     return path;
   }
   return existing.split(":").includes(path) ? existing : `${path}:${existing}`;
-}
-
-function appendPath(existing: string | undefined, path: string): string {
-  if (existing === undefined || existing.length === 0) {
-    return path;
-  }
-  return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
 }

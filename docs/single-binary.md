@@ -183,10 +183,17 @@ what "required" means), split the setup summary into two truths:
   extracted executable assets can run there. Nothing else. Bare `stn` gates
   on this.
 - `workflowReady` — core worktree workflow prerequisites: Git, worktrunk,
-  tmux, diffnav, git-delta, an agent CLI, and valid core config. It is
-  independent of the current directory and remains true with zero projects;
+  tmux, diffnav, git-delta, the effective default/selected agent CLI, valid core
+  config, and current Station-owned tracking artifacts for required Claude,
+  Codex, Cursor, or OpenCode harnesses. Artifact preparation does not prove
+  provider trust or runtime event delivery. It is independent of the current
+  directory and remains true with zero projects;
   choosing a project is the next TUI onboarding state. `stn setup` reports
   missing prerequisites as unmet *capabilities*, not as "broken."
+
+Setup represents artifact preparation with per-harness checks and never labels
+that state runtime Ready. Pi remains exempt from an invented external artifact
+requirement because its extension is composed in process.
 
 Each check keeps its real status; `stn setup check --json` gains both
 booleans and retains `requiredOk` as an alias of `workflowReady`. The compiled
