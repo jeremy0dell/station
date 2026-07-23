@@ -169,15 +169,14 @@ export async function sendProviderHookEvent(
   if (input.observerCommand !== undefined) {
     deliveryInput.observerCommand = input.observerCommand;
   }
-  const receipt = await deliverProviderHookWithSpooling(deliveryInput);
-  return receipt;
+  return deliverProviderHookWithSpooling(deliveryInput);
 }
 
 /**
  * ADAPTER
  *
- * Translates Claude hook stdin into provider-admitted ingress, recording safe
- * local evidence only when an admitted event cannot correlate to Station.
+ * Admits Claude's forwarded events before applying Station ownership/cwd
+ * correlation and translating hook stdin into shared harness ingress.
  */
 export async function sendClaudeHookPayload(
   input: SendClaudeHookInput,
@@ -204,19 +203,13 @@ export async function sendClaudeHookPayload(
   );
   if (correlationFailure !== undefined) {
     return ignoredProviderHookCorrelationReceipt(
-      {
-        paths: input.paths,
-        provider: "claude",
-        event: eventName,
-        reason: correlationFailure,
-        clock,
-        hookId: deps.hookId,
-      },
+      input,
+      { provider: "claude", event: eventName, reason: correlationFailure },
       deps,
     );
   }
 
-  const receipt = await sendProviderHookEvent(
+  return sendProviderHookEvent(
     {
       ...input,
       provider: "claude",
@@ -226,14 +219,13 @@ export async function sendClaudeHookPayload(
     },
     deps,
   );
-  return receipt;
 }
 
 /**
  * ADAPTER
  *
- * Translates Codex hook stdin into provider-admitted ingress, recording safe
- * local evidence only when an admitted event cannot correlate to Station.
+ * Admits Codex's forwarded events before applying Station ownership/cwd
+ * correlation and translating hook stdin into shared harness ingress.
  */
 export async function sendCodexHookPayload(
   input: SendCodexHookInput,
@@ -259,19 +251,13 @@ export async function sendCodexHookPayload(
   );
   if (correlationFailure !== undefined) {
     return ignoredProviderHookCorrelationReceipt(
-      {
-        paths: input.paths,
-        provider: "codex",
-        event: eventName,
-        reason: correlationFailure,
-        clock,
-        hookId: deps.hookId,
-      },
+      input,
+      { provider: "codex", event: eventName, reason: correlationFailure },
       deps,
     );
   }
 
-  const receipt = await sendProviderHookEvent(
+  return sendProviderHookEvent(
     {
       ...input,
       provider: "codex",
@@ -281,20 +267,18 @@ export async function sendCodexHookPayload(
     },
     deps,
   );
-  return receipt;
 }
 
 /**
  * ADAPTER
  *
- * Translates Cursor hook stdin into Station-owned provider ingress and records
- * safe local evidence when required ownership is incomplete.
+ * Enriches Cursor hook stdin with Station identity and requires complete
+ * ownership before translating it into shared harness ingress.
  */
 export async function sendCursorHookPayload(
   input: SendCursorHookInput,
   deps: ProviderHookSenderDeps = {},
 ): Promise<ProviderHookReceipt> {
-  const clock = deps.clock ?? systemClock;
   const enrichedPayload = enrichStationHookIdentityPayload({
     payload: input.payload,
     env: input.env ?? process.env,
@@ -302,19 +286,13 @@ export async function sendCursorHookPayload(
   const eventName = parseProviderHookEventName(enrichedPayload) ?? "unknown";
   if (!hasStationOwnership(enrichedPayload)) {
     return ignoredProviderHookCorrelationReceipt(
-      {
-        paths: input.paths,
-        provider: "cursor",
-        event: eventName,
-        reason: "missing-station-ownership",
-        clock,
-        hookId: deps.hookId,
-      },
+      input,
+      { provider: "cursor", event: eventName, reason: "missing-station-ownership" },
       deps,
     );
   }
 
-  const receipt = await sendProviderHookEvent(
+  return sendProviderHookEvent(
     {
       ...input,
       provider: "cursor",
@@ -324,39 +302,31 @@ export async function sendCursorHookPayload(
     },
     deps,
   );
-  return receipt;
 }
 
 /**
  * ADAPTER
  *
- * Translates Pi extension events into Station-owned provider ingress and
- * records safe local evidence when required ownership is incomplete.
+ * Translates Pi extension events into shared harness ingress only when their
+ * enriched payload carries complete Station ownership.
  */
 export async function sendPiHookPayload(
   input: SendPiHookInput,
   deps: ProviderHookSenderDeps = {},
 ): Promise<ProviderHookReceipt> {
-  const clock = deps.clock ?? systemClock;
   const enrichedPayload = enrichStationHookIdentityPayload({
     payload: input.payload,
     env: input.env ?? process.env,
   });
   if (!hasStationOwnership(enrichedPayload)) {
     return ignoredProviderHookCorrelationReceipt(
-      {
-        paths: input.paths,
-        provider: "pi",
-        event: input.eventType,
-        reason: "missing-station-ownership",
-        clock,
-        hookId: deps.hookId,
-      },
+      input,
+      { provider: "pi", event: input.eventType, reason: "missing-station-ownership" },
       deps,
     );
   }
 
-  const receipt = await sendProviderHookEvent(
+  return sendProviderHookEvent(
     {
       ...input,
       provider: "pi",
@@ -366,14 +336,13 @@ export async function sendPiHookPayload(
     },
     deps,
   );
-  return receipt;
 }
 
 /**
  * ADAPTER
  *
- * Translates rule-admitted OpenCode payloads into Station-owned provider
- * ingress and records safe local evidence when required ownership is incomplete.
+ * Applies OpenCode rule admission before requiring complete Station ownership
+ * and translating the payload into shared harness ingress.
  */
 export async function sendOpenCodeHookPayload(
   input: SendOpenCodeHookInput,
@@ -394,19 +363,17 @@ export async function sendOpenCodeHookPayload(
   });
   if (!hasStationOwnership(enrichedPayload)) {
     return ignoredProviderHookCorrelationReceipt(
+      input,
       {
-        paths: input.paths,
         provider: "opencode",
         event: input.eventType,
         reason: "missing-station-ownership",
-        clock,
-        hookId: deps.hookId,
       },
       deps,
     );
   }
 
-  const receipt = await sendProviderHookEvent(
+  return sendProviderHookEvent(
     {
       ...input,
       provider: "opencode",
@@ -416,7 +383,6 @@ export async function sendOpenCodeHookPayload(
     },
     deps,
   );
-  return receipt;
 }
 
 async function attemptHookDelivery(
@@ -516,30 +482,16 @@ async function logAndReturn(
       ...(deps.clock === undefined ? {} : { clock: deps.clock }),
     });
   try {
-    let level: "info" | "warn" | "error";
-    let message: string;
-    switch (receipt.status) {
-      case "ingested":
-        level = "info";
-        message = "Provider hook delivered to observer.";
-        break;
-      case "spooled":
-        level = "warn";
-        message = "Provider hook spooled for later delivery.";
-        break;
-      case "ignored":
-      case "rejected":
-        level = "error";
-        message = "Provider hook rejected.";
-        break;
-      default: {
-        const unexpectedStatus: never = receipt.status;
-        throw new Error(`Unsupported provider hook receipt status: ${unexpectedStatus}`);
-      }
-    }
+    const level =
+      receipt.status === "ingested" ? "info" : receipt.status === "spooled" ? "warn" : "error";
     await logger.log({
       level,
-      message,
+      message:
+        receipt.status === "ingested"
+          ? "Provider hook delivered to observer."
+          : receipt.status === "spooled"
+            ? "Provider hook spooled for later delivery."
+            : "Provider hook rejected.",
       provider: event.provider,
       attributes: {
         hookId: receipt.hookId,
@@ -573,9 +525,17 @@ function ignoredProviderHookReceipt(input: {
   });
 }
 
+type CorrelatedHookProvider = "claude" | "codex" | "cursor" | "pi" | "opencode";
+
 type ProviderHookCorrelationFailureReason =
   | "missing-station-ownership"
   | "cwd-outside-configured-roots";
+
+type ProviderHookCorrelationFailure = {
+  provider: CorrelatedHookProvider;
+  event: string;
+  reason: ProviderHookCorrelationFailureReason;
+};
 
 const providerHookCorrelationFailureMessages: Record<ProviderHookCorrelationFailureReason, string> =
   {
@@ -586,33 +546,33 @@ const providerHookCorrelationFailureMessages: Record<ProviderHookCorrelationFail
   };
 
 async function ignoredProviderHookCorrelationReceipt(
-  input: {
-    paths: ObserverPaths;
-    provider: "claude" | "codex" | "cursor" | "pi" | "opencode";
-    event: string;
-    reason: ProviderHookCorrelationFailureReason;
-    clock: RuntimeClock;
-    hookId?: (() => string) | undefined;
-  },
+  options: Pick<ProviderHookSenderOptions, "paths">,
+  failure: ProviderHookCorrelationFailure,
   deps: ProviderHookSenderDeps,
 ): Promise<ProviderHookReceipt> {
-  const receipt = ignoredProviderHookReceipt(input);
+  const clock = deps.clock ?? systemClock;
+  const receipt = ignoredProviderHookReceipt({
+    provider: failure.provider,
+    event: failure.event,
+    clock,
+    hookId: deps.hookId,
+  });
   try {
     const logger =
       deps.logger ??
       createJsonlLogger({
         component: "hook",
-        path: componentLogPath(input.paths.stateDir, "hook"),
-        clock: input.clock,
+        path: componentLogPath(options.paths.stateDir, "hook"),
+        clock,
       });
     await logger.log({
       level: "info",
-      message: providerHookCorrelationFailureMessages[input.reason],
-      provider: input.provider,
+      message: providerHookCorrelationFailureMessages[failure.reason],
+      provider: failure.provider,
       attributes: {
         hookId: receipt.hookId,
         status: receipt.status,
-        reason: input.reason,
+        reason: failure.reason,
       },
     });
   } catch {
