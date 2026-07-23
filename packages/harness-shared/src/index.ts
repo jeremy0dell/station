@@ -33,6 +33,13 @@ export {
   type HarnessHookReportMapperInput,
 } from "./hookAdapter.js";
 export {
+  createJsonHookConfigEditor,
+  isJsonObject,
+  type JsonHookConfigEditor,
+  type JsonHookConfigSpec,
+  type JsonHookDocument,
+} from "./hooks/jsonConfig.js";
+export {
   assignDefined,
   type CommonLaunchEnvOptions,
   type CommonProviderDataInput,
