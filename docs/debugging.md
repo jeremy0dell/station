@@ -55,7 +55,13 @@ query is supplied. Opt into hook logs explicitly:
 stn debug logs protocol
 stn debug logs --min-level error --limit 20
 stn debug logs timeout --component hook
+stn debug logs "Provider hook ignored before Observer delivery" --component hook
 ```
+
+The final query finds safe local evidence for allow-listed provider hooks that
+were ignored before Observer delivery because Station ownership was missing or
+cwd did not match configured roots. Unsupported provider events intentionally
+produce no per-occurrence log.
 
 Use current-truth tools only when the task permits live observer interaction.
 `doctor`, `snapshot`, `observe`, `command get`, `reconcile`, and `debug bundle`

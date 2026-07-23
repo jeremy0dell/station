@@ -1,6 +1,12 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ObserverHealth, ProviderHookEvent, ProviderHookReceipt } from "@station/contracts";
+import type {
+  LogRecord,
+  ObserverHealth,
+  ProviderHookEvent,
+  ProviderHookReceipt,
+} from "@station/contracts";
+import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
 import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { createRealStaleSocket } from "../../../../tests/support/sockets";
@@ -10,7 +16,7 @@ import {
   readHookSpoolRecord,
 } from "../../../../tests/support/spool";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
-import { runProviderIngressCommand } from "../../src/ingress/command.js";
+import { runProviderIngressCommand, runProviderIngressMain } from "../../src/ingress/command.js";
 
 // A config with one project rooted at `projectRoot`, so the delivery gate for
 // env-less sessions can be exercised (writeConfigToml hardcodes empty projects).
@@ -47,6 +53,10 @@ async function writeConfigWithProject(root: string, projectRoot: string): Promis
 }
 
 const now = "2026-05-20T12:00:00.000Z";
+const missingOwnershipMessage =
+  "Provider hook ignored before Observer delivery because Station ownership was missing.";
+const cwdOutsideRootsMessage =
+  "Provider hook ignored before Observer delivery because cwd did not match a configured Station project/worktree root.";
 
 describe("provider hook ingress command", () => {
   it("turns raw observer flags into one finalized startup command", async () => {
@@ -55,9 +65,7 @@ describe("provider hook ingress command", () => {
     await createRealStaleSocket(fixture.socketPath);
     let running = false;
     let staleSocketPresentAtSpawn = false;
-    let spawnInput:
-      | Parameters<NonNullable<Parameters<typeof runProviderIngressCommand>[2]["spawnObserver"]>>[0]
-      | undefined;
+    let spawnInput: Parameters<NonNullable<IngressDeps["spawnObserver"]>>[0] | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -403,8 +411,9 @@ describe("provider hook ingress command", () => {
         logger: {
           log: async () => {
             logCalls += 1;
+            throw new Error("ignored Codex hooks must not be logged");
           },
-        },
+        } as never,
       },
     );
 
@@ -429,6 +438,66 @@ describe("provider hook ingress command", () => {
       spoolCalls: 0,
       logCalls: 0,
     });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it.each([
+    {
+      provider: "codex",
+      expectedEvent: "SubagentStop",
+      providerArgs: ["codex"],
+      payload: () => ({ ...codexPayload(), hook_event_name: "SubagentStop" }),
+    },
+    {
+      provider: "claude",
+      expectedEvent: "SubagentStop",
+      providerArgs: ["claude"],
+      payload: () => ({ ...claudePayload(), hook_event_name: "SubagentStop" }),
+    },
+    {
+      provider: "opencode",
+      expectedEvent: "message.part.delta",
+      providerArgs: ["opencode", "message.part.delta"],
+      payload: () => ({
+        event_type: "message.part.delta",
+        cwd: "/station-unsupported-outside-root",
+        prompt: "unsupported-prompt-sentinel",
+      }),
+    },
+  ])("keeps unsupported $provider events ahead of correlation and all ingress work", async ({
+    provider,
+    expectedEvent,
+    providerArgs,
+    payload,
+  }) => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
+    const hookLogPath = componentLogPath(fixture.stateDir, "hook");
+    const capture = capturingHookLogger(hookLogPath);
+    const forbidden = observerWorkForbiddenDeps(capture.logger, `hook_unsupported_${provider}`);
+
+    const receipt = await runProviderIngressCommand(
+      ["--config", configPath, "--no-auto-start", ...providerArgs],
+      { stdin: JSON.stringify(payload()), env: {} },
+      forbidden.deps,
+    );
+
+    expect(receipt).toMatchObject({
+      accepted: false,
+      status: "ignored",
+      provider,
+      event: expectedEvent,
+    });
+    expect(forbidden.calls).toEqual({
+      client: 0,
+      health: 0,
+      delivery: 0,
+      startup: 0,
+      spool: 0,
+      log: 0,
+    });
+    expect(capture.records).toEqual([]);
+    await expect(fileExists(hookLogPath)).resolves.toBe(false);
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
@@ -518,18 +587,26 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("delivers Claude events without station ownership env when the payload has a cwd", async () => {
+  it.each([
+    "claude",
+    "codex",
+  ] as const)("delivers env-less %s events with a cwd when no config supplies roots", async (provider) => {
     const fixture = await createTempState();
+    const payload = provider === "claude" ? claudePayload() : codexPayload();
 
     const receipt = await runProviderIngressCommand(
-      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "claude"],
-      {
-        stdin: JSON.stringify(claudePayload()),
-        env: {},
-      },
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--no-auto-start",
+        provider,
+      ],
+      { stdin: JSON.stringify(payload), env: {} },
       {
         clock: { now: () => new Date(now) },
-        hookId: () => "report_claude_unowned_1",
+        hookId: () => `report_${provider}_unowned_with_cwd`,
       },
     );
 
@@ -537,7 +614,7 @@ describe("provider hook ingress command", () => {
     // running) so cwd correlation can light their worktree row.
     expect(receipt).toMatchObject({
       status: "spooled",
-      provider: "claude",
+      provider,
       event: "PreToolUse",
     });
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toHaveLength(1);
@@ -567,19 +644,26 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("delivers an env-less Claude event whose cwd falls under a configured project root", async () => {
+  it.each([
+    "claude",
+    "codex",
+  ] as const)("delivers an env-less %s event whose cwd falls under a configured project root", async (provider) => {
     const fixture = await createTempState();
     // The project root must exist on disk; the payload cwd is compared as a
     // string, so a subdir of the root need not exist.
     const configPath = await writeConfigWithProject(fixture.root, fixture.root);
+    const payload = provider === "claude" ? claudePayload() : codexPayload();
 
     const receipt = await runProviderIngressCommand(
-      ["--config", configPath, "--no-auto-start", "claude"],
+      ["--config", configPath, "--no-auto-start", provider],
       {
-        stdin: JSON.stringify({ ...claudePayload(), cwd: join(fixture.root, "web", "task") }),
+        stdin: JSON.stringify({ ...payload, cwd: join(fixture.root, "web", "task") }),
         env: {},
       },
-      { clock: { now: () => new Date(now) }, hookId: () => "report_claude_in_root" },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => `report_${provider}_in_root`,
+      },
     );
 
     expect(receipt.status).toBe("spooled");
@@ -599,6 +683,234 @@ describe("provider hook ingress command", () => {
     );
 
     expect(receipt).toMatchObject({ status: "ignored", provider: "claude" });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it.each([
+    {
+      provider: "claude",
+      hookId: "hook_claude_missing_ownership",
+      providerArgs: ["claude"],
+      payload: () => {
+        const { cwd: _cwd, ...payload } = claudePayload();
+        return payload;
+      },
+      reason: "missing-station-ownership" as const,
+      message: missingOwnershipMessage,
+    },
+    {
+      provider: "codex",
+      hookId: "hook_codex_missing_ownership",
+      providerArgs: ["codex"],
+      payload: () => {
+        const { cwd: _cwd, ...payload } = codexPayload();
+        return payload;
+      },
+      reason: "missing-station-ownership" as const,
+      message: missingOwnershipMessage,
+    },
+    {
+      provider: "claude",
+      hookId: "hook_claude_outside_roots",
+      providerArgs: ["claude"],
+      payload: () => ({ ...claudePayload(), cwd: "/station-outside-roots/claude" }),
+      reason: "cwd-outside-configured-roots" as const,
+      message: cwdOutsideRootsMessage,
+    },
+    {
+      provider: "codex",
+      hookId: "hook_codex_outside_roots",
+      providerArgs: ["codex"],
+      payload: () => ({ ...codexPayload(), cwd: "/station-outside-roots/codex" }),
+      reason: "cwd-outside-configured-roots" as const,
+      message: cwdOutsideRootsMessage,
+    },
+    {
+      provider: "cursor",
+      hookId: "hook_cursor_missing_ownership",
+      providerArgs: ["cursor"],
+      payload: cursorPayload,
+      reason: "missing-station-ownership" as const,
+      message: missingOwnershipMessage,
+    },
+    {
+      provider: "pi",
+      hookId: "hook_pi_missing_ownership",
+      providerArgs: ["pi", "agent_end"],
+      payload: () => ({ event_type: "agent_end", command: "pi-command-sentinel" }),
+      reason: "missing-station-ownership" as const,
+      message: missingOwnershipMessage,
+    },
+    {
+      provider: "opencode",
+      hookId: "hook_opencode_missing_ownership",
+      providerArgs: ["opencode", "session.idle"],
+      payload: () => ({ event_type: "session.idle", opencode_session_id: "native-session" }),
+      reason: "missing-station-ownership" as const,
+      message: missingOwnershipMessage,
+    },
+  ])("records one safe info log for an admitted $provider correlation failure", async ({
+    provider,
+    hookId,
+    providerArgs,
+    payload,
+    reason,
+    message,
+  }) => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
+    const hookLogPath = componentLogPath(fixture.stateDir, "hook");
+    const capture = capturingHookLogger(hookLogPath);
+    const forbidden = observerWorkForbiddenDeps(capture.logger, hookId);
+
+    const receipt = await runProviderIngressCommand(
+      ["--config", configPath, "--no-auto-start", ...providerArgs],
+      {
+        stdin: JSON.stringify(payload()),
+        env: { STATION_SESSION_ID: `incomplete-${provider}-session` },
+      },
+      forbidden.deps,
+    );
+
+    expect(receipt).toEqual({
+      schemaVersion: "0.8.0",
+      hookId,
+      provider,
+      event:
+        provider === "cursor"
+          ? "beforeShellExecution"
+          : provider === "pi"
+            ? "agent_end"
+            : provider === "opencode"
+              ? "session.idle"
+              : "PreToolUse",
+      accepted: false,
+      status: "ignored",
+      receivedAt: now,
+    });
+    expect(forbidden.calls).toEqual({
+      client: 0,
+      health: 0,
+      delivery: 0,
+      startup: 0,
+      spool: 0,
+      log: 1,
+    });
+    expect(capture.records).toEqual([
+      {
+        timestamp: now,
+        component: "hook",
+        level: "info",
+        message,
+        provider,
+        attributes: { hookId, status: "ignored", reason },
+      },
+    ]);
+    const serialized = (await readFile(hookLogPath, "utf8")).trim().split("\n");
+    expect(serialized).toHaveLength(1);
+    expect(JSON.parse(serialized[0] ?? "null")).toEqual(capture.records[0]);
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it("constructs ignored-correlation evidence without sensitive provider context", async () => {
+    const fixture = await createTempState();
+    const repositoryRoot = join(fixture.root, "repository-root-SENTINEL-47a8");
+    await mkdir(repositoryRoot, { recursive: true });
+    const configPath = await writeConfigWithProject(fixture.root, repositoryRoot);
+    const hookLogPath = componentLogPath(fixture.stateDir, "hook");
+    const capture = capturingHookLogger(hookLogPath);
+    const forbidden = observerWorkForbiddenDeps(capture.logger, "hook_redaction_safe");
+    const sentinels = {
+      cwd: "/outside/cwd-SENTINEL-184c",
+      repositoryRoot,
+      prompt: "prompt-SENTINEL-f031",
+      command: "command-SENTINEL-7bb2",
+      payload: "payload-SENTINEL-bd55",
+      environment: "environment-SENTINEL-e219",
+    };
+
+    const receipt = await runProviderIngressCommand(
+      ["--config", configPath, "--no-auto-start", "codex"],
+      {
+        stdin: JSON.stringify({
+          ...codexPayload(),
+          cwd: sentinels.cwd,
+          prompt: sentinels.prompt,
+          command: sentinels.command,
+          raw_payload: sentinels.payload,
+          tool_input: { command: sentinels.command },
+        }),
+        env: {
+          STATION_SESSION_ID: sentinels.environment,
+          PROVIDER_SECRET_SENTINEL: sentinels.environment,
+        },
+      },
+      forbidden.deps,
+    );
+
+    expect(receipt.status).toBe("ignored");
+    expect(capture.records).toEqual([
+      {
+        timestamp: now,
+        component: "hook",
+        level: "info",
+        message: cwdOutsideRootsMessage,
+        provider: "codex",
+        attributes: {
+          hookId: "hook_redaction_safe",
+          status: "ignored",
+          reason: "cwd-outside-configured-roots",
+        },
+      },
+    ]);
+    const capturedText = JSON.stringify(capture.records);
+    const serializedText = await readFile(hookLogPath, "utf8");
+    for (const sentinel of Object.values(sentinels)) {
+      expect(capturedText).not.toContain(sentinel);
+      expect(serializedText).not.toContain(sentinel);
+    }
+  });
+
+  it("returns the same ignored receipt when correlation logging fails", async () => {
+    const fixture = await createTempState();
+    const hookLogPath = componentLogPath(fixture.stateDir, "hook");
+    const writer = createJsonlLogger({
+      component: "hook",
+      path: hookLogPath,
+      clock: { now: () => new Date(now) },
+    });
+    const failingLogger: JsonlLogger = {
+      ...writer,
+      log: async () => {
+        throw new Error("hook log unavailable");
+      },
+    };
+    const forbidden = observerWorkForbiddenDeps(failingLogger, "hook_logging_failure");
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "cursor"],
+      { stdin: JSON.stringify(cursorPayload()), env: {} },
+      forbidden.deps,
+    );
+
+    expect(receipt).toEqual({
+      schemaVersion: "0.8.0",
+      hookId: "hook_logging_failure",
+      provider: "cursor",
+      event: "beforeShellExecution",
+      accepted: false,
+      status: "ignored",
+      receivedAt: now,
+    });
+    expect(forbidden.calls).toEqual({
+      client: 0,
+      health: 0,
+      delivery: 0,
+      startup: 0,
+      spool: 0,
+      log: 1,
+    });
+    await expect(fileExists(hookLogPath)).resolves.toBe(false);
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
@@ -840,8 +1152,10 @@ describe("provider hook ingress command", () => {
         clock: { now: () => new Date(now) },
         hookId: () => "report_codex_timeout",
         clientFactory: (_socketPath, options) => {
-          observedTimeoutMs = options.timeoutMs;
-          observedBuildVersion = options.expectedBuildVersion;
+          observedTimeoutMs = options?.timeoutMs;
+          if (options !== undefined && "expectedBuildVersion" in options) {
+            observedBuildVersion = options.expectedBuildVersion;
+          }
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => ({
             schemaVersion: "0.8.0",
             hookId: event.hookId ?? "hook_timeout_1",
@@ -904,6 +1218,51 @@ describe("provider hook ingress command", () => {
       kind: "harness",
       event: "PreToolUse",
     });
+  });
+
+  it("keeps ignored correlation failures silent at the CLI boundary", async () => {
+    const fixture = await createTempState();
+
+    const result = await runProviderIngressMain(
+      [
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--no-auto-start",
+        "cursor",
+      ],
+      { stdin: JSON.stringify(cursorPayload()), env: {} },
+    );
+
+    expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+    const logLines = (await readFile(componentLogPath(fixture.stateDir, "hook"), "utf8"))
+      .trim()
+      .split("\n");
+    expect(logLines).toHaveLength(1);
+    expect(JSON.parse(logLines[0] ?? "null")).toMatchObject({
+      level: "info",
+      component: "hook",
+      message: missingOwnershipMessage,
+      provider: "cursor",
+      attributes: {
+        status: "ignored",
+        reason: "missing-station-ownership",
+      },
+    });
+  });
+
+  it("keeps malformed JSON rejected and visible at the CLI boundary", async () => {
+    const fixture = await createTempState();
+
+    const result = await runProviderIngressMain(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "codex"],
+      { stdin: "{ invalid json", env: {} },
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("HOOK_PAYLOAD_INVALID");
   });
 
   it("rejects malformed provider payloads before delivery or spool writes", async () => {
@@ -994,6 +1353,85 @@ function stationEnv(): Record<string, string> {
     STATION_TERMINAL_PROVIDER: "tmux",
     STATION_TERMINAL_TARGET_ID: "tmux:station:@1:%2",
   };
+}
+
+type IngressDeps = NonNullable<Parameters<typeof runProviderIngressCommand>[2]>;
+
+type ObserverWorkCalls = {
+  client: number;
+  health: number;
+  delivery: number;
+  startup: number;
+  spool: number;
+  log: number;
+};
+
+function capturingHookLogger(path: string): { logger: JsonlLogger; records: LogRecord[] } {
+  const records: LogRecord[] = [];
+  const writer = createJsonlLogger({
+    component: "hook",
+    path,
+    clock: { now: () => new Date(now) },
+  });
+  return {
+    records,
+    logger: {
+      ...writer,
+      log: async (record) => {
+        const written = await writer.log(record);
+        records.push(written);
+        return written;
+      },
+    },
+  };
+}
+
+function observerWorkForbiddenDeps(
+  logger: JsonlLogger,
+  hookId: string,
+): { deps: IngressDeps; calls: ObserverWorkCalls } {
+  const calls: ObserverWorkCalls = {
+    client: 0,
+    health: 0,
+    delivery: 0,
+    startup: 0,
+    spool: 0,
+    log: 0,
+  };
+  const countedLogger: JsonlLogger = {
+    ...logger,
+    log: async (record) => {
+      calls.log += 1;
+      return logger.log(record);
+    },
+  };
+  const deps: IngressDeps = {
+    clock: { now: () => new Date(now) },
+    hookId: () => hookId,
+    clientFactory: () => {
+      calls.client += 1;
+      return {
+        health: async () => {
+          calls.health += 1;
+          throw new Error("correlation failures must not probe Observer health");
+        },
+        ingestProviderHookEvent: async () => {
+          calls.delivery += 1;
+          throw new Error("correlation failures must not reach Observer delivery");
+        },
+      } as never;
+    },
+    spawnObserver: async () => {
+      calls.startup += 1;
+      throw new Error("correlation failures must not start the Observer");
+    },
+    writeSpool: async () => {
+      calls.spool += 1;
+      throw new Error("correlation failures must not be spooled");
+    },
+    logger: countedLogger,
+  };
+  return { deps, calls };
 }
 
 function healthyObserver(paths: { socketPath: string; stateDir: string }): ObserverHealth {

@@ -95,6 +95,18 @@ submits a command; use it only when the task calls for a runtime action.
 
 Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, attempts bounded observer auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
 
+An allow-listed provider hook that fails the sender's Station ownership or
+configured-root correlation gate writes one best-effort `info` record before
+returning an `ignored` receipt. The record contains only provider, hook ID,
+ignored status, and the closed correlation reason; it excludes event names,
+cwd, roots, Station IDs, payloads, paths, and environment data. Unsupported
+provider events remain silent and do not produce this record. Query existing
+safe evidence without contacting the Observer:
+
+```bash
+stn debug logs "Provider hook ignored before Observer delivery" --component hook
+```
+
 When `defaults.worktree_provider = "worktrunk"`, doctor also validates Worktrunk
 binary availability, lifecycle hook setup, and automation capability for the
 configured lifecycle-hook mode. Missing `wt` degrades provider health with
