@@ -19,6 +19,18 @@ When finishing a change and summarizing it, include a minimal line or section na
 
 PR titles should be semantic and reviewer-oriented, using a type/domain shape like `refactor(protocol): centralize observer command completion waits`; do not add agent tags.
 
+PR descriptions must be reviewer-oriented and understandable without prior knowledge of Station's implementation history.
+
+Every substantive PR should answer, in this order:
+
+- `## What this fixes`: briefly explain the affected Station responsibility, the concrete problem, and why it matters.
+- `## What changed`: summarize the resulting behavior and important design decisions using concise, outcome-oriented bullets.
+- `## Testing`: name the meaningful validation performed.
+
+Add `## Safety and scope` or `## User-visible behavior` only when they provide decision-relevant context.
+
+Assume the reviewer is technically capable but may not know Station's internal architecture. Define unfamiliar subsystem responsibilities on first mention, but do not include project history, a file-by-file walkthrough, implementation details already clear from the diff, or exhaustive test output. Prefer one short context paragraph and 3-7 change bullets; smaller PRs should be shorter.
+
 STATION is terminal/TUI-first. Ignore generic web, frontend, site, image, and browser guidance unless the task explicitly targets a web frontend or browser-rendered UI.
 
 ## Code Comments
