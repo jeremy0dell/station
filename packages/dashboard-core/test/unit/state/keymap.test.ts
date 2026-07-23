@@ -3,7 +3,6 @@ import {
   dashboardFooterLabel,
   handleTuiKey,
   isSlotKey,
-  TUI_HELP_CONTENT,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { matchDashboardBinding } from "../../../src/state/keymap.js";
@@ -34,16 +33,6 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "i", ctrl: true })?.action).toBe("tui.focus.nextNeedsMe");
     expect(isSlotKey({ input: "i" })).toBe(true);
     expect(matchDashboardBinding({ input: "i" })?.action).toBe("tui.row.activateSlot");
-  });
-
-  it("keeps dashboard help content independent of screen key metadata", () => {
-    expect(TUI_HELP_CONTENT).toEqual(
-      expect.arrayContaining([
-        { key: "↑/↓", description: "move cursor" },
-        { key: "N", description: "new session" },
-        { key: "Q", description: "quit or close popup" },
-      ]),
-    );
   });
 });
 

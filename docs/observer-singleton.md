@@ -69,9 +69,9 @@ Measured against a real observer in an isolated `/private/tmp` state dir:
 ## Shipped
 
 | Change | What |
-|--------|------|
+| -------- | ------ |
 | #81 | WAL + `synchronous=NORMAL` sqlite; `stn observer reap` (socket-keyed candidacy, `lsof` keeper + health tiebreak, refuse-on-ambiguity, re-verify argv+start-token before every signal, SIGTERM→SIGKILL). `resolveObserverSocketForProcessArgs` in `@station/config`. |
-| #82 | Seeded socket-ownership watcher (`readSocketIdentity` + `expectedIdentity`); boot reorder — bind (`drainOnStart:false`) → arm seeded watcher → `observer.startup` reconcile, so a takeover during the scan is caught. |
+| #82 | Seeded socket-ownership watcher (`readSocketIdentity` + `expectedIdentity`); boot reorder — bind → arm seeded watcher → `observer.startup` reconcile, so a takeover during the scan is caught. |
 | #83 | `runShutdownWithBackstop`: `stopObserver` force-exits at a 5s ceiling so a wedged drain can't hang shutdown. Self-stop is now terminal (prerequisite for eviction). |
 | #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a concurrent stale-reclaimer ABA; 3d-a now supplies the serialization required before this helper may reclaim. |
 | 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
@@ -92,7 +92,7 @@ before either the socket path or pidfile can be mutated.
 Spike result: **NO-GO for both stale-path deletion designs (directory rename and
 AF_UNIX unlink/rebind); GO for a dedicated SQLite transaction claim backed by a
 permanent cross-runtime adversarial test.** #135 shipped that narrow result;
-#137 extends its claimed listening-socket branch with version-aware replacement.
+PR #137 extends its claimed listening-socket branch with version-aware replacement.
 
 Startup ownership mutation lives in observer boot (`main.ts`) under the
 OS-lock-backed claim database
@@ -106,6 +106,7 @@ and serialize startup, but retain distinct listeners and `<socketPath>.pid`
 files.
 
 Boot sequence while holding `C`:
+
 1. **Acquire `C`** by opening the dedicated database with private permissions
    and starting `BEGIN IMMEDIATE` with a bounded busy timeout. `SQLITE_BUSY`
    means another boot is in progress, so do not enter. Process death releases
@@ -144,6 +145,7 @@ until the endpoint is no longer listening, including through an unhealthy
 shutdown transition.
 
 Supporting:
+
 - Normal CLI and provider-hook children receive the caller's bounded startup
   budget so SQLite contention cannot outlive the parent's health wait.
 - Claim acquisition uses the low-level cross-runtime SQLite driver, not the

@@ -1,3 +1,4 @@
+import { createJsonHookConfigEditor, isJsonObject } from "@station/harness-shared";
 import { z } from "zod";
 import {
   CURSOR_HOOK_EVENT_NAMES,
@@ -6,7 +7,6 @@ import {
 } from "./hookConstants.js";
 import { CursorHookSetupError } from "./hookErrors.js";
 
-type CursorHookEntry = z.infer<typeof cursorHookEntrySchema>;
 type CursorHooksDocument = z.infer<typeof cursorHooksDocumentSchema>;
 
 const cursorHookEntrySchema = z
@@ -22,68 +22,39 @@ const cursorHooksDocumentSchema = z
   })
   .catchall(z.unknown());
 
-function withGeneratedHookEntry(
-  value: CursorHookEntry[] | undefined,
-  command: string,
-): CursorHookEntry[] {
-  const entries = withoutGeneratedHookEntries(value ?? [], command);
-  entries.push(generatedHookEntry(command));
-  return entries;
-}
+const hookConfigEditor = createJsonHookConfigEditor<CursorHookEventName, CursorHooksDocument>({
+  eventNames: CURSOR_HOOK_EVENT_NAMES,
+  entryCommands: (entry) => [entry],
+  withEntryCommands: (_entry, commands) => commands[0],
+  commandPath: (command) =>
+    isJsonObject(command) && typeof command.command === "string" ? command.command : undefined,
+  isGeneratedCommand: (command) => {
+    const parsed = cursorHookEntrySchema.safeParse(command);
+    return parsed.success && parsed.data.command !== undefined
+      ? commandLooksLikeGeneratedHookScript(parsed.data.command)
+      : false;
+  },
+  createEntry: (_eventName, command) => ({ command, timeout: 30 }),
+});
 
-function withoutGeneratedHookEntries(
-  entries: CursorHookEntry[],
-  command: string,
-): CursorHookEntry[] {
-  return entries.filter((entry) => !isGeneratedStationHook(entry, command));
-}
-
-function generatedHookEntry(command: string): CursorHookEntry {
-  return {
-    command,
-    timeout: 30,
-  };
-}
-
-function hookContainsCommand(
+export const removeGeneratedCursorHookCommands: (
   document: CursorHooksDocument,
-  eventName: CursorHookEventName,
-  command: string,
-): boolean {
-  return document.hooks?.[eventName]?.some((entry) => entry.command === command) === true;
-}
-
-function isGeneratedStationHook(entry: CursorHookEntry, command: string): boolean {
-  if (entry.command === command) {
-    return true;
-  }
-  if (entry.command === undefined) {
-    return false;
-  }
-  return commandLooksLikeGeneratedHookScript(entry.command);
-}
+  commands: Record<CursorHookEventName, string>,
+) => CursorHooksDocument = hookConfigEditor.removeGeneratedCommands;
+export const missingCursorHookEvents: (
+  document: CursorHooksDocument,
+  commands: Record<CursorHookEventName, string>,
+) => CursorHookEventName[] = hookConfigEditor.missingEvents;
+export const generatedCursorHookCommands: (
+  document: CursorHooksDocument,
+) => Record<CursorHookEventName, string[]> = hookConfigEditor.generatedCommands;
+export const documentContainsCommand: (document: CursorHooksDocument, command: string) => boolean =
+  hookConfigEditor.documentContainsCommand;
 
 function commandLooksLikeGeneratedHookScript(command: string): boolean {
   return (
     command === GENERATED_HOOK_SCRIPT_NAME || command.endsWith(`/${GENERATED_HOOK_SCRIPT_NAME}`)
   );
-}
-
-function cloneDocument(document: CursorHooksDocument): CursorHooksDocument {
-  return { ...document };
-}
-
-function cloneHooks(
-  hooks: Record<string, CursorHookEntry[]> | undefined,
-): Record<string, CursorHookEntry[]> {
-  const next: Record<string, CursorHookEntry[]> = {};
-  if (hooks === undefined) {
-    return next;
-  }
-  for (const [eventName, entries] of Object.entries(hooks)) {
-    next[eventName] = entries.map((entry) => ({ ...entry }));
-  }
-  return next;
 }
 
 export function parseJsonDocument(source: string): CursorHooksDocument {
@@ -124,72 +95,8 @@ export function installCursorHookCommands(
   document: CursorHooksDocument,
   commands: Record<CursorHookEventName, string>,
 ): CursorHooksDocument {
-  const next = cloneDocument(document);
-  next.version = document.version ?? 1;
-  const hooks = cloneHooks(document.hooks);
-  for (const eventName of CURSOR_HOOK_EVENT_NAMES) {
-    hooks[eventName] = withGeneratedHookEntry(hooks[eventName], commands[eventName]);
-  }
-  next.hooks = hooks;
-  return next;
-}
-
-export function removeGeneratedCursorHookCommands(
-  document: CursorHooksDocument,
-  commands: Record<CursorHookEventName, string>,
-): CursorHooksDocument {
-  const next = cloneDocument(document);
-  if (document.hooks === undefined) {
-    return next;
-  }
-
-  const hooks = cloneHooks(document.hooks);
-  for (const eventName of CURSOR_HOOK_EVENT_NAMES) {
-    const entries = withoutGeneratedHookEntries(hooks[eventName] ?? [], commands[eventName]);
-    if (entries.length === 0) {
-      delete hooks[eventName];
-    } else {
-      hooks[eventName] = entries;
-    }
-  }
-  if (Object.keys(hooks).length === 0) {
-    delete next.hooks;
-  } else {
-    next.hooks = hooks;
-  }
-  return next;
-}
-
-export function missingCursorHookEvents(
-  document: CursorHooksDocument,
-  commands: Record<CursorHookEventName, string>,
-): CursorHookEventName[] {
-  return CURSOR_HOOK_EVENT_NAMES.filter(
-    (eventName) => !hookContainsCommand(document, eventName, commands[eventName]),
-  );
-}
-
-export function generatedCursorHookCommands(
-  document: CursorHooksDocument,
-): Record<CursorHookEventName, string[]> {
-  const commands: Partial<Record<CursorHookEventName, string[]>> = {};
-  for (const eventName of CURSOR_HOOK_EVENT_NAMES) {
-    const eventCommands: string[] = [];
-    for (const entry of document.hooks?.[eventName] ?? []) {
-      if (entry.command !== undefined && commandLooksLikeGeneratedHookScript(entry.command)) {
-        eventCommands.push(entry.command);
-      }
-    }
-    commands[eventName] = eventCommands;
-  }
-  return commands as Record<CursorHookEventName, string[]>;
-}
-
-export function documentContainsCommand(document: CursorHooksDocument, command: string): boolean {
-  if (document.hooks === undefined) {
-    return false;
-  }
-  return Object.values(document.hooks).some((entries) =>
-    entries.some((entry) => entry.command === command),
+  return hookConfigEditor.installCommands(
+    { ...document, version: document.version ?? 1 },
+    commands,
   );
 }

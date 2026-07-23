@@ -167,14 +167,6 @@ export function runtimeBoundaryWithRetryEffect<T>(
   return retryEffect(runtimeBoundaryEffect({ error: fallback }, task), retry);
 }
 
-export async function withRetry<T>(
-  retry: RuntimeRetryOptions,
-  fallback: RuntimeSafeErrorFallback,
-  task: RuntimeBoundaryTask<T>,
-): Promise<T> {
-  return Effect.runPromise(runtimeBoundaryWithRetryEffect(retry, fallback, task));
-}
-
 export async function withTimeout<T>(
   task: RuntimeBoundaryTask<T>,
   input: RuntimeTimeoutOptions,

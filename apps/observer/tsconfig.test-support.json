@@ -4,5 +4,9 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["test/support/inMemoryObserverPersistence.ts", "test/support/projectConfigWriter.ts"]
+  "include": [
+    "test/support/harnessRuns.ts",
+    "test/support/inMemoryObserverPersistence.ts",
+    "test/support/projectConfigWriter.ts"
+  ]
 }

@@ -7,7 +7,6 @@ import {
   ensurePersistentPopupSession,
   openTmuxPopup,
   resolveRegisteredDevPopupUi,
-  resolveTmuxPopupFocusOrigin,
   resolveTmuxPopupFocusTarget,
 } from "../../src/popup";
 import { buildNormalPopupRoute, buildPopupActiveClaim } from "../../src/popup/fastProtocol";
@@ -283,19 +282,22 @@ describe("tmux popup", () => {
 
   it("uses a valid claim for focus origin and falls back to the compatibility mirror", async () => {
     const claimed = createPopupTmux({ activeClaim: true, registered: true });
-    await expect(resolveTmuxPopupFocusOrigin({ runner: claimed.runner })).resolves.toEqual({
-      clientId: "/dev/ttys001",
-      provider: "tmux",
+    await expect(resolveTmuxPopupFocusTarget({ runner: claimed.runner })).resolves.toMatchObject({
+      origin: {
+        clientId: "/dev/ttys001",
+        provider: "tmux",
+      },
     });
 
     const legacy = createPopupTmux();
     legacy.globalOptions.set("@station_popup_focus_client", "legacy-client");
-    await expect(resolveTmuxPopupFocusOrigin({ runner: legacy.runner })).resolves.toEqual({
-      clientId: "legacy-client",
-      provider: "tmux",
-    });
-
     const legacyTarget = await resolveTmuxPopupFocusTarget({ runner: legacy.runner });
+    expect(legacyTarget).toMatchObject({
+      origin: {
+        clientId: "legacy-client",
+        provider: "tmux",
+      },
+    });
     const replacement = buildPopupActiveClaim({
       actionNonce: "88".repeat(16),
       clientName: "/dev/ttys099",
@@ -313,7 +315,7 @@ describe("tmux popup", () => {
     malformed.globalOptions.set("@station_popup_active_claim", "future.claim.format");
     malformed.globalOptions.set("@station_popup_focus_client", "legacy-client");
     await expect(
-      resolveTmuxPopupFocusOrigin({ runner: malformed.runner }),
+      resolveTmuxPopupFocusTarget({ runner: malformed.runner }),
     ).resolves.toBeUndefined();
 
     const closing = createPopupTmux();
@@ -328,7 +330,7 @@ describe("tmux popup", () => {
       }),
     );
     closing.globalOptions.set("@station_popup_focus_client", "legacy-client");
-    await expect(resolveTmuxPopupFocusOrigin({ runner: closing.runner })).resolves.toBeUndefined();
+    await expect(resolveTmuxPopupFocusTarget({ runner: closing.runner })).resolves.toBeUndefined();
   });
 
   it("opens or focuses one cwd-bound shell window for the exact popup client", async () => {

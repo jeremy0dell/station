@@ -308,7 +308,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       hookSpoolDir,
       hookReconcileDebounceMs: 0,
     });
-    const server = await startObserverServer({ socketPath, api, clock, drainOnStart: false });
+    const server = await startObserverServer({ socketPath, api, clock });
     cleanupTasks.push(async () => {
       await server.close();
     });

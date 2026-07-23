@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import type {
   HarnessEventReport,
   HarnessEventReportReceipt,
@@ -44,20 +43,6 @@ export type DrainProviderIngressSpoolOptions = {
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
 };
-
-export async function listProviderIngressSpoolRecords(spoolDir: string): Promise<
-  Array<{
-    path: string;
-    record: ProviderHookSpoolRecord | HarnessEventReportSpoolRecord;
-  }>
-> {
-  const entries = await createFilesystemProviderIngressSpoolStore(spoolDir).list();
-  return entries.flatMap((entry) =>
-    entry.parsed === undefined
-      ? []
-      : [{ path: join(spoolDir, entry.id), record: entry.parsed.record }],
-  );
-}
 
 export function providerIngressSpoolDepth(spoolDir: string): Promise<number> {
   return createFilesystemProviderIngressSpoolStore(spoolDir).depth();

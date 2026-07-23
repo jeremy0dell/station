@@ -23,10 +23,6 @@ export function renderCliHelpFromArgs(args: readonly string[]): CliHelpResult | 
   };
 }
 
-export function renderCliHelpTopic(path: readonly string[], mode: CliHelpMode): string {
-  return renderCliCommandHelpTopic(path, mode);
-}
-
 export function isCliHelpFlag(arg: string): boolean {
   return arg === "--help" || arg === "-h" || arg === "--man";
 }

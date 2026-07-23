@@ -1,5 +1,4 @@
 import type { TmuxConfig } from "@station/config";
-import type { TerminalFocusOrigin } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   runExternalCommand,
@@ -725,12 +724,6 @@ export async function openTmuxPopup(options: TmuxPopupOptions = {}): Promise<Tmu
   }
 
   return { opened: true };
-}
-
-export async function resolveTmuxPopupFocusOrigin(
-  options: TmuxPopupFocusOriginOptions = {},
-): Promise<TerminalFocusOrigin | undefined> {
-  return (await resolveTmuxPopupFocusTarget(options))?.origin;
 }
 
 export async function resolveTmuxPopupFocusTarget(

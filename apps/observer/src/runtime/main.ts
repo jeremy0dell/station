@@ -399,7 +399,6 @@ async function runClaimedObserverRuntime(input: {
       socketPath,
       api,
       clock: systemClock,
-      drainOnStart: false,
       guardOperation: startupGate.assertReadyForOperation,
     });
     ownsSocket = true;

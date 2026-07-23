@@ -104,13 +104,6 @@ export async function compareAndSetActivePopupClaim(
   return (await resolveTmuxGlobalOption(input, activePopupClaimOption)) === options.replacement;
 }
 
-export async function setPopupClaimMirrors(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await setActivePopupClient(input);
-  await setFocusPopupClient(input);
-}
-
 export async function clearActivePopupClaimIfCurrent(
   input: TmuxCommandInput,
   options: { claim: string; clientId: string },
@@ -161,33 +154,6 @@ export async function dismissLegacyPopupIfUnclaimed(
   input: TmuxCommandInput & { clientId: string },
 ): Promise<boolean> {
   return runLegacyPopupActionIfUnclaimed(input, true);
-}
-
-export async function replaceLegacyPopupIfUnclaimed(
-  input: TmuxCommandInput & { clientId: string; previousClientId?: string },
-): Promise<boolean> {
-  if (
-    !isSafePopupClientName(input.clientId) ||
-    (input.previousClientId !== undefined && !isSafePopupClientName(input.previousClientId))
-  ) {
-    return false;
-  }
-  const miss = "STATION_POPUP_CAS_MISS";
-  const condition = `#{&&:${claimEqualsFormat(undefined)},${optionEqualsFormat(activePopupClientOption, input.previousClientId)}}`;
-  const commands = [
-    ...(input.previousClientId === undefined
-      ? []
-      : [`display-popup -c ${input.previousClientId} -C`]),
-    `set-option -gq ${activePopupClientOption} ${input.clientId}`,
-    `set-option -gq ${focusPopupClientOption} ${input.clientId}`,
-  ].join(" ; ");
-  const result = await runTmuxPopupQuery(input, {
-    args: ["if-shell", "-F", condition, commands, `display-message -p ${miss}`],
-    operation: "provider.tmux.popup.replaceLegacyState",
-    message: "tmux failed to replace the legacy station popup state.",
-    timeoutMessage: "tmux legacy popup state replacement timed out.",
-  });
-  return result.stdout.trim() !== miss;
 }
 
 export async function resolveActivePopupClient(

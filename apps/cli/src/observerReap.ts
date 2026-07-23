@@ -1,11 +1,8 @@
 import {
   createLocalObserverProcessEvidence,
-  parseObserverProcessList,
-  type ObserverProcessEntry as SharedObserverProcessEntry,
+  type ObserverProcessEntry,
 } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
-
-export type ObserverProcessEntry = SharedObserverProcessEntry;
 
 export type ReapTarget = { pid: number; startToken: string };
 
@@ -148,10 +145,6 @@ export async function runObserverReap(
   // Keeper must be untouched.
   void keeper;
   return { plan, applied: true, killed, survived };
-}
-
-export function parseObserverPsOutput(output: string): ObserverProcessEntry[] {
-  return parseObserverProcessList(output);
 }
 
 async function defaultHealthPid(socketPath: string): Promise<number | undefined> {

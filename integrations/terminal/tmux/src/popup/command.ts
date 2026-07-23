@@ -150,28 +150,6 @@ export async function setTmuxGlobalOption(
   });
 }
 
-export async function clearTmuxGlobalOption(
-  input: TmuxCommandInput,
-  optionName: string,
-  messages: RequiredTmuxPopupCommandMessages,
-): Promise<void> {
-  await runTmuxPopupCommand(input, {
-    args: ["set-option", "-gq", "-u", optionName],
-    ...messages,
-  });
-}
-
-export async function closeTmuxPopup(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await runTmuxPopupCommand(input, {
-    args: ["display-popup", "-c", input.clientId, "-C"],
-    operation: "provider.tmux.popup.close",
-    message: "tmux failed to close the active station popup.",
-    timeoutMessage: "tmux popup close timed out.",
-  });
-}
-
 export async function hasTmuxSession(input: TmuxCommandInput, sessionId: string): Promise<boolean> {
   try {
     await runTmuxPopupCommand(input, {

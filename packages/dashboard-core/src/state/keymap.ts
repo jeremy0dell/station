@@ -228,26 +228,6 @@ export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
 
-export const TUI_HELP_CONTENT = [
-  { text: "station help", align: "center" as const },
-  { text: "" },
-  { key: "↑/↓", description: "move cursor" },
-  { key: "↵", description: "open focused session" },
-  { key: "tab", description: "next session needing you" },
-  { key: "wheel", description: "scroll dashboard" },
-  { key: "1-9/a-z", description: "choose visible item" },
-  { key: "N", description: "new session" },
-  { key: "R", description: "rename session" },
-  { key: "X", description: "delete session" },
-  { key: "C", description: "collapse project" },
-  { key: "P", description: "project settings" },
-  { key: "/", description: "search" },
-  { key: "Z", description: "refresh snapshot" },
-  { key: "H / ?", description: "help" },
-  { key: "Q", description: "quit or close popup" },
-  { key: "Esc", description: "back/cancel" },
-] as const satisfies readonly TuiHelpContentLine[];
-
 export const QUIT_HINT_CLOSE = "Q/esc:close";
 
 export function dashboardFooterLabel({

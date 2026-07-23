@@ -151,6 +151,18 @@ export function parseStationHookIdentityPayload(
   return result.success ? result.data : undefined;
 }
 
+export const ProviderHookCwdPayloadSchema = z
+  .object({
+    cwd: nonEmptyStringSchema,
+  })
+  .passthrough();
+
+/** Parses provider-origin cwd without validating unrelated native payload fields. */
+export function parseProviderHookCwd(payload: unknown): string | undefined {
+  const result = ProviderHookCwdPayloadSchema.safeParse(payload);
+  return result.success ? result.data.cwd : undefined;
+}
+
 export const ProviderHookEventNamePayloadSchema = z
   .object({
     hook_event_name: nonEmptyStringSchema.optional(),
