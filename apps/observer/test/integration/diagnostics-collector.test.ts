@@ -62,6 +62,95 @@ describe("observer diagnostics collector", () => {
     sqlite.close();
   });
 
+  it("derives current health from checks while retaining command error evidence", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-recovery-"));
+    const clock = { now: () => new Date(now) };
+    const providers = new ProviderRegistry({
+      worktree: new ProviderDiagnosticWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers,
+      clock,
+      sqlitePath: join(stateDir, "observer.sqlite"),
+    });
+
+    try {
+      await providers.healthCache.refreshAll();
+      await core.reconcile("diagnostics-recovery-test");
+      const deps = {
+        config,
+        core,
+        persistence,
+        persistenceHealth: persistence,
+        providers,
+        paths: { stateDir },
+        clock,
+      };
+
+      const baseline = await runDoctor(deps);
+      expect(baseline.status).toBe("healthy");
+      expect(baseline.recentErrors).toEqual([]);
+
+      await persistence.recordCommandAccepted({
+        commandId: "cmd_historical_failure",
+        command: { type: "observer.reconcile", payload: { reason: "historical-failure" } },
+        createdAt: now,
+        traceId: "trc_historical_failure",
+        spanId: "spn_historical_failure",
+      });
+      await persistence.markCommandFailed({
+        commandId: "cmd_historical_failure",
+        safeError: {
+          tag: "ProjectConfigError",
+          code: "PROJECT_ROOT_NOT_GIT",
+          message: "Project root is not a Git repository.",
+          commandId: "cmd_historical_failure",
+          traceId: "trc_historical_failure",
+        },
+        envelope: {
+          id: "err_historical_failure",
+          tag: "ProjectConfigError",
+          code: "PROJECT_ROOT_NOT_GIT",
+          message: "Project root is not a Git repository.",
+          severity: "error",
+          commandId: "cmd_historical_failure",
+          traceId: "trc_historical_failure",
+          spanId: "spn_historical_failure",
+          redacted: true,
+          createdAt: now,
+        },
+        finishedAt: now,
+      });
+
+      const snapshot = await collectDiagnosticSnapshot(deps);
+      expect(snapshot.errors).toContainEqual(
+        expect.objectContaining({
+          id: "err_historical_failure",
+          code: "PROJECT_ROOT_NOT_GIT",
+          commandId: "cmd_historical_failure",
+          traceId: "trc_historical_failure",
+        }),
+      );
+
+      const report = await runDoctor(deps);
+      expect(report.checks.every((check) => check.status === "ok")).toBe(true);
+      expect(report.status).toBe("healthy");
+      expect(report.recentErrors).toContainEqual({
+        tag: "ProjectConfigError",
+        code: "PROJECT_ROOT_NOT_GIT",
+        message: "Project root is not a Git repository.",
+        diagnosticId: "err_historical_failure",
+        commandId: "cmd_historical_failure",
+        traceId: "trc_historical_failure",
+      });
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("includes Cursor hook diagnostics in doctor data", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-cursor-diag-"));
     const clock = { now: () => new Date(now) };
