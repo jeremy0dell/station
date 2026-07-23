@@ -34,14 +34,14 @@ describe("station build info", () => {
     expect(isCompiledBinary()).toBe(false);
     expect(verifyBuildIdentity).not.toHaveBeenCalled();
     expect(stationBuildInfo()).toEqual({
-      version: "0.7.1-rc.5",
+      version: "0.7.1-rc.6",
       compiled: false,
       buildIdentity,
     });
-    expect(currentObserverBuildVersion()).toBe(`0.7.1-rc.5+station.${buildIdentity}`);
-    expect(currentObserverBuildVersion()).toBe(`0.7.1-rc.5+station.${buildIdentity}`);
+    expect(currentObserverBuildVersion()).toBe(`0.7.1-rc.6+station.${buildIdentity}`);
+    expect(currentObserverBuildVersion()).toBe(`0.7.1-rc.6+station.${buildIdentity}`);
     expect(stationBuildInfo()).toEqual({
-      version: "0.7.1-rc.5",
+      version: "0.7.1-rc.6",
       compiled: false,
       buildIdentity,
     });
