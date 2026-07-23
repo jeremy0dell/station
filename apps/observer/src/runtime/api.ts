@@ -42,6 +42,8 @@ import {
   createFilesystemProviderIngressSpoolStore,
   providerIngressSpoolDepth,
 } from "../hooks/spool.js";
+import { createLocalGitWorktreeMetadataInvalidationSource } from "../metadata/gitRefInvalidation.js";
+import { createLocalGitWorktreeChangeSource } from "../metadata/localGitChangeSummary.js";
 import {
   createWorktreeMetadataRefreshService,
   type WorktreeMetadataRefreshService,
@@ -314,7 +316,11 @@ function buildMetadataRefresh(
     persistence: options.persistence,
     requestReconcile: scheduler.request,
     clock,
-    watchGitRefs: true,
+    worktreeChangeSource: createLocalGitWorktreeChangeSource({ clock }),
+    worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+      requestReconcile: scheduler.request,
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+    }),
   };
   if (options.logger !== undefined) {
     metadataRefreshOptions.logger = options.logger;
@@ -418,7 +424,7 @@ async function buildStop(
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
   await harnessIngressQueue.shutdown();
-  await metadataRefresh?.shutdown?.();
+  await metadataRefresh?.shutdown();
   await options.onStop?.();
   return {
     schemaVersion: STATION_SCHEMA_VERSION,

@@ -1,10 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationSnapshot } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  createWorktreeGitRefInvalidationService,
+  createLocalGitWorktreeMetadataInvalidationSource,
   gitRefInvalidationTargetsForWorktree,
 } from "../../src/metadata/gitRefInvalidation.js";
 
@@ -41,7 +40,7 @@ describe("worktree git ref invalidation", () => {
       directory: string;
       listener: (changedFile: string | undefined) => void;
     }> = [];
-    const watcher = createWorktreeGitRefInvalidationService({
+    const watcher = createLocalGitWorktreeMetadataInvalidationSource({
       debounceMs: 10,
       requestReconcile: (reason) => {
         reasons.push(reason);
@@ -59,16 +58,7 @@ describe("worktree git ref invalidation", () => {
       await writeFile(join(worktree, ".git", "HEAD"), "ref: refs/heads/main\n");
       await writeFile(join(refDir, "main"), "one\n");
 
-      watcher.update({
-        rows: [
-          {
-            id: "wt_1",
-            path: worktree,
-            branch: "main",
-            worktree: { state: "exists" },
-          },
-        ],
-      } as StationSnapshot);
+      watcher.replaceWatchedWorktrees([{ worktreeId: "wt_1", path: worktree, branch: "main" }]);
 
       const refWatch = directoryWatches.find((entry) => entry.directory === refDir);
       expect(refWatch).toBeDefined();
@@ -76,6 +66,43 @@ describe("worktree git ref invalidation", () => {
       await waitFor(() => reasons.includes("metadata:git-ref:wt_1"));
     } finally {
       watcher.shutdown();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("closes replaced watchers and ignores pending or late events after shutdown", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "station-git-ref-invalidation-"));
+    const reasons: string[] = [];
+    const listeners: Array<(changedFile: string | undefined) => void> = [];
+    let closed = 0;
+    const source = createLocalGitWorktreeMetadataInvalidationSource({
+      debounceMs: 10,
+      requestReconcile: (reason) => reasons.push(reason),
+      watchDirectory: (_directory, listener) => {
+        listeners.push(listener);
+        return { close: () => (closed += 1) };
+      },
+    });
+
+    try {
+      const worktree = join(tempDir, "worktree");
+      const refDir = join(worktree, ".git", "refs", "heads");
+      await mkdir(refDir, { recursive: true });
+      await writeFile(join(worktree, ".git", "HEAD"), "ref: refs/heads/main\n");
+      await writeFile(join(refDir, "main"), "one\n");
+
+      source.replaceWatchedWorktrees([{ worktreeId: "wt_1", path: worktree, branch: "main" }]);
+      listeners.at(-1)?.("main");
+      source.shutdown();
+      source.shutdown();
+      source.replaceWatchedWorktrees([{ worktreeId: "wt_1", path: worktree, branch: "main" }]);
+      listeners.at(-1)?.("main");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(closed).toBeGreaterThan(0);
+      expect(reasons).toEqual([]);
+    } finally {
+      source.shutdown();
       await rm(tempDir, { recursive: true, force: true });
     }
   });

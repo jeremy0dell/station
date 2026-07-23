@@ -1,16 +1,11 @@
 import { existsSync, type FSWatcher, lstatSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import type { StationSnapshot, WorktreeRow } from "@station/contracts";
 import type { StationLogger } from "../stationLogger.js";
+import type { WorktreeMetadataInvalidationSource } from "./ports.js";
 
 // A Git ref move invalidates all metadata keyed to HEAD: local diff, PR identity, and checks.
 // This trigger only requests reconcile; observer runtime remains the only UI event publisher.
-export type WorktreeGitRefInvalidationService = {
-  update(snapshot: StationSnapshot): void;
-  shutdown(): void;
-};
-
-export type CreateWorktreeGitRefInvalidationServiceOptions = {
+export type CreateLocalGitWorktreeMetadataInvalidationSourceOptions = {
   requestReconcile(reason: string): void;
   debounceMs?: number;
   logger?: StationLogger;
@@ -32,28 +27,32 @@ type WatchDirectory = (
 
 const defaultDebounceMs = 100;
 
-export function createWorktreeGitRefInvalidationService(
-  options: CreateWorktreeGitRefInvalidationServiceOptions,
-): WorktreeGitRefInvalidationService {
+/**
+ * ADAPTER
+ *
+ * Watches local Git refs and requests metadata reconciliation while owning watcher replacement and shutdown.
+ */
+export function createLocalGitWorktreeMetadataInvalidationSource(
+  options: CreateLocalGitWorktreeMetadataInvalidationSourceOptions,
+): WorktreeMetadataInvalidationSource {
   const debounceMs = options.debounceMs ?? defaultDebounceMs;
   const watchers = new Map<string, DirectoryWatcher>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const watchDirectory = options.watchDirectory ?? defaultWatchDirectory;
+  let stopped = false;
 
   return {
-    update: (snapshot) => {
+    replaceWatchedWorktrees: (targets) => {
+      if (stopped) return;
       const nextKeys = new Set<string>();
-      for (const row of snapshot.rows) {
-        if (row.worktree.state !== "exists") {
-          continue;
-        }
-        for (const target of gitRefInvalidationTargetsForRow(row)) {
-          const key = watcherKey(row.id, target.path);
+      for (const target of targets) {
+        for (const targetPath of gitRefInvalidationTargetsForWorktree(target.path, target.branch)) {
+          const key = watcherKey(target.worktreeId, targetPath.path);
           nextKeys.add(key);
           if (watchers.has(key)) {
             continue;
           }
-          const watcher = watchTarget(row.id, target);
+          const watcher = watchTarget(target.worktreeId, targetPath);
           if (watcher !== undefined) {
             watchers.set(key, watcher);
           }
@@ -69,6 +68,8 @@ export function createWorktreeGitRefInvalidationService(
       }
     },
     shutdown: () => {
+      if (stopped) return;
+      stopped = true;
       for (const timer of timers.values()) {
         clearTimeout(timer);
       }
@@ -116,6 +117,7 @@ export function createWorktreeGitRefInvalidationService(
   }
 
   function scheduleReconcile(worktreeId: string): void {
+    if (stopped) return;
     const existing = timers.get(worktreeId);
     if (existing !== undefined) {
       clearTimeout(existing);
@@ -123,14 +125,11 @@ export function createWorktreeGitRefInvalidationService(
 
     const timer = setTimeout(() => {
       timers.delete(worktreeId);
+      if (stopped) return;
       options.requestReconcile(`metadata:git-ref:${worktreeId}`);
     }, debounceMs);
     timers.set(worktreeId, timer);
   }
-}
-
-export function gitRefInvalidationTargetsForRow(row: WorktreeRow): GitRefInvalidationTarget[] {
-  return gitRefInvalidationTargetsForWorktree(row.path, row.branch);
 }
 
 export function gitRefInvalidationTargetsForWorktree(

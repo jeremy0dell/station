@@ -20,6 +20,8 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   createCommandQueue,
+  createLocalGitWorktreeChangeSource,
+  createLocalGitWorktreeMetadataInvalidationSource,
   createObserverApi,
   createObserverEventBus,
   createWorktreeMetadataRefreshService,
@@ -119,7 +121,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
     });
 
     const snapshot = await fixture.core.reconcile("metadata-refresh-before");
@@ -169,7 +174,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
     });
 
     const snapshotBefore = await fixture.core.reconcile("metadata-default-branch-before");
@@ -236,7 +244,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
     });
 
     const snapshot = await fixture.core.reconcile("metadata-refresh-failure-before");
@@ -291,7 +302,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
     });
 
     const snapshot = await fixture.core.reconcile("metadata-refresh-failure-loop-before");
@@ -390,7 +404,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
       repositoryProviders: [repository],
     });
 
@@ -457,7 +474,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
       repositoryProviders: [repository],
     });
 
@@ -512,7 +532,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
       repositoryProviders: providers,
     });
 
@@ -562,7 +585,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
       repositoryProviders: [repository],
     });
 
@@ -616,7 +642,10 @@ describe("observer worktree metadata refresh", () => {
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
       clock: fixture.clock,
-      runner,
+      worktreeChangeSource: createLocalGitWorktreeChangeSource({ runner }),
+      worktreeMetadataInvalidationSource: createLocalGitWorktreeMetadataInvalidationSource({
+        requestReconcile: (reason) => reasons.push(reason),
+      }),
       repositoryProviders: [repository],
     });
 

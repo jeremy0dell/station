@@ -6,7 +6,6 @@ import type {
   WorktreePullRequest,
 } from "@station/contracts";
 import {
-  type ExternalCommandRunner,
   forEachConcurrent,
   type RuntimeClock,
   systemClock,
@@ -19,20 +18,25 @@ import type {
 } from "../persistence/index.js";
 import type { StationLogger } from "../stationLogger.js";
 import { addMs } from "../utils/time.js";
-import {
-  type CreateWorktreeGitRefInvalidationServiceOptions,
-  createWorktreeGitRefInvalidationService,
-} from "./gitRefInvalidation.js";
-import { type LocalGitWorktree, readLocalGitChangeSummary } from "./localGitChangeSummary.js";
+import type {
+  WorktreeChangeReadInput,
+  WorktreeChangeSource,
+  WorktreeMetadataInvalidationSource,
+} from "./ports.js";
 import {
   type CreateRepositoryMetadataRefresherOptions,
   createRepositoryMetadataRefresher,
 } from "./repositoryRefresh.js";
 import { staleChangeSummary } from "./stalePayloads.js";
 
+/**
+ * USE CASE
+ *
+ * Refreshes and persists local-change and code-host metadata for snapshot worktrees through application-owned sources.
+ */
 export type WorktreeMetadataRefreshService = {
   refresh(snapshot: StationSnapshot): Promise<void>;
-  shutdown?(): Promise<void>;
+  shutdown(): Promise<void>;
 };
 
 export type CreateWorktreeMetadataRefreshServiceOptions = {
@@ -41,17 +45,15 @@ export type CreateWorktreeMetadataRefreshServiceOptions = {
   requestReconcile(reason: string): void;
   clock?: RuntimeClock;
   logger?: StationLogger;
-  runner?: ExternalCommandRunner;
+  worktreeChangeSource: WorktreeChangeSource;
+  worktreeMetadataInvalidationSource: WorktreeMetadataInvalidationSource;
   repositoryProviders?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
-  gitTimeoutMs?: number;
   ttlMs?: number;
   concurrency?: number;
   repositoryConcurrency?: number;
   repositoryNegativeBackoffMs?: number;
-  watchGitRefs?: boolean;
 };
 
-const defaultGitTimeoutMs = 200;
 const defaultTtlMs = 5 * 60 * 1000;
 const defaultConcurrency = 2;
 
@@ -78,14 +80,6 @@ export function createWorktreeMetadataRefreshService(
     repositoryOptions.negativeBackoffMs = options.repositoryNegativeBackoffMs;
   }
   const repositoryRefresher = createRepositoryMetadataRefresher(repositoryOptions);
-  const gitRefInvalidationOptions: CreateWorktreeGitRefInvalidationServiceOptions = {
-    requestReconcile: options.requestReconcile,
-  };
-  if (options.logger !== undefined) gitRefInvalidationOptions.logger = options.logger;
-  const gitRefInvalidation =
-    options.watchGitRefs === true
-      ? createWorktreeGitRefInvalidationService(gitRefInvalidationOptions)
-      : undefined;
   let pendingSnapshot: StationSnapshot | undefined;
   let running: Promise<void> | undefined;
   let shutdownRequested = false;
@@ -111,10 +105,11 @@ export function createWorktreeMetadataRefreshService(
       await running;
     },
     shutdown: async () => {
+      if (shutdownRequested) return;
       shutdownRequested = true;
       pendingSnapshot = undefined;
       controller?.abort();
-      gitRefInvalidation?.shutdown();
+      options.worktreeMetadataInvalidationSource.shutdown();
       await running?.catch(() => undefined);
     },
   };
@@ -128,7 +123,11 @@ export function createWorktreeMetadataRefreshService(
   }
 
   async function refreshSnapshot(snapshot: StationSnapshot, signal: AbortSignal): Promise<void> {
-    gitRefInvalidation?.update(snapshot);
+    options.worktreeMetadataInvalidationSource.replaceWatchedWorktrees(
+      snapshot.rows
+        .filter((row) => row.worktree.state === "exists")
+        .map((row) => ({ worktreeId: row.id, path: row.path, branch: row.branch })),
+    );
 
     const referenceTime = toIsoTimestamp(clock.now());
     const [changeRows, pullRequestRows, checksRows] = await Promise.all([
@@ -197,33 +196,32 @@ export function createWorktreeMetadataRefreshService(
     if (shouldBackOffFailedRefresh(input.existing)) {
       return;
     }
+    if (input.row.worktree.state !== "exists") {
+      await deleteExistingChangeSummary(input.row.id, input.existing);
+      return;
+    }
 
     try {
-      const worktree: LocalGitWorktree = {
+      const worktree: WorktreeChangeReadInput["worktree"] = {
         id: input.row.id,
         projectId: input.row.projectId,
         path: input.row.path,
         branch: input.row.branch,
-        state: input.row.worktree.state,
       };
       if (input.row.worktree.pr !== undefined) {
-        worktree.pr = input.row.worktree.pr;
+        worktree.pullRequest = input.row.worktree.pr;
       }
 
-      const summaryInput: Parameters<typeof readLocalGitChangeSummary>[0] = {
+      const summaryInput: WorktreeChangeReadInput = {
         project: input.project,
         worktree,
-        timeoutMs: options.gitTimeoutMs ?? defaultGitTimeoutMs,
-        clock,
         signal: input.signal,
       };
       if (input.cachedPullRequest !== undefined) {
         summaryInput.cachedPullRequest = input.cachedPullRequest;
       }
-      if (options.runner !== undefined) {
-        summaryInput.runner = options.runner;
-      }
-      const result = await readLocalGitChangeSummary(summaryInput);
+      const result = await options.worktreeChangeSource.read(summaryInput);
+      if (input.signal.aborted) return;
 
       if (result === undefined) {
         await deleteExistingChangeSummary(input.row.id, input.existing);
