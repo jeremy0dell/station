@@ -87,8 +87,6 @@ export const TerminalAttachmentSchema = z
   })
   .strict();
 
-export const WorktreeTerminalSchema = TerminalAttachmentSchema;
-
 export type TerminalAttachment = z.infer<typeof TerminalAttachmentSchema>;
 
 export const TurnReadinessSchema = z
@@ -166,10 +164,7 @@ export const WorktreeRowSchema = z
   })
   .strict();
 
-export const WorktreeViewSchema = WorktreeRowSchema;
-
 export type WorktreeRow = z.infer<typeof WorktreeRowSchema>;
-export type WorktreeView = WorktreeRow;
 
 export const SessionOriginSchema = z.enum(["station", "external"]);
 

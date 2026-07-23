@@ -52,22 +52,54 @@ describe("release readiness docs", () => {
   });
 
   it("provides an agent-led binary install and setup validation prompt", async () => {
-    const documents = await Promise.all(["README.md", "docs/install.md"].map(read));
+    const [readme, install, development] = await Promise.all(
+      ["README.md", "docs/install.md", "docs/development.md"].map(read),
+    );
 
-    for (const document of documents) {
-      const normalized = document.replace(/\s+/g, " ").toLowerCase();
-      expect(normalized).toContain("let your agent install and validate station");
-      expect(document).toContain("gh auth status --hostname github.com");
-      expect(document).toContain("gh repo view jeremy0dell/station");
-      expect(document).toContain("docs/install.md");
-      expect(document).toContain("stn setup plan --json");
-      expect(document).toContain("stn setup check --json");
-      expect(document).toContain("stn doctor");
-      expect(document).toContain("summary.requiredOk: true");
-      expect(normalized).toContain("do not clone the repository or build from source");
-      expect(normalized).toContain("do not edit any shell startup file");
-      expect(normalized).toContain("do not claim success");
+    for (const document of [readme, install]) {
+      const prompt = agentInstallPrompt(document);
+      const normalizedPrompt = prompt.replace(/\s+/g, " ").toLowerCase();
+      expect(document.replace(/\s+/g, " ").toLowerCase()).toContain(
+        "let your agent install and validate station",
+      );
+      expect(prompt).toContain("gh auth status --hostname github.com");
+      expect(prompt).toContain("gh repo view jeremy0dell/station");
+      expect(prompt).toContain("docs/install.md");
+      expect(prompt).toContain("stn setup plan --json");
+      expect(prompt).toContain("stn setup check --json");
+      expect(prompt).toContain("stn doctor");
+      expect(prompt).toContain("summary.requiredOk: true");
+      expect(normalizedPrompt).toContain("do not clone the repository or build from source");
+      expect(normalizedPrompt).toContain("do not edit any shell startup file");
+      expect(normalizedPrompt).toContain("scoped host/keychain access");
+      expect(normalizedPrompt).toContain("same access context");
+      expect(normalizedPrompt).toContain(
+        "retry both checks with scoped host/keychain access before asking me to authenticate",
+      );
+      expect(normalizedPrompt).toContain(
+        "if scoped host access is unavailable, ask me to run the auth checks and exact tagged temporary-file installer block from the page that supplied this prompt in my terminal",
+      );
+      expect(prompt).not.toContain("gh auth login");
+      expect(normalizedPrompt).toContain(
+        "never ask me to paste, extract, print, request, or export a github token",
+      );
+      expect(normalizedPrompt).toContain("absolute installed `stn` path");
+      expect(normalizedPrompt).toContain(
+        "only as evidence about the current agent execution context",
+      );
+      expect(normalizedPrompt).toContain("unfinished manual step");
+      expect(normalizedPrompt).toContain("verify all three launchers in a new shell");
+      expect(normalizedPrompt).toContain("do not claim success");
     }
+    expect(agentInstallPrompt(readme)).toBe(agentInstallPrompt(install));
+
+    const normalizedDevelopment = virtualBuddyCleanMacSection(development)
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+    expect(normalizedDevelopment).toContain("sandbox-only auth failure");
+    expect(normalizedDevelopment).toContain("scoped host/keychain access");
+    expect(normalizedDevelopment).toContain("absolute installed `stn` path");
+    expect(normalizedDevelopment).toContain("future-shell path as unverified");
   });
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
@@ -107,7 +139,7 @@ describe("release readiness docs", () => {
     expect(readme).toContain("authenticated GitHub release assets");
     expect(readme).toContain("does not require Node.js, pnpm, Bun");
     expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
-    expect(install).toContain("tag=v0.7.1-rc.5");
+    expect(install).toContain("tag=v0.7.1-rc.6");
     for (const [path, document] of [
       ["README.md", readme],
       ["docs/install.md", install],
@@ -163,7 +195,7 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
     expect(singleBinary).toContain("without `+` build metadata");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
-    expect(development).toContain("accepted-release-candidate-0.7.1-rc.5");
+    expect(development).toContain("accepted-release-candidate-0.7.1-rc.6");
     const acceptanceRecipes = shellBlocks(development).filter((block) =>
       block.includes('STATION_INSTALL_RELEASE_ID="$release_id"'),
     );
@@ -221,7 +253,7 @@ describe("release readiness docs", () => {
     expect(promote).toContain("actions/workflows/$workflow_id");
     expect(promote).toContain("compare/$commit...main");
     expect(promote).toContain('prerelease="$expected_prerelease"');
-    expect(packageJson.version).toBe("0.7.1-rc.5");
+    expect(packageJson.version).toBe("0.7.1-rc.6");
     expect(development).toContain("HOST_UPGRADE_BLOCKED");
     expect(homebrew).toContain("`workflow_dispatch` only");
     expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
@@ -294,7 +326,7 @@ describe("release readiness docs", () => {
     expect(readme).toContain("hash -r");
 
     expect(install).not.toContain(removedPersistenceOption);
-    expect(install).toMatch(/does not (?:read, create, or )?edit shell startup files/);
+    expect(install).toMatch(/does not (?:read, create, or )?edit shell\s+startup files/);
     expect(install).toContain("chosen shell configuration");
     expect(install).toContain("future shells");
     expect(install).toContain("Absolute fallback");
@@ -327,13 +359,9 @@ describe("release readiness docs", () => {
 
   it("keeps the VirtualBuddy lane aligned with zero-project onboarding", async () => {
     const development = await read("docs/development.md");
-    const start = development.indexOf("### VirtualBuddy clean-mac preparation");
-    const end = development.indexOf("\nFor each target", start);
-    const virtualBuddy = development.slice(start, end);
+    const virtualBuddy = virtualBuddyCleanMacSection(development);
     const normalizedVirtualBuddy = virtualBuddy.replace(/\s+/g, " ");
 
-    expect(start).toBeGreaterThanOrEqual(0);
-    expect(end).toBeGreaterThan(start);
     expect(normalizedVirtualBuddy).toContain("zero-project config");
     expect(virtualBuddy).toContain("**Add your first project**");
     expect(virtualBuddy.indexOf("**Add your first project**")).toBeLessThan(
@@ -372,6 +400,21 @@ async function readPackageManifest(): Promise<PackageManifest> {
   } catch (cause) {
     throw new Error("package.json must contain valid JSON", { cause });
   }
+}
+
+function agentInstallPrompt(document: string): string {
+  const heading = document.search(/let your agent install and validate station/i);
+  if (heading < 0) throw new Error("agent install prompt heading is missing");
+  const match = document.slice(heading).match(/```text\r?\n([\s\S]*?)```/);
+  if (match?.[1] === undefined) throw new Error("agent install prompt is missing");
+  return match[1];
+}
+
+function virtualBuddyCleanMacSection(document: string): string {
+  const start = document.indexOf("### VirtualBuddy clean-mac preparation");
+  const end = document.indexOf("\nFor each target", start);
+  if (start < 0 || end <= start) throw new Error("VirtualBuddy clean-mac section is missing");
+  return document.slice(start, end);
 }
 
 function continuedShellCommands(document: string): string[] {

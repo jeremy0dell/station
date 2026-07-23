@@ -51,6 +51,11 @@ If GitHub CLI is already authenticated, skip the login command. The repository
 check should print `jeremy0dell/station`; a not-found response means the active
 account cannot read the private repository. The commands below use the existing
 authentication, so do not paste credentials into the install command.
+On macOS, a failure observed only inside a restricted agent sandbox may mean
+that sandbox cannot read Keychain-backed credentials. Retry the checks from a
+normal Terminal or with scoped host/Keychain access, and keep the later
+authenticated `gh api` calls in that same context; do not move the token into
+the sandbox or reauthenticate solely because of a sandbox-only failure.
 
 ### 2. Install the current preview candidate
 
@@ -61,7 +66,7 @@ Run this from any directory:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.5
+  tag=v0.7.1-rc.6
   # After the first stable release, use:
   # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
   installer="$(mktemp)"
@@ -76,12 +81,12 @@ Run this from any directory:
 )
 ```
 
-`v0.7.1-rc.5` is the current private-binary candidate. `v0.7.1-rc.4` remains
-published as its immutable rollback; `v0.7.1-rc.2` and `v0.7.1-rc.3` are older
-published binaries, while the earlier `v0.7.0` and `v0.7.1-rc.1`
-candidates remained unpublished. Run the recipe after the candidate is
-published. It fetches the installer and binary from the same immutable release
-tag, verifies the release checksum, and installs `stn`, `stn-ingress`, and
+`v0.7.1-rc.6` is the current private-binary candidate. `v0.7.1-rc.5` remains
+published as its immutable rollback; `v0.7.1-rc.2`, `v0.7.1-rc.3`, and
+`v0.7.1-rc.4` are older published binaries, while the earlier `v0.7.0` and
+`v0.7.1-rc.1` candidates remained unpublished. Run the recipe after the
+candidate is published. It fetches the installer and binary from the same
+immutable release tag, verifies the release checksum, and installs `stn`, `stn-ingress`, and
 `stn-tmux-popup` in `~/.local/bin` by default. It does not expose or print your
 GitHub credentials. After the first stable release, the commented assignment
 resolves the latest stable tag.
@@ -103,6 +108,10 @@ stn doctor
 stn
 ```
 
+This PATH assignment affects only the shell where it runs. An agent tool shell
+does not update your Terminal or future login shells; use the installer's
+absolute `stn` fallback for agent-side continuation, and keep future-shell PATH
+as an unfinished manual step until a new shell resolves all three launchers.
 The installer never edits shell startup files or adds the current directory as
 a project. See [Install](docs/install.md) for supported platforms, exact-version
 installs, custom install directories, and recovery. Then follow the
@@ -114,38 +123,53 @@ Paste this prompt into a coding agent running on the machine where you want
 Station installed:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.5 and validate setup on this machine.
+Install Station private preview candidate v0.7.1-rc.6 and validate setup on this machine.
 
 Use the private GitHub repository jeremy0dell/station through GitHub CLI.
 
 Safety and scope:
 - First run `gh auth status --hostname github.com`, then verify repository
-  access with `gh repo view jeremy0dell/station`. Never ask me to paste,
-  extract, or print credentials. If authentication or repository access fails,
-  stop and ask me to run `gh auth login --hostname github.com` myself.
+  access with `gh repo view jeremy0dell/station`. On macOS, a failure inside a
+  restricted agent sandbox is inconclusive because GitHub CLI credentials may
+  be stored in the Keychain. Retry both checks with scoped host/Keychain access
+  before asking me to authenticate, and run every later authenticated `gh repo`
+  or `gh api` command in that same access context. Never ask me to paste,
+  extract, print, request, or export a GitHub token. If scoped host access is
+  unavailable, ask me to run the auth checks and exact tagged temporary-file
+  installer block from the page that supplied this prompt in my Terminal, then
+  resume using the absolute installed `stn` path.
 - Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.5`, read `docs/install.md` from that same tag with authenticated
+  `v0.7.1-rc.6`, read `docs/install.md` from that same tag with authenticated
   `gh api`, and follow its temporary-file installer procedure. If that release
   is not published yet, stop instead of falling back to another ref.
 - Never fetch installer code from `main` and never pipe network output directly
   into a shell.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
-  shell startup file. Apply PATH changes only to the current shell and show me
-  the exact export I can add later.
+  shell startup file. If the installer reports a PATH mismatch, do not assume
+  an export persists across agent tool calls or reaches my Terminal. Use the
+  absolute installed `stn` path for every remaining agent command, show me the
+  exact future-shell export, and treat it as an unfinished manual step until I
+  verify all three launchers in a new shell.
 - Do not infer or add the current directory as a Station project.
 
 Validation:
-1. Verify `command -v stn`, `command -v stn-ingress`, and
-   `command -v stn-tmux-popup`, then run `stn --version`.
-2. Run `stn setup plan --json`, summarize every proposed install or write, and
-   ask for approval before applying it.
-3. Run the guided `stn setup` and let me answer its choices. If you cannot pass
-   through an interactive prompt, ask me to run it, then continue afterward.
-4. Run `stn setup check --json` and `stn doctor`.
+1. Verify all three absolute installed launcher paths and run `stn --version`
+   through the absolute installed path. Record `command -v stn`,
+   `command -v stn-ingress`, and `command -v stn-tmux-popup` only as evidence
+   about the current agent execution context.
+2. Run `stn setup plan --json` through the absolute installed `stn` path,
+   summarize every proposed install or write, and ask for approval before
+   applying it.
+3. Run the guided `stn setup` through the absolute installed path and let me
+   answer its choices. If you cannot pass through an interactive prompt, ask me
+   to run it, then continue afterward.
+4. Run `stn setup check --json` and `stn doctor` through the absolute installed
+   path.
 5. Report the installed path and version, whether setup reports
-   `summary.requiredOk: true`, doctor health, and any remaining manual steps.
-   A valid zero-project config is acceptable. Do not claim success while a
-   required check is failing.
+   `summary.requiredOk: true`, doctor health, future-shell verification state,
+   and any remaining manual steps. A valid zero-project config is acceptable.
+   Do not claim success while a required check is failing or future-shell PATH
+   remains unverified.
 ```
 
 ## How it works

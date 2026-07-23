@@ -86,21 +86,6 @@ export type RowGridLayout = {
   };
 };
 
-export type WorktreeRowLayout = RowGridLayout;
-
-export type WorktreeRowLayoutInput = {
-  columns: number;
-  id?: string;
-  slot: string | undefined;
-  marker: RowMarker;
-  title: string;
-  harness?: string | undefined;
-  statusText?: string | undefined;
-  statusSeparator?: string | undefined;
-  color?: RowColor | undefined;
-  metadata?: WorktreeRowMetadataGroups | undefined;
-};
-
 export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
   columns: [
     {
@@ -260,22 +245,6 @@ export function layoutWorktreeRowGrid(input: {
   }
 
   return fallbackLayouts(columns, input.rows);
-}
-
-export function layoutWorktreeRow(input: WorktreeRowLayoutInput): WorktreeRowLayout {
-  const rowInput = rowGridInputFromRowLayoutInput(input);
-  const layout = layoutWorktreeRowGrid({
-    columns: input.columns,
-    rows: [rowInput],
-  })[0];
-  if (layout !== undefined) {
-    return layout;
-  }
-  const fallback = fallbackLayouts(normalizeColumns(input.columns), [rowInput])[0];
-  if (fallback === undefined) {
-    throw new Error("Expected row grid fallback layout.");
-  }
-  return fallback;
 }
 
 export function cellWidth(text: string): number {
@@ -715,60 +684,6 @@ function joinSegmentsWithSpaces(segments: readonly RowSegment[]): RowSegment[] {
     joined.push(segment);
   });
   return joined;
-}
-
-function rowGridInputFromRowLayoutInput(input: WorktreeRowLayoutInput): RowGridRowInput {
-  const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
-  cells.identity = {
-    key: "identity",
-    segments: identitySegments(input.slot, input.marker, input.color),
-    importance: "required",
-  };
-  cells.title = {
-    key: "title",
-    segments: [textSegment(input.title, { color: input.color })],
-    importance: "required",
-  };
-  if (input.harness !== undefined) {
-    cells.agent = {
-      key: "agent",
-      segments: [textSegment(input.harness, { color: input.color })],
-      importance: "optional",
-    };
-  }
-  if (input.statusText !== undefined) {
-    cells.activity = {
-      key: "activity",
-      segments: [textSegment(input.statusText, { color: input.color })],
-      importance: "meaningful",
-    };
-  }
-  const row: RowGridRowInput = {
-    id: input.id ?? "row",
-    cells,
-  };
-  if (input.metadata !== undefined) {
-    row.metadataGroups = input.metadata;
-  }
-  if (input.color !== undefined) {
-    row.color = input.color;
-  }
-  return row;
-}
-
-function identitySegments(
-  slot: string | undefined,
-  marker: RowMarker,
-  color: RowColor | undefined,
-): RowSegment[] {
-  const segments: RowSegment[] = [textSegment(` [${slot ?? " "}] `, { color })];
-  if (marker.kind === "throbber") {
-    segments.push({ kind: "throbber", variant: marker.variant });
-  } else {
-    segments.push(textSegment(marker.text, { color }));
-  }
-  segments.push(textSegment(" ", { color }));
-  return segments;
 }
 
 function columnImportance(

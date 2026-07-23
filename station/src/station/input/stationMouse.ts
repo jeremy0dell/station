@@ -6,14 +6,19 @@
 // never touch the store.
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
-import { isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core";
-import type { ProjectSettingsItemId, TuiStore } from "@station/dashboard-core";
+import {
+  deriveTuiInputMode,
+  isRemoveProjectArmed,
+  LIST_REGISTRY,
+  type ProjectSettingsItemId,
+  type TuiInputMode,
+  type TuiStore,
+} from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
   addWidgetSettingsPickerChoice,
   dismissStationToasts,
-  dispatchBindingClick,
   dispatchRowSlot,
   dispatchStationKey,
   focusProjectSettingsItem,
@@ -22,9 +27,7 @@ import {
   openWidgetSettingsPicker,
   removeWidgetSettingsRow,
   toggleWidgetSettingsRow,
-  representativeKeyForBinding,
   resolveForkSessionSubmit,
-  resolveNewSessionSubmit,
   resolveProjectPaneTarget,
   resolveQuickSessionSubmit,
   resolveRowAgentTarget,
@@ -36,7 +39,6 @@ import {
   type RowAgentTarget,
   type StationKeyOutcome,
 } from "./stationActions.js";
-import { deriveStationMode, STATION_KEYMAP, type StationInputMode } from "./stationKeymap.js";
 
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
@@ -52,7 +54,6 @@ export type StationMouseTarget =
   | { kind: "showDefaultAgentPickerForProject"; projectId: string }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
-  | { kind: "footerHint"; bindingId: string }
   | { kind: "toast" }
   /** A picker line inside a sheet; the key is the line's slot accelerator. */
   | { kind: "sheetChoice"; choiceKey: string }
@@ -139,7 +140,7 @@ export type StationMouseOutcome =
 const SCROLL_PAGE_ROWS = 5;
 
 /** Modes whose tables give row slots and scrolling a meaning. */
-const ROW_INTERACTIVE_MODES: ReadonlySet<StationInputMode> = new Set([
+const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
   "removeChooseSlot",
   "renameChooseSlot",
@@ -155,14 +156,14 @@ export function routeStationMouse(
   if (eventKind === undefined) {
     return { kind: "handled" };
   }
-  const mode = deriveStationMode(store.getState());
+  const mode = deriveTuiInputMode(store.getState());
 
   if (eventKind !== "down") {
     return routeStationWheel(target, eventKind, store, mode);
   }
 
   switch (target.kind) {
-    case "row":
+    case "row": {
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
       }
@@ -170,12 +171,10 @@ export function routeStationMouse(
       // The choose-slot modes (remove/rename) keep their slot semantics: a
       // click selects that row.
       if (mode === "dashboard") {
-        const targetRow = resolveRowAgentTarget(store, target.rowId);
-        return targetRow.kind === "launch-managed"
-          ? fromRowAgentTarget(targetRow)
-          : fromKeyOutcome(dispatchRowSlot(store, target.rowId));
+        return routeDashboardRow(store, target.rowId);
       }
       return fromKeyOutcome(dispatchRowSlot(store, target.rowId));
+    }
     case "link":
       if (mode !== "dashboard") {
         return { kind: "handled" };
@@ -214,26 +213,6 @@ export function routeStationMouse(
       }
       scrollStationView(store, target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS);
       return { kind: "handled" };
-    case "footerHint": {
-      const binding = bindingById(mode, target.bindingId);
-      if (binding === undefined) {
-        return { kind: "handled" };
-      }
-      // A click on the New Session review screen's create hint hosts the agent in
-      // Station, matching the keyboard Enter path (resolveKeyNewSessionSubmit).
-      if (representativeKeyForBinding(binding)?.return === true) {
-        const submit = resolveNewSessionSubmit(store);
-        if (submit.kind === "submit") {
-          return {
-            kind: "launch-new-session",
-            projectId: submit.projectId,
-            branch: submit.branch,
-            harness: submit.harness,
-          };
-        }
-      }
-      return fromKeyOutcome(dispatchBindingClick(store, binding));
-    }
     case "toast":
       dismissStationToasts(store);
       return { kind: "handled" };
@@ -327,6 +306,16 @@ export function routeStationMouse(
   }
 }
 
+function routeDashboardRow(
+  store: StoreApi<TuiStore>,
+  rowId: string,
+): StationMouseOutcome {
+  const target = resolveRowAgentTarget(store, rowId);
+  return target.kind === "launch-managed"
+    ? fromRowAgentTarget(target)
+    : fromKeyOutcome(dispatchRowSlot(store, rowId));
+}
+
 export function stationMouseEventKind(event: StationMouseEvent): StationMouseEventKind | undefined {
   if (event.type === "scroll") {
     if (event.scrollDirection === "up") {
@@ -345,15 +334,15 @@ export function stationMouseEventKind(event: StationMouseEvent): StationMouseEve
 
 // Modes whose sheets list slot-keyed choices a click can select — exactly the
 // registered selection lists, derived so this set cannot drift from the engine.
-const SHEET_CHOICE_MODES: ReadonlySet<StationInputMode> = new Set(
-  Object.keys(LIST_REGISTRY) as StationInputMode[],
+const SHEET_CHOICE_MODES: ReadonlySet<TuiInputMode> = new Set(
+  Object.keys(LIST_REGISTRY) as TuiInputMode[],
 );
 
 function routeStationWheel(
   target: StationMouseTarget,
   eventKind: "scroll-up" | "scroll-down",
   store: StoreApi<TuiStore>,
-  mode: StationInputMode,
+  mode: TuiInputMode,
 ): StationMouseOutcome {
   // Sheets and prompts must not scroll the dashboard beneath them.
   if (target.kind === "sheetBackdrop" || !ROW_INTERACTIVE_MODES.has(mode)) {
@@ -361,10 +350,6 @@ function routeStationWheel(
   }
   scrollStationView(store, eventKind === "scroll-up" ? -1 : 1);
   return { kind: "handled" };
-}
-
-function bindingById(mode: StationInputMode, bindingId: string) {
-  return STATION_KEYMAP[mode].find((binding) => binding.id === bindingId);
 }
 
 function fromKeyOutcome(outcome: StationKeyOutcome): StationMouseOutcome {

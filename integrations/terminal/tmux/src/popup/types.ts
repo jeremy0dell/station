@@ -1,12 +1,10 @@
 import type { TmuxConfig } from "@station/config";
 import type { ExternalCommandRunner } from "@station/runtime";
-import type { TmuxCommandInput } from "../command.js";
 
 export type TmuxPopupOptions = {
   checkoutRoot?: string;
   command?: string;
   config?: TmuxConfig;
-  enterWorkbench?: boolean;
   env?: NodeJS.ProcessEnv;
   focusClientId?: string;
   preferRegisteredDevPopup?: boolean;
@@ -118,15 +116,4 @@ export type TmuxPopupState = {
   focusOptionName?: string;
   optionName: string;
   tmuxCommand: string;
-};
-
-export type PopupWorkbenchFocusInput = TmuxCommandInput & {
-  clientId: string;
-  config?: TmuxConfig;
-};
-
-export type WorkbenchTarget = {
-  sessionId: string;
-  windowId?: string;
-  paneId?: string;
 };

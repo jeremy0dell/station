@@ -8,9 +8,9 @@ This guide starts with an installed Station binary. If `stn --version` does not 
 stn setup
 ```
 
-Setup checks the tools Station uses, requires at least one supported agent CLI, writes `~/.config/station/config.toml`, starts the observer, and offers to install provider hooks and the tmux popup binding. It does not add a project automatically.
+Setup checks the tools Station uses, requires at least one supported agent CLI, and lets you enable one or more detected CLIs. For a new config, the first selection becomes the default. Setup writes `~/.config/station/config.toml`, starts the observer, and offers provider-specific hooks and the tmux popup binding. It does not add a project automatically.
 
-Complete the agent CLI's own sign-in before starting a real session. Confirm the environment is ready:
+Complete each enabled agent CLI's own sign-in before using it for a real session. Confirm the environment is ready:
 
 ```sh
 stn doctor

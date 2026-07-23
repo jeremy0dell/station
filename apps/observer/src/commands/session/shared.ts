@@ -8,7 +8,6 @@ import type {
   SessionId,
   SessionView,
   StationSnapshot,
-  TerminalFocusOrigin,
   TerminalLaunchProcessRequest,
   TerminalLaunchProcessResult,
   TerminalProvider,
@@ -429,42 +428,6 @@ export async function launchHarnessInTerminal(
   throw safeError(error);
 }
 
-export async function closeTerminalTargetBestEffort(input: {
-  terminal: TerminalProvider;
-  targetId: string;
-  context: CommandHandlerContext;
-  logger?: StationLogger | undefined;
-  clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
-}): Promise<void> {
-  try {
-    await runProviderMutation(
-      {
-        operation: `provider.${input.terminal.id}.closeTarget.cleanup`,
-        clock: input.clock,
-        commandTimeoutMs: cleanupTimeoutMs(input.commandTimeoutMs),
-        trace: input.context.trace,
-        fallback: {
-          tag: "TerminalProviderError",
-          code: "TERMINAL_CLEANUP_CLOSE_FAILED",
-          message: "The terminal provider failed to close a target during cleanup.",
-          provider: input.terminal.id,
-        },
-      },
-      () => input.terminal.closeTarget(input.targetId),
-    );
-  } catch (error) {
-    await input.logger?.warn("Session cleanup failed to close terminal target.", {
-      commandId: input.context.commandId,
-      traceId: input.context.trace.traceId,
-      provider: input.terminal.id,
-      operation: "closeTarget",
-      targetId: input.targetId,
-      error,
-    });
-  }
-}
-
 export async function removeWorktreeBestEffort(input: {
   providers: ProviderRegistry;
   projectId: string;
@@ -525,53 +488,6 @@ export async function removeWorktreeBestEffort(input: {
       error,
     });
   }
-}
-
-export async function focusTerminalTargetBestEffort(input: {
-  terminal: TerminalProvider;
-  targetId: string;
-  origin?: TerminalFocusOrigin | undefined;
-  context: CommandHandlerContext;
-  logger?: StationLogger | undefined;
-  clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
-}): Promise<void> {
-  try {
-    await runProviderMutation(
-      {
-        operation: `provider.${input.terminal.id}.focusTarget`,
-        clock: input.clock,
-        commandTimeoutMs: input.commandTimeoutMs,
-        signal: input.context.signal,
-        trace: input.context.trace,
-        fallback: {
-          tag: "TerminalProviderError",
-          code: "TERMINAL_FOCUS_FAILED",
-          message: "The terminal provider failed to focus the session target.",
-          provider: input.terminal.id,
-        },
-      },
-      () => input.terminal.focusTarget(input.targetId, focusContext(input.origin)),
-    );
-  } catch (error) {
-    await input.logger?.warn("Terminal focus failed after session launch.", {
-      commandId: input.context.commandId,
-      traceId: input.context.trace.traceId,
-      provider: input.terminal.id,
-      operation: "focusTarget",
-      targetId: input.targetId,
-      error,
-    });
-  }
-}
-
-function focusContext(
-  origin: TerminalFocusOrigin | undefined,
-): { origin?: TerminalFocusOrigin } | undefined {
-  if (origin === undefined) {
-    return undefined;
-  }
-  return { origin };
 }
 
 export async function publishSessionCreated(input: {

@@ -157,7 +157,6 @@ export const ProviderHookIngestedEventSchema = z
     event: nonEmptyStringSchema,
   })
   .strict();
-export const HookIngestedEventSchema = ProviderHookIngestedEventSchema;
 
 export const HarnessEventReportedEventSchema = z
   .object({
@@ -177,7 +176,6 @@ export const ProviderHookSpoolDrainedEventSchema = z
     failed: z.number().int().nonnegative(),
   })
   .strict();
-export const HookSpoolDrainedEventSchema = ProviderHookSpoolDrainedEventSchema;
 
 export const StationEventSchema = z.discriminatedUnion("type", [
   ObserverStartedEventSchema,

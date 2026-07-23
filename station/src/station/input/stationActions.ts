@@ -1,7 +1,7 @@
 // Execution layer for the STATION view's input. Most keyboard input flows through
 // the shared transition machine (single behavioral source); this module is the
-// semantic entry point mouse targets and chrome (footer hints) use to reach the
-// same machine, plus the few Station mouse extensions that have no keyboard
+// semantic entry point mouse targets use to reach the same machine, plus the
+// few Station mouse extensions that have no keyboard
 // path in apps/tui (direct project-header collapse, wheel paging). Every
 // mutation here lands via store.handleKey or a shared pure state function — no
 // bespoke screen logic, except where a Station-only action diverges from the
@@ -13,6 +13,7 @@ import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
   addTuiToast,
   choiceValueByKey,
+  deriveTuiInputMode,
   newSessionIntentForInput,
   focusProjectSettingsItem as focusProjectSettingsItemState,
   openProjectDefaultAgentPicker,
@@ -41,7 +42,6 @@ import {
   type PaneRole,
 } from "../../state/types.js";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
-import { matchStationBinding, deriveStationMode, type StationBinding } from "./stationKeymap.js";
 
 export type StationKeyOutcome =
   /** Dispatched into the machine; the overlay stays up. */
@@ -74,42 +74,6 @@ function outcomeForResult(result: TuiHandleKeyResult): StationKeyOutcome {
     return { kind: "close-overlay" };
   }
   return { kind: "handled" };
-}
-
-/**
- * Synthesizes the representative key for a binding so clickable chrome
- * (footer hints, help rows) can dispatch exactly what pressing the key
- * would. Slot and text patterns have no single representative key.
- */
-export function representativeKeyForBinding(binding: StationBinding): TuiKey | undefined {
-  const pattern = binding.pattern;
-  switch (pattern.kind) {
-    case "char":
-      return pattern.ctrl === true ? { input: pattern.char, ctrl: true } : { input: pattern.char };
-    case "named":
-      switch (pattern.named) {
-        case "return":
-          return { input: "\r", return: true };
-        case "escape":
-          return { input: "", escape: true };
-        case "backspace":
-          return { input: "", backspace: true };
-        case "delete":
-          return { input: "", delete: true };
-        case "up":
-          return { input: "", upArrow: true };
-        case "down":
-          return { input: "", downArrow: true };
-        case "left":
-          return { input: "", leftArrow: true };
-        case "right":
-          return { input: "", rightArrow: true };
-      }
-      return undefined;
-    case "slot":
-    case "text":
-      return undefined;
-  }
 }
 
 /**
@@ -197,7 +161,7 @@ export function resolveKeyRowAgentTarget(
   sequence: string,
 ): RowAgentTarget {
   const state = store.getState();
-  if (state.snapshot === undefined || deriveStationMode(state) !== "dashboard") {
+  if (state.snapshot === undefined || deriveTuiInputMode(state) !== "dashboard") {
     return { kind: "none" };
   }
   const row = choiceValueByKey(selectDashboardViewport(state.snapshot, state).rowChoices, sequence);
@@ -219,7 +183,7 @@ export function resolveKeyFocusedRowAgentTarget(
     return { kind: "none" };
   }
   const state = store.getState();
-  if (state.snapshot === undefined || deriveStationMode(state) !== "dashboard") {
+  if (state.snapshot === undefined || deriveTuiInputMode(state) !== "dashboard") {
     return { kind: "none" };
   }
   const focusedRowId = state.focusedRowId;
@@ -487,25 +451,4 @@ export function scrollStationView(store: StoreApi<TuiStore>, delta: number): voi
 
 export function dismissStationToasts(store: StoreApi<TuiStore>): void {
   store.getState().dismissToasts();
-}
-
-/**
- * Dispatches a footer/help hint click as its binding's representative key,
- * but only when the binding belongs to the active mode (a stale hint from a
- * just-closed mode must not fire).
- */
-export function dispatchBindingClick(
-  store: StoreApi<TuiStore>,
-  binding: StationBinding,
-): StationKeyOutcome {
-  const mode = deriveStationMode(store.getState());
-  const key = representativeKeyForBinding(binding);
-  if (key === undefined) {
-    return { kind: "handled" };
-  }
-  const active = matchStationBinding(mode, key);
-  if (active?.id !== binding.id) {
-    return { kind: "handled" };
-  }
-  return dispatchStationKey(store, key);
 }

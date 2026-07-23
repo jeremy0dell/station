@@ -12,6 +12,7 @@ import { sessionTurnReadinessMigration } from "./011_session_turn_readiness.js";
 import { sessionLifecycleMigration } from "./012_session_lifecycle.js";
 import { sessionHarnessExecutionsMigration } from "./013_session_harness_executions.js";
 import { nativeBindingIngressClaimsMigration } from "./014_native_binding_ingress_claims.js";
+import { dropRecoveryBreadcrumbsMigration } from "./015_drop_recovery_breadcrumbs.js";
 
 export type ObserverSqliteMigration = {
   version: number;
@@ -34,6 +35,7 @@ export const migrations = [
   sessionLifecycleMigration,
   sessionHarnessExecutionsMigration,
   nativeBindingIngressClaimsMigration,
+  dropRecoveryBreadcrumbsMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

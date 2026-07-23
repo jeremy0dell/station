@@ -327,23 +327,23 @@ identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
 workflow never publishes the draft automatically.
 
-The current immutable binary candidate is `v0.7.1-rc.5`. `v0.7.1-rc.4` is the
-prior published binary, and `v0.7.1-rc.2` and `v0.7.1-rc.3` remain older
-published rollbacks; the earlier `v0.7.0` and `v0.7.1-rc.1` candidates remained
-unpublished:
+The current immutable binary candidate is `v0.7.1-rc.6`. `v0.7.1-rc.5` is the
+prior published binary, and `v0.7.1-rc.2`, `v0.7.1-rc.3`, and `v0.7.1-rc.4`
+remain older published rollbacks; the earlier `v0.7.0` and `v0.7.1-rc.1`
+candidates remained unpublished:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.7.1-rc.5`, then create and
-   push `v0.7.1-rc.5`.
+   with `package.json` and runtime reporting at `0.7.1-rc.6`, then create and
+   push `v0.7.1-rc.6`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.7.1-rc.5-attempt-*` artifact.
+   `accepted-release-candidate-0.7.1-rc.6-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
-4. Install `v0.7.1-rc.4`, upgrade to the accepted candidate, explicitly
-   reinstall `v0.7.1-rc.4`, then reinstall the candidate. Confirm the complete
+4. Install `v0.7.1-rc.5`, upgrade to the accepted candidate, explicitly
+   reinstall `v0.7.1-rc.5`, then reinstall the candidate. Confirm the complete
    version and all three launchers after every transition.
 5. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.7.1-rc.5`, and the manual-acceptance confirmation. It rechecks the
+   `v0.7.1-rc.6`, and the manual-acceptance confirmation. It rechecks the
    successful run SHA, immutable candidate manifest, tag commit, release ID,
    asset IDs, and all archive hashes immediately before publishing that exact
    draft.
@@ -427,7 +427,16 @@ gh auth status --hostname github.com
 gh repo view jeremy0dell/station
 ```
 
-Start the selected agent CLI once and complete its normal sign-in. Then create
+When validating the agent-led install prompt on macOS, start the agent in its
+normal sandbox after these host-Terminal checks succeed. A sandbox-only auth
+failure must remain inconclusive until the agent retries with scoped
+host/Keychain access; all later authenticated `gh repo` and `gh api` operations
+must use that same access context without reading, printing, requesting, or
+exporting a token. If scoped host access is unavailable, run the exact tagged
+temporary-file installer in the host Terminal and let the agent resume through
+the absolute installed `stn` path.
+
+Start each agent CLI you plan to select once and complete its normal sign-in. Then create
 a disposable Git project for the acceptance run:
 
 ```sh
@@ -456,7 +465,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.5
+  tag=v0.7.1-rc.6
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -526,8 +535,11 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select the
-authenticated agent, and enable the desired provider hooks and tmux binding.
+guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+more authenticated agents, and enable the desired provider hooks and tmux binding.
+Confirm the first selection becomes the default while every selection receives
+its own harness block and every hook-capable selection receives its own prompt
+when setup can safely persist or reuse that hook intent.
 Confirm setup writes a zero-project config without adopting the disposable
 repository, then run:
 
@@ -553,7 +565,10 @@ edit shell startup files. Copy the one future-shell export it printed into a
 shell configuration you choose,
 open a new login shell, and verify all three physical launcher resolutions and
 `stn --version`. The installer, not the user-facing PATH text alone, must have
-verified those launchers after installation.
+verified those launchers after installation. An agent must use the absolute
+installed `stn` path for continuation and report future-shell PATH as unverified
+until this new-shell check passes; its own `command -v` result is not user-shell
+evidence.
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
@@ -598,11 +613,11 @@ manually verify the actual user experience, not a dashboard override:
    live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
-   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.5`:
+   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.6`:
    never command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat the same checks while alternating the draft
-   with published `v0.7.1-rc.4` in both directions.
+   with published `v0.7.1-rc.5` in both directions.
 10. In an isolated home, test abandoned locks separately at
     `<install-dir>/.station-install.lock` and
     `<data-home>/station/.station-install.lock` with representative owner
