@@ -1012,7 +1012,7 @@ function environmentWithoutGitLocals(source) {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.7.1-rc.6";
+    return "0.7.1-rc.7";
   }
   if (
     normalized.length === 2 &&
