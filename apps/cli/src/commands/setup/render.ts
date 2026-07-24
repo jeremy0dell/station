@@ -65,21 +65,11 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
     // can still read "resolve the missing items". Show the completion steps here.
     const nextSteps = ["stn doctor", "stn"];
     const prepared = preparedHarnesses(plan);
-    const completion =
-      prepared.length === 0
-        ? "Core setup complete."
-        : `Core setup complete. Station tracking artifacts are prepared for ${prepared
-            .map((harness) => harness.label)
-            .join(" and ")}.`;
-    const codexNotice = prepared.some((harness) => harness.id === "codex")
-      ? [
-          "",
-          "Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.",
-        ]
-      : [];
+    const completionMessage = setupCompletionMessage(prepared);
+    const completionNotices = setupCompletionNotices(prepared);
     return [
-      theme.bold(theme.green(completion)),
-      ...codexNotice,
+      theme.bold(theme.green(completionMessage)),
+      ...completionNotices,
       "",
       sectionHeading("Next", theme),
       "",
@@ -218,7 +208,24 @@ function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[
   return lines;
 }
 
-function preparedHarnesses(plan: SetupPlan): { id: string; label: string }[] {
+type PreparedHarness = { id: string; label: string };
+
+function setupCompletionMessage(prepared: readonly PreparedHarness[]): string {
+  if (prepared.length === 0) return "Core setup complete.";
+  const harnessLabels = prepared.map((harness) => harness.label).join(" and ");
+  return `Core setup complete. Station tracking artifacts are prepared for ${harnessLabels}.`;
+}
+
+function setupCompletionNotices(prepared: readonly PreparedHarness[]): string[] {
+  const includesCodex = prepared.some((harness) => harness.id === "codex");
+  if (!includesCodex) return [];
+  return [
+    "",
+    "Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.",
+  ];
+}
+
+function preparedHarnesses(plan: SetupPlan): PreparedHarness[] {
   const displayNames: Record<string, string> = {
     claude: "Claude",
     codex: "Codex",
