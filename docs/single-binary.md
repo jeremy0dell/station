@@ -700,9 +700,16 @@ flow:
    OpenTUI renderer draws, observer connects, first-run screen shows.
 3. Open a shell pane → **Ctrl-Z suspends, `fg` resumes** (real job control).
 4. From `HOME` or `Desktop`, run `stn setup` → zero-project config is written
-   and the observer restarts on the **same socket**. Open the TUI, explicitly
-   add an existing Git repository, and verify the observer reflects it
-   immediately (B-config); an open TUI reconnects without a manual restart.
+   and the observer restarts on the **same socket**. First invoke setup through
+   the absolute installed fallback while the install directory is absent from
+   `PATH`: successful completion must retain the final all-three launcher
+   warning and exact installed paths. Repeat after the installer's current-shell
+   block: the current-process warning must disappear, while future-login PATH
+   remains unverified until the installer export is placed manually and tested
+   in a new login shell. Setup never emits that export or edits a startup file.
+   Open the TUI, explicitly add an existing Git repository, and verify the
+   observer reflects it immediately (B-config); an open TUI reconnects without
+   a manual restart.
 5. Build and install the compiled artifact with default popup geometry, then
    accept setup's optional popup binding. The marked block contains the
    installed-root fast command and exact sibling `stn-tmux-popup` fallback, and

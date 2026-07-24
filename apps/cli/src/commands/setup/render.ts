@@ -77,15 +77,33 @@ export function renderSetupApplyResult(
     );
   }
   if (plan.summary.requiredOk) {
-    // plan.nextSteps is computed before apply, so on a freshly-completed setup it
-    // can still read "resolve the missing items". Show the completion steps here.
+    // Pre-apply next steps can be stale, but the final re-probed launcher warning and its checkout recovery must remain visible.
     const nextSteps = ["stn doctor", "stn"];
     const prepared = preparedHarnesses(plan);
     const completionMessage = setupCompletionMessage(prepared);
     const completionNotices = setupCompletionNotices(prepared);
+    const launcherWarning = plan.checks.find(
+      (check) => check.id === "station-launchers" && check.status === "warning",
+    );
+    const launcherLinkAction = plan.actions.find(
+      (action) => action.id === "link-station-launchers",
+    );
+    const remainingLines: string[] = [];
+    if (launcherWarning !== undefined) {
+      remainingLines.push(
+        "",
+        sectionHeading("Remaining", theme),
+        "",
+        ...renderCheck(launcherWarning, theme),
+      );
+      if (launcherLinkAction !== undefined) {
+        remainingLines.push(...renderAction(launcherLinkAction, theme));
+      }
+    }
     return [
       theme.bold(theme.green(completionMessage)),
       ...completionNotices,
+      ...remainingLines,
       "",
       sectionHeading("Next", theme),
       "",

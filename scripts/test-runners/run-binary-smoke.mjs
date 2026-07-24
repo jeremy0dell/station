@@ -164,6 +164,23 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
       assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
       assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
+      const launcherCheck = setupPlan.checks.find((check) => check.id === "station-launchers");
+      assertEqual(launcherCheck?.tier, "recommended", "compiled launcher PATH warning tier");
+      assertEqual(launcherCheck?.status, "warning", "compiled launcher PATH warning status");
+      assertEqual(
+        launcherCheck?.message,
+        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup. Use the installer's PATH guidance to repair bare launcher resolution.",
+        "compiled launcher PATH warning message",
+      );
+      assertDeepEqual(
+        launcherCheck?.details,
+        {
+          station: join(installedRoot, "stn"),
+          ingress: join(installedRoot, "stn-ingress"),
+          tmuxPopup: join(installedRoot, "stn-tmux-popup"),
+        },
+        "compiled launcher PATH warning paths",
+      );
       const persistedBindingAction = requiredSetupAction(setupPlan, "tmux-popup-binding");
       const liveBindingAction = requiredSetupAction(setupPlan, "tmux-live-popup-binding");
       assertEqual(persistedBindingAction.tier, "recommended", "compiled popup binding tier");

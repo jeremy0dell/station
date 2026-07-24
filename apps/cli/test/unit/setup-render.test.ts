@@ -76,6 +76,92 @@ describe("setup renderer", () => {
     expect(output).not.toContain("runtime Ready");
   });
 
+  it("preserves a final launcher warning and checkout link command after successful apply", () => {
+    const base = plan();
+    const output = renderSetupApplyResult({
+      ...base,
+      checks: [
+        {
+          id: "station-launchers",
+          tier: "recommended",
+          status: "warning",
+          label: "STATION launchers",
+          message:
+            "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup; setup will use their current-checkout paths.",
+          details: {
+            station: "/tmp/station checkout/bin/stn",
+            ingress: "/tmp/station checkout/bin/stn-ingress",
+            tmuxPopup: "/tmp/station checkout/bin/stn-tmux-popup",
+          },
+        },
+        {
+          id: "doctor-reminder",
+          tier: "recommended",
+          status: "warning",
+          label: "Doctor reminder",
+          message: "Run doctor later.",
+        },
+      ],
+      actions: [
+        {
+          id: "link-station-launchers",
+          kind: "run-command",
+          tier: "recommended",
+          selected: false,
+          label: "Link STATION launchers",
+          message: "Link launchers globally.",
+          command: ["pnpm", "--dir", "/tmp/station checkout", "station:link"],
+        },
+      ],
+      summary: {
+        ...base.summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        warnings: 2,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toContain("Core setup complete.");
+    expect(output).toContain("Remaining\n\n");
+    expect(output).toContain("WARN      STATION launchers");
+    expect(output).toContain("station /tmp/station checkout/bin/stn");
+    expect(output).toContain("ingress /tmp/station checkout/bin/stn-ingress");
+    expect(output).toContain("tmuxPopup /tmp/station checkout/bin/stn-tmux-popup");
+    expect(output).toContain("SKIP      Link STATION launchers");
+    expect(output).toContain("command pnpm --dir '/tmp/station checkout' station:link");
+    expect(output).not.toContain("Doctor reminder");
+  });
+
+  it("keeps all-correct successful apply output concise", () => {
+    const base = plan();
+    const output = renderSetupApplyResult({
+      ...base,
+      checks: [
+        {
+          id: "station-launchers",
+          tier: "recommended",
+          status: "ok",
+          label: "STATION launchers",
+          message: "stn, stn-ingress, and stn-tmux-popup are available on PATH.",
+        },
+      ],
+      actions: [],
+      summary: {
+        ...base.summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toBe("Core setup complete.\n\nNext\n\n  stn doctor\n  stn\n");
+    expect(output).not.toContain("Remaining");
+    expect(output).not.toContain("STATION launchers");
+  });
+
   it("prioritizes unresolved harness selection in apply recovery output", () => {
     const output = renderSetupApplyResult(
       {

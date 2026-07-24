@@ -230,11 +230,11 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
   if (missing.length > 0) {
     warningMessage = `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`;
   } else if (checkoutOutsidePath.length > 0 && installedOutsidePath.length > 0) {
-    warningMessage = `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}.`;
+    warningMessage = `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}. Use the installer's PATH guidance for installed launchers; setup can link checkout launchers separately.`;
   } else if (checkoutOutsidePath.length > 0) {
     warningMessage = `These bare launchers do not resolve to this checkout on PATH: ${checkoutOutsidePath.join(", ")}; setup will use their current-checkout paths.`;
   } else if (installedOutsidePath.length > 0) {
-    warningMessage = `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}.`;
+    warningMessage = `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}. Use the installer's PATH guidance to repair bare launcher resolution.`;
   }
   if (warningMessage !== undefined) {
     return {
@@ -906,7 +906,7 @@ function setupActions(
 
 function stationLaunchersNeedLink(facts: SetupFacts): boolean {
   return [facts.launchers.station, facts.launchers.ingress, facts.launchers.tmuxPopup].some(
-    (launcher) => launcher.source !== "path" && launcher.source !== "installed",
+    (launcher) => launcher.source === "checkout",
   );
 }
 

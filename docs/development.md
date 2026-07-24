@@ -327,6 +327,25 @@ identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
 workflow never publishes the draft automatically.
 
+### Launcher PATH release acceptance
+
+For every release candidate, retain the complete installer output and
+distinguish two successful setup lanes. Running setup through the absolute
+installed fallback while its directory is absent from `PATH` must exit
+successfully and preserve the all-three launcher warning, exact installed
+paths, and installer-owned remediation reference. Running the installer's
+current-shell block first must make setup's final current-process probe clean
+and keep completion concise.
+
+Neither lane proves future-login behavior. Setup must not emit an export or
+modify a startup file. Copy the installer's future-shell export into a
+user-chosen configuration, open a genuinely new login shell, and physically
+verify all three aliases with `test ... -ef` before accepting the release.
+Repeat the mismatch lane with one shadowed alias and an install directory
+containing spaces and apostrophes. Source-checkout acceptance separately
+requires the preserved `pnpm --dir <checkout> station:link` command when
+linking is declined.
+
 The current immutable binary candidate is `v0.7.1-rc.6`. `v0.7.1-rc.5` is the
 prior published binary, and `v0.7.1-rc.2`, `v0.7.1-rc.3`, and `v0.7.1-rc.4`
 remain older published rollbacks; the earlier `v0.7.0` and `v0.7.1-rc.1`

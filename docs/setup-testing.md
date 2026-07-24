@@ -26,6 +26,29 @@ profile { name, state: { platform, xcodeClt, git, insideRepo, brew, worktrunk,
           expect: { exitCode, requiredOk, checks: { <id>: <status> } } }
 ```
 
+## Launcher success-rendering invariant
+
+Launcher PATH acceptance is deliberately outside the shared machine-profile
+contract. `station-launchers` is recommended and does not change
+`workflowReady` or `requiredOk`. Apply tests instead assert that successful
+output preserves only a final re-probed `station-launchers` warning and, for
+checkout launchers, its existing link action.
+
+| Final state | Successful apply output |
+| --- | --- |
+| All three launchers on PATH | Concise; no **Remaining** section |
+| Installed aliases outside PATH | Warning + exact paths; no checkout link |
+| One installed name shadowed | Warning names only that bare launcher |
+| Compiled sibling missing | Missing warning; never `pnpm station:link` |
+| Checkout names absent | Warning + existing `station:link` command |
+| Current PATH repaired | Concise; login shell remains unverified |
+| Spaces or apostrophes | Exact paths; installer owns safe quoting |
+
+Other recommended warnings, including doctor reminders and optional
+integrations, stay out of successful apply output. Installer tests own shell
+commands and startup-file non-interaction; release acceptance owns proof in a
+genuinely new login shell.
+
 ## Tier 1 — in-process synthetic profiles (every PR, ~zero cost)
 
 `apps/cli/test/integration/setup-profiles.test.ts` compiles each profile into the

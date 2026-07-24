@@ -697,6 +697,7 @@ describe("setup planner", () => {
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
       status: "warning",
     });
+    expect(plan.actions.find((action) => action.id === "link-station-launchers")).toBeUndefined();
     expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
   });
 
@@ -727,10 +728,18 @@ describe("setup planner", () => {
     );
 
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
+      tier: "recommended",
       status: "warning",
       message:
-        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup.",
+        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup. Use the installer's PATH guidance to repair bare launcher resolution.",
+      details: {
+        station: `${installedRoot}/stn`,
+        ingress: `${installedRoot}/stn-ingress`,
+        tmuxPopup: `${installedRoot}/stn-tmux-popup`,
+      },
     });
+    expect(plan.summary).toMatchObject({ workflowReady: true, requiredOk: true });
+    expect(plan.actions.find((action) => action.id === "link-station-launchers")).toBeUndefined();
   });
 
   it("plans the exact popup command and preserved key for a reachable tmux server", () => {
