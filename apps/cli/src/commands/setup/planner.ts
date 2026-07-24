@@ -362,21 +362,25 @@ function harnessTrackingChecks(
   );
 }
 
-type HarnessTrackingAssessment =
-  | {
-      capability: "unsupported";
-      state: "not-applicable";
-      status: SetupCheck["status"];
-      message: string;
-    }
-  | {
-      capability: "supported";
-      state: "probe-failed" | "disabled" | "artifact-missing-or-drifted" | "prepared";
-      status: SetupCheck["status"];
-      message: string;
-      requested: boolean | undefined;
-      installed: boolean | undefined;
-    };
+type HarnessTrackingAssessmentResult = {
+  status: SetupCheck["status"];
+  message: string;
+};
+
+type NoExternalTrackingAssessment = HarnessTrackingAssessmentResult & {
+  capability: "unsupported";
+  state: "not-applicable";
+};
+
+type ExternalTrackingAssessment = HarnessTrackingAssessmentResult & {
+  capability: "supported";
+  state: "probe-failed" | "disabled" | "artifact-missing-or-drifted" | "prepared";
+  requested: boolean | undefined;
+  installed: boolean | undefined;
+};
+
+// The capability discriminant keeps no-artifact outcomes distinct from incomplete external evidence.
+type HarnessTrackingAssessment = NoExternalTrackingAssessment | ExternalTrackingAssessment;
 
 function harnessTrackingCheck(
   facts: SetupFacts,
