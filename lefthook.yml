@@ -6,4 +6,4 @@ pre-commit:
 pre-push:
   commands:
     test:
-      run: node scripts/run-without-git-locals.mjs pnpm test:pre-push
+      run: node scripts/run-without-git-locals.mjs pnpm gate:pre-push {push_files}

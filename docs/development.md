@@ -147,7 +147,11 @@ diagnostics tests, the scripted-agent lane, setup and Observer lifecycle E2E
 coverage, and a production Observer SQLite restart smoke. It intentionally
 excludes real provider lanes.
 
-After root `pnpm install`, Lefthook runs the broader local gate before pushes:
+After root `pnpm install`, Lefthook classifies the commits being pushed. A
+change is documentation-only when every pushed path is under `docs/` or ends
+in `.md` or `.mdx`; that push skips the broader local gate. Any pushed path
+outside that allowlist, or an empty path set passed to the classifier, fails
+closed to:
 
 ```bash
 pnpm test:pre-push
@@ -156,12 +160,15 @@ pnpm test:pre-push
 In addition to `test:all`, it checks cross-runtime SQLite compatibility, the
 Station renderer, the native PTY implementation, and the compiled binary on
 the developer's current platform. Install both the root pnpm dependencies and
-the `station/` Bun dependencies before pushing.
+the `station/` Bun dependencies before pushing a non-documentation change.
 
-Ready, non-draft pull requests run `pnpm test:pre-push` once on
-`ubuntu-24.04`; release tags call that same full gate before adding the four
-native build and draft-install targets. Both that gate and `smoke:release` must
-pass before any native release build starts.
+Ready, non-draft pull requests use the same path policy. The required
+`standard-ci` check reports success for a documentation-only pull request after
+classification without installing dependencies or running the full gate. Mixed
+or unclassifiable pull requests run `pnpm test:pre-push` once on
+`ubuntu-24.04`; release tags always call that full gate before adding the four
+native build and draft-install targets. Both the full gate and `smoke:release`
+must pass before any native release build starts.
 Draft pull request activity allocates no
 runner, including synchronization before `ready_for_review`.
 Pushes to `main` run only build, typecheck, and lint as a cheap post-merge

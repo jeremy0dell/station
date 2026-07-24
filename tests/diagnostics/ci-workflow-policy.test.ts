@@ -16,7 +16,7 @@ function between(document: string, start: string, end?: string): string {
 }
 
 describe("hosted CI policy", () => {
-  it("runs the full gate for ready pull requests and release calls but not main pushes", () => {
+  it("relaxes documentation pull requests without weakening release or main policy", () => {
     const standardCi = read(".github/workflows/standard-ci.yml");
     const release = read(".github/workflows/release.yml");
     const development = read("docs/development.md");
@@ -26,6 +26,15 @@ describe("hosted CI policy", () => {
     const fullGate = between(standardCi, "  standard-ci:", "  main-smoke:");
     expect(fullGate).toContain("github.ref_type == 'tag'");
     expect(fullGate).toContain("github.event.pull_request.draft == false");
+    expect(fullGate).toContain("github.rest.pulls.listFiles");
+    expect(fullGate).toContain('path.startsWith("docs/")');
+    expect(fullGate).toContain('path.endsWith(".md")');
+    expect(fullGate).toContain('path.endsWith(".mdx")');
+    expect(fullGate).toContain("[file.previous_filename, file.filename]");
+    expect(fullGate).toContain("steps.changes.outputs.scope == 'documentation-only'");
+    expect(fullGate).toContain(
+      "if: github.event_name != 'pull_request' || steps.changes.outputs.scope != 'documentation-only'",
+    );
     expect(fullGate).toContain("run: pnpm test:pre-push");
 
     const mainSmoke = between(standardCi, "  main-smoke:");
@@ -41,7 +50,9 @@ describe("hosted CI policy", () => {
     const nativeBuilds = between(release, "  build-native:", "  create-draft:");
     expect(nativeBuilds).toMatch(/needs:\s+- validate\s+- standard-ci\s+- release-smoke/);
 
-    expect(development).toContain("Ready, non-draft pull requests run `pnpm test:pre-push`");
+    expect(development).toContain("Ready, non-draft pull requests use the same path policy");
+    expect(development).toContain("documentation-only pull request after");
+    expect(development).toContain("release tags always call that full gate");
     expect(development).toContain("before any native release build starts");
     expect(development).toMatch(/Draft pull request activity allocates no\s+runner/);
     expect(development).toMatch(/Pushes to `main`\s+run only build, typecheck, and lint/);
