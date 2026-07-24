@@ -49,11 +49,10 @@ export function expireTuiToasts(state: TuiState, nowMs = Date.now()): TuiState {
 
 export function refreshActiveTuiToastExpiry(state: TuiState, nowMs = Date.now()): TuiState {
   const active = activeTuiToast(state);
-  const expiryMs = active === undefined ? undefined : toastExpiryMs(active.toast.kind);
-  if (active === undefined || active.expiresAt === undefined || expiryMs === undefined) {
+  if (active === undefined || active.expiresAt === undefined) {
     return state;
   }
-  const expiresAt = nowMs + expiryMs;
+  const expiresAt = nowMs + toastExpiryMs(active.toast.kind);
   return {
     ...state,
     toasts: state.toasts.map((entry) =>
@@ -108,10 +107,11 @@ function createToastEntry(
   createdAt: number,
   updatedAt: number,
 ): TuiToastEntry {
-  const entry: TuiToastEntry = { id, toast, createdAt, updatedAt };
-  const expiryMs = toastExpiryMs(toast.kind);
-  if (expiryMs !== undefined) {
-    entry.expiresAt = updatedAt + expiryMs;
-  }
-  return entry;
+  return {
+    id,
+    toast,
+    createdAt,
+    updatedAt,
+    expiresAt: updatedAt + toastExpiryMs(toast.kind),
+  };
 }

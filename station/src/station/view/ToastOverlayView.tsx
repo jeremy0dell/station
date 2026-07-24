@@ -1,5 +1,5 @@
-// Render layer: a bottom-anchored notice that grows upward and leaves actionable
-// errors visible. Only the header X routes dismissal; body text stays selectable.
+// Render layer: a bottom-anchored notice that grows upward for actionable errors.
+// Only the header dismiss control routes dismissal; body text stays selectable.
 import { TextAttributes } from "@opentui/core";
 import {
   toastBorderColor,
@@ -70,7 +70,7 @@ export function ToastOverlayView({
           >
             {toastTitle(toast)}
           </text>
-          <ToastCloseControl />
+          <ToastDismissControl />
         </box>
         <text fg={STATION_COLORS.foreground} wrapMode="word" selectable>
           {toast.toast.message}
@@ -85,7 +85,7 @@ export function ToastOverlayView({
   );
 }
 
-function ToastCloseControl() {
+function ToastDismissControl() {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
@@ -98,7 +98,7 @@ function ToastCloseControl() {
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      [ × ]
+      [ dismiss ]
     </text>
   );
 }

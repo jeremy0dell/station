@@ -512,7 +512,7 @@ describe("dashboard golden frames", () => {
     }
   });
 
-  it("keeps notice text selectable and dismisses only from the close control", async () => {
+  it("keeps notice text selectable and dismisses only from the dismiss control", async () => {
     const targets: StationMouseTarget[] = [];
     let setup: RenderedDashboard;
     setup = await renderDashboard({
@@ -530,12 +530,12 @@ describe("dashboard golden frames", () => {
     let lines = setup.captureCharFrame().split("\n");
     const messageRow = lines.findIndex((line) => line.includes("Worktrunk failed"));
     const messageColumn = lines[messageRow]?.indexOf("Worktrunk") ?? -1;
-    const closeRow = lines.findIndex((line) => line.includes("[ × ]"));
-    const closeColumn = lines[closeRow]?.indexOf("[ × ]") ?? -1;
+    const dismissRow = lines.findIndex((line) => line.includes("[ dismiss ]"));
+    const dismissColumn = lines[dismissRow]?.indexOf("[ dismiss ]") ?? -1;
     expect(messageRow).toBeGreaterThan(0);
     expect(messageColumn).toBeGreaterThan(0);
-    expect(closeRow).toBeGreaterThan(0);
-    expect(closeColumn).toBeGreaterThan(0);
+    expect(dismissRow).toBeGreaterThan(0);
+    expect(dismissColumn).toBeGreaterThan(0);
 
     const textRenderables = collectTextRenderables(setup.renderer.root);
     const selectableCopy = textRenderables.filter(
@@ -551,17 +551,17 @@ describe("dashboard golden frames", () => {
     expect(targets).toEqual([]);
     expect(setup.store.getState().toasts).toHaveLength(1);
 
-    const ordinaryClose = spanAtFrameCell(setup.captureSpans(), closeRow, closeColumn);
+    const ordinaryDismiss = spanAtFrameCell(setup.captureSpans(), dismissRow, dismissColumn);
     await act(async () => {
-      await setup.mockMouse.moveTo(closeColumn, closeRow);
+      await setup.mockMouse.moveTo(dismissColumn, dismissRow);
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     await setup.flush();
-    const hoveredClose = spanAtFrameCell(setup.captureSpans(), closeRow, closeColumn);
-    expect(spanHex(hoveredClose)).not.toBe(spanHex(ordinaryClose));
-    expect(spanBgHex(hoveredClose)).not.toBe(spanBgHex(ordinaryClose));
+    const hoveredDismiss = spanAtFrameCell(setup.captureSpans(), dismissRow, dismissColumn);
+    expect(spanHex(hoveredDismiss)).not.toBe(spanHex(ordinaryDismiss));
+    expect(spanBgHex(hoveredDismiss)).not.toBe(spanBgHex(ordinaryDismiss));
 
-    await setup.mockMouse.click(closeColumn, closeRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(dismissColumn, dismissRow, MouseButtons.LEFT);
     await setup.flush();
     expect(targets).toEqual([{ kind: "toast" }]);
     expect(setup.store.getState().toasts).toEqual([]);

@@ -50,10 +50,10 @@ describe("TUI toast lifecycle state", () => {
     expect(second.toasts[0]).toMatchObject({
       createdAt: 1_000,
       updatedAt: 2_000,
+      expiresAt: 18_000,
       toast,
     });
-    expect(second.toasts[0]).not.toHaveProperty("expiresAt");
-    expect(nextTuiToastExpiry(second)).toBeUndefined();
+    expect(nextTuiToastExpiry(second)).toBe(18_000);
   });
 
   it("keeps only a small history while a different toast becomes active", () => {
@@ -75,10 +75,10 @@ describe("TUI toast lifecycle state", () => {
     expect(activeTuiToast(state)?.toast.message).toBe("Fourth.");
   });
 
-  it("expires success and info while errors remain until dismissed", () => {
+  it("gives errors twice their previous lifetime while success and info stay short", () => {
     expect(toastExpiryMs("success")).toBe(2_400);
     expect(toastExpiryMs("info")).toBe(3_200);
-    expect(toastExpiryMs("error")).toBeUndefined();
+    expect(toastExpiryMs("error")).toBe(16_000);
 
     const withSuccess = addTuiToast(
       createInitialTuiState(),
@@ -104,8 +104,9 @@ describe("TUI toast lifecycle state", () => {
       1_000,
     );
 
-    expect(withError.toasts[0]).not.toHaveProperty("expiresAt");
-    expect(expireTuiToasts(withError, 60_000).toasts).toHaveLength(1);
+    expect(withError.toasts[0]).toHaveProperty("expiresAt", 17_000);
+    expect(expireTuiToasts(withError, 16_999).toasts).toHaveLength(1);
+    expect(expireTuiToasts(withError, 17_000).toasts).toHaveLength(0);
   });
 
   it("refreshes the active toast expiry when hidden presentation resumes", () => {

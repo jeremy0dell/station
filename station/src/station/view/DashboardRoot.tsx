@@ -2,7 +2,7 @@
 // feeds the overlay's row budget into the viewport math, and switches
 // between the loading/waiting/unavailable bodies and the live dashboard —
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
-// toast overlay, transient expiry timers, and persistent error dismissal.
+// toast overlay, kind-specific expiry timers, and explicit error dismissal.
 import { useEffect, useRef } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";

@@ -340,7 +340,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                              opencode  exited                             #8 ✓
  [7] ⠋ provider-hooks                            opencode  working                    +32 -8 #16 …
  [8] ○ trace-bundle      ┌──────────────────────────────────────────────────────────────────────┐✓
-                         │ needs attention                                                [ × ] │
+                         │ needs attention                                          [ dismiss ] │
 ▼ scripts  2 sessions · 2│ Worktrunk failed to remove the selected checkout because the main    │]
  [9] ○ api-cache         │ worktree cannot be removed while Station is running there.           │1
  [a] ? metadata-refresh  │ Open a different linked checkout, select the session again, and      │0
@@ -362,7 +362,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
  [1] ○ cli-help-man        idle
  [2] - docs-cleanup        no agent
  [┌──────────────────────────────────┐
- [│ needs attention            [ × ] │
+ [│ needs attention      [ dismiss ] │
  [│ Worktrunk failed to remove the   │
   │ selected checkout because the    │
 ▼ │ main worktree cannot be removed  │]
