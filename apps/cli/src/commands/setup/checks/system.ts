@@ -107,7 +107,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     launcherOptions.providerHookIngressLauncher = options.providerHookIngressLauncher;
   }
   const git = await checkSetupGit(commandOptions);
-  const gitRoot = git.status === "ok" ? git.root : undefined;
+  const gitRoot = git.status === "ok" && git.repository === "present" ? git.root : undefined;
   const setupConfigInput: {
     options: CollectSetupFactsOptions;
     cwd: string;

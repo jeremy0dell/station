@@ -1,7 +1,11 @@
 import { basename } from "node:path";
+import { findGitRoot } from "@station/config";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
+  environmentWithoutGitLocals,
+  externalCommandDiagnosticFromSafeError,
+  gitLocalEnvironmentVariables,
   isSafeError,
   runExternalCommand,
 } from "@station/runtime";
@@ -16,96 +20,183 @@ export type CheckGitOptions = {
   cwd?: string;
 };
 
+const defaultBranch = "main";
+const outsideRepositoryMessage = "Git is available; choose a project explicitly in STATION.";
+const gitAbsentMessage =
+  "Git is not installed. Install Git (on macOS, xcode-select --install provides it), then run stn setup check.";
+const gitUnusableMessage =
+  "Git is installed but unusable. On macOS run xcode-select --install or configure a working custom Git; otherwise repair or reinstall Git. Then run stn setup check.";
+
+type MissingGitFact = Extract<SetupGitFact, { status: "missing" }>;
+
+type GitCapabilityAssessment =
+  | { status: "available" }
+  | { status: "unavailable"; fact: MissingGitFact };
+
 export async function checkSetupGit(options: CheckGitOptions = {}): Promise<SetupGitFact> {
+  const capability = await probeGitCapability(options);
+  if (capability.status === "unavailable") return capability.fact;
+  return probeGitRepository(options, options.cwd ?? process.cwd());
+}
+
+async function probeGitCapability(options: CheckGitOptions): Promise<GitCapabilityAssessment> {
   try {
-    const rootResult = await git(options, ["rev-parse", "--show-toplevel"]);
+    const version = await git(options, ["--version"]);
+    if (!isGitVersionOutput(version.stdout)) {
+      return { status: "unavailable", fact: unusableGitFact() };
+    }
+    return { status: "available" };
+  } catch (error) {
+    if (isSafeError(error) && error.code === "ENOENT") {
+      return { status: "unavailable", fact: absentGitFact() };
+    }
+    return { status: "unavailable", fact: unusableGitFact() };
+  }
+}
+
+async function probeGitRepository(options: CheckGitOptions, cwd: string): Promise<SetupGitFact> {
+  try {
+    const rootResult = await git(options, ["rev-parse", "--show-toplevel"], cwd);
     const root = rootResult.stdout.trim();
-    const defaultBranch = await detectDefaultBranch(options);
+    if (root.length === 0) return unusableRepositoryFact(cwd);
+
+    const detectedDefaultBranch = await detectDefaultBranch(options, root);
     return {
       status: "ok",
+      repository: "present",
       root,
-      defaultBranch,
+      defaultBranch: detectedDefaultBranch,
       repoName: basename(root) || "project",
     };
   } catch (error) {
-    // runExternalCommand normalizes a missing binary to a safe error coded ENOENT;
-    // a real git that fails rev-parse (not a repository) carries a numeric exitCode
-    // instead. The two cases need different remediation.
-    // Note: on a bare macOS host /usr/bin/git is a Command Line Tools shim that
-    // exists, so spawn succeeds and rev-parse fails with a numeric exit code (not
-    // ENOENT) — that host is surfaced by the separate Command Line Tools check, so
-    // git-absent here is the genuinely-uninstalled (e.g. Linux) case.
-    if (isSafeError(error) && error.code === "ENOENT") {
+    const failureText = gitFailureText(error);
+    if (isDubiousOwnershipError(failureText)) {
       return {
         status: "missing",
-        reason: "git-absent",
-        defaultBranch: "main",
-        message:
-          "git is not installed. On macOS run xcode-select --install (or install git), then run stn setup.",
+        reason: "dubious-ownership",
+        defaultBranch,
+        message: dubiousOwnershipMessage(failureText, cwd),
       };
     }
-    return {
-      status: "missing",
-      reason: "not-a-repo",
-      defaultBranch: "main",
-      // git can run yet refuse the repo for "dubious ownership" (owned by a different
-      // UID — common with mounted volumes / containers). The user IS inside the repo,
-      // so the not-a-repo wording is wrong; point at the real fix instead.
-      message: isDubiousOwnershipError(error)
-        ? "git refused this repository for dubious ownership (it is owned by a different user, common with mounted volumes or containers). Run: git config --global --add safe.directory <repository path>, then run stn setup."
-        : "Git is available. Finish setup here, then choose a project explicitly in STATION.",
-    };
+    if (isCanonicalNotRepositoryError(gitFailureStderr(error))) {
+      // A marker means Git discovered repository intent but could not read its metadata.
+      if ((await findGitRoot(cwd)) === undefined) {
+        return {
+          status: "ok",
+          repository: "absent",
+          defaultBranch,
+          message: outsideRepositoryMessage,
+        };
+      }
+    }
+    return unusableRepositoryFact(cwd);
   }
 }
 
-function isDubiousOwnershipError(error: unknown): boolean {
-  if (!isSafeError(error)) {
-    return false;
-  }
-  const stderr =
-    error.diagnosticDetails?.find((detail) => detail.type === "external_command")?.stderrSnippet ??
-    "";
-  return /dubious ownership|safe\.directory/i.test(stderr);
+function absentGitFact(): MissingGitFact {
+  return {
+    status: "missing",
+    reason: "git-absent",
+    defaultBranch,
+    message: gitAbsentMessage,
+  };
 }
 
-async function detectDefaultBranch(options: CheckGitOptions): Promise<string> {
+function unusableGitFact(): MissingGitFact {
+  return {
+    status: "missing",
+    reason: "git-unusable",
+    defaultBranch,
+    message: gitUnusableMessage,
+  };
+}
+
+function unusableRepositoryFact(cwd: string): MissingGitFact {
+  return {
+    status: "missing",
+    reason: "repository-unusable",
+    defaultBranch,
+    message: `Git could not read repository metadata from ${cwd}. Repair its metadata, permissions, or Git configuration, then run stn setup check.`,
+  };
+}
+
+function isGitVersionOutput(stdout: string): boolean {
+  return /^git version \S+(?: [^\r\n]+)?$/.test(stdout.trim());
+}
+
+function isDubiousOwnershipError(failureText: string): boolean {
+  return /dubious ownership|safe\.directory/i.test(failureText);
+}
+
+function isCanonicalNotRepositoryError(stderr: string): boolean {
+  return /^fatal: not a git repository \(or any of the parent directories\): \.git$/m.test(stderr);
+}
+
+function dubiousOwnershipMessage(failureText: string, cwd: string): string {
+  const repository =
+    failureText.match(/dubious ownership in repository at ['"]([^'"]+)['"]/i)?.[1] ?? cwd;
+  return `Git refused this repository for dubious ownership. Review its ownership, then run git config --global --add safe.directory ${quoteCommandPart(repository)}, then run stn setup check.`;
+}
+
+function gitFailureText(error: unknown): string {
+  if (!isSafeError(error)) return "";
+  const diagnostic = externalCommandDiagnosticFromSafeError(error);
+  return [error.message, diagnostic?.stdoutSnippet, diagnostic?.stderrSnippet]
+    .filter((part) => part !== undefined)
+    .join("\n");
+}
+
+function gitFailureStderr(error: unknown): string {
+  if (!isSafeError(error)) return "";
+  return externalCommandDiagnosticFromSafeError(error)?.stderrSnippet ?? "";
+}
+
+async function detectDefaultBranch(options: CheckGitOptions, root: string): Promise<string> {
   try {
-    const originHead = await git(options, [
-      "symbolic-ref",
-      "--quiet",
-      "--short",
-      "refs/remotes/origin/HEAD",
-    ]);
+    const originHead = await git(
+      options,
+      ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+      root,
+    );
     const branch = originHead.stdout.trim().replace(/^origin\//, "");
     if (branch.length > 0) {
       return branch;
     }
   } catch {
-    // fall through to current branch
+    // Fall through to the current branch because remote metadata is best-effort.
   }
 
   try {
-    const current = await git(options, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const current = await git(options, ["rev-parse", "--abbrev-ref", "HEAD"], root);
     const branch = current.stdout.trim();
     if (branch.length > 0 && branch !== "HEAD") {
       return branch;
     }
   } catch {
-    // fall through to stable default
+    // Fall through to the stable default because branch metadata is best-effort.
   }
 
-  return "main";
+  return defaultBranch;
 }
 
-function git(options: CheckGitOptions, args: string[]) {
+function git(options: CheckGitOptions, args: string[], cwd?: string) {
+  const sanitizedEnv = environmentWithoutGitLocals(options.env ?? process.env);
   const input: ExternalCommandInput = {
     command: "git",
     args,
+    env: {
+      ...commandEnv(sanitizedEnv),
+      LANG: "C",
+      LC_ALL: "C",
+    },
+    unsetEnv: gitLocalEnvironmentVariables,
     timeoutMs: setupProbeTimeoutMs,
     maxOutputChars: 4096,
   };
-  if (options.cwd !== undefined) input.cwd = options.cwd;
-  const env = commandEnv(options.env);
-  if (env !== undefined) input.env = env;
+  if (cwd !== undefined) input.cwd = cwd;
   return runExternalCommand(input, options.runner);
+}
+
+function quoteCommandPart(part: string): string {
+  return `'${part.replaceAll("'", `'\\''`)}'`;
 }

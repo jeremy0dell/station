@@ -47,13 +47,21 @@ workflow, not for launch:
 - diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
 - git (the binary); select an existing git repository explicitly after setup
 - the effective global default agent CLI, plus each CLI explicitly selected in the current guided setup: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
-- current Station-owned tracking artifacts for required Claude, Codex, Cursor, and OpenCode harnesses
+- current Station-owned tracking artifacts for required Claude, Codex, Cursor,
+  and OpenCode harnesses
 
-On macOS, the Command Line Tools provide git and the compilers Homebrew needs.
-`stn setup` detects a missing-git binary distinctly from "not inside a repo". The
-latter is healthy because setup does not adopt its working directory. On macOS,
-setup reports missing Command Line Tools with the `xcode-select --install`
-remediation. `scripts/setup/bootstrap.sh` preflights both before touching Homebrew.
+Git setup first verifies that the executable itself works, then inspects
+repository metadata. Working Git outside a repository is healthy because setup
+does not adopt its working directory. An unusable Git executable, unreadable or
+corrupt repository metadata, permission failures, and dubious ownership are
+required failures with Git-specific remediation.
+
+On macOS, the Command Line Tools provide Apple Git and the compilers Homebrew
+needs. A source-checkout setup reports missing Command Line Tools with the
+`xcode-select --install` remediation. Compiled Station does not independently
+require Command Line Tools when a working custom Git is available.
+`scripts/setup/bootstrap.sh` preflights both Git and Command Line Tools before
+touching Homebrew.
 
 Recommended after setup:
 

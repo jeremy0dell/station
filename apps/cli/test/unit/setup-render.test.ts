@@ -114,6 +114,32 @@ describe("setup renderer", () => {
     expect(output).not.toContain("Worktrunk is still missing");
   });
 
+  it("preserves Git remediation in apply output", () => {
+    const message =
+      "Git is installed but unusable. Run xcode-select --install, then run stn setup check.";
+    const output = renderSetupApplyResult({
+      ...plan(),
+      checks: [
+        {
+          id: "git-project",
+          tier: "required",
+          status: "missing",
+          label: "Git",
+          message,
+        },
+      ],
+      actions: [],
+      summary: {
+        ...plan().summary,
+        requiredMissing: 1,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toContain(message);
+    expect(output).not.toContain("Core setup is incomplete.");
+  });
+
   it("renders the effective Worktrunk automation mode", () => {
     const skipHooks = renderSetupPlan({
       ...plan(),
