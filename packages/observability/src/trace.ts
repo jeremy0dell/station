@@ -18,14 +18,6 @@ export function createTraceContext(options: CreateTraceContextOptions = {}): Tra
   };
 }
 
-export function createChildSpan(parent: TraceContext, operation?: string): TraceContext {
-  return createTraceContext({
-    traceId: parent.traceId,
-    parentSpanId: parent.spanId,
-    ...(operation === undefined ? {} : { operation }),
-  });
-}
-
 export function stableOperationName(input: string): string {
   return input
     .trim()

@@ -539,28 +539,3 @@ function harnessEventReportEntityKey(report: HarnessEventReport): string {
     report.reportId
   );
 }
-
-export function providerHookEvent(input: {
-  provider: string;
-  kind: ProviderHookEvent["kind"];
-  event: string;
-  clock?: RuntimeClock;
-  projectId?: string;
-  worktreeId?: string;
-  sessionId?: string;
-  payload?: unknown;
-}): ProviderHookEvent {
-  const clock = input.clock ?? systemClock;
-  const event: ProviderHookEvent = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    provider: input.provider,
-    kind: input.kind,
-    event: input.event,
-    receivedAt: toIsoTimestamp(clock.now()),
-  };
-  if (input.projectId !== undefined) event.projectId = input.projectId;
-  if (input.worktreeId !== undefined) event.worktreeId = input.worktreeId;
-  if (input.sessionId !== undefined) event.sessionId = input.sessionId;
-  if (input.payload !== undefined) event.payload = input.payload;
-  return ProviderHookEventSchema.parse(event);
-}

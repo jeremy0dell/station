@@ -257,16 +257,17 @@ describe("observer hook spool drain", () => {
     });
     const { socketPath } = await createTempSocketPath();
 
-    const serverPromise = startObserverServer({
+    const server = await startObserverServer({
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
     });
+    const startupReconcile = fixture.api.reconcile("observer.startup");
 
     await waitFor(async () => (await probeObserverSocket(socketPath)).status === "listening");
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
-    const server = await serverPromise;
+    await startupReconcile;
     await expect(fileExists(spoolPath)).resolves.toBe(false);
     await server.close();
     fixture.sqlite.close();
@@ -294,16 +295,17 @@ describe("observer hook spool drain", () => {
     });
     const { socketPath } = await createTempSocketPath();
 
-    const serverPromise = startObserverServer({
+    const server = await startObserverServer({
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
     });
+    const startupReconcile = fixture.api.reconcile("observer.startup");
 
     await waitFor(async () => processingStarted);
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
-    const server = await serverPromise;
+    await startupReconcile;
     await expect(fileExists(spoolPath)).resolves.toBe(false);
     await server.close();
     fixture.sqlite.close();

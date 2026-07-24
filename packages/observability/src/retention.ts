@@ -1,4 +1,4 @@
-import { readdir, rm, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type LocalStateUsage,
@@ -115,34 +115,6 @@ export async function scanLocalStateUsage(
       overLimit: entry.limitBytes === undefined ? false : entry.sizeBytes > entry.limitBytes,
     })),
   });
-}
-
-export async function enforceFileRetention(input: {
-  dir: string;
-  maxFiles: number;
-  maxDays: number;
-  now?: Date;
-}): Promise<string[]> {
-  const now = input.now ?? new Date();
-  const files = await directoryChildren(input.dir);
-  const stats = await Promise.all(
-    files.map(async (path) => ({
-      path,
-      stat: await stat(path),
-    })),
-  );
-  const cutoff = now.getTime() - input.maxDays * 24 * 60 * 60 * 1000;
-  // Sort newest first, then delete anything beyond maxFiles or older than the age cutoff.
-  const sorted = stats.sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs);
-  const stale = sorted
-    .filter((entry, index) => index >= input.maxFiles || entry.stat.mtimeMs < cutoff)
-    .map((entry) => entry.path);
-
-  for (const path of stale) {
-    await rm(path, { recursive: true, force: true });
-  }
-
-  return stale;
 }
 
 async function usageEntry(

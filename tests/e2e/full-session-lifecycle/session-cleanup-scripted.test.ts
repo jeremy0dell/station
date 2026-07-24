@@ -96,7 +96,7 @@ describe("full session cleanup e2e", () => {
       socketPath,
       stateDir,
     });
-    const server = await startObserverServer({ socketPath, api, clock, drainOnStart: false });
+    const server = await startObserverServer({ socketPath, api, clock });
     const client = createObserverClient({ socketPath, requestId: requestIds() });
 
     try {

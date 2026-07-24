@@ -12,10 +12,8 @@ import {
   type ObserverSessionMetadata,
   type ObserverTurnReadiness,
 } from "../../src/reconcile/graph";
-import {
-  type ObserverHarnessRun,
-  observerHarnessRunFromRun,
-} from "../../src/reconcile/harnessEventStatus";
+import type { ObserverHarnessRun } from "../../src/reconcile/harnessEventStatus";
+import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const generatedAt = "2026-05-20T12:00:00.000Z";
 const observerStartedAt = "2026-05-20T11:55:00.000Z";

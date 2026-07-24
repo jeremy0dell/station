@@ -17,19 +17,6 @@ type StatusOverlay = {
   observationId: string;
 };
 
-export function observerHarnessRunFromRun(run: HarnessRunObservation): ObserverHarnessRun {
-  return {
-    run,
-    status: {
-      value: run.state,
-      confidence: run.confidence,
-      reason: run.reason,
-      source: "harness_process",
-      updatedAt: run.observedAt,
-    },
-  };
-}
-
 export function externalHarnessRunId(provider: string, nativeSessionId: string): string {
   // nativeSessionId is untrusted (straight from the hook payload); encode both
   // parts so a value containing ':' or 'external:' cannot collide with another

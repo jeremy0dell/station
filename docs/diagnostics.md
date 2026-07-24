@@ -72,6 +72,26 @@ log read.
 
 `stn doctor` connects to the observer, asks the observer for runtime health, and reports config, SQLite, provider health, hook spool, snapshot, logs, local state usage, and retention status. If the config cannot be loaded, `doctor` does not start the observer; it returns a local SafeError report with diagnostic id `config-load`.
 
+### Doctor health semantics
+
+Doctor's top-level status is the worst severity among the current checks in the
+final report, including checks appended by the CLI. Retained command failures
+remain diagnostic evidence under `recentErrors`; they do not determine current
+health.
+
+| Any current `error` check? | Any current `warn` check? | Historical errors present? | Top-level status |
+| --- | --- | --- | --- |
+| Yes | Either | Either | `unavailable` |
+| No | Yes | Either | `degraded` |
+| No | No | No | `healthy` |
+| No | No | Yes | `healthy` |
+
+Invalid configuration remains `unavailable` because its current config check is
+an error. A local-state size overage remains `degraded` because the current
+retention check is a warning. The `recentErrors` field means retained historical
+evidence: Doctor can be `healthy` while that array is non-empty, and the same
+errors remain available in diagnostic snapshots and debug evidence.
+
 `stn snapshot --json` asks the observer for the current normalized graph. Use
 `--include-debug` when row-level diagnostic fields are needed for support
 evidence.
@@ -94,6 +114,18 @@ submits a command; use it only when the task calls for a runtime action.
 `pnpm setup:system:check` report local tool readiness. They are read-only.
 
 Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, attempts bounded observer auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
+
+An allow-listed provider hook that fails the sender's Station ownership or
+configured-root correlation gate writes one best-effort `info` record before
+returning an `ignored` receipt. The record contains only provider, hook ID,
+ignored status, and the closed correlation reason; it excludes event names,
+cwd, roots, Station IDs, payloads, paths, and environment data. Unsupported
+provider events remain silent and do not produce this record. Query existing
+safe evidence without contacting the Observer:
+
+```bash
+stn debug logs "Provider hook ignored before Observer delivery" --component hook
+```
 
 When `defaults.worktree_provider = "worktrunk"`, doctor also validates Worktrunk
 binary availability, lifecycle hook setup, and automation capability for the
@@ -229,7 +261,7 @@ max_bundles = 10
 max_days = 30
 ```
 
-File retention is enforced for logs and bundles created by this diagnostic surface. SQLite over-limit status is reported, but SQLite rows are not pruned by this retention pass.
+File retention is enforced for logs and bundles created by this diagnostic surface. SQLite over-limit status is reported, but SQLite rows are not pruned by this retention pass. The SQLite age settings do not determine Doctor's top-level status, prune command-error rows, or filter those rows from `recentErrors`.
 
 ## Redaction
 

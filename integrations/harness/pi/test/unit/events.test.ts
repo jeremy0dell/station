@@ -3,15 +3,14 @@ import type { ProviderHookEvent, RawHarnessEvent } from "@station/contracts";
 import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { PiHarnessProviderError } from "../../src/errors";
+import { compactFieldNamesForPiEvent } from "../../src/event/catalog";
+import { PiCompactEventSchema, parsePiCompactEvent } from "../../src/event/compactEvent";
+import { compactPiHookPayload } from "../../src/event/compaction";
 import {
-  compactPiHookPayload,
   normalizePiRawEvent,
-  PiCompactEventSchema,
-  parsePiCompactEvent,
   piHookPayloadToHarnessEventReport,
   statusFromPiEvent,
-} from "../../src/event";
-import { compactFieldNamesForPiEvent } from "../../src/event/catalog";
+} from "../../src/event/mapping";
 import { piSupportedEventNames } from "../../src/event/names";
 import { piHookAdapter } from "../../src/hookAdapter";
 

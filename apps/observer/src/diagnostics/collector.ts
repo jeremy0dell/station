@@ -151,6 +151,7 @@ export async function collectDiagnosticSnapshot(
  * USE CASE
  *
  * Aggregates current runtime, persistence, and provider evidence into the read-only health report.
+ * Top-level health comes from current checks; persisted command errors remain historical evidence.
  */
 export async function runDoctor(
   deps: ObserverDiagnosticsDeps,
@@ -205,7 +206,7 @@ export async function runDoctor(
   const recentErrors = doctorSnapshot.errors.map((error) => errorToSafeError(error));
   const status = checks.some((check) => check.status === "error")
     ? "unavailable"
-    : checks.some((check) => check.status === "warn") || recentErrors.length > 0
+    : checks.some((check) => check.status === "warn")
       ? "degraded"
       : "healthy";
 

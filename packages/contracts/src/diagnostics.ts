@@ -9,7 +9,6 @@ import {
   ProviderIdSchema,
   SchemaVersionSchema,
   SessionIdSchema,
-  STATION_SCHEMA_VERSION,
   TerminalTargetIdSchema,
   TimestampSchema,
   WorktreeIdSchema,
@@ -386,14 +385,3 @@ export const DebugBundleManifestSchema = z
   .strict();
 
 export type DebugBundleManifest = z.infer<typeof DebugBundleManifestSchema>;
-
-export const EMPTY_REDACTION_REPORT: RedactionReport = {
-  policyVersion: "station-redaction-v1",
-  generatedAt: "2026-05-20T00:00:00.000Z",
-  redactedFields: [],
-  redactedPatterns: [],
-  replacements: 0,
-  suspiciousSecretsFound: 0,
-};
-
-export const DEFAULT_DIAGNOSTIC_SCHEMA_VERSION = STATION_SCHEMA_VERSION;
