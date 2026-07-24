@@ -110,6 +110,21 @@ describe("createPtyTable", () => {
     expect(table.list()).toMatchObject([{ ptyId, worktreeId: "wt-1", alive: true }]);
   });
 
+  it("bounds the default warm-reattach replay to 256 KiB", () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn(baseParams);
+    const chunk = "x".repeat(1024);
+
+    for (let index = 0; index < 300; index += 1) {
+      scripted.helpers.emitData(chunk);
+    }
+
+    const snapshot = table.snapshot(ptyId);
+    expect(snapshot.scrollback).toHaveLength(256);
+    expect(snapshot.scrollback.every((entry) => entry === chunk)).toBe(true);
+    expect(snapshot.truncated).toBe(true);
+  });
+
   it("reuses the live PTY for the same worktree (idempotent spawn)", () => {
     const { table, scripteds } = tableWithScripted();
     const first = table.spawn(baseParams);

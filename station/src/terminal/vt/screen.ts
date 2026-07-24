@@ -1,6 +1,10 @@
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { type IMarker, Terminal } from "@xterm/headless";
-import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
+import {
+  DEFAULT_SCROLLBACK_LINES,
+  MAX_SCROLLBACK_LINES,
+  type ScrollOnOutputMode,
+} from "../../config/stationConfig.js";
 import { ChunkRing } from "../chunkRing.js";
 import {
   reportTerminalCorruption,
@@ -31,9 +35,6 @@ const FRAGMENT_SCAN_MIN_INTERVAL_MS = 1_000;
 // counts and logs, never alerts.
 const ESCAPE_FRAGMENT_PATTERN =
   /\[\??\d{1,4}(?:;\d{1,4}){1,7}[A-Za-z]|\b(?:38|48);[25];\d{1,3};\d{1,3};\d{1,3}m|;rgb:[0-9a-fA-F]{2}|\[\?\d{2,4}[hl]/;
-// Scrollback is now viewable (wheel + copy-mode), but a modest buffer still
-// keeps resize reflow cheap; the depth is intentionally not yet configurable.
-const DEFAULT_SCROLLBACK_LINES = 1000;
 const DEFAULT_SCROLL_ON_OUTPUT: ScrollOnOutputMode = "freeze";
 // Match xterm's internal resize clamp (and the bridge's) so the PTY and the
 // screen model can never disagree on dimensions.
@@ -42,6 +43,7 @@ const MIN_ROWS = 1;
 
 export type StationVtScreenOptions = {
   size: StationTerminalSize;
+  /** Normal-buffer history depth in lines, clamped to the native workspace safety ceiling. */
   scrollback?: number;
   /** How the scroll position reacts to new output; defaults to `freeze`. */
   scrollOnOutput?: ScrollOnOutputMode;
@@ -209,10 +211,15 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   const theme = options.theme ?? stationVtTheme;
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
+  const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
+  // xterm's retained-row memory and resize reflow both scale with pane width.
+  const scrollback = Number.isFinite(requestedScrollback)
+    ? Math.max(0, Math.min(Math.trunc(requestedScrollback), MAX_SCROLLBACK_LINES))
+    : DEFAULT_SCROLLBACK_LINES;
   const terminal = new Terminal({
     cols: Math.max(options.size.cols, MIN_COLS),
     rows: Math.max(options.size.rows, MIN_ROWS),
-    scrollback: options.scrollback ?? DEFAULT_SCROLLBACK_LINES,
+    scrollback,
     allowProposedApi: true,
   });
   // Headless xterm defaults to Unicode 6 widths; OpenTUI measures with modern

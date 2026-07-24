@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
-import { DEFAULT_WORKSPACE_CONFIG, loadStationConfig } from "./stationConfig.js";
+import {
+  DEFAULT_WORKSPACE_CONFIG,
+  loadStationConfig,
+  MAX_SCROLLBACK_LINES,
+} from "./stationConfig.js";
 
 // The [workspace] schema, defaults, and validation are owned by @station/config
 // and covered there; this suite covers the station-side adapter — pulling the
@@ -54,6 +58,7 @@ describe("loadStationConfig", () => {
   it("reads the [workspace] section out of the runtime config", async () => {
     const path = await writeConfig(`[workspace]
 scroll_on_output = "shift"
+scrollback_lines = 5000
 overlay_width_percent = 60
 overlay_height_percent = 60
 welcome_on_boot = false`);
@@ -61,6 +66,7 @@ welcome_on_boot = false`);
     expect(result.source).toBe("file");
     expect(result.warning).toBeUndefined();
     expect(result.config.scroll_on_output).toBe("shift");
+    expect(result.config.scrollback_lines).toBe(5_000);
     expect(result.config.overlay_width_percent).toBe(60);
     expect(result.config.overlay_height_percent).toBe(60);
     expect(result.config.welcome_on_boot).toBe(false);
@@ -83,12 +89,12 @@ scroll_on_output = "follow"`);
     expect(result.config.scroll_on_output).toBe("follow");
   });
 
-  it("keeps the TUI alive with a warning when [workspace] has a bad value", async () => {
+  it("keeps the TUI alive with a warning when [workspace] exceeds the scrollback ceiling", async () => {
     const path = await writeConfig(`[workspace]
-scroll_on_output = "sideways"`);
+scrollback_lines = ${MAX_SCROLLBACK_LINES + 1}`);
     const result = await loadStationConfig({ path });
-    // Best-effort: the config still loads (source "file"), the bad section is
-    // dropped to defaults, and the typo is surfaced as a warning.
+    // Best-effort: the config still loads (source "file"), the invalid section
+    // drops to defaults, and the ceiling violation is surfaced as a warning.
     expect(result.source).toBe("file");
     expect(result.config).toEqual(DEFAULT_WORKSPACE_CONFIG);
     expect(result.warning).toBeDefined();

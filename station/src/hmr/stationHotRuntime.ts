@@ -53,7 +53,10 @@ export function getOrCreateStationHotRuntime(
   const runtime: StationHotRuntime = {
     version: STATION_HOT_RUNTIME_VERSION,
     store: createStationStore(storeOptions),
-    registry: createPtyRegistry({ scrollOnOutput: config.scroll_on_output }),
+    registry: createPtyRegistry({
+      scrollOnOutput: config.scroll_on_output,
+      scrollbackLines: config.scrollback_lines,
+    }),
   };
   slots.__stationHotRuntime = runtime;
   return runtime;
