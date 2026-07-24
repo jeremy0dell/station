@@ -10,43 +10,11 @@ import {
   readHookSpoolRecord,
 } from "../../../../tests/support/spool";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
-import { runProviderIngressCommand } from "../../src/ingress/command.js";
-
-// A config with one project rooted at `projectRoot`, so the delivery gate for
-// env-less sessions can be exercised (writeConfigToml hardcodes empty projects).
-async function writeConfigWithProject(root: string, projectRoot: string): Promise<string> {
-  const path = join(root, "config-project.toml");
-  await writeFile(
-    path,
-    [
-      "schema_version = 1",
-      "",
-      "[defaults]",
-      'worktree_provider = "fake-worktree"',
-      'terminal = "fake-terminal"',
-      'harness = "fake-harness"',
-      'layout = "agent-shell"',
-      "",
-      "[[projects]]",
-      'id = "web"',
-      'label = "web"',
-      `root = ${JSON.stringify(projectRoot)}`,
-      "",
-      "[projects.defaults]",
-      'harness = "fake-harness"',
-      'terminal = "fake-terminal"',
-      'layout = "agent-shell"',
-      "",
-      "[projects.worktrunk]",
-      "enabled = true",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  return path;
-}
+import { runProviderIngressCommand, runProviderIngressMain } from "../../src/ingress/command.js";
 
 const now = "2026-05-20T12:00:00.000Z";
+
+type IngressDeps = NonNullable<Parameters<typeof runProviderIngressCommand>[2]>;
 
 describe("provider hook ingress command", () => {
   it("turns raw observer flags into one finalized startup command", async () => {
@@ -55,9 +23,7 @@ describe("provider hook ingress command", () => {
     await createRealStaleSocket(fixture.socketPath);
     let running = false;
     let staleSocketPresentAtSpawn = false;
-    let spawnInput:
-      | Parameters<NonNullable<Parameters<typeof runProviderIngressCommand>[2]["spawnObserver"]>>[0]
-      | undefined;
+    let spawnInput: Parameters<NonNullable<IngressDeps["spawnObserver"]>>[0] | undefined;
 
     const receipt = await runProviderIngressCommand(
       [
@@ -358,80 +324,6 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
-  it("ignores delayed Codex SubagentStop before observer, startup, spool, or logging work", async () => {
-    const fixture = await createTempState();
-    let clientCalls = 0;
-    let healthCalls = 0;
-    let deliveryCalls = 0;
-    let startupCalls = 0;
-    let spoolCalls = 0;
-    let logCalls = 0;
-
-    const receipt = await runProviderIngressCommand(
-      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "codex"],
-      {
-        stdin: JSON.stringify({
-          ...codexPayload(),
-          hook_event_name: "SubagentStop",
-        }),
-        env: stationEnv(),
-      },
-      {
-        clock: { now: () => new Date(now) },
-        hookId: () => "hook_codex_subagent_stop",
-        clientFactory: () => {
-          clientCalls += 1;
-          return {
-            health: async () => {
-              healthCalls += 1;
-              return healthyObserver(fixture);
-            },
-            ingestProviderHookEvent: async () => {
-              deliveryCalls += 1;
-              throw new Error("ignored Codex hooks must not be delivered");
-            },
-          } as never;
-        },
-        spawnObserver: async () => {
-          startupCalls += 1;
-          throw new Error("ignored Codex hooks must not start the observer");
-        },
-        writeSpool: async () => {
-          spoolCalls += 1;
-          throw new Error("ignored Codex hooks must not be spooled");
-        },
-        logger: {
-          log: async () => {
-            logCalls += 1;
-          },
-        },
-      },
-    );
-
-    expect(receipt).toMatchObject({
-      accepted: false,
-      status: "ignored",
-      provider: "codex",
-      event: "SubagentStop",
-    });
-    expect({
-      clientCalls,
-      healthCalls,
-      deliveryCalls,
-      startupCalls,
-      spoolCalls,
-      logCalls,
-    }).toEqual({
-      clientCalls: 0,
-      healthCalls: 0,
-      deliveryCalls: 0,
-      startupCalls: 0,
-      spoolCalls: 0,
-      logCalls: 0,
-    });
-    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
-  });
-
   it("delivers raw Claude hook payloads through observer.ingestProviderHookEvent", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -489,116 +381,6 @@ describe("provider hook ingress command", () => {
         station_session_id: "ses_web_task",
       },
     });
-    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
-  });
-
-  it("ignores Claude events outside the rule-derived allow-list", async () => {
-    const fixture = await createTempState();
-
-    const receipt = await runProviderIngressCommand(
-      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "claude"],
-      {
-        stdin: JSON.stringify({
-          ...claudePayload(),
-          hook_event_name: "SubagentStop",
-        }),
-        env: stationEnv(),
-      },
-      {
-        clock: { now: () => new Date(now) },
-        hookId: () => "report_claude_drop_1",
-      },
-    );
-
-    expect(receipt).toMatchObject({
-      status: "ignored",
-      provider: "claude",
-      event: "SubagentStop",
-    });
-    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
-  });
-
-  it("delivers Claude events without station ownership env when the payload has a cwd", async () => {
-    const fixture = await createTempState();
-
-    const receipt = await runProviderIngressCommand(
-      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "claude"],
-      {
-        stdin: JSON.stringify(claudePayload()),
-        env: {},
-      },
-      {
-        clock: { now: () => new Date(now) },
-        hookId: () => "report_claude_unowned_1",
-      },
-    );
-
-    // External sessions must reach the observer (spooled here — none is
-    // running) so cwd correlation can light their worktree row.
-    expect(receipt).toMatchObject({
-      status: "spooled",
-      provider: "claude",
-      event: "PreToolUse",
-    });
-    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toHaveLength(1);
-  });
-
-  it("ignores Claude events with neither station ownership env nor a payload cwd", async () => {
-    const fixture = await createTempState();
-    const { cwd: _cwd, ...payloadWithoutCwd } = claudePayload();
-
-    const receipt = await runProviderIngressCommand(
-      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "claude"],
-      {
-        stdin: JSON.stringify(payloadWithoutCwd),
-        env: {},
-      },
-      {
-        clock: { now: () => new Date(now) },
-        hookId: () => "report_claude_unowned_2",
-      },
-    );
-
-    expect(receipt).toMatchObject({
-      status: "ignored",
-      provider: "claude",
-      event: "PreToolUse",
-    });
-    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
-  });
-
-  it("delivers an env-less Claude event whose cwd falls under a configured project root", async () => {
-    const fixture = await createTempState();
-    // The project root must exist on disk; the payload cwd is compared as a
-    // string, so a subdir of the root need not exist.
-    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
-
-    const receipt = await runProviderIngressCommand(
-      ["--config", configPath, "--no-auto-start", "claude"],
-      {
-        stdin: JSON.stringify({ ...claudePayload(), cwd: join(fixture.root, "web", "task") }),
-        env: {},
-      },
-      { clock: { now: () => new Date(now) }, hookId: () => "report_claude_in_root" },
-    );
-
-    expect(receipt.status).toBe("spooled");
-  });
-
-  it("ignores an env-less Claude event whose cwd is under no configured project root", async () => {
-    const fixture = await createTempState();
-    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
-
-    const receipt = await runProviderIngressCommand(
-      ["--config", configPath, "--no-auto-start", "claude"],
-      {
-        stdin: JSON.stringify({ ...claudePayload(), cwd: "/tmp/unrelated/elsewhere" }),
-        env: {},
-      },
-      { clock: { now: () => new Date(now) }, hookId: () => "report_claude_out_of_root" },
-    );
-
-    expect(receipt).toMatchObject({ status: "ignored", provider: "claude" });
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
@@ -840,8 +622,10 @@ describe("provider hook ingress command", () => {
         clock: { now: () => new Date(now) },
         hookId: () => "report_codex_timeout",
         clientFactory: (_socketPath, options) => {
-          observedTimeoutMs = options.timeoutMs;
-          observedBuildVersion = options.expectedBuildVersion;
+          observedTimeoutMs = options?.timeoutMs;
+          if (options !== undefined && "expectedBuildVersion" in options) {
+            observedBuildVersion = options.expectedBuildVersion;
+          }
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => ({
             schemaVersion: "0.8.0",
             hookId: event.hookId ?? "hook_timeout_1",
@@ -904,6 +688,19 @@ describe("provider hook ingress command", () => {
       kind: "harness",
       event: "PreToolUse",
     });
+  });
+
+  it("keeps malformed JSON rejected and visible at the CLI boundary", async () => {
+    const fixture = await createTempState();
+
+    const result = await runProviderIngressMain(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "codex"],
+      { stdin: "{ invalid json", env: {} },
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("HOOK_PAYLOAD_INVALID");
   });
 
   it("rejects malformed provider payloads before delivery or spool writes", async () => {

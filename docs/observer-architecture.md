@@ -435,8 +435,14 @@ successful observations.
 ### Provider Hook And Harness Report Ingress
 
 ```text
-raw harness hook
-    -> strict schema validation -> persist and dedupe raw hook
+raw provider hook -> required JSON parse
+    -> provider admission
+       -> unsupported: ignored with no log, readiness, startup, delivery, or spool work
+    -> sender correlation
+       -> failed: best-effort safe local info evidence -> ignored
+    -> shared event validation -> build-aware readiness / optional startup
+    -> delivery, or offline spool for an ordinary transport failure
+    -> Observer strict schema validation -> persist and dedupe raw hook
     -> Observer-side provider adapter normalization ---------+
                                                               |
 already-normalized HarnessEventReport -> strict validation ---+
@@ -445,6 +451,13 @@ already-normalized HarnessEventReport -> strict validation ---+
     -> project immediate status/events
     -> schedule reconcile for fresh provider-backed graph truth
 ```
+
+Claude, Codex, and OpenCode admission runs before sender correlation so
+unsupported native events remain deterministic zero-work. Correlation-ignore
+evidence contains only the provider, generated hook ID, ignored status, and a
+closed ownership/root reason; logging is best-effort and cannot enter readiness,
+startup, delivery, or spool policy. Cursor and Pi retain ownership-only sender
+correlation, while Worktrunk has no sender admission or correlation gate.
 
 `stn-ingress` owns build-aware delivery and writes the offline spool when a
 compatible Observer cannot be reached for an ordinary transport failure. Known

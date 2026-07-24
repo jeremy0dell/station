@@ -45,6 +45,33 @@ drain. Raw hook payloads normalize exactly once through the selected
 Observer-side provider adapter; an already-normalized `HarnessEventReport`
 bypasses that adapter.
 
+## Pre-Delivery Ordering And Evidence
+
+After required JSON parsing, `stn-ingress` resolves the provider event and applies
+Claude, Codex, and OpenCode admission before correlation. An unlisted event
+returns an `ignored` receipt without hook logging, Observer health or startup
+work, delivery, or spooling. This silent zero-work path is intentional for noisy
+or unsupported provider events.
+
+An admitted Claude or Codex event correlates through complete Station session
+and worktree ownership, or through its provider-origin cwd fallback. Without an
+explicit config, any non-empty cwd keeps the permissive external-session path;
+with configured roots, cwd must be lexically equal to or inside one of those
+roots. Cursor, Pi, and OpenCode require complete Station ownership. Worktrunk
+has neither sender admission nor a sender correlation gate.
+
+A correlation failure still returns `ignored` and performs no Observer readiness,
+startup, delivery, or spool work. It writes one best-effort `info` record to
+`logs/hooks.jsonl` with only the built-in provider, generated hook ID, ignored
+status, and one closed reason: `missing-station-ownership` or
+`cwd-outside-configured-roots`. The record never includes event names, cwd,
+configured roots, Station IDs, payload content, paths, or environment data, and
+a logging failure cannot change the receipt or trigger fallback work.
+
+Only an admitted, correlated event proceeds to shared event validation, Observer
+readiness and optional startup, delivery, compatibility handling, ordinary
+transport-failure spooling, and the existing final-receipt log.
+
 ## Rollout
 
 OpenCode is the first provider using a rule-derived ingress filter. Claude Code follows the same shape: `integrations/harness/claude/src/ingressRules.ts` is the single source of truth for both the installed hook event set (the generated `--settings` artifact registers only rule-listed events) and status projection (`statusFromClaudeHookEvent` is gated by rule presence, and `stn-ingress claude` drops unlisted event types with an `ignored` receipt). `SubagentStart`, `SubagentStop`, and `PostToolUseFailure` are deliberately absent from the Claude rules: `SubagentStop` fires after `Stop` at turn end and would flip a freshly idle row back to working.
