@@ -286,6 +286,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     launchers: resolvedLaunchers,
     git,
     harnesses,
+    harnessTracking: [],
     config,
     tmuxBinding,
   };

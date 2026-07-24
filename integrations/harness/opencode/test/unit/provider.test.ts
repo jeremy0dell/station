@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -206,6 +206,25 @@ describe("OpenCodeHarnessProvider", () => {
     });
   });
 
+  it("reports unrequested and missing plugin preparation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-provider-missing-"));
+    const env = { OPENCODE_CONFIG_DIR: root };
+
+    await expect(createOpenCodeHarnessProvider({ env }).hooksStatus?.()).resolves.toMatchObject({
+      provider: "opencode",
+      requested: false,
+      installed: false,
+    });
+    await expect(
+      createOpenCodeHarnessProvider({ env, installHooks: true }).hooksStatus?.(),
+    ).resolves.toMatchObject({
+      provider: "opencode",
+      requested: true,
+      installed: false,
+      message: expect.stringContaining("not installed"),
+    });
+  });
+
   it("uses observer plugin paths when checking installed OpenCode plugin diagnostics", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-opencode-provider-"));
     const opencodeConfigDir = join(root, "opencode");
@@ -233,7 +252,9 @@ describe("OpenCodeHarnessProvider", () => {
       runner: async (input) => result(input, "1.15.12\n"),
     });
 
-    await expect(provider.doctorChecks()).resolves.toEqual(
+    const doctorChecks = provider.doctorChecks;
+    if (doctorChecks === undefined) throw new Error("OpenCode doctor checks are unavailable.");
+    await expect(doctorChecks()).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "opencode.command",
@@ -249,6 +270,31 @@ describe("OpenCodeHarnessProvider", () => {
     await expect(readFile(pluginPath, "utf8")).resolves.toContain(
       "station-opencode-observer-plugin:v1",
     );
+    await expect(provider.hooksStatus?.()).resolves.toMatchObject({
+      provider: "opencode",
+      requested: true,
+      installed: true,
+    });
+
+    const unrequestedProvider = createOpenCodeHarnessProvider({
+      observerSocketPath,
+      stateDir,
+      hookSpoolDir,
+      env: { OPENCODE_CONFIG_DIR: opencodeConfigDir },
+    });
+    await expect(unrequestedProvider.hooksStatus?.()).resolves.toMatchObject({
+      provider: "opencode",
+      requested: false,
+      installed: false,
+    });
+
+    await writeFile(pluginPath, "// drifted\n", "utf8");
+    await expect(provider.hooksStatus?.()).resolves.toMatchObject({
+      provider: "opencode",
+      requested: true,
+      installed: false,
+      message: expect.stringContaining("not installed"),
+    });
   });
 
   it("checks plugin identity against the complete requester hook runtime", async () => {
@@ -275,8 +321,10 @@ describe("OpenCodeHarnessProvider", () => {
       runner: async (input) => result(input, "1.15.12\n"),
     });
 
+    const doctorChecks = provider.doctorChecks;
+    if (doctorChecks === undefined) throw new Error("OpenCode doctor checks are unavailable.");
     await expect(
-      provider.doctorChecks({
+      doctorChecks({
         providerHookRuntime: {
           ingressLauncher: join(root, "requester", "bin", "stn-ingress"),
           observerSocketPath: requesterObserverSocketPath,

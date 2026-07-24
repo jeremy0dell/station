@@ -79,6 +79,7 @@ export function harnessInstallPlan(facts: SetupFacts, actions: readonly SetupAct
       requiredMissing: 1,
       warnings: 0,
       selectedActions: actions.filter((action) => action.selected).length,
+      selectionSource: "unresolved",
       configPath: facts.configPath,
     },
     nextSteps: [],

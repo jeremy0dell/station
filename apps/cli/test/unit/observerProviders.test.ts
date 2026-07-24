@@ -12,7 +12,7 @@ import { openCodeHookAdapter } from "@station/opencode";
 import { createPiHarnessProvider } from "@station/pi";
 import { createStationHostController } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
-import { createProviderRegistry } from "../../src/observerProviders";
+import { createProviderRegistry, probeHarnessHooksStatus } from "../../src/observerProviders";
 
 vi.mock("@station/terminal", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@station/terminal")>();
@@ -389,6 +389,76 @@ describe("observer providers", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("probes the exact configured provider and requester hook runtime without Observer startup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-setup-provider-probe-"));
+    const configPath = join(root, "config.toml");
+    const stateDir = join(root, "state");
+    const observerSocketPath = join(root, "run", "observer.sock");
+    const hookSpoolDir = join(stateDir, "spool", "hooks");
+    const ingressLauncher = join(root, "bin", "stn-ingress");
+    await writeFile(
+      configPath,
+      [
+        "schema_version = 1",
+        "projects = []",
+        "",
+        "[observer]",
+        `state_dir = ${JSON.stringify(stateDir)}`,
+        `socket_path = ${JSON.stringify(observerSocketPath)}`,
+        "auto_start_from_hooks = false",
+        "",
+        "[defaults]",
+        'worktree_provider = "worktrunk"',
+        'terminal = "tmux"',
+        'harness = "cursor"',
+        'layout = "agent-shell"',
+        "",
+        "[harness.cursor]",
+        "enabled = true",
+        "install_hooks = true",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = root;
+    try {
+      await installCursorHooks({
+        hookBin: ingressLauncher,
+        stationConfigPath: configPath,
+        observerSocketPath,
+        stateDir,
+        hookSpoolDir,
+        autoStartFromHooks: false,
+      });
+
+      await expect(
+        probeHarnessHooksStatus("cursor", configPath, { ingressLauncher }),
+      ).resolves.toMatchObject({
+        provider: "cursor",
+        requested: true,
+        installed: true,
+      });
+      await expect(probeHarnessHooksStatus("pi", configPath)).resolves.toBeUndefined();
+    } finally {
+      if (previousCursorHome === undefined) delete process.env.STATION_CURSOR_HOME;
+      else process.env.STATION_CURSOR_HOME = previousCursorHome;
+    }
+  });
+
+  it("normalizes setup hook probe failures", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-setup-provider-probe-failure-"));
+    const configPath = join(root, "invalid.toml");
+    await writeFile(configPath, "schema_version = 1\n[defaults\n", "utf8");
+
+    await expect(probeHarnessHooksStatus("codex", configPath)).rejects.toMatchObject({
+      tag: "SetupHarnessTrackingError",
+      code: "SETUP_HARNESS_TRACKING_PROBE_FAILED",
+      provider: "codex",
+    });
   });
 
   it("passes Cursor command config into the Cursor harness provider", async () => {

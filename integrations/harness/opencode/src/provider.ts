@@ -1,6 +1,7 @@
 import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
+  HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessPermissionMode,
   HarnessProvider,
@@ -76,6 +77,7 @@ const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOpti
     normalize: (event, context) => normalizeOpenCodeRawEvent(event, context),
   },
   doctorChecks,
+  hooksStatus,
 };
 
 function command(options: OpenCodeHarnessProviderOptions): string {
@@ -142,27 +144,7 @@ async function doctorChecks(
   }
 
   try {
-    const pluginOptions: Parameters<typeof doctorOpenCodePlugin>[0] = {
-      enabled: options.installHooks === true,
-      env: options.env ?? process.env,
-    };
-    const requesterRuntime = context?.providerHookRuntime;
-    if (requesterRuntime !== undefined) {
-      pluginOptions.observerSocketPath = requesterRuntime.observerSocketPath;
-      pluginOptions.stateDir = requesterRuntime.stateDir;
-      pluginOptions.hookSpoolDir = requesterRuntime.hookSpoolDir;
-    } else {
-      if (options.observerSocketPath !== undefined) {
-        pluginOptions.observerSocketPath = options.observerSocketPath;
-      }
-      if (options.stateDir !== undefined) {
-        pluginOptions.stateDir = options.stateDir;
-      }
-      if (options.hookSpoolDir !== undefined) {
-        pluginOptions.hookSpoolDir = options.hookSpoolDir;
-      }
-    }
-    const pluginResult = await doctorOpenCodePlugin(pluginOptions);
+    const pluginResult = await doctorOpenCodePlugin(openCodePluginDoctorOptions(options, context));
     checks.push({
       name: "opencode-plugin",
       status: pluginResult.status,
@@ -184,10 +166,54 @@ async function doctorChecks(
   return checks;
 }
 
+function openCodePluginDoctorOptions(
+  options: OpenCodeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Parameters<typeof doctorOpenCodePlugin>[0] {
+  const pluginOptions: Parameters<typeof doctorOpenCodePlugin>[0] = {
+    enabled: options.installHooks === true,
+    env: options.env ?? process.env,
+  };
+  const requesterRuntime = context?.providerHookRuntime;
+  if (requesterRuntime !== undefined) {
+    pluginOptions.observerSocketPath = requesterRuntime.observerSocketPath;
+    pluginOptions.stateDir = requesterRuntime.stateDir;
+    pluginOptions.hookSpoolDir = requesterRuntime.hookSpoolDir;
+  } else {
+    if (options.observerSocketPath !== undefined) {
+      pluginOptions.observerSocketPath = options.observerSocketPath;
+    }
+    if (options.stateDir !== undefined) {
+      pluginOptions.stateDir = options.stateDir;
+    }
+    if (options.hookSpoolDir !== undefined) {
+      pluginOptions.hookSpoolDir = options.hookSpoolDir;
+    }
+  }
+  return pluginOptions;
+}
+
+async function hooksStatus(
+  options: OpenCodeHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<HarnessHooksStatus> {
+  const pluginResult = await doctorOpenCodePlugin(openCodePluginDoctorOptions(options, context));
+  const requested = options.installHooks === true;
+  const installed = requested && pluginResult.installed && !pluginResult.changed;
+  return {
+    provider: "opencode",
+    requested,
+    installed,
+    missing: installed ? [] : [pluginResult.pluginPath],
+    message: pluginResult.message,
+  };
+}
+
 /**
  * ADAPTER
  *
- * Supplies OpenCode launch, discovery, plugin diagnostics, and event normalization through the harness port.
+ * Supplies OpenCode launch, discovery, plugin-installation status, diagnostics, and event
+ * normalization through the harness port.
  */
 export function createOpenCodeHarnessProvider(
   options: OpenCodeHarnessProviderOptions = {},

@@ -26,6 +26,11 @@ export type MachineProfileState = {
   gitDelta: ToolPresence;
   // Detected agent CLIs, e.g. ["codex"]. Empty means no supported harness.
   harnesses: string[];
+  // Deterministic provider hook-status results keyed by harness id.
+  harnessTracking?: Record<
+    string,
+    "prepared" | "missing" | "drifted" | "probe-failed" | "unsupported"
+  >;
   // Optional valid STATION config TOML; when present a happy machine can reach
   // requiredOk: true. {{REPO}} is replaced with the temp repo path by the adapter.
   configToml?: string;
@@ -58,6 +63,7 @@ const linuxAllTools: MachineProfileState = {
   diffnav: "present",
   gitDelta: "present",
   harnesses: ["codex"],
+  harnessTracking: { codex: "prepared" },
 };
 
 // A valid first-project config; {{REPO}} is replaced with the temp repo path.
@@ -73,6 +79,11 @@ const readyConfigToml = [
   'terminal = "tmux"',
   'harness = "codex"',
   'layout = "agent-shell"',
+  "",
+  "[harness.codex]",
+  "enabled = true",
+  'command = "codex"',
+  "install_hooks = true",
   "",
   "[[projects]]",
   'id = "repo"',
@@ -95,6 +106,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         bun: "ok",
         "git-project": "ok",
         harness: "ok",
+        "harness-tracking:codex": "ok",
         diffnav: "ok",
         "git-delta": "ok",
         config: "ok",

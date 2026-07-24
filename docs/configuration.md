@@ -14,9 +14,11 @@ the writer. Setup writes `projects = []` and never infers a project from its
 working directory; use the empty dashboard's **Add your first project** flow to
 choose an existing Git repository explicitly. After every successful guided or
 non-interactive setup config write, setup starts or restarts the observer and
-waits for it to become healthy with the updated configuration. If activation
-fails, setup retains the config, exits nonzero, and points to
-`stn observer restart`. This exception applies only to the implicit default
+waits for it to become healthy with the updated configuration. Only after
+activation succeeds does setup install remaining tracking artifacts and perform
+a final read-only re-probe. If activation fails, setup retains the config, exits
+nonzero, and prints both `stn observer restart` and the setup command that must
+follow it. This exception applies only to the implicit default
 path: a missing explicit `--config`, an unreadable file, malformed TOML, or
 invalid config still stops launch with an error.
 
@@ -147,8 +149,19 @@ configured harnesses remain available for explicit selection.
 | `permission_mode` | `standard` \| `yolo` | **`auto` is accepted only under `[harness.claude]`.** |
 | `sandbox_mode` | string | Free-form, e.g. codex `"workspace-write"`. |
 | `approval_policy` | string | Free-form, e.g. codex `"on-request"`. |
-| `install_hooks` | bool | Whether STATION installs provider hooks for this harness. |
+| `install_hooks` | bool | Station intent to install and require its tracking artifacts for this harness; it does not prove the files are current or that the provider executed them. |
 | `resume` | bool | Whether to resume sessions. |
+
+Setup requires the effective global default harness, plus any harness explicitly
+selected in the current guided run, to be runnable. For Claude, Codex, Cursor,
+and OpenCode, preparation also requires `install_hooks = true` and a successful
+read-only probe of the current Station-owned artifacts. Other configured
+non-default harnesses remain visible but do not block global setup. Pi loads its
+Station extension in process and has no equivalent external hook artifact.
+
+Artifact preparation is not runtime delivery proof. In particular, Codex may
+still require review of Station's current hook definition through `/hooks`.
+Setup neither bypasses nor verifies that review.
 
 Harness command fallback env vars:
 

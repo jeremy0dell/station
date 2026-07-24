@@ -152,6 +152,7 @@ function systemPlan(actions: SetupAction[]): SetupPlan {
       requiredMissing: 0,
       warnings: 0,
       selectedActions: actions.length,
+      selectionSource: "unresolved",
       configPath: "",
     },
     nextSteps: [],
