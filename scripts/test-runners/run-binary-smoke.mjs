@@ -142,6 +142,12 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       const help = await run(binaryPath, ["--help"], { env: childEnv });
       assertIncludes(help.stdout, "Usage:", "compiled --help");
 
+      await verifyCompiledGitFailure({
+        binaryPath,
+        installedRoot,
+        root: join(root, "git-setup-canary"),
+      });
+
       const popupHelp = await run(join(dirname(binaryPath), "stn-tmux-popup"), ["--help"], {
         env: childEnv,
       });
@@ -153,6 +159,8 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         allowedExitCodes: [1],
       });
       const setupPlan = JSON.parse(setup.stdout);
+      const healthyGitCheck = setupPlan.checks.find((check) => check.id === "git-project");
+      assertEqual(healthyGitCheck?.status, "ok", "compiled setup healthy Git status");
       assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
       assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
       assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
@@ -1118,7 +1126,7 @@ async function verifyCompiledInaccessibleObserver(input) {
     { env: input.childEnv },
   );
   assertEqual(
-    JSON.parse(restoredStatus.stdout).health?.pid,
+    parseSmokeJson(restoredStatus.stdout, "compiled restored observer status").health?.pid,
     input.observerPid,
     "compiled restored observer identity",
   );
@@ -1165,6 +1173,94 @@ async function waitForDirectoryFileCount(directory, expected) {
     await delay(25);
   }
   fail(`directory file count did not reach ${expected}: ${directory}`);
+}
+
+async function verifyCompiledGitFailure({ binaryPath, installedRoot, root }) {
+  const homeDir = join(root, "home");
+  const runtimeDir = join(root, "runtime");
+  const stateDir = join(root, "state");
+  const cwd = join(root, "outside-repository");
+  const fakeBin = join(root, "fake-bin");
+  const configPath = join(root, "config.toml");
+  await Promise.all(
+    [homeDir, join(homeDir, "tmp"), runtimeDir, stateDir, cwd, fakeBin].map((path) =>
+      mkdir(path, { recursive: true, mode: 0o700 }),
+    ),
+  );
+  await Promise.all([
+    writeFile(
+      join(fakeBin, "git"),
+      [
+        "#!/bin/sh",
+        'if [ "$1" = --version ]; then',
+        "  echo 'xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun' >&2",
+        "  exit 1",
+        "fi",
+        "echo 'unexpected repository probe after failed git --version' >&2",
+        "exit 97",
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    ),
+    writeFile(join(fakeBin, "wt"), "#!/bin/sh\necho 'worktrunk 1.2.3'\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "tmux"), "#!/bin/sh\necho 'tmux 3.5a'\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
+    writeFile(
+      configPath,
+      [
+        "schema_version = 1",
+        "projects = []",
+        "",
+        "[observer]",
+        `state_dir = ${JSON.stringify(stateDir)}`,
+        "",
+        "[defaults]",
+        'worktree_provider = "worktrunk"',
+        'terminal = "tmux"',
+        'harness = "pi"',
+        'layout = "agent-shell"',
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    ),
+  ]);
+
+  const env = {
+    ...isolatedBinaryEnv({ homeDir, runtimeDir }),
+    PATH: `${fakeBin}:${installedRoot}:/usr/bin:/bin`,
+  };
+  const result = await run(
+    binaryPath,
+    ["--config", configPath, "setup", "check", "--json", "--no-brew"],
+    { cwd, env, allowedExitCodes: [1] },
+  );
+  const plan = parseSmokeJson(result.stdout, "compiled Git canary setup plan");
+  const requiredFailures = plan.checks.filter(
+    (check) => check.tier === "required" && check.status === "missing",
+  );
+  const gitCheck = plan.checks.find((check) => check.id === "git-project");
+
+  assertEqual(result.code, 1, "compiled Git canary exit code");
+  assertEqual(gitCheck?.status, "missing", "compiled Git canary git-project status");
+  assertEqual(gitCheck?.details?.reason, "git-unusable", "compiled Git canary reason");
+  assertIncludes(
+    gitCheck?.message ?? "",
+    "Git is installed but unusable.",
+    "compiled Git canary unusable message",
+  );
+  assertIncludes(gitCheck?.message ?? "", "xcode-select --install", "compiled Git remediation");
+  assertEqual(requiredFailures.length, 1, "compiled Git canary required failure count");
+  assertEqual(plan.summary.requiredMissing, 1, "compiled Git canary requiredMissing");
+  assertEqual(plan.summary.workflowReady, false, "compiled Git canary workflowReady");
+  assertEqual(plan.summary.requiredOk, false, "compiled Git canary requiredOk");
+  assertEqual(plan.summary.launchReady, true, "compiled Git canary launchReady");
+  assertEqual(
+    plan.checks.some((check) => check.id === "command-line-tools"),
+    false,
+    "compiled Git canary omits Command Line Tools",
+  );
 }
 
 async function writeWorktrunkHookSmokeConfig(path, state, socket, worktrunkConfigPath) {
@@ -2059,6 +2155,14 @@ function signalProcess(pid, signal) {
   } catch (error) {
     if (error?.code === "ESRCH") return false;
     throw error;
+  }
+}
+
+function parseSmokeJson(source, label) {
+  try {
+    return JSON.parse(source);
+  } catch {
+    fail(`${label} did not return valid JSON`);
   }
 }
 

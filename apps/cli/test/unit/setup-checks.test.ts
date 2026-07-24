@@ -1,10 +1,11 @@
 import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
-import type {
-  ExternalCommandInput,
-  ExternalCommandResult,
-  ExternalCommandRunner,
+import {
+  type ExternalCommandInput,
+  type ExternalCommandResult,
+  type ExternalCommandRunner,
+  gitLocalEnvironmentVariables,
 } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -162,10 +163,10 @@ describe("setup dependency checks", () => {
     expect(unlinked).toEqual([join(path, ".probe")]);
   });
 
-  it("skips source renderer and Xcode probes in compiled setup", async () => {
+  it("accepts working custom Git without probing Xcode in compiled Darwin setup", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
-    await mkdir(repo, { recursive: true });
+    await mkdir(join(repo, ".git"), { recursive: true });
     const calls: ExternalCommandInput[] = [];
     const stationUiInstalled = vi.fn(async () => false);
 
@@ -175,7 +176,7 @@ describe("setup dependency checks", () => {
       homeDir: join(root, "home"),
       compiled: true,
       platform: "darwin",
-      env: { PATH: "/fake/bin" },
+      env: { PATH: "/fake/bin", GIT_DIR: "/inherited/repository" },
       runner: fakeRunner(calls, {
         "git rev-parse --show-toplevel": repo,
         "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
@@ -185,7 +186,17 @@ describe("setup dependency checks", () => {
       stationUiInstalled,
     });
     const plan = buildSetupPlan(facts);
+    const versionCall = calls.find(
+      (call) => call.command === "git" && call.args?.join(" ") === "--version",
+    );
 
+    expect(facts.git).toMatchObject({ status: "ok", repository: "present", root: repo });
+    expect(versionCall).toMatchObject({
+      env: expect.objectContaining({ LC_ALL: "C", LANG: "C" }),
+      unsetEnv: gitLocalEnvironmentVariables,
+    });
+    expect(versionCall).not.toHaveProperty("cwd");
+    expect(versionCall?.env).not.toHaveProperty("GIT_DIR");
     expect(stationUiInstalled).not.toHaveBeenCalled();
     expect(calls.some((call) => call.command === "xcode-select")).toBe(false);
     expect(plan.summary.launchReady).toBe(true);
@@ -1907,46 +1918,248 @@ describe("checkSetupXcode", () => {
 });
 
 describe("checkSetupGit", () => {
-  it("distinguishes a missing git binary from a missing repository", async () => {
+  const tempRoots: string[] = [];
+  const canonicalNotRepository =
+    "fatal: not a git repository (or any of the parent directories): .git";
+
+  afterEach(async () => {
+    await Promise.all(
+      tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+    );
+  });
+
+  it("reports Git absent when the version probe cannot find the binary", async () => {
+    const calls: ExternalCommandInput[] = [];
     const absent = await checkSetupGit({
       env: { PATH: "/fake/bin" },
       cwd: tmpdir(),
-      runner: fakeRunner([], {}),
-    });
-    expect(absent).toMatchObject({ status: "missing", reason: "git-absent" });
-    if (absent.status !== "missing") throw new Error("expected missing git");
-    expect(absent.message).toContain("xcode-select --install");
-
-    const notARepo = await checkSetupGit({
-      env: { PATH: "/fake/bin" },
-      cwd: tmpdir(),
-      // git resolves but rev-parse fails with a non-ENOENT exit code.
-      runner: async () => {
-        throw Object.assign(new Error("not a git repository"), { code: 128 });
+      runner: async (input) => {
+        calls.push(input);
+        throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT" });
       },
     });
-    expect(notARepo).toMatchObject({ status: "missing", reason: "not-a-repo" });
+
+    expect(absent).toMatchObject({ status: "missing", reason: "git-absent" });
+    expect(calls.map((call) => call.args)).toEqual([["--version"]]);
   });
 
-  it("gives the safe.directory remediation when git refuses for dubious ownership", async () => {
-    const dubious = await checkSetupGit({
-      env: { PATH: "/fake/bin" },
-      cwd: "/tmp/owned-by-root",
-      // git runs but exits 128 with a dubious-ownership message; the user IS inside
-      // the repo, so the remediation must point at safe.directory, not "not a repo".
-      runner: async () => {
-        throw Object.assign(
-          new Error("fatal: detected dubious ownership in repository at '/tmp/owned-by-root'"),
-          {
-            code: 128,
-            stderr: "fatal: detected dubious ownership in repository at '/tmp/owned-by-root'",
-          },
-        );
+  it("reports an Apple shim version failure as unusable without probing a repository", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const stderr = [
+      "xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools),",
+      "missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun",
+    ].join(" ");
+    const unusable = await checkSetupGit({
+      cwd: tmpdir(),
+      runner: async (input) => {
+        calls.push(input);
+        throw Object.assign(new Error(stderr), { code: 1, stderr });
       },
     });
-    expect(dubious).toMatchObject({ status: "missing", reason: "not-a-repo" });
-    if (dubious.status !== "missing") throw new Error("expected missing git");
-    expect(dubious.message).toContain("safe.directory");
+
+    expect(unusable).toMatchObject({ status: "missing", reason: "git-unusable" });
+    if (unusable.status !== "missing") throw new Error("expected unusable Git");
+    expect(unusable.message).toContain("xcode-select --install");
+    expect(calls.map((call) => call.args)).toEqual([["--version"]]);
+  });
+
+  it("reports malformed version output as unusable without probing a repository", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const unusable = await checkSetupGit({
+      cwd: tmpdir(),
+      runner: fakeRunner(calls, { "git --version": "Apple developer tools unavailable\n" }),
+    });
+
+    expect(unusable).toMatchObject({ status: "missing", reason: "git-unusable" });
+    expect(calls.map((call) => call.args)).toEqual([["--version"]]);
+  });
+
+  it("reports working Git outside a repository as healthy when no marker exists", async () => {
+    const root = await tempRoot(tempRoots);
+    const calls: ExternalCommandInput[] = [];
+    const outside = await checkSetupGit({
+      cwd: root,
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(canonicalNotRepository), {
+          code: 128,
+          stderr: canonicalNotRepository,
+        });
+      },
+    });
+
+    expect(outside).toEqual({
+      status: "ok",
+      repository: "absent",
+      defaultBranch: "main",
+      message: "Git is available; choose a project explicitly in STATION.",
+    });
+  });
+
+  it("reports working Git at a filesystem discovery boundary as healthy", async () => {
+    const stderr = [
+      "fatal: not a git repository (or any parent up to mount point /external)",
+      "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+    ].join("\n");
+    const outside = await checkSetupGit({
+      cwd: tmpdir(),
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(stderr), { code: 128, stderr });
+      },
+    });
+
+    expect(outside).toMatchObject({ status: "ok", repository: "absent" });
+  });
+
+  it("honors Git's discovery ceiling when checking for repository intent", async () => {
+    const root = await tempRoot(tempRoots);
+    const repository = join(root, "repo");
+    const cwd = join(repository, "child");
+    await mkdir(join(repository, ".git"), { recursive: true });
+    await mkdir(cwd);
+
+    const outside = await checkSetupGit({
+      cwd,
+      env: { GIT_CEILING_DIRECTORIES: repository },
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(canonicalNotRepository), {
+          code: 128,
+          stderr: canonicalNotRepository,
+        });
+      },
+    });
+
+    expect(outside).toMatchObject({ status: "ok", repository: "absent" });
+  });
+
+  it("reports a healthy repository with its root and best-effort default branch", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+
+    const healthy = await checkSetupGit({
+      cwd: repo,
+      env: { PATH: "/fake/bin", GIT_WORK_TREE: "/inherited/worktree" },
+      runner: fakeRunner(calls, {
+        "git rev-parse --show-toplevel": `${repo}\n`,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/trunk\n",
+      }),
+    });
+
+    expect(healthy).toEqual({
+      status: "ok",
+      repository: "present",
+      root: repo,
+      defaultBranch: "trunk",
+      repoName: "repo",
+    });
+    expect(calls[0]).toMatchObject({
+      command: "git",
+      args: ["--version"],
+      env: expect.objectContaining({ LC_ALL: "C", LANG: "C" }),
+      unsetEnv: gitLocalEnvironmentVariables,
+    });
+    expect(calls[0]).not.toHaveProperty("cwd");
+    expect(calls[0]?.env).not.toHaveProperty("GIT_WORK_TREE");
+  });
+
+  it("fails a canonical non-repository error when a repository marker exists", async () => {
+    const root = await tempRoot(tempRoots);
+    await mkdir(join(root, ".git"));
+    const failed = await checkSetupGit({
+      cwd: root,
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(canonicalNotRepository), {
+          code: 128,
+          stderr: canonicalNotRepository,
+        });
+      },
+    });
+
+    expect(failed).toMatchObject({ status: "missing", reason: "repository-unusable" });
+  });
+
+  it("gives scoped safe.directory guidance when the repository path contains an apostrophe", async () => {
+    const root = await tempRoot(tempRoots);
+    const repository = join(root, "O'Brien", "repo");
+    await mkdir(repository, { recursive: true });
+    const stderr = `fatal: detected dubious ownership in repository at '${repository}'`;
+    const dubious = await checkSetupGit({
+      cwd: repository,
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(stderr), { code: 128, stderr });
+      },
+    });
+
+    expect(dubious).toMatchObject({ status: "missing", reason: "dubious-ownership" });
+    if (dubious.status !== "missing") throw new Error("expected dubious repository");
+    const quotedRepository = `'${repository.replaceAll("'", `'\\''`)}'`;
+    expect(dubious.message).toContain(
+      `git config --global --add safe.directory ${quotedRepository}`,
+    );
+  });
+
+  it.each([
+    {
+      name: "corrupt config",
+      error: Object.assign(new Error("fatal: bad config line 1 in file .git/config"), {
+        code: 128,
+        stderr: "fatal: bad config line 1 in file .git/config",
+      }),
+    },
+    {
+      name: "permission failure",
+      error: Object.assign(new Error("permission denied"), { code: "EACCES" }),
+    },
+  ])("reports $name as an unusable repository", async ({ error }) => {
+    const root = await tempRoot(tempRoots);
+    const failed = await checkSetupGit({
+      cwd: root,
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw error;
+      },
+    });
+
+    expect(failed).toMatchObject({ status: "missing", reason: "repository-unusable" });
+  });
+
+  it("keeps remote and branch probe failures non-fatal after finding the repository root", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+
+    const healthy = await checkSetupGit({
+      cwd: repo,
+      runner: fakeRunner([], {
+        "git rev-parse --show-toplevel": `${repo}\n`,
+      }),
+    });
+
+    expect(healthy).toMatchObject({
+      status: "ok",
+      repository: "present",
+      root: repo,
+      defaultBranch: "main",
+    });
   });
 });
 
@@ -1989,7 +2202,18 @@ function fakeBinOutput(
 }
 
 function defaultProbeOutput(key: string): string | undefined {
+  if (key === "git --version") return "git version 2.49.0\n";
   return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
+}
+
+function externalCommandResult(input: ExternalCommandInput, stdout: string): ExternalCommandResult {
+  return {
+    command: input.command,
+    args: input.args ?? [],
+    stdout,
+    stderr: "",
+    exitCode: 0,
+  };
 }
 
 function fakeAccess(paths: readonly string[]): (path: string) => Promise<void> {

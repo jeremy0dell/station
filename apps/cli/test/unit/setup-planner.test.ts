@@ -555,32 +555,67 @@ describe("setup planner", () => {
     ]);
   });
 
-  it("treats Git outside a repository as ready for first-project selection", () => {
+  it("keeps working Git outside a repository green for first-project selection", () => {
     const config = validConfigFact({ hasProjectForRoot: false });
     delete config.matchedProject;
 
     const plan = buildSetupPlan(
       facts({
         git: {
-          status: "missing",
-          reason: "not-a-repo",
+          status: "ok",
+          repository: "absent",
           defaultBranch: "main",
-          message: "Choose a project after setup.",
+          message: "Git is available; choose a project explicitly in STATION.",
         },
         config,
       }),
     );
 
-    expect(plan.checks.find((check) => check.id === "git-project")).toMatchObject({
+    expect(plan.checks.find((check) => check.id === "git-project")).toEqual({
+      id: "git-project",
+      tier: "required",
       status: "ok",
       label: "Git",
-      message: expect.stringContaining("choose a project"),
+      message: "Git is available; choose a project explicitly in STATION.",
+      details: { defaultBranch: "main" },
     });
     expect(plan.checks.find((check) => check.id === "config")).toMatchObject({
       status: "ok",
     });
     expect(plan.summary.requiredOk).toBe(true);
     expect(plan.nextSteps).toEqual(["stn doctor", "stn"]);
+  });
+
+  it.each([
+    { name: "absent Git", reason: "git-absent" as const },
+    { name: "unusable Git", reason: "git-unusable" as const },
+    { name: "dubious ownership", reason: "dubious-ownership" as const },
+    { name: "corrupt repository metadata", reason: "repository-unusable" as const },
+  ])("keeps $name red and uses its remediation as the next step", ({ name, reason }) => {
+    const message = `${name} remediation.`;
+    const plan = buildSetupPlan(
+      facts({
+        git: {
+          status: "missing",
+          reason,
+          defaultBranch: "main",
+          message,
+        },
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "git-project")).toMatchObject({
+      tier: "required",
+      status: "missing",
+      message,
+      details: { defaultBranch: "main", reason },
+    });
+    expect(plan.summary).toMatchObject({
+      workflowReady: false,
+      requiredOk: false,
+      requiredMissing: 1,
+    });
+    expect(plan.nextSteps).toEqual([message]);
   });
 
   it("plans the optional tmux popup binding with the preserved key and exact command", () => {
@@ -1052,6 +1087,7 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
     },
     git: {
       status: "ok",
+      repository: "present",
       root: "/tmp/repo",
       defaultBranch: "main",
       repoName: "repo",

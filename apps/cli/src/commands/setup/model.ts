@@ -165,21 +165,40 @@ export type SetupXcodeFact =
       message: string;
     };
 
+type SetupGitRepositoryFact = {
+  status: "ok";
+  repository: "present";
+  root: string;
+  defaultBranch: string;
+  repoName: string;
+};
+
+type SetupGitOutsideRepositoryFact = {
+  status: "ok";
+  repository: "absent";
+  defaultBranch: string;
+  message: string;
+};
+
+type SetupGitCapabilityFailureFact = {
+  status: "missing";
+  reason: "git-absent" | "git-unusable";
+  defaultBranch: string;
+  message: string;
+};
+
+type SetupGitRepositoryFailureFact = {
+  status: "missing";
+  reason: "repository-unusable" | "dubious-ownership";
+  defaultBranch: string;
+  message: string;
+};
+
 export type SetupGitFact =
-  | {
-      status: "ok";
-      root: string;
-      defaultBranch: string;
-      repoName: string;
-    }
-  | {
-      status: "missing";
-      // "git-absent": the git binary is not installed (bare-machine case).
-      // "not-a-repo": git works but the cwd is not inside a repository.
-      reason: "git-absent" | "not-a-repo";
-      defaultBranch: string;
-      message: string;
-    };
+  | SetupGitRepositoryFact
+  | SetupGitOutsideRepositoryFact
+  | SetupGitCapabilityFailureFact
+  | SetupGitRepositoryFailureFact;
 
 export type SetupHarnessFact = {
   id: SupportedHarnessId;

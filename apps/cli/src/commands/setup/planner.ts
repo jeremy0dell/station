@@ -577,39 +577,37 @@ function gitDeltaCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
+type GitCheckAssessment = Pick<SetupCheck, "status" | "message" | "details">;
+
 function gitCheck(facts: SetupFacts): SetupCheck {
-  if (facts.git.status === "ok") {
-    return {
-      id: "git-project",
-      tier: "required",
-      status: "ok",
-      label: "Git",
-      message: "Git is available; choose projects explicitly in STATION.",
-      details: {
-        root: facts.git.root,
-        defaultBranch: facts.git.defaultBranch,
-      },
-    };
-  }
-  if (facts.git.reason === "not-a-repo") {
-    return {
-      id: "git-project",
-      tier: "required",
-      status: "ok",
-      label: "Git",
-      message: "Git is available; choose a project explicitly in STATION.",
-      details: { defaultBranch: facts.git.defaultBranch },
-    };
-  }
+  const assessment = assessGit(facts.git);
   return {
     id: "git-project",
     tier: "required",
-    status: "missing",
     label: "Git",
-    message: facts.git.message,
-    details: {
-      defaultBranch: facts.git.defaultBranch,
-    },
+    ...assessment,
+  };
+}
+
+function assessGit(git: SetupFacts["git"]): GitCheckAssessment {
+  if (git.status === "missing") {
+    return {
+      status: "missing",
+      message: git.message,
+      details: { defaultBranch: git.defaultBranch, reason: git.reason },
+    };
+  }
+  if (git.repository === "absent") {
+    return {
+      status: "ok",
+      message: git.message,
+      details: { defaultBranch: git.defaultBranch },
+    };
+  }
+  return {
+    status: "ok",
+    message: "Git is available; choose projects explicitly in STATION.",
+    details: { root: git.root, defaultBranch: git.defaultBranch },
   };
 }
 
@@ -1077,7 +1075,7 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   if (facts.bun.status === "missing") {
     return ["Install Bun (brew install bun), then run: stn setup check"];
   }
-  if (facts.git.status === "missing" && facts.git.reason === "git-absent") {
+  if (facts.git.status === "missing") {
     return [facts.git.message];
   }
   if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {
