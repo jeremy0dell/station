@@ -90,6 +90,8 @@ warning rather than refusing to start.
   accumulates below), `shift` holds a fixed distance from the bottom (the view
   slides), `follow` snaps back to the live bottom. At the bottom every mode
   tracks live output identically.
+- `scrollback_lines` (non-negative integer, default `10000`) — normal-buffer
+  history retained by each pane; changes apply to newly created panes.
 
 ## Persistence (aux panes + layout)
 

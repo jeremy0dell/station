@@ -19,11 +19,12 @@ import { ScrollbackRing } from "./scrollbackRing.js";
 
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
-const DEFAULT_SCROLLBACK_BYTES = 256 * 1024;
+const DEFAULT_SCROLLBACK_BYTES = 10_000_000;
 
 export type PtyTableOptions = {
   /** Test seam: inject a fake terminal so unit tests need no real node-pty. */
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
+  /** Per-PTY warm-reattach replay budget; defaults to 10,000,000 bytes. */
   maxScrollbackBytes?: number;
   /** Lifecycle observability — redaction-safe ids/counts only, never PTY data/env. */
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
@@ -117,7 +118,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     emit("agent.exit", { ptyId: entry.ptyId, exitCode: exitFrame.exitCode, reason });
   }
 
-  function require(ptyId: string): PtyEntry {
+  function requireEntry(ptyId: string): PtyEntry {
     const entry = entries.get(ptyId);
     if (entry === undefined) {
       throw new StationHostProviderError("HOST_PTY_NOT_FOUND", `No host PTY "${ptyId}".`);
@@ -216,11 +217,11 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     write(ptyId, data) {
-      require(ptyId).terminal.write(data);
+      requireEntry(ptyId).terminal.write(data);
     },
 
     resize(ptyId, cols, rows) {
-      const entry = require(ptyId);
+      const entry = requireEntry(ptyId);
       entry.cols = Math.max(MIN_COLS, cols);
       entry.rows = Math.max(MIN_ROWS, rows);
       entry.terminal.resize({ cols: entry.cols, rows: entry.rows });
@@ -242,7 +243,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     snapshot(ptyId) {
-      const entry = require(ptyId);
+      const entry = requireEntry(ptyId);
       const { scrollback, truncated } = entry.ring.snapshot();
       return {
         pid: entry.terminal.pid,

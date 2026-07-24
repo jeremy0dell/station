@@ -232,6 +232,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     stationClient,
     registry: stationRuntime.registry,
     scrollOnOutput: stationConfig.config.scroll_on_output,
+    scrollbackLines: stationConfig.config.scrollback_lines,
     overlayWidthPercent: stationConfig.config.overlay_width_percent,
     overlayHeightPercent: stationConfig.config.overlay_height_percent,
     automations: stationConfig.config.automations,

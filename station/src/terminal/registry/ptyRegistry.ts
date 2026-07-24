@@ -87,11 +87,15 @@ export type PtyRegistryRuntimeOptions = {
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
   /** Required so HMR can intentionally clear or change the default. */
   scrollOnOutput: ScrollOnOutputMode | undefined;
+  /** Required so HMR refreshes the configured history depth for future lazy spawns. */
+  scrollbackLines: number | undefined;
 };
 
 export type PtyRegistryOptions = {
   /** Test seam; production uses the local PTY bridge. */
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
+  /** Normal-buffer history retained by screens created after this option is applied. */
+  scrollbackLines?: number;
   /** Injectable for deterministic resize-debounce tests. */
   resizeDebounceMs?: number;
   /** Injectable for deterministic geometry-divergence tests. */
@@ -134,6 +138,7 @@ type InternalEntry = {
 export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry {
   let createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   let scrollOnOutput = options.scrollOnOutput;
+  let scrollbackLines = options.scrollbackLines;
   const resizeDebounceMs = options.resizeDebounceMs ?? DEFAULT_RESIZE_DEBOUNCE_MS;
   const geometrySettleMs = options.geometrySettleMs ?? GEOMETRY_SETTLE_MS;
   const entries = new Map<PaneId, InternalEntry>();
@@ -184,6 +189,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     const screen = createStationVtScreen({
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
+      ...(scrollbackLines === undefined ? {} : { scrollback: scrollbackLines }),
       diagnosticsLabel: entry.paneId,
       onResponse: (data) => {
         // A replayed snapshot re-parses queries the child issued long ago
@@ -432,6 +438,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         createTerminal = nextOptions.createTerminal;
       }
       scrollOnOutput = nextOptions.scrollOnOutput;
+      scrollbackLines = nextOptions.scrollbackLines;
     },
 
     dispose: (paneId) => {

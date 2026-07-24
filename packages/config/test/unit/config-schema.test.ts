@@ -11,8 +11,8 @@ import { describe, expect, it } from "vitest";
 
 const fixtureUrl = (path: string) => new URL(`../fixtures/${path}`, import.meta.url);
 
-async function loadJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(fixtureUrl(path), "utf8"));
+async function loadJson(path: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(fixtureUrl(path), "utf8")) as Record<string, unknown>;
 }
 
 describe("config schemas", () => {
@@ -248,7 +248,7 @@ describe("config schemas", () => {
 });
 
 describe("workspace config", () => {
-  it("fills an empty [workspace] with defaults (60% overlay, freeze, welcome on, see-diff)", () => {
+  it("fills an empty [workspace] with defaults (10k scrollback, 60% overlay, freeze, welcome on, see-diff)", () => {
     const workspace = WorkspaceConfigSchema.parse({});
     const expectedWatchCommand =
       'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
@@ -259,6 +259,7 @@ describe("workspace config", () => {
     ].join(" ");
 
     expect(workspace.scroll_on_output).toBe("freeze");
+    expect(workspace.scrollback_lines).toBe(10_000);
     expect(workspace.overlay_width_percent).toBe(60);
     expect(workspace.overlay_height_percent).toBe(60);
     expect(workspace.welcome_on_boot).toBe(true);
@@ -283,11 +284,13 @@ describe("workspace config", () => {
   it("accepts the valid scroll-on-output modes and applies per-step automation defaults", () => {
     const workspace = WorkspaceConfigSchema.parse({
       scroll_on_output: "shift",
+      scrollback_lines: 25_000,
       overlay_width_percent: 70,
       overlay_height_percent: 65,
       automations: [{ id: "build", label: "Build", steps: [{ command: "pnpm build" }] }],
     });
     expect(workspace.scroll_on_output).toBe("shift");
+    expect(workspace.scrollback_lines).toBe(25_000);
     expect(workspace.overlay_width_percent).toBe(70);
     expect(workspace.overlay_height_percent).toBe(65);
     expect(workspace.automations[0]?.steps[0]).toMatchObject({
@@ -370,6 +373,8 @@ describe("workspace config", () => {
 
   it("rejects an unknown scroll mode, unknown keys, stepless and duplicate automations", () => {
     expect(WorkspaceConfigSchema.safeParse({ scroll_on_output: "bounce" }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ scrollback_lines: -1 }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ scrollback_lines: 1.5 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ overlay_width_percent: 101 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ overlay_height_percent: 9 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ welcome: true }).success).toBe(false);
