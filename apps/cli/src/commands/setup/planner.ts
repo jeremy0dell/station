@@ -594,7 +594,7 @@ function assessGit(git: SetupFacts["git"]): GitCheckAssessment {
     return {
       status: "missing",
       message: git.message,
-      details: { defaultBranch: git.defaultBranch },
+      details: { defaultBranch: git.defaultBranch, reason: git.reason },
     };
   }
   if (git.repository === "absent") {

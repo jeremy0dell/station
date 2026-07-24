@@ -113,7 +113,7 @@ export function renderSetupApplyResult(
     );
   }
   if (missing?.id === "git-project") {
-    return missingResult(missing.message, "Then run:", theme);
+    return `${theme.bold(theme.red(missing.message))}\n`;
   }
   if (missing?.id === "harness") {
     return missingResult(missing.message, "Resolve the agent selection, then run:", theme);

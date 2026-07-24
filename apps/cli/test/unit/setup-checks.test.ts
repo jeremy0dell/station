@@ -1999,6 +1999,48 @@ describe("checkSetupGit", () => {
     });
   });
 
+  it("reports working Git at a filesystem discovery boundary as healthy", async () => {
+    const stderr = [
+      "fatal: not a git repository (or any parent up to mount point /external)",
+      "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+    ].join("\n");
+    const outside = await checkSetupGit({
+      cwd: tmpdir(),
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(stderr), { code: 128, stderr });
+      },
+    });
+
+    expect(outside).toMatchObject({ status: "ok", repository: "absent" });
+  });
+
+  it("honors Git's discovery ceiling when checking for repository intent", async () => {
+    const root = await tempRoot(tempRoots);
+    const repository = join(root, "repo");
+    const cwd = join(repository, "child");
+    await mkdir(join(repository, ".git"), { recursive: true });
+    await mkdir(cwd);
+
+    const outside = await checkSetupGit({
+      cwd,
+      env: { GIT_CEILING_DIRECTORIES: repository },
+      runner: async (input) => {
+        if (input.args?.[0] === "--version") {
+          return externalCommandResult(input, "git version 2.49.0\n");
+        }
+        throw Object.assign(new Error(canonicalNotRepository), {
+          code: 128,
+          stderr: canonicalNotRepository,
+        });
+      },
+    });
+
+    expect(outside).toMatchObject({ status: "ok", repository: "absent" });
+  });
+
   it("reports a healthy repository with its root and best-effort default branch", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -2050,10 +2092,10 @@ describe("checkSetupGit", () => {
     expect(failed).toMatchObject({ status: "missing", reason: "repository-unusable" });
   });
 
-  it("gives scoped safe.directory guidance for dubious ownership", async () => {
+  it("gives scoped safe.directory guidance when the repository path contains an apostrophe", async () => {
     const root = await tempRoot(tempRoots);
-    const repository = join(root, "owned-by-root");
-    await mkdir(repository);
+    const repository = join(root, "O'Brien", "repo");
+    await mkdir(repository, { recursive: true });
     const stderr = `fatal: detected dubious ownership in repository at '${repository}'`;
     const dubious = await checkSetupGit({
       cwd: repository,
@@ -2067,7 +2109,10 @@ describe("checkSetupGit", () => {
 
     expect(dubious).toMatchObject({ status: "missing", reason: "dubious-ownership" });
     if (dubious.status !== "missing") throw new Error("expected dubious repository");
-    expect(dubious.message).toContain(`git config --global --add safe.directory '${repository}'`);
+    const quotedRepository = `'${repository.replaceAll("'", `'\\''`)}'`;
+    expect(dubious.message).toContain(
+      `git config --global --add safe.directory ${quotedRepository}`,
+    );
   });
 
   it.each([

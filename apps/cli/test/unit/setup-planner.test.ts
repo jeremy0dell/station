@@ -608,6 +608,7 @@ describe("setup planner", () => {
       tier: "required",
       status: "missing",
       message,
+      details: { defaultBranch: "main", reason },
     });
     expect(plan.summary).toMatchObject({
       workflowReady: false,

@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { realpath } from "node:fs/promises";
+import { basename, delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 import { findGitRoot } from "@station/config";
 import {
   type ExternalCommandInput,
@@ -78,16 +79,18 @@ async function probeGitRepository(options: CheckGitOptions, cwd: string): Promis
         message: dubiousOwnershipMessage(failureText, cwd),
       };
     }
-    if (isCanonicalNotRepositoryError(gitFailureStderr(error))) {
-      // A marker means Git discovered repository intent but could not read its metadata.
-      if ((await findGitRoot(cwd)) === undefined) {
-        return {
-          status: "ok",
-          repository: "absent",
-          defaultBranch,
-          message: outsideRepositoryMessage,
-        };
-      }
+    const stderr = gitFailureStderr(error);
+    if (
+      isFilesystemBoundaryNotRepositoryError(stderr) ||
+      (isCanonicalNotRepositoryError(stderr) &&
+        (await findDiscoverableGitRoot(cwd, options.env ?? process.env)) === undefined)
+    ) {
+      return {
+        status: "ok",
+        repository: "absent",
+        defaultBranch,
+        message: outsideRepositoryMessage,
+      };
     }
     return unusableRepositoryFact(cwd);
   }
@@ -132,10 +135,81 @@ function isCanonicalNotRepositoryError(stderr: string): boolean {
   return /^fatal: not a git repository \(or any of the parent directories\): \.git$/m.test(stderr);
 }
 
+function isFilesystemBoundaryNotRepositoryError(stderr: string): boolean {
+  return /^fatal: not a git repository \(or any parent up to mount point [^\r\n]+\)\r?\nStopping at filesystem boundary \(GIT_DISCOVERY_ACROSS_FILESYSTEM not set\)\.$/m.test(
+    stderr,
+  );
+}
+
 function dubiousOwnershipMessage(failureText: string, cwd: string): string {
   const repository =
-    failureText.match(/dubious ownership in repository at ['"]([^'"]+)['"]/i)?.[1] ?? cwd;
+    failureText.match(/^fatal: detected dubious ownership in repository at '(.*)'\r?$/im)?.[1] ??
+    cwd;
   return `Git refused this repository for dubious ownership. Review its ownership, then run git config --global --add safe.directory ${quoteCommandPart(repository)}, then run stn setup check.`;
+}
+
+async function findDiscoverableGitRoot(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string | undefined> {
+  const root = await findGitRoot(cwd);
+  if (root === undefined) return undefined;
+
+  const ceilings = await gitCeilingDirectories(env.GIT_CEILING_DIRECTORIES);
+  if (ceilings.length === 0) return root;
+
+  const [canonicalCwd, canonicalRoot] = await Promise.all([
+    canonicalExistingPath(cwd),
+    canonicalExistingPath(root),
+  ]);
+  const blocked = ceilings.some(
+    (ceiling) =>
+      isStrictAncestor(ceiling, canonicalCwd) && isSameOrAncestor(canonicalRoot, ceiling),
+  );
+  return blocked ? undefined : root;
+}
+
+async function gitCeilingDirectories(value: string | undefined): Promise<string[]> {
+  if (value === undefined) return [];
+
+  const ceilings: string[] = [];
+  let skipCanonicalization = false;
+  for (const entry of value.split(delimiter)) {
+    if (entry.length === 0) {
+      skipCanonicalization = true;
+    } else if (isAbsolute(entry)) {
+      if (skipCanonicalization) {
+        ceilings.push(resolve(entry));
+      } else {
+        try {
+          ceilings.push(await realpath(entry));
+        } catch {
+          // Git discards ceiling entries that cannot be canonicalized.
+        }
+      }
+    }
+  }
+  return ceilings;
+}
+
+async function canonicalExistingPath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function isStrictAncestor(ancestor: string, path: string): boolean {
+  return ancestor !== path && isSameOrAncestor(ancestor, path);
+}
+
+function isSameOrAncestor(ancestor: string, path: string): boolean {
+  const descendant = relative(ancestor, path);
+  return (
+    descendant.length === 0 ||
+    (descendant !== ".." && !descendant.startsWith(`..${sep}`) && !isAbsolute(descendant))
+  );
 }
 
 function gitFailureText(error: unknown): string {

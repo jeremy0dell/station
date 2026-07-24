@@ -137,6 +137,8 @@ describe("setup renderer", () => {
     });
 
     expect(output).toContain(message);
+    expect(output.match(/stn setup check/g)).toHaveLength(1);
+    expect(output).not.toContain("Then run:");
     expect(output).not.toContain("Core setup is incomplete.");
   });
 

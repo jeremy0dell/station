@@ -159,6 +159,8 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         allowedExitCodes: [1],
       });
       const setupPlan = JSON.parse(setup.stdout);
+      const healthyGitCheck = setupPlan.checks.find((check) => check.id === "git-project");
+      assertEqual(healthyGitCheck?.status, "ok", "compiled setup healthy Git status");
       assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
       assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
       assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
@@ -1242,6 +1244,12 @@ async function verifyCompiledGitFailure({ binaryPath, installedRoot, root }) {
 
   assertEqual(result.code, 1, "compiled Git canary exit code");
   assertEqual(gitCheck?.status, "missing", "compiled Git canary git-project status");
+  assertEqual(gitCheck?.details?.reason, "git-unusable", "compiled Git canary reason");
+  assertIncludes(
+    gitCheck?.message ?? "",
+    "Git is installed but unusable.",
+    "compiled Git canary unusable message",
+  );
   assertIncludes(gitCheck?.message ?? "", "xcode-select --install", "compiled Git remediation");
   assertEqual(requiredFailures.length, 1, "compiled Git canary required failure count");
   assertEqual(plan.summary.requiredMissing, 1, "compiled Git canary requiredMissing");
