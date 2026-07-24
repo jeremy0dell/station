@@ -20,7 +20,6 @@ import {
   type RowGridRowInput,
 } from "@station/dashboard-core";
 import {
-  QUIT_HINT_CLOSE,
   selectDashboardViewport,
   selectFleetSummary,
   type DashboardSessionOverflow,
@@ -66,14 +65,14 @@ export type DashboardViewProps = {
   snapshot: StationSnapshot;
   viewState: TuiViewState;
   columns?: number;
+  footerQuitHint: string;
 };
-
-const QUIT_HINT = QUIT_HINT_CLOSE;
 
 export function DashboardView({
   snapshot,
   viewState,
   columns = 80,
+  footerQuitHint,
 }: DashboardViewProps) {
   const dispatch = useStationMouse();
   const viewport = selectDashboardViewport(snapshot, viewState);
@@ -119,7 +118,7 @@ export function DashboardView({
       <Divider columns={contentColumns} />
       <text fg={STATION_COLORS.foreground}>
         {truncateCells(
-          dashboardFooterLabel({ columns: contentColumns, quitHint: QUIT_HINT, firstRun }),
+          dashboardFooterLabel({ columns: contentColumns, quitHint: footerQuitHint, firstRun }),
           contentColumns,
         )}
       </text>

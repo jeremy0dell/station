@@ -15,6 +15,7 @@ import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleSearchKey } from "./screens/search.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import { selectionMiddleware } from "./selection/middleware.js";
+import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
 import type { TuiState } from "./types.js";
 
 export type TuiTransition = {
@@ -40,6 +41,20 @@ export function handleTuiKey(
     return {
       state,
       exitCode: 0,
+    };
+  }
+
+  const activeToast = activeTuiToast(state);
+  if (
+    key.escape === true &&
+    activeToast?.toast.kind === "error" &&
+    !isTuiToastHiddenByScreen(state.screen)
+  ) {
+    return {
+      state: {
+        ...state,
+        toasts: [],
+      },
     };
   }
 
