@@ -229,6 +229,7 @@ export type TuiHelpContentLine =
   | { key: string; description: string };
 
 export const QUIT_HINT_CLOSE = "Q/esc:close";
+export const QUIT_HINT_DISMISS_ERROR = "Esc:dismiss  Q:close";
 
 export function dashboardFooterLabel({
   columns,
@@ -243,11 +244,19 @@ export function dashboardFooterLabel({
     ? `↵ add first project  A add project  ${quitHint}`
     : `↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
   const compactFirstRun = `↵ add first project  ${quitHint}`;
-  const compactClose = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${QUIT_HINT_CLOSE}`;
+  const compact = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${quitHint}`;
   if (firstRun && full.length > columns) {
-    return compactFirstRun;
+    return quitHint === QUIT_HINT_DISMISS_ERROR && compactFirstRun.length > columns
+      ? quitHint
+      : compactFirstRun;
   }
-  return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
+  if (full.length <= columns) {
+    return full;
+  }
+  if (quitHint === QUIT_HINT_CLOSE) {
+    return compact;
+  }
+  return compact.length <= columns ? compact : quitHint;
 }
 
 export function isSlotKey(key: TuiKey): boolean {

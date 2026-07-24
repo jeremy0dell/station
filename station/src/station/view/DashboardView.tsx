@@ -4,7 +4,6 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProjectView, SessionId, StationSnapshot } from "@station/contracts";
 import {
-  dashboardFooterLabel,
   fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
@@ -20,7 +19,6 @@ import {
   type RowGridRowInput,
 } from "@station/dashboard-core";
 import {
-  QUIT_HINT_CLOSE,
   selectDashboardViewport,
   selectFleetSummary,
   type DashboardSessionOverflow,
@@ -68,13 +66,7 @@ export type DashboardViewProps = {
   columns?: number;
 };
 
-const QUIT_HINT = QUIT_HINT_CLOSE;
-
-export function DashboardView({
-  snapshot,
-  viewState,
-  columns = 80,
-}: DashboardViewProps) {
+export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardViewProps) {
   const dispatch = useStationMouse();
   const viewport = selectDashboardViewport(snapshot, viewState);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
@@ -117,12 +109,6 @@ export function DashboardView({
       )}
       <ScrollIndicatorRow direction="below" overflow={viewport.sessionOverflow} />
       <Divider columns={contentColumns} />
-      <text fg={STATION_COLORS.foreground}>
-        {truncateCells(
-          dashboardFooterLabel({ columns: contentColumns, quitHint: QUIT_HINT, firstRun }),
-          contentColumns,
-        )}
-      </text>
     </box>
   );
 }

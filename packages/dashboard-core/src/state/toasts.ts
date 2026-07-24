@@ -1,35 +1,21 @@
 import type { TuiToast } from "../services/types.js";
 import { toastExpiryMs } from "./timing.js";
-import type { TuiState, TuiToastEntry } from "./types.js";
+import type { TuiScreen, TuiState, TuiToastEntry } from "./types.js";
 
 export function addTuiToast(state: TuiState, toast: TuiToast, nowMs = Date.now()): TuiState {
   const current = expireTuiToasts(state, nowMs);
   const active = activeTuiToast(current);
-  const expiresAt = nowMs + toastExpiryMs(toast.kind);
 
   if (active !== undefined && toastKey(active.toast) === toastKey(toast)) {
     return {
       ...current,
       toasts: current.toasts.map((entry) =>
-        entry.id === active.id
-          ? {
-              ...entry,
-              toast,
-              updatedAt: nowMs,
-              expiresAt,
-            }
-          : entry,
+        entry.id === active.id ? createToastEntry(entry.id, toast, entry.createdAt, nowMs) : entry,
       ),
     };
   }
 
-  const entry: TuiToastEntry = {
-    id: toastEntryId(toast, nowMs),
-    toast,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-    expiresAt,
-  };
+  const entry = createToastEntry(toastEntryId(toast, nowMs), toast, nowMs, nowMs);
 
   return {
     ...current,
@@ -84,6 +70,13 @@ export function activeTuiToast(state: Pick<TuiState, "toasts">): TuiToastEntry |
   return state.toasts.at(-1);
 }
 
+export function isTuiToastHiddenByScreen(screen: TuiScreen): boolean {
+  if (screen.name === "dashboard" || screen.name === "search") {
+    return false;
+  }
+  return screen.name !== "renameSession" || screen.step === "editName";
+}
+
 export function nextTuiToastExpiry(state: Pick<TuiState, "toasts">): number | undefined {
   return state.toasts.reduce<number | undefined>((next, entry) => {
     if (entry.expiresAt === undefined) {
@@ -106,4 +99,19 @@ export function toastKey(toast: TuiToast): string {
 
 function toastEntryId(toast: TuiToast, nowMs: number): string {
   return `${nowMs}:${toastKey(toast)}`;
+}
+
+function createToastEntry(
+  id: string,
+  toast: TuiToast,
+  createdAt: number,
+  updatedAt: number,
+): TuiToastEntry {
+  return {
+    id,
+    toast,
+    createdAt,
+    updatedAt,
+    expiresAt: updatedAt + toastExpiryMs(toast.kind),
+  };
 }

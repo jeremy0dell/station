@@ -285,15 +285,3 @@ export function commandPromptRows(screen: TuiScreen): number {
   }
   return 0;
 }
-
-export function isModalOverlayActive(screen: TuiScreen): boolean {
-  return (
-    screen.name === "help" ||
-    screen.name === "newSession" ||
-    screen.name === "projectDefaultAgent" ||
-    screen.name === "projectCollapse" ||
-    screen.name === "projectSettingsPicker" ||
-    screen.name === "removeWorktree" ||
-    (screen.name === "renameSession" && screen.step === "editName")
-  );
-}

@@ -323,3 +323,61 @@ Add your first project.
 ↵ add first project  Q/esc:close        
 "
 `;
+
+exports[`dashboard golden frames wraps the complete actionable error at wide and narrow widths 1`] = `
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle         4 · 10 · 9
+──────────────────────────────────────────────────────────────────────────────────────────────────
+       SESSION                                   AGENT     STATUS                        DIFF · PR
+▼ station  5 sessions · 4 agents                                       [shell] [quick session] [▾]
+ [1] ○ cli-help-man                              codex     idle                       +14 -6 #70 ✓
+ [2] - docs-cleanup                              codex     no agent
+ [3] ○ pty-buffer                                codex     idle                              #73 ✓
+ [4] + session-resume                            codex     starting
+ [5] ⠋ station-overlay                           codex     working                  +412 -96 #76 …
+
+▼ observer  3 sessions · 3 agents                                      [shell] [quick session] [▾]
+ [6] x batch-export                              opencode  exited                             #8 ✓
+ [7] ⠋ provider-hooks                            opencode  working                    +32 -8 #16 …
+ [8] ○ trace-bundle      ┌──────────────────────────────────────────────────────────────────────┐✓
+                         │ needs attention                                          [ dismiss ] │
+▼ scripts  2 sessions · 2│ Worktrunk failed to remove the selected checkout because the main    │]
+ [9] ○ api-cache         │ worktree cannot be removed while Station is running there.           │1
+ [a] ? metadata-refresh  │ Open a different linked checkout, select the session again, and      │0
+                         │ retry after confirming the worktree path and branch. | trace         │
+▼ empty-project  0 sessio│ trace_worktree_remove_123 | diagnostic diag_worktree_remove_456      │]
+ no sessions yet · [ + ad└──────────────────────────────────────────────────────────────────────┘
+
+──────────────────────────────────────────────────────────────────────────────────────────────────
+↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Esc:dismiss  Q:close
+"
+`;
+
+exports[`dashboard golden frames wraps the complete actionable error at wide and narrow widths 2`] = `
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0
+───────────────────────────────────────
+       SESSION             STATUS
+▼ station  5 sessions · … [sh] [qs] [▾]
+ [1] ○ cli-help-man        idle
+ [2] - docs-cleanup        no agent
+ [┌──────────────────────────────────┐
+ [│ needs attention      [ dismiss ] │
+ [│ Worktrunk failed to remove the   │
+  │ selected checkout because the    │
+▼ │ main worktree cannot be removed  │]
+ [│ while Station is running there.  │
+ [│ Open a different linked          │
+ [│ checkout, select the session     │
+  │ again, and retry after           │
+▼ │ confirming the worktree path     │]
+ [│ and branch. | trace              │
+ [│ trace_worktree_remove_123 |      │
+  │ diagnostic                       │
+▼ │ diag_worktree_remove_456         │]
+ n└──────────────────────────────────┘
+
+───────────────────────────────────────
+Esc:dismiss  Q:close
+"
+`;

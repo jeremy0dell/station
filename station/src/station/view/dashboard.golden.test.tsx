@@ -2,11 +2,12 @@
 // after first render (before the 120ms throbber tick) so the working-row
 // throbber shows its first braille frame (⠋) deterministically.
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex, TextAttributes } from "@opentui/core";
+import { BaseRenderable, rgbToHex, TextAttributes, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
+import type { TuiToast } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -42,7 +43,21 @@ const SNAPSHOT_SCENARIOS: ReadonlyArray<{ name: string; snapshot: () => StationS
   { name: "no-projects", snapshot: noProjectsSnapshot },
 ];
 
-type RenderedDashboard = Awaited<ReturnType<typeof testRender>>;
+type RenderedDashboard = Awaited<ReturnType<typeof testRender>> & {
+  store: ReturnType<typeof makeStationTestStore>["store"];
+};
+
+const WORKTREE_ERROR_MESSAGE =
+  "Worktrunk failed to remove the selected checkout because the main worktree cannot be removed while Station is running there.";
+const WORKTREE_ERROR_HINT =
+  "Open a different linked checkout, select the session again, and retry after confirming the worktree path and branch.";
+const WORKTREE_ERROR: TuiToast = {
+  kind: "error",
+  message: WORKTREE_ERROR_MESSAGE,
+  hint: WORKTREE_ERROR_HINT,
+  traceId: "trace_worktree_remove_123",
+  diagnosticId: "diag_worktree_remove_456",
+};
 
 describe("dashboard golden frames", () => {
   const teardowns: Array<() => void> = [];
@@ -59,6 +74,7 @@ describe("dashboard golden frames", () => {
     connection?: StationClientConnectionState;
     dispatchMouse?: (target: StationMouseTarget) => void;
     hoverEnabled?: boolean;
+    toast?: TuiToast;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
       snapshot: input.snapshot ?? null,
@@ -91,7 +107,15 @@ describe("dashboard golden frames", () => {
       setup.renderer.destroy();
     });
     await setup.renderOnce();
-    return setup;
+    const toast = input.toast;
+    if (toast !== undefined) {
+      await act(async () => {
+        store.getState().pushToast(toast);
+        await Promise.resolve();
+      });
+      await setup.flush();
+    }
+    return Object.assign(setup, { store });
   }
 
   for (const scenario of SNAPSHOT_SCENARIOS) {
@@ -451,4 +475,105 @@ describe("dashboard golden frames", () => {
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
     expect(clicked).toMatchObject({ kind: "row" });
   });
+
+  it("wraps the complete actionable error at wide and narrow widths", async () => {
+    for (const size of [
+      { width: 99, height: 25 },
+      { width: 40, height: 25 },
+    ]) {
+      const setup = await renderDashboard({
+        ...size,
+        snapshot: manyProjectsSnapshot(),
+        toast: WORKTREE_ERROR,
+      });
+      const frame = setup.captureCharFrame();
+      const lines = frame.split("\n");
+      const top = lines.findIndex((line) => line.includes("┌"));
+      const bottom = lines.findIndex((line, index) => index > top && line.includes("└"));
+      const left = lines[top]?.indexOf("┌") ?? -1;
+      const right = lines[top]?.lastIndexOf("┐") ?? -1;
+      const noticeText = lines
+        .slice(top + 1, bottom)
+        .map((line) => line.slice(left + 1, right).trim())
+        .join(" ")
+        .replace(/\s+/g, " ");
+
+      expect(top).toBeGreaterThanOrEqual(3);
+      expect(bottom).toBeLessThan(size.height - 3);
+      expect(left).toBe(2 + Math.max(0, size.width - 76));
+      expect(size.width - right - 1).toBe(2);
+      expect(noticeText).toContain(WORKTREE_ERROR_MESSAGE);
+      expect(noticeText).toContain(WORKTREE_ERROR_HINT);
+      expect(noticeText).toContain("trace trace_worktree_remove_123");
+      expect(noticeText).toContain("diagnostic diag_worktree_remove_456");
+      expect(noticeText).not.toContain("…");
+      expect(frame).toContain("Esc:dismiss  Q:close");
+      expect(frame.replace(/[ \t]+$/gm, "")).toMatchSnapshot();
+    }
+  });
+
+  it("keeps notice text selectable and dismisses only from the dismiss control", async () => {
+    const targets: StationMouseTarget[] = [];
+    let setup: RenderedDashboard;
+    setup = await renderDashboard({
+      width: 99,
+      height: 25,
+      snapshot: manyProjectsSnapshot(),
+      toast: WORKTREE_ERROR,
+      dispatchMouse: (target) => {
+        targets.push(target);
+        if (target.kind === "toast") {
+          setup.store.getState().dismissToasts();
+        }
+      },
+    });
+    let lines = setup.captureCharFrame().split("\n");
+    const messageRow = lines.findIndex((line) => line.includes("Worktrunk failed"));
+    const messageColumn = lines[messageRow]?.indexOf("Worktrunk") ?? -1;
+    const dismissRow = lines.findIndex((line) => line.includes("[ dismiss ]"));
+    const dismissColumn = lines[dismissRow]?.indexOf("[ dismiss ]") ?? -1;
+    expect(messageRow).toBeGreaterThan(0);
+    expect(messageColumn).toBeGreaterThan(0);
+    expect(dismissRow).toBeGreaterThan(0);
+    expect(dismissColumn).toBeGreaterThan(0);
+
+    const textRenderables = collectTextRenderables(setup.renderer.root);
+    const selectableCopy = textRenderables.filter(
+      (renderable) =>
+        renderable.plainText === WORKTREE_ERROR_MESSAGE ||
+        renderable.plainText.includes(WORKTREE_ERROR_HINT),
+    );
+    expect(selectableCopy).toHaveLength(2);
+    expect(selectableCopy.every((renderable) => renderable.selectable)).toBe(true);
+
+    await setup.mockMouse.click(messageColumn, messageRow, MouseButtons.LEFT);
+    await setup.flush();
+    expect(targets).toEqual([]);
+    expect(setup.store.getState().toasts).toHaveLength(1);
+
+    const ordinaryDismiss = spanAtFrameCell(setup.captureSpans(), dismissRow, dismissColumn);
+    await act(async () => {
+      await setup.mockMouse.moveTo(dismissColumn, dismissRow);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    const hoveredDismiss = spanAtFrameCell(setup.captureSpans(), dismissRow, dismissColumn);
+    expect(spanHex(hoveredDismiss)).not.toBe(spanHex(ordinaryDismiss));
+    expect(spanBgHex(hoveredDismiss)).not.toBe(spanBgHex(ordinaryDismiss));
+
+    await setup.mockMouse.click(dismissColumn, dismissRow, MouseButtons.LEFT);
+    await setup.flush();
+    expect(targets).toEqual([{ kind: "toast" }]);
+    expect(setup.store.getState().toasts).toEqual([]);
+    lines = setup.captureCharFrame().split("\n");
+    expect(lines.some((line) => line.includes("Worktrunk failed"))).toBe(false);
+  });
 });
+
+function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
+  const collected = renderable instanceof TextRenderable ? [renderable] : [];
+  for (const child of renderable.getChildren()) {
+    collected.push(...collectTextRenderables(child));
+  }
+  return collected;
+}

@@ -39,7 +39,3 @@ export function toastBorderColor(entry: TuiToastEntry): ToastBorderColorName {
   }
   return "green";
 }
-
-export function toastTextWidth(contentWidth: number): number {
-  return Math.max(1, contentWidth - 2);
-}

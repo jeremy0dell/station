@@ -1,25 +1,26 @@
-// Render layer: absolute-positioned toast box (bottom-right, sized by shared
-// layout). Toast copy and color come from the shared content module. Click
-// dismisses (routes { kind: "toast" } through the station mouse context).
+// Render layer: a bottom-anchored notice that grows upward for actionable errors.
+// Only the header dismiss control routes dismissal; body text stays selectable.
 import { TextAttributes } from "@opentui/core";
 import {
   toastBorderColor,
   toastDetail,
   toastOverlayLayout,
-  toastTextWidth,
   toastTitle,
-  truncateCells,
   type TuiToastEntry,
 } from "@station/dashboard-core";
 import { STATION_COLORS, toastBorderColorHex } from "./theme.js";
-import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+import {
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+} from "./stationMouseContext.js";
 
 export type ToastOverlayViewProps = {
   columns: number;
   rows: number;
   toast: TuiToastEntry | undefined;
   promptRows: number;
-  hiddenByModal: boolean;
+  hiddenByScreen: boolean;
 };
 
 export function ToastOverlayView({
@@ -27,10 +28,9 @@ export function ToastOverlayView({
   rows,
   toast,
   promptRows,
-  hiddenByModal,
+  hiddenByScreen,
 }: ToastOverlayViewProps) {
-  const dispatch = useStationMouse();
-  if (hiddenByModal || toast === undefined) {
+  if (hiddenByScreen || toast === undefined) {
     return null;
   }
 
@@ -39,36 +39,66 @@ export function ToastOverlayView({
     columns,
     rows,
     promptRows,
-    contentRows: detail === undefined ? 2 : 3,
   });
   if (layout === undefined) {
     return null;
   }
-  const textWidth = toastTextWidth(layout.contentWidth);
 
   return (
     <box
       position="absolute"
       left={layout.left}
-      top={layout.top}
+      bottom={layout.bottom}
       width={layout.width}
-      height={layout.height}
+      maxHeight={layout.maxHeight}
       zIndex={20}
       border
+      overflow="hidden"
       borderColor={toastBorderColorHex(toastBorderColor(toast))}
       backgroundColor={STATION_COLORS.background}
       flexDirection="column"
-      {...stationMouseProps(dispatch, { kind: "toast" })}
     >
-      <box flexDirection="column" paddingLeft={1} paddingRight={1}>
-        <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>
-          {truncateCells(toastTitle(toast), textWidth)}
+      <box width="100%" flexDirection="column" paddingLeft={1} paddingRight={1}>
+        <box width="100%" flexDirection="row">
+          <text
+            flexGrow={1}
+            flexShrink={1}
+            fg={STATION_COLORS.foreground}
+            attributes={TextAttributes.BOLD}
+            wrapMode="word"
+            selectable
+          >
+            {toastTitle(toast)}
+          </text>
+          <ToastDismissControl />
+        </box>
+        <text fg={STATION_COLORS.foreground} wrapMode="word" selectable>
+          {toast.toast.message}
         </text>
-        <text fg={STATION_COLORS.foreground}>{truncateCells(toast.toast.message, textWidth)}</text>
         {detail === undefined ? null : (
-          <text fg={STATION_COLORS.gray}>{truncateCells(detail, textWidth)}</text>
+          <text fg={STATION_COLORS.gray} wrapMode="word" selectable>
+            {detail}
+          </text>
         )}
       </box>
     </box>
+  );
+}
+
+function ToastDismissControl() {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  return (
+    <text
+      flexShrink={0}
+      fg={hover ? STATION_COLORS.background : STATION_COLORS.gray}
+      {...(hover ? { bg: STATION_COLORS.red } : {})}
+      selectable={false}
+      {...stationMouseProps(dispatch, { kind: "toast" })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      [ dismiss ]
+    </text>
   );
 }
