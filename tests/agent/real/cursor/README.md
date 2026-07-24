@@ -15,8 +15,8 @@ STATION_TMUX_BIN="$(command -v tmux)" \
 pnpm test:e2e:cursor:real
 ```
 
-The test creates a temporary git worktree, starts a unique tmux session, launches Cursor through a temporary shim that logs argv/env and then `exec`s the real Cursor Agent binary, reconciles observer state, and cleans up the tmux/temp state afterward.
+The launch test creates a temporary git worktree, starts a unique tmux session, launches Cursor through a temporary shim that logs argv/env and then `exec`s the real Cursor Agent binary, reconciles observer state, and cleans up the tmux/temp state afterward.
 
-The assertion is intentionally conservative: station must observe a provider-neutral Cursor harness run with `unknown` low-confidence status. The shim log and tmux pane/process evidence prove the Cursor launch happened without asserting on Cursor screen text.
+The launch assertion is intentionally conservative: station must observe a provider-neutral Cursor harness run with `unknown` low-confidence status. The shim log and tmux pane/process evidence prove the Cursor launch happened without asserting on Cursor screen text.
 
-This lane does not install or exercise Cursor hooks. Hook-driven state promotion requires manually configuring Cursor to call `stn-ingress cursor` from `.cursor/hooks.json` or `~/.cursor/hooks.json`.
+The hook assertion installs the generated Cursor hook, routes an active-to-stop sequence through the checkout's `stn-ingress`, and requires high-confidence idle state from the matching Observer build.

@@ -15,7 +15,12 @@ import {
   ProviderRegistry,
   startObserverServer,
 } from "@station/observer/internal";
-import { createOpenCodeHarnessProvider, installOpenCodePlugin } from "@station/opencode";
+import {
+  createOpenCodeHarnessProvider,
+  installOpenCodePlugin,
+  openCodeHookAdapter,
+} from "@station/opencode";
+import { stationObserverBuildVersion } from "@station/runtime";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -23,7 +28,11 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { afterEach, describe, expect, it } from "vitest";
-import { requireRealE2eEnvironment, requireToolPath } from "../../../support/real-station/env";
+import {
+  realHarnessChildEnv,
+  requireRealE2eEnvironment,
+  requireToolPath,
+} from "../../../support/real-station/env";
 
 const realOpenCodeEnabled = process.env.STATION_REAL_OPENCODE === "1";
 const describeRealOpenCode = realOpenCodeEnabled ? describe : describe.skip;
@@ -108,6 +117,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
       harnesses: [
         createOpenCodeHarnessProvider({ command: opencodeBin, now: () => new Date(now) }),
       ],
+      hookAdapters: [openCodeHookAdapter],
     });
     const testConfig = config({ root, stateDir, socketPath, worktreePath });
     const core = createObserverCore({
@@ -128,6 +138,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
       clock,
       config: testConfig,
       socketPath,
+      observerBuildVersion: stationObserverBuildVersion(),
       stateDir,
       hookSpoolDir,
       hookReconcileDebounceMs: 0,
@@ -154,6 +165,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
           STATION_HARNESS_PROVIDER: "opencode",
           STATION_TERMINAL_PROVIDER: "tmux",
           STATION_TERMINAL_TARGET_ID: "real-opencode-target",
+          STATION_INGRESS_BIN: env.stationIngressBin,
           STATION_OBSERVER_SOCKET_PATH: socketPath,
           STATION_OBSERVER_STATE_DIR: stateDir,
           STATION_HOOK_SPOOL_DIR: hookSpoolDir,
@@ -225,10 +237,7 @@ async function runOpenCode(input: {
       ],
       {
         cwd: input.cwd,
-        env: {
-          ...process.env,
-          ...input.env,
-        },
+        env: realHarnessChildEnv(input.env),
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
