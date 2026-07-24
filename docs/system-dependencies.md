@@ -32,7 +32,7 @@ Exit codes:
 - `1`: required core setup is missing, harness selection is unresolved, or an apply action failed.
 - `2`: invalid setup command arguments.
 
-`stn setup check` and `stn setup plan` are read-only. A plan exits zero when it was produced; its JSON `summary.requiredOk` reports readiness. `stn setup apply --dry-run` performs no writes or installs and reports ambiguous harness selection as blocked. `stn setup apply --yes` also refuses ambiguous selection before mutating config or provider files. Direct `stn setup system` requires an explicit mode: use `--check` for read-only reporting or `--yes` to apply Homebrew installs for missing Worktrunk, tmux, Bun, diffnav, and git-delta.
+`stn setup check` and `stn setup plan` do not mutate config, provider homes, sockets, or durable Observer state. Their state-directory readiness check creates and removes a temporary probe file and can leave a newly created empty state directory. A plan exits zero when it was produced; its JSON `summary.requiredOk` reports readiness. `stn setup apply --dry-run` performs no config writes or installs, shares the same state-directory probe, and reports ambiguous harness selection as blocked. `stn setup apply --yes` also refuses ambiguous selection before mutating config or provider files. Direct `stn setup system` requires an explicit mode: use `--check` for read-only reporting or `--yes` to apply Homebrew installs for missing Worktrunk, tmux, Bun, diffnav, and git-delta.
 
 ## Dependency Tiers
 

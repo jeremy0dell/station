@@ -187,6 +187,52 @@ describe("CursorHarnessProvider", () => {
     }
   });
 
+  it("routes shared-home hooks through the launching runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-shared-home-"));
+    const runtimeA = {
+      configPath: join(root, "runtime-a", "config.toml"),
+      observerSocketPath: join(root, "runtime-a", "observer.sock"),
+      stateDir: join(root, "runtime-a", "state"),
+      hookSpoolDir: join(root, "runtime-a", "state", "spool", "hooks"),
+    };
+    const runtimeB = {
+      configPath: join(root, "runtime-b", "config.toml"),
+      observerSocketPath: join(root, "runtime-b", "observer.sock"),
+      stateDir: join(root, "runtime-b", "state"),
+      hookSpoolDir: join(root, "runtime-b", "state", "spool", "hooks"),
+    };
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = root;
+    try {
+      await installCursorHooks({
+        homeDir: root,
+        stationConfigPath: runtimeA.configPath,
+        observerSocketPath: runtimeA.observerSocketPath,
+        stateDir: runtimeA.stateDir,
+        hookSpoolDir: runtimeA.hookSpoolDir,
+        autoStartFromHooks: false,
+      });
+      const providerB = createCursorHarnessProvider({
+        installHooks: true,
+        ...runtimeB,
+        autoStartFromHooks: false,
+      });
+
+      await expect(providerB.hooksStatus?.()).resolves.toMatchObject({ installed: true });
+      await expect(providerB.buildLaunch(request())).resolves.toMatchObject({
+        env: {
+          STATION_CONFIG_PATH: runtimeB.configPath,
+          STATION_OBSERVER_SOCKET_PATH: runtimeB.observerSocketPath,
+          STATION_OBSERVER_STATE_DIR: runtimeB.stateDir,
+          STATION_HOOK_SPOOL_DIR: runtimeB.hookSpoolDir,
+        },
+      });
+    } finally {
+      if (previousCursorHome === undefined) delete process.env.STATION_CURSOR_HOME;
+      else process.env.STATION_CURSOR_HOME = previousCursorHome;
+    }
+  });
+
   it("launches interactive Cursor agent with STATION correlation env", async () => {
     const provider = createCursorHarnessProvider({
       command: "agent-test",

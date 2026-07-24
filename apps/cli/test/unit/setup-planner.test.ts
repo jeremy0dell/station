@@ -416,6 +416,65 @@ describe("setup planner", () => {
     expect(plan.actions.filter((action) => action.data?.harness !== undefined)).toEqual([]);
   });
 
+  it("repairs persisted tracking intent for a configured secondary harness", () => {
+    const plan = buildSetupPlan(
+      facts({
+        harnesses: harnesses(["codex", "opencode"]),
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: true,
+          },
+          {
+            harnessId: "opencode",
+            capability: "supported",
+            requested: true,
+            installed: false,
+          },
+        ],
+        config: validConfigFact({
+          configuredHarnesses: ["codex", "opencode"],
+          configuredHookHarnesses: ["codex", "opencode"],
+        }),
+      }),
+    );
+
+    expect(plan.actions.find((action) => action.id === "opencode-hooks")).toMatchObject({
+      tier: "recommended",
+      selected: true,
+      data: { setupRole: "hook", harness: "opencode" },
+    });
+  });
+
+  it("does not repair tracking for a configured secondary harness without persisted intent", () => {
+    const plan = buildSetupPlan(
+      facts({
+        harnesses: harnesses(["codex", "opencode"]),
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: true,
+          },
+          {
+            harnessId: "opencode",
+            capability: "supported",
+            requested: false,
+          },
+        ],
+        config: validConfigFact({
+          configuredHarnesses: ["codex", "opencode"],
+          configuredHookHarnesses: ["codex"],
+        }),
+      }),
+    );
+
+    expect(plan.actions.some((action) => action.id === "opencode-hooks")).toBe(false);
+  });
+
   it("reports an unavailable persisted default without substituting an available provider", () => {
     const plan = buildSetupPlan(
       facts({

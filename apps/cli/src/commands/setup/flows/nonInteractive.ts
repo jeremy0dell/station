@@ -31,7 +31,13 @@ export async function runNonInteractiveApply(
   }
 
   if (initial.harnessSelection.source === "unresolved") {
-    await write(deps, renderSetupApplyResult(initial.plan, renderOptions(deps)));
+    await write(
+      deps,
+      renderSetupApplyResult(initial.plan, {
+        ...renderOptions(deps),
+        selectionRequired: true,
+      }),
+    );
     return { code: 1 };
   }
 

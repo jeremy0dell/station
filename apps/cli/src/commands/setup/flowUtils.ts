@@ -72,11 +72,14 @@ export type CollectedSetupPlan = {
   plan: SetupPlan;
 };
 
-type CollectSetupPlanInput = {
-  noBrew?: boolean;
+type SetupPlanCollectionOptions = {
   selectedHarnessIds?: readonly SupportedHarnessId[];
   planConfigWrite?: boolean;
   installWorktrunkHooks?: boolean;
+};
+
+type CollectSetupPlanInput = SetupPlanCollectionOptions & {
+  noBrew?: boolean;
 };
 
 export async function collectSetupPlanForCommand(
@@ -88,6 +91,14 @@ export async function collectSetupPlanForCommand(
   const baseFacts = await collectForCommand(mode, options, deps, {
     ...(input.noBrew === undefined ? {} : { noBrew: input.noBrew }),
   });
+  return collectSetupPlanFromFacts(baseFacts, deps, input);
+}
+
+export async function collectSetupPlanFromFacts(
+  baseFacts: SetupFacts,
+  deps: SetupCommandDeps,
+  input: SetupPlanCollectionOptions = {},
+): Promise<CollectedSetupPlan> {
   const harnessSelection = resolveSetupHarnessSelection(baseFacts, input.selectedHarnessIds);
   const facts = await collectHarnessTrackingFacts(baseFacts, harnessSelection, deps);
   const trackedHarnessIds = harnessSelection.requiredHarnessIds.filter(harnessSupportsSetupHooks);

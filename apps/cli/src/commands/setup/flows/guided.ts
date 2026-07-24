@@ -7,6 +7,7 @@ import {
   applyOptions,
   collectForCommand,
   collectSetupPlanForCommand,
+  collectSetupPlanFromFacts,
   coreReadyForConfigWrite,
   depsWithBrewBinPath,
   isConfigAction,
@@ -158,12 +159,13 @@ async function ensureRequiredTools(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<GuidedFactsResult> {
-  const plan = buildSetupPlan(facts, { configWrite: await planSetupConfigWrite(facts) });
+  const initialState = await collectSetupPlanFromFacts(facts, deps, { planConfigWrite: true });
+  const plan = initialState.plan;
   await write(deps, renderSetupPlan(plan, renderOptions(deps)));
   const installActions = plan.actions.filter(
     (action) => isInstallAction(action) && action.selected,
   );
-  if (installActions.length === 0) return { status: "continue", facts };
+  if (installActions.length === 0) return { status: "continue", facts: initialState.facts };
 
   if (!(await prompt.confirm("Install missing required tools?"))) {
     await write(deps, "No changes made.\n");

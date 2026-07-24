@@ -3,6 +3,7 @@ import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
 import {
   harnessSupportsSetupHooks,
+  harnessTrackingRepairTargets,
   isSupportedHarnessId,
   relevantHarnessTrackingIds,
   resolveSetupHarnessSelection,
@@ -940,22 +941,24 @@ function hookSetupActions(
       data: { setupRole: "hook" },
     });
   }
-  for (const selectedHarness of harnessSelection.selected) {
+  for (const repairTarget of harnessTrackingRepairTargets(facts, harnessSelection)) {
     if (
-      !harnessSupportsSetupHooks(selectedHarness.id) ||
-      harnessTrackingPrepared(facts, selectedHarness.id)
+      !harnessSupportsSetupHooks(repairTarget.id) ||
+      harnessTrackingPrepared(facts, repairTarget.id)
     ) {
       continue;
     }
     actions.push({
-      id: `${selectedHarness.id}-hooks`,
+      id: `${repairTarget.id}-hooks`,
       kind: "run-command",
-      tier: "required",
+      tier: harnessSelection.requiredHarnessIds.includes(repairTarget.id)
+        ? "required"
+        : "recommended",
       selected: true,
-      label: `Install ${selectedHarness.label} tracking`,
-      message: `Install Station-owned ${selectedHarness.label} tracking artifacts.`,
-      command: harnessHookInstallCommand(facts, selectedHarness.id),
-      data: { setupRole: "hook", harness: selectedHarness.id },
+      label: `Install ${repairTarget.label} tracking`,
+      message: `Install Station-owned ${repairTarget.label} tracking artifacts.`,
+      command: harnessHookInstallCommand(facts, repairTarget.id),
+      data: { setupRole: "hook", harness: repairTarget.id },
     });
   }
   return actions;

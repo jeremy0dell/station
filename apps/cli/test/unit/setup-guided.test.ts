@@ -564,6 +564,7 @@ describe("guided setup command", () => {
       'command = "codex"\ninstall_hooks = true',
     );
     const fs = fakeFs({ [configPath]: preparedConfig });
+    const chunks: string[] = [];
     let activations = 0;
 
     const result = await runSetupCommand(
@@ -579,13 +580,18 @@ describe("guided setup command", () => {
           activations += 1;
         },
         prompt: prompt({ confirms: [false, false] }),
-        writeStdout: () => undefined,
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
+    const output = chunks.join("");
     expect(result.code).toBe(0);
     expect(activations).toBe(0);
     expect(fs.files[configPath]).toBe(preparedConfig);
+    expect(output).not.toContain("MISSING   Codex tracking");
+    expect(output).not.toContain("WILL      Install Codex tracking");
   });
 
   it("enables and installs hooks for an already-configured harness", async () => {

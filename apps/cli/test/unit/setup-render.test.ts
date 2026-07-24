@@ -76,6 +76,44 @@ describe("setup renderer", () => {
     expect(output).not.toContain("runtime Ready");
   });
 
+  it("prioritizes unresolved harness selection in apply recovery output", () => {
+    const output = renderSetupApplyResult(
+      {
+        ...plan(),
+        checks: [
+          {
+            id: "worktrunk",
+            tier: "required",
+            status: "missing",
+            label: "Worktrunk / wt",
+            message: "Worktrunk is missing.",
+          },
+          {
+            id: "harness",
+            tier: "required",
+            status: "missing",
+            label: "Agent CLI",
+            message: "Multiple supported agent CLIs are available; explicit selection is required.",
+          },
+        ],
+        actions: [],
+        summary: {
+          ...plan().summary,
+          selectionSource: "unresolved",
+          requiredOk: false,
+          requiredMissing: 2,
+          selectedActions: 0,
+        },
+      },
+      { selectionRequired: true },
+    );
+
+    expect(output).toContain("explicit selection is required");
+    expect(output).toContain("Run guided setup and choose an agent CLI");
+    expect(output).toContain("stn --config /tmp/station/config.toml setup");
+    expect(output).not.toContain("Worktrunk is still missing");
+  });
+
   it("renders the effective Worktrunk automation mode", () => {
     const skipHooks = renderSetupPlan({
       ...plan(),

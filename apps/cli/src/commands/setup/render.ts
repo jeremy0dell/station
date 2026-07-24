@@ -58,8 +58,24 @@ export function renderSetupPlan(plan: SetupPlan, options: SetupRenderOptions = {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOptions = {}): string {
+type SetupApplyRenderOptions = SetupRenderOptions & {
+  selectionRequired?: boolean;
+};
+
+export function renderSetupApplyResult(
+  plan: SetupPlan,
+  options: SetupApplyRenderOptions = {},
+): string {
   const theme = setupTheme(options);
+  if (options.selectionRequired === true) {
+    const harnessCheck = plan.checks.find((check) => check.id === "harness");
+    return missingResult(
+      harnessCheck?.message ?? "Agent CLI selection is required.",
+      "Run guided setup and choose an agent CLI:",
+      theme,
+      formatCommand(["stn", "--config", plan.summary.configPath, "setup"]),
+    );
+  }
   if (plan.summary.requiredOk) {
     // plan.nextSteps is computed before apply, so on a freshly-completed setup it
     // can still read "resolve the missing items". Show the completion steps here.
@@ -256,10 +272,13 @@ function sectionHeading(label: string, theme: SetupTheme): string {
   return theme.bold(label);
 }
 
-function missingResult(title: string, detail: string, theme: SetupTheme): string {
-  return [theme.bold(theme.red(title)), detail, `  ${theme.cyan("stn setup check")}`, ""].join(
-    "\n",
-  );
+function missingResult(
+  title: string,
+  detail: string,
+  theme: SetupTheme,
+  command = "stn setup check",
+): string {
+  return [theme.bold(theme.red(title)), detail, `  ${theme.cyan(command)}`, ""].join("\n");
 }
 
 function pad(value: string, width: number): string {

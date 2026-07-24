@@ -85,6 +85,12 @@ function buildLaunch(
   request: BuildHarnessLaunchRequest,
 ): HarnessLaunchPlan {
   const launchOptions: CursorLaunchOptions = { command: command(options) };
+  if (options.configPath !== undefined) launchOptions.configPath = options.configPath;
+  if (options.observerSocketPath !== undefined) {
+    launchOptions.observerSocketPath = options.observerSocketPath;
+  }
+  if (options.stateDir !== undefined) launchOptions.stateDir = options.stateDir;
+  if (options.hookSpoolDir !== undefined) launchOptions.hookSpoolDir = options.hookSpoolDir;
   return buildCursorLaunchPlan(request, launchOptions);
 }
 

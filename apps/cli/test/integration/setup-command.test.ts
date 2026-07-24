@@ -136,6 +136,80 @@ describe("CLI setup command", () => {
     });
   });
 
+  it("repairs persisted tracking intent for a configured secondary harness", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const source = setupConfigToml(repo, { includeHarness: true }).replace(
+      "[[projects]]",
+      [
+        "install_hooks = true",
+        "",
+        "[harness.opencode]",
+        "enabled = true",
+        'command = "opencode"',
+        "install_hooks = true",
+        "",
+        "[[projects]]",
+      ].join("\n"),
+    );
+    const calls: ExternalCommandInput[] = [];
+    const installed = new Set(["codex"]);
+    const baseRunner = fakeRunner(calls, {
+      "git rev-parse --show-toplevel": repo,
+      "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "codex --version": "codex 0.1.0\n",
+      "opencode --version": "opencode 1.0.0\n",
+    });
+
+    const setupDeps = {
+      cwd: repo,
+      homeDir: join(root, "home"),
+      env: { PATH: "/fake/bin" },
+      runner: async (input: ExternalCommandInput) => {
+        const commandResult = await baseRunner(input);
+        if (input.args?.[2] === "hooks" && input.args[4] === "opencode") {
+          installed.add("opencode");
+        }
+        return commandResult;
+      },
+      access: readySetupAccess(),
+      fs: fakeFs({ [configPath]: source }),
+      async probeHarnessHooksStatus(harnessId: string) {
+        const prepared = installed.has(harnessId);
+        return {
+          provider: harnessId,
+          requested: true,
+          installed: prepared,
+          missing: prepared ? [] : ["tracking artifact"],
+          message: prepared ? "Tracking is prepared." : "Tracking is missing.",
+        };
+      },
+      writeStdout: () => undefined,
+    };
+    const planned = await runCli(["--config", configPath, "setup", "plan", "--json"], {
+      setupDeps,
+    });
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps,
+    });
+
+    expect(planned.output).toMatchObject({
+      actions: expect.arrayContaining([expect.objectContaining({ id: "opencode-hooks" })]),
+    });
+    expect(result.code).toBe(0);
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        command: "/fake/bin/stn",
+        args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
+      }),
+    );
+    expect(installed).toContain("opencode");
+  });
+
   it("keeps the persisted default visible when only a secondary configured CLI is available", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -451,6 +525,7 @@ describe("CLI setup command", () => {
     const configPath = join(root, "config.toml");
     await mkdir(repo, { recursive: true });
     const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
     const fs = fakeFs({});
     const setupDeps = {
       cwd: repo,
@@ -466,7 +541,9 @@ describe("CLI setup command", () => {
       }),
       access: readySetupAccess(),
       fs,
-      writeStdout: () => undefined,
+      writeStdout: (chunk: string) => {
+        chunks.push(chunk);
+      },
     };
 
     const plan = await runCli(["--config", configPath, "setup", "plan", "--json"], {
@@ -485,6 +562,8 @@ describe("CLI setup command", () => {
     });
     expect(dryRun.code).toBe(1);
     expect(apply.code).toBe(1);
+    expect(chunks.join("")).toContain("Run guided setup and choose an agent CLI");
+    expect(chunks.join("")).toContain(`stn --config ${configPath} setup`);
     expect(fs.files).toEqual({});
     expect(
       calls.some(

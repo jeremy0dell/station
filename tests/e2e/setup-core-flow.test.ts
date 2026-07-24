@@ -99,7 +99,7 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "delta", "exit 0\n");
       const env = {
         ...process.env,
-        ...codexOnlyHarnessEnv(bin),
+        ...codexOnlyHarnessEnv(bin, home),
         HOME: home,
         PNPM_HOME: pnpmHome,
         XDG_CONFIG_HOME: join(root, "xdg-config"),
@@ -112,6 +112,7 @@ describe("setup core flow e2e", () => {
         NO_COLOR: "1",
         STATION_FAST_POPUP_NO_FALLBACK: "1",
       };
+      expect((env as NodeJS.ProcessEnv).CODEX_HOME).toBe(join(home, ".codex"));
       await Promise.all([
         mkdir(home, { recursive: true }),
         mkdir(join(pnpmHome, "bin"), { recursive: true }),
@@ -138,6 +139,9 @@ describe("setup core flow e2e", () => {
       });
       expect(setup.stdout).toContain("Core setup complete.");
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
+      await expect(
+        readFile(join(home, ".codex", "station.config.toml"), "utf8"),
+      ).resolves.toContain("[[hooks.SessionStart]]");
 
       const observer = createObserverClient({ socketPath: observerSocket, timeoutMs: 1000 });
       const health = await waitForStartupReconcile(observer);
@@ -217,7 +221,7 @@ describe("setup core flow e2e", () => {
       await writeShim(bin, "bun", "exit 0\n");
       const env: NodeJS.ProcessEnv = {
         ...process.env,
-        ...codexOnlyHarnessEnv(bin),
+        ...codexOnlyHarnessEnv(bin, home),
         HOME: home,
         XDG_RUNTIME_DIR: runtimeDir,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -380,7 +384,7 @@ describe("setup core flow e2e", () => {
 
       const env = {
         ...process.env,
-        ...codexOnlyHarnessEnv(bin),
+        ...codexOnlyHarnessEnv(bin, home),
         HOME: home,
         XDG_RUNTIME_DIR: runtimeDir,
         PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -539,8 +543,9 @@ describe("setup core flow e2e", () => {
   });
 });
 
-function codexOnlyHarnessEnv(bin: string): NodeJS.ProcessEnv {
+function codexOnlyHarnessEnv(bin: string, home: string): NodeJS.ProcessEnv {
   return {
+    CODEX_HOME: join(home, ".codex"),
     STATION_CODEX_BIN: join(bin, "codex"),
     STATION_CURSOR_AGENT_BIN: join(bin, "missing-cursor"),
     STATION_OPENCODE_BIN: join(bin, "missing-opencode"),

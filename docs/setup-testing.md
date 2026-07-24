@@ -102,7 +102,9 @@ tier 1, `docker build --target` for tier 2, `tart clone` for tier 3; (2) runs th
 read-only, machine-readable surfaces (`stn setup check --json`, `stn setup plan
 --json`, `stn setup apply --dry-run`); verifies that several runnable CLIs leave
 selection unresolved and that no read-only mode mutates config, provider homes,
-Observer state, sockets, or tmux; (3) captures stdout + exit code; (4)
+durable Observer state, sockets, or tmux. The state-directory readiness check is
+the narrow exception: it creates and removes a temporary probe file and can
+leave a newly created empty state directory; (3) captures stdout + exit code; (4)
 structurally diffs the JSON plan + exit code against the profile's `expect`; (5)
 iterates on setup code and re-runs. Tier 1 reruns in milliseconds, tier 2 in
 seconds, tier 3 in low minutes. Every artifact (profile, captured JSON, diff) is

@@ -98,6 +98,19 @@ export function harnessSupportsSetupHooks(
   );
 }
 
+export function harnessTrackingRepairTargets(
+  facts: Pick<SetupFacts, "config" | "harnesses">,
+  harnessSelection: SetupHarnessSelection,
+): SetupHarnessFact[] {
+  const persistedHookIds =
+    facts.config.status === "valid" ? facts.config.configuredHookHarnesses : [];
+  const repairIds = uniqueSupportedIds([
+    ...harnessSelection.requiredHarnessIds,
+    ...persistedHookIds,
+  ]);
+  return availableHarnesses(facts.harnesses, repairIds);
+}
+
 export function relevantHarnessTrackingIds(
   facts: Pick<SetupFacts, "config" | "harnesses">,
   harnessSelection: SetupHarnessSelection,
