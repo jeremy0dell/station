@@ -138,17 +138,33 @@ describe("createPtyRegistry", () => {
     const registry = createPtyRegistry({
       createTerminal: () => first.terminal,
       scrollOnOutput: "freeze",
+      scrollbackLines: 1,
     });
 
     registry.resize(PANE_A, SIZE);
     registry.setRuntimeOptions({
       createTerminal: () => second.terminal,
       scrollOnOutput: "follow",
+      scrollbackLines: 3,
     });
     registry.resize(PANE_B, SIZE);
 
     expect(registry.get(PANE_A)?.terminal).toBe(first.terminal);
     expect(registry.get(PANE_B)?.terminal).toBe(second.terminal);
+  });
+
+  it("caps each new screen at the configured scrollback depth", async () => {
+    const { registry, scripted } = harness();
+    registry.setRuntimeOptions({ scrollOnOutput: "freeze", scrollbackLines: 2 });
+    registry.resize(PANE_A, SIZE);
+
+    scripted[0].helpers.emitData(
+      Array.from({ length: 20 }, (_, index) => `line-${index}\r\n`).join(""),
+    );
+    const screen = registry.get(PANE_A)?.screen;
+    await screen?.whenIdle();
+
+    expect(screen?.bufferStats().baseY).toBe(2);
   });
 
   it("round-trips device queries from the screen back to the pty", async () => {

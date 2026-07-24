@@ -65,19 +65,21 @@ describe("reportTerminalCorruption", () => {
 
 describe("writePaneEvidenceDump", () => {
   it("redacts secrets in rows and the raw tail before writing", async () => {
+    const githubToken = ["ghp", "_abcdef0123456789abcdef"].join("");
+    const apiToken = ["sk", "-abcdefghijklmnop0123456789"].join("");
     writePaneEvidenceDump({
       pane: "pane-secret",
       trigger: "geometry_divergence",
       evidence: {
-        rows: ["export GITHUB_TOKEN=ghp_abcdef0123456789abcdef"],
-        rawTail: "Authorization: Bearer sk-abcdefghijklmnop0123456789",
+        rows: [`export GITHUB_TOKEN=${githubToken}`],
+        rawTail: `Authorization: Bearer ${apiToken}`,
       },
     });
     await waitFor(() => readdirSync(dumpDir).length >= 1);
     const [name] = readdirSync(dumpDir);
     const dump = JSON.parse(await readFile(join(dumpDir, name ?? ""), "utf8"));
-    expect(JSON.stringify(dump)).not.toContain("ghp_abcdef0123456789abcdef");
-    expect(JSON.stringify(dump)).not.toContain("sk-abcdefghijklmnop0123456789");
+    expect(JSON.stringify(dump)).not.toContain(githubToken);
+    expect(JSON.stringify(dump)).not.toContain(apiToken);
     expect(JSON.stringify(dump)).toContain("[REDACTED]");
   });
 

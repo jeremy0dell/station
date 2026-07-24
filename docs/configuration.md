@@ -269,10 +269,16 @@ degrades to defaults plus a diagnostic — it never crashes the daemon.
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `scroll_on_output` | `freeze` \| `shift` \| `follow` | `freeze` | Scroll behavior while scrolled up. `freeze` preserves visible lines; `shift` preserves distance from bottom; `follow` snaps to live. At the bottom, all modes track live. |
+| `scrollback_lines` | int ≥ 0 | `10000` | Normal-buffer history retained by each native pane. `0` disables pane scrollback. Existing panes keep their current depth; changes apply to newly created panes. |
 | `overlay_width_percent` | int 10-100 | `60` | Width of the native Station overlay as a percentage of the terminal width, still clamped to the minimum dashboard size and available space. |
 | `overlay_height_percent` | int 10-100 | `60` | Height of the native Station overlay as a percentage of the terminal height below the header row, still clamped to the minimum dashboard size and available space. |
 | `welcome_on_boot` | bool | `true` | Show the welcome screen over the restored layout on cold boot. `false` boots straight in. |
 | `automations` | `Automation[]` | one `see-diff` automation | Named, user-triggerable pane layouts in the pane context menu. Omit the key to keep the built-in `see-diff`; set `automations = []` to disable it. Automation ids must be unique. |
+
+Station Host separately retains up to 10,000,000 bytes of PTY output for warm
+reattachment. This internal replay budget is byte-based because it stores raw PTY
+chunks, while `scrollback_lines` is line-based because the native screen engine
+stores rendered rows. Alternate-screen output does not enter normal scrollback.
 
 Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 `[[workspace.automations.steps]]` is `{ command, split?, anchor?, run?, focus? }`:
@@ -567,7 +573,7 @@ right observer/session. `STATION_STATE_DIR` is a hook-script fallback for
 | Add project commands (dev/test/…) | `config.toml` `[projects.commands]`, or additively in project-local `[commands]` | |
 | Tune the observer daemon | `config.toml` | `[observer]` |
 | React to observer events with a command | `config.toml` | `[[hooks.event]]` |
-| Change scroll behavior, the welcome screen, or pane automations | `config.toml` | `[workspace]` |
+| Change scrollback depth, scroll behavior, the welcome screen, or pane automations | `config.toml` | `[workspace]` |
 | Add a clock/weather widget | `config.toml` | `[tui].widgets` |
 | Set log/DB retention caps | `config.toml` | `[observability.retention]` |
 | Toggle a feature flag | `config.toml` | `[feature_flags]` |
