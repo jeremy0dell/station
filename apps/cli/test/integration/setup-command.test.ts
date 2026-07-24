@@ -374,8 +374,12 @@ describe("CLI setup command", () => {
     const repo = join(root, "repo");
     const home = join(root, "home");
     const configPath = join(root, "config.toml");
-    const installedRoot = join(root, "installed bin");
+    const installedRoot = join(root, "installed path's bin");
+    const stationLauncher = join(installedRoot, "stn");
     const providerHookIngressLauncher = join(installedRoot, "stn-ingress");
+    const popupLauncher = join(installedRoot, "stn-tmux-popup");
+    const shellQuotedRoot = `'${installedRoot.replaceAll("'", "'\\''")}'`;
+    const shellQuotedStation = `'${stationLauncher.replaceAll("'", "'\\''")}'`;
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
     const chunks: string[] = [];
@@ -393,9 +397,9 @@ describe("CLI setup command", () => {
         "/fake/bin/bun",
         "/fake/bin/diffnav",
         "/fake/bin/delta",
-        join(installedRoot, "stn"),
+        stationLauncher,
         providerHookIngressLauncher,
-        join(installedRoot, "stn-tmux-popup"),
+        popupLauncher,
       ]),
       fs,
       activateObserverConfig: async () => undefined,
@@ -422,9 +426,10 @@ describe("CLI setup command", () => {
     expect(finalPlan.checks.find((item) => item.id === "station-launchers")).toMatchObject({
       status: "warning",
       details: {
-        station: join(installedRoot, "stn"),
+        station: stationLauncher,
         ingress: providerHookIngressLauncher,
-        tmuxPopup: join(installedRoot, "stn-tmux-popup"),
+        tmuxPopup: popupLauncher,
+        pathDirectory: installedRoot,
       },
     });
     expect(output).toContain("Core setup complete.");
@@ -432,9 +437,15 @@ describe("CLI setup command", () => {
     expect(output).toContain(
       "these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup",
     );
-    expect(output).toContain(`station ${join(installedRoot, "stn")}`);
+    expect(output).toContain(`station ${stationLauncher}`);
     expect(output).toContain(`ingress ${providerHookIngressLauncher}`);
-    expect(output).toContain(`tmuxPopup ${join(installedRoot, "stn-tmux-popup")}`);
+    expect(output).toContain(`tmuxPopup ${popupLauncher}`);
+    expect(output).toContain(`PATH=${shellQuotedRoot}\${PATH:+":$PATH"}`);
+    expect(output).toContain(`${shellQuotedStation} doctor`);
+    expect(output).toContain(`  ${shellQuotedStation}\n`);
+    expect(output).toContain("Future login shell launcher resolution remains unverified");
+    expect(output).not.toContain("\n  stn doctor\n");
+    expect(output).not.toContain("\n  stn\n");
     expect(output).not.toContain("station:link");
   });
 

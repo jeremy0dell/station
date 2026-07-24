@@ -703,11 +703,14 @@ flow:
    and the observer restarts on the **same socket**. First invoke setup through
    the absolute installed fallback while the install directory is absent from
    `PATH`: successful completion must retain the final all-three launcher
-   warning and exact installed paths. Repeat after the installer's current-shell
-   block: the current-process warning must disappear, while future-login PATH
-   remains unverified until the installer export is placed manually and tested
-   in a new login shell. Setup never emits that export or edits a startup file.
-   Open the TUI, explicitly add an existing Git repository, and verify the
+   warning and exact installed paths, print a safely quoted current-shell PATH
+   block, and use the absolute selected executable for doctor and launch next
+   steps. It must not recommend the bare commands it found unusable. Repeat
+   after the installer's current-shell block: the current-process warning must
+   disappear, while future-login PATH remains unverified until the installer
+   export is placed manually and tested in a new login shell. Setup never emits
+   that future-shell export or edits a startup file. Open the TUI, explicitly
+   add an existing Git repository, and verify the
    observer reflects it immediately (B-config); an open TUI reconnects without
    a manual restart.
 5. Build and install the compiled artifact with default popup geometry, then

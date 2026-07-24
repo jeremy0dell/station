@@ -736,6 +736,7 @@ describe("setup planner", () => {
         station: `${installedRoot}/stn`,
         ingress: `${installedRoot}/stn-ingress`,
         tmuxPopup: `${installedRoot}/stn-tmux-popup`,
+        pathDirectory: installedRoot,
       },
     });
     expect(plan.summary).toMatchObject({ workflowReady: true, requiredOk: true });

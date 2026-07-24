@@ -131,7 +131,55 @@ describe("setup renderer", () => {
     expect(output).toContain("tmuxPopup /tmp/station checkout/bin/stn-tmux-popup");
     expect(output).toContain("SKIP      Link STATION launchers");
     expect(output).toContain("command pnpm --dir '/tmp/station checkout' station:link");
+    expect(output).toContain("'/tmp/station checkout/bin/stn' doctor");
+    expect(output).toContain("'/tmp/station checkout/bin/stn'");
+    expect(output).toContain("Future login shell launcher resolution remains unverified");
+    expect(output).not.toContain("\n  stn doctor\n");
+    expect(output).not.toContain("\n  stn\n");
     expect(output).not.toContain("Doctor reminder");
+  });
+
+  it("renders installed current-shell PATH recovery and runnable absolute next steps", () => {
+    const base = plan();
+    const output = renderSetupApplyResult({
+      ...base,
+      checks: [
+        {
+          id: "station-launchers",
+          tier: "recommended",
+          status: "warning",
+          label: "STATION launchers",
+          message:
+            "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup.",
+          details: {
+            station: "/tmp/installed path's bin/stn",
+            ingress: "/tmp/installed path's bin/stn-ingress",
+            tmuxPopup: "/tmp/installed path's bin/stn-tmux-popup",
+            pathDirectory: "/tmp/installed path's bin",
+          },
+        },
+      ],
+      actions: [],
+      summary: {
+        ...base.summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        warnings: 1,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toContain("Current shell PATH recovery (does not edit startup files):");
+    expect(output).toContain(`PATH='/tmp/installed path'\\''s bin'\${PATH:+":$PATH"}`);
+    expect(output).toContain("export PATH");
+    expect(output).toContain("hash -r");
+    expect(output).toContain("'/tmp/installed path'\\''s bin/stn' doctor");
+    expect(output).toContain("'/tmp/installed path'\\''s bin/stn'");
+    expect(output).toContain("Future login shell launcher resolution remains unverified");
+    expect(output).not.toContain("\n  stn doctor\n");
+    expect(output).not.toContain("\n  stn\n");
+    expect(output).not.toContain("station:link");
   });
 
   it("keeps all-correct successful apply output concise", () => {

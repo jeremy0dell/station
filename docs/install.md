@@ -184,11 +184,12 @@ startup files.
 
 Successful setup preserves the final probe's current-process launcher
 mismatch under **Remaining**, including the selected absolute launcher paths.
-For an installed runtime, that warning points back to the installer's PATH
-guidance; setup does not invent another export or choose a startup file. If the
-installer current-shell block repaired PATH before setup, the final probe is
-clean and setup stays concise, but a future login shell remains unverified
-until you test it separately.
+When installed launchers share one directory, setup also repeats a safely
+quoted current-shell PATH block and uses the absolute selected `stn` executable
+for its immediate doctor and launch commands. It does not edit a startup file
+or generate a future-shell export. If the installer current-shell block repaired
+PATH before setup, the final probe is clean and setup stays concise, but a
+future login shell remains unverified until you test it separately.
 
 ## Install an Exact Version
 
@@ -265,8 +266,8 @@ The installer and setup have separate ownership:
 | --- | --- |
 | Download, verify, and install the binary artifacts | Station installer |
 | Verify all three launcher paths physically | Station installer |
-| Print current-shell, future-shell, and absolute recovery commands | Station installer |
-| Preserve final current-process launcher mismatch evidence | `stn setup` |
+| Print install-time current-shell, future-shell, and absolute recovery | Station installer |
+| Repeat final current-shell recovery and absolute next commands | `stn setup` |
 | Choose or edit a shell configuration | User |
 | Write Station configuration and install integrations | `stn setup` |
 | Choose the first Git project | User in Station |

@@ -37,17 +37,20 @@ checkout launchers, its existing link action.
 | Final state | Successful apply output |
 | --- | --- |
 | All three launchers on PATH | Concise; no **Remaining** section |
-| Installed aliases outside PATH | Warning + exact paths; no checkout link |
-| One installed name shadowed | Warning names only that bare launcher |
-| Compiled sibling missing | Missing warning; never `pnpm station:link` |
-| Checkout names absent | Warning + existing `station:link` command |
+| Installed aliases outside PATH | Warning, current-shell block, absolute next commands |
+| One installed name shadowed | Warning names only it; same runnable recovery |
+| Compiled sibling missing | Missing warning + absolute next; no checkout link |
+| Checkout names absent | Warning, absolute next, existing `station:link` command |
 | Current PATH repaired | Concise; login shell remains unverified |
-| Spaces or apostrophes | Exact paths; installer owns safe quoting |
+| Spaces or apostrophes | Current-shell block and commands remain safely quoted |
 
-Other recommended warnings, including doctor reminders and optional
-integrations, stay out of successful apply output. Installer tests own shell
-commands and startup-file non-interaction; release acceptance owns proof in a
-genuinely new login shell.
+Every successful mismatch rendering must keep future-login verification
+unresolved and must not recommend bare `stn` commands that the same probe found
+missing or shadowed. Compiled smoke runs a successful apply, not only a JSON
+check, and asserts the rendered recovery and absolute commands. Other
+recommended warnings, including doctor reminders and optional integrations,
+stay out of successful apply output. Installer tests own startup-file
+non-interaction; release acceptance owns proof in a genuinely new login shell.
 
 ## Tier 1 — in-process synthetic profiles (every PR, ~zero cost)
 

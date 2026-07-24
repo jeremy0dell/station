@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { stationUiInstallHint } from "../../stationWorkspace.js";
 import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
@@ -221,11 +222,21 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
   const installedOutsidePath = launcherEntries.flatMap((entry) =>
     entry[1].source === "installed" ? [entry[0]] : [],
   );
-  const details = {
-    station: setupLauncherExecutable(facts.launchers.station),
-    ingress: setupLauncherExecutable(facts.launchers.ingress),
-    tmuxPopup: setupLauncherExecutable(facts.launchers.tmuxPopup),
+  const stationExecutable = setupLauncherExecutable(facts.launchers.station);
+  const ingressExecutable = setupLauncherExecutable(facts.launchers.ingress);
+  const tmuxPopupExecutable = setupLauncherExecutable(facts.launchers.tmuxPopup);
+  const stationDirectory = dirname(stationExecutable);
+  const launchersShareDirectory = [ingressExecutable, tmuxPopupExecutable].every(
+    (executable) => dirname(executable) === stationDirectory,
+  );
+  const details: Record<string, string> = {
+    station: stationExecutable,
+    ingress: ingressExecutable,
+    tmuxPopup: tmuxPopupExecutable,
   };
+  if (missing.length === 0 && installedOutsidePath.length > 0 && launchersShareDirectory) {
+    details.pathDirectory = stationDirectory;
+  }
   let warningMessage: string | undefined;
   if (missing.length > 0) {
     warningMessage = `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`;

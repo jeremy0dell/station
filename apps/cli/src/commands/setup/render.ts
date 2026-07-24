@@ -77,14 +77,21 @@ export function renderSetupApplyResult(
     );
   }
   if (plan.summary.requiredOk) {
-    // Pre-apply next steps can be stale, but the final re-probed launcher warning and its checkout recovery must remain visible.
-    const nextSteps = ["stn doctor", "stn"];
+    // Pre-apply next steps can be stale; final launcher mismatches must retain runnable absolute commands and current evidence.
     const prepared = preparedHarnesses(plan);
     const completionMessage = setupCompletionMessage(prepared);
     const completionNotices = setupCompletionNotices(prepared);
     const launcherWarning = plan.checks.find(
       (check) => check.id === "station-launchers" && check.status === "warning",
     );
+    const launcherExecutable = launcherWarning?.details?.station;
+    const nextSteps =
+      launcherExecutable === undefined
+        ? ["stn doctor", "stn"]
+        : [
+            formatSelectedLauncherCommand(launcherExecutable, ["doctor"]),
+            formatSelectedLauncherCommand(launcherExecutable),
+          ];
     const launcherLinkAction = plan.actions.find(
       (action) => action.id === "link-station-launchers",
     );
@@ -99,6 +106,21 @@ export function renderSetupApplyResult(
       if (launcherLinkAction !== undefined) {
         remainingLines.push(...renderAction(launcherLinkAction, theme));
       }
+      const pathDirectory = launcherWarning.details?.pathDirectory;
+      if (pathDirectory !== undefined) {
+        remainingLines.push(
+          "",
+          theme.bold("Current shell PATH recovery (does not edit startup files):"),
+          `  ${theme.cyan(`PATH=${quoteShellPart(pathDirectory)}\${PATH:+":$PATH"}`)}`,
+          `  ${theme.cyan("export PATH")}`,
+          `  ${theme.cyan("hash -r")}`,
+        );
+      }
+      const futureShellGuidance =
+        pathDirectory === undefined
+          ? "Future login shell launcher resolution remains unverified."
+          : "Future login shell launcher resolution remains unverified; use the installer's future-shell export in a shell configuration you choose, then verify all three launchers in a new login shell.";
+      remainingLines.push("", `  ${theme.dim(futureShellGuidance)}`);
     }
     return [
       theme.bold(theme.green(completionMessage)),
@@ -158,6 +180,10 @@ export function renderSetupApplyResult(
 
 export function formatCommand(command: readonly string[]): string {
   return command.map((part) => quoteCommandPart(part)).join(" ");
+}
+
+function formatSelectedLauncherCommand(executable: string, args: readonly string[] = []): string {
+  return [quoteShellPart(executable), ...args.map((part) => quoteCommandPart(part))].join(" ");
 }
 
 export function renderActionStart(action: SetupAction, options: SetupRenderOptions = {}): string {
@@ -325,5 +351,9 @@ function quoteCommandPart(part: string): string {
   if (/^[A-Za-z0-9_./:=@%+-]+$/.test(part)) {
     return part;
   }
+  return quoteShellPart(part);
+}
+
+function quoteShellPart(part: string): string {
   return `'${part.replaceAll("'", "'\\''")}'`;
 }
