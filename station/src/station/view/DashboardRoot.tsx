@@ -12,13 +12,9 @@ import {
   snapshotLoadingLines,
 } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
-import {
-  activeTuiToast,
-  nextTuiToastExpiry,
-  QUIT_HINT_CLOSE,
-  QUIT_HINT_DISMISS_ERROR,
-} from "@station/dashboard-core";
+import { activeTuiToast, nextTuiToastExpiry } from "@station/dashboard-core";
 import { CommandPromptView } from "./CommandPromptView.js";
+import { DashboardFooterView } from "./DashboardFooterView.js";
 import { DashboardView, Divider } from "./DashboardView.js";
 import { OverlayHostView } from "./OverlayHostView.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
@@ -76,10 +72,6 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
   }, [nextExpiry, store, toastHiddenByScreen]);
 
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
-  const footerQuitHint =
-    !toastHiddenByScreen && activeToast?.toast.kind === "error"
-      ? QUIT_HINT_DISMISS_ERROR
-      : QUIT_HINT_CLOSE;
   const toastOverlay = (
     <ToastOverlayView
       columns={columns}
@@ -105,7 +97,7 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
           ))}
         </box>
         <Divider columns={contentColumns} />
-        <text fg={STATION_COLORS.gray}>{footerQuitHint}</text>
+        <DashboardFooterView store={store} columns={contentColumns} />
         {toastOverlay}
       </box>
     );
@@ -125,8 +117,8 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
           ...(focusedRowId === undefined ? {} : { focusedRowId }),
         }}
         columns={columns}
-        footerQuitHint={footerQuitHint}
       />
+      <DashboardFooterView store={store} columns={contentColumns} />
       <CommandPromptView screen={screen} />
       {toastOverlay}
       <OverlayHostView
