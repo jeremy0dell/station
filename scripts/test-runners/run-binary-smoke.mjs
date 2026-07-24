@@ -147,6 +147,11 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         installedRoot,
         root: join(root, "git-setup-canary"),
       });
+      await verifyCompiledSetupApplyLauncherWarning({
+        binaryPath,
+        installedRoot,
+        root: join(root, "setup-apply-canary"),
+      });
 
       const popupHelp = await run(join(dirname(binaryPath), "stn-tmux-popup"), ["--help"], {
         env: childEnv,
@@ -164,6 +169,24 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
       assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
       assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
+      const launcherCheck = setupPlan.checks.find((check) => check.id === "station-launchers");
+      assertEqual(launcherCheck?.tier, "recommended", "compiled launcher PATH warning tier");
+      assertEqual(launcherCheck?.status, "warning", "compiled launcher PATH warning status");
+      assertEqual(
+        launcherCheck?.message,
+        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup. Use the installer's PATH guidance to repair bare launcher resolution.",
+        "compiled launcher PATH warning message",
+      );
+      assertDeepEqual(
+        launcherCheck?.details,
+        {
+          station: join(installedRoot, "stn"),
+          ingress: join(installedRoot, "stn-ingress"),
+          tmuxPopup: join(installedRoot, "stn-tmux-popup"),
+          pathDirectory: installedRoot,
+        },
+        "compiled launcher PATH warning paths",
+      );
       const persistedBindingAction = requiredSetupAction(setupPlan, "tmux-popup-binding");
       const liveBindingAction = requiredSetupAction(setupPlan, "tmux-live-popup-binding");
       assertEqual(persistedBindingAction.tier, "recommended", "compiled popup binding tier");
@@ -1263,6 +1286,112 @@ async function verifyCompiledGitFailure({ binaryPath, installedRoot, root }) {
   );
 }
 
+async function verifyCompiledSetupApplyLauncherWarning({ binaryPath, installedRoot, root }) {
+  const homeDir = join(root, "home");
+  const runtimeDir = join(root, "runtime");
+  const stateDir = join(root, "state");
+  const cwd = join(root, "outside-repository");
+  const fakeBin = join(root, "fake-bin");
+  const configPath = join(root, "config.toml");
+  await Promise.all(
+    [homeDir, join(homeDir, "tmp"), runtimeDir, stateDir, cwd, fakeBin].map((path) =>
+      mkdir(path, { recursive: true, mode: 0o700 }),
+    ),
+  );
+  await Promise.all([
+    writeFile(
+      join(fakeBin, "wt"),
+      "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'worktrunk 1.2.3'; exit 0; fi\nexit 1\n",
+      { mode: 0o700 },
+    ),
+    writeFile(
+      join(fakeBin, "tmux"),
+      "#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux 3.5a'; exit 0; fi\nexit 1\n",
+      { mode: 0o700 },
+    ),
+    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
+    writeFile(
+      configPath,
+      [
+        "schema_version = 1",
+        "projects = []",
+        "",
+        "[observer]",
+        `state_dir = ${JSON.stringify(stateDir)}`,
+        `socket_path = ${JSON.stringify(join(runtimeDir, "observer.sock"))}`,
+        "",
+        "[defaults]",
+        'worktree_provider = "worktrunk"',
+        'terminal = "tmux"',
+        'harness = "pi"',
+        'layout = "agent-shell"',
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    ),
+  ]);
+
+  const env = {
+    ...isolatedBinaryEnv({ homeDir, runtimeDir }),
+    PATH: `${fakeBin}:/usr/bin:/bin`,
+  };
+  const result = await run(
+    binaryPath,
+    ["--config", configPath, "setup", "apply", "--yes", "--no-brew"],
+    { cwd, env },
+  );
+  const stationLauncher = join(installedRoot, "stn");
+
+  assertEqual(result.code, 0, "compiled successful setup apply exit code");
+  assertIncludes(result.stdout, "Core setup complete.", "compiled setup apply completion");
+  assertIncludes(result.stdout, "Remaining", "compiled setup apply remaining section");
+  assertIncludes(
+    result.stdout,
+    `PATH=${quoteShellWord(installedRoot)}\${PATH:+":$PATH"}`,
+    "compiled setup apply current-shell PATH recovery",
+  );
+  assertIncludes(
+    result.stdout,
+    `  ${quoteShellWord(stationLauncher)} doctor`,
+    "compiled setup apply absolute doctor command",
+  );
+  assertIncludes(
+    result.stdout,
+    `  ${quoteShellWord(stationLauncher)}\n`,
+    "compiled setup apply absolute launch command",
+  );
+  assertIncludes(
+    result.stdout,
+    "Use stn instead of the absolute path (optional):",
+    "compiled setup apply optional bare launcher guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    `For future shells, add ${quoteShellWord(installedRoot)} to PATH in a shell configuration you choose.`,
+    "compiled setup apply future-shell PATH guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    "compiled setup apply PATH over alias guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    "command -v stn-tmux-popup",
+    "compiled setup apply all-launcher verification",
+  );
+  assertIncludes(
+    result.stdout,
+    "Future login shell launcher resolution remains unverified",
+    "compiled setup apply future-shell status",
+  );
+  assertExcludes(result.stdout, "\n  stn doctor\n", "compiled setup apply bare doctor command");
+  assertExcludes(result.stdout, "\n  stn\n", "compiled setup apply bare launch command");
+  assertExcludes(result.stdout, "station:link", "compiled setup apply checkout link command");
+}
+
 async function writeWorktrunkHookSmokeConfig(path, state, socket, worktrunkConfigPath) {
   await writeFile(
     path,
@@ -2181,6 +2310,12 @@ function assertDeepEqual(actual, expected, label) {
 function assertIncludes(value, expected, label) {
   if (!value.includes(expected)) {
     fail(`${label}: expected ${JSON.stringify(value)} to include ${JSON.stringify(expected)}`);
+  }
+}
+
+function assertExcludes(value, unexpected, label) {
+  if (value.includes(unexpected)) {
+    fail(`${label}: expected ${JSON.stringify(value)} to exclude ${JSON.stringify(unexpected)}`);
   }
 }
 

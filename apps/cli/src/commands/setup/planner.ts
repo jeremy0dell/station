@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { stationUiInstallHint } from "../../stationWorkspace.js";
 import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
@@ -221,20 +222,30 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
   const installedOutsidePath = launcherEntries.flatMap((entry) =>
     entry[1].source === "installed" ? [entry[0]] : [],
   );
-  const details = {
-    station: setupLauncherExecutable(facts.launchers.station),
-    ingress: setupLauncherExecutable(facts.launchers.ingress),
-    tmuxPopup: setupLauncherExecutable(facts.launchers.tmuxPopup),
+  const stationExecutable = setupLauncherExecutable(facts.launchers.station);
+  const ingressExecutable = setupLauncherExecutable(facts.launchers.ingress);
+  const tmuxPopupExecutable = setupLauncherExecutable(facts.launchers.tmuxPopup);
+  const stationDirectory = dirname(stationExecutable);
+  const launchersShareDirectory = [ingressExecutable, tmuxPopupExecutable].every(
+    (executable) => dirname(executable) === stationDirectory,
+  );
+  const details: Record<string, string> = {
+    station: stationExecutable,
+    ingress: ingressExecutable,
+    tmuxPopup: tmuxPopupExecutable,
   };
+  if (missing.length === 0 && installedOutsidePath.length > 0 && launchersShareDirectory) {
+    details.pathDirectory = stationDirectory;
+  }
   let warningMessage: string | undefined;
   if (missing.length > 0) {
     warningMessage = `Some STATION launchers are missing: ${missing.map((launcher) => launcher.command).join(", ")}.`;
   } else if (checkoutOutsidePath.length > 0 && installedOutsidePath.length > 0) {
-    warningMessage = `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}.`;
+    warningMessage = `These bare STATION launchers do not resolve to setup's selected executables on PATH: ${[...checkoutOutsidePath, ...installedOutsidePath].join(", ")}. Use the installer's PATH guidance for installed launchers; setup can link checkout launchers separately.`;
   } else if (checkoutOutsidePath.length > 0) {
     warningMessage = `These bare launchers do not resolve to this checkout on PATH: ${checkoutOutsidePath.join(", ")}; setup will use their current-checkout paths.`;
   } else if (installedOutsidePath.length > 0) {
-    warningMessage = `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}.`;
+    warningMessage = `STATION is installed, but these bare launchers do not resolve to this installation on PATH: ${installedOutsidePath.join(", ")}. Use the installer's PATH guidance to repair bare launcher resolution.`;
   }
   if (warningMessage !== undefined) {
     return {
@@ -906,7 +917,7 @@ function setupActions(
 
 function stationLaunchersNeedLink(facts: SetupFacts): boolean {
   return [facts.launchers.station, facts.launchers.ingress, facts.launchers.tmuxPopup].some(
-    (launcher) => launcher.source !== "path" && launcher.source !== "installed",
+    (launcher) => launcher.source === "checkout",
   );
 }
 

@@ -53,6 +53,20 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
+      expect(result.stdout).toContain("Remaining");
+      expect(result.stdout).toContain(
+        "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup",
+      );
+      expect(result.stdout).toContain(`command pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
+      expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
+      expect(result.stdout).toContain(
+        "To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+      );
+      expect(result.stdout).toContain("command -v stn-tmux-popup");
+      expect(result.stdout).toContain("Future login shell launcher resolution remains unverified");
+      expect(result.stdout).not.toContain("\n  stn doctor\n");
+      expect(result.stdout).not.toContain("\n  stn\n");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
     } finally {
       await fixture.cleanup();

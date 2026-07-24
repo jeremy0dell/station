@@ -369,6 +369,94 @@ describe("CLI setup command", () => {
     expect(plan.actions.find((action) => action.id === "worktrunk-hooks")).toBeUndefined();
   });
 
+  it("preserves installed launcher PATH evidence after successful noninteractive apply", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    const configPath = join(root, "config.toml");
+    const installedRoot = join(root, "installed path's bin");
+    const stationLauncher = join(installedRoot, "stn");
+    const providerHookIngressLauncher = join(installedRoot, "stn-ingress");
+    const popupLauncher = join(installedRoot, "stn-tmux-popup");
+    const shellQuotedRoot = `'${installedRoot.replaceAll("'", "'\\''")}'`;
+    const shellQuotedStation = `'${stationLauncher.replaceAll("'", "'\\''")}'`;
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    const setupDeps = {
+      compiled: true,
+      tmuxPopupOwnerRoot: installedRoot,
+      providerHookIngressLauncher,
+      cwd: repo,
+      homeDir: home,
+      env: { PATH: "/fake/bin" },
+      runner: readySetupRunner(repo),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+        stationLauncher,
+        providerHookIngressLauncher,
+        popupLauncher,
+      ]),
+      fs,
+      activateObserverConfig: async () => undefined,
+      writeStdout: (chunk: string) => {
+        chunks.push(chunk);
+      },
+    };
+
+    const apply = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps,
+    });
+    const check = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps,
+    });
+    const finalPlan = check.output as {
+      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+      summary: { requiredOk: boolean };
+    };
+    const output = chunks.join("");
+
+    expect(apply.code).toBe(0);
+    expect(check.code).toBe(0);
+    expect(finalPlan.summary.requiredOk).toBe(true);
+    expect(finalPlan.checks.find((item) => item.id === "station-launchers")).toMatchObject({
+      status: "warning",
+      details: {
+        station: stationLauncher,
+        ingress: providerHookIngressLauncher,
+        tmuxPopup: popupLauncher,
+        pathDirectory: installedRoot,
+      },
+    });
+    expect(output).toContain("Core setup complete.");
+    expect(output).toContain("Remaining");
+    expect(output).toContain(
+      "these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup",
+    );
+    expect(output).toContain(`station ${stationLauncher}`);
+    expect(output).toContain(`ingress ${providerHookIngressLauncher}`);
+    expect(output).toContain(`tmuxPopup ${popupLauncher}`);
+    expect(output).toContain(`PATH=${shellQuotedRoot}\${PATH:+":$PATH"}`);
+    expect(output).toContain(`${shellQuotedStation} doctor`);
+    expect(output).toContain(`  ${shellQuotedStation}\n`);
+    expect(output).toContain("Use stn instead of the absolute path (optional):");
+    expect(output).toContain(
+      `For future shells, add ${shellQuotedRoot} to PATH in a shell configuration you choose.`,
+    );
+    expect(output).toContain(
+      "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    );
+    expect(output).toContain("command -v stn-tmux-popup");
+    expect(output).toContain("Future login shell launcher resolution remains unverified");
+    expect(output).not.toContain("\n  stn doctor\n");
+    expect(output).not.toContain("\n  stn\n");
+    expect(output).not.toContain("station:link");
+  });
+
   it("generates the compiled binding from installed ownership while preserving its key", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

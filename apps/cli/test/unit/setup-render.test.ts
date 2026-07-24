@@ -76,6 +76,160 @@ describe("setup renderer", () => {
     expect(output).not.toContain("runtime Ready");
   });
 
+  it("preserves a final launcher warning and checkout link command after successful apply", () => {
+    const base = plan();
+    const output = renderSetupApplyResult({
+      ...base,
+      checks: [
+        {
+          id: "station-launchers",
+          tier: "recommended",
+          status: "warning",
+          label: "STATION launchers",
+          message:
+            "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup; setup will use their current-checkout paths.",
+          details: {
+            station: "/tmp/station checkout/bin/stn",
+            ingress: "/tmp/station checkout/bin/stn-ingress",
+            tmuxPopup: "/tmp/station checkout/bin/stn-tmux-popup",
+          },
+        },
+        {
+          id: "doctor-reminder",
+          tier: "recommended",
+          status: "warning",
+          label: "Doctor reminder",
+          message: "Run doctor later.",
+        },
+      ],
+      actions: [
+        {
+          id: "link-station-launchers",
+          kind: "run-command",
+          tier: "recommended",
+          selected: false,
+          label: "Link STATION launchers",
+          message: "Link launchers globally.",
+          command: ["pnpm", "--dir", "/tmp/station checkout", "station:link"],
+        },
+      ],
+      summary: {
+        ...base.summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        warnings: 2,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toContain("Core setup complete.");
+    expect(output).toContain("Remaining\n\n");
+    expect(output).toContain("WARN      STATION launchers");
+    expect(output).toContain("station /tmp/station checkout/bin/stn");
+    expect(output).toContain("ingress /tmp/station checkout/bin/stn-ingress");
+    expect(output).toContain("tmuxPopup /tmp/station checkout/bin/stn-tmux-popup");
+    expect(output).toContain("SKIP      Link STATION launchers");
+    expect(output).toContain("command pnpm --dir '/tmp/station checkout' station:link");
+    expect(output).toContain("'/tmp/station checkout/bin/stn' doctor");
+    expect(output).toContain("'/tmp/station checkout/bin/stn'");
+    expect(output).toContain("Use stn instead of the absolute path (optional):");
+    expect(output).toContain("The absolute commands under Next already work");
+    expect(output).toContain(
+      "To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+    );
+    expect(output).toContain("command -v stn");
+    expect(output).toContain("command -v stn-ingress");
+    expect(output).toContain("command -v stn-tmux-popup");
+    expect(output).toContain("Future login shell launcher resolution remains unverified");
+    expect(output).not.toContain("\n  stn doctor\n");
+    expect(output).not.toContain("\n  stn\n");
+    expect(output).not.toContain("Doctor reminder");
+  });
+
+  it("renders installed current-shell PATH recovery and runnable absolute next steps", () => {
+    const base = plan();
+    const output = renderSetupApplyResult({
+      ...base,
+      checks: [
+        {
+          id: "station-launchers",
+          tier: "recommended",
+          status: "warning",
+          label: "STATION launchers",
+          message:
+            "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup.",
+          details: {
+            station: "/tmp/installed path's bin/stn",
+            ingress: "/tmp/installed path's bin/stn-ingress",
+            tmuxPopup: "/tmp/installed path's bin/stn-tmux-popup",
+            pathDirectory: "/tmp/installed path's bin",
+          },
+        },
+      ],
+      actions: [],
+      summary: {
+        ...base.summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        warnings: 1,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toContain("Current shell PATH recovery (does not edit startup files):");
+    expect(output).toContain(`PATH='/tmp/installed path'\\''s bin'\${PATH:+":$PATH"}`);
+    expect(output).toContain("export PATH");
+    expect(output).toContain("hash -r");
+    expect(output).toContain("'/tmp/installed path'\\''s bin/stn' doctor");
+    expect(output).toContain("'/tmp/installed path'\\''s bin/stn'");
+    expect(output).toContain("Use stn instead of the absolute path (optional):");
+    expect(output).toContain("To use stn in this shell, run the current-shell PATH block above.");
+    expect(output).toContain(
+      "For future shells, add '/tmp/installed path'\\''s bin' to PATH in a shell configuration you choose.",
+    );
+    expect(output).toContain(
+      "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    );
+    expect(output).toContain("command -v stn");
+    expect(output).toContain("command -v stn-ingress");
+    expect(output).toContain("command -v stn-tmux-popup");
+    expect(output).toContain("Future login shell launcher resolution remains unverified");
+    expect(output).not.toContain("\n  stn doctor\n");
+    expect(output).not.toContain("\n  stn\n");
+    expect(output).not.toContain("station:link");
+  });
+
+  it("keeps all-correct successful apply output concise", () => {
+    const base = plan();
+    const output = renderSetupApplyResult({
+      ...base,
+      checks: [
+        {
+          id: "station-launchers",
+          tier: "recommended",
+          status: "ok",
+          label: "STATION launchers",
+          message: "stn, stn-ingress, and stn-tmux-popup are available on PATH.",
+        },
+      ],
+      actions: [],
+      summary: {
+        ...base.summary,
+        workflowReady: true,
+        requiredOk: true,
+        requiredMissing: 0,
+        selectedActions: 0,
+      },
+    });
+
+    expect(output).toBe("Core setup complete.\n\nNext\n\n  stn doctor\n  stn\n");
+    expect(output).not.toContain("Remaining");
+    expect(output).not.toContain("STATION launchers");
+    expect(output).not.toContain("Use stn instead of the absolute path");
+  });
+
   it("prioritizes unresolved harness selection in apply recovery output", () => {
     const output = renderSetupApplyResult(
       {
