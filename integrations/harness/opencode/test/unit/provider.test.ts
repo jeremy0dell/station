@@ -276,6 +276,18 @@ describe("OpenCodeHarnessProvider", () => {
       installed: true,
     });
 
+    const unrequestedProvider = createOpenCodeHarnessProvider({
+      observerSocketPath,
+      stateDir,
+      hookSpoolDir,
+      env: { OPENCODE_CONFIG_DIR: opencodeConfigDir },
+    });
+    await expect(unrequestedProvider.hooksStatus?.()).resolves.toMatchObject({
+      provider: "opencode",
+      requested: false,
+      installed: false,
+    });
+
     await writeFile(pluginPath, "// drifted\n", "utf8");
     await expect(provider.hooksStatus?.()).resolves.toMatchObject({
       provider: "opencode",

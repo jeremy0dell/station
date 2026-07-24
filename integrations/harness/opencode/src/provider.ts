@@ -198,10 +198,11 @@ async function hooksStatus(
   context?: ProviderDoctorContext,
 ): Promise<HarnessHooksStatus> {
   const pluginResult = await doctorOpenCodePlugin(openCodePluginDoctorOptions(options, context));
-  const installed = pluginResult.installed && !pluginResult.changed;
+  const requested = options.installHooks === true;
+  const installed = requested && pluginResult.installed && !pluginResult.changed;
   return {
     provider: "opencode",
-    requested: options.installHooks === true,
+    requested,
     installed,
     missing: installed ? [] : [pluginResult.pluginPath],
     message: pluginResult.message,

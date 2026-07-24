@@ -13,53 +13,23 @@ import {
   runSetupCommand as runSetupCommandBase,
   type SetupPromptAdapter,
 } from "../../src/commands/setup/index.js";
+import {
+  configBackedHarnessHooksProbe,
+  withRequiredTrackingConsent,
+} from "../fixtures/setupTrackingSupport.js";
 
 async function runSetupCommand(...args: Parameters<typeof runSetupCommandBase>) {
   const deps = args[2] ?? {};
   const prompt = deps.prompt;
   return runSetupCommandBase(args[0], args[1], {
     ...deps,
-    ...(prompt === undefined
-      ? {}
-      : {
-          prompt: {
-            ...prompt,
-            confirm: (message: string) =>
-              message.includes("Station requires tracking")
-                ? Promise.resolve(true)
-                : prompt.confirm(message),
-          },
-        }),
+    ...(prompt === undefined ? {} : { prompt: withRequiredTrackingConsent(prompt) }),
     probeHarnessHooksStatus:
       deps.probeHarnessHooksStatus ??
-      (async (harnessId, configPath) => {
-        if (harnessId === "pi") return undefined;
-        let source = "";
-        try {
-          source = (await deps.fs?.readFile(configPath)) ?? "";
-        } catch {
-          source = "";
-        }
-        const block = setupHarnessBlock(source, harnessId);
-        const requested = /(?:^|\n)install_hooks\s*=\s*true(?:\n|$)/.test(block);
-        return {
-          provider: harnessId,
-          requested,
-          installed: requested,
-          missing: requested ? [] : ["tracking artifact"],
-          message: requested ? "Tracking artifacts are installed." : "Tracking is disabled.",
-        };
-      }),
+      configBackedHarnessHooksProbe(
+        async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
+      ),
   });
-}
-
-function setupHarnessBlock(source: string, harnessId: string): string {
-  const marker = `[harness.${harnessId}]`;
-  const start = source.indexOf(marker);
-  if (start < 0) return "";
-  const contentStart = start + marker.length;
-  const end = source.indexOf("\n[", contentStart);
-  return source.slice(contentStart, end < 0 ? source.length : end);
 }
 
 describe("guided setup command", () => {

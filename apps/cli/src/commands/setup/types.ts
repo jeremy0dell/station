@@ -35,7 +35,7 @@ export type SetupCommandDeps = {
   providerHookIngressLauncher?: string;
   /**
    * Inspects Station-owned tracking artifacts without contacting the Observer.
-   * An absent result means the provider does not support hook-status inspection.
+   * An absent result is valid only for a harness with no external tracking artifact.
    */
   probeHarnessHooksStatus?: (
     harnessId: SupportedHarnessId,

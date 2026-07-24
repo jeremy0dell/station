@@ -355,7 +355,6 @@ describe("setup planner", () => {
         requiredHarnessIds: ["codex", "opencode", "pi"],
         source: "explicit",
       },
-      installHarnessHooks: ["codex", "opencode"],
     });
 
     expect(plan.summary.selectedHarness).toBe("codex");

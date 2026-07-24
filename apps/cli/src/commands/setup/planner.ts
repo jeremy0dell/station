@@ -4,6 +4,7 @@ import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxB
 import {
   harnessSupportsSetupHooks,
   isSupportedHarnessId,
+  relevantHarnessTrackingIds,
   resolveSetupHarnessSelection,
   type SetupHarnessSelection,
 } from "./harnessSelection.js";
@@ -21,7 +22,6 @@ export type BuildSetupPlanOptions = {
   configWrite?: ConfigWritePlan;
   harnessSelection?: SetupHarnessSelection;
   installWorktrunkHooks?: boolean;
-  installHarnessHooks?: readonly SupportedHarnessId[];
 };
 
 export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions = {}): SetupPlan {
@@ -214,12 +214,12 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
     ["stn-ingress", facts.launchers.ingress],
     ["stn-tmux-popup", facts.launchers.tmuxPopup],
   ] as const;
-  const checkoutOutsidePath = launcherEntries
-    .filter((entry) => entry[1].source === "checkout")
-    .map((entry) => entry[0]);
-  const installedOutsidePath = launcherEntries
-    .filter((entry) => entry[1].source === "installed")
-    .map((entry) => entry[0]);
+  const checkoutOutsidePath = launcherEntries.flatMap((entry) =>
+    entry[1].source === "checkout" ? [entry[0]] : [],
+  );
+  const installedOutsidePath = launcherEntries.flatMap((entry) =>
+    entry[1].source === "installed" ? [entry[0]] : [],
+  );
   const details = {
     station: setupLauncherExecutable(facts.launchers.station),
     ingress: setupLauncherExecutable(facts.launchers.ingress),
@@ -355,18 +355,28 @@ function harnessTrackingChecks(
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
 ): SetupCheck[] {
-  const configuredIds =
-    facts.config.status === "valid"
-      ? [facts.config.defaults.harness, ...facts.config.configuredHarnesses]
-      : [];
-  const ids = [...harnessSelection.requiredHarnessIds, ...configuredIds]
-    .filter(isSupportedHarnessId)
-    .filter((id, index, all) => all.indexOf(id) === index);
+  const harnessIds = relevantHarnessTrackingIds(facts, harnessSelection);
   const required = new Set(harnessSelection.requiredHarnessIds);
-  return ids.map((harnessId) =>
+  return harnessIds.map((harnessId) =>
     harnessTrackingCheck(facts, harnessId, required.has(harnessId), harnessSelection.source),
   );
 }
+
+type HarnessTrackingAssessment =
+  | {
+      capability: "unsupported";
+      state: "not-applicable";
+      status: SetupCheck["status"];
+      message: string;
+    }
+  | {
+      capability: "supported";
+      state: "probe-failed" | "disabled" | "artifact-missing-or-drifted" | "prepared";
+      status: SetupCheck["status"];
+      message: string;
+      requested: boolean | undefined;
+      installed: boolean | undefined;
+    };
 
 function harnessTrackingCheck(
   facts: SetupFacts,
@@ -374,72 +384,103 @@ function harnessTrackingCheck(
   required: boolean,
   selectionSource: SetupHarnessSelection["source"],
 ): SetupCheck {
-  const harness = facts.harnesses.find((candidate) => candidate.id === harnessId);
-  const label = `${harness?.label ?? harnessId} tracking`;
-  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
-  const tier = required ? "required" : "recommended";
+  const harnessLabel =
+    facts.harnesses.find((candidate) => candidate.id === harnessId)?.label ?? harnessId;
+  const assessment = assessHarnessTracking(facts, harnessId, harnessLabel, required);
   const details: Record<string, string> = {
     harness: harnessId,
     selectionSource,
+    capability: assessment.capability,
+    state: assessment.state,
   };
-  if (fact?.capability === "unsupported" || !harnessSupportsSetupHooks(harnessId)) {
-    details.capability = "unsupported";
-    details.state = "not-applicable";
+  if (assessment.capability === "supported") {
+    if (assessment.requested !== undefined) details.requested = String(assessment.requested);
+    if (assessment.installed !== undefined) details.installed = String(assessment.installed);
+  }
+  return {
+    id: `harness-tracking:${harnessId}`,
+    tier: required ? "required" : "recommended",
+    status: assessment.status,
+    label: `${harnessLabel} tracking`,
+    message: assessment.message,
+    details,
+  };
+}
+
+function assessHarnessTracking(
+  facts: SetupFacts,
+  harnessId: SupportedHarnessId,
+  harnessLabel: string,
+  required: boolean,
+): HarnessTrackingAssessment {
+  if (!harnessSupportsSetupHooks(harnessId)) {
     return {
-      id: `harness-tracking:${harnessId}`,
-      tier,
+      capability: "unsupported",
+      state: "not-applicable",
       status: required ? "ok" : "skipped",
-      label,
-      message: `${harness?.label ?? harnessId} has no Station-managed external tracking artifact.`,
-      details,
+      message: `${harnessLabel} has no Station-managed external tracking artifact.`,
     };
   }
-  details.capability = "supported";
-  if (fact?.requested !== undefined) details.requested = String(fact.requested);
-  if (fact?.installed !== undefined) details.installed = String(fact.installed);
-  if (fact?.probeFailed === true) {
-    details.state = "probe-failed";
-    return {
-      id: `harness-tracking:${harnessId}`,
-      tier,
-      status: required ? "missing" : "warning",
-      label,
-      message: fact.detail ?? `${harnessId} tracking status could not be inspected.`,
-      details,
-    };
-  }
+
+  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
   const configRequested =
     facts.config.status === "valid" && facts.config.configuredHookHarnesses.includes(harnessId);
-  if (!configRequested || fact?.requested !== true) {
-    details.state = "disabled";
+  return assessSupportedHarnessTracking({
+    fact,
+    harnessId,
+    harnessLabel,
+    configRequested,
+    required,
+  });
+}
+
+function assessSupportedHarnessTracking(input: {
+  fact: SetupFacts["harnessTracking"][number] | undefined;
+  harnessId: SupportedHarnessId;
+  harnessLabel: string;
+  configRequested: boolean;
+  required: boolean;
+}): HarnessTrackingAssessment {
+  const { fact, harnessId, harnessLabel, configRequested, required } = input;
+  const unavailableStatus = required ? "missing" : "warning";
+  if (fact === undefined || fact.capability !== "supported" || fact.probeFailed === true) {
+    const supportedFact = fact?.capability === "supported" ? fact : undefined;
     return {
-      id: `harness-tracking:${harnessId}`,
-      tier,
-      status: required ? "missing" : "warning",
-      label,
-      message: `${harness?.label ?? harnessId} tracking is disabled in Station config.`,
-      details,
+      capability: "supported",
+      state: "probe-failed",
+      status: unavailableStatus,
+      message: fact?.detail ?? `${harnessId} tracking status could not be inspected.`,
+      requested: supportedFact?.requested,
+      installed: supportedFact?.installed,
+    };
+  }
+  if (!configRequested || fact.requested !== true) {
+    return {
+      capability: "supported",
+      state: "disabled",
+      status: unavailableStatus,
+      message: `${harnessLabel} tracking is disabled in Station config.`,
+      requested: fact.requested,
+      installed: fact.installed,
     };
   }
   if (fact.installed !== true) {
-    details.state = "artifact-missing-or-drifted";
     return {
-      id: `harness-tracking:${harnessId}`,
-      tier,
-      status: required ? "missing" : "warning",
-      label,
+      capability: "supported",
+      state: "artifact-missing-or-drifted",
+      status: unavailableStatus,
       message: fact.detail ?? `${harnessId} tracking artifacts are absent or drifted.`,
-      details,
+      requested: fact.requested,
+      installed: fact.installed,
     };
   }
-  details.state = "prepared";
   return {
-    id: `harness-tracking:${harnessId}`,
-    tier,
+    capability: "supported",
+    state: "prepared",
     status: "ok",
-    label,
-    message: `${harness?.label ?? harnessId} Station tracking artifacts are prepared on disk.`,
-    details,
+    message: `${harnessLabel} Station tracking artifacts are prepared on disk.`,
+    requested: fact.requested,
+    installed: fact.installed,
   };
 }
 
@@ -587,12 +628,7 @@ function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection
       tier: "required",
       status: "missing",
       label: "Agent CLI",
-      message:
-        available.length > 1
-          ? `Multiple supported agent CLIs are available (${available.map((item) => item.id).join(", ")}); run guided setup and select one explicitly.`
-          : available.length === 0
-            ? "Install one supported harness CLI: claude, codex, cursor agent, opencode, or pi."
-            : "Harness selection could not be resolved from the current config.",
+      message: unresolvedHarnessMessage(available),
       details,
     };
   }
@@ -602,11 +638,10 @@ function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection
   );
   if (unavailable.length > 0) {
     details.unavailable = unavailable.join(",");
-    details.defaultStatus =
+    const defaultUnavailable =
       harnessSelection.defaultHarness !== undefined &&
-      unavailable.includes(harnessSelection.defaultHarness)
-        ? "unavailable"
-        : "available";
+      unavailable.includes(harnessSelection.defaultHarness);
+    details.defaultStatus = defaultUnavailable ? "unavailable" : "available";
     return {
       id: "harness",
       tier: "required",
@@ -635,14 +670,32 @@ function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection
     tier: "required",
     status: "ok",
     label: "Agent CLI",
-    message:
-      harnessSelection.source === "inferred"
-        ? `${selectedLabels[0]} was inferred because it is the only runnable supported agent CLI.`
-        : harnessSelection.source === "explicit"
-          ? `Explicit agent selection: ${selectedLabels.join(", ")}.`
-          : `${selectedLabels[0]} is preserved as the configured default agent CLI.`,
+    message: selectedHarnessMessage(harnessSelection.source, selectedLabels),
     details,
   };
+}
+
+function unresolvedHarnessMessage(available: readonly SetupFacts["harnesses"][number][]): string {
+  if (available.length > 1) {
+    return `Multiple supported agent CLIs are available (${available.map((item) => item.id).join(", ")}); run guided setup and select one explicitly.`;
+  }
+  if (available.length === 0) {
+    return "Install one supported harness CLI: claude, codex, cursor agent, opencode, or pi.";
+  }
+  return "Harness selection could not be resolved from the current config.";
+}
+
+function selectedHarnessMessage(
+  source: SetupHarnessSelection["source"],
+  selectedLabels: readonly string[],
+): string {
+  if (source === "inferred") {
+    return `${selectedLabels[0]} was inferred because it is the only runnable supported agent CLI.`;
+  }
+  if (source === "explicit") {
+    return `Explicit agent selection: ${selectedLabels.join(", ")}.`;
+  }
+  return `${selectedLabels[0]} is preserved as the configured default agent CLI.`;
 }
 
 function configCheck(facts: SetupFacts): SetupCheck {

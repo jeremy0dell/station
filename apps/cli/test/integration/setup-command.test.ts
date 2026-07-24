@@ -5,6 +5,7 @@ import { runCli as runCliBase } from "@station/cli";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import { configBackedHarnessHooksProbe } from "../fixtures/setupTrackingSupport.js";
 
 async function runCli(...args: Parameters<typeof runCliBase>) {
   const options = args[1] ?? {};
@@ -16,35 +17,11 @@ async function runCli(...args: Parameters<typeof runCliBase>) {
     ...options,
     setupDeps: {
       ...deps,
-      async probeHarnessHooksStatus(harnessId, configPath) {
-        if (harnessId === "pi") return undefined;
-        let source = "";
-        try {
-          source = (await deps.fs?.readFile(configPath)) ?? "";
-        } catch {
-          source = "";
-        }
-        const block = setupHarnessBlock(source, harnessId);
-        const requested = /(?:^|\n)install_hooks\s*=\s*true(?:\n|$)/.test(block);
-        return {
-          provider: harnessId,
-          requested,
-          installed: requested,
-          missing: requested ? [] : ["tracking artifact"],
-          message: requested ? "Tracking artifacts are installed." : "Tracking is disabled.",
-        };
-      },
+      probeHarnessHooksStatus: configBackedHarnessHooksProbe(
+        async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
+      ),
     },
   });
-}
-
-function setupHarnessBlock(source: string, harnessId: string): string {
-  const marker = `[harness.${harnessId}]`;
-  const start = source.indexOf(marker);
-  if (start < 0) return "";
-  const contentStart = start + marker.length;
-  const end = source.indexOf("\n[", contentStart);
-  return source.slice(contentStart, end < 0 ? source.length : end);
 }
 
 describe("CLI setup command", () => {
@@ -516,6 +493,41 @@ describe("CLI setup command", () => {
           ((call.args ?? []).includes("hooks") && (call.args ?? []).includes("install")),
       ),
     ).toBe(false);
+  });
+
+  it("fails closed when a required provider omits hook-status inspection", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const config = setupConfigToml(repo, { includeHarness: true }).replace(
+      'command = "codex"',
+      'command = "codex"\ninstall_hooks = true',
+    );
+
+    const result = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs: fakeFs({ [configPath]: config }),
+        probeHarnessHooksStatus: async () => undefined,
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.output).toMatchObject({
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          id: "harness-tracking:codex",
+          status: "missing",
+          details: expect.objectContaining({ state: "probe-failed" }),
+        }),
+      ]),
+      summary: { requiredOk: false },
+    });
   });
 
   it("keeps apply non-ready when the final artifact re-probe fails", async () => {
