@@ -55,9 +55,10 @@ const harnessCommands: Record<string, string> = {
   claude: "claude",
 };
 
-// Compile a declarative profile into the real SetupCommandDeps injection surface:
-// a PATH-access set for path-resolved tools and a runner that answers the version
-// and presence probes the checks make.
+type ProfileState = MachineProfile["state"];
+type HarnessId = "codex" | "cursor" | "opencode" | "pi" | "claude";
+
+// Compile a declarative profile into the real SetupCommandDeps injection surface.
 function profileToSetupDeps(
   profile: MachineProfile,
   repo: string,
@@ -65,103 +66,150 @@ function profileToSetupDeps(
   configPath: string,
 ) {
   const state = profile.state;
-  const presentPaths = new Set<string>();
-  const addBin = (presence: string, bin: string) => {
-    if (presence === "present") presentPaths.add(`/fake/bin/${bin}`);
+  const presentPaths = profileExecutablePaths(state);
+  const files = profileConfigFiles(state, configPath, repo);
+  return {
+    cwd: repo,
+    homeDir: home,
+    env: { PATH: "/fake/bin" },
+    platform: state.platform,
+    runner: profileRunner(state, repo),
+    access: profileAccess(presentPaths),
+    fs: profileFileSystem(files),
+    probeHarnessHooksStatus: profileHarnessTrackingProbe(state),
+    now: () => new Date("2026-06-08T12:00:00.000Z"),
   };
-  addBin(state.worktrunk, "wt");
-  addBin(state.tmux, "tmux");
-  addBin(state.bun, "bun");
-  addBin(state.diffnav, "diffnav");
-  addBin(state.gitDelta, "delta");
+}
 
+function profileExecutablePaths(state: ProfileState): Set<string> {
+  const tools = [
+    [state.worktrunk, "wt"],
+    [state.tmux, "tmux"],
+    [state.bun, "bun"],
+    [state.diffnav, "diffnav"],
+    [state.gitDelta, "delta"],
+  ] as const;
+  return new Set(
+    tools.flatMap(([presence, binary]) => (presence === "present" ? [`/fake/bin/${binary}`] : [])),
+  );
+}
+
+function profileVersionOutputs(state: ProfileState): Record<string, string> {
   const versions: Record<string, string> = {};
   if (state.worktrunk === "present") versions["wt --version"] = "worktrunk 1.2.3\n";
   if (state.tmux === "present") versions["tmux -V"] = "tmux 3.5a\n";
   for (const harness of state.harnesses) {
     versions[`${harnessCommands[harness] ?? harness} --version`] = `${harness} 1.0.0\n`;
   }
+  return versions;
+}
 
-  const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
-    const bin = input.command.startsWith("/fake/bin/") ? basename(input.command) : input.command;
-    const args = input.args ?? [];
-    const key = `${bin} ${args.join(" ")}`;
-    if (input.command === "git") {
-      if (state.git === "absent") throw enoent(key);
-      if (args[0] === "rev-parse") {
-        if (!state.insideRepo) throw exitCode(key, 128);
-        return ok(input, `${repo}\n`);
-      }
-      if (args[0] === "symbolic-ref") return ok(input, "origin/main\n");
-      return ok(input, "");
-    }
-    if (bin === "brew") {
-      if (state.brew === "absent") throw enoent(key);
-      return ok(input, "Homebrew 4.0.0\n");
-    }
-    if (bin === "xcode-select") {
-      if (state.platform === "darwin" && state.xcodeClt === "present") {
-        return ok(input, "/Library/Developer/CommandLineTools\n");
-      }
-      throw exitCode(key, 1);
-    }
-    const stdout = versions[key];
-    if (stdout !== undefined) return ok(input, stdout);
-    throw enoent(key);
-  };
+function profileRunner(state: ProfileState, repo: string) {
+  const versions = profileVersionOutputs(state);
+  return (input: ExternalCommandInput): Promise<ExternalCommandResult> =>
+    Promise.resolve().then(() => profileCommandResult(state, repo, versions, input));
+}
 
-  const files: Record<string, string> = {};
-  if (state.configToml !== undefined) {
-    files[configPath] = state.configToml.replaceAll("{{REPO}}", repo);
+function profileCommandResult(
+  state: ProfileState,
+  repo: string,
+  versions: Readonly<Record<string, string>>,
+  input: ExternalCommandInput,
+): ExternalCommandResult {
+  const bin = input.command.startsWith("/fake/bin/") ? basename(input.command) : input.command;
+  const args = input.args ?? [];
+  const key = `${bin} ${args.join(" ")}`;
+  if (input.command === "git") return profileGitResult(state, repo, input, key, args);
+  if (bin === "brew") {
+    if (state.brew === "absent") throw enoent(key);
+    return ok(input, "Homebrew 4.0.0\n");
   }
+  if (bin === "xcode-select") return profileXcodeResult(state, input, key);
 
+  const stdout = versions[key];
+  if (stdout !== undefined) return ok(input, stdout);
+  throw enoent(key);
+}
+
+function profileGitResult(
+  state: ProfileState,
+  repo: string,
+  input: ExternalCommandInput,
+  key: string,
+  args: readonly string[],
+): ExternalCommandResult {
+  if (state.git === "absent") throw enoent(key);
+  if (args[0] === "--version") return ok(input, "git version 2.50.1\n");
+  if (args[0] === "rev-parse") {
+    if (!state.insideRepo) throw exitCode(key, 128);
+    return ok(input, `${repo}\n`);
+  }
+  if (args[0] === "symbolic-ref") return ok(input, "origin/main\n");
+  return ok(input, "");
+}
+
+function profileXcodeResult(
+  state: ProfileState,
+  input: ExternalCommandInput,
+  key: string,
+): ExternalCommandResult {
+  if (state.platform === "darwin" && state.xcodeClt === "present") {
+    return ok(input, "/Library/Developer/CommandLineTools\n");
+  }
+  throw exitCode(key, 1);
+}
+
+function profileAccess(presentPaths: ReadonlySet<string>) {
+  return (path: string): Promise<void> =>
+    presentPaths.has(path) ? Promise.resolve() : Promise.reject(enoent(path));
+}
+
+function profileConfigFiles(
+  state: ProfileState,
+  configPath: string,
+  repo: string,
+): Record<string, string> {
+  if (state.configToml === undefined) return {};
+  return { [configPath]: state.configToml.replaceAll("{{REPO}}", repo) };
+}
+
+function profileFileSystem(files: Record<string, string>) {
   return {
-    cwd: repo,
-    homeDir: home,
-    env: { PATH: "/fake/bin" },
-    platform: state.platform,
-    runner,
-    access: async (path: string) => {
-      if (!presentPaths.has(path)) throw enoent(path);
+    mkdir: () => Promise.resolve(),
+    readFile(path: string) {
+      const content = files[path];
+      return content === undefined ? Promise.reject(enoent(path)) : Promise.resolve(content);
     },
-    fs: {
-      async mkdir() {
-        return undefined;
-      },
-      async readFile(path: string) {
-        const content = files[path];
-        if (content === undefined) throw enoent(path);
-        return content;
-      },
-      async writeFile(path: string, content: string) {
-        files[path] = content;
-      },
-      async rename(from: string, to: string) {
-        const content = files[from];
-        if (content === undefined) throw enoent(from);
-        files[to] = content;
-        delete files[from];
-      },
-      async access(path: string) {
-        if (files[path] === undefined) throw enoent(path);
-      },
+    writeFile(path: string, content: string) {
+      files[path] = content;
+      return Promise.resolve();
     },
-    async probeHarnessHooksStatus(harnessId: "codex" | "cursor" | "opencode" | "pi" | "claude") {
-      const tracking = state.harnessTracking?.[harnessId];
-      if (tracking === "unsupported" || harnessId === "pi") return undefined;
-      if (tracking === "probe-failed") throw new Error("synthetic tracking probe failure");
-      const installed = tracking === "prepared";
-      return {
-        provider: harnessId,
-        requested: tracking !== undefined,
-        installed,
-        missing: installed ? [] : ["tracking artifact"],
-        message: installed
-          ? "Tracking artifacts are installed."
-          : "Tracking artifacts are missing.",
-      };
+    rename(from: string, to: string) {
+      const content = files[from];
+      if (content === undefined) return Promise.reject(enoent(from));
+      files[to] = content;
+      delete files[from];
+      return Promise.resolve();
     },
-    now: () => new Date("2026-06-08T12:00:00.000Z"),
+    access(path: string) {
+      return files[path] === undefined ? Promise.reject(enoent(path)) : Promise.resolve();
+    },
+  };
+}
+
+function profileHarnessTrackingProbe(state: ProfileState) {
+  return async (harnessId: HarnessId) => {
+    const tracking = state.harnessTracking?.[harnessId];
+    if (tracking === "unsupported" || harnessId === "pi") return undefined;
+    if (tracking === "probe-failed") throw new Error("synthetic tracking probe failure");
+    const installed = tracking === "prepared";
+    return {
+      provider: harnessId,
+      requested: tracking !== undefined,
+      installed,
+      missing: installed ? [] : ["tracking artifact"],
+      message: installed ? "Tracking artifacts are installed." : "Tracking artifacts are missing.",
+    };
   };
 }
 

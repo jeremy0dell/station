@@ -127,6 +127,8 @@ describe("setup config writer", () => {
       harnessSelection: {
         defaultHarness: "codex",
         selected: facts.harnesses,
+        requiredHarnessIds: ["codex", "opencode"],
+        source: "explicit",
       },
       installHarnessHooks: ["codex"],
     });
@@ -155,6 +157,7 @@ describe("setup config writer", () => {
         status: "valid",
         path: join(root, "config.toml"),
         source,
+        observerStateDir: join(root, "state"),
         hasProjectForRoot: false,
         configuredHarnesses: [],
         configuredHookHarnesses: [],
@@ -183,8 +186,8 @@ describe("setup config writer", () => {
     const root = await tempRoot(tempRoots);
     const facts = setupFacts(root, {
       git: {
-        status: "missing",
-        reason: "not-a-repo",
+        status: "ok",
+        repository: "absent",
         defaultBranch: "main",
         message: "Choose a project after setup.",
       },
@@ -218,8 +221,8 @@ describe("setup config writer", () => {
     const outsideRepo = await planSetupConfigWrite(
       setupFacts(root, {
         git: {
-          status: "missing",
-          reason: "not-a-repo",
+          status: "ok",
+          repository: "absent",
           defaultBranch: "main",
           message: "Choose a project after setup.",
         },
@@ -230,6 +233,7 @@ describe("setup config writer", () => {
       setupFacts(join(root, "ancestor"), {
         git: {
           status: "ok",
+          repository: "present",
           root: join(root, "ancestor"),
           repoName: "ancestor",
           defaultBranch: "trunk",
@@ -260,6 +264,7 @@ describe("setup config writer", () => {
         status: "valid",
         path: join(root, "config.toml"),
         source,
+        observerStateDir: join(root, "state"),
         hasProjectForRoot: true,
         configuredHarnesses: ["codex"],
         configuredHookHarnesses: [],
@@ -313,10 +318,14 @@ describe("setup config writer", () => {
       },
     });
 
+    const validConfig = facts.config;
+    if (validConfig.status !== "valid") throw new Error("expected valid config fact");
     const write = await planSetupConfigWrite(facts, {
       harnessSelection: {
         defaultHarness: "codex",
         selected: facts.harnesses,
+        requiredHarnessIds: ["codex", "opencode"],
+        source: "explicit",
       },
       installHarnessHooks: ["codex", "opencode"],
     });
@@ -343,7 +352,7 @@ describe("setup config writer", () => {
         {
           ...facts,
           config: {
-            ...facts.config,
+            ...validConfig,
             source: write.content,
             configuredHarnesses: ["codex", "opencode"],
             configuredHookHarnesses: ["codex", "opencode"],
@@ -353,6 +362,8 @@ describe("setup config writer", () => {
           harnessSelection: {
             defaultHarness: "codex",
             selected: facts.harnesses,
+            requiredHarnessIds: ["codex", "opencode"],
+            source: "explicit",
           },
           installHarnessHooks: ["opencode"],
         },
@@ -378,6 +389,7 @@ describe("setup config writer", () => {
           status: "valid",
           path: join(root, "config.toml"),
           source,
+          observerStateDir: join(root, "state"),
           hasProjectForRoot: false,
           configuredHarnesses: ["codex"],
           configuredHookHarnesses: [],
@@ -392,6 +404,8 @@ describe("setup config writer", () => {
         harnessSelection: {
           defaultHarness: "codex",
           selected: [{ id: "pi", label: "Pi", status: "ok", command: "pi" }],
+          requiredHarnessIds: ["pi", "codex"],
+          source: "explicit",
         },
       },
     );
@@ -417,6 +431,7 @@ describe("setup config writer", () => {
         status: "valid",
         path: join(root, "config.toml"),
         source,
+        observerStateDir: join(root, "state"),
         hasProjectForRoot: false,
         configuredHarnesses: ["codex"],
         configuredHookHarnesses: [],
@@ -432,6 +447,8 @@ describe("setup config writer", () => {
       harnessSelection: {
         defaultHarness: "codex",
         selected: [{ id: "pi", label: "Pi", status: "ok", command: "pi" }],
+        requiredHarnessIds: ["pi", "codex"],
+        source: "explicit",
       },
     });
 
@@ -489,6 +506,8 @@ describe("setup config writer", () => {
       harnessSelection: {
         defaultHarness: "codex",
         selected: facts.harnesses,
+        requiredHarnessIds: ["codex", "opencode"],
+        source: "explicit",
       },
       installHarnessHooks: ["codex", "opencode"],
     });
@@ -604,6 +623,7 @@ describe("setup config writer", () => {
         status: "valid",
         path: join(root, "config.toml"),
         source,
+        observerStateDir: join(root, "state"),
         hasProjectForRoot: false,
         configuredHarnesses: ["codex"],
         configuredHookHarnesses: [],
@@ -684,6 +704,7 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
     },
     git: {
       status: "ok",
+      repository: "present",
       root: repo,
       repoName: "repo",
       defaultBranch: "main",
@@ -694,6 +715,7 @@ function setupFacts(repo: string, overrides: Partial<SetupFacts>): SetupFacts {
       { id: "opencode", label: "OpenCode", status: "missing", command: "opencode" },
       { id: "pi", label: "Pi", status: "missing", command: "pi" },
     ],
+    harnessTracking: [],
     config: {
       status: "missing",
       path: "/tmp/config.toml",

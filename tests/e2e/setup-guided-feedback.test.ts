@@ -399,6 +399,7 @@ async function createFixture(input: {
     bin,
     "git",
     [
+      'if [ "$1" = "--version" ]; then echo "git version 2.50.1"; exit 0; fi',
       'if [ "$1" = "-C" ]; then',
       `  exec ${shellQuote(gitPath)} "$@"`,
       "fi",

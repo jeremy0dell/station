@@ -1616,6 +1616,7 @@ describe("guided setup command", () => {
             throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
           }
           const staticOutputs: Record<string, string> = {
+            "git --version": "git version 2.49.0\n",
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
             "codex --version": "codex 0.1.0\n",
@@ -1746,6 +1747,7 @@ describe("guided setup command", () => {
             throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
           }
           const staticOutputs: Record<string, string> = {
+            "git --version": "git version 2.49.0\n",
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
             "xcode-select -p": "/Library/Developer/CommandLineTools\n",
@@ -1905,6 +1907,7 @@ function fakeBinOutput(
 }
 
 function defaultProbeOutput(key: string): string | undefined {
+  if (key === "git --version") return "git version 2.49.0\n";
   return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
 }
 

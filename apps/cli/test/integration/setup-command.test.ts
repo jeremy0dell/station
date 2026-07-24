@@ -974,7 +974,9 @@ function fakeBinOutput(
 }
 
 function defaultProbeOutput(key: string): string | undefined {
-  return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
+  if (key === "git --version") return "git version 2.50.1\n";
+  if (key === "xcode-select -p") return "/Library/Developer/CommandLineTools\n";
+  return undefined;
 }
 
 function commandResult(input: ExternalCommandInput, stdout: string): ExternalCommandResult {
