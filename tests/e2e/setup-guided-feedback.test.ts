@@ -59,6 +59,11 @@ describe("setup guided feedback e2e", () => {
       );
       expect(result.stdout).toContain(`command pnpm --dir ${process.cwd()} station:link`);
       expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
+      expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
+      expect(result.stdout).toContain(
+        "To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+      );
+      expect(result.stdout).toContain("command -v stn-tmux-popup");
       expect(result.stdout).toContain("Future login shell launcher resolution remains unverified");
       expect(result.stdout).not.toContain("\n  stn doctor\n");
       expect(result.stdout).not.toContain("\n  stn\n");

@@ -443,6 +443,14 @@ describe("CLI setup command", () => {
     expect(output).toContain(`PATH=${shellQuotedRoot}\${PATH:+":$PATH"}`);
     expect(output).toContain(`${shellQuotedStation} doctor`);
     expect(output).toContain(`  ${shellQuotedStation}\n`);
+    expect(output).toContain("Use stn instead of the absolute path (optional):");
+    expect(output).toContain(
+      `For future shells, add ${shellQuotedRoot} to PATH in a shell configuration you choose.`,
+    );
+    expect(output).toContain(
+      "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    );
+    expect(output).toContain("command -v stn-tmux-popup");
     expect(output).toContain("Future login shell launcher resolution remains unverified");
     expect(output).not.toContain("\n  stn doctor\n");
     expect(output).not.toContain("\n  stn\n");

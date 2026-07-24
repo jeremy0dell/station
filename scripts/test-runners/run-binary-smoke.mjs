@@ -1364,6 +1364,26 @@ async function verifyCompiledSetupApplyLauncherWarning({ binaryPath, installedRo
   );
   assertIncludes(
     result.stdout,
+    "Use stn instead of the absolute path (optional):",
+    "compiled setup apply optional bare launcher guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    `For future shells, add ${quoteShellWord(installedRoot)} to PATH in a shell configuration you choose.`,
+    "compiled setup apply future-shell PATH guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    "compiled setup apply PATH over alias guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    "command -v stn-tmux-popup",
+    "compiled setup apply all-launcher verification",
+  );
+  assertIncludes(
+    result.stdout,
     "Future login shell launcher resolution remains unverified",
     "compiled setup apply future-shell status",
   );

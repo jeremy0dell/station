@@ -704,9 +704,11 @@ flow:
    the absolute installed fallback while the install directory is absent from
    `PATH`: successful completion must retain the final all-three launcher
    warning and exact installed paths, print a safely quoted current-shell PATH
-   block, and use the absolute selected executable for doctor and launch next
-   steps. It must not recommend the bare commands it found unusable. Repeat
-   after the installer's current-shell block: the current-process warning must
+   block, explain that using the shorter names is optional, prefer PATH over a
+   one-name alias, print all-three `command -v` checks, and use the absolute
+   selected executable for doctor and launch next steps. It must not recommend
+   executing the bare commands it found unusable. Repeat after the installer's
+   current-shell block: the current-process warning must
    disappear, while future-login PATH remains unverified until the installer
    export is placed manually and tested in a new login shell. Setup never emits
    that future-shell export or edits a startup file. Open the TUI, explicitly

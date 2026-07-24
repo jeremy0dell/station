@@ -116,11 +116,9 @@ export function renderSetupApplyResult(
           `  ${theme.cyan("hash -r")}`,
         );
       }
-      const futureShellGuidance =
-        pathDirectory === undefined
-          ? "Future login shell launcher resolution remains unverified."
-          : "Future login shell launcher resolution remains unverified; use the installer's future-shell export in a shell configuration you choose, then verify all three launchers in a new login shell.";
-      remainingLines.push("", `  ${theme.dim(futureShellGuidance)}`);
+      remainingLines.push(
+        ...bareLauncherConvenienceLines(pathDirectory, launcherLinkAction, theme),
+      );
     }
     return [
       theme.bold(theme.green(completionMessage)),
@@ -184,6 +182,42 @@ export function formatCommand(command: readonly string[]): string {
 
 function formatSelectedLauncherCommand(executable: string, args: readonly string[] = []): string {
   return [quoteShellPart(executable), ...args.map((part) => quoteCommandPart(part))].join(" ");
+}
+
+function bareLauncherConvenienceLines(
+  pathDirectory: string | undefined,
+  launcherLinkAction: SetupAction | undefined,
+  theme: SetupTheme,
+): string[] {
+  if (pathDirectory === undefined && launcherLinkAction === undefined) {
+    return ["", `  ${theme.dim("Future login shell launcher resolution remains unverified.")}`];
+  }
+
+  const lines = [
+    "",
+    theme.bold("Use stn instead of the absolute path (optional):"),
+    `  The absolute commands under ${theme.bold("Next")} already work; these steps only enable the shorter launcher names.`,
+  ];
+  if (pathDirectory !== undefined) {
+    lines.push(
+      "  To use stn in this shell, run the current-shell PATH block above.",
+      `  For future shells, add ${theme.cyan(quoteShellPart(pathDirectory))} to PATH in a shell configuration you choose.`,
+      "  Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    );
+  }
+  if (launcherLinkAction !== undefined) {
+    lines.push(
+      "  To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+    );
+  }
+  lines.push(
+    "  Then verify:",
+    `    ${theme.cyan("command -v stn")}`,
+    `    ${theme.cyan("command -v stn-ingress")}`,
+    `    ${theme.cyan("command -v stn-tmux-popup")}`,
+    `  ${theme.dim("Future login shell launcher resolution remains unverified until those checks pass in a new login shell.")}`,
+  );
+  return lines;
 }
 
 export function renderActionStart(action: SetupAction, options: SetupRenderOptions = {}): string {

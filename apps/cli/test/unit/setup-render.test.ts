@@ -133,6 +133,14 @@ describe("setup renderer", () => {
     expect(output).toContain("command pnpm --dir '/tmp/station checkout' station:link");
     expect(output).toContain("'/tmp/station checkout/bin/stn' doctor");
     expect(output).toContain("'/tmp/station checkout/bin/stn'");
+    expect(output).toContain("Use stn instead of the absolute path (optional):");
+    expect(output).toContain("The absolute commands under Next already work");
+    expect(output).toContain(
+      "To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+    );
+    expect(output).toContain("command -v stn");
+    expect(output).toContain("command -v stn-ingress");
+    expect(output).toContain("command -v stn-tmux-popup");
     expect(output).toContain("Future login shell launcher resolution remains unverified");
     expect(output).not.toContain("\n  stn doctor\n");
     expect(output).not.toContain("\n  stn\n");
@@ -176,6 +184,17 @@ describe("setup renderer", () => {
     expect(output).toContain("hash -r");
     expect(output).toContain("'/tmp/installed path'\\''s bin/stn' doctor");
     expect(output).toContain("'/tmp/installed path'\\''s bin/stn'");
+    expect(output).toContain("Use stn instead of the absolute path (optional):");
+    expect(output).toContain("To use stn in this shell, run the current-shell PATH block above.");
+    expect(output).toContain(
+      "For future shells, add '/tmp/installed path'\\''s bin' to PATH in a shell configuration you choose.",
+    );
+    expect(output).toContain(
+      "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    );
+    expect(output).toContain("command -v stn");
+    expect(output).toContain("command -v stn-ingress");
+    expect(output).toContain("command -v stn-tmux-popup");
     expect(output).toContain("Future login shell launcher resolution remains unverified");
     expect(output).not.toContain("\n  stn doctor\n");
     expect(output).not.toContain("\n  stn\n");
@@ -208,6 +227,7 @@ describe("setup renderer", () => {
     expect(output).toBe("Core setup complete.\n\nNext\n\n  stn doctor\n  stn\n");
     expect(output).not.toContain("Remaining");
     expect(output).not.toContain("STATION launchers");
+    expect(output).not.toContain("Use stn instead of the absolute path");
   });
 
   it("prioritizes unresolved harness selection in apply recovery output", () => {

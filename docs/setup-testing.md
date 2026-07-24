@@ -37,17 +37,21 @@ checkout launchers, its existing link action.
 | Final state | Successful apply output |
 | --- | --- |
 | All three launchers on PATH | Concise; no **Remaining** section |
-| Installed aliases outside PATH | Warning, current-shell block, absolute next commands |
-| One installed name shadowed | Warning names only it; same runnable recovery |
-| Compiled sibling missing | Missing warning + absolute next; no checkout link |
-| Checkout names absent | Warning, absolute next, existing `station:link` command |
+| Installed aliases outside PATH | Warning, PATH guidance, absolute commands |
+| One installed name shadowed | Warning names it; same recovery |
+| Compiled sibling missing | Missing warning, absolute commands; no link |
+| Checkout names absent | Warning, absolute commands, contextual `station:link` |
 | Current PATH repaired | Concise; login shell remains unverified |
 | Spaces or apostrophes | Current-shell block and commands remain safely quoted |
 
 Every successful mismatch rendering must keep future-login verification
-unresolved and must not recommend bare `stn` commands that the same probe found
-missing or shadowed. Compiled smoke runs a successful apply, not only a JSON
-check, and asserts the rendered recovery and absolute commands. Other
+unresolved and must not recommend executing bare `stn` commands that the same
+probe found missing or shadowed. When a supported convenience remedy applies,
+output explains that absolute commands already work, tells installed users to
+prefer PATH over a one-name alias or checkout users to run `station:link`, and
+uses `command -v` only to verify all three names after remediation. Compiled
+smoke runs a successful apply, not only a JSON check, and asserts the rendered
+recovery, optional convenience guidance, and absolute commands. Other
 recommended warnings, including doctor reminders and optional integrations,
 stay out of successful apply output. Installer tests own startup-file
 non-interaction; release acceptance owns proof in a genuinely new login shell.

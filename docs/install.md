@@ -186,10 +186,15 @@ Successful setup preserves the final probe's current-process launcher
 mismatch under **Remaining**, including the selected absolute launcher paths.
 When installed launchers share one directory, setup also repeats a safely
 quoted current-shell PATH block and uses the absolute selected `stn` executable
-for its immediate doctor and launch commands. It does not edit a startup file
-or generate a future-shell export. If the installer current-shell block repaired
-PATH before setup, the final probe is clean and setup stays concise, but a
-future login shell remains unverified until you test it separately.
+for its immediate doctor and launch commands. It explains that the absolute
+commands already work and that configuring the shorter `stn` name is optional.
+For that convenience, use PATH rather than a `stn` alias so all three launcher
+names resolve together; setup names the directory, leaves shell-configuration
+selection to the user, and prints `command -v` checks for all three names. It
+does not edit a startup file or generate a future-shell export. If the installer
+current-shell block repaired PATH before setup, the final probe is clean and
+setup stays concise, but a future login shell remains unverified until you test
+it separately.
 
 ## Install an Exact Version
 

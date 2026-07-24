@@ -333,10 +333,11 @@ For every release candidate, retain the complete installer output and
 distinguish two successful setup lanes. Running setup through the absolute
 installed fallback while its directory is absent from `PATH` must exit
 successfully and preserve the all-three launcher warning, exact installed
-paths, a safely quoted current-shell PATH block, and absolute doctor and launch
-commands. That mismatch output must not recommend bare `stn` commands. Running
-the installer's current-shell block first must make setup's final
-current-process probe clean and keep completion concise.
+paths, a safely quoted current-shell PATH block, optional PATH-not-alias
+convenience guidance with all-three `command -v` checks, and absolute doctor and
+launch commands. That mismatch output must not recommend executing bare `stn`
+commands. Running the installer's current-shell block first must make setup's
+final current-process probe clean and keep completion concise.
 
 Neither lane proves future-login behavior. Setup must not emit a future-shell
 export or modify a startup file. Copy the installer's future-shell export into
