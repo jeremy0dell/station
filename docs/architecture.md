@@ -7,7 +7,9 @@ Use [Naming](naming.md) for provider hook, provider hook ingress, harness event 
 Use [Observer Architecture](observer-architecture.md) for the Observer's application model,
 dependency direction, runtime flows, state lifetimes, and active deviations. Use
 [Architecture Documentation](architecture-documentation.md) for the controlled JSDoc language
-applied to Observer architectural seams.
+applied to Observer architectural seams. Use
+[Setup Target Architecture](setup-architecture.md) for the approved but
+not-yet-implemented functional setup session, presentation, and client boundaries.
 
 station is a terminal-native control plane for AI-agent worktree sessions. It keeps repositories, worktrees, terminal targets, provider hooks, agent runs, commands, and diagnostics in one runtime graph.
 
