@@ -148,7 +148,7 @@ stn (bun build --compile, per platform, no ambient env)
   atomically published `station-build-id` sidecar and reverifies its repository
   inputs plus production package outputs; compiled and source output from the
   same whole-repository build therefore produce the same Observer selector while
-  retaining `{ version: "0.7.1-rc.7", compiled: false }` display semantics.
+  retaining `{ version: "0.7.1-rc.8", compiled: false }` display semantics.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -394,7 +394,7 @@ Each native job runs the full binary smoke and uploads one archive:
 - `stn-v{version}-darwin-arm64.tar.gz`
 
 Here `{version}` is the package version without the tag's leading `v`, for
-example `stn-v0.7.1-rc.7-darwin-arm64.tar.gz`.
+example `stn-v0.7.1-rc.8-darwin-arm64.tar.gz`.
 
 Every archive contains exactly `stn`, the `stn-ingress` and
 `stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
@@ -436,8 +436,8 @@ invoke it with `--version` set to the same tag. Latest install first resolves
 the latest stable tag, then performs the same tagged fetch and explicit invoke.
 There is no silent `main` fallback, so installer code and release artifacts are
 always paired. `v0.7.1-rc.2` is the first published binary,
-`v0.7.1-rc.6` is the latest published binary, and publishing `v0.7.1-rc.7`
-makes immutable rollback to `v0.7.1-rc.6` available.
+`v0.7.1-rc.7` is the latest published binary, and publishing `v0.7.1-rc.8`
+makes immutable rollback to `v0.7.1-rc.7` available.
 
 The installer uses authenticated `gh api` release endpoints, accepts only the
 four supported targets, verifies the one matching `SHA256SUMS` entry and exact
@@ -506,9 +506,9 @@ The future-shell export appears only when physical current-process resolution
 is incomplete. The installer never reads, selects, creates, or edits shell
 startup files.
 
-Candidate `v0.7.1-rc.7` promotes only after all four native targets pass
+Candidate `v0.7.1-rc.8` promotes only after all four native targets pass
 automated and manual acceptance, including upgrade and rollback against
-published `v0.7.1-rc.6`. Published tags and assets are never deleted, moved, or
+published `v0.7.1-rc.7`. Published tags and assets are never deleted, moved, or
 overwritten; a bad release rolls back explicitly and rolls forward to a higher
 version containing the revert or fix.
 
@@ -735,10 +735,10 @@ flow:
    `accepted-release-candidate-*` artifact, rechecks the exact tag, release,
    asset IDs, and hashes, then publishes only that draft.
 9. With terminal A continuously running installed `stn --version`, terminal B
-   repeatedly installs the draft → only complete `0.7.1-rc.7` output appears,
+   repeatedly installs the draft → only complete `0.7.1-rc.8` output appears,
    never command-not-found or malformed output; both aliases remain links to
    `stn`, so entrypoints never mix. Alternate the draft with published
-   `v0.7.1-rc.6` in both directions to prove upgrade and rollback.
+   `v0.7.1-rc.7` in both directions to prove upgrade and rollback.
 10. Abandoned command and license `.station-install.lock` directories each
     refuse the install until their recorded PID is confirmed dead, the lock is
     manually removed, and the same install is retried successfully.
