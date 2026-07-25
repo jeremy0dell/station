@@ -19,7 +19,12 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import {
+  type RuntimeClock,
+  safeErrorFromUnknown,
+  systemClock,
+  toIsoTimestamp,
+} from "@station/runtime";
 import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";
 import {
@@ -253,7 +258,31 @@ async function prepareExternalLaunchSafe(
   params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
 ): ReturnType<ObserverApi["prepareExternalLaunch"]> {
   const deps = assertProvidersAvailable(options);
-  const { outcome, reconcile } = await prepareExternalLaunch(deps, params);
+  let result: Awaited<ReturnType<typeof prepareExternalLaunch>>;
+  try {
+    result = await prepareExternalLaunch(deps, params);
+  } catch (cause) {
+    const error = safeErrorFromUnknown(cause, {
+      tag: "ExternalLaunchError",
+      code: "EXTERNAL_LAUNCH_PREPARE_FAILED",
+      message: "External agent launch preparation failed.",
+    });
+    if (error.code === "HARNESS_HOOKS_NOT_INSTALLED") {
+      const attributes: Record<string, unknown> = {
+        error,
+        projectId: params.projectId,
+        worktreeId: params.worktreeId,
+      };
+      if (params.harness !== undefined) {
+        attributes.harnessProvider = params.harness;
+      }
+      await options.logger
+        ?.warn("External agent launch rejected because harness hooks are unavailable.", attributes)
+        .catch(() => undefined);
+    }
+    throw cause;
+  }
+  const { outcome, reconcile } = result;
   if (reconcile) {
     reconcileAfterExternalLaunch(
       reconcileDeps,

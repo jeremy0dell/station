@@ -2,6 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StationConfig } from "@station/config";
+import type { HarnessHooksStatus } from "@station/contracts";
 import { StationTerminalProvider } from "@station/terminal";
 import {
   createFakeWorktree,
@@ -21,6 +22,7 @@ import {
   ProviderRegistry,
   providerIngressSpoolDir,
 } from "../../src/internal";
+import type { StationLogger } from "../../src/stationLogger";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -74,9 +76,43 @@ describe("observer external-launch reconcile", () => {
 
     fixture.sqlite.close();
   });
+
+  it("logs hook readiness rejections with their diagnostic code", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const records: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const logger: StationLogger = {
+      info: async () => {},
+      warn: async (message, attributes) => {
+        records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+      error: async () => {},
+    };
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      harness: new MissingHooksHarness(),
+      logger,
+    });
+    await fixture.api.reconcile("seed");
+
+    await expect(
+      fixture.api.prepareExternalLaunch({ projectId: "web", worktreeId: "wt_web_feature" }),
+    ).rejects.toMatchObject({ code: "HARNESS_HOOKS_NOT_INSTALLED" });
+    expect(records).toContainEqual({
+      message: "External agent launch rejected because harness hooks are unavailable.",
+      attributes: {
+        error: expect.objectContaining({ code: "HARNESS_HOOKS_NOT_INSTALLED" }),
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+      },
+    });
+
+    fixture.sqlite.close();
+  });
 });
 
-function createFixture(spoolDir: string) {
+function createFixture(
+  spoolDir: string,
+  options: { harness?: FakeHarnessProvider; logger?: StationLogger } = {},
+) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
@@ -99,7 +135,7 @@ function createFixture(spoolDir: string) {
     }),
     terminal: new FakeTerminalProvider({ now }),
     managedTerminal: station,
-    harnesses: [new FakeHarnessProvider({ now })],
+    harnesses: [options.harness ?? new FakeHarnessProvider({ now })],
   });
   const core = createObserverCore({ config, providers, persistence, clock });
   const queue = createCommandQueue({ persistence, clock, idFactory: ids(), eventBus });
@@ -112,8 +148,21 @@ function createFixture(spoolDir: string) {
     eventBus,
     hookSpoolDir: spoolDir,
     clock,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
   return { api, sqlite };
+}
+
+class MissingHooksHarness extends FakeHarnessProvider {
+  async hooksStatus(): Promise<HarnessHooksStatus> {
+    return {
+      provider: this.id,
+      installed: false,
+      requested: true,
+      missing: ["SessionStart"],
+      message: "Hooks are not installed.",
+    };
+  }
 }
 
 function ids() {
