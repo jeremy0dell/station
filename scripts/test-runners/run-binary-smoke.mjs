@@ -275,6 +275,53 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       const hookObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
       await hookObserverClient.stop();
       await waitForMissing(socketPath);
+
+      const codexHome = join(root, "codex-home");
+      const codexHookEnv = { ...childEnv, CODEX_HOME: codexHome };
+      await writeCodexHookSmokeConfig(configPath, stateDir, socketPath);
+      const codexHookInstall = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "install", "codex", "--yes"],
+        { env: codexHookEnv },
+      );
+      const codexHookInstallReport = JSON.parse(codexHookInstall.stdout);
+      assertEqual(codexHookInstallReport.installed, true, "compiled Codex hook install");
+      assertIncludes(
+        await readFile(codexHookInstallReport.hookScriptPath, "utf8"),
+        join(installedRoot, "stn-ingress"),
+        "compiled Codex hook absolute ingress launcher",
+      );
+      const codexStandaloneDoctor = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "doctor", "codex"],
+        { env: codexHookEnv },
+      );
+      assertEqual(
+        JSON.parse(codexStandaloneDoctor.stdout).status,
+        "ok",
+        "compiled standalone Codex hook doctor",
+      );
+      const codexSetupCheck = await run(
+        binaryPath,
+        ["--config", configPath, "setup", "check", "--json", "--no-brew"],
+        { env: codexHookEnv, allowedExitCodes: [0, 1] },
+      );
+      const codexSetupPlan = JSON.parse(codexSetupCheck.stdout);
+      const codexSetupHookCheck = codexSetupPlan.checks.find(
+        (check) => check.id === "harness-tracking:codex",
+      );
+      assertEqual(codexSetupHookCheck?.status, "ok", "compiled setup Codex hook check");
+      const codexFullDoctor = await run(binaryPath, ["--config", configPath, "doctor"], {
+        env: codexHookEnv,
+        allowedExitCodes: [0, 1],
+      });
+      const codexFullHookCheck = JSON.parse(codexFullDoctor.stdout).checks?.find(
+        (check) => check.name === "codex-hooks",
+      );
+      assertEqual(codexFullHookCheck?.status, "ok", "compiled full Codex hook doctor");
+      const codexObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      await codexObserverClient.stop();
+      await waitForMissing(socketPath);
       await writeSmokeConfig(configPath, stateDir, socketPath);
 
       observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
@@ -1413,6 +1460,32 @@ async function writeWorktrunkHookSmokeConfig(path, state, socket, worktrunkConfi
       'command = "/usr/bin/true"',
       `config_path = ${JSON.stringify(worktrunkConfigPath)}`,
       "use_lifecycle_hooks = true",
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
+}
+
+async function writeCodexHookSmokeConfig(path, state, socket) {
+  await writeFile(
+    path,
+    [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[observer]",
+      `state_dir = ${JSON.stringify(state)}`,
+      `socket_path = ${JSON.stringify(socket)}`,
+      "",
+      "[defaults]",
+      'worktree_provider = "noop-worktree"',
+      'terminal = "noop-terminal"',
+      'harness = "codex"',
+      'layout = "agent-shell"',
+      "",
+      "[harness.codex]",
+      'command = "/usr/bin/true"',
+      "install_hooks = true",
       "",
     ].join("\n"),
     { mode: 0o600 },

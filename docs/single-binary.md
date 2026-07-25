@@ -353,7 +353,9 @@ A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
 Local pre-push and hosted `standard-ci` binary smoke checks: `--version`,
 `--help`, exact popup alias symlinks, popup argv0 fallback routing, compiled
 setup binding generation, and `setup check --json`
-(asserting the `launchReady`/`workflowReady` split), an **observer round
+(asserting the `launchReady`/`workflowReady` split), compiled Codex hook
+installation with the absolute sibling ingress launcher plus agreement across
+plain doctor, setup check, and Observer doctor, an **observer round
 trip through the binary** in an isolated state dir, an ingress receipt via
 the `stn-ingress` symlink, the **hostile-directory RCE test** (F1), and the
 **detached self-spawn** check (folds in S5). A stateful fake tmux proves that a
