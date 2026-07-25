@@ -279,6 +279,9 @@ function createHarnessProvider(
     if (providerConfig?.resume !== undefined) {
       options.resume = providerConfig.resume;
     }
+    if (registryOptions.providerHookIngressLauncher !== undefined) {
+      options.hookBin = registryOptions.providerHookIngressLauncher;
+    }
     applyObserverPaths(options, config, true);
     return createClaudeHarnessProvider(options);
   }
@@ -291,6 +294,9 @@ function createHarnessProvider(
     }
     if (providerConfig?.resume !== undefined) {
       options.resume = providerConfig.resume;
+    }
+    if (registryOptions.providerHookIngressLauncher !== undefined) {
+      options.hookBin = registryOptions.providerHookIngressLauncher;
     }
     applyObserverPaths(options, config, true);
     return createCodexHarnessProvider(options);
@@ -309,6 +315,9 @@ function createHarnessProvider(
     }
     if (registryOptions.configPath !== undefined) {
       options.configPath = registryOptions.configPath;
+    }
+    if (registryOptions.providerHookIngressLauncher !== undefined) {
+      options.hookBin = registryOptions.providerHookIngressLauncher;
     }
     applyObserverPaths(options, config, true);
     return createCursorHarnessProvider(options);

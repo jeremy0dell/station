@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   DEFAULT_WORKSPACE_CONFIG,
   HarnessProvidersConfigSchema,
+  loadConfig,
   type StationConfig,
 } from "@station/config";
 import * as contracts from "@station/contracts";
@@ -437,6 +438,18 @@ describe("observer providers", () => {
 
       await expect(
         probeHarnessHooksStatus("cursor", configPath, { ingressLauncher }),
+      ).resolves.toMatchObject({
+        provider: "cursor",
+        requested: true,
+        installed: true,
+      });
+      const loaded = await loadConfig(configPath);
+      const provider = createProviderRegistry(loaded.config, {
+        configPath: loaded.configPath,
+        providerHookIngressLauncher: ingressLauncher,
+      }).harnesses.get("cursor");
+      await expect(
+        provider?.hooksStatus?.({ stationConfigPath: loaded.configPath }),
       ).resolves.toMatchObject({
         provider: "cursor",
         requested: true,

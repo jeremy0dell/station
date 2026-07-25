@@ -53,6 +53,22 @@ describe("CLI Claude hook commands", () => {
     );
   });
 
+  it("uses the composed ingress launcher when --hook-bin is omitted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-claude-hooks-"));
+    const configPath = await writeConfig(root, true);
+    const env = claudeEnv(root);
+    const hookScriptPath = join(root, "state", "hooks", "station-claude-hook.sh");
+    const providerHookIngressLauncher = join(root, "installed", "stn-ingress");
+    const options = { env, providerHookIngressLauncher };
+
+    await runCli(["--config", configPath, "hooks", "install", "claude", "--yes"], options);
+
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(providerHookIngressLauncher);
+    await expect(
+      runCli(["--config", configPath, "hooks", "doctor", "claude"], options),
+    ).resolves.toMatchObject({ code: 0, output: { installed: true, status: "ok" } });
+  });
+
   it("installs and uninstalls through the generic hooks command", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-claude-hooks-"));
     const configPath = await writeConfig(root, true);
