@@ -33,7 +33,7 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.7 and validate setup on this machine.
+Install Station private preview candidate v0.7.1-rc.8 and validate setup on this machine.
 
 Use the private GitHub repository jeremy0dell/station through GitHub CLI.
 
@@ -49,7 +49,7 @@ Safety and scope:
   installer block from the page that supplied this prompt in my Terminal, then
   resume using the absolute installed `stn` path.
 - Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.7`, read `docs/install.md` from that same tag with authenticated
+  `v0.7.1-rc.8`, read `docs/install.md` from that same tag with authenticated
   `gh api`, and follow its temporary-file installer procedure. If that release
   is not published yet, stop instead of falling back to another ref.
 - Never fetch installer code from `main` and never pipe network output directly
@@ -114,7 +114,7 @@ From any directory, run:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.7
+  tag=v0.7.1-rc.8
   # After the first stable release, use:
   # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
   installer="$(mktemp)"
@@ -129,16 +129,16 @@ From any directory, run:
 )
 ```
 
-`v0.7.1-rc.7` is the current private-binary candidate. `v0.7.1-rc.6` remains
+`v0.7.1-rc.8` is the current private-binary candidate. `v0.7.1-rc.7` remains
 published as its immutable rollback; `v0.7.1-rc.2`, `v0.7.1-rc.3`,
-`v0.7.1-rc.4`, and `v0.7.1-rc.5` are older published binaries, while the earlier
-`v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished. Run this recipe
-after the candidate is published. Keep the fixed assignment for an exact
-prerelease install. After the first stable release, use the commented assignment
-to resolve the latest stable tag while still fetching installer code and
-artifacts from that same immutable tag. The recipe never falls back to `main`,
-never prints GitHub credentials, and never pipes network output directly into a
-shell.
+`v0.7.1-rc.4`, `v0.7.1-rc.5`, and `v0.7.1-rc.6` are older published binaries,
+while the earlier `v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished.
+Run this recipe after the candidate is published. Keep the fixed assignment for
+an exact prerelease install. After the first stable release, use the commented
+assignment to resolve the latest stable tag while still fetching installer code
+and artifacts from that same immutable tag. The recipe never falls back to
+`main`, never prints GitHub credentials, and never pipes network output directly
+into a shell.
 
 The installer selects the matching platform archive, verifies it against
 `SHA256SUMS`, and installs these launchers in `~/.local/bin` by default:
@@ -152,7 +152,7 @@ stn-tmux-popup
 It also installs the redistributed license under
 `${XDG_DATA_HOME:-$HOME/.local/share}/station/`.
 
-After this candidate is published, immutable rollback to `v0.7.1-rc.6` uses the
+After this candidate is published, immutable rollback to `v0.7.1-rc.7` uses the
 same exact-version procedure below.
 
 ## 3. Verify the Install
@@ -199,11 +199,11 @@ it separately.
 
 ## Install an Exact Version
 
-To install an exact release or return to published `v0.7.1-rc.6`, use the same
+To install an exact release or return to published `v0.7.1-rc.7`, use the same
 recipe with this assignment instead of the latest-release lookup:
 
 ```bash
-tag=v0.7.1-rc.6
+tag=v0.7.1-rc.7
 ```
 
 The installer code and artifacts still come from that same tag. The earlier
