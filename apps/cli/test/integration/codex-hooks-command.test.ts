@@ -56,6 +56,39 @@ describe("CLI Codex hook commands", () => {
     );
   });
 
+  it("uses the composed ingress launcher when --hook-bin is omitted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-codex-hooks-"));
+    const configPath = await writeConfig(root, true);
+    const env = codexEnv(root);
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const providerHookIngressLauncher = join(root, "installed", "stn-ingress");
+    const options = { env, providerHookIngressLauncher };
+
+    await runCli(["--config", configPath, "hooks", "install", "codex", "--yes"], options);
+
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(providerHookIngressLauncher);
+    await expect(
+      runCli(["--config", configPath, "hooks", "doctor", "codex"], options),
+    ).resolves.toMatchObject({ code: 0, output: { installed: true, status: "ok" } });
+
+    await runCli(
+      [
+        "--config",
+        configPath,
+        "hooks",
+        "install",
+        "codex",
+        "--yes",
+        "--hook-bin",
+        "/explicit/stn-ingress",
+      ],
+      options,
+    );
+    const overriddenScript = await readFile(hookScriptPath, "utf8");
+    expect(overriddenScript).toContain("/explicit/stn-ingress");
+    expect(overriddenScript).not.toContain(providerHookIngressLauncher);
+  });
+
   it("installs and uninstalls through the generic hooks command", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-codex-hooks-"));
     const configPath = await writeConfig(root, true);

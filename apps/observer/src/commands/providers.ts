@@ -4,6 +4,7 @@ import type {
   SafeError,
   TerminalProvider,
 } from "@station/contracts";
+import { commandLine } from "@station/runtime";
 import type { ProviderRegistry } from "../providers/registry.js";
 
 export function resolveTerminalProviderOrThrow(
@@ -61,15 +62,18 @@ export async function assertHooksInstalledOrThrow(
         : { stationConfigPath: options.stationConfigPath },
     );
   } catch {
+    const doctorCommand = providerHookCommand(provider.id, "doctor", options.stationConfigPath);
     const error: SafeError = {
       tag: "HarnessProviderError",
       code: "HARNESS_HOOKS_STATUS_FAILED",
       message: `STATION could not verify whether ${provider.id} status hooks are installed.`,
-      hint: `Run 'stn hooks doctor ${provider.id}' to diagnose, then retry.`,
+      hint: `Run \`${doctorCommand}\` to diagnose, then retry.`,
       provider: provider.id,
     };
     throw error;
   }
+  const installCommand = providerHookCommand(provider.id, "install", options.stationConfigPath);
+  const doctorCommand = providerHookCommand(provider.id, "doctor", options.stationConfigPath);
   if (status.installed) {
     return;
   }
@@ -81,15 +85,31 @@ export async function assertHooksInstalledOrThrow(
         tag: "CommandValidationError",
         code: "HARNESS_HOOKS_NOT_INSTALLED",
         message: `${provider.id} status hooks are not installed, so the observer cannot track this agent.`,
-        hint: `Run 'stn hooks install ${provider.id}' (then 'stn hooks doctor ${provider.id}' to confirm) and retry.`,
+        hint: `Run \`${installCommand}\`, then \`${doctorCommand}\` to confirm, and retry.`,
         provider: provider.id,
       }
     : {
         tag: "CommandValidationError",
         code: "HARNESS_HOOKS_NOT_INSTALLED",
         message: `${provider.id} status hooks are not enabled, so the observer cannot track this agent.`,
-        hint: `Enable hooks for this harness — set 'install_hooks = true' under [harness.${provider.id}] in your station config (or run 'stn setup'), then 'stn hooks install ${provider.id}' — and retry.`,
+        hint: `Enable hooks for this harness — set 'install_hooks = true' under [harness.${provider.id}] in your station config (or run \`stn setup\`), then run \`${installCommand}\` and retry.`,
         provider: provider.id,
       };
   throw error;
+}
+
+function providerHookCommand(
+  providerId: string,
+  action: "doctor" | "install",
+  configPath: string | undefined,
+): string {
+  const args = ["stn"];
+  if (configPath !== undefined) {
+    args.push("--config", configPath);
+  }
+  args.push("hooks", action, providerId);
+  if (action === "install") {
+    args.push("--yes");
+  }
+  return commandLine(args);
 }

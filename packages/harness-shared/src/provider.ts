@@ -30,6 +30,7 @@ import {
 /** Options every terminal-bound harness adapter accepts; provider-specific options extend this. */
 export type CommonHarnessProviderOptions = {
   command?: string;
+  hookBin?: string;
   now?: () => Date | string;
   timeoutMs?: number;
   runner?: ExternalCommandRunner;
@@ -229,6 +230,7 @@ export async function harnessHealth<TOpts extends CommonHarnessProviderOptions>(
 
 export type HarnessHookDoctorOptionsInput = {
   installHooks?: boolean;
+  hookBin?: string;
   observerSocketPath?: string;
   stateDir?: string;
   hookSpoolDir?: string;
@@ -265,6 +267,9 @@ export function harnessHookDoctorOptions(
   }
   if (options.observerSocketPath !== undefined) {
     result.observerSocketPath = options.observerSocketPath;
+  }
+  if (options.hookBin !== undefined) {
+    result.hookBin = options.hookBin;
   }
   if (options.stateDir !== undefined) {
     result.stateDir = options.stateDir;
