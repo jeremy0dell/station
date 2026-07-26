@@ -352,23 +352,23 @@ containing spaces and apostrophes. Source-checkout acceptance separately
 requires the preserved `pnpm --dir <checkout> station:link` command when
 linking is declined.
 
-The public candidate is experimental pre-alpha `v0.0.0-pre-alpha.1`. The old
+The public candidate is experimental pre-alpha `v0.0.0-pre-alpha.2`. The old
 `v0.7.1-rc.*` releases were internal previews, not predecessors in the public
 version line. `v0.7.1-rc.8` is retained as the installed-version fixture that
 proves the intentional version-number reset:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.0.0-pre-alpha.1`, then create
-   and push `v0.0.0-pre-alpha.1`.
+   with `package.json` and runtime reporting at `0.0.0-pre-alpha.2`, then create
+   and push `v0.0.0-pre-alpha.2`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.0.0-pre-alpha.1-attempt-*` artifact.
+   `accepted-release-candidate-0.0.0-pre-alpha.2-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
 4. Install `v0.7.1-rc.8`, upgrade to the accepted candidate, and confirm the
    lower public version number does not block replacement. Confirm the complete
    version and all three launchers after every transition.
 5. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.0.0-pre-alpha.1`, and the manual-acceptance confirmation. It rechecks the
+   `v0.0.0-pre-alpha.2`, and the manual-acceptance confirmation. It rechecks the
    successful run SHA, immutable candidate manifest, tag commit, release ID,
    asset IDs, the stamped installer, and all hashes immediately before
    publishing that exact draft. Its four public-install jobs must then pass.
@@ -493,7 +493,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.0.0-pre-alpha.1
+  tag=v0.0.0-pre-alpha.2
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -640,7 +640,11 @@ manually verify the actual user experience, not a dashboard override:
    and connects to a healthy Observer.
 4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 5. Run `stn setup` from `HOME` or Desktop. Confirm it creates a zero-project
-   config without adopting that directory, then verify both
+   config without adopting that directory. In a lane with no agent CLI, select
+   all offered agents and confirm no installer starts an agent, begins sign-in,
+   or edits a shell startup file. Make one installer fail and confirm later
+   selections still run; setup must continue when any selected CLI re-probes as
+   runnable and must name every unavailable selection. Then verify both
    `stn hooks doctor worktrunk` and the `worktrunk-hooks` row in full
    `stn doctor` are `ok` without `--hook-bin`. In the open TUI, press `Enter` on
    **Add your first project**, choose a Git repository, and confirm the TUI
@@ -659,7 +663,7 @@ manually verify the actual user experience, not a dashboard override:
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
    B, repeatedly reinstall the draft. Terminal A may print only
-   `0.0.0-pre-alpha.1`:
+   `0.0.0-pre-alpha.2`:
    never command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat the same checks while alternating the draft
