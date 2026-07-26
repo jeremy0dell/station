@@ -740,6 +740,40 @@ describe("setup dependency checks", () => {
     });
   });
 
+  it("detects OpenCode under its no-profile installer directory", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    await mkdir(repo, { recursive: true });
+    const facts = await collectSetupFacts({
+      mode: "check",
+      cwd: repo,
+      homeDir: home,
+      env: { PATH: "/fake/bin" },
+      runner: fakeRunner([], {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        "wt --version": "worktrunk 1.2.3\n",
+        "tmux -V": "tmux 3.5a\n",
+        [`${home}/.opencode/bin/opencode --version`]: "opencode 1.0.0\n",
+      }),
+      access: fakeAccess([
+        "/fake/bin/wt",
+        "/fake/bin/tmux",
+        "/fake/bin/bun",
+        "/fake/bin/diffnav",
+        "/fake/bin/delta",
+      ]),
+      fs: readOnlyFs({}),
+      noBrew: true,
+    });
+
+    expect(facts.harnesses.find((harness) => harness.id === "opencode")).toMatchObject({
+      status: "ok",
+      command: `${home}/.opencode/bin/opencode`,
+    });
+  });
+
   it("derives Worktrunk automation mode from existing config", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

@@ -74,7 +74,7 @@ async function runGuidedSetupWithPrompt(
   );
   if (availableHarnessFacts === undefined) return { code: 1 };
 
-  const reprobeDeps = depsWithBrewBinPath(depsWithUserBinPath(deps, availableHarnessFacts));
+  const reprobeDeps = depsWithBrewBinPath(depsWithHarnessBinPaths(deps, availableHarnessFacts));
   const harnessChoice = await selectGuidedHarnesses(availableHarnessFacts, prompt, deps);
   if (harnessChoice.status === "halt") return { code: 1 };
   const selectedHarnessIds = harnessChoice.selectedHarnessIds;
@@ -171,14 +171,16 @@ async function ensureRequiredTools(
     await write(deps, "No changes made.\n");
     return { status: "halt" };
   }
-  const installResult = await applySetupPlan(
-    plan,
-    // A fresh Homebrew install usually has not updated the current process PATH yet.
-    applyOptions(depsWithBrewBinPath(deps), {
-      actionFilter: isInstallAction,
-      announceActions: true,
-      showCommandOutput: true,
-    }),
+  const installResult = await withPromptPaused(prompt, () =>
+    applySetupPlan(
+      plan,
+      // A fresh Homebrew install usually has not updated the current process PATH yet.
+      applyOptions(depsWithBrewBinPath(deps), {
+        actionFilter: isInstallAction,
+        announceActions: true,
+        showCommandOutput: true,
+      }),
+    ),
   );
   if (installResult.failedAction !== undefined) {
     await write(
@@ -497,9 +499,11 @@ async function ensureBootstrapTools(
       "Install Xcode Command Line Tools now? (runs xcode-select --install)",
     );
     if (accepted) {
-      await applySetupPlan(
-        harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
-        applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+      await withPromptPaused(prompt, () =>
+        applySetupPlan(
+          harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
+          applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+        ),
       );
       // The CLT installer runs asynchronously in its own window; we cannot continue
       // until it finishes, so stop here and have the user re-run.
@@ -516,7 +520,8 @@ async function ensureBootstrapTools(
     return { halt: true };
   }
 
-  if (facts.brew.status === "missing" && coreToolsNeedBrew(facts)) {
+  if (facts.brew.status === "missing" && setupShouldOfferBrew(facts)) {
+    const requiredForCoreTools = coreToolsNeedBrew(facts);
     const accepted = await prompt.confirm(
       "Install Homebrew now? (runs the official Homebrew installer)",
     );
@@ -524,17 +529,26 @@ async function ensureBootstrapTools(
       await write(deps, brewMissingCallout(facts));
       return {};
     }
-    const result = await applySetupPlan(
-      harnessInstallPlan(facts, [homebrewInstallAction()]),
-      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+    await write(
+      deps,
+      "\nInstalling Homebrew...\nLive installer output is shown below. Station will continue when this installer exits.\n\n",
+    );
+    const result = await withPromptPaused(prompt, () =>
+      applySetupPlan(
+        harnessInstallPlan(facts, [homebrewInstallAction()]),
+        applyOptions(deps, { showCommandOutput: true }),
+      ),
     );
     if (result.failedAction !== undefined) {
-      await write(
-        deps,
-        "Homebrew install failed. Install it from https://brew.sh, then run: stn setup\n",
-      );
-      return { halt: true };
+      await write(deps, "\nHomebrew install failed.\n");
+      if (requiredForCoreTools) {
+        await write(deps, "Install it from https://brew.sh, then run: stn setup\n");
+        return { halt: true };
+      }
+      await write(deps, "Continuing with non-Homebrew agent installers where supported.\n");
+      return {};
     }
+    await write(deps, "\nHomebrew install completed.\n");
     // Re-probe with the brew prefix on PATH so the just-installed brew (and the
     // core tools it can now install) are detected in the main plan.
     return { facts: await collectForCommand("apply", options, depsWithBrewBinPath(deps), {}) };
@@ -555,7 +569,7 @@ function commandLineToolsInstallAction(): SetupAction {
   };
 }
 
-function homebrewInstallAction(): SetupAction {
+export function homebrewInstallAction(): SetupAction {
   return {
     id: "install-homebrew",
     kind: "run-command",
@@ -566,7 +580,13 @@ function homebrewInstallAction(): SetupAction {
     command: [
       "/bin/bash",
       "-c",
-      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)",
+      [
+        "set -eu",
+        'installer="$(mktemp)"',
+        "trap 'rm -f \"$installer\"' EXIT",
+        'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"',
+        '/bin/bash "$installer"',
+      ].join("; "),
     ],
   };
 }
@@ -581,7 +601,17 @@ function coreToolsNeedBrew(facts: SetupFacts): boolean {
   );
 }
 
+function setupShouldOfferBrew(facts: SetupFacts): boolean {
+  return (
+    coreToolsNeedBrew(facts) ||
+    (facts.xcode.applicable && !facts.harnesses.some((harness) => harness.status === "ok"))
+  );
+}
+
 function brewMissingCallout(facts: SetupFacts): string {
+  if (!coreToolsNeedBrew(facts)) {
+    return "Homebrew was not installed. Setup will offer non-Homebrew agent installers where supported.\n\n";
+  }
   const lines = [
     "Homebrew is required to install the missing core tools.",
     "  Install Homebrew first: https://brew.sh",
@@ -685,9 +715,12 @@ async function ensureHarnessAvailable(
   );
 
   const selectedActions: SetupAction[] = [];
-  for (const action of missingHarnessInstallActions(facts.harnesses)) {
-    const command = action.command === undefined ? action.label : formatCommand(action.command);
-    const accepted = await prompt.confirm(`${action.label}? (${command})`);
+  for (const action of missingHarnessInstallActions(facts.harnesses, {
+    brewAvailable: facts.brew.status === "ok",
+    homeDir: facts.homeDir,
+    macos: facts.xcode.applicable,
+  })) {
+    const accepted = await prompt.confirm(`${action.label}? (${action.message})`);
     if (accepted) {
       selectedActions.push({ ...action, selected: true });
     }
@@ -706,28 +739,60 @@ async function ensureHarnessAvailable(
     return undefined;
   }
 
-  const result = await applySetupPlan(
-    harnessInstallPlan(facts, selectedActions),
-    applyOptions(deps, {
-      actionFilter: isHarnessInstallAction,
-      announceActions: true,
-      showCommandOutput: true,
-    }),
-  );
-  if (result.failedAction !== undefined) {
-    await write(deps, "Agent CLI install failed. Fix the install error, then run: stn setup\n");
-    return undefined;
+  const installDeps = depsWithBrewBinPath(depsWithHarnessBinPaths(deps, facts));
+  const failedHarnessIds = new Set<SupportedHarnessId>();
+  for (const action of selectedActions) {
+    const harnessId = action.data?.harness;
+    const harness = facts.harnesses.find((candidate) => candidate.id === harnessId);
+    const label = harness?.label ?? action.label;
+    await write(
+      deps,
+      `\nInstalling ${label}...\nLive installer output is shown below. Station will continue when this installer exits.\n\n`,
+    );
+    const result = await withPromptPaused(prompt, () =>
+      applySetupPlan(
+        harnessInstallPlan(facts, [action]),
+        applyOptions(installDeps, {
+          actionFilter: isHarnessInstallAction,
+          showCommandOutput: true,
+        }),
+      ),
+    );
+    if (result.failedAction === undefined) {
+      await write(deps, `\n${label} install completed.\n`);
+    } else {
+      await write(deps, `\n${label} install failed. Continuing to the next selected agent.\n`);
+    }
+    if (
+      result.failedAction !== undefined &&
+      harnessId !== undefined &&
+      isSupportedHarnessId(harnessId)
+    ) {
+      failedHarnessIds.add(harnessId);
+    }
   }
 
-  // Compose both prefixes: the agent CLI lands in ~/.local/bin, but the core tools
-  // installed earlier this session live in the brew prefix — without it they re-read
-  // as missing and overwrite the good facts, dead-ending config write on a fresh Mac.
-  const refreshedFacts = await collectForCommand(
-    "apply",
-    options,
-    depsWithBrewBinPath(depsWithUserBinPath(deps, facts)),
-    {},
-  );
+  const refreshedFacts = await collectForCommand("apply", options, installDeps, {});
+  const stillMissing = selectedActions.flatMap((action) => {
+    const harnessId = action.data?.harness;
+    if (harnessId === undefined || !isSupportedHarnessId(harnessId)) return [];
+    const available = refreshedFacts.harnesses.some(
+      (harness) => harness.id === harnessId && harness.status === "ok",
+    );
+    return available ? [] : [harnessId];
+  });
+  for (const harnessId of stillMissing) failedHarnessIds.add(harnessId);
+
+  if (failedHarnessIds.size > 0) {
+    const labels = refreshedFacts.harnesses
+      .filter((harness) => failedHarnessIds.has(harness.id))
+      .map((harness) => `  - ${harness.label}`);
+    await write(
+      deps,
+      ["These selected agent CLIs are still unavailable:", ...labels, ""].join("\n"),
+    );
+  }
+
   if (refreshedFacts.harnesses.some((harness) => harness.status === "ok")) {
     return refreshedFacts;
   }
@@ -744,8 +809,9 @@ async function ensureHarnessAvailable(
   return undefined;
 }
 
-function depsWithUserBinPath(deps: SetupCommandDeps, facts: SetupFacts): SetupCommandDeps {
+function depsWithHarnessBinPaths(deps: SetupCommandDeps, facts: SetupFacts): SetupCommandDeps {
   const env = { ...(deps.env ?? process.env) };
+  env.PATH = prependPath(`${facts.homeDir}/.opencode/bin`, env.PATH);
   env.PATH = prependPath(`${facts.homeDir}/.local/bin`, env.PATH);
   return { ...deps, env };
 }
@@ -755,4 +821,14 @@ function prependPath(path: string, existing: string | undefined): string {
     return path;
   }
   return existing.split(":").includes(path) ? existing : `${path}:${existing}`;
+}
+
+async function withPromptPaused<T>(prompt: SetupPromptAdapter, task: () => Promise<T>): Promise<T> {
+  // Readline must release stdin while an inherited-stdio installer owns the terminal.
+  prompt.pause?.();
+  try {
+    return await task();
+  } finally {
+    prompt.resume?.();
+  }
 }

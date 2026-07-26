@@ -292,17 +292,19 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Prompt order: install codex (y), decline cursor/opencode/pi/claude,
+        // Prompt order: decline Homebrew, install codex (y), decline cursor/opencode/pi/claude,
         // decline linking the fixture's non-runtime launchers and Worktrunk hooks,
         // accept required Codex tracking and Write config; decline shell integration + popup.
-        answers: ["y", "n", "n", "n", "n", "n", "n", "y", "y", "n", "n"],
+        answers: ["n", "y", "n", "n", "n", "n", "n", "n", "y", "y", "n", "n"],
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("No supported agent CLI is available.");
-      expect(result.stdout).toContain("Running: sh -c");
+      expect(result.stdout).toContain("Installing Codex...");
+      expect(result.stdout).toContain("Live installer output is shown below");
       expect(result.stdout).toContain("fake codex installer ran");
+      expect(result.stdout).toContain("Codex install completed.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
       expect(result.stdout).toContain("Applying: Write STATION config");
@@ -469,7 +471,9 @@ async function createFixture(input: {
   await writeShim(
     bin,
     "brew",
-    'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
+    input.harness === "installable-codex"
+      ? "exit 2\n"
+      : 'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
   );
   // diffnav + delta are required; the checks only need the binaries on PATH.
   await writeShim(bin, "diffnav", "exit 0\n");
@@ -518,20 +522,25 @@ async function createFixture(input: {
     await writeShim(bin, "stn-tmux-popup", "exit 0\n");
     await writeShim(
       bin,
-      "sh",
+      "curl",
       [
-        'if [ "$1" = "-c" ] && [ "$2" = "curl -fsSL https://chatgpt.com/codex/install.sh | sh" ]; then',
-        `  cat > ${shellQuote(join(bin, "codex"))} <<'EOF'`,
+        'output=""',
+        'while [ "$#" -gt 0 ]; do',
+        '  if [ "$1" = "-o" ]; then output="$2"; shift 2; else shift; fi',
+        "done",
+        'test -n "$output"',
+        "cat > \"$output\" <<'INSTALL'",
+        "#!/bin/sh",
+        'test "$CODEX_NON_INTERACTIVE" = "1"',
+        'mkdir -p "$CODEX_INSTALL_DIR"',
+        "cat > \"$CODEX_INSTALL_DIR/codex\" <<'CODEX'",
         "#!/bin/sh",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi',
         "exit 0",
-        "EOF",
-        `  chmod 700 ${shellQuote(join(bin, "codex"))}`,
-        '  echo "fake codex installer ran"',
-        "  exit 0",
-        "fi",
-        'echo "unexpected sh $*" >&2',
-        "exit 2",
+        "CODEX",
+        'chmod 700 "$CODEX_INSTALL_DIR/codex"',
+        'echo "fake codex installer ran"',
+        "INSTALL",
         "",
       ].join("\n"),
     );
@@ -546,7 +555,12 @@ async function createFixture(input: {
     STATION_TMUX_BIN: "tmux",
     // Pin every non-target harness so the post-install re-probe (which now also
     // searches the brew prefix) can't pick up a real one from the dev machine.
-    STATION_CODEX_BIN: input.harness === "missing" ? "/missing/codex" : "codex",
+    STATION_CODEX_BIN:
+      input.harness === "missing"
+        ? "/missing/codex"
+        : input.harness === "installable-codex"
+          ? join(home, ".local", "bin", "codex")
+          : "codex",
     STATION_CURSOR_AGENT_BIN: "/missing/agent",
     STATION_OPENCODE_BIN: input.harness === "codex-opencode" ? "opencode" : "/missing/opencode",
     STATION_PI_BIN: input.harness === "codex-pi" ? "pi" : "/missing/pi",

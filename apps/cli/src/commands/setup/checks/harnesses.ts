@@ -62,7 +62,7 @@ async function checkHarness(
     environmentCommand === undefined
       ? options.homeDir
       : undefined;
-  for (const candidate of harnessCommandCandidates(command, defaultCommandHomeDir)) {
+  for (const candidate of harnessCommandCandidates(definition.id, command, defaultCommandHomeDir)) {
     try {
       const input: ExternalCommandInput = {
         command: candidate,
@@ -100,9 +100,15 @@ function parseHarnessVersion(output: string): string | undefined {
   return output.match(/\b(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/)?.[1];
 }
 
-function harnessCommandCandidates(command: string, homeDir: string | undefined): string[] {
+function harnessCommandCandidates(
+  id: SupportedHarnessId,
+  command: string,
+  homeDir: string | undefined,
+): string[] {
   if (command.includes("/") || homeDir === undefined) {
     return [command];
   }
-  return [command, `${homeDir}/.local/bin/${command}`];
+  const candidates = [command, `${homeDir}/.local/bin/${command}`];
+  if (id === "opencode") candidates.push(`${homeDir}/.opencode/bin/${command}`);
+  return candidates;
 }
