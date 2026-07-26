@@ -1320,6 +1320,7 @@ describe("guided setup command", () => {
         cwd: repo,
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
+        platform: "darwin",
         runner: async (input) => {
           calls.push(input);
           const key = `${input.command} ${(input.args ?? []).join(" ")}`;
@@ -1337,6 +1338,7 @@ describe("guided setup command", () => {
           return fakeRunner([], {
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
             "wt --version": "worktrunk 1.2.3\n",
             "tmux -V": "tmux 3.5a\n",
           })(input);
