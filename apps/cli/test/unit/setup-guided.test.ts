@@ -1320,10 +1320,15 @@ describe("guided setup command", () => {
         cwd: repo,
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
+        platform: "darwin",
         runner: async (input) => {
           calls.push(input);
           const key = `${input.command} ${(input.args ?? []).join(" ")}`;
-          if (key === "sh -c curl -fsSL https://chatgpt.com/codex/install.sh | sh") {
+          if (
+            input.command === "/bin/bash" &&
+            input.args?.[0] === "-c" &&
+            input.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true
+          ) {
             codexInstalled = true;
             return commandResult(input, "");
           }
@@ -1333,6 +1338,7 @@ describe("guided setup command", () => {
           return fakeRunner([], {
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
             "wt --version": "worktrunk 1.2.3\n",
             "tmux -V": "tmux 3.5a\n",
           })(input);
@@ -1352,7 +1358,9 @@ describe("guided setup command", () => {
         prompt: {
           async confirm(message: string) {
             return (
-              message.includes("Install Codex?") || message.includes("Write core STATION config")
+              message.includes("Install Homebrew") ||
+              message.includes("Install Codex?") ||
+              message.includes("Write core STATION config")
             );
           },
           async selectMany() {
@@ -1366,13 +1374,126 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(calls.find((call) => call.command === "sh")).toMatchObject({
-      args: ["-c", "curl -fsSL https://chatgpt.com/codex/install.sh | sh"],
+    expect(
+      calls.find(
+        (call) =>
+          call.command === "/bin/bash" &&
+          call.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true,
+      ),
+    ).toMatchObject({
+      args: ["-c", expect.stringContaining("CODEX_NON_INTERACTIVE=1")],
       stdio: "inherit",
     });
     expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("[harness.codex]");
     expect(chunks.join("")).toContain("No supported agent CLI is available.");
-    expect(chunks.join("")).toContain("Running: sh -c");
+    expect(chunks.join("")).toContain("Installing Codex...");
+    expect(chunks.join("")).toContain("Live installer output is shown below");
+    expect(chunks.join("")).toContain("Codex install completed.");
+    expect(chunks.join("")).toContain(
+      "Homebrew install failed.\nContinuing with non-Homebrew agent installers where supported.",
+    );
+  });
+
+  it("continues installing selected agents after one installer fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+    const promptEvents: string[] = [];
+    let piInstalled = false;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        platform: "linux",
+        runner: async (input) => {
+          calls.push(input);
+          const key = `${input.command} ${(input.args ?? []).join(" ")}`;
+          if (
+            input.command === "/bin/bash" &&
+            input.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true
+          ) {
+            throw new Error("Codex installer failed");
+          }
+          if (
+            key ===
+            `npm install --global --prefix ${homeDir}/.local --ignore-scripts --no-fund --no-audit @earendil-works/pi-coding-agent`
+          ) {
+            piInstalled = true;
+            return commandResult(input, "");
+          }
+          if (key === "pi --version" && piInstalled) {
+            return commandResult(input, "pi 0.1.0\n");
+          }
+          return fakeRunner([], {
+            "git --version": "git version 2.49.0\n",
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "wt --version": "worktrunk 1.2.3\n",
+            "tmux -V": "tmux 3.5a\n",
+          })(input);
+        },
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Codex?") ||
+              message.includes("Install Pi?") ||
+              message.includes("Write core STATION config")
+            );
+          },
+          async selectMany() {
+            return ["pi"];
+          },
+          pause() {
+            promptEvents.push("pause");
+          },
+          resume() {
+            promptEvents.push("resume");
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    const codexCallIndex = calls.findIndex(
+      (call) =>
+        call.command === "/bin/bash" &&
+        call.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true,
+    );
+    const piCallIndex = calls.findIndex(
+      (call) => call.command === "npm" && call.args?.includes("@earendil-works/pi-coding-agent"),
+    );
+    expect(codexCallIndex).toBeGreaterThanOrEqual(0);
+    expect(piCallIndex).toBeGreaterThan(codexCallIndex);
+    expect(fs.files[configPath]).toContain("[harness.pi]");
+    expect(chunks.join("")).toContain(
+      "Codex install failed. Continuing to the next selected agent.",
+    );
+    expect(chunks.join("")).toContain("Pi install completed.");
+    expect(chunks.join("")).toContain(
+      "These selected agent CLIs are still unavailable:\n  - Codex",
+    );
+    expect(promptEvents).toEqual(["pause", "resume", "pause", "resume"]);
   });
 
   it("closes prompts and writes nothing when harness install choices are declined", async () => {
@@ -1716,7 +1837,7 @@ describe("guided setup command", () => {
             return commandResult(input, "");
           }
           // The agent CLI installer (no agent CLI is present until this runs).
-          if (key === "sh -c curl -fsSL https://chatgpt.com/codex/install.sh | sh") {
+          if (bin === "brew" && input.args?.join(" ") === "install --cask homebrew/cask/codex") {
             codexInstalled = true;
             return commandResult(input, "");
           }
@@ -1778,7 +1899,7 @@ describe("guided setup command", () => {
             return (
               message.includes("Install Homebrew") ||
               message.includes("Install missing required tools") ||
-              message.includes("chatgpt.com/codex") ||
+              message.includes("Install Codex") ||
               message.includes("Write core STATION config")
             );
           },
@@ -1793,7 +1914,12 @@ describe("guided setup command", () => {
     // Without the brew prefix on the post-agent-install re-probe this exits 1 with no
     // config: the brew tools (resolvable only under /opt/homebrew/bin) re-read missing.
     expect(result.code).toBe(0);
-    expect(calls.some((call) => call.command === "sh")).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.command === "brew" && call.args?.join(" ") === "install --cask homebrew/cask/codex",
+      ),
+    ).toBe(true);
     expect(fs.files[configPath]).toContain("projects = []");
   });
 });

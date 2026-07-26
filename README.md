@@ -11,10 +11,18 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
 ## Install
 
 Station is experimental pre-alpha software. Install the current public version,
-`v0.0.0-pre-alpha.1`, with one command:
+`v0.0.0-pre-alpha.2`, with one command:
 
 ```sh
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh | sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh | sh
+```
+
+Then complete and verify first-run setup:
+
+```sh
+stn setup
+stn setup check --json
+stn doctor
 ```
 
 See the [installation guide](docs/install.md) for supported platforms, runtime
@@ -50,7 +58,15 @@ The version-stamped installer downloads only that tag's archive and
 `SHA256SUMS`, verifies the checksum and archive manifest, and atomically installs
 `stn`, `stn-ingress`, and `stn-tmux-popup` in `~/.local/bin`. It needs `curl`
 and either `sha256sum` or `shasum`; it does not need a GitHub account, GitHub
-CLI, Node.js, pnpm, Bun, or a source checkout.
+CLI, Homebrew, Node.js, pnpm, Bun, or a source checkout.
+
+`stn setup` is a separate guided step. On macOS it can install Homebrew for
+third-party workflow tools, then use official Homebrew packages for Codex,
+Claude Code, OpenCode, and Pi; Cursor uses its unattended vendor installer.
+Agent installs never launch or sign in to an agent, and a failed selection does
+not prevent later selected agents from installing. Station labels each install,
+streams its live output, and prints completion or failure before continuing. See the
+[installation guide](docs/install.md#complete-first-run-setup) for details.
 
 Supported native targets and runtime floors:
 
@@ -91,11 +107,11 @@ Paste this prompt into a coding agent running on the machine where you want
 Station installed:
 
 ```text
-Install experimental Station v0.0.0-pre-alpha.1 and validate setup on this machine.
+Install experimental Station v0.0.0-pre-alpha.2 and validate setup on this machine.
 
 Safety and scope:
 - Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh`.
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -171,7 +187,7 @@ or real-agent lanes.
 
 ## Release status
 
-Station `v0.0.0-pre-alpha.1` is an experimental pre-alpha. User-facing commands,
+Station `v0.0.0-pre-alpha.2` is an experimental pre-alpha. User-facing commands,
 configuration, state, and release packaging may change without compatibility.
 The old `v0.7.1-rc.*` releases were internal previews, not predecessors in the
 public version line. Report feedback and bugs through

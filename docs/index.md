@@ -2,11 +2,11 @@
 
 Station is a terminal workspace for running AI coding agents in isolated Git
 worktrees. It is experimental pre-alpha software; the current public version is
-`v0.0.0-pre-alpha.1`. Native binaries support macOS 13+ and glibc 2.39+ Linux
+`v0.0.0-pre-alpha.2`. Native binaries support macOS 13+ and glibc 2.39+ Linux
 on arm64 and x64.
 
 ```sh
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh | sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh | sh
 ```
 
 Then run `stn setup`, `stn setup check --json`, and `stn doctor`. See

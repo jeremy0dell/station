@@ -1,6 +1,6 @@
 # Limitations and Workarounds
 
-Station `v0.0.0-pre-alpha.1` is experimental pre-alpha software. This page
+Station `v0.0.0-pre-alpha.2` is experimental pre-alpha software. This page
 lists user-visible constraints and the available operational workaround for
 each one.
 
@@ -8,7 +8,9 @@ each one.
 
 Station is distributed through an exact-tag public GitHub installer. The
 compiled binary supports macOS 13+ and glibc 2.39+ Linux on arm64 and x64;
-Windows and musl Linux are not supported. Homebrew is not currently supported.
+Windows and musl Linux are not supported. Homebrew distribution of Station is
+not currently supported; guided setup may still use Homebrew for third-party
+workflow tools and agent CLIs after explicit consent.
 
 Use the public installation procedure in [Install](install.md), then run
 `stn setup`, `stn setup check --json`, and `stn doctor`. The old

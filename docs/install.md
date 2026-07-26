@@ -1,7 +1,7 @@
 # Install Station
 
 Station is experimental pre-alpha software. The current public version is
-`v0.0.0-pre-alpha.1`.
+`v0.0.0-pre-alpha.2`.
 
 ## Binary Requirements
 
@@ -14,9 +14,10 @@ The compiled binary supports these targets:
 
 Windows and musl Linux are not supported. The binary install needs `curl` and
 either `sha256sum` or `shasum`; it does not require a GitHub account, GitHub CLI,
-a source checkout, Node.js, pnpm, or Bun. `stn setup` handles the separate tools
-needed for the complete agent workflow after Station is installed. Report
-feedback through [GitHub Issues](https://github.com/jeremy0dell/station/issues).
+a source checkout, Homebrew, Node.js, pnpm, or Bun. `stn setup` handles the
+separate tools needed for the complete agent workflow after Station is
+installed. Report feedback through
+[GitHub Issues](https://github.com/jeremy0dell/station/issues).
 
 Station uses the platform `lsof` executable (`/usr/sbin/lsof` on macOS,
 `/usr/bin/lsof` on Linux) to prove that an unreachable Unix socket has no live
@@ -32,11 +33,11 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install experimental Station v0.0.0-pre-alpha.1 and validate setup on this machine.
+Install experimental Station v0.0.0-pre-alpha.2 and validate setup on this machine.
 
 Safety and scope:
 - Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh`.
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -70,10 +71,10 @@ choices.
 From any directory, run:
 
 ```bash
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh | sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh | sh
 ```
 
-The released `install.sh` is stamped with `v0.0.0-pre-alpha.1`. With no
+The released `install.sh` is stamped with `v0.0.0-pre-alpha.2`. With no
 arguments it downloads only that tag's matching native archive and
 `SHA256SUMS` over unauthenticated HTTPS. The old `v0.7.1-rc.*` releases were
 internal previews, not predecessors in the public version line.
@@ -137,7 +138,7 @@ it separately.
 Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh | \
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh | \
   sh -s -- --install-dir "$HOME/bin"
 ```
 
@@ -166,6 +167,28 @@ runnable CLIs require explicit guided selection. Check, plan, dry-run, and
 noninteractive apply never choose the catalog-first CLI in that ambiguous case.
 An existing config always preserves its global default, even when another CLI is
 available.
+
+If no supported agent CLI is runnable, setup offers Codex, Cursor Agent,
+OpenCode, Pi, and Claude Code individually. On macOS with Homebrew available,
+Codex and Claude Code use the official casks and OpenCode and Pi use fully
+qualified official core formulae; Cursor uses its unattended vendor installer.
+Without a usable Homebrew package, Codex runs with the vendor's documented
+noninteractive mode under an isolated installer home, OpenCode receives
+`--no-modify-path`, and npm fallbacks install under `~/.local` with lifecycle
+scripts disabled. Setup never starts an agent, enters its sign-in or onboarding
+flow, or edits a shell startup file while installing an agent. Each accepted
+agent is attempted independently, then setup re-probes the actual CLI. If one
+install fails but another runnable agent is available, setup reports the failed
+selection and continues; if none is runnable, it stops with recovery guidance.
+For every accepted selection, setup prints a clear install heading, temporarily
+suspends its own prompt reader, streams the child installer's terminal output,
+and prints an explicit completion or failure line before moving on. A quiet or
+slow progress bar is therefore still bracketed by visible Station status.
+
+Installing Station itself through Homebrew remains unsupported. Homebrew is
+only a setup mechanism for third-party workflow tools and agent CLIs. Its
+official macOS bootstrap requires administrator access and may show the normal
+password and confirmation prompts after the explicit Station consent prompt.
 
 For required Claude, Codex, Cursor, and OpenCode selections, guided setup
 explains that Station needs tracking and asks for consent before changing config
@@ -303,7 +326,10 @@ For a complete source-development workflow, `stn setup check` exits 1 until thes
 fresh startup works without it, while stale-socket recovery and Observer build
 handoff remain blocked until holder evidence is available.
 
-`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk, Bun, tmux, diffnav, git-delta, plus keg-only Node 24); git / Command Line Tools and the agent CLI are obtained separately.
+`bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk,
+Bun, tmux, diffnav, git-delta, plus keg-only Node 24); Git / Command Line Tools
+are obtained separately, and guided `stn setup` can offer the supported agent
+CLIs described above.
 
 Node.js 24.2+ (and below 25) and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node). The repo selects the current Node 24 release with `.node-version` and `.nvmrc` (`24`), so fnm/nvm use the supported release in the checkout instead of falling back to your global default (asdf reads these only with `legacy_version_file = yes` in `~/.asdfrc`).
 

@@ -63,9 +63,9 @@ describe("release readiness docs", () => {
         "let your agent install and validate station",
       );
       expect(prompt).toContain(
-        "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh",
+        "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh",
       );
-      expect(prompt).toContain("v0.0.0-pre-alpha.1");
+      expect(prompt).toContain("v0.0.0-pre-alpha.2");
       expect(prompt).toContain("stn setup check --json");
       expect(prompt).toContain("stn doctor");
       expect(prompt).toContain("summary.requiredOk: true");
@@ -144,9 +144,9 @@ describe("release readiness docs", () => {
       ].map(read),
     );
     const packageJson = await readPackageManifest();
-    const exactVersion = "v0.0.0-pre-alpha.1";
+    const exactVersion = "v0.0.0-pre-alpha.2";
     const exactInstallerUrl =
-      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh";
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.2/install.sh";
 
     for (const [path, document] of [
       ["README.md", readme],
@@ -171,9 +171,15 @@ describe("release readiness docs", () => {
 
     expect(readme).toContain(exactInstallerUrl);
     expect(readme.indexOf(exactInstallerUrl)).toBeLessThan(readme.indexOf("## Why Station"));
+    expect(readme.indexOf("stn setup")).toBeLessThan(readme.indexOf("## Why Station"));
     expect(readme).toContain("[installation guide](docs/install.md)");
     expect(install).toContain(exactInstallerUrl);
     expect(install).toContain("does not require a GitHub account");
+    expect(install).toContain("Setup never starts an agent");
+    expect(install.replace(/\s+/g, " ")).toContain(
+      "Each accepted agent is attempted independently",
+    );
+    expect(install).toContain("streams the child installer's terminal output");
     expect(install.replace(/\s+/g, " ")).toContain(
       "The old `v0.7.1-rc.*` releases were internal previews",
     );
@@ -181,9 +187,10 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("six assets");
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
-    expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.1");
+    expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.2");
     expect(development).toContain("v0.7.1-rc.8");
     expect(homebrew).toContain("Homebrew installation is not currently supported");
+    expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");
     expect(homebrew).not.toMatch(/^\s*brew install[^\n]*station/im);
 
     expect(installer).toContain('embedded_version=""');
@@ -192,7 +199,7 @@ describe("release readiness docs", () => {
     expect(installer).toContain("STATION_INSTALL_RELEASE_ID");
     expect(installer).not.toContain("releases/latest");
     expect(installer).not.toContain("contents/scripts/install.sh");
-    expect(installSmoke).toContain('const releaseTag = "v0.0.0-pre-alpha.1"');
+    expect(installSmoke).toContain('const releaseTag = "v0.0.0-pre-alpha.2"');
     expect(installSmoke).toContain('const rollbackTag = "v0.7.1-rc.8"');
     expect(installSmoke).toContain("makePublicBin()");
     expect(installSmoke).toContain("assertStrictPublicFlow");
@@ -246,7 +253,7 @@ describe("release readiness docs", () => {
       expect(singleBinary).toContain(target);
     }
 
-    expect(packageJson.version).toBe("0.0.0-pre-alpha.1");
+    expect(packageJson.version).toBe("0.0.0-pre-alpha.2");
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );

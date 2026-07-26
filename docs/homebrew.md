@@ -3,9 +3,16 @@
 Homebrew installation is not currently supported for Station.
 
 The public installation path for experimental pre-alpha
-`v0.0.0-pre-alpha.1` is the exact-tag native installer documented in
+`v0.0.0-pre-alpha.2` is the exact-tag native installer documented in
 [Install Station](install.md). Do not use the historical tap for public
 onboarding, and do not update it as part of pre-alpha publication.
+
+This distribution policy is separate from first-run dependencies. On macOS,
+`stn setup` may offer to install Homebrew after explicit consent, then use it to
+install third-party workflow tools and the official Codex, Claude Code,
+OpenCode, or Pi packages. Cursor Agent uses its unattended vendor installer.
+The Homebrew bootstrap can request the administrator password required by the
+official installer. Station does not use the historical Station tap.
 
 The old `v0.1.0` source-formula release and `v0.7.1-rc.*` binary releases
 were internal packaging previews, not predecessors in the public version line.
