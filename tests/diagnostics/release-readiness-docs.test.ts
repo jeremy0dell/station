@@ -62,27 +62,21 @@ describe("release readiness docs", () => {
       expect(document.replace(/\s+/g, " ").toLowerCase()).toContain(
         "let your agent install and validate station",
       );
-      expect(prompt).toContain("gh auth status --hostname github.com");
-      expect(prompt).toContain("gh repo view jeremy0dell/station");
-      expect(prompt).toContain("docs/install.md");
-      expect(prompt).toContain("stn setup plan --json");
+      expect(prompt).toContain(
+        "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh",
+      );
+      expect(prompt).toContain("v0.0.0-pre-alpha.1");
       expect(prompt).toContain("stn setup check --json");
       expect(prompt).toContain("stn doctor");
       expect(prompt).toContain("summary.requiredOk: true");
       expect(normalizedPrompt).toContain("do not clone the repository or build from source");
       expect(normalizedPrompt).toContain("do not edit any shell startup file");
-      expect(normalizedPrompt).toContain("scoped host/keychain access");
-      expect(normalizedPrompt).toContain("same access context");
-      expect(normalizedPrompt).toContain(
-        "retry both checks with scoped host/keychain access before asking me to authenticate",
-      );
-      expect(normalizedPrompt).toContain(
-        "if scoped host access is unavailable, ask me to run the auth checks and exact tagged temporary-file installer block from the page that supplied this prompt in my terminal",
-      );
-      expect(prompt).not.toContain("gh auth login");
-      expect(normalizedPrompt).toContain(
-        "never ask me to paste, extract, print, request, or export a github token",
-      );
+      expect(normalizedPrompt).not.toContain("github token");
+      expect(normalizedPrompt).not.toContain("gh auth");
+      expect(normalizedPrompt).not.toContain("latest");
+      expect(normalizedPrompt).not.toContain("homebrew");
+      expect(normalizedPrompt).not.toContain("ref=main");
+      expect(normalizedPrompt).not.toContain("/main/");
       expect(normalizedPrompt).toContain("absolute installed `stn` path");
       expect(normalizedPrompt).toContain(
         "only as evidence about the current agent execution context",
@@ -121,142 +115,138 @@ describe("release readiness docs", () => {
     expect(packageManifest.engines.node).toBe(">=24.2 <25");
   });
 
-  it("documents the authenticated private binary release contract", async () => {
-    const [readme, install, development, singleBinary, homebrew, release, promote] =
-      await Promise.all(
-        [
-          "README.md",
-          "docs/install.md",
-          "docs/development.md",
-          "docs/single-binary.md",
-          "docs/homebrew.md",
-          ".github/workflows/release.yml",
-          ".github/workflows/promote-release.yml",
-        ].map(read),
-      );
+  it("documents and enforces the public exact-tag binary release contract", async () => {
+    const [
+      readme,
+      install,
+      docsIndex,
+      limitations,
+      development,
+      singleBinary,
+      homebrew,
+      release,
+      promote,
+      installer,
+      installSmoke,
+    ] = await Promise.all(
+      [
+        "README.md",
+        "docs/install.md",
+        "docs/index.md",
+        "docs/limitations.md",
+        "docs/development.md",
+        "docs/single-binary.md",
+        "docs/homebrew.md",
+        ".github/workflows/release.yml",
+        ".github/workflows/promote-release.yml",
+        "scripts/install.sh",
+        "scripts/test-runners/run-install-smoke.mjs",
+      ].map(read),
+    );
     const packageJson = await readPackageManifest();
+    const exactVersion = "v0.0.0-pre-alpha.1";
+    const exactInstallerUrl =
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh";
 
-    expect(readme).toContain("authenticated GitHub release assets");
-    expect(readme).toContain("does not require Node.js, pnpm, Bun");
-    expect(install.replace(/\s+/g, " ")).toContain("latest stable tag");
-    expect(install).toContain("tag=v0.7.1-rc.8");
     for (const [path, document] of [
       ["README.md", readme],
       ["docs/install.md", install],
+      ["docs/index.md", docsIndex],
+      ["docs/limitations.md", limitations],
     ] as const) {
+      const normalized = document.replace(/\s+/g, " ");
+      expect(normalized, path).toMatch(/experimental pre-alpha/i);
+      expect(document, path).toContain(exactVersion);
+      expect(document, path).toContain("GitHub Issues");
+      expect(document, path).toContain("stn setup");
+      expect(document, path).toContain("stn setup check --json");
+      expect(document, path).toContain("stn doctor");
+      expect(document, path).toMatch(/macOS 13(?:\.0)?(?:\+| or newer)/);
+      expect(document, path).toContain("glibc 2.39");
+      expect(document, path).not.toContain("/releases/latest");
       expect(document, path).not.toContain("ref=main");
-      expect(document, path).not.toContain("gh auth token");
-      expect(document, path).not.toContain("Authorization: Bearer");
-      expect(document, path).not.toContain("curl");
-      const recipes = shellBlocks(document).filter((block) =>
-        block.includes("repos/jeremy0dell/station/contents/scripts/install.sh"),
-      );
-      expect(recipes, path).toHaveLength(1);
-      for (const recipe of recipes) {
-        expect(recipe, path).not.toContain("cd /path/to/your/git-project");
-        expect(recipe, path).toContain("umask 077");
-        expect(recipe, path).toContain("export GH_HOST=github.com");
-        expect(recipe, path).toContain("releases/latest");
-        expect(recipe.indexOf("export GH_HOST=github.com"), path).toBeLessThan(
-          recipe.indexOf("gh api --method GET"),
-        );
-        expect(recipe, path).toContain('installer="$(mktemp)"');
-        expect(recipe, path).toContain("trap 'rm -f \"$installer\"' EXIT");
-        expect(recipe, path).toContain('test -s "$installer"');
-        expect(recipe, path).toContain('sh -n "$installer"');
-        expect(recipe, path).toContain('sh "$installer" --version "$tag"');
+      expect(document, path).not.toMatch(/gh auth (?:login|status)/);
+      expect(document, path).not.toMatch(/^\s*brew install[^\n]*station/im);
+    }
 
-        const installerFetches = continuedShellCommands(recipe).filter((command) =>
-          command.includes("contents/scripts/install.sh"),
-        );
-        expect(installerFetches, path).toHaveLength(1);
-        const command = installerFetches[0] ?? "";
-        expect(command, path).toContain("gh api --method GET");
-        expect(command, path).toContain("Accept: application/vnd.github.raw+json");
-        expect(command, path).toContain('-f ref="$tag"');
-        expect(command, path).toContain(
-          'repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"',
-        );
-        expect(command, path).not.toMatch(/\|\s*(?:\/bin\/)?sh\b/);
-      }
-    }
-    expect(install).toContain(
-      'tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest',
+    expect(readme).toContain(exactInstallerUrl);
+    expect(readme.indexOf(exactInstallerUrl)).toBeLessThan(readme.indexOf("## Why Station"));
+    expect(readme).toContain("[installation guide](docs/install.md)");
+    expect(install).toContain(exactInstallerUrl);
+    expect(install).toContain("does not require a GitHub account");
+    expect(install.replace(/\s+/g, " ")).toContain(
+      "The old `v0.7.1-rc.*` releases were internal previews",
     );
-    expect(install.replace(/\s+/g, " ")).toContain("installer code and artifacts");
-    expect(install).toContain("SHA256SUMS");
-    expect(install).toContain("stn-tmux-popup");
-    for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
-      expect(singleBinary).toContain(target);
-    }
-    expect(singleBinary).toContain("**Status: implemented.**");
     expect(singleBinary).toContain("release **draft**");
-    expect(singleBinary).toContain("GitHub immutable");
+    expect(singleBinary).toContain("six assets");
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
-    expect(singleBinary).toContain("without `+` build metadata");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
-    expect(development).toContain("accepted-release-candidate-0.7.1-rc.8");
-    const acceptanceRecipes = shellBlocks(development).filter((block) =>
-      block.includes('STATION_INSTALL_RELEASE_ID="$release_id"'),
-    );
-    expect(acceptanceRecipes).toHaveLength(1);
-    const acceptanceRecipe = acceptanceRecipes[0] ?? "";
-    expect(acceptanceRecipe).toContain("export GH_HOST=github.com");
-    expect(acceptanceRecipe).toContain("release_run_id=123456789");
-    expect(acceptanceRecipe).toContain("--json workflowName --jq '.workflowName'");
-    expect(acceptanceRecipe).toContain("accepted-release-candidate-$version-attempt-$run_attempt");
-    expect(acceptanceRecipe).toContain("manifest_field workflowRunId");
-    expect(acceptanceRecipe).toContain("manifest_field workflowRunAttempt");
-    expect(acceptanceRecipe).toContain('commit="$(manifest_field commit)"');
-    expect(acceptanceRecipe).toContain('release_id="$(manifest_field releaseId)"');
-    expect(acceptanceRecipe).toContain(
-      'test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq \'.sha\')" = "$commit"',
-    );
-    expect(acceptanceRecipe).toContain('-f ref="$commit"');
-    expect(acceptanceRecipe).not.toContain(
-      'commit="$(gh api "repos/jeremy0dell/station/commits/$tag"',
-    );
-    expect(release).toContain('-f ref="$COMMIT"');
-    expect(release).toContain("persist-credentials: false");
-    const validateRelease = release.slice(
-      release.indexOf("      - name: Validate release tag"),
-      release.indexOf("\n  standard-ci:"),
-    );
-    expect(validateRelease).toMatch(/GH_TOKEN: \$\{\{ github\.token \}\}/);
-    expect(validateRelease).toContain("compare/$GITHUB_SHA...main");
-    expect(validateRelease).toContain("ahead|identical");
-    expect(validateRelease).not.toContain("git fetch --no-tags origin");
-    const createDraftStart = release.indexOf("      - name: Create draft release");
-    const createDraft = release.slice(
-      createDraftStart,
-      release.indexOf("      - uses: actions/upload-artifact@v4", createDraftStart),
-    );
-    expect(createDraft).toContain("for _ in {1..12}");
-    expect(createDraft).toContain('gh release view "$TAG" --json databaseId,isDraft');
-    expect(createDraft).toContain("'select(.isDraft == true) | .databaseId'");
-    expect(createDraft).toContain('[[ "$release_id" =~ ^[0-9]+$ ]] && break');
-    expect(createDraft).not.toContain("releases?per_page=100");
-    expect(createDraft).toContain('--argjson releaseId "$release_id"');
+    expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.1");
+    expect(development).toContain("v0.7.1-rc.8");
+    expect(homebrew).toContain("Homebrew installation is not currently supported");
+    expect(homebrew).not.toMatch(/^\s*brew install[^\n]*station/im);
+
+    expect(installer).toContain('embedded_version=""');
+    expect(installer).toContain("releases/download/$tag");
+    expect(installer).toContain("run_curl");
+    expect(installer).toContain("STATION_INSTALL_RELEASE_ID");
+    expect(installer).not.toContain("releases/latest");
+    expect(installer).not.toContain("contents/scripts/install.sh");
+    expect(installSmoke).toContain('const releaseTag = "v0.0.0-pre-alpha.1"');
+    expect(installSmoke).toContain('const rollbackTag = "v0.7.1-rc.8"');
+    expect(installSmoke).toContain("makePublicBin()");
+    expect(installSmoke).toContain("assertStrictPublicFlow");
+    expect(installSmoke).toContain("strict stamped public flow without gh");
+    expect(installSmoke).toContain("STATION_INSTALL_RELEASE_ID");
+
+    expect(release).toContain("Stamp release installer");
+    expect(release).toContain(['embedded_version=\\"$', 'TAG\\"'].join(""));
+    expect(release).toContain(['for asset in "$', '{expected[@]}" install.sh'].join(""));
+    expect(release).toContain("install.sh");
+    expect(release).toContain("SHA256SUMS");
     expect(release).toContain("accepted-release-candidate-");
+    expect(release).not.toContain("render-installer");
+    const createDraft = release.slice(
+      release.indexOf("      - name: Create draft release"),
+      release.indexOf("\n  install-draft:"),
+    );
+    for (const asset of [
+      "stn-v$VERSION-darwin-arm64.tar.gz",
+      "stn-v$VERSION-darwin-x64.tar.gz",
+      "stn-v$VERSION-linux-arm64.tar.gz",
+      "stn-v$VERSION-linux-x64.tar.gz",
+      "install.sh",
+      "SHA256SUMS",
+    ]) {
+      expect(createDraft).toContain(asset);
+    }
     const installDraft = release.slice(
       release.indexOf("  install-draft:"),
       release.indexOf("  record-accepted-candidate:"),
     );
+    expect(installDraft).toContain("releases/assets/$installer_asset_id");
+    expect(installDraft).toContain('grep -Fx "embedded_version=\\"$TAG\\""');
+    expect(installDraft).toContain("STATION_INSTALL_RELEASE_ID");
+    expect(installDraft).not.toContain('--version "$TAG"');
+    expect(installDraft).toContain("0.7.1-rc.8");
     const recordCandidate = release.slice(release.indexOf("  record-accepted-candidate:"));
-    for (const job of [installDraft, recordCandidate]) {
-      expect(job).toContain("contents: write");
-      expect(job).not.toContain("contents: read");
+    expect(recordCandidate).toContain("asset-ids.txt");
+    expect(recordCandidate).toContain("releaseId");
+
+    expect(promote).toContain("verify-public-install:");
+    expect(promote).toContain("Download exact-tag public installer");
+    expect(promote).toContain("Install without GitHub credentials or gh");
+    expect(promote).toContain("releases/download/$TAG/install.sh");
+    expect(promote).toContain('test ! -e "$public_path/gh"');
+    expect(promote).toContain("env -u GH_TOKEN -u GITHUB_TOKEN");
+    expect(promote).toContain("install.sh");
+    for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
+      expect(release).toContain(target);
+      expect(promote).toContain(target);
+      expect(singleBinary).toContain(target);
     }
-    expect(promote).toContain("workflow_dispatch");
-    expect(promote).toContain("manual_acceptance");
-    expect(promote).toContain("asset-ids.txt");
-    expect(promote).toContain("actions/workflows/$workflow_id");
-    expect(promote).toContain("compare/$commit...main");
-    expect(promote).toContain('prerelease="$expected_prerelease"');
-    expect(packageJson.version).toBe("0.7.1-rc.8");
-    expect(development).toContain("HOST_UPGRADE_BLOCKED");
-    expect(homebrew).toContain("`workflow_dispatch` only");
-    expect(homebrew).toContain("`COMMITTER_TOKEN` remains intentionally unconfigured");
+
+    expect(packageJson.version).toBe("0.0.0-pre-alpha.1");
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
@@ -276,7 +266,8 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("<install-dir>/.station-install.lock/owner-*");
       expect(document, path).toContain("<data-home>/station/.station-install.lock");
       expect(document, path).toContain("<data-home>/station/.station-install.lock/owner-*");
-      expect(normalized, path).toContain("requested tag or `latest`");
+      expect(normalized, path).toContain("requested tag");
+      expect(normalized, path).not.toContain("requested tag or `latest`");
       expect(document, path).toContain("token");
       expect(document, path).toMatch(/10(?:-second| seconds)/);
       expect(document, path).toMatch(/existing\s+Station\s+installation\s+was\s+unchanged/);
@@ -306,7 +297,7 @@ describe("release readiness docs", () => {
       "stn-ingress",
       "HOST_UPGRADE_BLOCKED",
       "same Observer socket",
-      "prior published binary",
+      "internal preview",
     ]) {
       expect(normalizedDevelopment).toContain(acceptance);
     }
@@ -343,7 +334,7 @@ describe("release readiness docs", () => {
     expect(install).toContain("~/.config/station/config.toml");
     expect(install).toContain("PATH uses `:` to separate entries");
     expect(install).toMatch(
-      /before GitHub requests[^.]*temporary-directory creation[^.]*destination mutation/,
+      /before network requests[^.]*temporary-directory creation[^.]*destination mutation/,
     );
 
     expect(quickStart).not.toContain(removedPersistenceOption);
@@ -415,18 +406,6 @@ function virtualBuddyCleanMacSection(document: string): string {
   const end = document.indexOf("\nFor each target", start);
   if (start < 0 || end <= start) throw new Error("VirtualBuddy clean-mac section is missing");
   return document.slice(start, end);
-}
-
-function continuedShellCommands(document: string): string[] {
-  return document
-    .replace(/\\\r?\n\s*/g, " ")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^(?:[A-Z_]+=[^ ]+\s+)*(?:curl|gh)\s/.test(line));
-}
-
-function shellBlocks(document: string): string[] {
-  return [...document.matchAll(/```(?:sh|bash)\r?\n([\s\S]*?)```/g)].map((match) => match[1] ?? "");
 }
 
 async function markdownFiles(root: string): Promise<string[]> {

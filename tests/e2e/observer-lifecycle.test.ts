@@ -234,12 +234,12 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
-  it("replaces a lower build only after its process and socket have closed", async () => {
+  it("replaces an internal preview only after its process and socket have closed", async () => {
     const fixture = await createTempState();
     const incumbent = await startIncumbentFixture({
       stateDir: fixture.stateDir,
       socketPath: fixture.socketPath,
-      version: "0.6.0",
+      version: "0.7.1-rc.8",
       stopDelayMs: 400,
     });
     const config = observerConfig(fixture.stateDir, fixture.socketPath);
@@ -384,12 +384,12 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
-  it("refuses a wedged lower build without automatic SIGKILL", async () => {
+  it("refuses a wedged internal preview without automatic SIGKILL", async () => {
     const fixture = await createTempState();
     const incumbent = await startIncumbentFixture({
       stateDir: fixture.stateDir,
       socketPath: fixture.socketPath,
-      version: "0.6.0",
+      version: "0.7.1-rc.8",
       mode: "wedged",
     });
 
@@ -405,13 +405,13 @@ describe("observer lifecycle e2e", () => {
       expect(processIsAlive(incumbent.child.pid)).toBe(true);
       await expect(incumbent.client.health()).resolves.toMatchObject({
         pid: incumbent.child.pid,
-        version: "0.6.0",
+        version: "0.7.1-rc.8",
       });
       expect(
         ObserverProcessIdentitySchema.parse(
           JSON.parse(await readFile(`${fixture.socketPath}.pid`, "utf8")),
         ),
-      ).toMatchObject({ pid: incumbent.child.pid, version: "0.6.0" });
+      ).toMatchObject({ pid: incumbent.child.pid, version: "0.7.1-rc.8" });
     } finally {
       await terminateFixture(incumbent.child);
       await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
@@ -423,8 +423,8 @@ describe("observer lifecycle e2e", () => {
     const incumbent = await startIncumbentFixture({
       stateDir: fixture.stateDir,
       socketPath: fixture.socketPath,
-      version: "0.6.0",
-      pidfileVersion: "0.5.0",
+      version: "0.7.1-rc.8",
+      pidfileVersion: "0.7.1-rc.7",
     });
 
     try {

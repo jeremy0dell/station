@@ -16,6 +16,8 @@ import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 const GRACEFUL_HANDOFF_BUDGET_RATIO = 0.5;
 const DEFAULT_HANDOFF_POLL_INTERVAL_MS = 50;
 const MIN_HANDOFF_TIMEOUT_MS = 1;
+const INTERNAL_PREVIEW_VERSION_PATTERN = /^0\.7\.1-rc\.(?:0|[1-9]\d*)$/u;
+const PUBLIC_PRE_ALPHA_VERSION_PATTERN = /^0\.0\.0-pre-alpha\.(?:0|[1-9]\d*)$/u;
 
 const SemVerSchema = z
   .string()
@@ -186,7 +188,11 @@ export function classifyObserverIncumbent(input: {
       };
     }
   }
-  const precedence = compareSemVer(candidateVersion.data, incumbentVersion.data);
+  const resetPrecedence = comparePublicVersionLineReset(
+    candidateBuild.version,
+    incumbentBuild.version,
+  );
+  const precedence = resetPrecedence ?? compareSemVer(candidateVersion.data, incumbentVersion.data);
   if (precedence < 0) return { action: "attach", reason: "incumbent-wins" };
   if (precedence === 0) {
     // Display-version strings are stable across the CLI parent and Observer child;
@@ -205,6 +211,22 @@ export function classifyObserverIncumbent(input: {
     };
   }
   return { action: "replace", reason: "candidate-wins" };
+}
+
+function comparePublicVersionLineReset(candidate: string, incumbent: string): -1 | 1 | undefined {
+  if (
+    PUBLIC_PRE_ALPHA_VERSION_PATTERN.test(candidate) &&
+    INTERNAL_PREVIEW_VERSION_PATTERN.test(incumbent)
+  ) {
+    return 1;
+  }
+  if (
+    INTERNAL_PREVIEW_VERSION_PATTERN.test(candidate) &&
+    PUBLIC_PRE_ALPHA_VERSION_PATTERN.test(incumbent)
+  ) {
+    return -1;
+  }
+  return undefined;
 }
 
 /**
