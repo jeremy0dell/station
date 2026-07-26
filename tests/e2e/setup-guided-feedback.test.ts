@@ -292,10 +292,22 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Prompt order: decline Homebrew, install codex (y), decline cursor/opencode/pi/claude,
-        // decline linking the fixture's non-runtime launchers and Worktrunk hooks,
-        // accept required Codex tracking and Write config; decline shell integration + popup.
-        answers: ["n", "y", "n", "n", "n", "n", "n", "n", "y", "y", "n", "n"],
+        // macOS first offers Homebrew; both platforms then install Codex and decline
+        // the other agents, linking, hooks, shell integration, and popup binding.
+        answers: [
+          ...(process.platform === "darwin" ? ["n"] : []),
+          "y",
+          "n",
+          "n",
+          "n",
+          "n",
+          "n",
+          "n",
+          "y",
+          "y",
+          "n",
+          "n",
+        ],
       });
 
       expect(result.timedOut).toBe(false);
