@@ -2956,6 +2956,7 @@ function makePublicBin() {
     "cat",
     "chmod",
     "cp",
+    "gzip",
     "grep",
     "ln",
     "ls",

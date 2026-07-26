@@ -188,7 +188,7 @@ jobs:
         run: |
           public_path="$RUNNER_TEMP/public-path"
           mkdir -p "$public_path"
-          for command in awk cat chmod cp curl grep ln ls mkdir mktemp mv paste readlink rm rmdir sleep sort tar tr uname; do
+          for command in awk cat chmod cp curl grep gzip ln ls mkdir mktemp mv paste readlink rm rmdir sleep sort tar tr uname; do
             command_path="$(command -v "$command")"
             test -n "$command_path"
             ln -s "$command_path" "$public_path/$command"
