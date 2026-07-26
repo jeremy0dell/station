@@ -1,12 +1,20 @@
 # Limitations and Workarounds
 
-Station v0.7 is a private preview. This page lists user-visible constraints and the available operational workaround for each one.
+Station `v0.0.0-pre-alpha.1` is experimental pre-alpha software. This page
+lists user-visible constraints and the available operational workaround for
+each one.
 
 ## Availability
 
-Station is distributed through authenticated release assets in the private `jeremy0dell/station` repository. It is not available from a public package registry or public download page. The compiled binary supports macOS and Linux on arm64 and x64; Windows is not supported.
+Station is distributed through an exact-tag public GitHub installer. The
+compiled binary supports macOS 13+ and glibc 2.39+ Linux on arm64 and x64;
+Windows and musl Linux are not supported. Homebrew is not currently supported.
 
-Use the authenticated installation procedure in [Install](install.md).
+Use the public installation procedure in [Install](install.md), then run
+`stn setup`, `stn setup check --json`, and `stn doctor`. The old
+`v0.7.1-rc.*` releases were internal previews, not predecessors in the public
+version line. Report feedback through
+[GitHub Issues](https://github.com/jeremy0dell/station/issues).
 
 ## Agent Status Can Be Conservative
 

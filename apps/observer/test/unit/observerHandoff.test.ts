@@ -88,6 +88,20 @@ describe("classifyObserverIncumbent", () => {
     });
   });
 
+  it("orders the public pre-alpha after the internal preview version line", () => {
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.1", higherBuildIdentity);
+    const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
+
+    expect(decisionFor(publicPreAlpha, internalPreview)).toEqual({
+      action: "replace",
+      reason: "candidate-wins",
+    });
+    expect(decisionFor(internalPreview, publicPreAlpha)).toEqual({
+      action: "attach",
+      reason: "incumbent-wins",
+    });
+  });
+
   it("attaches to a valid higher incumbent without mutation-only identity fields", () => {
     expect(
       classifyObserverIncumbent({

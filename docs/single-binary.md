@@ -1,7 +1,7 @@
 # Single-binary Station
 
-> **Status: v1.1 (current).** v1 was feasibility evidence, not an
-> implementation-ready roadmap; an adversarial audit of commit `e0d4307`
+> **Status: implemented; distribution updated for `v0.0.0-pre-alpha.1`.** v1
+> was feasibility evidence, not an implementation-ready roadmap; an adversarial audit of commit `e0d4307`
 > found 11 blocking issues, all reproduced and confirmed (see
 > [Audit findings](#audit-findings-all-confirmed)). v1.1 is subtractive:
 > it corrects the SQLite contract and dispatch boundary, removes the
@@ -28,11 +28,8 @@ agent CLIs) gates *features*, never launch — captured precisely by the
 
 Non-goals:
 
-- **Public distribution.** The repo is private; binaries ship as private
-  GitHub release assets fetched by an authenticated install script. A
-  binary Homebrew formula is **deferred** until a tested private-asset
-  download strategy exists (see A5); the authenticated script is the only
-  binary channel meanwhile.
+- **Homebrew distribution.** The supported public channel is the exact-tag
+  installer described in A5. Homebrew is not currently supported.
 - **Windows targets.**
 - **Any observer replacement / eviction in this roadmap.** Coordinated
   single-observer behavior is owned entirely by
@@ -51,8 +48,8 @@ Pinned so the release job, install script, and acceptance suite agree.
 | ------ | -------- |
 | Targets | `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`. No Windows. |
 | Build runners | Native per target (no cross-compile — only the host-matching `@opentui/core-*` optional dep installs). Use *currently available* GitHub-hosted labels resolved at implementation time; do **not** hard-code `macos-13` (F9 — Intel macOS labels are being retired). Pin exact labels in the workflow with a comment naming the check date. |
-| macOS floor | Match the oldest OS the chosen Intel/arm runners image supports; state it in release notes. |
-| Linux floor | glibc only for v1.1 (bun's default). Declare the built-against glibc version (the runner's) as the floor; musl is a later target, not silently implied. |
+| macOS floor | macOS 13.0 or newer on Apple silicon or Intel. |
+| Linux floor | glibc 2.39 or newer on x64 or arm64. musl is not supported. |
 | CPU | x64 uses Bun's explicit `-baseline` targets for older SSE4.2-era CPUs; arm64 = Apple/ARMv8. |
 | Artifact | `stn-v{ver}-{platform}-{arch}.tar.gz`, using the target values above. **Manifest below is exhaustive.** |
 
@@ -148,7 +145,7 @@ stn (bun build --compile, per platform, no ambient env)
   atomically published `station-build-id` sidecar and reverifies its repository
   inputs plus production package outputs; compiled and source output from the
   same whole-repository build therefore produce the same Observer selector while
-  retaining `{ version: "0.7.1-rc.8", compiled: false }` display semantics.
+  retaining `{ version: "0.0.0-pre-alpha.1", compiled: false }` display semantics.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -373,7 +370,7 @@ PID, inode, pidfile, and holder set, spool exactly one hook, then reconnect to t
 same process and drain it after mode `0600` is restored. `observerReap.ts` and the same-TTY UI
 reaper recognize the exact compiled process shapes.
 
-### A5 — release pipeline (private, deterministic, verifiable)
+### A5 — release pipeline (public, exact-tagged, verifiable)
 
 **Status: implemented.** `.github/workflows/release.yml` runs on `v*` tags.
 It requires release SemVer without `+` build metadata, exact agreement between
@@ -394,26 +391,25 @@ Each native job runs the full binary smoke and uploads one archive:
 - `stn-v{version}-darwin-arm64.tar.gz`
 
 Here `{version}` is the package version without the tag's leading `v`, for
-example `stn-v0.7.1-rc.8-darwin-arm64.tar.gz`.
+example `stn-v0.0.0-pre-alpha.1-darwin-arm64.tar.gz`.
 
 Every archive contains exactly `stn`, the `stn-ingress` and
 `stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
 duplicate targets, emits a stably sorted `SHA256SUMS`, and creates a GitHub
-release **draft** without clobbering an existing release. A second native
-matrix revalidates the tag, fetches the installer by the validated commit SHA
-through the authenticated Contents API, invokes it with the explicit tag against
-that real draft, and verifies the binary version, both argv0 aliases, license,
-and launch without Node or Bun on the runtime PATH. The four native builds use
-one archive-packaging helper, and the draft-install matrix consumes those exact
-uploaded archives. Publication remains a manual decision after the real-TTY
-acceptance below. GitHub's tag endpoint
-exposes published releases only, so the workflow captures the new draft's
-numeric release ID from the authenticated release list and passes it only to
-these acceptance jobs; normal installs keep using the latest/published-tag
-endpoints.
+release **draft** without clobbering an existing release. The aggregate job also
+stamps the exact tag into the installer's existing `embedded_version=""` marker,
+includes that executable `install.sh` in `SHA256SUMS`, and uploads six assets:
+the four archives, `install.sh`, and `SHA256SUMS`. A second native matrix
+revalidates the tag, downloads the actual stamped installer asset from the draft
+by its captured release and asset IDs, invokes it without a version argument,
+and verifies the binary version, both argv0 aliases, license, and launch without
+Node or Bun on the runtime PATH. The four native builds use one archive-packaging
+helper, and the draft-install matrix consumes those exact uploaded archives.
+Publication remains a manual decision after the real-TTY acceptance below.
 
 After all native acceptance jobs pass, the release workflow re-downloads the
-five draft assets, checks them against the build-generated `SHA256SUMS`, and
+six draft assets, checks the five checksummed assets against the build-generated
+`SHA256SUMS`, and
 uploads an immutable `accepted-release-candidate-*` Actions artifact containing
 the validated commit, workflow run/attempt, release ID, asset IDs, and checksums.
 The manually dispatched `promote-release.yml` downloads that exact artifact,
@@ -422,28 +418,26 @@ then publishes the unchanged draft. Draft assets cannot drift between acceptance
 and promotion without failing that workflow.
 
 `SHA256SUMS` is unsigned in A5 because no signing-key infrastructure exists;
-the trust chain is authenticated GitHub access plus immutable release assets.
+the public trust chain is the exact tagged GitHub release URL, checksum
+validation, archive-manifest validation, and immutable release assets.
 The pipeline pins inputs, gates, targets, names, and manifest, but does not
 claim bit-for-bit reproducible Bun executables or archives.
 
-`scripts/install.sh` supports latest stable, explicit `--version`, and
-`--install-dir` (default `~/.local/bin`). The supported binary-install baseline
-starts at `v0.7.1-rc.2`; the earlier `v0.7.0` and `v0.7.1-rc.1` candidates
-remained unpublished.
-Explicit installs set a tag, fetch
-`scripts/install.sh` from that tag through the authenticated Contents API, and
-invoke it with `--version` set to the same tag. Latest install first resolves
-the latest stable tag, then performs the same tagged fetch and explicit invoke.
-There is no silent `main` fallback, so installer code and release artifacts are
-always paired. `v0.7.1-rc.2` is the first published binary,
-`v0.7.1-rc.7` is the latest published binary, and publishing `v0.7.1-rc.8`
-makes immutable rollback to `v0.7.1-rc.7` available.
+The released `scripts/install.sh` is self-versioned for one exact public tag and
+supports an explicit `--version` override and `--install-dir` (default
+`~/.local/bin`). Its public path uses unauthenticated `curl` only for the exact
+tagged archive and `SHA256SUMS`; it has no `latest` or source-branch fallback.
+The source installer is intentionally unstamped and therefore requires an exact
+version. Draft-release CI preserves authenticated `STATION_INSTALL_RELEASE_ID`
+handling so it can download mutable draft assets by their captured IDs without
+changing public behavior. The earlier `v0.7.1-rc.*` releases were internal
+previews, not predecessors in the public version line.
 
-The installer uses authenticated `gh api` release endpoints, accepts only the
-four supported targets, verifies the one matching `SHA256SUMS` entry and exact
-archive manifest before touching an existing install, and stages replacement
-on each destination filesystem. Every potentially blocking `gh` operation is a
-tracked file-backed child rather than a command substitution.
+The installer accepts only the four supported targets, verifies the one matching
+`SHA256SUMS` entry and exact archive manifest before touching an existing
+install, and stages replacement on each destination filesystem. Every
+potentially blocking public `curl` or draft `gh` operation is a tracked
+file-backed child rather than a command substitution.
 
 The staged binary's `--version` probe has a 10-second supervised deadline and
 a POSIX file-size limit on stdout/stderr. Watchdog exit 124 reports timeout;
@@ -457,7 +451,7 @@ The command lock is `<install-dir>/.station-install.lock`; the license lock is
 `<data-home>/station/.station-install.lock`. Their sole owner files—
 `<install-dir>/.station-install.lock/owner-*` and
 `<data-home>/station/.station-install.lock/owner-*`—record the PID, requested
-tag or `latest`, and the token embedded in each filename. Cleanup removes only
+tag, and the token embedded in each filename. Cleanup removes only
 its token-specific owner file and revalidates the lock-directory inode so it
 cannot remove a replacement owner's lock. The installer acquires the
 command lock first and the license lock second, skips a duplicate path, and
@@ -493,8 +487,8 @@ still gives coherent process-level visibility to continuous readers. Power loss
 is not equivalent: the installer does not fsync files or containing directories
 and therefore makes no post-power-loss durability guarantee; old/new
 cross-filesystem `LICENSE` metadata may also remain. The deterministic
-`smoke:install` suite exercises this boundary with fake authenticated release
-assets and is part of `test:all`.
+`smoke:install` suite exercises this boundary with fake exact-tag public
+downloads and authenticated draft assets and is part of `test:all`.
 
 After success, all three bare launchers are resolved physically. If every one
 points into the new install directory, the installer prints only
@@ -506,10 +500,12 @@ The future-shell export appears only when physical current-process resolution
 is incomplete. The installer never reads, selects, creates, or edits shell
 startup files.
 
-Candidate `v0.7.1-rc.8` promotes only after all four native targets pass
-automated and manual acceptance, including upgrade and rollback against
-published `v0.7.1-rc.7`. Published tags and assets are never deleted, moved, or
-overwritten; a bad release rolls back explicitly and rolls forward to a higher
+Candidate `v0.0.0-pre-alpha.1` promotes only after all four native targets pass
+automated and manual acceptance, including installation over an existing
+`v0.7.1-rc.8` internal preview despite the intentional public version reset.
+After promotion, all four targets test the unauthenticated public exact-tag URL
+without GitHub credentials or a `gh` executable. Published tags and assets are
+never deleted, moved, or overwritten; a bad release rolls forward with a new
 version containing the revert or fix.
 
 Drafts are still mutable. Release notes record the workflow commit, while the
@@ -521,10 +517,7 @@ An unpublished draft left by a transient workflow failure may be deleted and
 the unchanged tag workflow rerun; a source fix uses a new prerelease tag, while
 published releases are never deleted or mutated.
 
-The source-based Homebrew formula remains separate and manually dispatched.
-The default release `GITHUB_TOKEN` cannot trigger another workflow, and the tap
-`COMMITTER_TOKEN` is intentionally not configured for A5; no binary Homebrew
-formula is claimed until private asset authentication is proven there.
+Homebrew is not currently supported and the tap is outside this release path.
 
 Implementation sources: the target and manifest policy above; the existing
 [`build:binary` staging](../scripts/build-binary.mjs),
@@ -733,16 +726,19 @@ flow:
    build (B-host).
 8. Manual promotion selects the successful run's immutable
    `accepted-release-candidate-*` artifact, rechecks the exact tag, release,
-   asset IDs, and hashes, then publishes only that draft.
+   asset IDs, and hashes, then publishes only that draft. After publication,
+   the four native targets install through the public exact-tag URL without
+   GitHub credentials or a `gh` executable.
 9. With terminal A continuously running installed `stn --version`, terminal B
-   repeatedly installs the draft → only complete `0.7.1-rc.8` output appears,
-   never command-not-found or malformed output; both aliases remain links to
-   `stn`, so entrypoints never mix. Alternate the draft with published
-   `v0.7.1-rc.7` in both directions to prove upgrade and rollback.
+   repeatedly installs the draft → only complete `0.7.1-rc.8` or
+   `0.0.0-pre-alpha.1` output appears, never command-not-found or malformed
+   output; both aliases remain links to `stn`, so entrypoints never mix. Install
+   the reset public version over the internal preview to prove the intentional
+   lower SemVer is accepted.
 10. Abandoned command and license `.station-install.lock` directories each
     refuse the install until their recorded PID is confirmed dead, the lock is
     manually removed, and the same install is retried successfully.
-11. Ctrl-C during a real authenticated upgrade exits 130, preserves the prior
+11. Ctrl-C during a real draft upgrade exits 130, preserves the prior
     launchable TUI, cleans its owned stages and both locks, and permits a
     successful retry.
 
