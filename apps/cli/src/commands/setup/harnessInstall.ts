@@ -86,7 +86,7 @@ function harnessInstallDefinition(
               "-c",
               downloadedInstallerCommand(
                 "https://opencode.ai/install",
-                '/bin/bash "$installer" --no-modify-path',
+                '/bin/bash "$installer" --no-modify-path && mkdir -p "$HOME/.local/bin" && ln -s "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode"',
               ),
             ],
             message: "Run OpenCode's installer without modifying shell startup files.",
