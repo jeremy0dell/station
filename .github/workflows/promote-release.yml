@@ -103,6 +103,7 @@ jobs:
 
           expected=(
             SHA256SUMS
+            install.sh
             "stn-v$version-darwin-arm64.tar.gz"
             "stn-v$version-darwin-x64.tar.gz"
             "stn-v$version-linux-arm64.tar.gz"
@@ -147,3 +148,71 @@ jobs:
             jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$published_release_json"
           )" = "$current_ids"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"
+
+  verify-public-install:
+    name: verify public install (${{ matrix.target }})
+    needs: promote
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Download exact-tag public installer
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          installer="$RUNNER_TEMP/station-install.sh"
+          env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
+            curl --fail --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --output "$installer" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/install.sh"
+          test -s "$installer"
+          /bin/sh -n "$installer"
+          grep -Fx "embedded_version=\"$TAG\"" "$installer"
+          chmod 0700 "$installer"
+      - name: Install without GitHub credentials or gh
+        env:
+          EXPECTED_VERSION: ${{ inputs.tag }}
+        run: |
+          public_path="$RUNNER_TEMP/public-path"
+          mkdir -p "$public_path"
+          for command in awk cat chmod cp curl grep ln ls mkdir mktemp mv paste readlink rm rmdir sleep sort tar tr uname; do
+            command_path="$(command -v "$command")"
+            test -n "$command_path"
+            ln -s "$command_path" "$public_path/$command"
+          done
+          if command -v sha256sum >/dev/null 2>&1; then
+            ln -s "$(command -v sha256sum)" "$public_path/sha256sum"
+          else
+            ln -s "$(command -v shasum)" "$public_path/shasum"
+          fi
+          test ! -e "$public_path/gh"
+
+          install_home="$RUNNER_TEMP/public-install-home"
+          bin_dir="$install_home/.local/bin"
+          data_home="$install_home/.local/share"
+          mkdir -p "$install_home"
+          env -i \
+            HOME="$install_home" \
+            XDG_DATA_HOME="$data_home" \
+            PATH="$public_path" \
+            /bin/sh "$RUNNER_TEMP/station-install.sh" --install-dir "$bin_dir"
+
+          version="${EXPECTED_VERSION#v}"
+          test "$(env -i HOME="$install_home" XDG_DATA_HOME="$data_home" \
+            PATH="$bin_dir:$public_path" stn --version)" = "$version"
+          test "$(readlink "$bin_dir/stn-ingress")" = stn
+          test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          test -f "$data_home/station/LICENSE"

@@ -8,6 +8,7 @@ github_host="github.com"
 export GH_HOST=$github_host
 requested_version=""
 requested_version_set=0
+embedded_version=""
 install_dir=""
 release_id=${STATION_INSTALL_RELEASE_ID:-}
 temp_dir=""
@@ -52,7 +53,7 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [--version vX.Y.Z[-prerelease]] [--install-dir PATH]
 
-Install the latest stable private Station release, or an explicit version.
+Install the exact public Station release stamped into this script, or an explicit version.
 
 Options:
   --version VERSION   Install an immutable v-prefixed release version.
@@ -314,6 +315,24 @@ run_gh() {
   return "$tracked_status"
 }
 
+run_curl() {
+  curl_output=$1
+  curl_error=$2
+  shift 2
+  child_starting=1
+  curl "$@" > "$curl_output" 2> "$curl_error" &
+  tracked_child_pid=$!
+  child_starting=0
+  finish_pending_signal
+  if wait "$tracked_child_pid"; then
+    tracked_status=0
+  else
+    tracked_status=$?
+  fi
+  tracked_child_pid=""
+  return "$tracked_status"
+}
+
 read_file_value() {
   value_file=$1
   if ! file_value=$(
@@ -461,6 +480,13 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if [ "$requested_version_set" -eq 0 ] && [ -n "$embedded_version" ]; then
+  requested_version=$embedded_version
+  requested_version_set=1
+fi
+if [ "$requested_version_set" -eq 0 ]; then
+  fail "this installer is not version-stamped; pass --version with an exact release tag."
+fi
 if [ "$requested_version_set" -eq 1 ] && ! valid_version "$requested_version"; then
   fail "version must be valid v-prefixed SemVer, for example v0.7.0 or v0.7.1-rc.1."
 fi
@@ -468,7 +494,7 @@ if [ -n "$release_id" ]; then
   case "$release_id" in
     *[!0-9]*) fail "STATION_INSTALL_RELEASE_ID must be a numeric GitHub release ID." ;;
   esac
-  [ "$requested_version_set" -eq 1 ] || fail "STATION_INSTALL_RELEASE_ID requires --version."
+  [ "$requested_version_set" -eq 1 ] || fail "STATION_INSTALL_RELEASE_ID requires an exact version."
 fi
 
 if ! raw_current_dir=$(
@@ -516,19 +542,19 @@ case "$(uname -s 2>/dev/null || true):$(uname -m 2>/dev/null || true)" in
   *) fail "unsupported platform; Station binaries support macOS and glibc Linux on arm64 or x64." ;;
 esac
 
-command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required; install 'gh', then run 'gh auth login --hostname github.com'."
+if [ -n "$release_id" ]; then
+  command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required for draft release acceptance; install 'gh', then run 'gh auth login --hostname github.com'."
+else
+  command -v curl >/dev/null 2>&1 || fail "curl is required to download the public Station release."
+fi
 temp_dir=$(mktemp -d "$tmp_base/station-install.XXXXXX") || fail "could not create a temporary directory."
 install_lock_token=$$-${temp_dir##*/}
-if ! run_gh "$temp_dir/auth.stdout" "$temp_dir/auth.stderr" auth status --hostname "$github_host"; then
-  fail "GitHub authentication is required for this private release; run 'gh auth login --hostname github.com', then retry."
+if [ -n "$release_id" ] && ! run_gh "$temp_dir/auth.stdout" "$temp_dir/auth.stderr" auth status --hostname "$github_host"; then
+  fail "GitHub authentication is required for draft release acceptance; run 'gh auth login --hostname github.com', then retry."
 fi
 
 mkdir -p "$install_dir" || fail "could not create Station install directory '$install_dir'."
-if [ "$requested_version_set" -eq 1 ]; then
-  owner_request=$requested_version
-else
-  owner_request=latest
-fi
+owner_request=$requested_version
 command_lock_dir=$install_dir/.station-install.lock
 acquire_lock "$command_lock_dir" command
 
@@ -603,21 +629,8 @@ if [ -n "$release_id" ]; then
   archive_id=$asset_result
   lookup_draft_asset SHA256SUMS draft-checksums
   checksums_id=$asset_result
-elif [ "$requested_version_set" -eq 1 ]; then
-  tag=$requested_version
-  release_endpoint="repos/$repository/releases/tags/$tag"
 else
-  if ! run_gh "$temp_dir/latest.stdout" "$temp_dir/latest.stderr" api "repos/$repository/releases/latest" --jq '.tag_name'; then
-    fail "could not resolve the latest stable Station release; check 'gh auth status' and repository access."
-  fi
-  if ! read_file_value "$temp_dir/latest.stdout"; then
-    fail "could not read the latest stable Station release tag."
-  fi
-  tag=$file_value
-  if ! valid_version "$tag"; then
-    fail "the latest Station release returned an invalid tag."
-  fi
-  release_endpoint="repos/$repository/releases/tags/$tag"
+  tag=$requested_version
 fi
 
 if [ -z "$release_id" ]; then
@@ -625,30 +638,30 @@ if [ -z "$release_id" ]; then
   archive_name="stn-v${version}-${target}.tar.gz"
 fi
 
-lookup_asset() {
-  asset_name=$1
-  asset_slug=$2
-  if ! run_gh "$temp_dir/$asset_slug.stdout" "$temp_dir/$asset_slug.stderr" api "$release_endpoint" --jq ".assets[] | select(.name == \"$asset_name\") | .id"; then
-    fail "could not read release $tag; check that the release exists and your account can access it."
-  fi
-  read_numeric_result "$temp_dir/$asset_slug.stdout" "release $tag must contain exactly one '$asset_name' asset."
-  asset_result=$numeric_result
-}
-
-if [ -z "$release_id" ]; then
-  lookup_asset "$archive_name" release-archive
-  archive_id=$asset_result
-  lookup_asset SHA256SUMS release-checksums
-  checksums_id=$asset_result
-fi
 archive_path=$temp_dir/$archive_name
 checksums_path=$temp_dir/SHA256SUMS
 
-if ! run_gh "$archive_path" "$temp_dir/archive-download.stderr" api -H "Accept: application/octet-stream" "repos/$repository/releases/assets/$archive_id"; then
-  fail "could not download $archive_name from release $tag."
-fi
-if ! run_gh "$checksums_path" "$temp_dir/checksums-download.stderr" api -H "Accept: application/octet-stream" "repos/$repository/releases/assets/$checksums_id"; then
-  fail "could not download SHA256SUMS from release $tag."
+if [ -n "$release_id" ]; then
+  if ! run_gh "$archive_path" "$temp_dir/archive-download.stderr" api -H "Accept: application/octet-stream" "repos/$repository/releases/assets/$archive_id"; then
+    fail "could not download $archive_name from draft release $tag."
+  fi
+  if ! run_gh "$checksums_path" "$temp_dir/checksums-download.stderr" api -H "Accept: application/octet-stream" "repos/$repository/releases/assets/$checksums_id"; then
+    fail "could not download SHA256SUMS from draft release $tag."
+  fi
+else
+  release_url="https://github.com/$repository/releases/download/$tag"
+  if ! run_curl "$archive_path" "$temp_dir/archive-download.stderr" \
+    --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    "$release_url/$archive_name"; then
+    fail "could not download $archive_name from public release $tag."
+  fi
+  if ! run_curl "$checksums_path" "$temp_dir/checksums-download.stderr" \
+    --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    "$release_url/SHA256SUMS"; then
+    fail "could not download SHA256SUMS from public release $tag."
+  fi
 fi
 
 expected_hashes=$(awk -v name="$archive_name" '$2 == name || $2 == "*" name { print $1 }' "$checksums_path")
