@@ -188,7 +188,8 @@ pnpm smoke:install
 ```
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
-authenticated GitHub responses and temporary homes, including startup-file
+public `curl` downloads and authenticated draft responses in temporary homes,
+including startup-file
 non-interaction, safely evaluated minimal-PATH guidance, physical launcher
 resolution, and normalized-colon preflight coverage. It is deterministic, does
 not download a real release, and does not read or modify real shell startup
@@ -304,7 +305,7 @@ must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
 
-## Private Binary Release
+## Experimental Pre-Alpha Release
 
 Before tagging, an administrator must enable GitHub immutable releases; the
 workflow token cannot read that administration setting. The workflow validates
@@ -314,18 +315,21 @@ and have no existing GitHub release. Pushing a `v*` tag runs the callable
 standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
 for all four supported targets, archive/checksum assembly, and an authenticated
 installer smoke against the resulting GitHub release draft. The four native
-release builds use one archive-packaging helper, and the draft-install jobs
-consume those exact uploaded archives. Draft acceptance revalidates the tag but
-fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
-with `--version`; a moved tag cannot substitute different installer code. After
-all four native installs pass, the workflow re-downloads the five draft assets,
+release builds use one archive-packaging helper. Assembly stamps the validated
+tag into the existing `embedded_version=""` marker and publishes that
+`install.sh` beside the archives. Draft-install jobs download and run the actual
+stamped draft asset with the captured numeric release ID and no version
+argument. After all four native installs pass, the workflow re-downloads the
+six draft assets,
 verifies them against the build checksum, and uploads an immutable
 `accepted-release-candidate-*` Actions artifact containing the commit, release
 ID, asset IDs, and checksums. Draft install and candidate-recording jobs use
 contents write permission because GitHub exposes draft releases only to
 identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
-workflow never publishes the draft automatically.
+workflow never publishes the draft automatically. Promotion publishes the
+accepted draft, then four native jobs download the exact-tag public installer
+without GitHub credentials or a `gh` executable and run it end to end.
 
 ### Launcher PATH release acceptance
 
@@ -348,32 +352,34 @@ containing spaces and apostrophes. Source-checkout acceptance separately
 requires the preserved `pnpm --dir <checkout> station:link` command when
 linking is declined.
 
-The current immutable binary candidate is `v0.7.1-rc.8`. `v0.7.1-rc.7` is the
-prior published binary, and `v0.7.1-rc.2`, `v0.7.1-rc.3`, `v0.7.1-rc.4`,
-`v0.7.1-rc.5`, and `v0.7.1-rc.6` remain older published rollbacks; the earlier
-`v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished:
+The public candidate is experimental pre-alpha `v0.0.0-pre-alpha.1`. The old
+`v0.7.1-rc.*` releases were internal previews, not predecessors in the public
+version line. `v0.7.1-rc.8` is retained as the installed-version fixture that
+proves the intentional version-number reset:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.7.1-rc.8`, then create and
-   push `v0.7.1-rc.8`.
+   with `package.json` and runtime reporting at `0.0.0-pre-alpha.1`, then create
+   and push `v0.0.0-pre-alpha.1`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.7.1-rc.8-attempt-*` artifact.
+   `accepted-release-candidate-0.0.0-pre-alpha.1-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
-4. Install `v0.7.1-rc.7`, upgrade to the accepted candidate, explicitly
-   reinstall `v0.7.1-rc.7`, then reinstall the candidate. Confirm the complete
+4. Install `v0.7.1-rc.8`, upgrade to the accepted candidate, and confirm the
+   lower public version number does not block replacement. Confirm the complete
    version and all three launchers after every transition.
 5. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.7.1-rc.8`, and the manual-acceptance confirmation. It rechecks the
+   `v0.0.0-pre-alpha.1`, and the manual-acceptance confirmation. It rechecks the
    successful run SHA, immutable candidate manifest, tag commit, release ID,
-   asset IDs, and all archive hashes immediately before publishing that exact
-   draft.
+   asset IDs, the stamped installer, and all hashes immediately before
+   publishing that exact draft. Its four public-install jobs must then pass.
+6. Mark the historical assetless `v0.1.0` release as a prerelease before the
+   announcement so the repository does not present a stable channel. Leave the
+   Homebrew tap untouched; Homebrew is not currently supported.
 
 Published tags and assets are immutable. Once two binary releases exist,
 recovery may explicitly reinstall the prior version, but the release line moves
 forward with a superseding patch; it never deletes, retags, or overwrites a
-published release. The source Homebrew formula is a separate manually
-dispatched workflow and is not part of this binary release gate.
+published release.
 
 If a transient workflow failure leaves an unpublished draft, delete only that
 draft and rerun the unchanged tag workflow. If the source needs a fix, leave
@@ -384,7 +390,7 @@ Installer acceptance uses both `<install-dir>/.station-install.lock` and
 `<data-home>/station/.station-install.lock`. Their sole corresponding
 `<install-dir>/.station-install.lock/owner-*` and
 `<data-home>/station/.station-install.lock/owner-*` files record the PID,
-requested tag or `latest`, and the token embedded in each filename. The command
+requested tag and the token embedded in each filename. The command
 lock is acquired first and the license lock second, with the duplicate path
 skipped, and they are released in reverse order. Cleanup removes only its
 token-specific owner file and revalidates the directory inode so it cannot
@@ -392,7 +398,7 @@ remove a replacement owner's lock. Either refusal must name the lock and
 readable owner PID, state that the existing
 Station installation was unchanged, and tell the user to wait and retry; a
 license-lock refusal also releases the command lock without making a release
-API request. The installer never auto-removes an uncertain lock. Only after
+request. The installer never auto-removes an uncertain lock. Only after
 confirming that no installer with the recorded PID is alive may an operator
 remove the affected lock directory manually and retry.
 
@@ -400,8 +406,9 @@ The staged binary's `--version` probe must finish within 10 seconds. Its
 watchdog returns 124 for timeout and 125 for timer failure, bounds output at the
 filesystem level, TERM/KILLs and reaps the probe, removes common GitHub and
 Actions token variables from the child environment, and shows at most 4096
-sanitized bytes of compatibility stderr. Every potentially blocking `gh`
-operation is a tracked file-backed child; HUP, INT, and TERM forward to that
+sanitized bytes of compatibility stderr. Every potentially blocking public
+`curl` or draft-only `gh` operation is a tracked file-backed child; HUP, INT,
+and TERM forward to that
 child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
 
 The verified `stn` rename is the sole runtime commit point. Immediately before
@@ -486,7 +493,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.8
+  tag=v0.0.0-pre-alpha.1
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -515,7 +522,9 @@ promotion will verify:
     --name "accepted-release-candidate-$version-attempt-$run_attempt" \
     --dir "$candidate_dir"
   manifest="$candidate_dir/manifest.json"
+  asset_ids="$candidate_dir/asset-ids.txt"
   test -f "$manifest"
+  test -f "$asset_ids"
   manifest_field() {
     node -e '
       const { readFileSync } = require("node:fs");
@@ -539,13 +548,16 @@ promotion will verify:
     ''|*[!0-9]*) echo "candidate release ID must be numeric" >&2; exit 1 ;;
   esac
   test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq '.sha')" = "$commit"
-  gh api --method GET \
-    -H 'Accept: application/vnd.github.raw+json' \
-    -f ref="$commit" \
-    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
+  installer_asset_id="$(awk -F= '$1 == "install.sh" { print $2 }' "$asset_ids")"
+  case "$installer_asset_id" in
+    ''|*[!0-9]*) echo "candidate installer asset ID must be numeric" >&2; exit 1 ;;
+  esac
+  gh api -H 'Accept: application/octet-stream' \
+    "repos/jeremy0dell/station/releases/assets/$installer_asset_id" > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer" --version "$tag"
+  grep -Fx "embedded_version=\"$tag\"" "$installer"
+  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer"
 )
 ```
 
@@ -605,7 +617,7 @@ produce a Station event.
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
-For each target, install through the authenticated script into a clean home and
+For each target, install through the authenticated stamped draft asset into a clean home and
 manually verify the actual user experience, not a dashboard override:
 
 1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
@@ -619,7 +631,7 @@ manually verify the actual user experience, not a dashboard override:
    Confirm two installs leave every startup file, inode, mode, symlink, and
    target unchanged. Copy the printed export manually into the file you choose,
    open a new login shell, and physically verify all three launchers. Also
-   confirm a normalized install path containing `:` fails before any GitHub
+   confirm a normalized install path containing `:` fails before any release
    request or installer-created path. With all three launchers already resolving
    physically to the install directory, confirm the short `Next: run stn setup`
    success message.
@@ -646,11 +658,12 @@ manually verify the actual user experience, not a dashboard override:
    live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
-   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.8`:
+   B, repeatedly reinstall the draft. Terminal A may print only
+   `0.0.0-pre-alpha.1`:
    never command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat the same checks while alternating the draft
-   with published `v0.7.1-rc.7` in both directions.
+   with published internal preview `v0.7.1-rc.8` in both directions.
 10. In an isolated home, test abandoned locks separately at
     `<install-dir>/.station-install.lock` and
     `<data-home>/station/.station-install.lock` with representative owner
@@ -666,9 +679,10 @@ manually verify the actual user experience, not a dashboard override:
     replacing any asset.
 
 Record the oldest supported macOS version or built-against glibc version in the
-release notes. Signing and notarization are not part of the initial private
-binary release; integrity is the authenticated GitHub asset plus `SHA256SUMS`
-verification and immutable publication.
+release notes. The current documented floors are macOS 13 and glibc 2.39.
+Signing and notarization are not part of the initial public pre-alpha; integrity
+is the exact-tag GitHub asset plus `SHA256SUMS` verification and immutable
+publication.
 
 For CI install parity, use:
 

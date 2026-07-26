@@ -279,9 +279,11 @@ Current startup proceeds in this order:
    `absent`, `listening`, `stale`, and `inaccessible`. Absent or proven-stale
    keeps the claim for owned startup; bind performs a fresh zero-holder and path-
    identity check before its only unlink attempt. Listening reads incumbent health and applies the
-   strict SemVer selector policy: exact builds or higher-version incumbents
-   attach; a deterministically elected same-version build or higher-version
-   candidate may replace an incumbent only after complete process attribution.
+   strict selector policy: exact builds or higher-version incumbents attach; a
+   deterministically elected same-version build or higher-version candidate may
+   replace an incumbent only after complete process attribution. The declared
+   public version-line reset orders `0.0.0-pre-alpha.*` after the internal
+   `0.7.1-rc.*` previews despite ordinary SemVer precedence.
    A losing or legacy same-version candidate refuses rather than attaching.
    Inaccessible paths, missing or malformed `lsof` evidence, path replacement,
    and non-socket collisions fail before provider construction, main SQLite,
@@ -567,7 +569,7 @@ from the diagnostic use case.
 | --- | --- |
 | Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
-| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
+| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |

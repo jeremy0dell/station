@@ -1,23 +1,22 @@
 # Install Station
 
-Station is distributed through authenticated GitHub release assets in the
-private `jeremy0dell/station` repository. This procedure assumes your GitHub
-account already has read access; it does not require or display a personal
-access token.
+Station is experimental pre-alpha software. The current public version is
+`v0.0.0-pre-alpha.1`.
 
 ## Binary Requirements
 
 The compiled binary supports these targets:
 
-- macOS on Apple silicon (`darwin-arm64`)
-- macOS on Intel (`darwin-x64`)
-- Linux on arm64 (`linux-arm64`)
-- Linux on x64 (`linux-x64`)
+- macOS 13 or newer on Apple silicon (`darwin-arm64`)
+- macOS 13 or newer on Intel (`darwin-x64`)
+- glibc 2.39 or newer Linux on arm64 (`linux-arm64`)
+- glibc 2.39 or newer Linux on x64 (`linux-x64`)
 
-Install the [GitHub CLI](https://cli.github.com/) before continuing. The binary
-install itself does not require a source checkout, Node.js, pnpm, Bun, Xcode, or
-Homebrew. `stn setup` handles the separate tools needed for the complete agent
-workflow after Station is installed.
+Windows and musl Linux are not supported. The binary install needs `curl` and
+either `sha256sum` or `shasum`; it does not require a GitHub account, GitHub CLI,
+a source checkout, Node.js, pnpm, or Bun. `stn setup` handles the separate tools
+needed for the complete agent workflow after Station is installed. Report
+feedback through [GitHub Issues](https://github.com/jeremy0dell/station/issues).
 
 Station uses the platform `lsof` executable (`/usr/sbin/lsof` on macOS,
 `/usr/bin/lsof` on Linux) to prove that an unreachable Unix socket has no live
@@ -33,27 +32,11 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.8 and validate setup on this machine.
-
-Use the private GitHub repository jeremy0dell/station through GitHub CLI.
+Install experimental Station v0.0.0-pre-alpha.1 and validate setup on this machine.
 
 Safety and scope:
-- First run `gh auth status --hostname github.com`, then verify repository
-  access with `gh repo view jeremy0dell/station`. On macOS, a failure inside a
-  restricted agent sandbox is inconclusive because GitHub CLI credentials may
-  be stored in the Keychain. Retry both checks with scoped host/Keychain access
-  before asking me to authenticate, and run every later authenticated `gh repo`
-  or `gh api` command in that same access context. Never ask me to paste,
-  extract, print, request, or export a GitHub token. If scoped host access is
-  unavailable, ask me to run the auth checks and exact tagged temporary-file
-  installer block from the page that supplied this prompt in my Terminal, then
-  resume using the absolute installed `stn` path.
-- Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.8`, read `docs/install.md` from that same tag with authenticated
-  `gh api`, and follow its temporary-file installer procedure. If that release
-  is not published yet, stop instead of falling back to another ref.
-- Never fetch installer code from `main` and never pipe network output directly
-  into a shell.
+- Do not clone the repository or build from source. Use only
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -67,78 +50,33 @@ Validation:
    through the absolute installed path. Record `command -v stn`,
    `command -v stn-ingress`, and `command -v stn-tmux-popup` only as evidence
    about the current agent execution context.
-2. Run `stn setup plan --json` through the absolute installed `stn` path,
-   summarize every proposed install or write, and ask for approval before
-   applying it.
-3. Run the guided `stn setup` through the absolute installed path and let me
+2. Run the guided `stn setup` through the absolute installed path and let me
    answer its choices. If you cannot pass through an interactive prompt, ask me
    to run it, then continue afterward.
-4. Run `stn setup check --json` and `stn doctor` through the absolute installed
+3. Run `stn setup check --json` and `stn doctor` through the absolute installed
    path.
-5. Report the installed path and version, whether setup reports
+4. Report the installed path and version, whether setup reports
    `summary.requiredOk: true`, doctor health, future-shell verification state,
    and any remaining manual steps. A valid zero-project config is acceptable.
    Do not claim success while a required check is failing or future-shell PATH
    remains unverified.
 ```
 
-The agent should stop at authentication or approval boundaries rather than
-inventing credentials or setup choices.
+The agent should stop at approval boundaries rather than inventing setup
+choices.
 
-## 1. Authenticate GitHub CLI
-
-Sign in with the GitHub account that can read `jeremy0dell/station`:
-
-```bash
-gh auth login --hostname github.com
-gh auth status --hostname github.com
-gh repo view jeremy0dell/station --json nameWithOwner --jq '.nameWithOwner'
-```
-
-If GitHub CLI is already authenticated, skip the login command. The repository
-check should print `jeremy0dell/station`; a not-found response means the active
-account cannot read the private repository. GitHub CLI supplies its stored
-authentication to the API calls below, so do not add credentials to the recipe.
-On macOS, a failure observed only inside a restricted agent sandbox may mean
-that sandbox cannot read Keychain-backed credentials. Retry the checks from a
-normal Terminal or with scoped host/Keychain access, and keep the later
-authenticated `gh api` calls in that same context; do not move the token into
-the sandbox or reauthenticate solely because of a sandbox-only failure.
-
-## 2. Install the Current Preview Candidate
+## Install the Exact Public Pre-Alpha
 
 From any directory, run:
 
 ```bash
-(
-  set -eu
-  umask 077
-  export GH_HOST=github.com
-  tag=v0.7.1-rc.8
-  # After the first stable release, use:
-  # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  gh api --method GET \
-    -H 'Accept: application/vnd.github.raw+json' \
-    -f ref="$tag" \
-    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
-  test -s "$installer"
-  sh -n "$installer"
-  sh "$installer" --version "$tag"
-)
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh | sh
 ```
 
-`v0.7.1-rc.8` is the current private-binary candidate. `v0.7.1-rc.7` remains
-published as its immutable rollback; `v0.7.1-rc.2`, `v0.7.1-rc.3`,
-`v0.7.1-rc.4`, `v0.7.1-rc.5`, and `v0.7.1-rc.6` are older published binaries,
-while the earlier `v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished.
-Run this recipe after the candidate is published. Keep the fixed assignment for
-an exact prerelease install. After the first stable release, use the commented
-assignment to resolve the latest stable tag while still fetching installer code
-and artifacts from that same immutable tag. The recipe never falls back to
-`main`, never prints GitHub credentials, and never pipes network output directly
-into a shell.
+The released `install.sh` is stamped with `v0.0.0-pre-alpha.1`. With no
+arguments it downloads only that tag's matching native archive and
+`SHA256SUMS` over unauthenticated HTTPS. The old `v0.7.1-rc.*` releases were
+internal previews, not predecessors in the public version line.
 
 The installer selects the matching platform archive, verifies it against
 `SHA256SUMS`, and installs these launchers in `~/.local/bin` by default:
@@ -152,10 +90,7 @@ stn-tmux-popup
 It also installs the redistributed license under
 `${XDG_DATA_HOME:-$HOME/.local/share}/station/`.
 
-After this candidate is published, immutable rollback to `v0.7.1-rc.7` uses the
-same exact-version procedure below.
-
-## 3. Verify the Install
+## Verify the Install
 
 The installer physically verifies all three launchers. If the install directory
 is not visible in the current shell, it prints an exact current-shell recovery
@@ -197,38 +132,27 @@ current-shell block repaired PATH before setup, the final probe is clean and
 setup stays concise, but a future login shell remains unverified until you test
 it separately.
 
-## Install an Exact Version
-
-To install an exact release or return to published `v0.7.1-rc.7`, use the same
-recipe with this assignment instead of the latest-release lookup:
-
-```bash
-tag=v0.7.1-rc.7
-```
-
-The installer code and artifacts still come from that same tag. The earlier
-`v0.7.0` and `v0.7.1-rc.1` candidates remained unpublished.
-
 ## Use a Custom Install Directory
 
-Change the final installer invocation to pass an absolute or home-relative
-path:
+Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-sh "$installer" --version "$tag" --install-dir "$HOME/bin"
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.1/install.sh | \
+  sh -s -- --install-dir "$HOME/bin"
 ```
 
 Use the PATH and absolute commands printed by that install rather than the
 default `~/.local/bin` examples. The normalized install directory cannot
 contain `:` because PATH uses `:` to separate entries. This validation happens
-before GitHub requests, temporary-directory creation, or destination mutation.
+before network requests, temporary-directory creation, or destination mutation.
 
-## 4. Complete First-Run Setup
+## Complete First-Run Setup
 
 Run setup only after `stn --version` succeeds:
 
 ```bash
 stn setup
+stn setup check --json
 stn doctor
 stn tui
 ```
@@ -281,7 +205,7 @@ The installer and setup have separate ownership:
 The installer:
 
 - accepts only `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64`;
-- downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` through authenticated `gh api` calls (`{version}` excludes the tag's leading `v`);
+- downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` from the stamped public tag with unauthenticated `curl` (`{version}` excludes the tag's leading `v`);
 - verifies the matching SHA-256 before extraction and rejects an unexpected archive manifest;
 - stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
 - keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
@@ -297,16 +221,16 @@ Every install serializes both mutated resources with these locks:
 - `<data-home>/station/.station-install.lock` (by default
   `~/.local/share/station/.station-install.lock`) for `LICENSE`.
 
-Each lock's sole `owner-*` file records the installer PID, requested tag or
-`latest`, and the unique ownership token embedded in its filename. Cleanup
+Each lock's sole `owner-*` file records the installer PID, requested tag, and
+the unique ownership token embedded in its filename. Cleanup
 removes only that token-specific file and revalidates the lock inode, so an
 earlier installer cannot remove a replacement lock. The installer acquires
 the command lock first and the license lock second, skips the second acquisition
 if both paths coincide, and releases them in reverse order. A refusal happens
-before release lookup or download, names
+before a release download, names
 the lock and readable owner PID, states that the existing Station installation
 was unchanged, and tells the user to wait and retry. A license-lock refusal
-releases the command lock and performs no release API request.
+releases the command lock and performs no release request.
 
 The installer never guesses that either lock is stale. For an abandoned lock,
 read its sole `<install-dir>/.station-install.lock/owner-*` or
@@ -347,10 +271,10 @@ retrying after a machine loss.
 
 The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, diffnav and git-delta for diff automation, and a supported agent CLI for agent sessions.
 
-Rollback is the same authenticated explicit-version install. Published tags and
-assets are immutable; do not delete, move, or overwrite them. If a published
-binary is bad, reinstall the prior published version and ship a higher version
-containing the revert or fix.
+Every public version carries its own exact-tag stamped installer asset.
+Published tags and assets are immutable; do not delete, move, or overwrite
+them. If a published binary is bad, reinstall a known-good published version
+and ship a higher version containing the revert or fix.
 
 ## Development Checkout
 
@@ -412,8 +336,9 @@ Optional integrations can be added later.
 
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
-`pnpm smoke:install` exercises latest, explicit, and draft selection; strict
-authenticated API arguments; all four platform mappings; startup-file
+`pnpm smoke:install` exercises stamped and explicit public selection plus
+release-ID-scoped authenticated draft acceptance; strict download arguments;
+all four platform mappings; startup-file
 non-interaction, safely evaluated PATH guidance for spaces and apostrophes,
 normalized-colon preflight, and physical PATH shadow behavior;
 checksum/archive/probe failures; dual-lock concurrency and stale recovery;
