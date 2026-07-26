@@ -1059,7 +1059,7 @@ function environmentWithoutGitLocals(source) {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.0.0-pre-alpha.3";
+    return "0.0.0-pre-alpha.4";
   }
   if (
     normalized.length === 2 &&

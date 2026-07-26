@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -78,6 +78,9 @@ describe("guided agent installers", () => {
     await expect(readFile(join(resultDir, "codex-started"), "utf8")).rejects.toThrow();
     await expect(readFile(join(resultDir, "cursor"), "utf8")).resolves.toBe("ran\n");
     await expect(readFile(join(resultDir, "opencode"), "utf8")).resolves.toBe("--no-modify-path\n");
+    await expect(readlink(join(homeDir, ".local", "bin", "opencode"))).resolves.toBe(
+      join(homeDir, ".opencode", "bin", "opencode"),
+    );
     const npmCalls = await readFile(join(resultDir, "npm"), "utf8");
     expect(npmCalls).toContain(
       `install --global --prefix ${homeDir}/.local --ignore-scripts --no-fund --no-audit @earendil-works/pi-coding-agent`,
@@ -200,6 +203,9 @@ printf 'ran\n' > "$FAKE_RESULTS/cursor"
     `#!/bin/bash
 set -eu
 printf '%s\n' "$*" > "$FAKE_RESULTS/opencode"
+mkdir -p "$HOME/.opencode/bin"
+printf '#!/bin/sh\n' > "$HOME/.opencode/bin/opencode"
+chmod +x "$HOME/.opencode/bin/opencode"
 `,
     "utf8",
   );
