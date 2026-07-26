@@ -128,12 +128,11 @@ function harnessInstallDefinition(
               "--global",
               "--prefix",
               `${options.homeDir}/.local`,
-              "--ignore-scripts",
               "--no-fund",
               "--no-audit",
               "@anthropic-ai/claude-code",
             ],
-            message: "Install Claude Code with npm without lifecycle scripts or prompts.",
+            message: "Install Claude Code with npm without prompts.",
           };
   }
 }

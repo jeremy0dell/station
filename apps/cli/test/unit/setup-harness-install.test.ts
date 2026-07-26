@@ -83,7 +83,10 @@ describe("guided agent installers", () => {
       `install --global --prefix ${homeDir}/.local --ignore-scripts --no-fund --no-audit @earendil-works/pi-coding-agent`,
     );
     expect(npmCalls).toContain(
-      `install --global --prefix ${homeDir}/.local --ignore-scripts --no-fund --no-audit @anthropic-ai/claude-code`,
+      `install --global --prefix ${homeDir}/.local --no-fund --no-audit @anthropic-ai/claude-code`,
+    );
+    expect(npmCalls).not.toContain(
+      `--ignore-scripts --no-fund --no-audit @anthropic-ai/claude-code`,
     );
     await expect(readFile(zshrc, "utf8")).resolves.toBe("# user sentinel\n");
     await expect(readFile(join(homeDir, ".profile"), "utf8")).rejects.toThrow();
