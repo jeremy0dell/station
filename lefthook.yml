@@ -5,5 +5,5 @@ pre-commit:
 
 pre-push:
   commands:
-    test:
+    lint:
       run: node scripts/run-without-git-locals.mjs pnpm test:pre-push

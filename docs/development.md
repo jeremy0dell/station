@@ -147,27 +147,32 @@ diagnostics tests, the scripted-agent lane, setup and Observer lifecycle E2E
 coverage, and a production Observer SQLite restart smoke. It intentionally
 excludes real provider lanes.
 
-After root `pnpm install`, Lefthook runs the broader local gate before pushes:
+After root `pnpm install`, Lefthook runs lint before commits and pushes:
 
 ```bash
 pnpm test:pre-push
 ```
 
-In addition to `test:all`, it checks cross-runtime SQLite compatibility, the
-Station renderer, the native PTY implementation, and the compiled binary on
-the developer's current platform. Install both the root pnpm dependencies and
-the `station/` Bun dependencies before pushing.
+The pre-push hook is intentionally lint-only so pushing does not repeat the hosted deterministic
+gate. Use `pnpm test:all` or the focused commands below when local behavior needs validation.
+Install the `station/` Bun dependencies only for Station renderer, PTY, or compiled-binary work.
 
-Ready, non-draft pull requests run `pnpm test:pre-push` once on
-`ubuntu-24.04`; release tags call that same full gate before adding the four
-native build and draft-install targets. Both that gate and `smoke:release` must
-pass before any native release build starts.
-Draft pull request activity allocates no
-runner, including synchronization before `ready_for_review`.
-Pushes to `main` run only build, typecheck, and lint as a cheap post-merge
-smoke. The repository ruleset must require the pull-request `standard-ci` check
-and block direct `main` pushes; the cheap smoke is a post-merge backstop, not a
-substitute for the full required gate.
+Ready, non-draft pull requests fan out static validation, root tests, setup E2E, Observer E2E,
+cross-runtime SQLite, Station renderer and PTY tests, and selected installer and binary smokes on
+independent `ubuntu-24.04` jobs. Documentation-only changes run lint and diagnostics policy tests.
+Installer smoke runs when installer, release, dependency, or CI infrastructure changes; binary
+smoke runs when production, binary, dependency, or CI infrastructure changes. Observer-sensitive
+changes use the exhaustive claim-race counts, while setup- and Worktrunk-sensitive changes retain
+both bash and zsh process-level setup coverage. One aggregate job named `standard-ci` preserves the
+repository ruleset contract and fails if a mandatory or path-selected lane is unexpectedly skipped.
+
+Release tags select every lane, use the exhaustive claim-race counts and both setup shell paths, and
+call that parallel gate before adding the four native build and draft-install targets. Both `standard-ci` and
+`smoke:release` must pass before any native release build starts. Draft pull request activity
+allocates no runner, including synchronization before `ready_for_review`. Pushes to `main`
+run only build, typecheck, and lint as a cheap post-merge smoke. The repository ruleset must
+require the pull-request `standard-ci` check and block direct `main` pushes; the cheap smoke is a
+post-merge backstop, not a substitute for the full required gate.
 
 Useful focused commands:
 
@@ -179,6 +184,7 @@ pnpm test:unit
 pnpm test:contracts
 pnpm test:integration
 pnpm test:e2e:observer
+pnpm test:e2e:setup:guided:all-shells
 pnpm test:observer-claim:cross-runtime
 pnpm test:sqlite:bun
 pnpm test:diagnostics
@@ -193,7 +199,7 @@ including startup-file
 non-interaction, safely evaluated minimal-PATH guidance, physical launcher
 resolution, and normalized-colon preflight coverage. It is deterministic, does
 not download a real release, and does not read or modify real shell startup
-files. The single Ubuntu CI gate runs it once. On a heavily contended local host, run
+files. The path-selected installer CI job runs it once. On a heavily contended local host, run
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
@@ -202,12 +208,14 @@ targets, then installs each actual draft asset with real platform utilities.
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
 the other runtime to verify the shared SQLite contract and migrations. It also
-runs the permanent boot-claim race: 50 alternating Node/Bun two-process rounds,
-three-contender rounds, and killed-owner recovery with stable inode and
-`integrity_check=ok`. That runner also checks Node/Bun inaccessible and stale
-classification plus displaced-listener abandonment; the claim gate makes no
-fairness claim. Both the local pre-push
-gate and the hosted `standard-ci` job run these checks.
+runs the exhaustive boot-claim stress: 50 alternating Node/Bun two-process rounds,
+10 three-contender rounds, and killed-owner recovery with stable inode and
+`integrity_check=ok`. Pull-request CI uses `pnpm test:sqlite:bun:pr` for five two-process and two
+three-contender rounds; Observer-sensitive pull requests and release tags retain the exhaustive
+counts. The scheduled `nightly-observer-claim` workflow runs the same exhaustive command against
+`main` each day so a low-frequency race cannot remain latent until a release. Both commands also
+check Node/Bun inaccessible and stale classification plus displaced-listener abandonment; the
+claim gate makes no fairness claim.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
@@ -236,7 +244,8 @@ bun run test:pty:bun             # Bun.Terminal + controlling-terminal helper
 Both PTY lanes include the pinned Pi 0.80.10 capability detector in real local
 and Station Host-backed child processes. They prove equivalent Station-owned
 capabilities while requiring persistent Host spawns to fail closed on tmux
-provenance. Both lanes are part of `test:pre-push`.
+provenance. Both lanes are part of hosted `standard-ci` and remain available as focused local
+commands.
 
 To daily-drive the Bun implementation in the isolated devbox, return to the
 repo root and start a fresh host with the selector in its environment:

@@ -7,8 +7,7 @@ import { createObserverClient } from "../../packages/protocol/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
 
 const shellIntegrationMarker = "# Worktrunk shell integration";
-const supportedShells = ["zsh", "bash"] as const;
-type SupportedShell = (typeof supportedShells)[number];
+type SupportedShell = "bash" | "zsh";
 
 describe("setup guided feedback e2e", () => {
   it("exits instead of hanging when every agent install choice is declined", async () => {
@@ -188,7 +187,10 @@ describe("setup guided feedback e2e", () => {
     }
   });
 
-  for (const shell of supportedShells) {
+  // Normal PRs use zsh; shell-sensitive and release CI retain both process-level paths.
+  const shellsUnderTest: readonly SupportedShell[] =
+    process.env.STATION_SETUP_E2E_ALL_SHELLS === "true" ? ["zsh", "bash"] : ["zsh"];
+  for (const shell of shellsUnderTest) {
     it(`gives one optional recovery command when the active ${shell} rc file is missing`, async () => {
       const fixture = await createFixture({ harness: "codex", shell });
       const rcPath = shellRcPath(fixture.home, shell);
@@ -246,7 +248,11 @@ describe("setup guided feedback e2e", () => {
         );
         const check = await runStation(
           ["--config", fixture.configPath, "setup", "check", "--json"],
-          { cwd: fixture.repo, env: fixture.env, answers: [] },
+          {
+            cwd: fixture.repo,
+            env: fixture.env,
+            answers: [],
+          },
         );
         expect(check.exitCode).toBe(0);
         expect(JSON.parse(check.stdout).checks).toEqual(
