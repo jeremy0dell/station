@@ -2,8 +2,8 @@
 
 `stn setup` must work on a brand-new device — from the nightmare machine (no Xcode
 Command Line Tools, no git, no Homebrew) to a fully provisioned happy path. This
-doc describes the three-tier test environment that lets agents and maintainers run
-the setup flow against machines in those varied states.
+doc describes the three-tier test environment for running the setup flow against
+machines in those varied states.
 
 The setup engine is dependency-injected end to end (`runner`, `access`, `fs`,
 `env`, `platform`, `now`, `noBrew`, `prompt`, `probeHarnessHooksStatus`), so most coverage is free and
@@ -131,15 +131,15 @@ GitHub-hosted macOS runners only for an occasional full happy-path smoke — the
 images are fully provisioned and bill at a 10× multiplier, so they cannot model
 deprivation states.
 
-## The agent-driven loop
+## Repeatable profile loop
 
-For each profile an agent: (1) provisions/selects an environment — nothing for
-tier 1, `docker build --target` for tier 2, `tart clone` for tier 3; (2) runs the
-read-only, machine-readable surfaces (`stn setup check --json`, `stn setup plan
---json`, `stn setup apply --dry-run`); verifies that several runnable CLIs leave
-selection unresolved and that no read-only mode mutates config, provider homes,
-durable Observer state, sockets, or tmux. The state-directory readiness check is
-the narrow exception: it creates and removes a temporary probe file and can
+For each profile, the test workflow: (1) provisions or selects an environment —
+nothing for tier 1, `docker build --target` for tier 2, `tart clone` for tier 3;
+(2) runs the read-only, machine-readable surfaces (`stn setup check --json`,
+`stn setup plan --json`, `stn setup apply --dry-run`); verifies that several
+runnable CLIs leave selection unresolved and that no read-only mode mutates
+config, provider homes, durable Observer state, sockets, or tmux. The state-
+directory readiness check is the narrow exception: it creates and removes a temporary probe file and can
 leave a newly created empty state directory; (3) captures stdout + exit code; (4)
 structurally diffs the JSON plan + exit code against the profile's `expect`; (5)
 iterates on setup code and re-runs. Tier 1 reruns in milliseconds, tier 2 in

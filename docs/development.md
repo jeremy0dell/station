@@ -626,9 +626,9 @@ edit shell startup files. Copy the one future-shell export it printed into a
 shell configuration you choose,
 open a new login shell, and verify all three physical launcher resolutions and
 `stn --version`. The installer, not the user-facing PATH text alone, must have
-verified those launchers after installation. An agent must use the absolute
-installed `stn` path for continuation and report future-shell PATH as unverified
-until this new-shell check passes; its own `command -v` result is not user-shell
+verified those launchers after installation. The agent-led continuation uses the
+absolute installed `stn` path and reports future-shell PATH as unverified until
+this new-shell check passes; its own `command -v` result is not user-shell
 evidence.
 Repeat isolated first-run acceptance for Claude, Codex, Cursor, and OpenCode,
 using separate provider homes and verifying missing, current, drifted, and probe-
@@ -815,11 +815,3 @@ TUI work has additional OpenTUI/React and terminal-layout expectations. The term
 - Provider-specific diagnostics and behavior must stay behind provider or integration boundaries.
 - Do not move raw provider payloads into contracts, normal TUI rendering, protocol-facing shapes, or observer core logic.
 - Do not make observer/core scrape provider-specific keys from generic `providerData`. Normalize those values at the provider boundary into contract fields, correlation fields, or provider-owned schema data.
-
-## Agent Guidance Maintenance
-
-- Keep always-loaded guidance concise. `AGENTS.md` should route agents and preserve hard repo quirks, not duplicate long plans.
-- Use just-in-time references. Put detailed architecture, development, and debugging guidance in living docs that agents open only for relevant tasks.
-- Scope guidance by task and path when possible. A terminal-boundary rule, docs workflow, or runtime-debug procedure should not force every agent to read an old rebuild plan.
-- Review instructions periodically. Remove stale mandates, classify historical docs clearly, and update living docs when current code/tests prove a different truth.
-- Avoid conflicting instructions. If an old plan, current doc, current test, and runtime evidence disagree, resolve the conflict explicitly instead of adding another overlapping rule.
