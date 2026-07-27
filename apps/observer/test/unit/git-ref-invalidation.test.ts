@@ -110,19 +110,22 @@ describe("local Git worktree metadata invalidation", () => {
     await fixture.cleanup();
   });
 
-  it("logs watch-start failure and retries on the next replacement", async () => {
+  it("retains successful targets, warns once, and retries a failed watch start", async () => {
     const warnings: unknown[] = [];
     const fixture = await createWatchFixture({
-      failStartCount: 1,
+      failStartCount: 2,
       logger: testLogger(async (_message, attributes) => void warnings.push(attributes)),
     });
     try {
       await fixture.source.replaceWatchedWorktrees([target]);
+      const retainedWatches = [...fixture.watches];
       const attemptsAfterFailure = fixture.startAttempts;
       await fixture.source.replaceWatchedWorktrees([target]);
+      await fixture.source.replaceWatchedWorktrees([target]);
 
-      expect(attemptsAfterFailure).toBe(1);
-      expect(fixture.startAttempts).toBeGreaterThan(attemptsAfterFailure);
+      expect(attemptsAfterFailure).toBe(4);
+      expect(fixture.startAttempts).toBe(6);
+      expect(retainedWatches.every((watch) => watch.closed === 0)).toBe(true);
       expect(warnings).toEqual([
         expect.objectContaining({
           error: expect.objectContaining({ code: "LOCAL_GIT_REF_WATCH_FAILED" }),
@@ -134,16 +137,43 @@ describe("local Git worktree metadata invalidation", () => {
     }
   });
 
-  it("removes a failed runtime registration and permits re-arm", async () => {
+  it("retains available targets and arms a missing ref directory later", async () => {
+    const warnings: unknown[] = [];
+    const fixture = await createWatchFixture({
+      omitRefDirectory: true,
+      logger: testLogger(async (_message, attributes) => void warnings.push(attributes)),
+    });
+    try {
+      await fixture.source.replaceWatchedWorktrees([target]);
+      const retainedWatches = [...fixture.watches];
+      expect(retainedWatches).toHaveLength(3);
+
+      await fixture.createBranchRef();
+      await fixture.source.replaceWatchedWorktrees([target]);
+
+      expect(fixture.watches).toHaveLength(4);
+      expect(retainedWatches.every((watch) => watch.closed === 0)).toBe(true);
+      expect(fixture.branchWatch()).toBeDefined();
+      expect(warnings).toEqual([]);
+    } finally {
+      await fixture.source.shutdown();
+      await fixture.cleanup();
+    }
+  });
+
+  it("removes only a failed runtime target and permits re-arm", async () => {
     const fixture = await createWatchFixture();
     try {
       await fixture.source.replaceWatchedWorktrees([target]);
       const firstGeneration = [...fixture.watches];
       firstGeneration[0]?.error?.(new Error("watch failed"));
+      firstGeneration[0]?.listener(".git");
       await fixture.source.replaceWatchedWorktrees([target]);
 
-      expect(firstGeneration.every((watch) => watch.closed === 1)).toBe(true);
-      expect(fixture.watches.length).toBeGreaterThan(firstGeneration.length);
+      expect(firstGeneration[0]?.closed).toBe(1);
+      expect(firstGeneration.slice(1).every((watch) => watch.closed === 0)).toBe(true);
+      expect(fixture.watches).toHaveLength(firstGeneration.length + 1);
+      expect(fixture.reasons).toEqual([]);
     } finally {
       await fixture.source.shutdown();
       await fixture.cleanup();
@@ -176,33 +206,49 @@ type FakeWatch = {
 };
 
 async function createWatchFixture(
-  options: { failStartCount?: number; throwingCloseIndex?: number; logger?: StationLogger } = {},
+  options: {
+    failStartCount?: number;
+    throwingCloseIndex?: number;
+    omitRefDirectory?: boolean;
+    logger?: StationLogger;
+  } = {},
 ) {
   const tempDir = await mkdtemp(join(tmpdir(), "station-git-ref-invalidation-"));
   const worktree = join(tempDir, "worktree");
-  const refDir = join(worktree, ".git", "refs", "heads");
-  await mkdir(refDir, { recursive: true });
-  await writeFile(join(worktree, ".git", "HEAD"), "ref: refs/heads/main\n");
-  await writeFile(join(refDir, "main"), "one\n");
+  const gitDir = join(worktree, ".git");
+  const refDir = join(gitDir, "refs", "heads");
+  await mkdir(options.omitRefDirectory === true ? gitDir : refDir, { recursive: true });
+  await writeFile(join(gitDir, "HEAD"), "ref: refs/heads/main\n");
+  if (options.omitRefDirectory !== true) {
+    await writeFile(join(refDir, "main"), "one\n");
+  }
 
   const watches: FakeWatch[] = [];
   const reasons: string[] = [];
   let startAttempts = 0;
   let registrationIdentity = target.registrationIdentity;
   let remainingStartFailures = options.failStartCount ?? 0;
+  let failedDirectory: string | undefined;
   const sourceOptions: Parameters<typeof createLocalGitWorktreeMetadataInvalidationSource>[0] = {
     debounceMs: 10,
     resolveWorktree: (expected) => ({
-      worktreeId: expected.worktreeId,
-      projectId: expected.projectId,
-      branch: expected.branch,
-      path: worktree,
-      ...(registrationIdentity === undefined ? {} : { registrationIdentity }),
+      status: "resolved",
+      worktree: {
+        worktreeId: expected.worktreeId,
+        projectId: expected.projectId,
+        branch: expected.branch,
+        path: worktree,
+        ...(registrationIdentity === undefined ? {} : { registrationIdentity }),
+      },
     }),
     requestReconcile: (reason) => void reasons.push(reason),
     watchDirectory: (directory, listener) => {
       startAttempts += 1;
-      if (remainingStartFailures > 0) {
+      if (
+        remainingStartFailures > 0 &&
+        (failedDirectory === undefined || failedDirectory === directory)
+      ) {
+        failedDirectory ??= directory;
         remainingStartFailures -= 1;
         throw new Error("watch start failed");
       }
@@ -238,6 +284,10 @@ async function createWatchFixture(
     },
     branchWatch(offset = 0) {
       return watches.slice(offset).find((entry) => entry.directory === refDir);
+    },
+    createBranchRef: async () => {
+      await mkdir(refDir, { recursive: true });
+      await writeFile(join(refDir, "main"), "one\n");
     },
     cleanup: () => rm(tempDir, { recursive: true, force: true }),
   };

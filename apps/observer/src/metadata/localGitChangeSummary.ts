@@ -9,16 +9,16 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { type GitCommandContext, runGitCommand } from "./gitCommand.js";
-import type {
-  LocalGitMetadataWorktree,
-  ResolveLocalGitMetadataWorktree,
+import {
+  type LocalGitMetadataWorktree,
+  matchesExpectedLocalGitMetadataTarget,
+  type ResolveLocalGitMetadataWorktree,
 } from "./localGitWorktree.js";
 import type {
   WorktreeChangeBaseSelection,
   WorktreeChangeEvidence,
   WorktreeChangeReadRequest,
   WorktreeChangeSource,
-  WorktreeMetadataTarget,
 } from "./ports.js";
 
 export type CreateLocalGitWorktreeChangeSourceOptions = {
@@ -56,8 +56,12 @@ export function createLocalGitWorktreeChangeSource(
 
   return {
     read: async (request) => {
-      const worktree = options.resolveWorktree(request.target);
-      if (worktree === undefined || !matchesExpectedTarget(worktree, request.target)) {
+      const resolution = options.resolveWorktree(request.target);
+      if (resolution.status !== "resolved") {
+        return { status: resolution.status };
+      }
+      const { worktree } = resolution;
+      if (!matchesExpectedLocalGitMetadataTarget(worktree, request.target)) {
         return { status: "superseded" };
       }
 
@@ -69,10 +73,13 @@ export function createLocalGitWorktreeChangeSource(
           timeoutMs,
           ...(options.runner === undefined ? {} : { runner: options.runner }),
         });
-        const currentWorktree = options.resolveWorktree(request.target);
+        const currentResolution = options.resolveWorktree(request.target);
+        if (currentResolution.status !== "resolved") {
+          return { status: currentResolution.status };
+        }
+        const currentWorktree = currentResolution.worktree;
         if (
-          currentWorktree === undefined ||
-          !matchesExpectedTarget(currentWorktree, request.target) ||
+          !matchesExpectedLocalGitMetadataTarget(currentWorktree, request.target) ||
           currentWorktree.path !== worktree.path
         ) {
           return { status: "superseded" };
@@ -81,6 +88,16 @@ export function createLocalGitWorktreeChangeSource(
           ? { status: "unavailable" }
           : { status: "available", evidence };
       } catch (error) {
+        const currentResolution = options.resolveWorktree(request.target);
+        if (currentResolution.status !== "resolved") {
+          return { status: currentResolution.status };
+        }
+        if (
+          !matchesExpectedLocalGitMetadataTarget(currentResolution.worktree, request.target) ||
+          currentResolution.worktree.path !== worktree.path
+        ) {
+          return { status: "superseded" };
+        }
         throw safeErrorFromUnknown(error, {
           tag: "LocalGitMetadataError",
           code: "LOCAL_GIT_CHANGE_SUMMARY_FAILED",
@@ -149,18 +166,6 @@ async function readResolvedLocalGitChangeSummary(input: {
       mergeBaseSha,
     }),
   };
-}
-
-function matchesExpectedTarget(
-  worktree: LocalGitMetadataWorktree,
-  target: WorktreeMetadataTarget,
-): boolean {
-  return (
-    worktree.worktreeId === target.worktreeId &&
-    worktree.projectId === target.projectId &&
-    worktree.branch === target.branch &&
-    worktree.registrationIdentity === target.registrationIdentity
-  );
 }
 
 export function parseGitNumstat(output: string): ParsedGitNumstat {

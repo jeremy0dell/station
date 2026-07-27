@@ -400,14 +400,16 @@ function buildMetadataRefresh(
       .rows.find((candidate) => candidate.id === target.worktreeId);
     if (
       row === undefined ||
-      row.worktree.state !== "exists" ||
       row.projectId !== target.projectId ||
       row.branch !== target.branch ||
       row.registrationIdentity !== target.registrationIdentity
     ) {
-      return undefined;
+      return { status: "superseded" };
     }
-    const resolved = {
+    if (row.worktree.state !== "exists") {
+      return { status: "unavailable" };
+    }
+    const worktree = {
       worktreeId: row.id,
       projectId: row.projectId,
       branch: row.branch,
@@ -416,7 +418,7 @@ function buildMetadataRefresh(
         ? {}
         : { registrationIdentity: row.registrationIdentity }),
     };
-    return resolved;
+    return { status: "resolved", worktree };
   };
   const worktreeChangeSource =
     options.worktreeChangeSource ?? createLocalGitWorktreeChangeSource({ resolveWorktree, clock });

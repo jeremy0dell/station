@@ -13,7 +13,7 @@ import { createCommandQueue } from "../../src/commands/queue";
 import { registerObserverCommandHandlers } from "../../src/commands/router";
 import type { PersistenceHealthSource } from "../../src/persistence/ports";
 import { ProviderRegistry } from "../../src/providers/registry";
-import { createObserverCore } from "../../src/reconcile/core";
+import { createObserverCore, type ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
@@ -179,6 +179,64 @@ describe("Observer API composition with in-memory persistence", () => {
     await expect(commandQueue.drain()).resolves.toBeUndefined();
   });
 
+  it("clears cached local evidence when composition sees a matching missing worktree", async () => {
+    const clock = { now: () => new Date(now) };
+    const idFactory = observerIds();
+    const persistence = createInMemoryObserverPersistence({ clock, idFactory });
+    const eventBus = createObserverEventBus();
+    const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+    const providers = fakeProviders();
+    const core = createObserverCore({ config, providers, persistence, clock });
+    const missingSnapshot = structuredClone(await core.reconcile("missing-worktree-fixture"));
+    const row = missingSnapshot.rows.find((candidate) => candidate.id === "wt_web_task");
+    if (row === undefined) throw new Error("Expected fake worktree row.");
+    row.worktree.state = "missing";
+    const missingCore: ObserverCore = {
+      ...core,
+      reconcile: async () => missingSnapshot,
+      getSnapshot: () => missingSnapshot,
+    };
+    await persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: row.id,
+      kind: "change_summary",
+      cacheKey: "cached-before-missing",
+      expiresAt: "2026-05-20T12:05:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 3,
+        deletions: 1,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const invalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    const api = createObserverApi({
+      core: missingCore,
+      providers,
+      persistence,
+      persistenceHealth: { health: () => healthStub },
+      commandQueue,
+      eventBus,
+      clock,
+      config,
+      worktreeMetadataInvalidationSource: invalidationSource,
+      onStop: async () => commandQueue.shutdown(),
+    });
+
+    await api.reconcile("missing-worktree-cache-clear");
+    await waitFor(async () => {
+      const rows = await persistence.listWorktreeMetadataCurrent({
+        kind: "change_summary",
+        includeExpired: true,
+        now,
+      });
+      return rows.length === 0;
+    });
+
+    expect(invalidationSource.replacements[0]).toEqual([]);
+    await expect(api.stop()).resolves.toMatchObject({ stopped: true });
+  });
+
   it("waits for an in-flight provider health publication before stopping", async () => {
     const clock = { now: () => new Date(now) };
     const idFactory = observerIds();
@@ -318,9 +376,9 @@ function observerIds() {
   };
 }
 
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
   throw new Error("Timed out waiting for background metadata work.");

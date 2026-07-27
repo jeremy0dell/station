@@ -243,7 +243,7 @@ No single layer owns all truth.
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, native-execution bindings, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
-| Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Cached rows retain that evidence through their TTL and stale-on-failure policy; ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
+| Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Command failures retain cached evidence through the TTL and mark it stale, while a matching checkout reported unavailable clears its local-change row; superseded identities cannot mutate either row. Ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. Its `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. It corroborates process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
@@ -358,7 +358,9 @@ terminal, aborts active local and repository reads, shuts down ref invalidation,
 and waits for the refresh flight before scheduling process shutdown. Ref-watcher
 shutdown invalidates callbacks first, clears debounce timers, attempts every
 close despite individual failures, and makes later replacement and callbacks
-no-ops. Process shutdown disables health responses first.
+no-ops. During normal operation, one missing or failed ref target does not tear
+down healthy sibling watches; later full-set replacements retry only unarmed
+targets. Process shutdown disables health responses first.
 The explicit CLI stop/restart path pins PID and start time, plus version and
 socket when reported, before sending stop on the same connection. Legacy health
 may omit version or socket, but missing PID/start time refuses. A stop receipt

@@ -26,7 +26,10 @@ describe("local Git worktree change source adapter", () => {
       await git(repository, "commit", "-m", "feature one");
 
       const source = createLocalGitWorktreeChangeSource({
-        resolveWorktree: (target) => ({ ...target, path: repository }),
+        resolveWorktree: (target) => ({
+          status: "resolved",
+          worktree: { ...target, path: repository },
+        }),
         timeoutMs: 2_000,
         clock: { now: () => new Date("2026-05-20T12:00:00.000Z") },
       });

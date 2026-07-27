@@ -332,7 +332,6 @@ export function createWorktreeMetadataRefreshService(
       if (input.existing.cacheKey !== undefined) {
         upsertInput.cacheKey = input.existing.cacheKey;
       }
-      if (input.signal.aborted || shutdownRequested) return;
       await options.persistence.upsertWorktreeMetadataCurrent(upsertInput);
       if (!input.signal.aborted && !shutdownRequested) {
         options.requestReconcile("metadata:change_summary");

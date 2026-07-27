@@ -355,10 +355,55 @@ describe("local git change summary", () => {
     expect(inputs.every((input) => input.unsetEnv === gitLocalEnvironmentVariables)).toBe(true);
   });
 
+  it("performs no Git command when the matching checkout is unavailable", async () => {
+    const inputs: ExternalCommandInput[] = [];
+    const source = createLocalGitWorktreeChangeSource({
+      resolveWorktree: () => ({ status: "unavailable" }),
+      runner: createFakeExternalCommandRunner((input) => {
+        inputs.push(input);
+        throw new Error("Git should not run.");
+      }),
+    });
+
+    await expect(
+      source.read({
+        target: { worktreeId: "wt_missing", projectId: "web", branch: "feature" },
+        baseSelection: {},
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(inputs).toEqual([]);
+  });
+
+  it("reports unavailable when the matching checkout disappears during a failed read", async () => {
+    let checkoutAvailable = true;
+    const source = createLocalGitWorktreeChangeSource({
+      resolveWorktree: (target) =>
+        checkoutAvailable
+          ? {
+              status: "resolved",
+              worktree: { ...target, path: baseInput.worktree.path },
+            }
+          : { status: "unavailable" },
+      runner: createFakeExternalCommandRunner(() => {
+        checkoutAvailable = false;
+        throw new Error("checkout disappeared");
+      }),
+    });
+
+    await expect(
+      source.read({
+        target: { worktreeId: "wt_web_feature", projectId: "web", branch: "feature" },
+        baseSelection: {},
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({ status: "unavailable" });
+  });
+
   it("performs no Git command when Station identity is superseded", async () => {
     const inputs: ExternalCommandInput[] = [];
     const source = createLocalGitWorktreeChangeSource({
-      resolveWorktree: () => undefined,
+      resolveWorktree: () => ({ status: "superseded" }),
       runner: createFakeExternalCommandRunner((input) => {
         inputs.push(input);
         throw new Error("Git should not run.");
@@ -377,7 +422,10 @@ describe("local git change summary", () => {
 
   it("normalizes command execution failures as typed SafeErrors", async () => {
     const source = createLocalGitWorktreeChangeSource({
-      resolveWorktree: (target) => ({ ...target, path: baseInput.worktree.path }),
+      resolveWorktree: (target) => ({
+        status: "resolved",
+        worktree: { ...target, path: baseInput.worktree.path },
+      }),
       runner: createFakeExternalCommandRunner(() => {
         throw new Error("runner failed");
       }),
@@ -438,12 +486,15 @@ async function readLocalGitChangeSummary(input: TestLocalGitChangeSummaryInput) 
   const source = createLocalGitWorktreeChangeSource({
     resolveWorktree: (target) =>
       input.worktree.state !== undefined && input.worktree.state !== "exists"
-        ? undefined
+        ? { status: "unavailable" }
         : {
-            worktreeId: target.worktreeId,
-            projectId: target.projectId,
-            branch: target.branch,
-            path: input.worktree.path,
+            status: "resolved",
+            worktree: {
+              worktreeId: target.worktreeId,
+              projectId: target.projectId,
+              branch: target.branch,
+              path: input.worktree.path,
+            },
           },
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.clock === undefined ? {} : { clock: input.clock }),

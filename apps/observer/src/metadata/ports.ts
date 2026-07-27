@@ -37,8 +37,8 @@ export type WorktreeChangeReadResult =
  * while keeping paths and Git execution outside the use case.
  *
  * Local Git is authoritative only for checkout `HEAD`, refs, merge-base, and
- * numstat at read time. Reads honor cancellation, and a Station identity that
- * no longer resolves is reported as superseded rather than as absent evidence.
+ * numstat at read time. Reads honor cancellation; matching unavailable
+ * checkouts report absent evidence, while changed identities are superseded.
  */
 export interface WorktreeChangeSource {
   read(request: WorktreeChangeReadRequest): Promise<WorktreeChangeReadResult>;

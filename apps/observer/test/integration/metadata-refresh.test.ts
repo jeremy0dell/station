@@ -333,6 +333,90 @@ describe("observer worktree metadata refresh use case", () => {
     fixture.sqlite.close();
   });
 
+  it("deletes cached local evidence when the matching checkout is unavailable", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    await fixture.persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: "wt_web_feature",
+      kind: "change_summary",
+      cacheKey: "old",
+      expiresAt: "2026-05-20T12:05:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 1,
+        deletions: 0,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    worktreeChangeSource.result = { status: "unavailable" };
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => void reasons.push(reason),
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: new FakeWorktreeMetadataInvalidationSource(),
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-unavailable-checkout"));
+
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({
+        kind: "change_summary",
+        includeExpired: true,
+        now,
+      }),
+    ).resolves.toEqual([]);
+    expect(reasons).toEqual(["metadata:change_summary"]);
+    await service.shutdown();
+    fixture.sqlite.close();
+  });
+
+  it("retains cached local evidence when the Station identity is superseded", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    await fixture.persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: "wt_web_feature",
+      kind: "change_summary",
+      cacheKey: "old",
+      expiresAt: "2026-05-20T12:05:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 1,
+        deletions: 0,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    worktreeChangeSource.result = { status: "superseded" };
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => void reasons.push(reason),
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: new FakeWorktreeMetadataInvalidationSource(),
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-superseded-checkout"));
+
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({
+        kind: "change_summary",
+        includeExpired: true,
+        now,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_feature", cacheKey: "old", stale: false }),
+    ]);
+    expect(reasons).toEqual([]);
+    await service.shutdown();
+    fixture.sqlite.close();
+  });
+
   it("substitutes both local metadata ports without Git or filesystem dependencies", async () => {
     const fixture = createFixture();
     const reasons: string[] = [];
@@ -804,8 +888,11 @@ type TestMetadataRefreshOptions = Omit<
 function createWorktreeMetadataRefreshService(options: TestMetadataRefreshOptions) {
   const worktreeChangeSource = createLocalGitWorktreeChangeSource({
     resolveWorktree: (target) => ({
-      ...target,
-      path: "/tmp/station/web/feature",
+      status: "resolved",
+      worktree: {
+        ...target,
+        path: "/tmp/station/web/feature",
+      },
     }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.runner === undefined ? {} : { runner: options.runner }),
