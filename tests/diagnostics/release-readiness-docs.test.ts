@@ -8,7 +8,7 @@ describe("release readiness docs", () => {
   it("separates release guidance from contributor and test references", async () => {
     const [
       readme,
-      docsIndex,
+      docsReadme,
       quickStart,
       install,
       limitations,
@@ -17,7 +17,7 @@ describe("release readiness docs", () => {
       localRealConfig,
     ] = await Promise.all([
       read("README.md"),
-      read("docs/index.md"),
+      read("docs/README.md"),
       read("docs/quick-start.md"),
       read("docs/install.md"),
       read("docs/limitations.md"),
@@ -26,16 +26,16 @@ describe("release readiness docs", () => {
       read("examples/local-real-config.toml"),
     ]);
 
-    expect(readme).toContain("docs/index.md");
+    expect(readme).toContain("docs/README.md");
     expect(readme).toContain("docs/quick-start.md");
     expect(readme).toContain("docs/limitations.md");
-    expect(docsIndex).toContain("## Start Here");
-    expect(docsIndex).toContain("install.md#let-your-agent-install-and-validate-station");
-    expect(docsIndex).toContain("## Use Station");
-    expect(docsIndex).toContain("## Develop Station");
-    expect(docsIndex).not.toContain("single-binary.md");
-    expect(docsIndex).not.toContain("observer-singleton.md");
-    expect(docsIndex).not.toContain("homebrew.md");
+    expect(docsReadme).toContain("## Start Here");
+    expect(docsReadme).toContain("install.md#let-your-agent-install-and-validate-station");
+    expect(docsReadme).toContain("## Use Station");
+    expect(docsReadme).toContain("## Develop Station");
+    expect(docsReadme).not.toContain("single-binary.md");
+    expect(docsReadme).not.toContain("observer-singleton.md");
+    expect(docsReadme).not.toContain("homebrew.md");
     expect(quickStart).toContain("Add your first project");
     expect(quickStart).toContain("Create Session");
     expect(install).toContain("Node.js 24.2+");
@@ -119,7 +119,7 @@ describe("release readiness docs", () => {
     const [
       readme,
       install,
-      docsIndex,
+      docsReadme,
       limitations,
       development,
       singleBinary,
@@ -132,7 +132,7 @@ describe("release readiness docs", () => {
       [
         "README.md",
         "docs/install.md",
-        "docs/index.md",
+        "docs/README.md",
         "docs/limitations.md",
         "docs/development.md",
         "docs/single-binary.md",
@@ -151,7 +151,7 @@ describe("release readiness docs", () => {
     for (const [path, document] of [
       ["README.md", readme],
       ["docs/install.md", install],
-      ["docs/index.md", docsIndex],
+      ["docs/README.md", docsReadme],
       ["docs/limitations.md", limitations],
     ] as const) {
       const normalized = document.replace(/\s+/g, " ");
@@ -370,6 +370,25 @@ describe("release readiness docs", () => {
     expect(normalizedVirtualBuddy).toContain("`tmux prefix + Space`");
     expect(normalizedVirtualBuddy).toContain("cold open");
     expect(normalizedVirtualBuddy).toContain("warm reopen");
+  });
+
+  it("keeps assistant-only operating guidance out of documentation", async () => {
+    const forbiddenGuidance = [
+      /## No-Action Mode/i,
+      /If the user says "no action"/i,
+      /unless explicitly asked/i,
+      /## Agent Guidance Maintenance/i,
+      /## The agent-driven loop/i,
+      /`AGENTS\.md`/,
+      /when the task (?:permits|calls for)/i,
+    ];
+
+    for (const file of await markdownFiles("docs")) {
+      const content = await read(file);
+      for (const pattern of forbiddenGuidance) {
+        expect(content, `${file}: ${pattern}`).not.toMatch(pattern);
+      }
+    }
   });
 
   it("does not advertise removed Crush harness surfaces", async () => {
