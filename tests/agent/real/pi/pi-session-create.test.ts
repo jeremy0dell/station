@@ -17,7 +17,7 @@ import {
   registerObserverCommandHandlers,
   startObserverServer,
 } from "@station/observer/internal";
-import { createPiHarnessProvider } from "@station/pi";
+import { createPiHarnessProvider, piHookAdapter } from "@station/pi";
 import { stationObserverBuildVersion } from "@station/runtime";
 import {
   createFakeTerminalTarget,
@@ -28,7 +28,7 @@ import {
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 import { createUnexpectedProjectConfigWriter } from "../../../../apps/observer/test/support/projectConfigWriter.js";
-import type { RealE2eEnvironment } from "../../../support/real-station/env";
+import { type RealE2eEnvironment, realHarnessChildEnv } from "../../../support/real-station/env";
 import { createPiLaunchLoggingWrapper, waitForPiLaunchLog } from "../../../support/real-station/pi";
 
 const execFileAsync = promisify(execFile);
@@ -285,6 +285,7 @@ describeRealPi("real Pi session.create launch lane", () => {
         ],
       }),
       harnesses: [createPiHarnessProvider({ command: piBin, now: () => new Date(now) })],
+      hookAdapters: [piHookAdapter],
     });
     const core = createObserverCore({
       config: testConfig,
@@ -459,10 +460,7 @@ async function runPi(input: {
       ],
       {
         cwd: input.cwd,
-        env: {
-          ...process.env,
-          ...input.env,
-        },
+        env: realHarnessChildEnv(input.env),
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

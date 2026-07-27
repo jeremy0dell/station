@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { StationConfig } from "@station/config";
-import { createCursorHarnessProvider, installCursorHooks } from "@station/cursor";
+import {
+  createCursorHarnessProvider,
+  cursorHookAdapter,
+  installCursorHooks,
+} from "@station/cursor";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
@@ -18,6 +22,7 @@ import {
   registerObserverCommandHandlers,
   startObserverServer,
 } from "@station/observer/internal";
+import { stationObserverBuildVersion } from "@station/runtime";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -27,6 +32,7 @@ import {
 import { TmuxProvider } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 import { createUnexpectedProjectConfigWriter } from "../../../../apps/observer/test/support/projectConfigWriter.js";
+import { realHarnessChildEnv } from "../../../support/real-station/env.js";
 
 const execFileAsync = promisify(execFile);
 const realCursorEnabled = process.env.STATION_REAL_CURSOR === "1";
@@ -268,6 +274,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
         ],
       }),
       harnesses: [createCursorHarnessProvider({ command: cursorBin, now: () => new Date(now) })],
+      hookAdapters: [cursorHookAdapter],
     });
     const core = createObserverCore({
       config: testConfig,
@@ -286,6 +293,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
       clock,
       config: testConfig,
       socketPath,
+      observerBuildVersion: stationObserverBuildVersion(),
       stateDir,
       hookSpoolDir,
       hookReconcileDebounceMs: 0,
@@ -297,7 +305,30 @@ describeRealCursor("real Cursor session.create launch lane", () => {
 
     try {
       await core.reconcile("real-cursor-hook-initial");
-      const result = await runHookScript(
+      const hookEnv = {
+        STATION_PROJECT_ID: "web",
+        STATION_WORKTREE_ID: "wt_real_cursor_hook",
+        STATION_WORKTREE_PATH: worktreePath,
+        STATION_SESSION_ID: "ses_real_cursor_hook",
+        STATION_HARNESS_PROVIDER: "cursor",
+        STATION_TERMINAL_PROVIDER: "tmux",
+        STATION_TERMINAL_TARGET_ID: "real-cursor-hook-target",
+        STATION_CONFIG_PATH: configPath,
+        STATION_OBSERVER_SOCKET_PATH: socketPath,
+        STATION_HOOK_SPOOL_DIR: hookSpoolDir,
+      };
+      const activeResult = await runHookScript(
+        hookScriptPath,
+        JSON.stringify({
+          hook_event_name: "preToolUse",
+          cwd: worktreePath,
+          session_id: "cursor_session_real",
+          tool_name: "Shell",
+          tool_use_id: "tool_real",
+        }),
+        hookEnv,
+      );
+      const stopResult = await runHookScript(
         hookScriptPath,
         JSON.stringify({
           hook_event_name: "stop",
@@ -305,21 +336,11 @@ describeRealCursor("real Cursor session.create launch lane", () => {
           cwd: worktreePath,
           session_id: "cursor_session_real",
         }),
-        {
-          STATION_PROJECT_ID: "web",
-          STATION_WORKTREE_ID: "wt_real_cursor_hook",
-          STATION_WORKTREE_PATH: worktreePath,
-          STATION_SESSION_ID: "ses_real_cursor_hook",
-          STATION_HARNESS_PROVIDER: "cursor",
-          STATION_TERMINAL_PROVIDER: "tmux",
-          STATION_TERMINAL_TARGET_ID: "real-cursor-hook-target",
-          STATION_CONFIG_PATH: configPath,
-          STATION_OBSERVER_SOCKET_PATH: socketPath,
-          STATION_HOOK_SPOOL_DIR: hookSpoolDir,
-        },
+        hookEnv,
       );
 
-      expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
+      expect(activeResult).toEqual({ code: 0, stdout: "", stderr: "" });
+      expect(stopResult).toEqual({ code: 0, stdout: "", stderr: "" });
       const snapshot = await core.reconcile("real-cursor-hook-observed");
       expect(snapshot.rows[0]?.agent).toMatchObject({
         harness: "cursor",
@@ -434,10 +455,7 @@ async function runHookScript(
 ): Promise<HookScriptResult> {
   return new Promise((resolve) => {
     const child = spawn(scriptPath, [], {
-      env: {
-        ...process.env,
-        ...env,
-      },
+      env: realHarnessChildEnv(env),
       stdio: ["pipe", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];

@@ -30,6 +30,15 @@ export function realE2eEnabled(): boolean {
   return process.env.STATION_REAL_E2E === "1";
 }
 
+/** Removes the caller's Station session identity before applying fixture-owned values. */
+export function realHarnessChildEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (name.startsWith("STATION_")) delete env[name];
+  }
+  return { ...env, ...overrides };
+}
+
 export async function requireRealE2eEnvironment(
   requirements: RealE2eRequirements = {},
 ): Promise<RealE2eEnvironment> {
