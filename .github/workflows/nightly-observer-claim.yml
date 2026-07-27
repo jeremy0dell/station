@@ -1,0 +1,27 @@
+# Exhaustive probabilistic coverage stays off the normal PR critical path while
+# still detecting low-frequency Node/Bun Observer boot-claim races on main.
+name: nightly-observer-claim
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claim-stress:
+    if: github.repository_owner == 'jeremy0dell'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+        with:
+          bun: "true"
+      - run: pnpm build
+      - name: Exhaustive Node/Bun Observer claim stress
+        run: pnpm test:observer-claim:cross-runtime

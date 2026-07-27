@@ -10,6 +10,8 @@ type Classification = {
   docs_only: boolean;
   installer: boolean;
   binary: boolean;
+  claim_stress: boolean;
+  shell_matrix: boolean;
 };
 
 type ClassificationCase = {
@@ -23,39 +25,106 @@ describe("standard CI path classification", () => {
     {
       name: "documentation only",
       paths: ["README.md", "docs/development.md"],
-      expected: { docs_only: true, installer: false, binary: false },
+      expected: {
+        docs_only: true,
+        installer: false,
+        binary: false,
+        claim_stress: false,
+        shell_matrix: false,
+      },
     },
     {
       name: "production source",
-      paths: ["apps/observer/src/runtime/main.ts"],
-      expected: { docs_only: false, installer: false, binary: true },
+      paths: ["packages/protocol/src/index.ts"],
+      expected: {
+        docs_only: false,
+        installer: false,
+        binary: true,
+        claim_stress: false,
+        shell_matrix: false,
+      },
+    },
+    {
+      name: "Observer claim-sensitive source",
+      paths: ["apps/observer/src/runtime/observerBootClaim.ts"],
+      expected: {
+        docs_only: false,
+        installer: false,
+        binary: true,
+        claim_stress: true,
+        shell_matrix: false,
+      },
+    },
+    {
+      name: "shell-sensitive setup source",
+      paths: ["apps/cli/src/commands/setup/checks/worktrunk.ts"],
+      expected: {
+        docs_only: false,
+        installer: false,
+        binary: true,
+        claim_stress: false,
+        shell_matrix: true,
+      },
     },
     {
       name: "installer only",
       paths: ["scripts/install.sh", "scripts/test-runners/run-install-smoke.mjs"],
-      expected: { docs_only: false, installer: true, binary: false },
+      expected: {
+        docs_only: false,
+        installer: true,
+        binary: false,
+        claim_stress: false,
+        shell_matrix: false,
+      },
     },
     {
       name: "tests only",
-      paths: ["apps/cli/test/unit/setup-checks.test.ts", "config/vitest/vitest.unit.config.ts"],
-      expected: { docs_only: false, installer: false, binary: false },
+      paths: [
+        "station/src/station/input/stationMouse.test.ts",
+        "config/vitest/vitest.unit.config.ts",
+      ],
+      expected: {
+        docs_only: false,
+        installer: false,
+        binary: false,
+        claim_stress: false,
+        shell_matrix: false,
+      },
     },
     {
       name: "CI infrastructure",
       paths: [".github/workflows/standard-ci.yml"],
-      expected: { docs_only: false, installer: true, binary: true },
+      expected: {
+        docs_only: false,
+        installer: true,
+        binary: true,
+        claim_stress: true,
+        shell_matrix: true,
+      },
     },
     {
       name: "packaged dependency state",
       paths: ["package.json", "pnpm-lock.yaml", "LICENSE"],
-      expected: { docs_only: false, installer: true, binary: true },
+      expected: {
+        docs_only: false,
+        installer: true,
+        binary: true,
+        claim_stress: true,
+        shell_matrix: false,
+      },
     },
   ] as const)("classifies $name changes", ({ paths, expected }: ClassificationCase) => {
     expect(classify(paths)).toEqual(expected);
   });
 
   it("falls back to every specialized lane when Git reports no paths", () => {
-    expect(classify([])).toEqual({ docs_only: false, installer: true, binary: true });
+    expect(classify([])).toEqual({
+      docs_only: false,
+      installer: true,
+      binary: true,
+      claim_stress: true,
+      shell_matrix: true,
+    });
   });
 });
 

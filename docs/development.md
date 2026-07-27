@@ -161,11 +161,13 @@ Ready, non-draft pull requests fan out static validation, root tests, setup E2E,
 cross-runtime SQLite, Station renderer and PTY tests, and selected installer and binary smokes on
 independent `ubuntu-24.04` jobs. Documentation-only changes run lint and diagnostics policy tests.
 Installer smoke runs when installer, release, dependency, or CI infrastructure changes; binary
-smoke runs when production, binary, dependency, or CI infrastructure changes. One aggregate job
-named `standard-ci` preserves the repository ruleset contract.
+smoke runs when production, binary, dependency, or CI infrastructure changes. Observer-sensitive
+changes use the exhaustive claim-race counts, while setup- and Worktrunk-sensitive changes retain
+both bash and zsh process-level setup coverage. One aggregate job named `standard-ci` preserves the
+repository ruleset contract and fails if a mandatory or path-selected lane is unexpectedly skipped.
 
-Release tags select every lane, use the exhaustive claim-race counts, and call that parallel gate
-before adding the four native build and draft-install targets. Both `standard-ci` and
+Release tags select every lane, use the exhaustive claim-race counts and both setup shell paths, and
+call that parallel gate before adding the four native build and draft-install targets. Both `standard-ci` and
 `smoke:release` must pass before any native release build starts. Draft pull request activity
 allocates no runner, including synchronization before `ready_for_review`. Pushes to `main`
 run only build, typecheck, and lint as a cheap post-merge smoke. The repository ruleset must
@@ -182,6 +184,7 @@ pnpm test:unit
 pnpm test:contracts
 pnpm test:integration
 pnpm test:e2e:observer
+pnpm test:e2e:setup:guided:all-shells
 pnpm test:observer-claim:cross-runtime
 pnpm test:sqlite:bun
 pnpm test:diagnostics
@@ -208,9 +211,11 @@ the other runtime to verify the shared SQLite contract and migrations. It also
 runs the exhaustive boot-claim stress: 50 alternating Node/Bun two-process rounds,
 10 three-contender rounds, and killed-owner recovery with stable inode and
 `integrity_check=ok`. Pull-request CI uses `pnpm test:sqlite:bun:pr` for five two-process and two
-three-contender rounds; release tags retain the exhaustive counts. Both commands also check
-Node/Bun inaccessible and stale classification plus displaced-listener abandonment; the claim
-gate makes no fairness claim.
+three-contender rounds; Observer-sensitive pull requests and release tags retain the exhaustive
+counts. The scheduled `nightly-observer-claim` workflow runs the same exhaustive command against
+`main` each day so a low-frequency race cannot remain latent until a release. Both commands also
+check Node/Bun inaccessible and stale classification plus displaced-listener abandonment; the
+claim gate makes no fairness claim.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,

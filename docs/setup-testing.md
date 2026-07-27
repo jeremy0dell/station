@@ -72,6 +72,11 @@ or unsupported results and never inspect a developer's real provider homes.
 pnpm test:integration   # includes setup-profiles
 ```
 
+Hosted setup E2E uses zsh as the representative process path for unrelated changes. Changes to the
+setup engine or Worktrunk integration, plus release tags, exercise both bash and zsh recovery and
+idempotency paths. Run that focused matrix locally with
+`pnpm test:e2e:setup:guided:all-shells`.
+
 ## Tier 2 — Linux containers (medium fidelity, nightly/manual)
 
 `tests/env/docker/Dockerfile` is one multi-stage build whose per-profile

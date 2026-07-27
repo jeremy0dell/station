@@ -51,6 +51,7 @@
     "test:diagnostics:policy": "vitest run --config config/vitest/vitest.diagnostics.config.ts tests/diagnostics/ci-classification.test.ts tests/diagnostics/ci-workflow-policy.test.ts tests/diagnostics/release-readiness-docs.test.ts",
     "test:e2e:setup": "vitest run --config config/vitest/vitest.setup-e2e.config.ts",
     "test:e2e:setup:guided": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-guided-feedback.test.ts",
+    "test:e2e:setup:guided:all-shells": "STATION_SETUP_E2E_ALL_SHELLS=true pnpm test:e2e:setup:guided",
     "test:e2e:setup:core": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-core-flow.test.ts",
     "test:e2e:setup:sqlite": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/observer-sqlite-smoke.test.ts",
     "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts",
