@@ -383,6 +383,7 @@ function assertProvidersAvailable(options: CreateObserverApiOptions): ExternalLa
     persistence: options.persistence,
     clock: options.clock,
     configPath: options.configPath,
+    logger: options.logger,
   };
 }
 

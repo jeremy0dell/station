@@ -41,7 +41,8 @@ export type ObserverService = {
   reconcile(reason?: string): Promise<StationSnapshot>;
   /**
    * Ask the observer to mint a STATION identity for an externally-hosted (e.g.
-   * Station-owned) primary agent and return its launch plan. Does not spawn.
+   * Station-owned) primary agent and return its launch plan. A supplied title
+   * applies only when preparation mints a fresh session. Does not spawn.
    */
   prepareExternalLaunch(
     params: AgentPrepareExternalLaunchParams,

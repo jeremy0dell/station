@@ -97,7 +97,12 @@ export type StationInputEffects = {
    * the wizard, creates the worktree, then runs the same managed launch a row
    * click uses; failures surface as a STATION toast.
    */
-  launchHostedNewSession(target: { projectId: string; branch: string; harness: ProviderId }): void;
+  launchHostedNewSession(target: {
+    projectId: string;
+    title: string;
+    branch: string;
+    harness: ProviderId;
+  }): void;
   /**
    * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
    * harness in a Station pane (the Fork details submit); fire-and-forget like
@@ -106,6 +111,7 @@ export type StationInputEffects = {
   launchHostedForkSession(target: {
     projectId: string;
     sourceWorktreeId: string;
+    title: string;
     branch: string;
     copyDirty: boolean;
   }): void;

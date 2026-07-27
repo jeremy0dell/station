@@ -37,6 +37,12 @@ export type CreateSessionCreateHandlerOptions = {
   commandTimeoutMs?: number | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Create a session worktree on its generated branch, persist its independent
+ * user-facing title, and launch its primary agent workspace.
+ */
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
 ): CommandHandler {
@@ -90,7 +96,7 @@ export function createSessionCreateHandler(
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
-        title: payload.branch.trim(),
+        title: payload.title ?? payload.branch,
         clock: options.clock,
       });
       seededSessionTitle = true;

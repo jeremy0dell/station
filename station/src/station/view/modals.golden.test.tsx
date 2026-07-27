@@ -155,8 +155,22 @@ const CASES: ModalCase[] = [
   },
   {
     name: "fork details sheet",
-    keys: [{ input: "F" }, { input: "1" }],
-    expect: ["Fork Session", "Source", "uncommitted changes", "Fork (enter)", "enter:fork"],
+    keys: [
+      { input: "F" },
+      { input: "1" },
+      { input: "u", ctrl: true },
+      { input: "Hexagonal PT 12" },
+    ],
+    expect: [
+      "Fork Session",
+      "Source",
+      "Name",
+      "Hexagonal PT 12",
+      "uncommitted changes",
+      "Fork (enter)",
+      "enter:fork",
+    ],
+    reject: ["Branch"],
   },
   {
     name: "new session review",

@@ -216,8 +216,21 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
     keyed.getState().handleKey({ input: slot });
 
-    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
-    expect(clicked.getState().screen).toMatchObject({ name: "fork", step: "details" });
+    const clickedScreen = clicked.getState().screen;
+    const keyedScreen = keyed.getState().screen;
+    if (
+      clickedScreen.name !== "fork" ||
+      clickedScreen.step !== "details" ||
+      keyedScreen.name !== "fork" ||
+      keyedScreen.step !== "details"
+    ) {
+      throw new Error("expected fork details from click and key paths");
+    }
+    const { branch: clickedBranch, ...clickedStable } = clickedScreen;
+    const { branch: keyedBranch, ...keyedStable } = keyedScreen;
+    expect(clickedStable).toEqual(keyedStable);
+    expect(clickedBranch).toContain("-fork-");
+    expect(keyedBranch).toContain("-fork-");
   });
 
   it("launches a fork from the sheet submit button", () => {
@@ -235,7 +248,9 @@ describe("routeStationMouse", () => {
       expect(outcome.projectId).toBe("station");
       expect(outcome.sourceWorktreeId).toBe(worktreeId);
       expect(outcome.copyDirty).toBe(true);
-      expect(outcome.branch.length).toBeGreaterThan(0);
+      expect(outcome.title).toMatch(/-fork$/);
+      expect(outcome.branch).toContain("-fork-");
+      expect(outcome.title).not.toBe(outcome.branch);
     }
     // The submit is intercepted, not dispatched to the machine — the sheet stays open
     // until the executor closes it, so the machine never ran the tmux session.fork.
@@ -461,6 +476,7 @@ describe("routeStationMouse", () => {
       expect(outcome.projectId).toBe("station");
       expect(outcome.harness).toBe("codex"); // project.defaults.harness
       expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
+      expect(outcome.title).toBe(outcome.branch);
     }
   });
 

@@ -82,9 +82,11 @@ function submitNewSession(state: TuiState): TuiTransition {
     };
   }
 
-  const branch = validation.branch.trim();
+  const title = validation.title;
+  const branch = validation.branch;
   const command = buildCreateSessionCommand({
     project: validation.project,
+    title,
     branch,
     harnessProvider: validation.harnessProvider,
   });
@@ -102,6 +104,7 @@ function submitNewSession(state: TuiState): TuiTransition {
       {
         localId,
         projectId: validation.project.id,
+        title,
         branch,
         harnessProvider: validation.harnessProvider,
         createdAt: new Date().toISOString(),
@@ -112,6 +115,7 @@ function submitNewSession(state: TuiState): TuiTransition {
         type: "createSession",
         localId,
         projectId: validation.project.id,
+        title,
         branch,
         harnessProvider: validation.harnessProvider,
         command,

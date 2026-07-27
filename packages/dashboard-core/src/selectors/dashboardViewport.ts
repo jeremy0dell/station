@@ -248,7 +248,7 @@ function compareDashboardRows(
 
 function rowTitle(row: GroupDashboardRow, state: TuiViewState): string {
   if (row.type === "createLocalRow") {
-    return row.row.branch;
+    return row.row.title;
   }
   return sessionRowDisplayTitle(row.row, state.localRows);
 }
@@ -271,7 +271,7 @@ function localRowMatchesSearch(
     return true;
   }
   const harnessProvider = row.status === "pending" ? (row.harnessProvider ?? "") : "";
-  return [row.branch, project.label, harnessProvider].some((value) =>
+  return [row.title, row.branch, project.label, harnessProvider].some((value) =>
     value.toLocaleLowerCase().includes(query),
   );
 }

@@ -20,8 +20,9 @@ describe("new session flow", () => {
       reviewFocus: "create",
       selectedProjectId: "web",
       selectedHarness: "codex",
+      title: "web-k7p3x9",
       branch: "web-k7p3x9",
-      nameSource: "generated",
+      titleSource: "generated",
       stepHistory: [],
     });
     expect(Object.hasOwn(state ?? {}, "draftName")).toBe(false);
@@ -74,7 +75,7 @@ describe("new session flow", () => {
     });
   });
 
-  it("trims typed names and otherwise preserves branch text", () => {
+  it("trims custom titles without changing the generated branch", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
@@ -82,12 +83,13 @@ describe("new session flow", () => {
     const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
 
-    const state = typeName(editing, " feature/foo ");
+    const state = typeName(editing, " Hexagonal PT 12! ");
 
     expect(transitionNewSessionFlow(state, { type: "commitName" })).toMatchObject({
       mode: "review",
-      branch: "feature/foo",
-      nameSource: "custom",
+      title: "Hexagonal PT 12!",
+      branch: "web-aaaaaa",
+      titleSource: "custom",
     });
   });
 
@@ -156,8 +158,9 @@ describe("new session flow", () => {
       mode: "review",
       selectedProjectId: "api",
       selectedHarness: "opencode",
+      title: "api-bbbbbb",
       branch: "api-bbbbbb",
-      nameSource: "generated",
+      titleSource: "generated",
     });
   });
 
@@ -168,8 +171,8 @@ describe("new session flow", () => {
 
     const custom = {
       ...opened,
-      branch: "feature/custom",
-      nameSource: "custom" as const,
+      title: "Hexagonal PT 12",
+      titleSource: "custom" as const,
     };
     const picker = transitionNewSessionFlow(custom, { type: "pickProject" });
     if (picker?.mode !== "pickProject") throw new Error("expected project picker");
@@ -178,8 +181,9 @@ describe("new session flow", () => {
     expect(selected).toMatchObject({
       selectedProjectId: "api",
       selectedHarness: "codex",
-      branch: "feature/custom",
-      nameSource: "custom",
+      title: "Hexagonal PT 12",
+      branch: "api-bbbbbb",
+      titleSource: "custom",
     });
   });
 
@@ -206,6 +210,7 @@ describe("new session flow", () => {
       mode: "review",
       selectedProjectId: "project-10",
       selectedHarness: "codex",
+      title: "project-10-bbbbbb",
       branch: "project-10-bbbbbb",
     });
   });

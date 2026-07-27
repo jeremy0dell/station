@@ -90,6 +90,7 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
     case "pane-launch-new-session":
       effects.launchHostedNewSession({
         projectId: outcome.projectId,
+        title: outcome.title,
         branch: outcome.branch,
         harness: outcome.harness,
       });
@@ -98,6 +99,7 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       effects.launchHostedForkSession({
         projectId: outcome.projectId,
         sourceWorktreeId: outcome.sourceWorktreeId,
+        title: outcome.title,
         branch: outcome.branch,
         copyDirty: outcome.copyDirty,
       });
@@ -198,7 +200,9 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
     case "forkSession":
       if (stationViewStore !== undefined) {
         stationViewStore.setState(
-          openForkDetailsForRow(stationViewStore.getState(), action.rowId, "dashboard"),
+          openForkDetailsForRow(stationViewStore.getState(), action.rowId, {
+            returnTo: "dashboard",
+          }),
         );
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }

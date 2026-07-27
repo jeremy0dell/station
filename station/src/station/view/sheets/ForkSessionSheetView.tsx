@@ -1,5 +1,5 @@
 // OpenTUI bottom sheet for Fork Session: chooseSlot (pick a source row, mirrors
-// RemoveSessionSheetView) and details (branch field + copy-dirty toggle + submit,
+// RemoveSessionSheetView) and details (name field + copy-dirty toggle + submit,
 // mirrors NewSessionSheetView's EditName). The submit button is a click target so
 // the fork launches in Station (sheetSubmit → launch-fork), never the tmux path.
 import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";
@@ -61,11 +61,11 @@ function ForkDetails({
   sheetWidth: number;
 }) {
   const focus = screen.focus;
-  const branchValue =
-    focus === "branch" ? (
-      <EditableTextInputView {...screen.draftBranch} />
+  const titleValue =
+    focus === "name" ? (
+      <EditableTextInputView {...screen.draftTitle} />
     ) : (
-      screen.draftBranch.value
+      screen.draftTitle.value
     );
   const extraRows = (screen.sourceAgentRunning ? 1 : 0) + (screen.validationError !== undefined ? 1 : 0);
   return (
@@ -85,9 +85,9 @@ function ForkDetails({
       />
       <SheetLabelValue
         width={contentWidth}
-        label={focusLabel("Branch", focus === "branch")}
+        label={focusLabel("Name", focus === "name")}
         labelWidth={LABEL_WIDTH}
-        value={branchValue}
+        value={titleValue}
       />
       <SheetLabelValue
         width={contentWidth}

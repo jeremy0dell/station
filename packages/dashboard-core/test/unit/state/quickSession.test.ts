@@ -25,6 +25,9 @@ describe("quick session", () => {
         },
       },
     });
+    const command = service.dispatched[0];
+    if (command?.type !== "session.create") throw new Error("expected create command");
+    expect(command.payload.title).toBe(command.payload.branch);
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 

@@ -6,6 +6,7 @@ import {
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
   selectDashboardViewport,
+  type TuiKey,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
@@ -749,7 +750,7 @@ describe("TUI screen transitions", () => {
     { input: "N" },
     { input: "", escape: true },
     { input: "\r", return: true },
-  ])("cancels remove confirmation without a command", (key) => {
+  ])("cancels remove confirmation without a command", (key: TuiKey) => {
     const state = handleTuiKey(
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "X",
@@ -788,6 +789,14 @@ describe("TUI screen transitions", () => {
           },
         },
       },
+    });
+    const operation = submitted.operations?.[0];
+    if (operation?.type !== "createSession") throw new Error("expected create operation");
+    expect(operation.title).toBe(operation.branch);
+    expect(operation.command.payload.title).toBe(operation.branch);
+    expect(submitted.state.localRows.pendingCreate[0]).toMatchObject({
+      title: operation.title,
+      branch: operation.branch,
     });
   });
 

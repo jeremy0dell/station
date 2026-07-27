@@ -211,7 +211,7 @@ export function resolveKeyFocusedRowAgentTarget(
  * then launch it into Station like a row click).
  */
 export type NewSessionSubmitTarget =
-  | { kind: "submit"; projectId: string; branch: string; harness: ProviderId }
+  | { kind: "submit"; projectId: string; title: string; branch: string; harness: ProviderId }
   | { kind: "none" };
 
 /**
@@ -244,7 +244,8 @@ export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSu
   return {
     kind: "submit",
     projectId: validation.project.id,
-    branch: validation.branch.trim(),
+    title: validation.title,
+    branch: validation.branch,
     harness: validation.harnessProvider,
   };
 }
@@ -270,6 +271,7 @@ export type ForkSessionSubmitTarget =
       kind: "submit";
       projectId: string;
       sourceWorktreeId: string;
+      title: string;
       branch: string;
       copyDirty: boolean;
     }
@@ -298,6 +300,7 @@ export function resolveForkSessionSubmit(store: StoreApi<TuiStore>): ForkSession
     kind: "submit",
     projectId: validation.project.id,
     sourceWorktreeId: validation.sourceWorktreeId,
+    title: validation.title,
     branch: validation.branch,
     copyDirty: validation.copyDirty,
   };
@@ -320,7 +323,7 @@ export function resolveKeyForkSessionSubmit(
  * only a missing or stale project is an inert miss.
  */
 export type QuickSessionSubmitTarget =
-  | { kind: "submit"; projectId: string; branch: string; harness: ProviderId }
+  | { kind: "submit"; projectId: string; title: string; branch: string; harness: ProviderId }
   | { kind: "none" };
 
 export function resolveQuickSessionSubmit(
@@ -336,6 +339,7 @@ export function resolveQuickSessionSubmit(
   return {
     kind: "submit",
     projectId: intent.projectId,
+    title: intent.title,
     branch: intent.branch,
     harness: intent.harnessProvider,
   };
