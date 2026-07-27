@@ -204,6 +204,9 @@ describe("hosted CI policy", () => {
     const setupAction = read(".github/actions/setup-ci/action.yml");
     const mainSmoke = between(standardCi, "  main-smoke:");
 
+    const setupNodePin = setupAction.match(/uses: (actions\/setup-node@[0-9a-f]{40})/)?.[1];
+    expect(setupNodePin).toBeDefined();
+    expect(mainSmoke).toContain(`uses: ${setupNodePin}`);
     expect(setupAction).toMatch(/uses: actions\/cache@[0-9a-f]{40}/);
     expect(setupAction).toContain("if: inputs.restore-turbo-cache == 'true'");
     expect(setupAction).toContain("path: .turbo");
