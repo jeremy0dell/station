@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { type HarnessEventObservation, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -18,6 +18,10 @@ import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
+import {
+  FakeWorktreeChangeSource,
+  FakeWorktreeMetadataInvalidationSource,
+} from "../support/worktreeMetadataSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const healthStub = {
@@ -28,7 +32,7 @@ const healthStub = {
   lastCheckedAt: now,
 };
 
-describe("Observer API with in-memory persistence", () => {
+describe("Observer API composition with in-memory persistence", () => {
   it("runs core, commands, ingress, diagnostics, and shutdown without SQLite", async () => {
     const clock = { now: () => new Date(now) };
     const idFactory = observerIds();
@@ -37,7 +41,12 @@ describe("Observer API with in-memory persistence", () => {
     const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
     const providers = fakeProviders();
     const core = createObserverCore({ config, providers, persistence, clock });
-    let metadataStopped = false;
+    const lifecycle: string[] = [];
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    const worktreeMetadataInvalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    worktreeMetadataInvalidationSource.onShutdown = async () => {
+      lifecycle.push("metadata");
+    };
     const persistenceHealth: PersistenceHealthSource = { health: () => healthStub };
     const api = createObserverApi({
       core,
@@ -50,13 +59,12 @@ describe("Observer API with in-memory persistence", () => {
       config,
       stateDir: "/tmp/station-no-sqlite-observer",
       hookReconcileDebounceMs: 0,
-      metadataRefresh: {
-        refresh: async () => undefined,
-        shutdown: async () => {
-          metadataStopped = true;
-        },
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource,
+      onStop: async () => {
+        lifecycle.push("onStop");
+        await commandQueue.shutdown();
       },
-      onStop: () => commandQueue.shutdown(),
     });
     registerObserverCommandHandlers({
       projectConfigWriter: createUnexpectedProjectConfigWriter(),
@@ -94,6 +102,15 @@ describe("Observer API with in-memory persistence", () => {
       ],
     });
     await initialEvents.return?.();
+    await waitFor(() => worktreeChangeSource.requests.length > 0);
+    expect(worktreeChangeSource.requests[0]?.target).toMatchObject({
+      worktreeId: "wt_web_task",
+      projectId: "web",
+      branch: "task",
+    });
+    expect(worktreeMetadataInvalidationSource.replacements[0]).toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_task", projectId: "web", branch: "task" }),
+    ]);
 
     const command = await api.dispatch({
       type: "observer.reconcile",
@@ -153,7 +170,12 @@ describe("Observer API with in-memory persistence", () => {
     });
 
     await expect(api.stop()).resolves.toMatchObject({ stopped: true, at: now });
-    expect(metadataStopped).toBe(true);
+    expect(worktreeMetadataInvalidationSource.shutdownCount).toBe(1);
+    expect(lifecycle).toEqual(["metadata", "onStop"]);
+    const requestsAfterStop = worktreeChangeSource.requests.length;
+    await api.reconcile("after-stop-direct-test");
+    await settleBackgroundWork();
+    expect(worktreeChangeSource.requests).toHaveLength(requestsAfterStop);
     await expect(commandQueue.drain()).resolves.toBeUndefined();
   });
 });
@@ -241,8 +263,22 @@ function observerIds() {
   };
 }
 
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error("Timed out waiting for background metadata work.");
+}
+
+async function settleBackgroundWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

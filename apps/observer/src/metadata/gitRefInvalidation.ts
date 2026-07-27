@@ -1,16 +1,15 @@
 import { existsSync, type FSWatcher, lstatSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import type { StationSnapshot, WorktreeRow } from "@station/contracts";
+import { toSafeError } from "../diagnostics/errors.js";
 import type { StationLogger } from "../stationLogger.js";
+import type {
+  LocalGitMetadataWorktree,
+  ResolveLocalGitMetadataWorktree,
+} from "./localGitWorktree.js";
+import type { WorktreeMetadataInvalidationSource, WorktreeMetadataTarget } from "./ports.js";
 
-// A Git ref move invalidates all metadata keyed to HEAD: local diff, PR identity, and checks.
-// This trigger only requests reconcile; observer runtime remains the only UI event publisher.
-export type WorktreeGitRefInvalidationService = {
-  update(snapshot: StationSnapshot): void;
-  shutdown(): void;
-};
-
-export type CreateWorktreeGitRefInvalidationServiceOptions = {
+export type CreateLocalGitWorktreeMetadataInvalidationSourceOptions = {
+  resolveWorktree: ResolveLocalGitMetadataWorktree;
   requestReconcile(reason: string): void;
   debounceMs?: number;
   logger?: StationLogger;
@@ -30,107 +29,189 @@ type WatchDirectory = (
   listener: (changedFile: string | undefined) => void,
 ) => DirectoryWatcher;
 
+type WatchedDirectory = {
+  path: string;
+  watcher: DirectoryWatcher;
+};
+
+type ActiveRegistration = {
+  target: WorktreeMetadataTarget;
+  signature: string;
+  active: boolean;
+  watchers: WatchedDirectory[];
+};
+
 const defaultDebounceMs = 100;
 
-export function createWorktreeGitRefInvalidationService(
-  options: CreateWorktreeGitRefInvalidationServiceOptions,
-): WorktreeGitRefInvalidationService {
+/**
+ * ADAPTER
+ *
+ * Translates Station worktree identity into local Git ref watches and owns
+ * replacement, debounce, failure cleanup, and deterministic shutdown.
+ */
+export function createLocalGitWorktreeMetadataInvalidationSource(
+  options: CreateLocalGitWorktreeMetadataInvalidationSourceOptions,
+): WorktreeMetadataInvalidationSource {
   const debounceMs = options.debounceMs ?? defaultDebounceMs;
-  const watchers = new Map<string, DirectoryWatcher>();
+  const registrations = new Map<string, ActiveRegistration>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const watchDirectory = options.watchDirectory ?? defaultWatchDirectory;
+  let stopped = false;
 
   return {
-    update: (snapshot) => {
-      const nextKeys = new Set<string>();
-      for (const row of snapshot.rows) {
-        if (row.worktree.state !== "exists") {
-          continue;
-        }
-        for (const target of gitRefInvalidationTargetsForRow(row)) {
-          const key = watcherKey(row.id, target.path);
-          nextKeys.add(key);
-          if (watchers.has(key)) {
-            continue;
-          }
-          const watcher = watchTarget(row.id, target);
-          if (watcher !== undefined) {
-            watchers.set(key, watcher);
-          }
+    replaceWatchedWorktrees: async (targets) => {
+      if (stopped) return;
+
+      const desired = new Map(targets.map((target) => [target.worktreeId, target]));
+      for (const [worktreeId, registration] of registrations) {
+        if (!desired.has(worktreeId)) {
+          closeRegistration(registration);
         }
       }
 
-      for (const [key, watcher] of watchers) {
-        if (nextKeys.has(key)) {
+      for (const target of desired.values()) {
+        if (stopped) return;
+        const worktree = options.resolveWorktree(target);
+        if (worktree === undefined || !matchesExpectedTarget(worktree, target)) {
+          const existing = registrations.get(target.worktreeId);
+          if (existing !== undefined) closeRegistration(existing);
           continue;
         }
-        watcher.close();
-        watchers.delete(key);
+
+        const refTargets = gitRefInvalidationTargetsForWorktree(worktree.path, worktree.branch);
+        const signature = registrationSignature(worktree, refTargets);
+        const existing = registrations.get(target.worktreeId);
+        if (existing?.signature === signature && existing.active) {
+          continue;
+        }
+        if (existing !== undefined) closeRegistration(existing);
+        if (refTargets.length === 0) continue;
+
+        armRegistration(target, signature, refTargets);
       }
     },
-    shutdown: () => {
-      for (const timer of timers.values()) {
-        clearTimeout(timer);
-      }
+    shutdown: async () => {
+      if (stopped) return;
+      stopped = true;
+      for (const timer of timers.values()) clearTimeout(timer);
       timers.clear();
-      for (const watcher of watchers.values()) {
-        watcher.close();
+      for (const registration of [...registrations.values()]) {
+        closeRegistration(registration);
       }
-      watchers.clear();
     },
   };
 
-  function watchTarget(
-    worktreeId: string,
-    target: GitRefInvalidationTarget,
-  ): DirectoryWatcher | undefined {
-    const directory = dirname(target.path);
-    if (!existsSync(directory)) {
-      return undefined;
-    }
+  function armRegistration(
+    target: WorktreeMetadataTarget,
+    signature: string,
+    refTargets: readonly GitRefInvalidationTarget[],
+  ): void {
+    const registration: ActiveRegistration = {
+      target,
+      signature,
+      active: true,
+      watchers: [],
+    };
+    registrations.set(target.worktreeId, registration);
 
     try {
-      const fileName = basename(target.path);
-      const watcher = watchDirectory(directory, (changedFile) => {
-        if (changedFile !== undefined && changedFile !== fileName) {
-          return;
+      for (const refTarget of refTargets) {
+        const directory = dirname(refTarget.path);
+        if (!existsSync(directory)) {
+          throw localGitWatcherError(
+            "LOCAL_GIT_WATCH_DIRECTORY_MISSING",
+            "Git metadata watch directory does not exist.",
+          );
         }
-        scheduleReconcile(worktreeId);
-      });
-      watcher.on?.("error", (error) => {
-        void options.logger?.warn("Git metadata watcher failed.", {
-          error,
-          path: target.path,
-          worktreeId,
+        const fileName = basename(refTarget.path);
+        const watcher = watchDirectory(directory, (changedFile) => {
+          if (!isCurrent(registration)) return;
+          if (changedFile !== undefined && changedFile !== fileName) return;
+          scheduleReconcile(registration);
         });
-      });
-      return watcher;
+        registration.watchers.push({ path: refTarget.path, watcher });
+        watcher.on?.("error", (error) => {
+          if (!isCurrent(registration)) return;
+          logFailure("Git metadata watcher failed.", error, registration, refTarget.path);
+          closeRegistration(registration);
+        });
+        if (!isCurrent(registration)) return;
+      }
     } catch (error) {
-      void options.logger?.warn("Git metadata watcher could not start.", {
-        error,
-        path: target.path,
-        worktreeId,
-      });
-      return undefined;
+      logFailure("Git metadata watcher could not start.", error, registration);
+      closeRegistration(registration);
     }
   }
 
-  function scheduleReconcile(worktreeId: string): void {
+  function scheduleReconcile(registration: ActiveRegistration): void {
+    if (!isCurrent(registration)) return;
+    const worktreeId = registration.target.worktreeId;
     const existing = timers.get(worktreeId);
-    if (existing !== undefined) {
-      clearTimeout(existing);
-    }
+    if (existing !== undefined) clearTimeout(existing);
 
     const timer = setTimeout(() => {
       timers.delete(worktreeId);
-      options.requestReconcile(`metadata:git-ref:${worktreeId}`);
+      if (!isCurrent(registration)) return;
+      try {
+        options.requestReconcile(`metadata:git-ref:${worktreeId}`);
+      } catch (error) {
+        logFailure("Git metadata watcher reconcile request failed.", error, registration);
+      }
     }, debounceMs);
     timers.set(worktreeId, timer);
   }
-}
 
-export function gitRefInvalidationTargetsForRow(row: WorktreeRow): GitRefInvalidationTarget[] {
-  return gitRefInvalidationTargetsForWorktree(row.path, row.branch);
+  function isCurrent(registration: ActiveRegistration): boolean {
+    return (
+      !stopped &&
+      registration.active &&
+      registrations.get(registration.target.worktreeId) === registration
+    );
+  }
+
+  function closeRegistration(registration: ActiveRegistration): void {
+    registration.active = false;
+    const worktreeId = registration.target.worktreeId;
+    if (registrations.get(worktreeId) === registration) registrations.delete(worktreeId);
+    const timer = timers.get(worktreeId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timers.delete(worktreeId);
+    }
+
+    for (const watched of registration.watchers) {
+      try {
+        watched.watcher.close();
+      } catch (error) {
+        logFailure("Git metadata watcher could not close.", error, registration, watched.path);
+      }
+    }
+    registration.watchers.length = 0;
+  }
+
+  function logFailure(
+    message: string,
+    error: unknown,
+    registration: ActiveRegistration,
+    path?: string,
+  ): void {
+    const safeError = toSafeError(error, {
+      tag: "LocalGitMetadataError",
+      code: "LOCAL_GIT_REF_WATCH_FAILED",
+      message,
+    });
+    const attributes: Record<string, unknown> = {
+      error: safeError,
+      projectId: registration.target.projectId,
+      worktreeId: registration.target.worktreeId,
+    };
+    if (path !== undefined) attributes.path = path;
+    try {
+      void options.logger?.warn(message, attributes).catch(() => undefined);
+    } catch {
+      // Logging is best-effort and must not disrupt watcher cleanup.
+    }
+  }
 }
 
 export function gitRefInvalidationTargetsForWorktree(
@@ -150,6 +231,32 @@ export function gitRefInvalidationTargetsForWorktree(
   targets.push({ path: join(commonDir, refName) });
   targets.push({ path: join(commonDir, "packed-refs") });
   return uniqueTargets(targets);
+}
+
+function matchesExpectedTarget(
+  worktree: LocalGitMetadataWorktree,
+  target: WorktreeMetadataTarget,
+): boolean {
+  return (
+    worktree.worktreeId === target.worktreeId &&
+    worktree.projectId === target.projectId &&
+    worktree.branch === target.branch &&
+    worktree.registrationIdentity === target.registrationIdentity
+  );
+}
+
+function registrationSignature(
+  worktree: LocalGitMetadataWorktree,
+  targets: readonly GitRefInvalidationTarget[],
+): string {
+  return JSON.stringify({
+    worktreeId: worktree.worktreeId,
+    projectId: worktree.projectId,
+    branch: worktree.branch,
+    registrationIdentity: worktree.registrationIdentity,
+    path: worktree.path,
+    targets: targets.map((target) => target.path),
+  });
 }
 
 function resolveGitDir(dotGit: string): string | undefined {
@@ -210,8 +317,12 @@ function uniqueTargets(targets: GitRefInvalidationTarget[]): GitRefInvalidationT
   return unique;
 }
 
-function watcherKey(worktreeId: string, path: string): string {
-  return `${worktreeId}:${path}`;
+function localGitWatcherError(code: string, message: string) {
+  return {
+    tag: "LocalGitMetadataError",
+    code,
+    message,
+  };
 }
 
 function defaultWatchDirectory(

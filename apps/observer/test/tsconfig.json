@@ -6,5 +6,12 @@
     "declarationMap": false,
     "types": ["node", "vitest/globals"]
   },
-  "files": ["integration/worktrunk-diagnostics.test.ts"]
+  "files": [
+    "integration/in-memory-observer-api.test.ts",
+    "integration/local-git-worktree-change-source.test.ts",
+    "integration/metadata-refresh.test.ts",
+    "integration/worktrunk-diagnostics.test.ts",
+    "unit/git-ref-invalidation.test.ts",
+    "unit/localGitChangeSummary.test.ts"
+  ]
 }

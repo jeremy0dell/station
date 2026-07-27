@@ -1,10 +1,15 @@
-import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { createFakeExternalCommandRunner } from "@station/runtime";
+import type { ProviderProjectConfig, WorktreePullRequest } from "@station/contracts";
+import type {
+  ExternalCommandInput,
+  ExternalCommandResult,
+  ExternalCommandRunner,
+  RuntimeClock,
+} from "@station/runtime";
+import { createFakeExternalCommandRunner, gitLocalEnvironmentVariables } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import type { LocalGitChangeSummaryInput } from "../../src/metadata/localGitChangeSummary";
 import {
+  createLocalGitWorktreeChangeSource,
   parseGitNumstat,
-  readLocalGitChangeSummary,
 } from "../../src/metadata/localGitChangeSummary";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -13,7 +18,7 @@ const baseSha = "1111111111111111111111111111111111111111";
 const mergeBaseSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const oldLocalMainSha = "3333333333333333333333333333333333333333";
 
-const baseInput: Omit<LocalGitChangeSummaryInput, "runner"> = {
+const baseInput: Omit<TestLocalGitChangeSummaryInput, "runner"> = {
   project: {
     id: "web",
     label: "web",
@@ -318,6 +323,78 @@ describe("local git change summary", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("captures cwd and timeout while forwarding cancellation and clearing Git-local environment", async () => {
+    const inputs: ExternalCommandInput[] = [];
+    const signal = new AbortController().signal;
+    const responses: Record<string, string> = {
+      "rev-parse --verify HEAD^{commit}": headSha,
+      remote: "",
+      "rev-parse --verify refs/heads/main^{commit}": baseSha,
+      "merge-base main HEAD": mergeBaseSha,
+      [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
+    };
+    const runner = createFakeExternalCommandRunner((input) => {
+      inputs.push(input);
+      const key = (input.args ?? []).join(" ");
+      const stdout = responses[key];
+      if (stdout === undefined) throw new Error(`No response for ${key}`);
+      return { command: input.command, args: input.args ?? [], stdout, stderr: "", exitCode: 0 };
+    });
+
+    await readLocalGitChangeSummary({
+      ...baseInput,
+      runner,
+      timeoutMs: 321,
+      signal,
+    });
+
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs.every((input) => input.cwd === baseInput.worktree.path)).toBe(true);
+    expect(inputs.every((input) => input.timeoutMs === 321)).toBe(true);
+    expect(inputs.every((input) => input.signal !== undefined && !input.signal.aborted)).toBe(true);
+    expect(inputs.every((input) => input.unsetEnv === gitLocalEnvironmentVariables)).toBe(true);
+  });
+
+  it("performs no Git command when Station identity is superseded", async () => {
+    const inputs: ExternalCommandInput[] = [];
+    const source = createLocalGitWorktreeChangeSource({
+      resolveWorktree: () => undefined,
+      runner: createFakeExternalCommandRunner((input) => {
+        inputs.push(input);
+        throw new Error("Git should not run.");
+      }),
+    });
+
+    await expect(
+      source.read({
+        target: { worktreeId: "wt_old", projectId: "web", branch: "feature" },
+        baseSelection: {},
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({ status: "superseded" });
+    expect(inputs).toEqual([]);
+  });
+
+  it("normalizes command execution failures as typed SafeErrors", async () => {
+    const source = createLocalGitWorktreeChangeSource({
+      resolveWorktree: (target) => ({ ...target, path: baseInput.worktree.path }),
+      runner: createFakeExternalCommandRunner(() => {
+        throw new Error("runner failed");
+      }),
+    });
+
+    await expect(
+      source.read({
+        target: { worktreeId: "wt_web_feature", projectId: "web", branch: "feature" },
+        baseSelection: { defaultBranch: "main" },
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      tag: "ExternalCommandError",
+      code: "EXTERNAL_COMMAND_FAILED",
+    });
+  });
+
   it("rejects malformed diff output", async () => {
     const calls: string[] = [];
     const runner = gitRunner(calls, {
@@ -340,23 +417,74 @@ describe("local git change summary", () => {
   });
 });
 
+type TestLocalGitChangeSummaryInput = {
+  project: ProviderProjectConfig;
+  worktree: {
+    id: string;
+    projectId: string;
+    path: string;
+    branch: string;
+    state?: string;
+    pr?: WorktreePullRequest;
+  };
+  cachedPullRequest?: WorktreePullRequest;
+  timeoutMs?: number;
+  clock?: RuntimeClock;
+  runner?: ExternalCommandRunner;
+  signal?: AbortSignal;
+};
+
+async function readLocalGitChangeSummary(input: TestLocalGitChangeSummaryInput) {
+  const source = createLocalGitWorktreeChangeSource({
+    resolveWorktree: (target) =>
+      input.worktree.state !== undefined && input.worktree.state !== "exists"
+        ? undefined
+        : {
+            worktreeId: target.worktreeId,
+            projectId: target.projectId,
+            branch: target.branch,
+            path: input.worktree.path,
+          },
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+    ...(input.clock === undefined ? {} : { clock: input.clock }),
+    ...(input.runner === undefined ? {} : { runner: input.runner }),
+  });
+  const result = await source.read({
+    target: {
+      worktreeId: input.worktree.id,
+      projectId: input.worktree.projectId,
+      branch: input.worktree.branch,
+    },
+    baseSelection: {
+      ...(input.worktree.pr?.baseRef === undefined
+        ? {}
+        : { observedPullRequestBase: input.worktree.pr.baseRef }),
+      ...(input.cachedPullRequest?.baseRef === undefined
+        ? {}
+        : { cachedPullRequestBase: input.cachedPullRequest.baseRef }),
+      ...(input.project.defaultBranch === undefined
+        ? {}
+        : { defaultBranch: input.project.defaultBranch }),
+      ...(input.project.worktrunk.base === undefined
+        ? {}
+        : { worktrunkBase: input.project.worktrunk.base }),
+    },
+    signal: input.signal ?? new AbortController().signal,
+  });
+  return result.status === "available" ? result.evidence : undefined;
+}
+
 function gitRunner(calls: string[], responses: Record<string, string>) {
   return createFakeExternalCommandRunner((input: ExternalCommandInput): ExternalCommandResult => {
     const key = [input.command, ...(input.args ?? [])].slice(1).join(" ");
     calls.push(key);
     const stdout = responses[key];
-    if (stdout === undefined) {
-      throw Object.assign(new Error(`No fake git response for ${key}`), {
-        code: 1,
-        stderr: "not found",
-      });
-    }
     return {
       command: input.command,
       args: input.args ?? [],
-      stdout,
-      stderr: "",
-      exitCode: 0,
+      stdout: stdout ?? "",
+      stderr: stdout === undefined ? "not found" : "",
+      exitCode: stdout === undefined ? 1 : 0,
     };
   });
 }

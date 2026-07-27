@@ -191,7 +191,7 @@ ownership even where current ownership is still a deviation.
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
 | Logging and config mutation | Driven | `StationLogger` and `ProjectConfigWriter` | `runtime/logging.ts` JSONL adapter and `runtime/projectConfigWriter.ts` config adapter | Conforming ports expose only operational logging and the three project mutations; paths and representations remain adapter-owned. |
-| Worktree metadata evidence | Driven | target `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | One role reads typed change evidence; the other owns watcher replacement and shutdown (OBS-HEX-011). |
+| Worktree metadata evidence | Driven | `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | Conforming path-free roles: one reads typed checkout-local change evidence; the other owns full-set watcher replacement and terminal shutdown. |
 | Diagnostic evidence | Driven | target `DiagnosticEvidenceSource` | local state, log, and hook-spool adapter | Only typed local evidence traversal crosses the port; command/event persistence, providers, core, and SQLite remain separate inputs (OBS-HEX-012). |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, argv, and OS start token must corroborate before replacement or signaling. |
@@ -217,7 +217,7 @@ areas contain the following responsibilities:
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
 | `runtime/logging.ts`, `runtime/projectConfigWriter.ts` | Redacted JSONL writes and `@station/config` project mutation translation | Outbound adapters retaining log, config, and home paths at composition. |
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
-| `metadata/` | metadata refresh, repository lookup, Git execution, and ref watching | Metadata use cases select adapters through provider-neutral policy and depend on local-metadata ports (OBS-HEX-011). |
+| `metadata/` | metadata refresh, repository lookup, local Git execution, and ref watching | The refresh use case depends on path-free local-metadata ports; local Git command and filesystem adapters resolve Station identities privately, while runtime composition selects and shuts down both roles. |
 | `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
 | `persistence/sqliteAdapter.ts`, SQLite implementation modules, `migrations/`, `sqlite.ts` | SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Production outbound adapter edge selected and lifecycle-managed by runtime composition. |
 | `test/support/inMemoryObserverPersistence.ts`, `persistence/observationParser.ts` | Process-local persistence test support plus representation-neutral observation parsing and coalescing | Test-only storage substitute and shared boundary translation used to prove substitution; production source and runtime remain SQLite-only. |
@@ -243,6 +243,7 @@ No single layer owns all truth.
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, native-execution bindings, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
+| Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Cached rows retain that evidence through their TTL and stale-on-failure policy; ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. Its `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. It corroborates process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
@@ -302,7 +303,10 @@ Current startup proceeds in this order:
    Observer core, command handlers, and configured event hooks around the awaited
    provider registry. Only the two application ports pass inward.
 7. The API constructs ingress queues, reconcile scheduling, metadata refresh,
-   diagnostics dependencies, and spool draining.
+   diagnostics dependencies, and spool draining. Local Git readers and ref
+   invalidation are selected here; watches arm lazily on the first metadata
+   refresh, and each refresh replaces the complete watched identity set before
+   cache or metadata reads so a later ref move cannot be missed.
 8. The runtime constructs a private startup-and-health gate, then the protocol
    server binds the resolved socket before startup reconcile. Only the
    successful socket binder may publish process identity.
@@ -347,8 +351,12 @@ defined startup failure path and shutdown owner.
 
 ### Shutdown
 
-The current API stop path drains harness ingress and metadata watchers, then
-schedules process shutdown. Process shutdown disables health responses first.
+The current API stop path drains harness ingress, marks metadata refresh
+terminal, aborts active local and repository reads, shuts down ref invalidation,
+and waits for the refresh flight before scheduling process shutdown. Ref-watcher
+shutdown invalidates callbacks first, clears debounce timers, attempts every
+close despite individual failures, and makes later replacement and callbacks
+no-ops. Process shutdown disables health responses first.
 The explicit CLI stop/restart path pins PID and start time, plus version and
 socket when reported, before sending stop on the same connection. Legacy health
 may omit version or socket, but missing PID/start time refuses. A stop receipt
@@ -795,7 +803,6 @@ and exit condition here.
 | ID | Current evidence and risk | Containment and exit evidence | Tracking |
 | --- | --- | --- | --- |
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
-| `OBS-HEX-011` | Metadata refresh directly owns Git command execution and ref filesystem watchers. Read evidence and long-lived watcher lifecycle are mixed into the use case. | Exit when `WorktreeChangeSource` owns typed Git reads, `WorktreeMetadataInvalidationSource` separately owns watched-worktree replacement and shutdown, and use cases receive neither Git runners nor filesystem paths. | Local metadata source isolation. |
 | `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only. Exit when a `DiagnosticEvidenceSource` adapter owns only local-state, recent-log, and hook-spool traversal, captures its paths, and the use case runs against a fake without absorbing persistence, providers, core, or SQLite. | Diagnostic evidence isolation. |
 
 The managed-terminal lifecycle leak formerly tracked as `OBS-HEX-001` is
@@ -821,6 +828,10 @@ never fail over to a duplicate local spawn.
 `OBS-HEX-010` is resolved: Observer consumers depend on `StationLogger` and
 `ProjectConfigWriter`, while runtime adapters alone retain JSONL records and
 configuration/home paths; static inventory and substitution tests enforce both edges.
+`OBS-HEX-011` is resolved: path-free `WorktreeChangeSource` and
+`WorktreeMetadataInvalidationSource` ports isolate local Git reads and ref-watch
+lifecycle, runtime composition selects both adapters, substitution tests replace
+both roles, and boundary diagnostics confine Git/process and filesystem mechanics.
 `OBS-HEX-013` is resolved: normal and provider-hook clients no longer unlink
 stale sockets, the child holds the persistent SQLite boot claim through ready
 commitment, and permanent Node/Bun plus production lifecycle races cover

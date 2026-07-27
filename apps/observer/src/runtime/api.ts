@@ -47,6 +47,13 @@ import {
   createFilesystemProviderIngressSpoolStore,
   providerIngressSpoolDepth,
 } from "../hooks/spool.js";
+import { createLocalGitWorktreeMetadataInvalidationSource } from "../metadata/gitRefInvalidation.js";
+import { createLocalGitWorktreeChangeSource } from "../metadata/localGitChangeSummary.js";
+import type { ResolveLocalGitMetadataWorktree } from "../metadata/localGitWorktree.js";
+import type {
+  WorktreeChangeSource,
+  WorktreeMetadataInvalidationSource,
+} from "../metadata/ports.js";
 import {
   createWorktreeMetadataRefreshService,
   type WorktreeMetadataRefreshService,
@@ -94,6 +101,8 @@ export type CreateObserverApiOptions = {
   configPath?: string;
   configDiagnostics?: ConfigDiagnostic[];
   metadataRefresh?: WorktreeMetadataRefreshService;
+  worktreeChangeSource?: WorktreeChangeSource;
+  worktreeMetadataInvalidationSource?: WorktreeMetadataInvalidationSource;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
 };
@@ -101,8 +110,8 @@ export type CreateObserverApiOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires Observer use cases, durable adapters, ingress workers, scheduling, and
- * exact build publication behind the application API.
+ * Wires Observer use cases, durable and local-metadata adapters, ingress workers,
+ * scheduling, exact build publication, and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -338,12 +347,50 @@ function buildMetadataRefresh(
   if (options.metadataRefresh !== undefined) return options.metadataRefresh;
   if (options.config === undefined) return undefined;
 
+  const resolveWorktree: ResolveLocalGitMetadataWorktree = (target) => {
+    const row = options.core
+      .getSnapshot()
+      .rows.find((candidate) => candidate.id === target.worktreeId);
+    if (
+      row === undefined ||
+      row.worktree.state !== "exists" ||
+      row.projectId !== target.projectId ||
+      row.branch !== target.branch ||
+      row.registrationIdentity !== target.registrationIdentity
+    ) {
+      return undefined;
+    }
+    const resolved = {
+      worktreeId: row.id,
+      projectId: row.projectId,
+      branch: row.branch,
+      path: row.path,
+      ...(row.registrationIdentity === undefined
+        ? {}
+        : { registrationIdentity: row.registrationIdentity }),
+    };
+    return resolved;
+  };
+  const worktreeChangeSource =
+    options.worktreeChangeSource ?? createLocalGitWorktreeChangeSource({ resolveWorktree, clock });
+  const invalidationOptions: Parameters<
+    typeof createLocalGitWorktreeMetadataInvalidationSource
+  >[0] = {
+    resolveWorktree,
+    requestReconcile: scheduler.request,
+  };
+  if (options.logger !== undefined) invalidationOptions.logger = options.logger;
+  const worktreeMetadataInvalidationSource =
+    options.worktreeMetadataInvalidationSource ??
+    createLocalGitWorktreeMetadataInvalidationSource(invalidationOptions);
+
   const metadataRefreshOptions: Parameters<typeof createWorktreeMetadataRefreshService>[0] = {
     projects: providerProjectsFromConfig(options.config),
     persistence: options.persistence,
     requestReconcile: scheduler.request,
     clock,
-    watchGitRefs: true,
+    worktreeChangeSource,
+    worktreeMetadataInvalidationSource,
   };
   if (options.logger !== undefined) {
     metadataRefreshOptions.logger = options.logger;
@@ -447,7 +494,7 @@ async function buildStop(
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
   await harnessIngressQueue.shutdown();
-  await metadataRefresh?.shutdown?.();
+  await metadataRefresh?.shutdown();
   await options.onStop?.();
   return {
     schemaVersion: STATION_SCHEMA_VERSION,

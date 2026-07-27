@@ -6,7 +6,6 @@ import type {
   WorktreePullRequest,
 } from "@station/contracts";
 import {
-  type ExternalCommandRunner,
   forEachConcurrent,
   type RuntimeClock,
   systemClock,
@@ -19,11 +18,12 @@ import type {
 } from "../persistence/index.js";
 import type { StationLogger } from "../stationLogger.js";
 import { addMs } from "../utils/time.js";
-import {
-  type CreateWorktreeGitRefInvalidationServiceOptions,
-  createWorktreeGitRefInvalidationService,
-} from "./gitRefInvalidation.js";
-import { type LocalGitWorktree, readLocalGitChangeSummary } from "./localGitChangeSummary.js";
+import type {
+  WorktreeChangeReadRequest,
+  WorktreeChangeSource,
+  WorktreeMetadataInvalidationSource,
+  WorktreeMetadataTarget,
+} from "./ports.js";
 import {
   type CreateRepositoryMetadataRefresherOptions,
   createRepositoryMetadataRefresher,
@@ -32,7 +32,7 @@ import { staleChangeSummary } from "./stalePayloads.js";
 
 export type WorktreeMetadataRefreshService = {
   refresh(snapshot: StationSnapshot): Promise<void>;
-  shutdown?(): Promise<void>;
+  shutdown(): Promise<void>;
 };
 
 export type CreateWorktreeMetadataRefreshServiceOptions = {
@@ -41,20 +41,27 @@ export type CreateWorktreeMetadataRefreshServiceOptions = {
   requestReconcile(reason: string): void;
   clock?: RuntimeClock;
   logger?: StationLogger;
-  runner?: ExternalCommandRunner;
+  worktreeChangeSource: WorktreeChangeSource;
+  worktreeMetadataInvalidationSource: WorktreeMetadataInvalidationSource;
   repositoryProviders?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
-  gitTimeoutMs?: number;
   ttlMs?: number;
   concurrency?: number;
   repositoryConcurrency?: number;
   repositoryNegativeBackoffMs?: number;
-  watchGitRefs?: boolean;
 };
 
-const defaultGitTimeoutMs = 200;
 const defaultTtlMs = 5 * 60 * 1000;
 const defaultConcurrency = 2;
 
+/**
+ * USE CASE
+ *
+ * Refreshes and persists local-change and repository metadata through
+ * purpose-owned evidence and invalidation ports.
+ *
+ * Shutdown aborts current reads before invalidation teardown and prevents late
+ * source completions from mutating metadata.
+ */
 export function createWorktreeMetadataRefreshService(
   options: CreateWorktreeMetadataRefreshServiceOptions,
 ): WorktreeMetadataRefreshService {
@@ -78,17 +85,10 @@ export function createWorktreeMetadataRefreshService(
     repositoryOptions.negativeBackoffMs = options.repositoryNegativeBackoffMs;
   }
   const repositoryRefresher = createRepositoryMetadataRefresher(repositoryOptions);
-  const gitRefInvalidationOptions: CreateWorktreeGitRefInvalidationServiceOptions = {
-    requestReconcile: options.requestReconcile,
-  };
-  if (options.logger !== undefined) gitRefInvalidationOptions.logger = options.logger;
-  const gitRefInvalidation =
-    options.watchGitRefs === true
-      ? createWorktreeGitRefInvalidationService(gitRefInvalidationOptions)
-      : undefined;
   let pendingSnapshot: StationSnapshot | undefined;
   let running: Promise<void> | undefined;
   let shutdownRequested = false;
+  let shutdownFlight: Promise<void> | undefined;
   let controller: AbortController | undefined;
 
   return {
@@ -111,11 +111,8 @@ export function createWorktreeMetadataRefreshService(
       await running;
     },
     shutdown: async () => {
-      shutdownRequested = true;
-      pendingSnapshot = undefined;
-      controller?.abort();
-      gitRefInvalidation?.shutdown();
-      await running?.catch(() => undefined);
+      shutdownFlight ??= performShutdown();
+      await shutdownFlight;
     },
   };
 
@@ -127,8 +124,23 @@ export function createWorktreeMetadataRefreshService(
     }
   }
 
+  async function performShutdown(): Promise<void> {
+    shutdownRequested = true;
+    pendingSnapshot = undefined;
+    controller?.abort();
+    try {
+      await options.worktreeMetadataInvalidationSource.shutdown();
+    } finally {
+      await running?.catch(() => undefined);
+    }
+  }
+
   async function refreshSnapshot(snapshot: StationSnapshot, signal: AbortSignal): Promise<void> {
-    gitRefInvalidation?.update(snapshot);
+    const watchedTargets = snapshot.rows
+      .filter((row) => row.worktree.state === "exists")
+      .map(worktreeMetadataTargetFromRow);
+    await options.worktreeMetadataInvalidationSource.replaceWatchedWorktrees(watchedTargets);
+    if (signal.aborted) return;
 
     const referenceTime = toIsoTimestamp(clock.now());
     const [changeRows, pullRequestRows, checksRows] = await Promise.all([
@@ -199,41 +211,43 @@ export function createWorktreeMetadataRefreshService(
     }
 
     try {
-      const worktree: LocalGitWorktree = {
-        id: input.row.id,
-        projectId: input.row.projectId,
-        path: input.row.path,
-        branch: input.row.branch,
-        state: input.row.worktree.state,
-      };
-      if (input.row.worktree.pr !== undefined) {
-        worktree.pr = input.row.worktree.pr;
-      }
-
-      const summaryInput: Parameters<typeof readLocalGitChangeSummary>[0] = {
-        project: input.project,
-        worktree,
-        timeoutMs: options.gitTimeoutMs ?? defaultGitTimeoutMs,
-        clock,
+      const request: WorktreeChangeReadRequest = {
+        target: worktreeMetadataTargetFromRow(input.row),
+        baseSelection: {},
         signal: input.signal,
       };
-      if (input.cachedPullRequest !== undefined) {
-        summaryInput.cachedPullRequest = input.cachedPullRequest;
+      const observedPullRequestBase = input.row.worktree.pr?.baseRef;
+      if (observedPullRequestBase !== undefined) {
+        request.baseSelection.observedPullRequestBase = observedPullRequestBase;
       }
-      if (options.runner !== undefined) {
-        summaryInput.runner = options.runner;
+      const cachedPullRequestBase = input.cachedPullRequest?.baseRef;
+      if (cachedPullRequestBase !== undefined) {
+        request.baseSelection.cachedPullRequestBase = cachedPullRequestBase;
       }
-      const result = await readLocalGitChangeSummary(summaryInput);
+      if (input.project.defaultBranch !== undefined) {
+        request.baseSelection.defaultBranch = input.project.defaultBranch;
+      }
+      if (input.project.worktrunk.base !== undefined) {
+        request.baseSelection.worktrunkBase = input.project.worktrunk.base;
+      }
 
-      if (result === undefined) {
-        await deleteExistingChangeSummary(input.row.id, input.existing);
-        return;
+      const result = await options.worktreeChangeSource.read(request);
+      if (input.signal.aborted || shutdownRequested) return;
+
+      switch (result.status) {
+        case "superseded":
+          return;
+        case "unavailable":
+          await deleteExistingChangeSummary(input.row.id, input.existing, input.signal);
+          return;
+        case "available":
+          break;
       }
 
       if (
         input.existing !== undefined &&
         !input.existing.expired &&
-        input.existing.cacheKey === result.cacheKey
+        input.existing.cacheKey === result.evidence.cacheKey
       ) {
         return;
       }
@@ -241,11 +255,12 @@ export function createWorktreeMetadataRefreshService(
       await options.persistence.upsertWorktreeMetadataCurrent({
         worktreeId: input.row.id,
         kind: "change_summary",
-        payload: result.summary,
-        cacheKey: result.cacheKey,
-        updatedAt: result.summary.checkedAt,
-        expiresAt: addMs(result.summary.checkedAt, options.ttlMs ?? defaultTtlMs),
+        payload: result.evidence.summary,
+        cacheKey: result.evidence.cacheKey,
+        updatedAt: result.evidence.summary.checkedAt,
+        expiresAt: addMs(result.evidence.summary.checkedAt, options.ttlMs ?? defaultTtlMs),
       });
+      if (input.signal.aborted || shutdownRequested) return;
       options.requestReconcile("metadata:change_summary");
     } catch (error) {
       if (!input.signal.aborted) {
@@ -257,15 +272,16 @@ export function createWorktreeMetadataRefreshService(
   async function deleteExistingChangeSummary(
     worktreeId: string,
     existing: PersistedWorktreeMetadataCurrent<"change_summary"> | undefined,
+    signal: AbortSignal,
   ): Promise<void> {
-    if (existing === undefined) {
+    if (existing === undefined || signal.aborted || shutdownRequested) {
       return;
     }
     const deleted = await options.persistence.deleteWorktreeMetadataCurrent({
       worktreeId,
       kind: "change_summary",
     });
-    if (deleted > 0) {
+    if (deleted > 0 && !signal.aborted && !shutdownRequested) {
       options.requestReconcile("metadata:change_summary");
     }
   }
@@ -273,10 +289,12 @@ export function createWorktreeMetadataRefreshService(
   async function handleLocalRefreshFailure(
     input: {
       row: StationSnapshot["rows"][number];
+      signal: AbortSignal;
       existing?: PersistedWorktreeMetadataCurrent<"change_summary">;
     },
     error: unknown,
   ): Promise<void> {
+    if (input.signal.aborted || shutdownRequested) return;
     const safeError = toSafeError(
       error,
       {
@@ -314,8 +332,11 @@ export function createWorktreeMetadataRefreshService(
       if (input.existing.cacheKey !== undefined) {
         upsertInput.cacheKey = input.existing.cacheKey;
       }
+      if (input.signal.aborted || shutdownRequested) return;
       await options.persistence.upsertWorktreeMetadataCurrent(upsertInput);
-      options.requestReconcile("metadata:change_summary");
+      if (!input.signal.aborted && !shutdownRequested) {
+        options.requestReconcile("metadata:change_summary");
+      }
       return;
     }
 
@@ -325,6 +346,20 @@ export function createWorktreeMetadataRefreshService(
       error: safeError,
     });
   }
+}
+
+function worktreeMetadataTargetFromRow(
+  row: StationSnapshot["rows"][number],
+): WorktreeMetadataTarget {
+  const target: WorktreeMetadataTarget = {
+    worktreeId: row.id,
+    projectId: row.projectId,
+    branch: row.branch,
+  };
+  if (row.registrationIdentity !== undefined) {
+    target.registrationIdentity = row.registrationIdentity;
+  }
+  return target;
 }
 
 function shouldBackOffFailedRefresh(
