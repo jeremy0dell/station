@@ -1,14 +1,13 @@
 // Installs/uninstalls the STATION hook into Codex's hook config.
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
-import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
 import {
   commandLine,
   createHookSetupFileOps,
   expectedProviderHookScript,
   hookCommandsForEvents,
   installConfigScriptHook,
-  type ProviderHookArtifactOwnership,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
   providerHookScriptOptions,

@@ -1,6 +1,5 @@
 import {
   actionNeedsYes,
-  capitalize,
   hookCommandExitCode,
   loadedConfigCommandOptions,
 } from "../cliCommand/helpers.js";
@@ -52,7 +51,7 @@ async function runWorktrunkHooksCliCommand(context: CliCommandRunContext) {
 function worktrunkHookActionCommand(action: string): CliCommandNode {
   return {
     name: action,
-    description: `${capitalize(action)} Worktrunk lifecycle hooks.`,
+    description: `Worktrunk lifecycle hooks: ${action}.`,
     usage: [`stn worktrunk hooks ${action}${actionNeedsYes(action) ? " --yes" : ""} [options]`],
     options: [
       { name: "--yes, -y", description: "Required for install and uninstall actions." },

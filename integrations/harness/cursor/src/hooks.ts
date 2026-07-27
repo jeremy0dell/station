@@ -1,7 +1,7 @@
 // Installs/uninstalls the STATION hook into Cursor's .cursor/hooks.json.
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
-import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
 import {
   assertProviderHookArtifactOwnership,
   assignBackupPaths,
@@ -10,7 +10,6 @@ import {
   expectedProviderHookScript,
   hookCommandsForEvents,
   installConfigScriptHook,
-  type ProviderHookArtifactOwnership,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
   providerHookScriptLauncher,

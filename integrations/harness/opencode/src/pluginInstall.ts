@@ -1,11 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
-  type ProviderHookArtifactOwnership,
   providerHookOwnerMarker,
 } from "@station/runtime";
 import { openCodeForwardedEventTypes } from "./ingressRules.js";

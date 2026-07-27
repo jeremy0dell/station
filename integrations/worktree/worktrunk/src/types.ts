@@ -1,9 +1,5 @@
-import type { ProviderHookArtifactOwner } from "@station/contracts";
-import type {
-  ExternalCommandRunner,
-  ProviderHookArtifactOwnership,
-  RuntimeClock,
-} from "@station/runtime";
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
+import type { ExternalCommandRunner, RuntimeClock } from "@station/runtime";
 
 export const WORKTRUNK_HOOK_NAMES = [
   "post-create",

@@ -1,14 +1,13 @@
 // Installs/uninstalls the STATION hook into Claude Code's settings.json hooks.
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
-import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
 import {
   assertProviderHookArtifactOwnership,
   classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
   expectedProviderHookScript,
   installConfigScriptHook,
-  type ProviderHookArtifactOwnership,
   type ProviderHookScriptOptions,
   providerHookScriptLauncher,
   providerHookScriptOptions,

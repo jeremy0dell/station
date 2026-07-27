@@ -6,6 +6,7 @@ import {
   type ProviderHookArtifactOwner,
   ProviderHookArtifactOwnerSchema,
   type ProviderHookArtifactOwnership,
+  type ProviderId,
 } from "@station/contracts";
 import type { StationBuildInfo } from "./buildInfo.js";
 import {
@@ -43,31 +44,41 @@ export type ProviderHookScriptOptions = {
 
 export const PROVIDER_HOOK_OWNER_MARKER = "station-provider-artifact-owner:v1:";
 
-export type { ProviderHookArtifactOwnership };
-
 export class ProviderHookArtifactOwnershipError extends Error {
+  readonly tag = "ProviderHookArtifactOwnershipError";
   readonly code = "PROVIDER_HOOK_OWNERSHIP_CONFLICT";
+  readonly provider: ProviderId;
+  readonly hint: string;
   readonly ownership: ProviderHookArtifactOwnership;
 
   constructor(input: {
-    provider: string;
+    provider: ProviderId;
     action: "install" | "uninstall";
     artifactPath: string;
-    ownership: ProviderHookArtifactOwnership;
+    ownership: Extract<
+      ProviderHookArtifactOwnership,
+      { status: "different-owner" | "legacy-unknown" }
+    >;
   }) {
-    const current =
-      "currentLauncher" in input.ownership
-        ? ` It currently belongs to ${input.ownership.currentLauncher}; the requested owner is ${input.ownership.requested.launcher}.`
-        : " Its existing Station ownership cannot be determined safely.";
+    const requested = input.ownership.requested;
+    const requestedOwner = `${requested.runtimeKind} ${requested.version} build ${requested.buildIdentity} via ${requested.launcher}`;
+    const currentOwner =
+      input.ownership.status === "legacy-unknown"
+        ? "unknown because the existing ownership marker is missing or invalid"
+        : input.ownership.current === undefined
+          ? `legacy artifact invoking ${input.ownership.currentLauncher}`
+          : `${input.ownership.current.runtimeKind} ${input.ownership.current.version} build ${input.ownership.current.buildIdentity} via ${input.ownership.current.launcher}`;
     const takeover = `stn hooks ${input.action} ${input.provider} --yes --takeover`;
     const repair =
-      "currentLauncher" in input.ownership
+      input.ownership.status === "different-owner"
         ? ` To perform this action as the current owner, run ${shellQuote(resolve(dirname(input.ownership.currentLauncher), "stn"))} hooks ${input.action} ${input.provider} --yes.`
         : "";
     super(
-      `Refusing to ${input.action} ${input.provider} hooks because ${input.artifactPath} is a shared Station artifact with a different or unknown owner.${current} Re-run ${takeover} only to transfer ownership.${repair}`,
+      `Refusing to ${input.action} ${input.provider} hooks because ${input.artifactPath} belongs to another Station runtime. Current owner: ${currentOwner}. Requested owner: ${requestedOwner}.`,
     );
-    this.name = "ProviderHookArtifactOwnershipError";
+    this.name = this.tag;
+    this.provider = input.provider;
+    this.hint = `Run ${takeover} only to transfer ownership.${repair}`;
     this.ownership = input.ownership;
   }
 }
@@ -146,7 +157,7 @@ export function classifyProviderHookArtifactOwnership(input: {
 }
 
 export function assertProviderHookArtifactOwnership(input: {
-  provider: string;
+  provider: ProviderId;
   action: "install" | "uninstall";
   artifactPath: string;
   contents: string;

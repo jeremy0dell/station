@@ -11,6 +11,7 @@ import {
   type HookSetupErrorFactory,
   hookCommandsForEvents,
   installConfigScriptHook,
+  isSafeError,
   PROVIDER_HOOK_OWNER_MARKER,
   planConfigScriptHook,
   providerHookArtifactOwner,
@@ -247,7 +248,11 @@ describe("runtime hookSetup", () => {
           contents: `# ${providerHookOwnerMarker(current)}\n`,
           requested,
         }),
-      ).toThrow(/--yes --takeover/u);
+      ).toThrowError(
+        expect.objectContaining({
+          hint: expect.stringContaining("stn hooks install codex --yes --takeover"),
+        }),
+      );
     });
 
     it("allows version and build upgrades at the same launcher", () => {
@@ -405,24 +410,29 @@ describe("runtime hookSetup", () => {
         }),
       );
 
-      await expect(
-        installConfigScriptHook({
-          configPath,
-          hookScriptPath: scriptPath,
-          after: plan.after,
-          expectedScript,
-          configChanged: plan.configChanged,
-          scriptChanged: plan.scriptChanged,
-          fileOps: ops,
-          provider: "codex",
-          artifactOwner: requested,
-        }),
-      ).rejects.toMatchObject({
+      const refusal = installConfigScriptHook({
+        configPath,
+        hookScriptPath: scriptPath,
+        after: plan.after,
+        expectedScript,
+        configChanged: plan.configChanged,
+        scriptChanged: plan.scriptChanged,
+        fileOps: ops,
+        provider: "codex",
+        artifactOwner: requested,
+      });
+      await expect(refusal).rejects.toMatchObject({
+        tag: "ProviderHookArtifactOwnershipError",
         code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+        provider: "codex",
         message: expect.stringContaining(
+          `Current owner: compiled 0.7.1 build ${BUILD_B} via /installed/bin/stn-ingress.`,
+        ),
+        hint: expect.stringContaining(
           "To perform this action as the current owner, run /installed/bin/stn hooks install codex --yes.",
         ),
       });
+      await expect(refusal.catch((error: unknown) => isSafeError(error))).resolves.toBe(true);
       await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
       await expect(readFile(scriptPath, "utf8")).resolves.toContain(
         providerHookOwnerMarker(current),

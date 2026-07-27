@@ -239,7 +239,7 @@ describe("CLI Codex hook commands", () => {
       }),
     ).rejects.toMatchObject({
       code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
-      message: expect.stringContaining("stn hooks install codex --yes --takeover"),
+      hint: expect.stringContaining("stn hooks install codex --yes --takeover"),
     });
     await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(installedScript);
 
