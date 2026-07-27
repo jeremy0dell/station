@@ -27,9 +27,6 @@ import {
 
 export type {
   ConfigDiagnostic,
-  ConfigDiagnosticCode,
-  ConfigErrorCode,
-  ConfigErrorOptions,
   LoadConfigFromTomlOptions,
   LoadConfigOptions,
   LoadedStationConfig,

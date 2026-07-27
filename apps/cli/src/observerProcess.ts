@@ -24,14 +24,12 @@ import type {
 } from "./observerProcess/types.js";
 import { type ObserverPaths, resolveObserverPaths } from "./paths.js";
 
-export { waitForObserverHealth } from "./observerProcess/health.js";
 // Commands intentionally keep one stable lifecycle import while implementation lives in observerProcess/.
 export type {
   ChildProcessLike,
   ObserverProcessDeps,
   ObserverProcessOptions,
   ObserverStatus,
-  SpawnObserverInput,
 } from "./observerProcess/types.js";
 
 /**

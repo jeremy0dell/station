@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { waitFor } from "../testing/waitFor.js";
-import { buildVisibleRows } from "./rows.js";
 import { createStationVtScreen } from "./screen.js";
 
 describe("vt screen throughput", () => {

@@ -62,8 +62,6 @@ export const OpenCodeNativeEventPropertiesSchema = z
   })
   .catchall(z.unknown());
 
-export type OpenCodeNativeEventProperties = z.infer<typeof OpenCodeNativeEventPropertiesSchema>;
-
 export const OpenCodeNativeEventSchema = z
   .object({
     id: nonEmptyStringSchema.optional(),
@@ -109,32 +107,3 @@ export const OpenCodeCompactEventSchema = z
   .strict();
 
 export type OpenCodeCompactEvent = z.infer<typeof OpenCodeCompactEventSchema>;
-
-export const openCodeCompactFieldNames = [
-  "event_type",
-  "observed_at",
-  "event_id",
-  "cwd",
-  "pid",
-  "opencode_session_id",
-  "status_type",
-  "permission_reply",
-  "question_reply",
-  "request_id",
-  "message_id",
-  "part_id",
-  "tool_call_id",
-  "tool_name",
-  "command_name",
-  "file_path",
-  "error_name",
-  "property_keys",
-  "station_project_id",
-  "station_worktree_id",
-  "station_worktree_path",
-  "station_session_id",
-  "station_terminal_provider",
-  "station_terminal_target_id",
-  "station_integration_id",
-  "station_integration_version",
-] as const;

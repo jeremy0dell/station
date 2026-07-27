@@ -147,27 +147,32 @@ diagnostics tests, the scripted-agent lane, setup and Observer lifecycle E2E
 coverage, and a production Observer SQLite restart smoke. It intentionally
 excludes real provider lanes.
 
-After root `pnpm install`, Lefthook runs the broader local gate before pushes:
+After root `pnpm install`, Lefthook runs lint before commits and pushes:
 
 ```bash
 pnpm test:pre-push
 ```
 
-In addition to `test:all`, it checks cross-runtime SQLite compatibility, the
-Station renderer, the native PTY implementation, and the compiled binary on
-the developer's current platform. Install both the root pnpm dependencies and
-the `station/` Bun dependencies before pushing.
+The pre-push hook is intentionally lint-only so pushing does not repeat the hosted deterministic
+gate. Use `pnpm test:all` or the focused commands below when local behavior needs validation.
+Install the `station/` Bun dependencies only for Station renderer, PTY, or compiled-binary work.
 
-Ready, non-draft pull requests run `pnpm test:pre-push` once on
-`ubuntu-24.04`; release tags call that same full gate before adding the four
-native build and draft-install targets. Both that gate and `smoke:release` must
-pass before any native release build starts.
-Draft pull request activity allocates no
-runner, including synchronization before `ready_for_review`.
-Pushes to `main` run only build, typecheck, and lint as a cheap post-merge
-smoke. The repository ruleset must require the pull-request `standard-ci` check
-and block direct `main` pushes; the cheap smoke is a post-merge backstop, not a
-substitute for the full required gate.
+Ready, non-draft pull requests fan out static validation, root tests, setup E2E, Observer E2E,
+cross-runtime SQLite, Station renderer and PTY tests, and selected installer and binary smokes on
+independent `ubuntu-24.04` jobs. Documentation-only changes run lint and diagnostics policy tests.
+Installer smoke runs when installer, release, dependency, or CI infrastructure changes; binary
+smoke runs when production, binary, dependency, or CI infrastructure changes. Observer-sensitive
+changes use the exhaustive claim-race counts, while setup- and Worktrunk-sensitive changes retain
+both bash and zsh process-level setup coverage. One aggregate job named `standard-ci` preserves the
+repository ruleset contract and fails if a mandatory or path-selected lane is unexpectedly skipped.
+
+Release tags select every lane, use the exhaustive claim-race counts and both setup shell paths, and
+call that parallel gate before adding the four native build and draft-install targets. Both `standard-ci` and
+`smoke:release` must pass before any native release build starts. Draft pull request activity
+allocates no runner, including synchronization before `ready_for_review`. Pushes to `main`
+run only build, typecheck, and lint as a cheap post-merge smoke. The repository ruleset must
+require the pull-request `standard-ci` check and block direct `main` pushes; the cheap smoke is a
+post-merge backstop, not a substitute for the full required gate.
 
 Useful focused commands:
 
@@ -179,6 +184,7 @@ pnpm test:unit
 pnpm test:contracts
 pnpm test:integration
 pnpm test:e2e:observer
+pnpm test:e2e:setup:guided:all-shells
 pnpm test:observer-claim:cross-runtime
 pnpm test:sqlite:bun
 pnpm test:diagnostics
@@ -187,12 +193,30 @@ pnpm smoke:release
 pnpm smoke:install
 ```
 
+Dead-code audits are repository-owned and cover both the pnpm monorepo and the separate
+`station/` Bun workspace:
+
+```bash
+pnpm deadcode                 # all source, tests, exports, and development dependencies
+pnpm deadcode:production      # code and dependencies reachable from shipped entrypoints
+```
+
+The full audit should pass cleanly. The production audit excludes test and development consumers,
+so it may list deliberate test-support exports alongside product-only cleanup candidates.
+`knip.jsonc` records executable files that are reached through package scripts, subprocess path
+strings, binary packaging, or Bun test discovery. TypeScript also rejects unused locals and
+parameters in both the root packages and Station workspace. Treat Knip findings as candidates:
+confirm dynamic and external entrypoints before removal, and do not use Knip's automatic file
+removal. Neither command is part of `test:all`; run the relevant focused tests and deterministic
+gates after each reviewed cleanup slice.
+
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
-authenticated GitHub responses and temporary homes, including startup-file
+public `curl` downloads and authenticated draft responses in temporary homes,
+including startup-file
 non-interaction, safely evaluated minimal-PATH guidance, physical launcher
 resolution, and normalized-colon preflight coverage. It is deterministic, does
 not download a real release, and does not read or modify real shell startup
-files. The single Ubuntu CI gate runs it once. On a heavily contended local host, run
+files. The path-selected installer CI job runs it once. On a heavily contended local host, run
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
@@ -201,12 +225,14 @@ targets, then installs each actual draft asset with real platform utilities.
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under
 the other runtime to verify the shared SQLite contract and migrations. It also
-runs the permanent boot-claim race: 50 alternating Node/Bun two-process rounds,
-three-contender rounds, and killed-owner recovery with stable inode and
-`integrity_check=ok`. That runner also checks Node/Bun inaccessible and stale
-classification plus displaced-listener abandonment; the claim gate makes no
-fairness claim. Both the local pre-push
-gate and the hosted `standard-ci` job run these checks.
+runs the exhaustive boot-claim stress: 50 alternating Node/Bun two-process rounds,
+10 three-contender rounds, and killed-owner recovery with stable inode and
+`integrity_check=ok`. Pull-request CI uses `pnpm test:sqlite:bun:pr` for five two-process and two
+three-contender rounds; Observer-sensitive pull requests and release tags retain the exhaustive
+counts. The scheduled `nightly-observer-claim` workflow runs the same exhaustive command against
+`main` each day so a low-frequency race cannot remain latent until a release. Both commands also
+check Node/Bun inaccessible and stale classification plus displaced-listener abandonment; the
+claim gate makes no fairness claim.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
@@ -235,7 +261,8 @@ bun run test:pty:bun             # Bun.Terminal + controlling-terminal helper
 Both PTY lanes include the pinned Pi 0.80.10 capability detector in real local
 and Station Host-backed child processes. They prove equivalent Station-owned
 capabilities while requiring persistent Host spawns to fail closed on tmux
-provenance. Both lanes are part of `test:pre-push`.
+provenance. Both lanes are part of hosted `standard-ci` and remain available as focused local
+commands.
 
 To daily-drive the Bun implementation in the isolated devbox, return to the
 repo root and start a fresh host with the selector in its environment:
@@ -304,7 +331,7 @@ must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
 
-## Private Binary Release
+## Experimental Pre-Alpha Release
 
 Before tagging, an administrator must enable GitHub immutable releases; the
 workflow token cannot read that administration setting. The workflow validates
@@ -314,45 +341,71 @@ and have no existing GitHub release. Pushing a `v*` tag runs the callable
 standard CI workflow, `pnpm smoke:release`, native binary build and smoke jobs
 for all four supported targets, archive/checksum assembly, and an authenticated
 installer smoke against the resulting GitHub release draft. The four native
-release builds use one archive-packaging helper, and the draft-install jobs
-consume those exact uploaded archives. Draft acceptance revalidates the tag but
-fetches `scripts/install.sh` by the validated commit SHA, then passes the tag
-with `--version`; a moved tag cannot substitute different installer code. After
-all four native installs pass, the workflow re-downloads the five draft assets,
+release builds use one archive-packaging helper. Assembly stamps the validated
+tag into the existing `embedded_version=""` marker and publishes that
+`install.sh` beside the archives. Draft-install jobs download and run the actual
+stamped draft asset with the captured numeric release ID and no version
+argument. After all four native installs pass, the workflow re-downloads the
+six draft assets,
 verifies them against the build checksum, and uploads an immutable
 `accepted-release-candidate-*` Actions artifact containing the commit, release
 ID, asset IDs, and checksums. Draft install and candidate-recording jobs use
 contents write permission because GitHub exposes draft releases only to
 identities with push access, but their steps only read release metadata and
 assets. Only draft creation and manual promotion mutate releases. The tag
-workflow never publishes the draft automatically.
+workflow never publishes the draft automatically. Promotion publishes the
+accepted draft, then four native jobs download the exact-tag public installer
+without GitHub credentials or a `gh` executable and run it end to end.
 
-The current immutable binary candidate is `v0.7.1-rc.6`. `v0.7.1-rc.5` is the
-prior published binary, and `v0.7.1-rc.2`, `v0.7.1-rc.3`, and `v0.7.1-rc.4`
-remain older published rollbacks; the earlier `v0.7.0` and `v0.7.1-rc.1`
-candidates remained unpublished:
+### Launcher PATH release acceptance
+
+For every release candidate, retain the complete installer output and
+distinguish two successful setup lanes. Running setup through the absolute
+installed fallback while its directory is absent from `PATH` must exit
+successfully and preserve the all-three launcher warning, exact installed
+paths, a safely quoted current-shell PATH block, optional PATH-not-alias
+convenience guidance with all-three `command -v` checks, and absolute doctor and
+launch commands. That mismatch output must not recommend executing bare `stn`
+commands. Running the installer's current-shell block first must make setup's
+final current-process probe clean and keep completion concise.
+
+Neither lane proves future-login behavior. Setup must not emit a future-shell
+export or modify a startup file. Copy the installer's future-shell export into
+a user-chosen configuration, open a genuinely new login shell, and physically
+verify all three aliases with `test ... -ef` before accepting the release.
+Repeat the mismatch lane with one shadowed alias and an install directory
+containing spaces and apostrophes. Source-checkout acceptance separately
+requires the preserved `pnpm --dir <checkout> station:link` command when
+linking is declined.
+
+The public candidate is experimental pre-alpha `v0.0.0-pre-alpha.4`. The old
+`v0.7.1-rc.*` releases were internal previews, not predecessors in the public
+version line. `v0.7.1-rc.8` is retained as the installed-version fixture that
+proves the intentional version-number reset:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.7.1-rc.6`, then create and
-   push `v0.7.1-rc.6`.
+   with `package.json` and runtime reporting at `0.0.0-pre-alpha.4`, then create
+   and push `v0.0.0-pre-alpha.4`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.7.1-rc.6-attempt-*` artifact.
+   `accepted-release-candidate-0.0.0-pre-alpha.4-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
-4. Install `v0.7.1-rc.5`, upgrade to the accepted candidate, explicitly
-   reinstall `v0.7.1-rc.5`, then reinstall the candidate. Confirm the complete
+4. Install `v0.7.1-rc.8`, upgrade to the accepted candidate, and confirm the
+   lower public version number does not block replacement. Confirm the complete
    version and all three launchers after every transition.
 5. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.7.1-rc.6`, and the manual-acceptance confirmation. It rechecks the
+   `v0.0.0-pre-alpha.4`, and the manual-acceptance confirmation. It rechecks the
    successful run SHA, immutable candidate manifest, tag commit, release ID,
-   asset IDs, and all archive hashes immediately before publishing that exact
-   draft.
+   asset IDs, the stamped installer, and all hashes immediately before
+   publishing that exact draft. Its four public-install jobs must then pass.
+6. Mark the historical assetless `v0.1.0` release as a prerelease before the
+   announcement so the repository does not present a stable channel. Leave the
+   Homebrew tap untouched; Homebrew is not currently supported.
 
 Published tags and assets are immutable. Once two binary releases exist,
 recovery may explicitly reinstall the prior version, but the release line moves
 forward with a superseding patch; it never deletes, retags, or overwrites a
-published release. The source Homebrew formula is a separate manually
-dispatched workflow and is not part of this binary release gate.
+published release.
 
 If a transient workflow failure leaves an unpublished draft, delete only that
 draft and rerun the unchanged tag workflow. If the source needs a fix, leave
@@ -363,7 +416,7 @@ Installer acceptance uses both `<install-dir>/.station-install.lock` and
 `<data-home>/station/.station-install.lock`. Their sole corresponding
 `<install-dir>/.station-install.lock/owner-*` and
 `<data-home>/station/.station-install.lock/owner-*` files record the PID,
-requested tag or `latest`, and the token embedded in each filename. The command
+requested tag and the token embedded in each filename. The command
 lock is acquired first and the license lock second, with the duplicate path
 skipped, and they are released in reverse order. Cleanup removes only its
 token-specific owner file and revalidates the directory inode so it cannot
@@ -371,7 +424,7 @@ remove a replacement owner's lock. Either refusal must name the lock and
 readable owner PID, state that the existing
 Station installation was unchanged, and tell the user to wait and retry; a
 license-lock refusal also releases the command lock without making a release
-API request. The installer never auto-removes an uncertain lock. Only after
+request. The installer never auto-removes an uncertain lock. Only after
 confirming that no installer with the recorded PID is alive may an operator
 remove the affected lock directory manually and retry.
 
@@ -379,8 +432,9 @@ The staged binary's `--version` probe must finish within 10 seconds. Its
 watchdog returns 124 for timeout and 125 for timer failure, bounds output at the
 filesystem level, TERM/KILLs and reaps the probe, removes common GitHub and
 Actions token variables from the child environment, and shows at most 4096
-sanitized bytes of compatibility stderr. Every potentially blocking `gh`
-operation is a tracked file-backed child; HUP, INT, and TERM forward to that
+sanitized bytes of compatibility stderr. Every potentially blocking public
+`curl` or draft-only `gh` operation is a tracked file-backed child; HUP, INT,
+and TERM forward to that
 child, use the same TERM/KILL/reap cleanup, and exit 129, 130, and 143.
 
 The verified `stn` rename is the sole runtime commit point. Immediately before
@@ -465,7 +519,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.7.1-rc.6
+  tag=v0.0.0-pre-alpha.4
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -494,7 +548,9 @@ promotion will verify:
     --name "accepted-release-candidate-$version-attempt-$run_attempt" \
     --dir "$candidate_dir"
   manifest="$candidate_dir/manifest.json"
+  asset_ids="$candidate_dir/asset-ids.txt"
   test -f "$manifest"
+  test -f "$asset_ids"
   manifest_field() {
     node -e '
       const { readFileSync } = require("node:fs");
@@ -518,13 +574,16 @@ promotion will verify:
     ''|*[!0-9]*) echo "candidate release ID must be numeric" >&2; exit 1 ;;
   esac
   test "$(gh api "repos/jeremy0dell/station/commits/$tag" --jq '.sha')" = "$commit"
-  gh api --method GET \
-    -H 'Accept: application/vnd.github.raw+json' \
-    -f ref="$commit" \
-    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
+  installer_asset_id="$(awk -F= '$1 == "install.sh" { print $2 }' "$asset_ids")"
+  case "$installer_asset_id" in
+    ''|*[!0-9]*) echo "candidate installer asset ID must be numeric" >&2; exit 1 ;;
+  esac
+  gh api -H 'Accept: application/octet-stream' \
+    "repos/jeremy0dell/station/releases/assets/$installer_asset_id" > "$installer"
   test -s "$installer"
   sh -n "$installer"
-  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer" --version "$tag"
+  grep -Fx "embedded_version=\"$tag\"" "$installer"
+  STATION_INSTALL_RELEASE_ID="$release_id" sh "$installer"
 )
 ```
 
@@ -536,10 +595,12 @@ and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
 guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
-more authenticated agents, and enable the desired provider hooks and tmux binding.
-Confirm the first selection becomes the default while every selection receives
-its own harness block and every hook-capable selection receives its own prompt
-when setup can safely persist or reuse that hook intent.
+more authenticated agents, consent to required Station tracking artifacts, and
+optionally install the tmux binding. Confirm the first selection becomes the
+default only for a new config, every explicit selection receives its own harness
+block, and each unprepared artifact-backed selection receives a required consent
+prompt before config or provider mutation. Verify final output says Prepared,
+not runtime Ready; for Codex it must also name possible `/hooks` review.
 Confirm setup writes a zero-project config without adopting the disposable
 repository, then run:
 
@@ -569,10 +630,20 @@ verified those launchers after installation. An agent must use the absolute
 installed `stn` path for continuation and report future-shell PATH as unverified
 until this new-shell check passes; its own `command -v` result is not user-shell
 evidence.
+Repeat isolated first-run acceptance for Claude, Codex, Cursor, and OpenCode,
+using separate provider homes and verifying missing, current, drifted, and probe-
+failure artifacts. Each current artifact must permit the first managed launch;
+each missing or drifted artifact must block setup and new launch. Run a Pi-only
+lane to prove no external hook artifact is required. In a multiple-CLI lane,
+check/plan must report selection required and dry-run/apply must perform zero
+writes. For Codex, verify setup does not mutate trust or `[features] hooks`, the
+Prepared output names `/hooks` review, and approving the current definition can
+produce a Station event.
+
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 
-For each target, install through the authenticated script into a clean home and
+For each target, install through the authenticated stamped draft asset into a clean home and
 manually verify the actual user experience, not a dashboard override:
 
 1. Install into a clean default `HOME` with `XDG_DATA_HOME` unset and an install
@@ -586,7 +657,7 @@ manually verify the actual user experience, not a dashboard override:
    Confirm two installs leave every startup file, inode, mode, symlink, and
    target unchanged. Copy the printed export manually into the file you choose,
    open a new login shell, and physically verify all three launchers. Also
-   confirm a normalized install path containing `:` fails before any GitHub
+   confirm a normalized install path containing `:` fails before any release
    request or installer-created path. With all three launchers already resolving
    physically to the install directory, confirm the short `Next: run stn setup`
    success message.
@@ -595,7 +666,11 @@ manually verify the actual user experience, not a dashboard override:
    and connects to a healthy Observer.
 4. Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 5. Run `stn setup` from `HOME` or Desktop. Confirm it creates a zero-project
-   config without adopting that directory, then verify both
+   config without adopting that directory. In a lane with no agent CLI, select
+   all offered agents and confirm no installer starts an agent, begins sign-in,
+   or edits a shell startup file. Make one installer fail and confirm later
+   selections still run; setup must continue when any selected CLI re-probes as
+   runnable and must name every unavailable selection. Then verify both
    `stn hooks doctor worktrunk` and the `worktrunk-hooks` row in full
    `stn doctor` are `ok` without `--hook-bin`. In the open TUI, press `Enter` on
    **Add your first project**, choose a Git repository, and confirm the TUI
@@ -613,11 +688,12 @@ manually verify the actual user experience, not a dashboard override:
    live hosted PTY and confirm `HOST_UPGRADE_BLOCKED` preserves its terminal and
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
-   B, repeatedly reinstall the draft. Terminal A may print only `0.7.1-rc.6`:
+   B, repeatedly reinstall the draft. Terminal A may print only
+   `0.0.0-pre-alpha.4`:
    never command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat the same checks while alternating the draft
-   with published `v0.7.1-rc.5` in both directions.
+   with published internal preview `v0.7.1-rc.8` in both directions.
 10. In an isolated home, test abandoned locks separately at
     `<install-dir>/.station-install.lock` and
     `<data-home>/station/.station-install.lock` with representative owner
@@ -633,9 +709,10 @@ manually verify the actual user experience, not a dashboard override:
     replacing any asset.
 
 Record the oldest supported macOS version or built-against glibc version in the
-release notes. Signing and notarization are not part of the initial private
-binary release; integrity is the authenticated GitHub asset plus `SHA256SUMS`
-verification and immutable publication.
+release notes. The current documented floors are macOS 13 and glibc 2.39.
+Signing and notarization are not part of the initial public pre-alpha; integrity
+is the exact-tag GitHub asset plus `SHA256SUMS` verification and immutable
+publication.
 
 For CI install parity, use:
 

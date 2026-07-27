@@ -14,8 +14,6 @@ import { nonEmptyStringSchema } from "./shared.js";
 import { SessionViewSchema, WorktreeAgentSchema, WorktreeRowSchema } from "./snapshot.js";
 
 export const WorktreeAgentStateChangeSourceSchema = z.enum(["harness_event_report", "reconcile"]);
-export type WorktreeAgentStateChangeSource = z.infer<typeof WorktreeAgentStateChangeSourceSchema>;
-
 export const StationEventTypeSchema = z.enum([
   "observer.started",
   "observer.reconciled",
@@ -36,8 +34,6 @@ export const StationEventTypeSchema = z.enum([
   "harness.eventReported",
   "providerHook.spoolDrained",
 ]);
-
-export type StationEventType = z.infer<typeof StationEventTypeSchema>;
 
 const DiagnosticEventFields = {
   traceId: nonEmptyStringSchema.optional(),

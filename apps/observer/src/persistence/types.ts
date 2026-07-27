@@ -99,9 +99,6 @@ export type WorktreeMetadataCurrentPayloadByKind = {
   checks: WorktreeChecksSummary;
 };
 
-export type WorktreeMetadataCurrentPayload =
-  WorktreeMetadataCurrentPayloadByKind[WorktreeMetadataCurrentKind];
-
 type PersistedProviderObservationFields = {
   id: string;
   provider: ProviderId;
@@ -120,6 +117,8 @@ type RecordProviderObservationFields = {
   entityKey: string;
   observedAt?: string;
   expiresAt?: string | undefined;
+  /** Refresh the latest row when only top-level observation timestamps or latency changed. */
+  coalesceUnchanged?: boolean;
 };
 
 export type RecordProviderObservationInput = RecordProviderObservationFields & ProviderObservation;

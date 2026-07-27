@@ -2,12 +2,9 @@ import {
   createEditableTextInputState,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
-import { normalizedFilter, pastedPathCandidate, searchQueryForFilter } from "./input.js";
-import { addProjectRows } from "./rows.js";
+import { normalizedFilter, searchQueryForFilter } from "./input.js";
 import {
   chooseStateForLoadedFolder,
-  clampChooseSelection,
-  clampIndex,
   commitEditedProjectId,
   createAddProjectStartState,
   failedStateForError,
@@ -33,19 +30,14 @@ export function transitionAddProjectFlow(
   parentPath?: (path: string) => string,
 ): AddProjectTransition {
   switch (action.type) {
-    case "move":
-      return { state: moveSelection(state, action.delta) };
-    case "select":
-      return { state: selectIndex(state, action.index) };
-    case "startOpen": {
-      if (state.mode !== "start") return { state };
-      const choice = state.choices[state.selectedIndex];
-      return choice === undefined
-        ? { state }
-        : { state, effects: [{ type: "loadDirectory", path: choice.path }] };
-    }
+    case "startOpen":
+      return state.mode === "start"
+        ? { state, effects: [{ type: "loadDirectory", path: action.path }] }
+        : { state };
     case "chooseOpen":
-      return chooseOpen(state);
+      return state.mode === "choose"
+        ? { state, effects: [{ type: "loadDirectory", path: action.path }] }
+        : { state };
     case "chooseParent":
       return state.mode === "choose"
         ? {
@@ -56,7 +48,9 @@ export function transitionAddProjectFlow(
           }
         : { state };
     case "chooseSelected":
-      return chooseSelected(state);
+      return state.mode === "choose"
+        ? { state, effects: [{ type: "reviewFolder", path: action.path }] }
+        : { state };
     case "folderLoaded":
       return {
         state: chooseStateForLoadedFolder(state, action.result.path, action.result.entries),
@@ -68,14 +62,12 @@ export function transitionAddProjectFlow(
     case "folderSearchLoaded":
       return state.mode === "choose" && action.result.query === normalizedFilter(state.filter)
         ? {
-            state: clampChooseSelection(
-              withoutSearchError({
-                ...state,
-                searchEntries: action.result.entries,
-                searching: false,
-                searchTruncated: action.result.truncated,
-              }),
-            ),
+            state: withoutSearchError({
+              ...state,
+              searchEntries: action.result.entries,
+              searching: false,
+              searchTruncated: action.result.truncated,
+            }),
           }
         : { state };
     case "folderSearchFailed":
@@ -107,7 +99,6 @@ export function transitionAddProjectFlow(
               ...state,
               filter: "",
               filterMode: false,
-              selectedIndex: 0,
               searchEntries: [],
               searching: false,
               searchTruncated: false,
@@ -150,31 +141,6 @@ export function transitionAddProjectFlow(
   }
 }
 
-function chooseOpen(state: AddProjectFlowState): AddProjectTransition {
-  if (state.mode !== "choose") return { state };
-  const row = addProjectRows(state)[state.selectedIndex];
-  if (row === undefined || row.kind === "current") return { state };
-  return { state, effects: [{ type: "loadDirectory", path: row.path }] };
-}
-
-function chooseSelected(state: AddProjectFlowState): AddProjectTransition {
-  if (state.mode === "start") {
-    const choice = state.choices[state.selectedIndex];
-    return choice === undefined
-      ? { state }
-      : { state, effects: [{ type: "loadDirectory", path: choice.path }] };
-  }
-  if (state.mode !== "choose") return { state };
-  const row = addProjectRows(state)[state.selectedIndex];
-  if (row !== undefined) {
-    return { state, effects: [{ type: "reviewFolder", path: row.path }] };
-  }
-  const pastedPath = pastedPathCandidate(state.filter);
-  return pastedPath === undefined
-    ? { state }
-    : { state, effects: [{ type: "reviewFolder", path: pastedPath }] };
-}
-
 function submitReview(state: AddProjectFlowState): AddProjectTransition {
   if (state.mode !== "review" || state.editingId !== undefined || state.gitRoot === undefined) {
     return { state };
@@ -197,46 +163,18 @@ function submitReview(state: AddProjectFlowState): AddProjectTransition {
   };
 }
 
-function moveSelection(state: AddProjectFlowState, delta: number): AddProjectFlowState {
-  if (state.mode === "start") {
-    return {
-      ...state,
-      selectedIndex: clampIndex(state.selectedIndex + delta, 0, state.choices.length - 1),
-    };
-  }
-  if (state.mode === "choose") {
-    const count = addProjectRows(state).length;
-    return { ...state, selectedIndex: clampIndex(state.selectedIndex + delta, 0, count - 1) };
-  }
-  return state;
-}
-
-// Absolute-index cursor move for a mouse click; clamps into the active list so a
-// stale click past the end lands on the last row rather than out of range.
-function selectIndex(state: AddProjectFlowState, index: number): AddProjectFlowState {
-  if (state.mode === "start") {
-    return { ...state, selectedIndex: clampIndex(index, 0, state.choices.length - 1) };
-  }
-  if (state.mode === "choose") {
-    return { ...state, selectedIndex: clampIndex(index, 0, addProjectRows(state).length - 1) };
-  }
-  return state;
-}
-
 function updateFilter(state: AddProjectFlowState, filter: string): AddProjectTransition {
   if (state.mode !== "choose") {
     return { state };
   }
   const searchQuery = searchQueryForFilter(filter);
-  const nextState = clampChooseSelection(
-    withoutSearchError({
-      ...state,
-      filter,
-      searchEntries: [],
-      searching: searchQuery !== undefined,
-      searchTruncated: false,
-    }),
-  );
+  const nextState = withoutSearchError({
+    ...state,
+    filter,
+    searchEntries: [],
+    searching: searchQuery !== undefined,
+    searchTruncated: false,
+  });
   return {
     state: nextState,
     ...(searchQuery === undefined

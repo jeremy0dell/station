@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import {
-  ParsedStationConfigSchema,
   ProjectConfigSchema,
   ProjectLocalConfigSchema,
   StationConfigSchema,
@@ -8,19 +7,21 @@ import {
   WorkspaceConfigSchema,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const fixtureUrl = (path: string) => new URL(`../fixtures/${path}`, import.meta.url);
 
-async function loadJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(fixtureUrl(path), "utf8"));
+async function loadJson(path: string): Promise<Record<string, unknown>> {
+  return z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(await readFile(fixtureUrl(path), "utf8")));
 }
 
 describe("config schemas", () => {
   it("validates parsed config objects without loading TOML or expanding paths", async () => {
     const config = await loadJson("valid-config.json");
-    const parsed = ParsedStationConfigSchema.parse(config);
+    const parsed = StationConfigSchema.parse(config);
 
-    expect(StationConfigSchema.parse(config)).toEqual(parsed);
     expect(parsed.projects).toHaveLength(2);
     expect(parsed.projects[0]?.root).toBe("~/projects/web");
     expect(parsed.projects[0]?.localConfig).toEqual({
@@ -33,7 +34,7 @@ describe("config schemas", () => {
   });
 
   it("exports ProjectConfig as a focused project-level schema", async () => {
-    const config = ParsedStationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse(await loadJson("valid-config.json"));
 
     for (const project of config.projects) {
       expect(ProjectConfigSchema.parse(project)).toEqual(project);
@@ -51,7 +52,7 @@ describe("config schemas", () => {
   });
 
   it("rejects invalid parsed config objects", async () => {
-    expect(ParsedStationConfigSchema.safeParse(await loadJson("invalid-config.json")).success).toBe(
+    expect(StationConfigSchema.safeParse(await loadJson("invalid-config.json")).success).toBe(
       false,
     );
     expect(
@@ -63,7 +64,7 @@ describe("config schemas", () => {
   });
 
   it("validates observability retention config", async () => {
-    const config = ParsedStationConfigSchema.parse(await loadJson("retention-config.json"));
+    const config = StationConfigSchema.parse(await loadJson("retention-config.json"));
 
     expect(config.observability?.retention).toMatchObject({
       maxDays: 7,
@@ -76,7 +77,7 @@ describe("config schemas", () => {
       },
     });
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         observability: {
           retention: {
@@ -88,8 +89,9 @@ describe("config schemas", () => {
   });
 
   it("accepts production feature flags and rejects unknown flags", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       featureFlags: {
         sessionResumeAgent: true,
       },
@@ -99,7 +101,7 @@ describe("config schemas", () => {
       sessionResumeAgent: true,
     });
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         featureFlags: {
           "test.fake": true,
@@ -109,8 +111,9 @@ describe("config schemas", () => {
   });
 
   it("accepts per-harness resume opt-in", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       harness: {
         codex: {
           resume: true,
@@ -122,8 +125,9 @@ describe("config schemas", () => {
   });
 
   it("validates configured TUI widgets", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       tui: {
         widgets: [
           {
@@ -154,7 +158,7 @@ describe("config schemas", () => {
     // But the root config attaches [tui] best-effort: bad widget values degrade
     // to `tui: undefined` rather than failing the whole config parse.
     expect(
-      ParsedStationConfigSchema.parse({
+      StationConfigSchema.parse({
         ...config,
         tui: { widgets: [{ type: "weather", city: "" }] },
       }).tui,
@@ -162,8 +166,9 @@ describe("config schemas", () => {
   });
 
   it("accepts terminal tmux command config", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       terminal: {
         tmux: {
           command: "/opt/homebrew/bin/tmux",
@@ -173,7 +178,7 @@ describe("config schemas", () => {
 
     expect(config.terminal?.tmux?.command).toBe("/opt/homebrew/bin/tmux");
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         terminal: {
           tmux: {
@@ -184,18 +189,33 @@ describe("config schemas", () => {
     ).toBe(false);
   });
 
-  it("accepts omitted and empty TUI widget config", async () => {
-    const config = await loadJson("valid-config.json");
+  it("accepts tmux popup scopes and rejects unsupported ownership modes", async () => {
+    const config = StationConfigSchema.parse({
+      ...(await loadJson("valid-config.json")),
+      terminal: { tmux: { popupScope: "client" } },
+    });
 
-    expect(ParsedStationConfigSchema.parse(config).tui).toBeUndefined();
+    expect(config.terminal?.tmux?.popupScope).toBe("client");
     expect(
-      ParsedStationConfigSchema.parse({
+      StationConfigSchema.safeParse({
+        ...config,
+        terminal: { tmux: { popupScope: "window" } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts omitted and empty TUI widget config", async () => {
+    const config = StationConfigSchema.parse(await loadJson("valid-config.json"));
+
+    expect(config.tui).toBeUndefined();
+    expect(
+      StationConfigSchema.parse({
         ...config,
         tui: {},
       }).tui,
     ).toEqual({});
     expect(
-      ParsedStationConfigSchema.parse({
+      StationConfigSchema.parse({
         ...config,
         tui: {
           widgets: [],

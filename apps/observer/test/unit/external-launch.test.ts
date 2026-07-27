@@ -348,11 +348,18 @@ describe("prepareExternalLaunch", () => {
   it("rejects when the harness's status hooks are not installed", async () => {
     const station = new FakeManagedTerminalLifecycle();
     await expect(
-      prepareExternalLaunch(deps([row()], station, [new HookableHarness(false)]), prepareParams),
+      prepareExternalLaunch(
+        {
+          ...deps([row()], station, [new HookableHarness(false)]),
+          configPath: "/tmp/custom station/config.toml",
+        },
+        prepareParams,
+      ),
     ).rejects.toMatchObject({
       tag: "CommandValidationError",
       code: "HARNESS_HOOKS_NOT_INSTALLED",
       provider: "fake-harness",
+      hint: "Run `stn --config '/tmp/custom station/config.toml' hooks install fake-harness --yes`, then `stn --config '/tmp/custom station/config.toml' hooks doctor fake-harness` to confirm, and retry.",
     });
     // No target is left registered after a gated rejection.
     expect(await station.listTargets()).toEqual([]);

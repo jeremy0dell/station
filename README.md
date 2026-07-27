@@ -8,6 +8,26 @@
 
 Station gives every agent an isolated Git worktree, keeps its terminal session alive, and shows all active projects and sessions in one terminal workspace. Bring Claude Code, Codex, Cursor, OpenCode, or Pi; Station coordinates the surrounding work without replacing the harness.
 
+## Install
+
+Station is experimental pre-alpha software. Install the current public version,
+`v0.0.0-pre-alpha.4`, with one command:
+
+```sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh | sh
+```
+
+Then complete and verify first-run setup:
+
+```sh
+stn setup
+stn setup check --json
+stn doctor
+```
+
+See the [installation guide](docs/install.md) for supported platforms, runtime
+floors, verification, custom directories, and recovery.
+
 <p align="center">
   <img width="1728" height="1048" alt="Station terminal workspace showing multiple agent panes and a toggleable dashboard" src="https://github.com/user-attachments/assets/358c6c52-800f-496a-ada0-c8c291c8c33f" />
   <br>
@@ -32,66 +52,29 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
   <em>Follow an agent and review its changes without leaving the terminal.</em>
 </p>
 
-## Install the binary
+## Installation details
 
-This procedure installs Station from authenticated GitHub release assets and
-assumes your GitHub account can read the private `jeremy0dell/station`
-repository. Install the [GitHub CLI](https://cli.github.com/) first. The binary
-does not require Node.js, pnpm, Bun, or a source checkout.
+The version-stamped installer downloads only that tag's archive and
+`SHA256SUMS`, verifies the checksum and archive manifest, and atomically installs
+`stn`, `stn-ingress`, and `stn-tmux-popup` in `~/.local/bin`. It needs `curl`
+and either `sha256sum` or `shasum`; it does not need a GitHub account, GitHub
+CLI, Homebrew, Node.js, pnpm, Bun, or a source checkout.
 
-### 1. Authenticate GitHub CLI
+`stn setup` is a separate guided step. On macOS it can install Homebrew for
+third-party workflow tools, then use official Homebrew packages for Codex,
+Claude Code, OpenCode, and Pi; Cursor uses its unattended vendor installer.
+Agent installs never launch or sign in to an agent, and a failed selection does
+not prevent later selected agents from installing. Station labels each install,
+streams its live output, and prints completion or failure before continuing. See the
+[installation guide](docs/install.md#complete-first-run-setup) for details.
 
-```sh
-gh auth login --hostname github.com
-gh auth status --hostname github.com
-gh repo view jeremy0dell/station --json nameWithOwner --jq '.nameWithOwner'
-```
+Supported native targets and runtime floors:
 
-If GitHub CLI is already authenticated, skip the login command. The repository
-check should print `jeremy0dell/station`; a not-found response means the active
-account cannot read the private repository. The commands below use the existing
-authentication, so do not paste credentials into the install command.
-On macOS, a failure observed only inside a restricted agent sandbox may mean
-that sandbox cannot read Keychain-backed credentials. Retry the checks from a
-normal Terminal or with scoped host/Keychain access, and keep the later
-authenticated `gh api` calls in that same context; do not move the token into
-the sandbox or reauthenticate solely because of a sandbox-only failure.
+- macOS 13 or newer on Apple silicon (`darwin-arm64`) or Intel (`darwin-x64`)
+- glibc 2.39 or newer Linux on arm64 (`linux-arm64`) or x64 (`linux-x64`)
+- Windows and musl Linux are not supported
 
-### 2. Install the current preview candidate
-
-Run this from any directory:
-
-```sh
-(
-  set -eu
-  umask 077
-  export GH_HOST=github.com
-  tag=v0.7.1-rc.6
-  # After the first stable release, use:
-  # tag="$(GH_HOST=github.com gh api repos/jeremy0dell/station/releases/latest --jq '.tag_name')"
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  gh api --method GET \
-    -H 'Accept: application/vnd.github.raw+json' \
-    -f ref="$tag" \
-    repos/jeremy0dell/station/contents/scripts/install.sh > "$installer"
-  test -s "$installer"
-  sh -n "$installer"
-  sh "$installer" --version "$tag"
-)
-```
-
-`v0.7.1-rc.6` is the current private-binary candidate. `v0.7.1-rc.5` remains
-published as its immutable rollback; `v0.7.1-rc.2`, `v0.7.1-rc.3`, and
-`v0.7.1-rc.4` are older published binaries, while the earlier `v0.7.0` and
-`v0.7.1-rc.1` candidates remained unpublished. Run the recipe after the
-candidate is published. It fetches the installer and binary from the same
-immutable release tag, verifies the release checksum, and installs `stn`, `stn-ingress`, and
-`stn-tmux-popup` in `~/.local/bin` by default. It does not expose or print your
-GitHub credentials. After the first stable release, the commented assignment
-resolves the latest stable tag.
-
-### 3. Verify and start Station
+### Verify and start Station
 
 The installer prints an exact PATH command if `~/.local/bin` is not visible in
 the current shell. For the default install directory, run:
@@ -104,6 +87,7 @@ hash -r
 command -v stn
 stn --version
 stn setup
+stn setup check --json
 stn doctor
 stn
 ```
@@ -123,27 +107,11 @@ Paste this prompt into a coding agent running on the machine where you want
 Station installed:
 
 ```text
-Install Station private preview candidate v0.7.1-rc.6 and validate setup on this machine.
-
-Use the private GitHub repository jeremy0dell/station through GitHub CLI.
+Install experimental Station v0.0.0-pre-alpha.4 and validate setup on this machine.
 
 Safety and scope:
-- First run `gh auth status --hostname github.com`, then verify repository
-  access with `gh repo view jeremy0dell/station`. On macOS, a failure inside a
-  restricted agent sandbox is inconclusive because GitHub CLI credentials may
-  be stored in the Keychain. Retry both checks with scoped host/Keychain access
-  before asking me to authenticate, and run every later authenticated `gh repo`
-  or `gh api` command in that same access context. Never ask me to paste,
-  extract, print, request, or export a GitHub token. If scoped host access is
-  unavailable, ask me to run the auth checks and exact tagged temporary-file
-  installer block from the page that supplied this prompt in my Terminal, then
-  resume using the absolute installed `stn` path.
-- Do not clone the repository or build from source. Use release tag
-  `v0.7.1-rc.6`, read `docs/install.md` from that same tag with authenticated
-  `gh api`, and follow its temporary-file installer procedure. If that release
-  is not published yet, stop instead of falling back to another ref.
-- Never fetch installer code from `main` and never pipe network output directly
-  into a shell.
+- Do not clone the repository or build from source. Use only
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -157,15 +125,12 @@ Validation:
    through the absolute installed path. Record `command -v stn`,
    `command -v stn-ingress`, and `command -v stn-tmux-popup` only as evidence
    about the current agent execution context.
-2. Run `stn setup plan --json` through the absolute installed `stn` path,
-   summarize every proposed install or write, and ask for approval before
-   applying it.
-3. Run the guided `stn setup` through the absolute installed path and let me
+2. Run the guided `stn setup` through the absolute installed path and let me
    answer its choices. If you cannot pass through an interactive prompt, ask me
    to run it, then continue afterward.
-4. Run `stn setup check --json` and `stn doctor` through the absolute installed
+3. Run `stn setup check --json` and `stn doctor` through the absolute installed
    path.
-5. Report the installed path and version, whether setup reports
+4. Report the installed path and version, whether setup reports
    `summary.requiredOk: true`, doctor health, future-shell verification state,
    and any remaining manual steps. A valid zero-project config is acceptable.
    Do not claim success while a required check is failing or future-shell PATH
@@ -222,6 +187,8 @@ or real-agent lanes.
 
 ## Release status
 
-Station v0.7 is a private preview for local daily use. The authenticated
-binary supports macOS and Linux on arm64 and x64. User-facing commands and
-configuration may change between preview releases.
+Station `v0.0.0-pre-alpha.4` is an experimental pre-alpha. User-facing commands,
+configuration, state, and release packaging may change without compatibility.
+The old `v0.7.1-rc.*` releases were internal previews, not predecessors in the
+public version line. Report feedback and bugs through
+[GitHub Issues](https://github.com/jeremy0dell/station/issues).

@@ -24,11 +24,22 @@ export async function planSetupConfigWrite(
   options: PlanSetupConfigWriteOptions = {},
 ): Promise<ConfigWritePlan> {
   const harnessSelection = options.harnessSelection ?? resolveSetupHarnessSelection(facts);
+  if (facts.config.status === "invalid") {
+    return {
+      operation: "blocked",
+      path: facts.config.path,
+      reason: facts.config.message,
+    };
+  }
   if (harnessSelection.selected.length === 0) {
     return {
       operation: "blocked",
       path: facts.configPath,
-      reason: "No supported harness CLI is available; config was not planned.",
+      reason:
+        harnessSelection.source === "unresolved" &&
+        facts.harnesses.filter((harness) => harness.status === "ok").length > 1
+          ? "Multiple supported harness CLIs are available; explicit selection is required."
+          : "No unambiguous supported harness CLI is available; config was not planned.",
     };
   }
   if (facts.config.status === "missing") {
@@ -36,14 +47,6 @@ export async function planSetupConfigWrite(
       operation: "create",
       path: facts.configPath,
       content: renderNewSetupConfig(harnessSelection.selected, facts, options),
-    };
-  }
-
-  if (facts.config.status === "invalid") {
-    return {
-      operation: "blocked",
-      path: facts.config.path,
-      reason: facts.config.message,
     };
   }
 

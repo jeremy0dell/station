@@ -9,7 +9,28 @@ import {
   tmuxPopupBindingBlock,
   tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
-import { runSetupCommand, type SetupPromptAdapter } from "../../src/commands/setup/index.js";
+import {
+  runSetupCommand as runSetupCommandBase,
+  type SetupPromptAdapter,
+} from "../../src/commands/setup/index.js";
+import {
+  configBackedHarnessHooksProbe,
+  withRequiredTrackingConsent,
+} from "../fixtures/setupTrackingSupport.js";
+
+async function runSetupCommand(...args: Parameters<typeof runSetupCommandBase>) {
+  const deps = args[2] ?? {};
+  const prompt = deps.prompt;
+  return runSetupCommandBase(args[0], args[1], {
+    ...deps,
+    ...(prompt === undefined ? {} : { prompt: withRequiredTrackingConsent(prompt) }),
+    probeHarnessHooksStatus:
+      deps.probeHarnessHooksStatus ??
+      configBackedHarnessHooksProbe(
+        async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
+      ),
+  });
+}
 
 describe("guided setup command", () => {
   const tempRoots: string[] = [];
@@ -264,11 +285,11 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(1);
-    expect(codexProbes).toBe(2);
+    expect(codexProbes).toBe(3);
     expect(fs.files[configPath]).toBeUndefined();
   });
 
-  it("adds an available harness while preserving an unavailable existing default", async () => {
+  it("does not let an available harness mask an unavailable existing default", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const homeDir = join(root, "home");
@@ -312,9 +333,8 @@ describe("guided setup command", () => {
       },
     );
 
-    expect(result.code).toBe(0);
-    expect(fs.files[configPath]).toContain('harness = "codex"');
-    expect(fs.files[configPath].match(/^\[harness\.(codex|pi)\]$/gm)).toHaveLength(2);
+    expect(result.code).toBe(1);
+    expect(fs.files[configPath]).toBe(configuredProjectToml(repo));
   });
 
   it("runs Worktrunk shell integration non-interactively after the STATION prompt", async () => {
@@ -439,6 +459,58 @@ describe("guided setup command", () => {
     expect(chunks.join("")).not.toContain("Failed: Install Worktrunk shell integration");
   });
 
+  it("declines required tracking before config or provider mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "home/.config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+
+    const result = await runSetupCommandBase(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        prompt: {
+          async confirm() {
+            return false;
+          },
+          async selectMany() {
+            return ["codex"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(fs.files[configPath]).toBeUndefined();
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
+    expect(chunks.join("")).toContain("Required agent tracking was declined");
+    expect(chunks.join("")).not.toContain("Core setup complete");
+  });
+
   it("declining config write produces no writes", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -487,7 +559,12 @@ describe("guided setup command", () => {
     const homeDir = join(root, "home");
     const configPath = join(homeDir, ".config/station/config.toml");
     await mkdir(repo, { recursive: true });
-    const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
+    const preparedConfig = configuredProjectToml(repo).replace(
+      'command = "codex"',
+      'command = "codex"\ninstall_hooks = true',
+    );
+    const fs = fakeFs({ [configPath]: preparedConfig });
+    const chunks: string[] = [];
     let activations = 0;
 
     const result = await runSetupCommand(
@@ -503,13 +580,18 @@ describe("guided setup command", () => {
           activations += 1;
         },
         prompt: prompt({ confirms: [false, false] }),
-        writeStdout: () => undefined,
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
+    const output = chunks.join("");
     expect(result.code).toBe(0);
     expect(activations).toBe(0);
-    expect(fs.files[configPath]).toBe(configuredProjectToml(repo));
+    expect(fs.files[configPath]).toBe(preparedConfig);
+    expect(output).not.toContain("MISSING   Codex tracking");
+    expect(output).not.toContain("WILL      Install Codex tracking");
   });
 
   it("enables and installs hooks for an already-configured harness", async () => {
@@ -588,7 +670,7 @@ describe("guided setup command", () => {
     );
   });
 
-  it("scopes hook prompts and actions to current selections while preserving the configured default", async () => {
+  it("prepares explicit selections and the preserved configured default", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const homeDir = join(root, "home");
@@ -643,13 +725,13 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(prompts).toContain("Install OpenCode agent hooks?");
+    expect(prompts).not.toContain("Install OpenCode agent hooks?");
     expect(prompts).not.toContain("Install Codex agent hooks?");
     expect(
       calls
         .filter((call) => call.command === "/fake/bin/stn" && call.args?.[2] === "hooks")
         .map((call) => call.args?.[4]),
-    ).toEqual(["opencode"]);
+    ).toEqual(["opencode", "codex"]);
     expect(fs.files[configPath].match(/^harness = "codex"$/gm)).toHaveLength(1);
     expect(fs.files[configPath].match(/^\[harness\.codex\]$/gm)).toHaveLength(1);
     expect(fs.files[configPath].match(/^\[harness\.opencode\]$/gm)).toHaveLength(1);
@@ -735,9 +817,11 @@ describe("guided setup command", () => {
     expect(output).toContain("Config was written, but observer activation failed.");
     expect(output).toContain("Code: TEST_ACTIVATION_FAILED");
     expect(output).toContain("Hint: Inspect observer logs.");
-    expect(output).toContain("Setup does not need to be rerun; the config is saved.");
+    expect(output).toContain("The config is saved; remaining setup actions were not applied.");
     expect(output).toContain("Resolve the error above, then activate it with:");
     expect(output).toContain(`Run: stn --config ${configPath} observer restart`);
+    expect(output).toContain(`Then rerun: stn --config ${configPath} setup apply --yes`);
+    expect(output).not.toContain("Applying: Install Codex tracking");
     expect(output).not.toContain("Core setup complete.");
   });
 
@@ -772,7 +856,7 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({
-          confirms: [false, false, false, true, false, false],
+          confirms: [false, false, true, false, false],
           multiSelects: [["opencode", "codex"]],
         }),
         writeStdout: () => undefined,
@@ -844,7 +928,7 @@ describe("guided setup command", () => {
       "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers",
     );
     expect(chunks.join("")).toContain("Direct fallback: stn popup");
-  });
+  }, 15_000);
 
   it("preserves a customized tmux key while replacing Station's command", async () => {
     const root = await tempRoot(tempRoots);
@@ -942,6 +1026,9 @@ describe("guided setup command", () => {
           if (command === "tmux" && input.args?.[0] === "bind-key") {
             return commandResult(input, "");
           }
+          if ((input.args ?? []).includes("hooks") && (input.args ?? []).includes("install")) {
+            return commandResult(input, "");
+          }
           throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
         },
         access: fakeAccess([
@@ -971,7 +1058,7 @@ describe("guided setup command", () => {
     expect(output).not.toContain("persisted and loaded in the current tmux server");
     expect(
       calls.filter((call) => basename(call.command) === "tmux" && call.args?.[0] === "run-shell"),
-    ).toHaveLength(3);
+    ).toHaveLength(5);
   });
 
   it("delegates Worktrunk launcher composition while resolving the agent ingress launcher", async () => {
@@ -1031,7 +1118,7 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(order).toEqual(["hook:worktrunk", "hook:codex", "hook:opencode", "activate"]);
+    expect(order).toEqual(["activate", "hook:worktrunk", "hook:codex", "hook:opencode"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
     expect(calls).toEqual(
@@ -1064,7 +1151,7 @@ describe("guided setup command", () => {
     );
   });
 
-  it("attempts activation after a hook install fails", async () => {
+  it("keeps the activated config when a later hook install fails", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const configPath = join(root, "home/.config/station/config.toml");
@@ -1080,13 +1167,18 @@ describe("guided setup command", () => {
         cwd: repo,
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
-        runner: fakeRunner([], {
-          "git rev-parse --show-toplevel": repo,
-          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
-          "wt --version": "worktrunk 1.2.3\n",
-          "tmux -V": "tmux 3.5a\n",
-          "codex --version": "codex 0.1.0\n",
-        }),
+        runner: async (input) => {
+          if ((input.args ?? []).includes("hooks") && (input.args ?? []).includes("install")) {
+            throw new Error("synthetic hook install failure");
+          }
+          return fakeRunner([], {
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "wt --version": "worktrunk 1.2.3\n",
+            "tmux -V": "tmux 3.5a\n",
+            "codex --version": "codex 0.1.0\n",
+          })(input);
+        },
         access: fakeAccess([
           "/fake/bin/wt",
           "/fake/bin/tmux",
@@ -1101,7 +1193,7 @@ describe("guided setup command", () => {
         activateObserverConfig: async () => {
           activations += 1;
         },
-        prompt: prompt({ confirms: [true, false, true] }),
+        prompt: prompt({ confirms: [true, true] }),
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -1176,6 +1268,24 @@ describe("guided setup command", () => {
       ]),
       fs,
       activateObserverConfig: noopActivateObserverConfig,
+      probeHarnessHooksStatus: async (
+        harnessId: "codex" | "opencode" | "pi" | "cursor" | "claude",
+      ) => {
+        if (harnessId === "pi") return undefined;
+        const attempts = calls.filter(
+          (call) => call.command === "/fake/bin/stn" && call.args?.[4] === harnessId,
+        ).length;
+        const installed = harnessId === "codex" ? codexHookAttempts > 1 : attempts > 0;
+        return {
+          provider: harnessId,
+          requested: fs.files[configPath]?.includes("install_hooks = true") === true,
+          installed,
+          missing: installed ? [] : ["tracking artifact"],
+          message: installed
+            ? "Tracking artifacts are installed."
+            : "Tracking artifacts are missing.",
+        };
+      },
       prompt: promptAdapter,
       writeStdout: () => undefined,
     };
@@ -1191,7 +1301,7 @@ describe("guided setup command", () => {
     ).toHaveLength(2);
     expect(
       calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "opencode"),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it("installs a selected agent CLI when no harness is available, then continues", async () => {
@@ -1210,10 +1320,15 @@ describe("guided setup command", () => {
         cwd: repo,
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
+        platform: "darwin",
         runner: async (input) => {
           calls.push(input);
           const key = `${input.command} ${(input.args ?? []).join(" ")}`;
-          if (key === "sh -c curl -fsSL https://chatgpt.com/codex/install.sh | sh") {
+          if (
+            input.command === "/bin/bash" &&
+            input.args?.[0] === "-c" &&
+            input.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true
+          ) {
             codexInstalled = true;
             return commandResult(input, "");
           }
@@ -1223,6 +1338,7 @@ describe("guided setup command", () => {
           return fakeRunner([], {
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "xcode-select -p": "/Library/Developer/CommandLineTools\n",
             "wt --version": "worktrunk 1.2.3\n",
             "tmux -V": "tmux 3.5a\n",
           })(input);
@@ -1242,7 +1358,9 @@ describe("guided setup command", () => {
         prompt: {
           async confirm(message: string) {
             return (
-              message.includes("Install Codex?") || message.includes("Write core STATION config")
+              message.includes("Install Homebrew") ||
+              message.includes("Install Codex?") ||
+              message.includes("Write core STATION config")
             );
           },
           async selectMany() {
@@ -1256,13 +1374,126 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(calls.find((call) => call.command === "sh")).toMatchObject({
-      args: ["-c", "curl -fsSL https://chatgpt.com/codex/install.sh | sh"],
+    expect(
+      calls.find(
+        (call) =>
+          call.command === "/bin/bash" &&
+          call.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true,
+      ),
+    ).toMatchObject({
+      args: ["-c", expect.stringContaining("CODEX_NON_INTERACTIVE=1")],
       stdio: "inherit",
     });
     expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("[harness.codex]");
     expect(chunks.join("")).toContain("No supported agent CLI is available.");
-    expect(chunks.join("")).toContain("Running: sh -c");
+    expect(chunks.join("")).toContain("Installing Codex...");
+    expect(chunks.join("")).toContain("Live installer output is shown below");
+    expect(chunks.join("")).toContain("Codex install completed.");
+    expect(chunks.join("")).toContain(
+      "Homebrew install failed.\nContinuing with non-Homebrew agent installers where supported.",
+    );
+  });
+
+  it("continues installing selected agents after one installer fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+    const promptEvents: string[] = [];
+    let piInstalled = false;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        platform: "linux",
+        runner: async (input) => {
+          calls.push(input);
+          const key = `${input.command} ${(input.args ?? []).join(" ")}`;
+          if (
+            input.command === "/bin/bash" &&
+            input.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true
+          ) {
+            throw new Error("Codex installer failed");
+          }
+          if (
+            key ===
+            `npm install --global --prefix ${homeDir}/.local --ignore-scripts --no-fund --no-audit @earendil-works/pi-coding-agent`
+          ) {
+            piInstalled = true;
+            return commandResult(input, "");
+          }
+          if (key === "pi --version" && piInstalled) {
+            return commandResult(input, "pi 0.1.0\n");
+          }
+          return fakeRunner([], {
+            "git --version": "git version 2.49.0\n",
+            "git rev-parse --show-toplevel": repo,
+            "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+            "wt --version": "worktrunk 1.2.3\n",
+            "tmux -V": "tmux 3.5a\n",
+          })(input);
+        },
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message: string) {
+            return (
+              message.includes("Install Codex?") ||
+              message.includes("Install Pi?") ||
+              message.includes("Write core STATION config")
+            );
+          },
+          async selectMany() {
+            return ["pi"];
+          },
+          pause() {
+            promptEvents.push("pause");
+          },
+          resume() {
+            promptEvents.push("resume");
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    const codexCallIndex = calls.findIndex(
+      (call) =>
+        call.command === "/bin/bash" &&
+        call.args?.[1]?.includes("https://chatgpt.com/codex/install.sh") === true,
+    );
+    const piCallIndex = calls.findIndex(
+      (call) => call.command === "npm" && call.args?.includes("@earendil-works/pi-coding-agent"),
+    );
+    expect(codexCallIndex).toBeGreaterThanOrEqual(0);
+    expect(piCallIndex).toBeGreaterThan(codexCallIndex);
+    expect(fs.files[configPath]).toContain("[harness.pi]");
+    expect(chunks.join("")).toContain(
+      "Codex install failed. Continuing to the next selected agent.",
+    );
+    expect(chunks.join("")).toContain("Pi install completed.");
+    expect(chunks.join("")).toContain(
+      "These selected agent CLIs are still unavailable:\n  - Codex",
+    );
+    expect(promptEvents).toEqual(["pause", "resume", "pause", "resume"]);
   });
 
   it("closes prompts and writes nothing when harness install choices are declined", async () => {
@@ -1506,21 +1737,24 @@ describe("guided setup command", () => {
             throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
           }
           const staticOutputs: Record<string, string> = {
+            "git --version": "git version 2.49.0\n",
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
             "codex --version": "codex 0.1.0\n",
             "xcode-select -p": "/Library/Developer/CommandLineTools\n",
           };
           const out = staticOutputs[key];
-          if (out === undefined) {
-            throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+          if (out !== undefined) return commandResult(input, out);
+          if ((input.args ?? []).includes("hooks") && (input.args ?? []).includes("install")) {
+            return commandResult(input, "");
           }
-          return commandResult(input, out);
+          throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
         },
         // bun/diffnav/delta (and wt/tmux path resolution) live in the brew prefix and
         // resolve only once their formula has been installed.
         access: async (path) => {
           const present =
+            path.startsWith(`${setupPackageRoot()}/`) ||
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
             (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
@@ -1603,7 +1837,7 @@ describe("guided setup command", () => {
             return commandResult(input, "");
           }
           // The agent CLI installer (no agent CLI is present until this runs).
-          if (key === "sh -c curl -fsSL https://chatgpt.com/codex/install.sh | sh") {
+          if (bin === "brew" && input.args?.join(" ") === "install --cask homebrew/cask/codex") {
             codexInstalled = true;
             return commandResult(input, "");
           }
@@ -1634,18 +1868,21 @@ describe("guided setup command", () => {
             throw Object.assign(new Error("tmux not found"), { code: "ENOENT" });
           }
           const staticOutputs: Record<string, string> = {
+            "git --version": "git version 2.49.0\n",
             "git rev-parse --show-toplevel": repo,
             "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
             "xcode-select -p": "/Library/Developer/CommandLineTools\n",
           };
           const out = staticOutputs[key];
-          if (out === undefined) {
-            throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
+          if (out !== undefined) return commandResult(input, out);
+          if ((input.args ?? []).includes("hooks") && (input.args ?? []).includes("install")) {
+            return commandResult(input, "");
           }
-          return commandResult(input, out);
+          throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
         },
         access: async (path) => {
           const present =
+            path.startsWith(`${setupPackageRoot()}/`) ||
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
             (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
@@ -1662,7 +1899,7 @@ describe("guided setup command", () => {
             return (
               message.includes("Install Homebrew") ||
               message.includes("Install missing required tools") ||
-              message.includes("chatgpt.com/codex") ||
+              message.includes("Install Codex") ||
               message.includes("Write core STATION config")
             );
           },
@@ -1677,7 +1914,12 @@ describe("guided setup command", () => {
     // Without the brew prefix on the post-agent-install re-probe this exits 1 with no
     // config: the brew tools (resolvable only under /opt/homebrew/bin) re-read missing.
     expect(result.code).toBe(0);
-    expect(calls.some((call) => call.command === "sh")).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.command === "brew" && call.args?.join(" ") === "install --cask homebrew/cask/codex",
+      ),
+    ).toBe(true);
     expect(fs.files[configPath]).toContain("projects = []");
   });
 });
@@ -1766,7 +2008,13 @@ function fakeRunner(
     calls.push(input);
     const key = `${input.command} ${(input.args ?? []).join(" ")}`;
     // Synthetic machines have macOS Command Line Tools unless a test overrides it.
-    const stdout = outputs[key] ?? fakeBinOutput(input, outputs) ?? defaultProbeOutput(key);
+    const stdout =
+      outputs[key] ??
+      fakeBinOutput(input, outputs) ??
+      ((input.args ?? []).includes("hooks") && (input.args ?? []).includes("install")
+        ? ""
+        : undefined) ??
+      defaultProbeOutput(key);
     if (stdout === undefined) {
       throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
     }
@@ -1785,6 +2033,7 @@ function fakeBinOutput(
 }
 
 function defaultProbeOutput(key: string): string | undefined {
+  if (key === "git --version") return "git version 2.49.0\n";
   return key === "xcode-select -p" ? "/Library/Developer/CommandLineTools\n" : undefined;
 }
 
@@ -1800,8 +2049,9 @@ function commandResult(input: ExternalCommandInput, stdout: string): ExternalCom
 
 function fakeAccess(paths: readonly string[]): (path: string) => Promise<void> {
   const available = new Set(paths);
+  const packageRoot = setupPackageRoot();
   return async (path) => {
-    if (!available.has(path)) {
+    if (!available.has(path) && !path.startsWith(`${packageRoot}/`)) {
       throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
     }
   };

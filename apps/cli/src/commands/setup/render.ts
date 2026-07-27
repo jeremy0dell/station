@@ -26,6 +26,7 @@ export function renderSetupPlan(plan: SetupPlan, options: SetupRenderOptions = {
   const theme = setupTheme(options);
   const lines: string[] = [];
   lines.push(theme.bold(theme.cyan(`stn setup ${plan.mode}`)));
+  lines.push(`Harness selection: ${plan.summary.selectionSource}`);
   lines.push("");
   for (const tier of ["required", "recommended", "optional"] as const) {
     const checks = plan.checks.filter((check) => check.tier === tier);
@@ -57,14 +58,72 @@ export function renderSetupPlan(plan: SetupPlan, options: SetupRenderOptions = {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOptions = {}): string {
+type SetupApplyRenderOptions = SetupRenderOptions & {
+  selectionRequired?: boolean;
+};
+
+export function renderSetupApplyResult(
+  plan: SetupPlan,
+  options: SetupApplyRenderOptions = {},
+): string {
   const theme = setupTheme(options);
+  if (options.selectionRequired === true) {
+    const harnessCheck = plan.checks.find((check) => check.id === "harness");
+    return missingResult(
+      harnessCheck?.message ?? "Agent CLI selection is required.",
+      "Run guided setup and choose an agent CLI:",
+      theme,
+      formatCommand(["stn", "--config", plan.summary.configPath, "setup"]),
+    );
+  }
   if (plan.summary.requiredOk) {
-    // plan.nextSteps is computed before apply, so on a freshly-completed setup it
-    // can still read "resolve the missing items". Show the completion steps here.
-    const nextSteps = ["stn doctor", "stn"];
+    // Pre-apply next steps can be stale; final launcher mismatches must retain runnable absolute commands and current evidence.
+    const prepared = preparedHarnesses(plan);
+    const completionMessage = setupCompletionMessage(prepared);
+    const completionNotices = setupCompletionNotices(prepared);
+    const launcherWarning = plan.checks.find(
+      (check) => check.id === "station-launchers" && check.status === "warning",
+    );
+    const launcherExecutable = launcherWarning?.details?.station;
+    const nextSteps =
+      launcherExecutable === undefined
+        ? ["stn doctor", "stn"]
+        : [
+            formatSelectedLauncherCommand(launcherExecutable, ["doctor"]),
+            formatSelectedLauncherCommand(launcherExecutable),
+          ];
+    const launcherLinkAction = plan.actions.find(
+      (action) => action.id === "link-station-launchers",
+    );
+    const remainingLines: string[] = [];
+    if (launcherWarning !== undefined) {
+      remainingLines.push(
+        "",
+        sectionHeading("Remaining", theme),
+        "",
+        ...renderCheck(launcherWarning, theme),
+      );
+      if (launcherLinkAction !== undefined) {
+        remainingLines.push(...renderAction(launcherLinkAction, theme));
+      }
+      const pathDirectory = launcherWarning.details?.pathDirectory;
+      if (pathDirectory !== undefined) {
+        remainingLines.push(
+          "",
+          theme.bold("Current shell PATH recovery (does not edit startup files):"),
+          `  ${theme.cyan(`PATH=${quoteShellPart(pathDirectory)}\${PATH:+":$PATH"}`)}`,
+          `  ${theme.cyan("export PATH")}`,
+          `  ${theme.cyan("hash -r")}`,
+        );
+      }
+      remainingLines.push(
+        ...bareLauncherConvenienceLines(pathDirectory, launcherLinkAction, theme),
+      );
+    }
     return [
-      theme.bold(theme.green("Core setup complete.")),
+      theme.bold(theme.green(completionMessage)),
+      ...completionNotices,
+      ...remainingLines,
       "",
       sectionHeading("Next", theme),
       "",
@@ -91,12 +150,14 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
       theme,
     );
   }
+  if (missing?.id === "git-project") {
+    return `${theme.bold(theme.red(missing.message))}\n`;
+  }
   if (missing?.id === "harness") {
-    return missingResult(
-      "No supported agent CLI is available.",
-      "Install claude, codex, cursor agent, opencode, or pi, then run:",
-      theme,
-    );
+    return missingResult(missing.message, "Resolve the agent selection, then run:", theme);
+  }
+  if (missing?.id.startsWith("harness-tracking:") === true) {
+    return missingResult(missing.message, "Prepare that selected agent, then run:", theme);
   }
   if (missing?.id === "diffnav") {
     return missingResult(
@@ -117,6 +178,46 @@ export function renderSetupApplyResult(plan: SetupPlan, options: SetupRenderOpti
 
 export function formatCommand(command: readonly string[]): string {
   return command.map((part) => quoteCommandPart(part)).join(" ");
+}
+
+function formatSelectedLauncherCommand(executable: string, args: readonly string[] = []): string {
+  return [quoteShellPart(executable), ...args.map((part) => quoteCommandPart(part))].join(" ");
+}
+
+function bareLauncherConvenienceLines(
+  pathDirectory: string | undefined,
+  launcherLinkAction: SetupAction | undefined,
+  theme: SetupTheme,
+): string[] {
+  if (pathDirectory === undefined && launcherLinkAction === undefined) {
+    return ["", `  ${theme.dim("Future login shell launcher resolution remains unverified.")}`];
+  }
+
+  const lines = [
+    "",
+    theme.bold("Use stn instead of the absolute path (optional):"),
+    `  The absolute commands under ${theme.bold("Next")} already work; these steps only enable the shorter launcher names.`,
+  ];
+  if (pathDirectory !== undefined) {
+    lines.push(
+      "  To use stn in this shell, run the current-shell PATH block above.",
+      `  For future shells, add ${theme.cyan(quoteShellPart(pathDirectory))} to PATH in a shell configuration you choose.`,
+      "  Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    );
+  }
+  if (launcherLinkAction !== undefined) {
+    lines.push(
+      "  To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+    );
+  }
+  lines.push(
+    "  Then verify:",
+    `    ${theme.cyan("command -v stn")}`,
+    `    ${theme.cyan("command -v stn-ingress")}`,
+    `    ${theme.cyan("command -v stn-tmux-popup")}`,
+    `  ${theme.dim("Future login shell launcher resolution remains unverified until those checks pass in a new login shell.")}`,
+  );
+  return lines;
 }
 
 export function renderActionStart(action: SetupAction, options: SetupRenderOptions = {}): string {
@@ -179,7 +280,12 @@ function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[
     "root",
     "defaultBranch",
     "selected",
+    "selectionSource",
     "available",
+    "state",
+    "capability",
+    "requested",
+    "installed",
     "automationMode",
     "flag",
     "missingSubcommands",
@@ -199,6 +305,37 @@ function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[
   return lines;
 }
 
+type PreparedHarness = { id: string; label: string };
+
+function setupCompletionMessage(prepared: readonly PreparedHarness[]): string {
+  if (prepared.length === 0) return "Core setup complete.";
+  const harnessLabels = prepared.map((harness) => harness.label).join(" and ");
+  return `Core setup complete. Station tracking artifacts are prepared for ${harnessLabels}.`;
+}
+
+function setupCompletionNotices(prepared: readonly PreparedHarness[]): string[] {
+  const includesCodex = prepared.some((harness) => harness.id === "codex");
+  if (!includesCodex) return [];
+  return [
+    "",
+    "Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.",
+  ];
+}
+
+function preparedHarnesses(plan: SetupPlan): PreparedHarness[] {
+  const displayNames: Record<string, string> = {
+    claude: "Claude",
+    codex: "Codex",
+    cursor: "Cursor",
+    opencode: "OpenCode",
+  };
+  return plan.checks.flatMap((check) => {
+    const id = check.details?.harness;
+    if (check.details?.state !== "prepared" || id === undefined) return [];
+    return [{ id, label: displayNames[id] ?? id }];
+  });
+}
+
 function colorStatus(label: string, status: SetupCheck["status"], theme: SetupTheme): string {
   switch (status) {
     case "ok":
@@ -216,10 +353,13 @@ function sectionHeading(label: string, theme: SetupTheme): string {
   return theme.bold(label);
 }
 
-function missingResult(title: string, detail: string, theme: SetupTheme): string {
-  return [theme.bold(theme.red(title)), detail, `  ${theme.cyan("stn setup check")}`, ""].join(
-    "\n",
-  );
+function missingResult(
+  title: string,
+  detail: string,
+  theme: SetupTheme,
+  command = "stn setup check",
+): string {
+  return [theme.bold(theme.red(title)), detail, `  ${theme.cyan(command)}`, ""].join("\n");
 }
 
 function pad(value: string, width: number): string {
@@ -245,5 +385,9 @@ function quoteCommandPart(part: string): string {
   if (/^[A-Za-z0-9_./:=@%+-]+$/.test(part)) {
     return part;
   }
+  return quoteShellPart(part);
+}
+
+function quoteShellPart(part: string): string {
   return `'${part.replaceAll("'", "'\\''")}'`;
 }

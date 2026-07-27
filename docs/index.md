@@ -1,10 +1,21 @@
 # Station Documentation
 
-Station is a terminal workspace for running AI coding agents in isolated Git worktrees. It is currently available as a private preview for macOS and Linux on arm64 and x64.
+Station is a terminal workspace for running AI coding agents in isolated Git
+worktrees. It is experimental pre-alpha software; the current public version is
+`v0.0.0-pre-alpha.4`. Native binaries support macOS 13+ and glibc 2.39+ Linux
+on arm64 and x64.
+
+```sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh | sh
+```
+
+Then run `stn setup`, `stn setup check --json`, and `stn doctor`. See
+[Install Station](install.md) for the complete installation and verification
+guide.
 
 ## Start Here
 
-- [Install Station](install.md) — install and verify the authenticated binary.
+- [Install Station](install.md) — install the exact public pre-alpha and verify setup.
 - [Agent-led install prompt](install.md#let-your-agent-install-and-validate-station) — let a coding agent install the binary and validate `stn setup` safely.
 - [Quick start](quick-start.md) — add a project and create your first agent session.
 - [Overview](overview.md) — understand projects, worktrees, sessions, providers, and the observer.
@@ -28,3 +39,5 @@ Station is a terminal workspace for running AI coding agents in isolated Git wor
 - [System dependencies](system-dependencies.md) — understand external tools and setup checks.
 
 Contributor references describe the current implementation and its invariants. Historical design records and release-planning files remain in the repository but are not part of this documentation path.
+
+Report feedback through [GitHub Issues](https://github.com/jeremy0dell/station/issues).

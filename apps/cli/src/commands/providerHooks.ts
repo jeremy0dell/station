@@ -112,6 +112,9 @@ export function buildCommonHookOptions(context: HookCommandContext): CommonHookO
   if (context.env !== undefined) {
     options.env = context.env;
   }
+  if (context.providerHookIngressLauncher !== undefined) {
+    options.hookBin = context.providerHookIngressLauncher;
+  }
   return options;
 }
 

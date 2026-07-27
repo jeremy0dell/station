@@ -155,22 +155,6 @@ export async function installCodexHookProjectConfig(input: {
   };
 }
 
-export async function waitForFileContaining(
-  filePath: string,
-  text: string,
-  timeoutMs = 60_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() <= deadline) {
-    const content = await readFile(filePath, "utf8").catch(() => "");
-    if (content.includes(text)) {
-      return;
-    }
-    await delay(500);
-  }
-  throw new Error(`${filePath} did not contain ${text}.`);
-}
-
 export async function writeFailureBundle(input: {
   env: RealE2eEnvironment;
   configPath: string;

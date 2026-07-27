@@ -20,8 +20,6 @@ export const TerminalIntentTypeSchema = z.enum([
   "terminal.close",
 ]);
 
-export type TerminalIntentType = z.infer<typeof TerminalIntentTypeSchema>;
-
 export const TerminalIntentSubjectSchema = z
   .object({
     projectId: ProjectIdSchema.optional(),
@@ -46,10 +44,6 @@ export const EnsureAgentWorkspaceHarnessOptionsSchema = z
     sandboxMode: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type EnsureAgentWorkspaceHarnessOptions = z.infer<
-  typeof EnsureAgentWorkspaceHarnessOptionsSchema
->;
 
 export const EnsureAgentWorkspaceIntentSchema = z
   .object({
@@ -113,8 +107,6 @@ export const TerminalIntentAcceptedReceiptSchema = z
   })
   .strict();
 
-export type TerminalIntentAcceptedReceipt = z.infer<typeof TerminalIntentAcceptedReceiptSchema>;
-
 export const TerminalIntentRejectedReceiptSchema = z
   .object({
     status: z.literal("rejected"),
@@ -126,8 +118,6 @@ export const TerminalIntentRejectedReceiptSchema = z
     error: SafeErrorSchema,
   })
   .strict();
-
-export type TerminalIntentRejectedReceipt = z.infer<typeof TerminalIntentRejectedReceiptSchema>;
 
 export const TerminalIntentReceiptSchema = z.discriminatedUnion("status", [
   TerminalIntentAcceptedReceiptSchema,

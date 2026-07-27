@@ -10,6 +10,10 @@ import { CursorHarnessProviderError } from "./errors.js";
 export type CursorLaunchOptions = {
   command?: string;
   cursorHome?: string;
+  configPath?: string;
+  observerSocketPath?: string;
+  stateDir?: string;
+  hookSpoolDir?: string;
 };
 
 function cursorLaunchEnv(
@@ -17,6 +21,10 @@ function cursorLaunchEnv(
   options: CursorLaunchOptions,
 ): Record<string, string> {
   return harnessLaunchEnv("cursor", request, {
+    configPath: options.configPath,
+    observerSocketPath: options.observerSocketPath,
+    stateDir: options.stateDir,
+    hookSpoolDir: options.hookSpoolDir,
     env: { STATION_CURSOR_HOME: options.cursorHome },
     carryEnv: [{ from: "STATION_CURSOR_HOME", to: "HOME" }],
   });

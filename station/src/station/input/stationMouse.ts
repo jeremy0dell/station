@@ -146,6 +146,11 @@ const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "renameChooseSlot",
   "forkChooseSlot",
 ]);
+const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
+  "addProjectStart",
+  "addProjectChoose",
+  "addProjectFilter",
+]);
 
 export function routeStationMouse(
   target: StationMouseTarget,
@@ -263,7 +268,7 @@ export function routeStationMouse(
       addWidgetSettingsPickerChoice(store, target.index);
       return { kind: "handled" };
     case "addProjectRow":
-      if (mode !== "addProject") {
+      if (!ADD_PROJECT_ROW_MODES.has(mode)) {
         return { kind: "handled" };
       }
       selectAddProjectRow(store, target.index);
@@ -306,10 +311,7 @@ export function routeStationMouse(
   }
 }
 
-function routeDashboardRow(
-  store: StoreApi<TuiStore>,
-  rowId: string,
-): StationMouseOutcome {
+function routeDashboardRow(store: StoreApi<TuiStore>, rowId: string): StationMouseOutcome {
   const target = resolveRowAgentTarget(store, rowId);
   return target.kind === "launch-managed"
     ? fromRowAgentTarget(target)

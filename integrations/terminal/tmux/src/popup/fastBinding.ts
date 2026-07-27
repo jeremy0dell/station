@@ -102,8 +102,8 @@ function expectedPersistentPopupSignature(options: {
 /**
  * ADAPTER
  *
- * Translates an installed popup owner into a silent tmux warm-path command that falls back to
- * the exact compiled alias whenever its versioned route cannot be acted on safely.
+ * Translates the server-scoped installed popup owner into a silent tmux warm-path command that
+ * falls back to the exact compiled alias whenever its versioned route cannot be acted on safely.
  */
 export function buildManagedFastPopupRunShellCommand(
   options: BuildManagedFastPopupRunShellCommandOptions,

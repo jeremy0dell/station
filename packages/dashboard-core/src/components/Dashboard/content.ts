@@ -92,11 +92,6 @@ export function fleetCountsLabel(
   return compact.length <= maxWidth ? compact : "";
 }
 
-export function projectHeaderLabel(project: ProjectView, collapsed: boolean): string {
-  const parts = projectHeaderLabelParts(project, collapsed);
-  return `${parts.title}${parts.counts}`;
-}
-
 export function projectHeaderLabelParts(
   project: ProjectView,
   collapsed: boolean,

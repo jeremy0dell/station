@@ -45,6 +45,7 @@ describe("runCliObserverMain", () => {
     expect(mocks.createProviderRegistry).toHaveBeenCalledWith(config, {
       configPath: "/config/station.toml",
       piExtensionPath: "/canonical/state/assets/pi/station-pi-extension.mjs",
+      providerHookIngressLauncher: expect.stringMatching(/\/bin\/stn-ingress$/),
     });
   });
 
@@ -60,6 +61,8 @@ describe("runCliObserverMain", () => {
     const config = {} as StationConfig;
     await deps.providerRegistryFactory(config, { stateDir: "/source/state" });
 
-    expect(mocks.createProviderRegistry).toHaveBeenCalledWith(config, {});
+    expect(mocks.createProviderRegistry).toHaveBeenCalledWith(config, {
+      providerHookIngressLauncher: expect.stringMatching(/\/bin\/stn-ingress$/),
+    });
   });
 });

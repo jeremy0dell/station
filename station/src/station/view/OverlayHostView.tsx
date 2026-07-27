@@ -53,7 +53,14 @@ export function OverlayHostView({
     );
   }
   if (screen.name === "addProject") {
-    return <AddProjectSheetView columns={columns} rows={rows} state={screen.flow} />;
+    return (
+      <AddProjectSheetView
+        columns={columns}
+        rows={rows}
+        state={screen.flow}
+        selection={selection}
+      />
+    );
   }
   if (screen.name === "newSession") {
     return (

@@ -26,9 +26,7 @@ import { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hooks/hookC
 import { CursorHookSetupError } from "./hooks/hookErrors.js";
 import { resolveCursorHookScriptPath, resolveCursorHooksPath } from "./hooks/hookPaths.js";
 
-export { CURSOR_HOOK_EVENT_NAMES, type CursorHookEventName } from "./hooks/hookConstants.js";
-export { CursorHookSetupError, type CursorHookSetupErrorCode } from "./hooks/hookErrors.js";
-export { resolveCursorHookScriptPath, resolveCursorHooksPath } from "./hooks/hookPaths.js";
+export type { CursorHookEventName } from "./hooks/hookConstants.js";
 export { expectedCursorHookCommands, expectedCursorHookScript };
 
 export type CursorHookPlanOptions = {

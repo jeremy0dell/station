@@ -17,4 +17,4 @@ export const allVtCases: readonly VtCase[] = [
   ...charsetMiscCases,
 ];
 
-export type { VtCase, VtCellExpectation } from "./types.js";
+export type { VtCase } from "./types.js";

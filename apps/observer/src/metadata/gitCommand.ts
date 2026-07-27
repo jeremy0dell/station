@@ -36,15 +36,3 @@ export async function runGitCommand(
   }
   return result;
 }
-
-export async function runOptionalGitCommand(
-  command: GitCommandContext,
-  args: string[],
-  options: RunGitCommandOptions,
-): Promise<Awaited<ReturnType<typeof runExternalCommand>> | undefined> {
-  try {
-    return await runGitCommand(command, args, options);
-  } catch {
-    return undefined;
-  }
-}

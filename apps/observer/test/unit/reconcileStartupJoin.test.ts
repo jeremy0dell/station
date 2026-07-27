@@ -88,6 +88,7 @@ function controllableCore(): { core: ObserverCore; scans: ControlledScan[] } {
       new Promise<StationSnapshot>((resolve) => {
         scans.push({ reason, snapshot: emptyStationSnapshot(now), resolve });
       }),
+    commitProviderHealthProbe: () => Promise.resolve(undefined),
     projectHarnessEventStatus: async () => ({ projected: false, events: [] }),
     clearTurnReadiness: () => undefined,
     updateConfig: () => undefined,

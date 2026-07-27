@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { StationConfig } from "@station/config";
+import type { StationConfig, TmuxConfig } from "@station/config";
 import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import {
@@ -114,7 +114,7 @@ export async function runTuiCommand(
       buildRendererEnv(parsed, { STATION_SOURCE: "mock" }, options.configPath),
       "dashboard",
       parsed.persistentPopup,
-      options.config?.terminal?.tmux?.command,
+      options.config?.terminal?.tmux,
     );
   }
 
@@ -181,7 +181,7 @@ export async function runTuiCommand(
     ),
     parsed.popupMode ? "dashboard" : "station",
     parsed.persistentPopup,
-    options.config?.terminal?.tmux?.command,
+    options.config?.terminal?.tmux,
   );
 }
 
@@ -211,11 +211,11 @@ function runRenderer(
   env: Record<string, string>,
   entry: RendererEntry,
   persistentPopup: boolean,
-  popupCommand: string | undefined,
+  popupConfig: TmuxConfig | undefined,
 ): Promise<TuiRunResult> {
   return (
     deps.spawnRenderer?.({ env, entry }) ??
-    spawnRenderer({ env, entry }, deps, persistentPopup, popupCommand)
+    spawnRenderer({ env, entry }, deps, persistentPopup, popupConfig)
   );
 }
 
@@ -223,7 +223,7 @@ async function spawnRenderer(
   { env, entry }: RendererSpawnOptions,
   deps: TuiCommandDeps,
   persistentPopup: boolean,
-  popupCommand: string | undefined,
+  popupConfig: TmuxConfig | undefined,
 ): Promise<TuiRunResult> {
   const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
   const override = process.env.STATION_DASHBOARD_COMMAND;
@@ -273,7 +273,7 @@ async function spawnRenderer(
   const control = popupRenderer
     ? attachTuiRendererControl(
         child,
-        deps.popupControl ?? defaultPopupControl(deps.env, popupCommand),
+        deps.popupControl ?? defaultPopupControl(deps.env, popupConfig),
       )
     : undefined;
   return new Promise<TuiRunResult>((resolve) => {
@@ -311,14 +311,17 @@ async function runStationLink(
 
 function defaultPopupControl(
   env: CliEnv | undefined,
-  command: string | undefined,
+  config: TmuxConfig | undefined,
 ): TuiRendererControlAdapters {
   const popupEnv = { ...(env ?? process.env) };
-  // The startup client is a delivery hint; runtime requests must follow the current popup claim.
-  delete popupEnv.STATION_FOCUS_CLIENT_ID;
+  if ((config?.popupScope ?? "server") === "server") {
+    // A server-scoped renderer follows the current claim rather than its startup client.
+    delete popupEnv.STATION_FOCUS_CLIENT_ID;
+  }
   const popupOptions = {
     env: popupEnv,
-    command: resolvePopupTmuxCommand(command, popupEnv),
+    command: resolvePopupTmuxCommand(config?.command, popupEnv),
+    ...(config === undefined ? {} : { config }),
   };
   return {
     dismissPopup: () => dismissTmuxPopup(popupOptions),

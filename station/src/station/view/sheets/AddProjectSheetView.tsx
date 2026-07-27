@@ -1,5 +1,5 @@
-import { addProjectRows } from "@station/dashboard-core";
-import type { AddProjectFlowState } from "@station/dashboard-core";
+import { addProjectRows, addProjectSelectedIndexForFlow } from "@station/dashboard-core";
+import type { AddProjectFlowState, TuiSelectionState } from "@station/dashboard-core";
 import { bottomSheetContentWidth } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
@@ -17,13 +17,15 @@ import {
 
 export type AddProjectSheetViewProps = {
   state: AddProjectFlowState;
+  selection: TuiSelectionState;
   columns: number;
   rows: number;
 };
 
-export function AddProjectSheetView({ state, columns, rows }: AddProjectSheetViewProps) {
+export function AddProjectSheetView({ state, selection, columns, rows }: AddProjectSheetViewProps) {
   const targetHeight = fixedSheetHeight(rows);
   const contentWidth = bottomSheetContentWidth(columns);
+  const selectedIndex = addProjectSelectedIndexForFlow(state, selection);
   return (
     <BottomSheetFrameView
       columns={columns}
@@ -32,17 +34,36 @@ export function AddProjectSheetView({ state, columns, rows }: AddProjectSheetVie
       contentRows={Math.max(1, targetHeight - 2)}
       minHeight={targetHeight}
     >
-      {renderState(state, contentWidth, Math.max(1, targetHeight - 3))}
+      {renderState(state, selectedIndex, contentWidth, Math.max(1, targetHeight - 3))}
     </BottomSheetFrameView>
   );
 }
 
-function renderState(state: AddProjectFlowState, width: number, contentRows: number) {
+function renderState(
+  state: AddProjectFlowState,
+  selectedIndex: number | undefined,
+  width: number,
+  contentRows: number,
+) {
   if (state.mode === "start") {
-    return <StartChoices state={state} width={width} contentRows={contentRows} />;
+    return (
+      <StartChoices
+        state={state}
+        selectedIndex={selectedIndex}
+        width={width}
+        contentRows={contentRows}
+      />
+    );
   }
   if (state.mode === "choose") {
-    return <FolderPicker state={state} width={width} contentRows={contentRows} />;
+    return (
+      <FolderPicker
+        state={state}
+        selectedIndex={selectedIndex}
+        width={width}
+        contentRows={contentRows}
+      />
+    );
   }
   if (state.mode === "review") {
     return <Review state={state} width={width} />;
@@ -55,10 +76,12 @@ function renderState(state: AddProjectFlowState, width: number, contentRows: num
 
 function StartChoices({
   state,
+  selectedIndex,
   width,
   contentRows,
 }: {
   state: Extract<AddProjectFlowState, { mode: "start" }>;
+  selectedIndex: number | undefined;
   width: number;
   contentRows: number;
 }) {
@@ -71,7 +94,7 @@ function StartChoices({
         <SheetPickerLine
           key={choice.path}
           width={width}
-          selected={index === state.selectedIndex}
+          selected={index === selectedIndex}
           label={choice.label}
           detail={choice.detail}
           mouseTarget={{ kind: "addProjectRow", index }}
@@ -85,17 +108,19 @@ function StartChoices({
 
 function FolderPicker({
   state,
+  selectedIndex,
   width,
   contentRows,
 }: {
   state: Extract<AddProjectFlowState, { mode: "choose" }>;
+  selectedIndex: number | undefined;
   width: number;
   contentRows: number;
 }) {
   const rows = addProjectRows(state);
   const hasSearchPrompt = state.filterMode || state.filter.length > 0;
   const listHeight = Math.max(1, contentRows - (hasSearchPrompt ? 5 : 4));
-  const start = Math.max(0, Math.min(state.selectedIndex, rows.length - listHeight));
+  const start = Math.max(0, Math.min(selectedIndex ?? 0, rows.length - listHeight));
   const visible = rows.slice(start, start + listHeight);
   if (state.filter.length > 0 && rows.length === 0) {
     return (
@@ -147,7 +172,7 @@ function FolderPicker({
         <SheetPickerLine
           key={`${row.kind}:${row.path}`}
           width={width}
-          selected={start + index === state.selectedIndex}
+          selected={start + index === selectedIndex}
           label={rowLabel(row)}
           detail={rowDetail(row.kind)}
           mouseTarget={{ kind: "addProjectRow", index: start + index }}

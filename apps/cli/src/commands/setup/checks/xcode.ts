@@ -19,10 +19,9 @@ const commandLineToolsInstallHint =
   "Command Line Tools are not installed. Run xcode-select --install, then run stn setup.";
 
 /**
- * macOS Command Line Tools probe. Homebrew, git, and node-gyp all depend on the
- * CLT, so a bare Mac fails everything downstream; this check is the one place that
- * names the `xcode-select --install` remediation. The CLT do not apply off macOS,
- * so non-darwin hosts report a not-applicable ok and add no plan noise.
+ * Source-checkout macOS Command Line Tools probe for Homebrew and native builds.
+ * Compiled setup skips this check and accepts any Git implementation that passes
+ * its own probe; non-darwin hosts report a not-applicable ok without plan noise.
  */
 export async function checkSetupXcode(options: CheckXcodeOptions = {}): Promise<SetupXcodeFact> {
   const platform = options.platform ?? process.platform;

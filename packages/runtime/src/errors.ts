@@ -8,10 +8,6 @@ import {
   type WorktreeRemovalRefusalDiagnosticDetail,
 } from "@station/contracts";
 
-export type RuntimeDiagnosticDetail = DiagnosticDetail;
-export type RuntimeExternalCommandDiagnosticDetail = ExternalCommandDiagnosticDetail;
-export type RuntimeWorktreeRemovalRefusalDiagnosticDetail = WorktreeRemovalRefusalDiagnosticDetail;
-
 export type RuntimeSafeError = SafeError & {
   diagnosticDetails?: DiagnosticDetail[];
 };
@@ -23,14 +19,6 @@ export type RuntimeSafeErrorFallback = {
   hint?: string | undefined;
   provider?: string | undefined;
   traceId?: string | undefined;
-};
-
-export type RuntimeTimeoutError = RuntimeSafeError & {
-  tag: "TimeoutError";
-};
-
-export type RuntimeCancellationError = RuntimeSafeError & {
-  tag: "CancellationError";
 };
 
 export type ExternalCommandError = RuntimeSafeError & {

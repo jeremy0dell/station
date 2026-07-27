@@ -51,6 +51,24 @@ describe("CLI Cursor hook commands", () => {
     );
   });
 
+  it("uses the composed ingress launcher when --hook-bin is omitted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-cursor-hooks-"));
+    const configPath = await writeConfig(root, true);
+    const env = { STATION_CURSOR_HOME: root };
+    const hooksPath = join(root, ".cursor", "hooks.json");
+    const hookScriptPath = join(root, "state", "hooks", "station-cursor-hook.sh");
+    const providerHookIngressLauncher = join(root, "installed", "stn-ingress");
+    const options = { env, providerHookIngressLauncher };
+
+    await runCli(["--config", configPath, "hooks", "install", "cursor", "--yes"], options);
+
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(providerHookIngressLauncher);
+    await expect(
+      runCli(["--config", configPath, "hooks", "doctor", "cursor"], options),
+    ).resolves.toMatchObject({ code: 0, output: { installed: true, status: "ok" } });
+    await expect(readFile(hooksPath, "utf8")).resolves.toContain(hookScriptPath);
+  });
+
   it("installs and uninstalls through the generic hooks command", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-cursor-hooks-"));
     const configPath = await writeConfig(root, true);

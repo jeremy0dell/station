@@ -32,7 +32,6 @@ import { focusedPaneAcceptsModifiedEnter } from "./keymap/modifiedEnterPolicy.js
 import {
   normalizeSequence,
   providerSupportsModifiedEnterSoftNewline,
-  type NormalizedSequence,
 } from "./runtime/sequenceNormalize.js";
 import { executeOutcome } from "./runtime/executeOutcome.js";
 import { createPaneEffects } from "./runtime/paneEffects.js";

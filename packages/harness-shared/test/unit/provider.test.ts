@@ -214,11 +214,19 @@ describe("versionInfo", () => {
 describe("harnessHookDoctorOptions", () => {
   const incumbent = {
     installHooks: true,
+    hookBin: "/checkout/A/bin/stn-ingress",
     observerSocketPath: "/shared/observer.sock",
     stateDir: "/checkout/A/state",
     hookSpoolDir: "/checkout/A/state/spool/hooks",
     autoStartFromHooks: true,
   };
+
+  it("preserves the incumbent hook launcher without a requester runtime", () => {
+    expect(harnessHookDoctorOptions(incumbent)).toMatchObject({
+      enabled: true,
+      hookBin: incumbent.hookBin,
+    });
+  });
   const requesterRuntime = {
     ingressLauncher: "/checkout/B/bin/stn-ingress",
     observerSocketPath: "/shared/observer.sock",

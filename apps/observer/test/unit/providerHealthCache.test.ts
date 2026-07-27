@@ -66,6 +66,41 @@ describe("provider health cache", () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
+  it("notifies once when callers join the same probe", async () => {
+    let resolveProbe: (health: ProviderHealth) => void = () => undefined;
+    const probe = vi.fn(
+      () =>
+        new Promise<ProviderHealth>((resolve) => {
+          resolveProbe = resolve;
+        }),
+    );
+    const listener = vi.fn(async () => undefined);
+    const cache = new ProviderHealthCache({ targets: [target("fake", probe)] });
+    cache.onProbeCompleted(listener);
+
+    const first = cache.refresh("fake");
+    const second = cache.refresh("fake");
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce());
+    resolveProbe(healthyResult("fake"));
+    await Promise.all([first, second]);
+
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(healthyResult("fake"));
+  });
+
+  it("keeps refresh non-rejecting when a completion listener fails", async () => {
+    const cache = new ProviderHealthCache({
+      targets: [target("fake", async () => healthyResult("fake"))],
+    });
+    cache.onProbeCompleted(async () => {
+      throw new Error("publication failed");
+    });
+
+    await expect(cache.refresh("fake")).resolves.toBeUndefined();
+    expect(cache.read("fake")?.status).toBe("healthy");
+  });
+
   it("serves stale entries past the TTL while revalidating once in the background", async () => {
     const { clock, advance } = testClock();
     let resolveRevalidation: (value: ProviderHealth) => void = () => undefined;

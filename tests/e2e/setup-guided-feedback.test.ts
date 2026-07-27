@@ -7,8 +7,7 @@ import { createObserverClient } from "../../packages/protocol/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
 
 const shellIntegrationMarker = "# Worktrunk shell integration";
-const supportedShells = ["zsh", "bash"] as const;
-type SupportedShell = (typeof supportedShells)[number];
+type SupportedShell = "bash" | "zsh";
 
 describe("setup guided feedback e2e", () => {
   it("exits instead of hanging when every agent install choice is declined", async () => {
@@ -37,14 +36,14 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["n", "n", "n", "y", "y", "n"],
+        answers: ["n", "n", "y", "y", "y", "n"],
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
-      expect(result.stdout).toContain("Install Codex agent hooks?");
+      expect(result.stdout).toContain("Install Codex tracking?");
       expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
       expect(result.stdout).toContain(
@@ -53,13 +52,27 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
+      expect(result.stdout).toContain("Remaining");
+      expect(result.stdout).toContain(
+        "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup",
+      );
+      expect(result.stdout).toContain(`command pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
+      expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
+      expect(result.stdout).toContain(
+        "To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
+      );
+      expect(result.stdout).toContain("command -v stn-tmux-popup");
+      expect(result.stdout).toContain("Future login shell launcher resolution remains unverified");
+      expect(result.stdout).not.toContain("\n  stn doctor\n");
+      expect(result.stdout).not.toContain("\n  stn\n");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
     } finally {
       await fixture.cleanup();
     }
   });
 
-  it("writes multiple selected agent CLIs, installs both hooks, and passes both doctors", async () => {
+  it("writes multiple selected agent CLIs, prepares tracking, and passes both doctors", async () => {
     const fixture = await createFixture({ harness: "codex-opencode" });
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
@@ -71,12 +84,12 @@ describe("setup guided feedback e2e", () => {
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain(
-        "Select agent CLIs to enable (comma-separated; first is the default for new configs).",
+        "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
       );
-      expect(result.stdout).toContain("Install Codex agent hooks?");
-      expect(result.stdout).toContain("Install OpenCode agent hooks?");
-      expect(result.stdout).toContain("Completed: Install Codex hooks");
-      expect(result.stdout).toContain("Completed: Install OpenCode hooks");
+      expect(result.stdout).toContain("Install Codex tracking?");
+      expect(result.stdout).toContain("Install OpenCode tracking?");
+      expect(result.stdout).toContain("Completed: Install Codex tracking");
+      expect(result.stdout).toContain("Completed: Install OpenCode tracking");
       const config = await readFile(fixture.configPath, "utf8");
       expect(config).toContain('harness = "codex"');
       expect(config).toContain("[harness.codex]");
@@ -145,9 +158,9 @@ describe("setup guided feedback e2e", () => {
       const setup = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline launcher linking, accept Worktrunk hooks, decline Codex hooks,
+        // Decline launcher linking, accept Worktrunk hooks and required Codex tracking,
         // write config, then decline shell integration and popup binding.
-        answers: ["n", "y", "n", "y", "n", "n"],
+        answers: ["n", "y", "y", "y", "n", "n"],
       });
       expect(setup.exitCode).toBe(0);
 
@@ -174,7 +187,10 @@ describe("setup guided feedback e2e", () => {
     }
   });
 
-  for (const shell of supportedShells) {
+  // Normal PRs use zsh; shell-sensitive and release CI retain both process-level paths.
+  const shellsUnderTest: readonly SupportedShell[] =
+    process.env.STATION_SETUP_E2E_ALL_SHELLS === "true" ? ["zsh", "bash"] : ["zsh"];
+  for (const shell of shellsUnderTest) {
     it(`gives one optional recovery command when the active ${shell} rc file is missing`, async () => {
       const fixture = await createFixture({ harness: "codex", shell });
       const rcPath = shellRcPath(fixture.home, shell);
@@ -182,7 +198,7 @@ describe("setup guided feedback e2e", () => {
         const result = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
           env: fixture.env,
-          answers: ["n", "n", "n", "y", "y", "n"],
+          answers: ["n", "n", "y", "y", "y", "n"],
         });
 
         expect(result.timedOut).toBe(false);
@@ -213,7 +229,7 @@ describe("setup guided feedback e2e", () => {
         const first = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
           env: fixture.env,
-          answers: ["n", "n", "n", "y", "y", "n"],
+          answers: ["n", "n", "y", "y", "y", "n"],
         });
         const second = await runStation(["--config", fixture.configPath, "setup"], {
           cwd: fixture.repo,
@@ -232,7 +248,11 @@ describe("setup guided feedback e2e", () => {
         );
         const check = await runStation(
           ["--config", fixture.configPath, "setup", "check", "--json"],
-          { cwd: fixture.repo, env: fixture.env, answers: [] },
+          {
+            cwd: fixture.repo,
+            env: fixture.env,
+            answers: [],
+          },
         );
         expect(check.exitCode).toBe(0);
         expect(JSON.parse(check.stdout).checks).toEqual(
@@ -259,7 +279,7 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["n", "n", "n", "y", "n", "n"],
+        answers: ["n", "n", "y", "y", "n", "n"],
       });
 
       expect(result.exitCode).toBe(0);
@@ -278,19 +298,33 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Prompt order: install codex (y), decline cursor/opencode/pi/claude,
-        // decline linking the fixture's non-runtime launchers, Worktrunk hooks,
-        // and Codex hooks; accept Write config; decline shell integration + popup.
-        answers: ["y", "n", "n", "n", "n", "n", "n", "n", "y", "n", "n"],
+        // macOS first offers Homebrew; both platforms then install Codex and decline
+        // the other agents, linking, hooks, shell integration, and popup binding.
+        answers: [
+          ...(process.platform === "darwin" ? ["n"] : []),
+          "y",
+          "n",
+          "n",
+          "n",
+          "n",
+          "n",
+          "n",
+          "y",
+          "y",
+          "n",
+          "n",
+        ],
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("No supported agent CLI is available.");
-      expect(result.stdout).toContain("Running: sh -c");
+      expect(result.stdout).toContain("Installing Codex...");
+      expect(result.stdout).toContain("Live installer output is shown below");
       expect(result.stdout).toContain("fake codex installer ran");
+      expect(result.stdout).toContain("Codex install completed.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
-      expect(result.stdout).toContain("Install Codex agent hooks?");
+      expect(result.stdout).toContain("Install Codex tracking?");
       expect(result.stdout).toContain("Applying: Write STATION config");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
@@ -305,8 +339,9 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // Decline launcher linking and hooks; write config; accept popup (no shell prompt without a supported active shell).
-        answers: ["n", "n", "n", "y", "y"],
+        // Decline launcher linking and Worktrunk hooks, accept required Codex tracking,
+        // write config, then accept popup (no shell prompt without a supported active shell).
+        answers: ["n", "n", "y", "y", "y"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -352,9 +387,12 @@ describe("setup guided feedback e2e", () => {
       );
 
       expect(freshTmux.status, freshTmux.stderr).toBe(0);
-      expect(await readFile(fixture.popupMarker, "utf8")).toBe(
-        "/usr/bin:/bin\ntmux\n#{q:client_name}\n",
-      );
+      const popupMarker = (await readFile(fixture.popupMarker, "utf8")).trim().split("\n");
+      expect(popupMarker).toEqual([
+        "/usr/bin:/bin",
+        "tmux",
+        expect.stringContaining("client_name"),
+      ]);
     } finally {
       await fixture.cleanup();
     }
@@ -398,6 +436,7 @@ async function createFixture(input: {
     bin,
     "git",
     [
+      'if [ "$1" = "--version" ]; then echo "git version 2.50.1"; exit 0; fi',
       'if [ "$1" = "-C" ]; then',
       `  exec ${shellQuote(gitPath)} "$@"`,
       "fi",
@@ -453,7 +492,9 @@ async function createFixture(input: {
   await writeShim(
     bin,
     "brew",
-    'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
+    input.harness === "installable-codex"
+      ? "exit 2\n"
+      : 'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
   );
   // diffnav + delta are required; the checks only need the binaries on PATH.
   await writeShim(bin, "diffnav", "exit 0\n");
@@ -502,20 +543,25 @@ async function createFixture(input: {
     await writeShim(bin, "stn-tmux-popup", "exit 0\n");
     await writeShim(
       bin,
-      "sh",
+      "curl",
       [
-        'if [ "$1" = "-c" ] && [ "$2" = "curl -fsSL https://chatgpt.com/codex/install.sh | sh" ]; then',
-        `  cat > ${shellQuote(join(bin, "codex"))} <<'EOF'`,
+        'output=""',
+        'while [ "$#" -gt 0 ]; do',
+        '  if [ "$1" = "-o" ]; then output="$2"; shift 2; else shift; fi',
+        "done",
+        'test -n "$output"',
+        "cat > \"$output\" <<'INSTALL'",
+        "#!/bin/sh",
+        'test "$CODEX_NON_INTERACTIVE" = "1"',
+        'mkdir -p "$CODEX_INSTALL_DIR"',
+        "cat > \"$CODEX_INSTALL_DIR/codex\" <<'CODEX'",
         "#!/bin/sh",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi',
         "exit 0",
-        "EOF",
-        `  chmod 700 ${shellQuote(join(bin, "codex"))}`,
-        '  echo "fake codex installer ran"',
-        "  exit 0",
-        "fi",
-        'echo "unexpected sh $*" >&2',
-        "exit 2",
+        "CODEX",
+        'chmod 700 "$CODEX_INSTALL_DIR/codex"',
+        'echo "fake codex installer ran"',
+        "INSTALL",
         "",
       ].join("\n"),
     );
@@ -530,7 +576,12 @@ async function createFixture(input: {
     STATION_TMUX_BIN: "tmux",
     // Pin every non-target harness so the post-install re-probe (which now also
     // searches the brew prefix) can't pick up a real one from the dev machine.
-    STATION_CODEX_BIN: input.harness === "missing" ? "/missing/codex" : "codex",
+    STATION_CODEX_BIN:
+      input.harness === "missing"
+        ? "/missing/codex"
+        : input.harness === "installable-codex"
+          ? join(home, ".local", "bin", "codex")
+          : "codex",
     STATION_CURSOR_AGENT_BIN: "/missing/agent",
     STATION_OPENCODE_BIN: input.harness === "codex-opencode" ? "opencode" : "/missing/opencode",
     STATION_PI_BIN: input.harness === "codex-pi" ? "pi" : "/missing/pi",

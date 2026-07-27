@@ -21,7 +21,13 @@ export type TuiInputMode =
   | "newSessionPickAgent"
   | "projectDefaultAgent"
   | "projectSettings"
-  | "addProject"
+  | "addProjectStart"
+  | "addProjectChoose"
+  | "addProjectFilter"
+  | "addProjectReview"
+  | "addProjectEditId"
+  | "addProjectSuccess"
+  | "addProjectFailed"
   | "widgetSettings";
 
 export function deriveTuiInputMode(state: TuiState): TuiInputMode {
@@ -50,7 +56,14 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       if (screen.flow.mode === "pickProject") return "newSessionPickProject";
       return "newSessionPickAgent";
     case "addProject":
-      return "addProject";
+      if (screen.flow.mode === "start") return "addProjectStart";
+      if (screen.flow.mode === "choose") {
+        return screen.flow.filterMode ? "addProjectFilter" : "addProjectChoose";
+      }
+      if (screen.flow.mode === "review") {
+        return screen.flow.editingId === undefined ? "addProjectReview" : "addProjectEditId";
+      }
+      return screen.flow.mode === "success" ? "addProjectSuccess" : "addProjectFailed";
     case "projectDefaultAgent":
       return "projectDefaultAgent";
     case "projectSettings":

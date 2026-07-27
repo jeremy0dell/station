@@ -14,9 +14,11 @@ the writer. Setup writes `projects = []` and never infers a project from its
 working directory; use the empty dashboard's **Add your first project** flow to
 choose an existing Git repository explicitly. After every successful guided or
 non-interactive setup config write, setup starts or restarts the observer and
-waits for it to become healthy with the updated configuration. If activation
-fails, setup retains the config, exits nonzero, and points to
-`stn observer restart`. This exception applies only to the implicit default
+waits for it to become healthy with the updated configuration. Only after
+activation succeeds does setup install remaining tracking artifacts and perform
+a final read-only re-probe. If activation fails, setup retains the config, exits
+nonzero, and prints both `stn observer restart` and the setup command that must
+follow it. This exception applies only to the implicit default
 path: a missing explicit `--config`, an unreadable file, malformed TOML, or
 invalid config still stops launch with an error.
 
@@ -128,6 +130,7 @@ accepted by config validation but become unavailable providers at runtime.
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
 | `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |
+| `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
 
 ### `[harness.<id>]` — agent harnesses (optional)
 
@@ -147,8 +150,19 @@ configured harnesses remain available for explicit selection.
 | `permission_mode` | `standard` \| `yolo` | **`auto` is accepted only under `[harness.claude]`.** |
 | `sandbox_mode` | string | Free-form, e.g. codex `"workspace-write"`. |
 | `approval_policy` | string | Free-form, e.g. codex `"on-request"`. |
-| `install_hooks` | bool | Whether STATION installs provider hooks for this harness. |
+| `install_hooks` | bool | Station intent to install and require its tracking artifacts for this harness; it does not prove the files are current or that the provider executed them. |
 | `resume` | bool | Whether to resume sessions. |
+
+Setup requires the effective global default harness, plus any harness explicitly
+selected in the current guided run, to be runnable. For Claude, Codex, Cursor,
+and OpenCode, preparation also requires `install_hooks = true` and a successful
+read-only probe of the current Station-owned artifacts. Other configured
+non-default harnesses remain visible but do not block global setup. Pi loads its
+Station extension in process and has no equivalent external hook artifact.
+
+Artifact preparation is not runtime delivery proof. In particular, Codex may
+still require review of Station's current hook definition through `/hooks`.
+Setup neither bypasses nor verifies that review.
 
 Harness command fallback env vars:
 

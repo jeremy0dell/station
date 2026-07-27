@@ -32,16 +32,6 @@ export const TraceContextSchema = z
 
 export type TraceContext = z.infer<typeof TraceContextSchema>;
 
-export const DiagnosticContextSchema = z
-  .object({
-    traceId: TraceIdSchema.optional(),
-    spanId: SpanIdSchema.optional(),
-    operation: nonEmptyStringSchema.optional(),
-  })
-  .strict();
-
-export type DiagnosticContext = z.infer<typeof DiagnosticContextSchema>;
-
 export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export const LogComponentSchema = z.enum([
   "observer",
@@ -292,8 +282,6 @@ export const DiagnosticQuestionSchema = z
     itemIds: z.array(nonEmptyStringSchema),
   })
   .strict();
-
-export type DiagnosticQuestion = z.infer<typeof DiagnosticQuestionSchema>;
 
 export const DiagnosticEvidenceIndexSchema = z
   .object({

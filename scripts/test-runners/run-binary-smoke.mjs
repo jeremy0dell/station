@@ -142,6 +142,17 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       const help = await run(binaryPath, ["--help"], { env: childEnv });
       assertIncludes(help.stdout, "Usage:", "compiled --help");
 
+      await verifyCompiledGitFailure({
+        binaryPath,
+        installedRoot,
+        root: join(root, "git-setup-canary"),
+      });
+      await verifyCompiledSetupApplyLauncherWarning({
+        binaryPath,
+        installedRoot,
+        root: join(root, "setup-apply-canary"),
+      });
+
       const popupHelp = await run(join(dirname(binaryPath), "stn-tmux-popup"), ["--help"], {
         env: childEnv,
       });
@@ -153,9 +164,29 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         allowedExitCodes: [1],
       });
       const setupPlan = JSON.parse(setup.stdout);
+      const healthyGitCheck = setupPlan.checks.find((check) => check.id === "git-project");
+      assertEqual(healthyGitCheck?.status, "ok", "compiled setup healthy Git status");
       assertEqual(setupPlan.summary.launchReady, true, "compiled setup launchReady");
       assertEqual(setupPlan.summary.workflowReady, false, "compiled setup workflowReady");
       assertEqual(setupPlan.summary.requiredOk, false, "compiled setup requiredOk alias");
+      const launcherCheck = setupPlan.checks.find((check) => check.id === "station-launchers");
+      assertEqual(launcherCheck?.tier, "recommended", "compiled launcher PATH warning tier");
+      assertEqual(launcherCheck?.status, "warning", "compiled launcher PATH warning status");
+      assertEqual(
+        launcherCheck?.message,
+        "STATION is installed, but these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup. Use the installer's PATH guidance to repair bare launcher resolution.",
+        "compiled launcher PATH warning message",
+      );
+      assertDeepEqual(
+        launcherCheck?.details,
+        {
+          station: join(installedRoot, "stn"),
+          ingress: join(installedRoot, "stn-ingress"),
+          tmuxPopup: join(installedRoot, "stn-tmux-popup"),
+          pathDirectory: installedRoot,
+        },
+        "compiled launcher PATH warning paths",
+      );
       const persistedBindingAction = requiredSetupAction(setupPlan, "tmux-popup-binding");
       const liveBindingAction = requiredSetupAction(setupPlan, "tmux-live-popup-binding");
       assertEqual(persistedBindingAction.tier, "recommended", "compiled popup binding tier");
@@ -243,6 +274,53 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       assertEqual(fullHookCheck?.status, "ok", "compiled full hook doctor");
       const hookObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
       await hookObserverClient.stop();
+      await waitForMissing(socketPath);
+
+      const codexHome = join(root, "codex-home");
+      const codexHookEnv = { ...childEnv, CODEX_HOME: codexHome };
+      await writeCodexHookSmokeConfig(configPath, stateDir, socketPath);
+      const codexHookInstall = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "install", "codex", "--yes"],
+        { env: codexHookEnv },
+      );
+      const codexHookInstallReport = JSON.parse(codexHookInstall.stdout);
+      assertEqual(codexHookInstallReport.installed, true, "compiled Codex hook install");
+      assertIncludes(
+        await readFile(codexHookInstallReport.hookScriptPath, "utf8"),
+        join(installedRoot, "stn-ingress"),
+        "compiled Codex hook absolute ingress launcher",
+      );
+      const codexStandaloneDoctor = await run(
+        binaryPath,
+        ["--config", configPath, "hooks", "doctor", "codex"],
+        { env: codexHookEnv },
+      );
+      assertEqual(
+        JSON.parse(codexStandaloneDoctor.stdout).status,
+        "ok",
+        "compiled standalone Codex hook doctor",
+      );
+      const codexSetupCheck = await run(
+        binaryPath,
+        ["--config", configPath, "setup", "check", "--json", "--no-brew"],
+        { env: codexHookEnv, allowedExitCodes: [0, 1] },
+      );
+      const codexSetupPlan = JSON.parse(codexSetupCheck.stdout);
+      const codexSetupHookCheck = codexSetupPlan.checks.find(
+        (check) => check.id === "harness-tracking:codex",
+      );
+      assertEqual(codexSetupHookCheck?.status, "ok", "compiled setup Codex hook check");
+      const codexFullDoctor = await run(binaryPath, ["--config", configPath, "doctor"], {
+        env: codexHookEnv,
+        allowedExitCodes: [0, 1],
+      });
+      const codexFullHookCheck = JSON.parse(codexFullDoctor.stdout).checks?.find(
+        (check) => check.name === "codex-hooks",
+      );
+      assertEqual(codexFullHookCheck?.status, "ok", "compiled full Codex hook doctor");
+      const codexObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      await codexObserverClient.stop();
       await waitForMissing(socketPath);
       await writeSmokeConfig(configPath, stateDir, socketPath);
 
@@ -981,7 +1059,7 @@ function environmentWithoutGitLocals(source) {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.7.1-rc.6";
+    return "0.0.0-pre-alpha.4";
   }
   if (
     normalized.length === 2 &&
@@ -1118,7 +1196,7 @@ async function verifyCompiledInaccessibleObserver(input) {
     { env: input.childEnv },
   );
   assertEqual(
-    JSON.parse(restoredStatus.stdout).health?.pid,
+    parseSmokeJson(restoredStatus.stdout, "compiled restored observer status").health?.pid,
     input.observerPid,
     "compiled restored observer identity",
   );
@@ -1167,6 +1245,200 @@ async function waitForDirectoryFileCount(directory, expected) {
   fail(`directory file count did not reach ${expected}: ${directory}`);
 }
 
+async function verifyCompiledGitFailure({ binaryPath, installedRoot, root }) {
+  const homeDir = join(root, "home");
+  const runtimeDir = join(root, "runtime");
+  const stateDir = join(root, "state");
+  const cwd = join(root, "outside-repository");
+  const fakeBin = join(root, "fake-bin");
+  const configPath = join(root, "config.toml");
+  await Promise.all(
+    [homeDir, join(homeDir, "tmp"), runtimeDir, stateDir, cwd, fakeBin].map((path) =>
+      mkdir(path, { recursive: true, mode: 0o700 }),
+    ),
+  );
+  await Promise.all([
+    writeFile(
+      join(fakeBin, "git"),
+      [
+        "#!/bin/sh",
+        'if [ "$1" = --version ]; then',
+        "  echo 'xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun' >&2",
+        "  exit 1",
+        "fi",
+        "echo 'unexpected repository probe after failed git --version' >&2",
+        "exit 97",
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    ),
+    writeFile(join(fakeBin, "wt"), "#!/bin/sh\necho 'worktrunk 1.2.3'\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "tmux"), "#!/bin/sh\necho 'tmux 3.5a'\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
+    writeFile(
+      configPath,
+      [
+        "schema_version = 1",
+        "projects = []",
+        "",
+        "[observer]",
+        `state_dir = ${JSON.stringify(stateDir)}`,
+        "",
+        "[defaults]",
+        'worktree_provider = "worktrunk"',
+        'terminal = "tmux"',
+        'harness = "pi"',
+        'layout = "agent-shell"',
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    ),
+  ]);
+
+  const env = {
+    ...isolatedBinaryEnv({ homeDir, runtimeDir }),
+    PATH: `${fakeBin}:${installedRoot}:/usr/bin:/bin`,
+  };
+  const result = await run(
+    binaryPath,
+    ["--config", configPath, "setup", "check", "--json", "--no-brew"],
+    { cwd, env, allowedExitCodes: [1] },
+  );
+  const plan = parseSmokeJson(result.stdout, "compiled Git canary setup plan");
+  const requiredFailures = plan.checks.filter(
+    (check) => check.tier === "required" && check.status === "missing",
+  );
+  const gitCheck = plan.checks.find((check) => check.id === "git-project");
+
+  assertEqual(result.code, 1, "compiled Git canary exit code");
+  assertEqual(gitCheck?.status, "missing", "compiled Git canary git-project status");
+  assertEqual(gitCheck?.details?.reason, "git-unusable", "compiled Git canary reason");
+  assertIncludes(
+    gitCheck?.message ?? "",
+    "Git is installed but unusable.",
+    "compiled Git canary unusable message",
+  );
+  assertIncludes(gitCheck?.message ?? "", "xcode-select --install", "compiled Git remediation");
+  assertEqual(requiredFailures.length, 1, "compiled Git canary required failure count");
+  assertEqual(plan.summary.requiredMissing, 1, "compiled Git canary requiredMissing");
+  assertEqual(plan.summary.workflowReady, false, "compiled Git canary workflowReady");
+  assertEqual(plan.summary.requiredOk, false, "compiled Git canary requiredOk");
+  assertEqual(plan.summary.launchReady, true, "compiled Git canary launchReady");
+  assertEqual(
+    plan.checks.some((check) => check.id === "command-line-tools"),
+    false,
+    "compiled Git canary omits Command Line Tools",
+  );
+}
+
+async function verifyCompiledSetupApplyLauncherWarning({ binaryPath, installedRoot, root }) {
+  const homeDir = join(root, "home");
+  const runtimeDir = join(root, "runtime");
+  const stateDir = join(root, "state");
+  const cwd = join(root, "outside-repository");
+  const fakeBin = join(root, "fake-bin");
+  const configPath = join(root, "config.toml");
+  await Promise.all(
+    [homeDir, join(homeDir, "tmp"), runtimeDir, stateDir, cwd, fakeBin].map((path) =>
+      mkdir(path, { recursive: true, mode: 0o700 }),
+    ),
+  );
+  await Promise.all([
+    writeFile(
+      join(fakeBin, "wt"),
+      "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'worktrunk 1.2.3'; exit 0; fi\nexit 1\n",
+      { mode: 0o700 },
+    ),
+    writeFile(
+      join(fakeBin, "tmux"),
+      "#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux 3.5a'; exit 0; fi\nexit 1\n",
+      { mode: 0o700 },
+    ),
+    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
+    writeFile(
+      configPath,
+      [
+        "schema_version = 1",
+        "projects = []",
+        "",
+        "[observer]",
+        `state_dir = ${JSON.stringify(stateDir)}`,
+        `socket_path = ${JSON.stringify(join(runtimeDir, "observer.sock"))}`,
+        "",
+        "[defaults]",
+        'worktree_provider = "worktrunk"',
+        'terminal = "tmux"',
+        'harness = "pi"',
+        'layout = "agent-shell"',
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    ),
+  ]);
+
+  const env = {
+    ...isolatedBinaryEnv({ homeDir, runtimeDir }),
+    PATH: `${fakeBin}:/usr/bin:/bin`,
+  };
+  const result = await run(
+    binaryPath,
+    ["--config", configPath, "setup", "apply", "--yes", "--no-brew"],
+    { cwd, env },
+  );
+  const stationLauncher = join(installedRoot, "stn");
+
+  assertEqual(result.code, 0, "compiled successful setup apply exit code");
+  assertIncludes(result.stdout, "Core setup complete.", "compiled setup apply completion");
+  assertIncludes(result.stdout, "Remaining", "compiled setup apply remaining section");
+  assertIncludes(
+    result.stdout,
+    `PATH=${quoteShellWord(installedRoot)}\${PATH:+":$PATH"}`,
+    "compiled setup apply current-shell PATH recovery",
+  );
+  assertIncludes(
+    result.stdout,
+    `  ${quoteShellWord(stationLauncher)} doctor`,
+    "compiled setup apply absolute doctor command",
+  );
+  assertIncludes(
+    result.stdout,
+    `  ${quoteShellWord(stationLauncher)}\n`,
+    "compiled setup apply absolute launch command",
+  );
+  assertIncludes(
+    result.stdout,
+    "Use stn instead of the absolute path (optional):",
+    "compiled setup apply optional bare launcher guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    `For future shells, add ${quoteShellWord(installedRoot)} to PATH in a shell configuration you choose.`,
+    "compiled setup apply future-shell PATH guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    "Use PATH rather than an alias so all three STATION launcher names resolve together.",
+    "compiled setup apply PATH over alias guidance",
+  );
+  assertIncludes(
+    result.stdout,
+    "command -v stn-tmux-popup",
+    "compiled setup apply all-launcher verification",
+  );
+  assertIncludes(
+    result.stdout,
+    "Future login shell launcher resolution remains unverified",
+    "compiled setup apply future-shell status",
+  );
+  assertExcludes(result.stdout, "\n  stn doctor\n", "compiled setup apply bare doctor command");
+  assertExcludes(result.stdout, "\n  stn\n", "compiled setup apply bare launch command");
+  assertExcludes(result.stdout, "station:link", "compiled setup apply checkout link command");
+}
+
 async function writeWorktrunkHookSmokeConfig(path, state, socket, worktrunkConfigPath) {
   await writeFile(
     path,
@@ -1188,6 +1460,32 @@ async function writeWorktrunkHookSmokeConfig(path, state, socket, worktrunkConfi
       'command = "/usr/bin/true"',
       `config_path = ${JSON.stringify(worktrunkConfigPath)}`,
       "use_lifecycle_hooks = true",
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
+}
+
+async function writeCodexHookSmokeConfig(path, state, socket) {
+  await writeFile(
+    path,
+    [
+      "schema_version = 1",
+      "projects = []",
+      "",
+      "[observer]",
+      `state_dir = ${JSON.stringify(state)}`,
+      `socket_path = ${JSON.stringify(socket)}`,
+      "",
+      "[defaults]",
+      'worktree_provider = "noop-worktree"',
+      'terminal = "noop-terminal"',
+      'harness = "codex"',
+      'layout = "agent-shell"',
+      "",
+      "[harness.codex]",
+      'command = "/usr/bin/true"',
+      "install_hooks = true",
       "",
     ].join("\n"),
     { mode: 0o600 },
@@ -2062,6 +2360,14 @@ function signalProcess(pid, signal) {
   }
 }
 
+function parseSmokeJson(source, label) {
+  try {
+    return JSON.parse(source);
+  } catch {
+    fail(`${label} did not return valid JSON`);
+  }
+}
+
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
     fail(`${label}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
@@ -2077,6 +2383,12 @@ function assertDeepEqual(actual, expected, label) {
 function assertIncludes(value, expected, label) {
   if (!value.includes(expected)) {
     fail(`${label}: expected ${JSON.stringify(value)} to include ${JSON.stringify(expected)}`);
+  }
+}
+
+function assertExcludes(value, unexpected, label) {
+  if (value.includes(unexpected)) {
+    fail(`${label}: expected ${JSON.stringify(value)} to exclude ${JSON.stringify(unexpected)}`);
   }
 }
 

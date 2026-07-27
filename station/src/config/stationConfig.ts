@@ -13,9 +13,7 @@ import { safeErrorFromUnknown } from "@station/runtime";
 // validation live in `@station/config`.
 export {
   type Automation,
-  type AutomationStep,
   DEFAULT_WORKSPACE_CONFIG,
-  SCROLL_ON_OUTPUT_MODES,
   type ScrollOnOutputMode,
   type WorkspaceConfig,
 } from "@station/config";
