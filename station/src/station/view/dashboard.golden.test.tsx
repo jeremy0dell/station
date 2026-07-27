@@ -7,6 +7,7 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
+import type { TuiToast } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -42,7 +43,21 @@ const SNAPSHOT_SCENARIOS: ReadonlyArray<{ name: string; snapshot: () => StationS
   { name: "no-projects", snapshot: noProjectsSnapshot },
 ];
 
-type RenderedDashboard = Awaited<ReturnType<typeof testRender>>;
+type RenderedDashboard = Awaited<ReturnType<typeof testRender>> & {
+  store: ReturnType<typeof makeStationTestStore>["store"];
+};
+
+const WORKTREE_ERROR_MESSAGE =
+  "Worktrunk failed to remove the selected checkout because the main worktree cannot be removed while Station is running there.";
+const WORKTREE_ERROR_HINT =
+  "Open a different linked checkout, select the session again, and retry after confirming the worktree path and branch.";
+const WORKTREE_ERROR: TuiToast = {
+  kind: "error",
+  message: WORKTREE_ERROR_MESSAGE,
+  hint: WORKTREE_ERROR_HINT,
+  traceId: "trace_worktree_remove_123",
+  diagnosticId: "diag_worktree_remove_456",
+};
 
 describe("dashboard golden frames", () => {
   const teardowns: Array<() => void> = [];
@@ -59,6 +74,7 @@ describe("dashboard golden frames", () => {
     connection?: StationClientConnectionState;
     dispatchMouse?: (target: StationMouseTarget) => void;
     hoverEnabled?: boolean;
+    toast?: TuiToast;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
       snapshot: input.snapshot ?? null,
@@ -71,6 +87,7 @@ describe("dashboard golden frames", () => {
         store={store}
         columns={input.width}
         rows={input.height}
+        onCopyNotice={() => {}}
       />
     );
     const mouseDashboard =
@@ -91,7 +108,15 @@ describe("dashboard golden frames", () => {
       setup.renderer.destroy();
     });
     await setup.renderOnce();
-    return setup;
+    const toast = input.toast;
+    if (toast !== undefined) {
+      await act(async () => {
+        store.getState().pushToast(toast);
+        await Promise.resolve();
+      });
+      await setup.flush();
+    }
+    return Object.assign(setup, { store });
   }
 
   for (const scenario of SNAPSHOT_SCENARIOS) {
@@ -124,10 +149,10 @@ describe("dashboard golden frames", () => {
       seedInitialSnapshot: false,
     });
     store.getState().start();
-    const setup = await testRender(<DashboardRoot store={store} columns={width} rows={height} />, {
-      width,
-      height,
-    });
+    const setup = await testRender(
+      <DashboardRoot store={store} columns={width} rows={height} onCopyNotice={() => {}} />,
+      { width, height },
+    );
     teardowns.push(() => {
       setup.renderer.destroy();
     });
@@ -384,10 +409,10 @@ describe("dashboard golden frames", () => {
       seedInitialSnapshot: false,
     });
     store.getState().start();
-    const setup = await testRender(<DashboardRoot store={store} columns={80} rows={24} />, {
-      width: 80,
-      height: 24,
-    });
+    const setup = await testRender(
+      <DashboardRoot store={store} columns={80} rows={24} onCopyNotice={() => {}} />,
+      { width: 80, height: 24 },
+    );
     teardowns.push(() => {
       setup.renderer.destroy();
     });
@@ -451,4 +476,41 @@ describe("dashboard golden frames", () => {
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
     expect(clicked).toMatchObject({ kind: "row" });
   });
+
+  it("wraps the complete actionable error at wide and narrow widths", async () => {
+    for (const size of [
+      { width: 99, height: 25 },
+      { width: 40, height: 25 },
+    ]) {
+      const setup = await renderDashboard({
+        ...size,
+        snapshot: manyProjectsSnapshot(),
+        toast: WORKTREE_ERROR,
+      });
+      const frame = setup.captureCharFrame();
+      const lines = frame.split("\n");
+      const top = lines.findIndex((line) => line.includes("┌"));
+      const bottom = lines.findIndex((line, index) => index > top && line.includes("└"));
+      const left = lines[top]?.indexOf("┌") ?? -1;
+      const right = lines[top]?.lastIndexOf("┐") ?? -1;
+      const noticeText = lines
+        .slice(top + 1, bottom)
+        .map((line) => line.slice(left + 1, right).trim())
+        .join(" ")
+        .replace(/\s+/g, " ");
+
+      expect(top).toBeGreaterThanOrEqual(3);
+      expect(bottom).toBeLessThan(size.height - 3);
+      expect(left).toBe(2 + Math.max(0, size.width - 76));
+      expect(size.width - right - 1).toBe(2);
+      expect(noticeText).toContain(WORKTREE_ERROR_MESSAGE);
+      expect(noticeText).toContain(WORKTREE_ERROR_HINT);
+      expect(noticeText).toContain("trace trace_worktree_remove_123");
+      expect(noticeText).toContain("diagnostic diag_worktree_remove_456");
+      expect(noticeText).not.toContain("…");
+      expect(frame).toContain("Esc:dismiss  Q:close");
+      expect(frame.replace(/[ \t]+$/gm, "")).toMatchSnapshot();
+    }
+  });
+
 });

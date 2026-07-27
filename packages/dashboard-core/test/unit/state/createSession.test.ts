@@ -69,15 +69,21 @@ const operation = {
   type: "createSession" as const,
   localId: "local_create_1",
   projectId: "web",
+  title: "Hexagonal PT 12",
   branch: "feature/new-session",
   harnessProvider: "codex",
   command: {
     type: "session.create" as const,
     payload: {
       projectId: "web",
+      title: "Hexagonal PT 12",
       branch: "feature/new-session",
       harness: { provider: "codex", mode: "interactive" as const },
-      terminal: { provider: "fixture-terminal", layout: "agent-build-shell", focus: false },
+      terminal: {
+        provider: "fixture-terminal",
+        layout: "agent-build-shell" as const,
+        focus: false,
+      },
     },
   },
 };

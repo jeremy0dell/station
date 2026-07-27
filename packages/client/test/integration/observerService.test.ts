@@ -126,13 +126,13 @@ describe("observer client service", () => {
 
   it("prepares external launches and reports external exits through the protocol", async () => {
     const { socketPath } = await createTempSocketPath();
-    const prepared: Array<{ projectId: string; worktreeId: string }> = [];
+    const prepared: Array<{ projectId: string; worktreeId: string; title?: string }> = [];
     const exited: string[] = [];
     const server = await startProtocolServer({
       socketPath,
       api: fakeApi({
         prepareExternalLaunch: async (params) => {
-          prepared.push({ projectId: params.projectId, worktreeId: params.worktreeId });
+          prepared.push(params);
           return {
             kind: "prepared",
             sessionId: "ses_external_1",
@@ -160,7 +160,11 @@ describe("observer client service", () => {
     const service = createObserverService({ socketPath, requestId: ids("ext") });
 
     await expect(
-      service.prepareExternalLaunch({ projectId: "web", worktreeId: "wt_web_feature" }),
+      service.prepareExternalLaunch({
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        title: "Hexagonal PT 12",
+      }),
     ).resolves.toMatchObject({
       kind: "prepared",
       sessionId: "ses_external_1",
@@ -175,7 +179,9 @@ describe("observer client service", () => {
       service.reportExternalExit({ terminalTargetId: "native:wt_web_feature" }),
     ).resolves.toEqual({ acknowledged: true, terminalTargetId: "native:wt_web_feature" });
 
-    expect(prepared).toEqual([{ projectId: "web", worktreeId: "wt_web_feature" }]);
+    expect(prepared).toEqual([
+      { projectId: "web", worktreeId: "wt_web_feature", title: "Hexagonal PT 12" },
+    ]);
     expect(exited).toEqual(["native:wt_web_feature"]);
 
     await server.close();
@@ -267,35 +273,7 @@ describe("observer client service", () => {
   it("returns the underlying subscription iterator for cleanup", async () => {
     let returned = false;
     const service = createObserverService({
-      client: {
-        health: async () => fakeHealth(),
-        stop: async () => ({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          stopped: true,
-          at: fixtureNow,
-        }),
-        getSnapshot: async () => createCommandSnapshot("idle"),
-        dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
-        getCommand: async () => undefined,
-        waitForCommand: async () => commandRecord("cmd_1", "succeeded") as TerminalCommandRecord,
-        reconcile: async () => ({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          reason: "test",
-          reconciledAt: fixtureNow,
-          snapshot: createCommandSnapshot("idle"),
-        }),
-        ingestProviderHookEvent: async (event: ProviderHookEvent) => ({
-          schemaVersion: STATION_SCHEMA_VERSION,
-          hookId: "hook_1",
-          provider: event.provider,
-          event: event.event,
-          accepted: true,
-          status: "ingested",
-          receivedAt: event.receivedAt,
-          reconciled: true,
-        }),
-        runDoctor: async () => fakeDoctor(),
-        collectDiagnostics: async () => fakeDiagnostics(),
+      client: fakeClient({
         subscribe: () => ({
           [Symbol.asyncIterator]: () => ({
             next: async () => new Promise<IteratorResult<StationEvent>>(() => undefined),
@@ -305,7 +283,7 @@ describe("observer client service", () => {
             },
           }),
         }),
-      },
+      }),
     });
 
     const iterator = service.subscribeEvents()[Symbol.asyncIterator]();
@@ -522,11 +500,47 @@ function fakeHealth(): ObserverHealth {
 }
 
 function fakeDoctor(): DoctorReport {
+  const snapshot = createCommandSnapshot("idle");
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     status: "healthy",
     generatedAt: fixtureNow,
     checks: [],
+    observer: fakeHealth(),
+    config: { projectCount: snapshot.projects.length, diagnostics: [] },
+    providers: {},
+    snapshot,
+    logs: { paths: [], recent: [] },
+    localState: {
+      stateDir: "/tmp/station",
+      totalBytes: 0,
+      limitBytes: 1,
+      overLimit: false,
+      entries: [],
+    },
+    retention: {
+      maxDays: 1,
+      maxTotalMb: 1,
+      maxFileMb: 1,
+      maxFilesPerComponent: 1,
+      components: {
+        observerMaxMb: 1,
+        cliMaxMb: 1,
+        tuiMaxMb: 1,
+        hookRunnerMaxMb: 1,
+        providerMaxMb: 1,
+      },
+      sqlite: {
+        eventsMaxDays: 1,
+        commandsMaxDays: 1,
+        errorsMaxDays: 1,
+        providerObservationsMaxDays: 1,
+      },
+      debugBundles: { maxBundles: 1, maxDays: 1 },
+      hookSpool: { deliveredDeleteImmediately: true, failedMaxDays: 1, failedMaxItems: 1 },
+    },
+    recentErrors: [],
+    debugBundle: { available: true, diagnosticsDir: "/tmp/station/diagnostics" },
   };
 }
 
@@ -534,16 +548,13 @@ function fakeDiagnostics(): DiagnosticSnapshot {
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     collectedAt: fixtureNow,
+    observerHealth: fakeHealth(),
+    snapshot: createCommandSnapshot("idle"),
+    providerHealth: {},
     commands: [],
     events: [],
     errors: [],
     logs: [],
-    redaction: {
-      policyVersion: "test",
-      redactedFields: [],
-      redactedValues: 0,
-      suspiciousPatterns: [],
-    },
   };
 }
 
@@ -588,6 +599,15 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       receivedAt: report.observedAt,
       projected: false,
       scheduledReconcile: true,
+    }),
+    prepareExternalLaunch: async (params) => ({
+      kind: "existing-session",
+      sessionId: `ses_${params.worktreeId}`,
+      harnessProvider: "fake-harness",
+    }),
+    reportExternalExit: async (params) => ({
+      acknowledged: true,
+      terminalTargetId: params.terminalTargetId,
     }),
     runDoctor: async () => fakeDoctor(),
     collectDiagnostics: async () => fakeDiagnostics(),

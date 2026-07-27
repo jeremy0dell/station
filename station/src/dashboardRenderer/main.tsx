@@ -3,7 +3,7 @@
 // starts the observer and spawns this entry under Bun for both fullscreen and
 // popup; it renders Station's dashboard view over the observer socket and
 // dispatches the same observer commands the Ink TUI did (no Station panes).
-import { createCliRenderer } from "@opentui/core";
+import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { createTuiStore } from "@station/dashboard-core";
 import {
@@ -11,6 +11,9 @@ import {
   startWidgetConfigWrites,
   type WidgetConfigWrites,
 } from "../config/tuiConfig.js";
+import { copyToClipboard, DEFAULT_COPY_SINKS } from "../copy/clipboard.js";
+import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
+import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
@@ -23,7 +26,7 @@ import {
   createProcessRendererControlChannel,
 } from "./popupRuntime.js";
 
-type DashboardHotRenderer = { destroy(): void };
+type DashboardHotRenderer = Pick<CliRenderer, "destroy" | "getSelection">;
 type DashboardHotRoot = { unmount(): void };
 type DashboardHotSlots = typeof globalThis & {
   __stationDashboardHotDispose?: () => void;
@@ -42,6 +45,11 @@ function dashboardHotSlots(): DashboardHotSlots {
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
   const hotSlots = dashboardHotSlots();
+  const clipboardEffects = createRuntimeClipboardEffects({
+    env,
+    platform: process.platform,
+    writeToHost: (sequence) => process.stdout.write(sequence),
+  });
 
   // The prior OpenTUI owner must release process-global stdin synchronously before replacement.
   hotSlots.__stationDashboardHotDispose?.();
@@ -87,6 +95,9 @@ export async function runDashboardMain(): Promise<void> {
     },
     ...popupRuntime.storeOptions,
   });
+  const copyNoticeText = (text: string): void => {
+    copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
+  };
   const mouseEffects: DashboardMouseEffects = {
     openShell: ({ cwd }) => {
       const openShell = popupRuntime.openShell;
@@ -147,10 +158,11 @@ export async function runDashboardMain(): Promise<void> {
   const enableMouseMovement = !popupRenderer;
 
   try {
+    const copySelectedText = createOpenTuiSelectionCopyHandler(() => renderer, clipboardEffects);
     const nextRenderer = await createCliRenderer({
       enableMouseMovement,
       exitOnCtrlC: false,
-      prependInputHandlers: [createDashboardSequenceHandler(store)],
+      prependInputHandlers: [copySelectedText, createDashboardSequenceHandler(store)],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;
@@ -168,13 +180,13 @@ export async function runDashboardMain(): Promise<void> {
         store.getState().handleKey({ input: text });
       }
     });
-
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
     nextRoot.render(
       <FullscreenDashboard
         store={store}
         effects={mouseEffects}
+        onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
       />,
     );

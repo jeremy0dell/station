@@ -208,7 +208,7 @@ function row(
     branch: "feature/login",
     path: "/tmp/station/web/feature",
     worktree: { state: "exists", source: "worktrunk" },
-    display: { statusLabel: "No agent", sortPriority: 0, alert: false },
+    display: { statusLabel: "no agent", sortPriority: 0, alert: false },
   };
   if (overrides.agentSessionId !== undefined) {
     base.agent = {
@@ -243,9 +243,24 @@ function fakeCore(rows: WorktreeRow[]): ObserverCore {
   } as unknown as ObserverCore;
 }
 
-const fakePersistence = {
-  findRememberedHarnessProviderForWorktree: async () => undefined,
-} as unknown as SessionStore;
+function trackingPersistence() {
+  const seeded: Array<Parameters<SessionStore["seedSessionTitle"]>[0]> = [];
+  const deleted: string[] = [];
+  const store = {
+    findRememberedHarnessProviderForWorktree: async () => undefined,
+    seedSessionTitle: async (input: Parameters<SessionStore["seedSessionTitle"]>[0]) => {
+      seeded.push(input);
+      return {} as Awaited<ReturnType<SessionStore["seedSessionTitle"]>>;
+    },
+    deleteSessionTitleSeed: async (sessionId: string) => {
+      deleted.push(sessionId);
+      return 1;
+    },
+  } as unknown as SessionStore;
+  return { store, seeded, deleted };
+}
+
+const fakePersistence = trackingPersistence().store;
 
 /** A harness that reports hook installation status (the gate input). */
 class HookableHarness extends FakeHarnessProvider {
@@ -287,11 +302,12 @@ function deps(
   rows: WorktreeRow[],
   managedTerminal: ManagedTerminalLifecycle,
   harnesses?: Harnesses,
+  persistence: SessionStore = fakePersistence,
 ) {
   return {
     core: fakeCore(rows),
     providers: registryWith(managedTerminal, harnesses),
-    persistence: fakePersistence,
+    persistence,
     clock: { now: () => new Date(now) },
   };
 }
@@ -343,6 +359,28 @@ describe("prepareExternalLaunch", () => {
     const targets = await station.listTargets();
     expect(targets).toHaveLength(1);
     expect(targets[0]?.harnessBinding?.role).toBe("main-agent");
+  });
+
+  it("persists a custom title before exposing a newly prepared session", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const persistence = trackingPersistence();
+
+    const result = await prepareExternalLaunch(
+      deps([row()], station, undefined, persistence.store),
+      { ...prepareParams, title: "Hexagonal PT 12" },
+    );
+
+    expect(result.outcome.kind).toBe("prepared");
+    if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
+    expect(persistence.seeded).toEqual([
+      expect.objectContaining({
+        sessionId: result.outcome.sessionId,
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        title: "Hexagonal PT 12",
+      }),
+    ]);
+    expect(persistence.deleted).toEqual([]);
   });
 
   it("rejects when the harness's status hooks are not installed", async () => {
@@ -415,11 +453,12 @@ describe("prepareExternalLaunch", () => {
     expect(await station.listTargets()).toHaveLength(1);
   });
 
-  it("returns the existing session id instead of minting a second identity", async () => {
+  it("returns the existing session id without applying a requested title", async () => {
     const station = new FakeManagedTerminalLifecycle();
+    const persistence = trackingPersistence();
     const result = await prepareExternalLaunch(
-      deps([row({ agentSessionId: "ses_existing" })], station),
-      prepareParams,
+      deps([row({ agentSessionId: "ses_existing" })], station, undefined, persistence.store),
+      { ...prepareParams, title: "Do not rename me" },
     );
     expect(result).toEqual({
       outcome: {
@@ -429,7 +468,9 @@ describe("prepareExternalLaunch", () => {
       },
       reconcile: false,
     });
-    // No new target registered when an agent already exists.
+    // No title or target is created when an agent already exists.
+    expect(persistence.seeded).toEqual([]);
+    expect(persistence.deleted).toEqual([]);
     expect(await station.listTargets()).toEqual([]);
   });
 
@@ -599,7 +640,7 @@ describe("prepareExternalLaunch", () => {
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
   });
 
-  it("releases the opened target when managed process launch fails", async () => {
+  it("releases the opened target and deletes its title seed when process launch fails", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
         tag: "TerminalProviderError",
@@ -607,15 +648,20 @@ describe("prepareExternalLaunch", () => {
         message: "launch failed",
       },
     });
+    const persistence = trackingPersistence();
 
     await expect(
-      prepareExternalLaunch(deps([row()], station), prepareParams),
+      prepareExternalLaunch(deps([row()], station, undefined, persistence.store), {
+        ...prepareParams,
+        title: "Hexagonal PT 12",
+      }),
     ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+    expect(persistence.deleted).toEqual([persistence.seeded[0]?.sessionId]);
     expect(await station.listTargets()).toEqual([]);
   });
 
-  it("preserves the launch failure when rollback release also fails", async () => {
+  it("preserves the launch failure and title seed when rollback release also fails", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
         tag: "TerminalProviderError",
@@ -628,11 +674,17 @@ describe("prepareExternalLaunch", () => {
         message: "release failed",
       },
     });
+    const persistence = trackingPersistence();
 
     await expect(
-      prepareExternalLaunch(deps([row()], station), prepareParams),
+      prepareExternalLaunch(deps([row()], station, undefined, persistence.store), {
+        ...prepareParams,
+        title: "Hexagonal PT 12",
+      }),
     ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+    expect(persistence.deleted).toEqual([]);
+    expect(await station.listTargets()).toHaveLength(1);
   });
 });
 

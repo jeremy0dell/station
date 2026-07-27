@@ -32,6 +32,7 @@ import {
   providerProjectsFromConfig,
 } from "../../src/internal";
 import { createLocalGitWorktreeChangeSource } from "../../src/metadata/localGitChangeSummary.js";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createTestObserver } from "../support/testObserver";
 import {
   FakeWorktreeChangeSource,
@@ -582,6 +583,7 @@ describe("observer worktree metadata refresh use case", () => {
         eventBus,
       }),
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock: fixture.clock,
       metadataRefresh: {
         refresh: async () => {

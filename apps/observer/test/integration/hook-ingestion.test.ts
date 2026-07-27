@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
@@ -21,6 +21,7 @@ import {
   openObserverSqlite,
   ProviderRegistry,
 } from "../../src/internal";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -313,6 +314,7 @@ describe("observer provider hook ingress", () => {
       persistenceHealth: persistence,
       commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       harnessEventReportIngestion: {
         ingest: async (report): Promise<HarnessEventReportReceipt> => {
@@ -368,6 +370,7 @@ describe("observer provider hook ingress", () => {
       persistenceHealth: persistence,
       commandQueue: createCommandQueue({ persistence, clock, idFactory: ids(), eventBus }),
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       harnessEventReportIngestion: {
         ingest: async (report): Promise<HarnessEventReportReceipt> => {
@@ -750,6 +753,7 @@ describe("observer provider hook ingress", () => {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
@@ -904,10 +908,10 @@ class RecordingHarnessProvider extends FakeHarnessProvider {
         sessionId: "ses_web_feature_auth",
         rawEventType: "run.updated",
         status: {
-          value: "idle",
-          confidence: "high",
+          value: "idle" as const,
+          confidence: "high" as const,
           reason: "Fake harness hook reported idle.",
-          source: "harness_event",
+          source: "harness_event" as const,
           updatedAt: now,
         },
         observedAt: now,

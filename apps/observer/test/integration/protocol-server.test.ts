@@ -1,6 +1,8 @@
-import { access, chmod } from "node:fs/promises";
+import { access, chmod, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import { componentLogPath } from "@station/observability";
 import { createObserverClient } from "@station/protocol";
 import {
   createFakeWorktree,
@@ -26,6 +28,7 @@ import {
   runObserverMain,
   startObserverServer,
 } from "../../src/internal";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -133,6 +136,63 @@ describe("observer protocol server", () => {
       await chmod(socketPath, 0o600);
       await server.close();
       fixture.sqlite.close();
+    }
+  });
+
+  it("captures canonical runtime paths in the local diagnostic adapter", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-runtime-diagnostics-"));
+    const stateDir = join(root, "state with spaces");
+    const { socketPath } = await createTempSocketPath();
+    const providerRegistryFactory = vi.fn(
+      () =>
+        new ProviderRegistry({
+          worktree: new FakeWorktreeProvider({ now }),
+          terminal: new FakeTerminalProvider({ now }),
+          harnesses: [new FakeHarnessProvider({ now })],
+        }),
+    );
+    const runtime = runObserverMain(
+      ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
+      { providerRegistryFactory, buildVersion: observerBuildVersion },
+    );
+    const client = createObserverClient({ socketPath, requestId: ids("runtime-path") });
+
+    try {
+      await vi.waitFor(
+        async () => {
+          await expect(client.health()).resolves.toMatchObject({ stateDir, socketPath });
+        },
+        { timeout: 2000 },
+      );
+      const snapshot = await client.collectDiagnostics({ includeLogs: false });
+      expect(snapshot.observerHealth).toMatchObject({ stateDir, socketPath });
+      expect(snapshot.localState).toMatchObject({
+        stateDir,
+        entries: [
+          { kind: "logs", path: join(stateDir, "logs") },
+          { kind: "database", path: join(stateDir, "observer.sqlite") },
+          { kind: "debug_bundles", path: join(stateDir, "diagnostics") },
+          { kind: "hook_spool", path: join(stateDir, "spool", "hooks") },
+        ],
+      });
+      expect(snapshot.hookSpool).toMatchObject({
+        path: join(stateDir, "spool", "hooks"),
+      });
+
+      const report = await client.runDoctor();
+      expect(report.observer).toMatchObject({ stateDir, socketPath });
+      expect(report.logs.paths).toEqual([
+        componentLogPath(stateDir, "observer"),
+        componentLogPath(stateDir, "hook"),
+      ]);
+      expect(report.debugBundle.diagnosticsDir).toBe(join(stateDir, "diagnostics"));
+
+      await client.stop();
+      await expect(runtime).resolves.toBe(0);
+      expect(providerRegistryFactory).toHaveBeenCalledOnce();
+    } finally {
+      await client.stop().catch(() => undefined);
+      await runtime.catch(() => undefined);
     }
   });
 
@@ -266,6 +326,7 @@ function createObserverFixture(socketPath: string) {
     persistenceHealth,
     commandQueue: queue,
     eventBus,
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     clock,
     socketPath,
     observerBuildVersion,

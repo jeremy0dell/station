@@ -115,7 +115,7 @@ async function renderOverlay(
 ) {
   const { store } = makeStationTestStore();
   const setup = await testRender(
-    <StationOverlay store={store} dispatchMouse={dispatchMouse} />,
+    <StationOverlay store={store} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />,
     SURFACE,
   );
   await setup.flush();

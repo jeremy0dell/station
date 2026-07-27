@@ -4,6 +4,7 @@ import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
 import type { StationLogger } from "../../src/stationLogger";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { emptyStationSnapshot, fakeObserverCommandQueue } from "../support/testObserver";
 
@@ -113,6 +114,7 @@ function createProfilingApi(input: {
     },
     commandQueue: fakeObserverCommandQueue(),
     eventBus,
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     clock,
     logger: input.logger,
     metadataRefresh: {
@@ -135,7 +137,13 @@ function fakeCore(reconcileDelayMs: number): ObserverCore {
       }
       return emptyStationSnapshot(now);
     },
-    projectHarnessEventStatus: async () => ({ projected: false, events: [] }),
+    commitProviderHealthProbe: () => Promise.resolve(undefined),
+    projectHarnessEventStatus: async () => ({
+      projected: false,
+      snapshot: emptyStationSnapshot(now),
+      events: [],
+    }),
+    clearTurnReadiness: () => undefined,
     updateConfig: () => undefined,
     getProjects: () => [],
     getSnapshot: () => emptyStationSnapshot(now),

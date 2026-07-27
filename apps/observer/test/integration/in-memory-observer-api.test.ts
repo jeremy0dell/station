@@ -16,6 +16,7 @@ import { ProviderRegistry } from "../../src/providers/registry";
 import { createObserverCore, type ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 import {
@@ -48,6 +49,7 @@ describe("Observer API composition with in-memory persistence", () => {
       lifecycle.push("metadata");
     };
     const persistenceHealth: PersistenceHealthSource = { health: () => healthStub };
+    const diagnosticEvidenceSource = new FakeDiagnosticEvidenceSource();
     const api = createObserverApi({
       core,
       providers,
@@ -55,9 +57,9 @@ describe("Observer API composition with in-memory persistence", () => {
       persistenceHealth,
       commandQueue,
       eventBus,
+      diagnosticEvidenceSource,
       clock,
       config,
-      stateDir: "/tmp/station-no-sqlite-observer",
       hookReconcileDebounceMs: 0,
       worktreeChangeSource,
       worktreeMetadataInvalidationSource,
@@ -162,12 +164,23 @@ describe("Observer API composition with in-memory persistence", () => {
       sqlite: healthStub,
     });
     await expect(api.collectDiagnostics({ includeLogs: false })).resolves.toMatchObject({
-      observerHealth: { sqlite: healthStub },
+      observerHealth: {
+        sqlite: healthStub,
+        stateDir: "memory://state",
+        socketPath: "memory://observer-socket",
+      },
+      localState: { stateDir: "memory://state" },
+      hookSpool: { path: "urn:station:hook-spool" },
       commands: [expect.objectContaining({ id: command.commandId, status: "succeeded" })],
       events: expect.arrayContaining([
         expect.objectContaining({ type: "providerHook.ingested", hookId: "hook_memory_1" }),
       ]),
     });
+    await expect(api.runDoctor()).resolves.toMatchObject({
+      logs: { paths: ["queue://observer-log", "queue://hook-log"] },
+      debugBundle: { diagnosticsDir: "memory://diagnostics" },
+    });
+    expect(diagnosticEvidenceSource.readRecentLogsCalls).toEqual([50]);
 
     await expect(api.stop()).resolves.toMatchObject({ stopped: true, at: now });
     expect(worktreeMetadataInvalidationSource.shutdownCount).toBe(1);
@@ -217,6 +230,7 @@ describe("Observer API composition with in-memory persistence", () => {
       persistenceHealth: { health: () => healthStub },
       commandQueue,
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       config,
       worktreeMetadataInvalidationSource: invalidationSource,
@@ -271,6 +285,7 @@ describe("Observer API composition with in-memory persistence", () => {
       persistenceHealth: { health: () => healthStub },
       commandQueue,
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       config,
       metadataRefresh: {

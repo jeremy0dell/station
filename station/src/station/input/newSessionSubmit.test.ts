@@ -38,8 +38,25 @@ describe("resolveNewSessionSubmit", () => {
       expect(submit.projectId).toBe("station");
       // Generated branch carries a random token, so match the prefix, not the whole name.
       expect(submit.branch).toMatch(/^station-/);
+      expect(submit.title).toBe(submit.branch);
       expect(submit.harness).toBe("codex");
     }
+  });
+
+  it("carries a custom name independently from the generated branch", () => {
+    const store = storeOnNewSessionReview();
+    const opened = store.getState().screen;
+    if (opened.name !== "newSession") throw new Error("expected new-session wizard");
+    const branch = opened.flow.branch;
+    store.getState().handleKey({ input: "N" });
+    store.getState().handleKey({ input: "Hexagonal PT 12" });
+    store.getState().handleKey({ input: "\r", return: true });
+
+    expect(resolveNewSessionSubmit(store)).toMatchObject({
+      kind: "submit",
+      title: "Hexagonal PT 12",
+      branch,
+    });
   });
 
   it("does not submit from the dashboard (no wizard open)", () => {

@@ -159,8 +159,9 @@ Composition is intentionally split:
    expectation from resolved runtime paths and the Observer ingress launcher, and
    supplies a `ProviderRegistry` factory.
 2. `apps/observer/src/runtime/main.ts` loads config and constructs Observer-
-   private infrastructure: SQLite, persistence, logging and project-config adapters, event bus, command
-   queue, core, handlers, ingress queues, schedulers, API, and protocol server.
+   private infrastructure: SQLite, persistence, logging, project-config, and local
+   diagnostic-evidence adapters, event bus, command queue, core, handlers, ingress
+   queues, schedulers, API, and protocol server.
 
 The split is allowed because both pieces are outer wiring. Application modules
 must not compensate for it by selecting concrete adapters at runtime.
@@ -192,7 +193,7 @@ ownership even where current ownership is still a deviation.
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
 | Logging and config mutation | Driven | `StationLogger` and `ProjectConfigWriter` | `runtime/logging.ts` JSONL adapter and `runtime/projectConfigWriter.ts` config adapter | Conforming ports expose only operational logging and the three project mutations; paths and representations remain adapter-owned. |
 | Worktree metadata evidence | Driven | `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | Conforming path-free roles: one reads typed checkout-local change evidence; the other owns full-set watcher replacement and terminal shutdown. |
-| Diagnostic evidence | Driven | target `DiagnosticEvidenceSource` | local state, log, and hook-spool adapter | Only typed local evidence traversal crosses the port; command/event persistence, providers, core, and SQLite remain separate inputs (OBS-HEX-012). |
+| Diagnostic evidence | Driven | `DiagnosticEvidenceSource` | `createLocalDiagnosticEvidenceSource` | Conforming read-only role: the adapter captures resolved local state, log, diagnostics, socket, and hook-spool locations while only typed measurements and bounded evidence cross the port; command/event journals, providers, core, and SQLite remain separate inputs. |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, argv, and OS start token must corroborate before replacement or signaling. |
 
@@ -221,7 +222,7 @@ areas contain the following responsibilities:
 | `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
 | `persistence/sqliteAdapter.ts`, SQLite implementation modules, `migrations/`, `sqlite.ts` | SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Production outbound adapter edge selected and lifecycle-managed by runtime composition. |
 | `test/support/inMemoryObserverPersistence.ts`, `persistence/observationParser.ts` | Process-local persistence test support plus representation-neutral observation parsing and coalescing | Test-only storage substitute and shared boundary translation used to prove substitution; production source and runtime remain SQLite-only. |
-| `diagnostics/` | doctor and diagnostic collection plus local evidence traversal | Diagnostic use cases depend on an evidence-source port (OBS-HEX-012). |
+| `diagnostics/` | doctor and diagnostic collection, the local-evidence port, and local representation translation | Diagnostic use cases aggregate core, journal, persistence-health, provider, configuration, and typed local evidence; `localEvidenceSource.ts` alone owns state, JSONL log, and hook-spool filesystem traversal. |
 | `features/` | feature-flag evaluation | Deterministic application policy. |
 | `apps/cli/src/observerProviders.ts` | concrete provider construction and role assignment | Outer composition root. |
 | `integrations/**` | external-system parsing and operations | Outbound adapters. |
@@ -302,12 +303,15 @@ Current startup proceeds in this order:
    `ProjectConfigWriter` configuration adapter, command queue, feature evaluator,
    Observer core, command handlers, and configured event hooks around the awaited
    provider registry. Only the two application ports pass inward.
-7. The API constructs ingress queues, reconcile scheduling, metadata refresh,
-   diagnostics dependencies, spool draining, and the provider-health completion
-   listener whose commits drain before persistence shutdown. Local Git readers
-   and ref invalidation are selected here; watches arm lazily on the first
-   metadata refresh, and each refresh replaces the complete watched identity set
-   before cache or metadata reads so a later ref move cannot be missed.
+7. Runtime composition captures the resolved state, socket, diagnostics, log,
+   and hook-spool locations in the local diagnostic-evidence adapter before
+   supplying it to the API. The API constructs ingress queues, reconcile
+   scheduling, metadata refresh, diagnostics dependencies, spool draining, and
+   the provider-health completion listener whose commits drain before persistence
+   shutdown. Local Git readers and ref invalidation are selected here; watches
+   arm lazily on the first metadata refresh, and each refresh replaces the
+   complete watched identity set before cache or metadata reads so a later ref
+   move cannot be missed.
 8. The runtime constructs a private startup-and-health gate, then the protocol
    server binds the resolved socket before startup reconcile. Only the
    successful socket binder may publish process identity.
@@ -552,6 +556,13 @@ capability. Providers without an equivalent managed external artifact retain
 the deliberate fail-open behavior; Pi is not forced through this gate. Focusing
 an existing session precedes the gate.
 
+When preparation mints a fresh session and receives a title, it persists that
+title before registering the managed target so reconcile cannot publish the new
+session under its branch. Terminal-preparation or process-launch failure releases
+the target before deleting the seed; if target release cannot be confirmed, the
+seed remains so a dangling target cannot lose its title. A title supplied while
+returning an existing session is ignored.
+
 A managed launch result may include an opaque attachment that Station resolves
 to its host mechanics. An absent attachment permits Station's local launch path;
 once an attachment is advertised, resolution or later attachment failure must
@@ -569,14 +580,16 @@ without mixing requester and Observer identities, so Worktrunk, Claude, Codex,
 Cursor, and OpenCode compare hook artifacts using the requester runtime identity
 even when an exact-build Observer from another checkout serves the request. Direct
 API callers retain the whole Observer composition expectation as the fallback.
-Provider adapters receive
-`PersistenceHealthSource` separately from the command and event journals, so
-neither use case needs a concrete SQLite handle. Collection must remain
-read-only with respect to product state. Provider doctor calls receive an
+Provider adapters receive `PersistenceHealthSource` separately from the command
+and event journals, so neither use case needs a concrete SQLite handle. The
+`DiagnosticEvidenceSource` supplies measured local-state usage, bounded typed
+logs with their reported locations, and hook-spool file metadata separately from
+those inputs. Its local adapter captures canonical runtime paths at composition;
+the use cases receive no filesystem layout or traversal mechanics. Collection
+remains read-only with respect to product state. Provider doctor calls receive an
 Observer-owned total timeout and cancellation signal; adapters that fan out
 checks must bound concurrency and return completed evidence before that budget
-expires. OBS-HEX-012 tracks separation of filesystem, log, and spool traversal
-from the diagnostic use case.
+expires.
 
 ## Concurrency, Failure, And Backpressure
 
@@ -785,10 +798,11 @@ Architecture is protected by several forms of evidence:
 Current enforcement is partial. The boundary inventory catches forbidden
 package imports but cannot detect copied provider IDs, reconstructed target
 formats, or application logic that selects a concrete adapter. Marker and
-declared-seam checks begin with documented or touched seams. Persistence
-substitution is covered by shared contracts and a no-SQLite application lane;
-complete conformance still requires the remaining dependency-direction and
-local-evidence adapter remediation tracked below.
+declared-seam checks begin with documented or touched seams. Persistence substitution is covered by shared contracts and a no-SQLite
+application lane. Diagnostic-evidence substitution is covered by a deliberately
+non-local fake, local-adapter translation tests, runtime path-capture coverage,
+and import diagnostics; complete conformance still requires the remaining
+major-module dependency-direction remediation tracked below.
 
 The final architecture manifest is generated from named exported declarations,
 their controlled JSDoc markers and purpose prose, and the source/import graph.
@@ -810,7 +824,6 @@ and exit condition here.
 | ID | Current evidence and risk | Containment and exit evidence | Tracking |
 | --- | --- | --- | --- |
 | `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
-| `OBS-HEX-012` | Diagnostic collection directly traverses filesystem, log, spool, and runtime path representations. The use case cannot be substituted independently of local evidence layout. | Diagnostics remain read-only. Exit when a `DiagnosticEvidenceSource` adapter owns only local-state, recent-log, and hook-spool traversal, captures its paths, and the use case runs against a fake without absorbing persistence, providers, core, or SQLite. | Diagnostic evidence isolation. |
 
 The managed-terminal lifecycle leak formerly tracked as `OBS-HEX-001` is
 resolved: application code receives `ManagedTerminalLifecycle` from composition,
@@ -839,6 +852,10 @@ configuration/home paths; static inventory and substitution tests enforce both e
 `WorktreeMetadataInvalidationSource` ports isolate local Git reads and ref-watch
 lifecycle, runtime composition selects both adapters, substitution tests replace
 both roles, and boundary diagnostics confine Git/process and filesystem mechanics.
+`OBS-HEX-012` is resolved: the typed `DiagnosticEvidenceSource` isolates local
+state, recent-log, and hook-spool reads; runtime composition captures canonical
+paths in its local adapter, while fake substitution and import diagnostics keep
+journals, persistence health, providers, core, and SQLite as separate inputs.
 `OBS-HEX-013` is resolved: normal and provider-hook clients no longer unlink
 stale sockets, the child holds the persistent SQLite boot claim through ready
 commitment, and permanent Node/Bun plus production lifecycle races cover

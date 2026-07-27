@@ -155,7 +155,7 @@ Read [Overview](docs/overview.md) for the mental model and
 
 ## Documentation
 
-Start at the [documentation home](docs/index.md), or go directly to:
+Start at the [documentation home](docs/README.md), or go directly to:
 
 - [Quick start](docs/quick-start.md) — add a project and run the first agent
 - [Install](docs/install.md) — installation, verification, updates, and recovery

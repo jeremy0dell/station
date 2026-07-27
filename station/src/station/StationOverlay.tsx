@@ -18,6 +18,7 @@ export type StationOverlayProps = {
   topRowWidgets?: readonly TopRowWidgetView[];
   /** The Station input runtime's mouse entry point. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
+  onCopyNotice: (text: string) => void;
   widthPercent?: number | undefined;
   heightPercent?: number | undefined;
 };
@@ -76,6 +77,7 @@ export function StationOverlay({
   store,
   topRowWidgets = [],
   dispatchMouse,
+  onCopyNotice,
   widthPercent,
   heightPercent,
 }: StationOverlayProps) {
@@ -129,7 +131,12 @@ export function StationOverlay({
         onMouseDown={stopPopupMouse}
         onMouseScroll={stopPopupMouse}
       >
-        <DashboardRoot store={store} columns={innerColumns} rows={innerRows} />
+        <DashboardRoot
+          store={store}
+          columns={innerColumns}
+          rows={innerRows}
+          onCopyNotice={onCopyNotice}
+        />
       </box>
       <DashboardFrameTitle
         store={store}

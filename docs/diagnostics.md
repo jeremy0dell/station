@@ -106,7 +106,7 @@ Failed provider commands may include optional redacted diagnostics derived from
 the persisted command error envelope. The command record keeps live SafeError
 events lean while still making provider command failures self-diagnosing from
 the command/debug surfaces. `stn command dispatch --stdin` intentionally
-submits a command; use it only when the task calls for a runtime action.
+submits a command and can change runtime state.
 
 `stn debug bundle` asks the observer for a diagnostic snapshot, then writes a redacted bundle under the configured state directory. If the config cannot be loaded, it writes a local invalid-config bundle next to the failing config instead of contacting the observer.
 

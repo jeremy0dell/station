@@ -17,14 +17,15 @@ import {
   type StepWizardState,
 } from "./stepWizard.js";
 
-export type NewSessionNameSource = "generated" | "custom";
+export type NewSessionTitleSource = "generated" | "custom";
 export type NewSessionStep = "review" | "editName" | "pickProject" | "pickAgent";
 
 type NewSessionBaseState = StepWizardState<NewSessionStep> & {
   selectedProjectId: ProjectId;
   selectedHarness: ProviderId;
+  title: string;
   branch: string;
-  nameSource: NewSessionNameSource;
+  titleSource: NewSessionTitleSource;
 };
 
 /** The review menu's focus ring — which field ↵ acts on. */
@@ -108,6 +109,7 @@ export type NewSessionCreateValidation =
   | {
       ok: true;
       project: NonNullable<ReturnType<typeof selectNewSessionProject>>;
+      title: string;
       branch: string;
       harnessProvider: ProviderId;
     }
@@ -145,13 +147,15 @@ export function createNewSessionFlow(
   if (harness === undefined) {
     return undefined;
   }
+  const branch = generatedSessionBranch(project.id, token);
   return {
     ...createStepWizardState("review"),
     reviewFocus: "create",
     selectedProjectId: project.id,
     selectedHarness: harness.id,
-    branch: generatedSessionBranch(project.id, token),
-    nameSource: "generated",
+    title: branch,
+    branch,
+    titleSource: "generated",
   };
 }
 
@@ -261,9 +265,22 @@ export function validateNewSessionCreate(
     };
   }
 
+  const title = state.title.trim();
+  if (title.length === 0) {
+    return {
+      ok: false,
+      error: {
+        tag: "CommandValidationError",
+        code: "SESSION_TITLE_EMPTY",
+        message: "Session name cannot be empty.",
+      },
+    };
+  }
+
   return {
     ok: true,
     project,
+    title,
     branch: state.branch,
     harnessProvider: state.selectedHarness,
   };
@@ -300,7 +317,7 @@ export function generatedSessionBranch(projectId: ProjectId, token: string): str
   });
 }
 
-export function createNewSessionNameToken(unique = randomUUID()): string {
+export function createNewSessionNameToken(unique: string = randomUUID()): string {
   return stableNameHash(["new-session", unique], 6);
 }
 
@@ -356,14 +373,14 @@ function isReturn(input: NewSessionInput): boolean {
 }
 
 function commitEditedName(state: NewSessionEditNameState): NewSessionReviewState {
-  const branch = state.draftName.value.trim();
-  if (branch.length === 0) {
+  const title = state.draftName.value.trim();
+  if (title.length === 0) {
     return toReviewState(state);
   }
   return {
     ...toReviewState(state),
-    branch,
-    nameSource: "custom",
+    title,
+    titleSource: "custom",
   };
 }
 
@@ -391,12 +408,13 @@ function applyChosenProject(
   if (harness === undefined) {
     return state;
   }
+  const branch = generatedSessionBranch(project.id, token);
   return {
     ...toReviewState(state),
     selectedProjectId: project.id,
     selectedHarness: harness.id,
-    branch:
-      state.nameSource === "generated" ? generatedSessionBranch(project.id, token) : state.branch,
+    branch,
+    title: state.titleSource === "generated" ? branch : state.title,
   };
 }
 
@@ -449,7 +467,8 @@ function baseState(state: NewSessionBaseState): NewSessionBaseState {
     stepHistory: state.stepHistory,
     selectedProjectId: state.selectedProjectId,
     selectedHarness: state.selectedHarness,
+    title: state.title,
     branch: state.branch,
-    nameSource: state.nameSource,
+    titleSource: state.titleSource,
   };
 }

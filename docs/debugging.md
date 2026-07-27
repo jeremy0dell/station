@@ -35,8 +35,8 @@ Use the narrowest tool that can answer the question:
 | Current runtime health | `stn doctor` |
 | Current normalized graph | `stn snapshot --json` |
 | Current normalized graph with debug fields | `stn snapshot --json --include-debug` |
-| Live event stream for agents | `stn observe --json --include-snapshot --duration 3s` |
-| Live event stream for humans | `stn observe --include-snapshot --duration 3s` or `stn observe --pane` |
+| Machine-readable live event stream | `stn observe --json --include-snapshot --duration 3s` |
+| Interactive live event stream | `stn observe --include-snapshot --duration 3s` or `stn observe --pane` |
 | One command lifecycle record | `stn command get <commandId>` |
 | Failed provider command details | `stn debug trace <traceOrCommandId>` or `stn command get <commandId>` |
 | Redacted shareable evidence | `stn debug bundle --trace <traceId>` / `--command <commandId>` / `--latest-failure` |
@@ -63,9 +63,9 @@ were ignored before Observer delivery because Station ownership was missing or
 cwd did not match configured roots. Unsupported provider events intentionally
 produce no per-occurrence log.
 
-Use current-truth tools only when the task permits live observer interaction.
-`doctor`, `snapshot`, `observe`, `command get`, `reconcile`, and `debug bundle`
-all contact the observer or start it when needed. `debug bundle` also writes a
+Current-truth tools interact with the live observer. `doctor`, `snapshot`,
+`observe`, `command get`, `reconcile`, and `debug bundle` all contact the
+observer or start it when needed. `debug bundle` also writes a
 new redacted bundle. `reconcile`, `command dispatch`, `project add/remove`,
 hook install/uninstall, and setup apply commands intentionally mutate runtime,
 config, hooks, or local machine state.
@@ -105,27 +105,6 @@ mutations pass `--no-hooks`; `true` means they pass `--yes`; unset means STATION
 uses Worktrunk's default prompt behavior. Setup and doctor checks should report
 the effective automation mode and whether the installed `wt` supports the flag
 required by that mode.
-
-## No-Action Mode
-
-If the user says "no action", keep debugging read-only.
-
-Do not start or restart the observer, retry commands, kill processes, mutate state, or write a new bundle unless explicitly asked.
-
-In no-action mode, inspect existing state only:
-
-- `stn debug trace <id>` or `stn debug trace --latest-failure`
-- `stn debug logs [query]`
-- existing bundles under `diagnostics/`
-- existing logs under `logs/`
-- existing bundle `commands.jsonl`, `errors.jsonl`, and derived indexes
-
-Avoid live observer commands in no-action mode, including `doctor`, `snapshot`,
-`observe`, `command get`, `command dispatch`, `reconcile`, `debug bundle`,
-`project add/remove`, hook install/uninstall, setup apply, and observer
-start/stop/restart/run. `stn observer status` is non-mutating, but it is still a
-live status check rather than an existing-state log read; use it only when live
-status is allowed by the request.
 
 ## State Directory
 

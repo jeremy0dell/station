@@ -1,10 +1,11 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessHooksStatus } from "@station/contracts";
 import { StationTerminalProvider } from "@station/terminal";
 import {
+  createFakeHarnessRun,
   createFakeWorktree,
   FakeHarnessProvider,
   FakeTerminalProvider,
@@ -23,11 +24,13 @@ import {
   providerIngressSpoolDir,
 } from "../../src/internal";
 import type { StationLogger } from "../../src/stationLogger";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
@@ -51,7 +54,7 @@ const config: StationConfig = {
 // spooled during an agent launch was never flushed. Prove the launch-triggered
 // reconcile drains the spool, the same as api.reconcile does.
 describe("observer external-launch reconcile", () => {
-  it("drains the hook spool when an external launch triggers a reconcile", async () => {
+  it("publishes the custom title and drains the hook spool after external launch", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const spoolDir = providerIngressSpoolDir(stateDir);
     const fixture = createFixture(spoolDir);
@@ -66,13 +69,32 @@ describe("observer external-launch reconcile", () => {
     const result = await fixture.api.prepareExternalLaunch({
       projectId: "web",
       worktreeId: "wt_web_feature",
+      title: "Hexagonal PT 12",
     });
     expect(result.kind).toBe("prepared");
+    if (result.kind !== "prepared") throw new Error("expected prepared launch");
+    fixture.harness.addRun(
+      createFakeHarnessRun({
+        id: "run_web_feature",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        sessionId: result.sessionId,
+        state: "working",
+        now,
+      }),
+    );
 
     // The post-launch reconcile is fire-and-forget; wait for the drain to delete
     // the spooled record.
     await waitFor(async () => !(await fileExists(spoolPath)));
     expect(await fileExists(spoolPath)).toBe(false);
+    await fixture.api.reconcile("verify-external-title");
+    expect((await fixture.api.getSnapshot()).sessions).toEqual([
+      expect.objectContaining({
+        worktreeId: "wt_web_feature",
+        title: "Hexagonal PT 12",
+      }),
+    ]);
 
     fixture.sqlite.close();
   });
@@ -118,6 +140,7 @@ function createFixture(
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
   const eventBus = createObserverEventBus();
   const station = new StationTerminalProvider({ clock });
+  const harness = options.harness ?? new FakeHarnessProvider({ now });
   const providers = new ProviderRegistry({
     worktree: new FakeWorktreeProvider({
       now,
@@ -135,7 +158,7 @@ function createFixture(
     }),
     terminal: new FakeTerminalProvider({ now }),
     managedTerminal: station,
-    harnesses: [options.harness ?? new FakeHarnessProvider({ now })],
+    harnesses: [harness],
   });
   const core = createObserverCore({ config, providers, persistence, clock });
   const queue = createCommandQueue({ persistence, clock, idFactory: ids(), eventBus });
@@ -146,11 +169,12 @@ function createFixture(
     persistenceHealth: persistence,
     commandQueue: queue,
     eventBus,
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     hookSpoolDir: spoolDir,
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, sqlite };
+  return { api, harness, sqlite };
 }
 
 class MissingHooksHarness extends FakeHarnessProvider {

@@ -174,7 +174,7 @@ export function rowGridInputForViewportItem(
       id: item.id,
       slot: undefined,
       marker: { kind: "text", text: "!" },
-      title: item.row.branch,
+      title: item.row.title,
       activity: item.row.error.message,
       activityImportance: "meaningful",
       activityOverflow: "rowSlack",
@@ -185,7 +185,7 @@ export function rowGridInputForViewportItem(
     id: item.id,
     slot: undefined,
     marker: { kind: "throbber", variant: "braille" },
-    title: item.row.branch,
+    title: item.row.title,
     agent: item.row.harnessProvider ?? "",
     activity: "starting session...",
     activityImportance: "meaningful",
@@ -279,16 +279,4 @@ export function commandPromptRows(screen: TuiScreen): number {
     return 2;
   }
   return 0;
-}
-
-export function isModalOverlayActive(screen: TuiScreen): boolean {
-  return (
-    screen.name === "help" ||
-    screen.name === "newSession" ||
-    screen.name === "projectDefaultAgent" ||
-    screen.name === "projectCollapse" ||
-    screen.name === "projectSettingsPicker" ||
-    screen.name === "removeWorktree" ||
-    (screen.name === "renameSession" && screen.step === "editName")
-  );
 }

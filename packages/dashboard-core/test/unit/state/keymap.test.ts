@@ -3,6 +3,7 @@ import {
   dashboardFooterLabel,
   handleTuiKey,
   isSlotKey,
+  QUIT_HINT_DISMISS_ERROR,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { matchDashboardBinding } from "../../../src/state/keymap.js";
@@ -89,5 +90,21 @@ describe("dashboard footer", () => {
       expect(label).not.toContain("N new");
       expect(label).not.toContain("delete");
     }
+  });
+
+  it("keeps error dismissal and close copy visible at compact widths", () => {
+    expect(dashboardFooterLabel({ columns: 120, quitHint: QUIT_HINT_DISMISS_ERROR })).toContain(
+      QUIT_HINT_DISMISS_ERROR,
+    );
+    expect(dashboardFooterLabel({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
+      QUIT_HINT_DISMISS_ERROR,
+    );
+    expect(
+      dashboardFooterLabel({
+        columns: 40,
+        quitHint: QUIT_HINT_DISMISS_ERROR,
+        firstRun: true,
+      }),
+    ).toBe(QUIT_HINT_DISMISS_ERROR);
   });
 });

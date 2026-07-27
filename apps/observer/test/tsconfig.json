@@ -7,11 +7,19 @@
     "types": ["node", "vitest/globals"]
   },
   "files": [
+    "integration/diagnostics-collector.test.ts",
+    "integration/external-launch-reconcile.test.ts",
+    "integration/hook-spool-drain.test.ts",
     "integration/in-memory-observer-api.test.ts",
+    "integration/local-diagnostic-evidence-source.test.ts",
     "integration/local-git-worktree-change-source.test.ts",
     "integration/metadata-refresh.test.ts",
+    "integration/protocol-server.test.ts",
+    "integration/release-doctor-boundary.test.ts",
     "integration/worktrunk-diagnostics.test.ts",
     "unit/git-ref-invalidation.test.ts",
-    "unit/localGitChangeSummary.test.ts"
+    "unit/localGitChangeSummary.test.ts",
+    "unit/reconcileProfiling.test.ts",
+    "unit/reconcileStartupJoin.test.ts"
   ]
 }
