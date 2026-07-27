@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { createCodexHarnessProvider } from "@station/codex";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
+  createLocalDiagnosticEvidenceSource,
   createObserverCore,
   createObserverEventBus,
   createSqliteObserverPersistence,
@@ -227,12 +228,14 @@ async function writeFailureBundle(input: {
   const snapshot = await collectDiagnosticSnapshot({
     config: input.config,
     core: input.core,
-    persistence: input.persistence,
+    commandJournal: input.persistence,
+    eventJournal: input.persistence,
     persistenceHealth: input.persistence,
-    paths: {
+    evidenceSource: createLocalDiagnosticEvidenceSource({
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,
-    },
+      logPaths: [join(input.stateDir, "logs", "observer.jsonl")],
+    }),
     clock: { now: () => new Date(now) },
   });
   await writeDebugBundle({
@@ -246,6 +249,7 @@ async function writeFailureBundle(input: {
 function config(root: string, stateDir: string): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: {
       stateDir,
       socketPath: join(root, "observer.sock"),

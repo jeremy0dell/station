@@ -11,6 +11,7 @@ import {
   openObserverSqlite,
   type ProviderRegistry,
 } from "../../src/internal";
+import { FakeDiagnosticEvidenceSource } from "./diagnosticEvidenceSources.js";
 
 export type TestClock = { now: () => Date };
 
@@ -119,6 +120,7 @@ export function createTestObserver(input: CreateTestObserverInput) {
     persistenceHealth: persistence,
     commandQueue,
     eventBus,
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     clock,
     config,
     hookReconcileDebounceMs: input.hookReconcileDebounceMs ?? 0,

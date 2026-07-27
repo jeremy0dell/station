@@ -5,6 +5,7 @@
     "rootDir": "."
   },
   "include": [
+    "test/support/diagnosticEvidenceSources.ts",
     "test/support/harnessRuns.ts",
     "test/support/inMemoryObserverPersistence.ts",
     "test/support/projectConfigWriter.ts",

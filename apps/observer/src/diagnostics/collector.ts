@@ -1,5 +1,3 @@
-import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
 import type { ConfigDiagnostic, StationConfig } from "@station/config";
 import type {
   DiagnosticCollectionOptions,
@@ -22,12 +20,7 @@ import {
   DoctorReportSchema,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
-import {
-  componentLogPath,
-  mergeRetentionPolicy,
-  readJsonlLog,
-  scanLocalStateUsage,
-} from "@station/observability";
+import { mergeRetentionPolicy } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import { runRuntimeBoundaryWithTimeout, systemClock, toIsoTimestamp } from "@station/runtime";
 import { commandRecordFromPersisted } from "../commands/record.js";
@@ -42,50 +35,58 @@ import type {
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { buildSessionEnvironmentCheck } from "./environmentCheck.js";
-
-export type DiagnosticRuntimePaths = {
-  stateDir: string;
-  socketPath?: string;
-  hookSpoolDir?: string;
-  diagnosticsDir?: string;
-  logPaths?: string[];
-};
+import type {
+  DiagnosticEvidenceSource,
+  DiagnosticLocalStateEvidence,
+  DiagnosticRecentLogEvidence,
+} from "./evidenceSource.js";
 
 export type ObserverDiagnosticsDeps = {
   config: StationConfig;
   configPath?: string;
   configDiagnostics?: ConfigDiagnostic[];
   core: ObserverCore;
-  persistence: CommandJournal & EventJournal;
+  commandJournal: CommandJournal;
+  eventJournal: EventJournal;
   persistenceHealth: PersistenceHealthSource;
+  evidenceSource: DiagnosticEvidenceSource;
   providers?: ProviderRegistry;
-  paths: DiagnosticRuntimePaths;
   clock?: RuntimeClock;
   providerDoctorTimeoutMs?: number;
 };
 
+type DiagnosticCollectionResult = {
+  snapshot: DiagnosticSnapshot;
+  localStateEvidence: DiagnosticLocalStateEvidence;
+  recentLogEvidence?: DiagnosticRecentLogEvidence;
+};
+
+/**
+ * USE CASE
+ *
+ * Aggregates current core health, purpose-specific journals, persistence health,
+ * configuration, and typed local evidence into a bounded read-only diagnostic snapshot.
+ */
 export async function collectDiagnosticSnapshot(
   deps: ObserverDiagnosticsDeps,
   options: DiagnosticCollectionOptions = {},
 ): Promise<DiagnosticSnapshot> {
+  return (await collectDiagnosticResult(deps, options ?? {})).snapshot;
+}
+
+async function collectDiagnosticResult(
+  deps: ObserverDiagnosticsDeps,
+  options: NonNullable<DiagnosticCollectionOptions>,
+): Promise<DiagnosticCollectionResult> {
   const clock = deps.clock ?? systemClock;
   const collectedAt = toIsoTimestamp(clock.now());
-  const observerHealth: DiagnosticSnapshot["observerHealth"] = {
-    schemaVersion: STATION_SCHEMA_VERSION,
-    ...deps.core.getHealth(),
-    pid: deps.core.getSnapshot().observer.pid,
-    version: deps.core.getSnapshot().observer.version,
-    stateDir: deps.paths.stateDir,
-    sqlite: deps.persistenceHealth.health(),
-  };
-  if (deps.paths.socketPath !== undefined) {
-    observerHealth.socketPath = deps.paths.socketPath;
-  }
+  const coreHealth = deps.core.getHealth();
   const snapshot = deps.core.getSnapshot();
-  const commands = await deps.persistence.listCommands();
-  const latestFailure = options?.latestFailure === true ? latestFailedCommand(commands) : undefined;
-  const commandIdFilter = options?.commandId ?? latestFailure?.id;
-  const traceIdFilter = options?.traceId ?? latestFailure?.traceId;
+  const sqliteHealth = deps.persistenceHealth.health();
+  const commands = await deps.commandJournal.listCommands();
+  const latestFailure = options.latestFailure === true ? latestFailedCommand(commands) : undefined;
+  const commandIdFilter = options.commandId ?? latestFailure?.id;
+  const traceIdFilter = options.traceId ?? latestFailure?.traceId;
   const hasCommandFilter = commandIdFilter !== undefined || traceIdFilter !== undefined;
   const filteredCommands = filterCommands(commands, {
     commandId: commandIdFilter,
@@ -105,26 +106,36 @@ export async function collectDiagnosticSnapshot(
   if (commandIdFilter !== undefined) {
     eventFilter.commandId = commandIdFilter;
   }
-  const events = (await deps.persistence.listEvents(eventFilter)).filter((event) =>
+  const events = (await deps.eventJournal.listEvents(eventFilter)).filter((event) =>
     persistedEventMatches(event, { commandIds, traceIds }),
   );
-  const commandErrors = (await deps.persistence.listCommandErrors(commandIdFilter)).filter(
+  const commandErrors = (await deps.commandJournal.listCommandErrors(commandIdFilter)).filter(
     (error) => commandErrorMatches(error, { commandIds, traceIds }),
   );
   const policy = mergeRetentionPolicy(deps.config.observability?.retention);
-  const localState = await scanLocalStateUsage(deps.paths.stateDir, policy);
-  const rawLogs =
-    options?.includeLogs === false
-      ? []
-      : await readLogs(
-          deps.paths.logPaths ?? [componentLogPath(deps.paths.stateDir, "observer")],
-          options?.maxLogRecords ?? 500,
-        );
-  const logs = prioritizeLogs(rawLogs, { commandIds, traceIds }, options?.maxLogRecords ?? 500);
-  const hookSpool =
-    deps.paths.hookSpoolDir === undefined
+  const localStateEvidence = await deps.evidenceSource.scanLocalState(policy);
+  const maxLogRecords = options.maxLogRecords ?? 500;
+  const recentLogEvidence =
+    options.includeLogs === false
       ? undefined
-      : await summarizeHookSpool(deps.paths.hookSpoolDir);
+      : await deps.evidenceSource.readRecentLogs(maxLogRecords);
+  const logs = prioritizeLogs(
+    recentLogEvidence?.records ?? [],
+    { commandIds, traceIds },
+    maxLogRecords,
+  );
+  const hookSpool = await deps.evidenceSource.summarizeHookSpool();
+  const observerHealth: DiagnosticSnapshot["observerHealth"] = {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    ...coreHealth,
+    pid: snapshot.observer.pid,
+    version: snapshot.observer.version,
+    stateDir: localStateEvidence.usage.stateDir,
+    sqlite: sqliteHealth,
+  };
+  if (localStateEvidence.socketPath !== undefined) {
+    observerHealth.socketPath = localStateEvidence.socketPath;
+  }
 
   const diagnosticSnapshot: DiagnosticSnapshot = {
     schemaVersion: STATION_SCHEMA_VERSION,
@@ -137,32 +148,41 @@ export async function collectDiagnosticSnapshot(
     errors: commandErrors.map((error) => error.envelope),
     logs,
     configSummary: configSummary(deps),
-    localState,
+    localState: localStateEvidence.usage,
     retention: policy,
   };
   if (hookSpool !== undefined) {
     diagnosticSnapshot.hookSpool = hookSpool;
   }
 
-  return DiagnosticSnapshotSchema.parse(diagnosticSnapshot);
+  const result: DiagnosticCollectionResult = {
+    snapshot: DiagnosticSnapshotSchema.parse(diagnosticSnapshot),
+    localStateEvidence,
+  };
+  if (recentLogEvidence !== undefined) {
+    result.recentLogEvidence = recentLogEvidence;
+  }
+  return result;
 }
 
 /**
  * USE CASE
  *
- * Aggregates current runtime, persistence, and provider evidence into the read-only health report.
- * Top-level health comes from current checks; persisted command errors remain historical evidence.
+ * Aggregates current runtime, persistence, provider, and typed local evidence into
+ * the read-only health report. Top-level health comes from current checks; persisted
+ * command errors remain historical evidence.
  */
 export async function runDoctor(
   deps: ObserverDiagnosticsDeps,
   options: DoctorOptions = {},
 ): Promise<DoctorReport> {
   const clock = deps.clock ?? systemClock;
-  const snapshot = await collectDiagnosticSnapshot(deps, {
+  const collection = await collectDiagnosticResult(deps, {
     includeLogs: true,
     maxLogRecords: 50,
   });
-  const doctorSnapshot = requireDoctorSnapshotState(snapshot);
+  const doctorSnapshot = requireDoctorSnapshotState(collection.snapshot);
+  const recentLogEvidence = requireDoctorRecentLogs(collection);
   const providerHealth = await collectProviderHealth(deps);
   const providers = {
     ...doctorSnapshot.providerHealth,
@@ -220,7 +240,7 @@ export async function runDoctor(
     providers,
     snapshot: doctorSnapshot.snapshot,
     logs: {
-      paths: deps.paths.logPaths ?? [componentLogPath(deps.paths.stateDir, "observer")],
+      paths: recentLogEvidence.paths,
       recent: doctorSnapshot.logs,
     },
     localState: doctorSnapshot.localState,
@@ -228,7 +248,7 @@ export async function runDoctor(
     recentErrors,
     debugBundle: {
       available: true,
-      diagnosticsDir: deps.paths.diagnosticsDir ?? join(deps.paths.stateDir, "diagnostics"),
+      diagnosticsDir: collection.localStateEvidence.diagnosticsDir,
     },
   };
   if (doctorSnapshot.observerHealth.sqlite !== undefined) {
@@ -239,11 +259,6 @@ export async function runDoctor(
   }
 
   return DoctorReportSchema.parse(report);
-}
-
-async function readLogs(paths: readonly string[], maxRecords: number): Promise<LogRecord[]> {
-  const logs = await Promise.all(paths.map((path) => readJsonlLog(path, maxRecords)));
-  return logs.flat().slice(-maxRecords);
 }
 
 function latestFailedCommand(commands: readonly PersistedCommand[]): PersistedCommand | undefined {
@@ -354,42 +369,6 @@ function configSummary(
   return summary;
 }
 
-async function summarizeHookSpool(
-  path: string,
-): Promise<NonNullable<DiagnosticSnapshot["hookSpool"]>> {
-  const entries = await listFileStats(path);
-  const created = entries.map((entry) => entry.mtime.toISOString()).sort();
-  const summary: NonNullable<DiagnosticSnapshot["hookSpool"]> = {
-    path,
-    pending: entries.length,
-  };
-  const oldestCreatedAt = created[0];
-  const newestCreatedAt = created.at(-1);
-  if (oldestCreatedAt !== undefined) {
-    summary.oldestCreatedAt = oldestCreatedAt;
-  }
-  if (newestCreatedAt !== undefined) {
-    summary.newestCreatedAt = newestCreatedAt;
-  }
-  return summary;
-}
-
-async function listFileStats(path: string): Promise<Array<{ mtime: Date }>> {
-  try {
-    const entries = await readdir(path, { withFileTypes: true });
-    return Promise.all(
-      entries
-        .filter((entry) => entry.isFile())
-        .map(async (entry) => {
-          const fileStat = await stat(join(path, entry.name));
-          return { mtime: fileStat.mtime };
-        }),
-    );
-  } catch {
-    return [];
-  }
-}
-
 function providerStatus(providers: Record<string, ProviderHealth>): "healthy" | "degraded" {
   return Object.values(providers).some(
     (health) => health.status === "degraded" || health.status === "unavailable",
@@ -431,6 +410,13 @@ function requireDoctorSnapshotState(snapshot: DiagnosticSnapshot): DoctorDiagnos
     throw missingDoctorStateError("retention");
   }
   return snapshot as DoctorDiagnosticSnapshot;
+}
+
+function requireDoctorRecentLogs(result: DiagnosticCollectionResult): DiagnosticRecentLogEvidence {
+  if (result.recentLogEvidence === undefined) {
+    throw missingDoctorStateError("recentLogs");
+  }
+  return result.recentLogEvidence;
 }
 
 function missingDoctorStateError(field: string): SafeError {
