@@ -8,7 +8,7 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 
 export const CommandSourceSchema = z
   .object({
@@ -91,6 +91,7 @@ export const CreateSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
     branch: nonEmptyStringSchema,
+    title: userFacingTitleSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     source: CommandSourceSchema.optional(),
     harness: HarnessCommandOptionsSchema,
@@ -124,6 +125,7 @@ export const ForkSessionPayloadSchema = z
     projectId: ProjectIdSchema,
     sourceWorktreeId: WorktreeIdSchema,
     branch: nonEmptyStringSchema,
+    title: userFacingTitleSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     copyDirty: z.boolean().optional(),
     harness: StartAgentHarnessCommandOptionsSchema.optional(),
@@ -171,7 +173,7 @@ export const CloseSessionPayloadSchema = z
 export const RenameSessionPayloadSchema = z
   .object({
     sessionId: SessionIdSchema,
-    title: nonEmptyStringSchema,
+    title: userFacingTitleSchema,
   })
   .strict();
 

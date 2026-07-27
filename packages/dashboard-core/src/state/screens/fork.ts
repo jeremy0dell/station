@@ -1,10 +1,12 @@
 import type { SessionId, WorktreeRow } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
+import { stableName } from "@station/runtime";
 import {
   createEditableTextInputState,
   editableTextInputIntentForInput,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
+import { createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardSessionRow } from "../../selectors/selectors.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
@@ -22,6 +24,7 @@ export type ForkSessionCreateValidation =
       ok: true;
       project: ForkSnapshot["projects"][number];
       sourceWorktreeId: ForkDetailsScreen["sourceWorktreeId"];
+      title: string;
       branch: string;
       copyDirty: boolean;
     }
@@ -33,15 +36,11 @@ export function validateForkSessionCreate(
   snapshot: ForkSnapshot,
   screen: ForkDetailsScreen,
 ): ForkSessionCreateValidation {
-  const branch = screen.draftBranch.value.trim();
-  if (branch.length === 0) {
-    return { ok: false, message: "Branch name cannot be empty." };
+  const title = screen.draftTitle.value.trim();
+  if (title.length === 0) {
+    return { ok: false, message: "Session name cannot be empty." };
   }
-  // Branch names are unique per project/repo, not globally — only a worktree in
-  // the same project can collide.
-  if (snapshot.rows.some((row) => row.projectId === screen.projectId && row.branch === branch)) {
-    return { ok: false, message: `A worktree on "${branch}" already exists.` };
-  }
+  const branch = availableForkBranch(screen.branch, snapshot.rows, screen.projectId);
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   if (project === undefined) {
     return { ok: false, message: "The source project is no longer available." };
@@ -50,12 +49,13 @@ export function validateForkSessionCreate(
     ok: true,
     project,
     sourceWorktreeId: screen.sourceWorktreeId,
+    title,
     branch,
     copyDirty: screen.copyDirty,
   };
 }
 
-const FOCUS_ORDER = ["branch", "copyDirty", "submit"] as const;
+const FOCUS_ORDER = ["name", "copyDirty", "submit"] as const;
 
 export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "fork") {
@@ -72,12 +72,18 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
   return handleDetailsKey(state, key, state.screen);
 }
 
+export type OpenForkDetailsOptions = {
+  returnTo?: "dashboard";
+  /** Stable injection for deterministic callers; ordinary UI opens mint a fresh branch token. */
+  branchToken?: string;
+};
+
 // Builds the fork details step from a dashboard row. Exported so the context menu can
 // open it directly for a clicked row (skipping chooseSlot), like renameSession.
 export function openForkDetailsForRow(
   state: TuiState,
   rowId: SessionId,
-  returnTo?: "dashboard",
+  options: OpenForkDetailsOptions = {},
 ): TuiState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "fork") {
     return state;
@@ -96,6 +102,12 @@ export function openForkDetailsForRow(
     return state;
   }
 
+  // A fresh hidden token on each open makes a provider-only Git-ref collision recoverable on retry.
+  const branch = availableForkBranch(
+    generatedForkBranch(row.branch, options.branchToken ?? createNewSessionNameToken()),
+    snapshot.rows,
+    row.projectId,
+  );
   const screen: ForkDetailsScreen = {
     name: "fork",
     step: "details",
@@ -107,28 +119,32 @@ export function openForkDetailsForRow(
     sourceAgentRunning: snapshot.sessions.some(
       (session) => session.worktreeId === row.id && isRunningAgentState(session.status.value),
     ),
-    draftBranch: createEditableTextInputState(
-      suggestForkBranch(row.branch, snapshot.rows, row.projectId),
-    ),
-    nameSource: "generated",
+    branch,
+    draftTitle: createEditableTextInputState(`${row.branch}-fork`),
     copyDirty: true,
-    focus: "branch",
+    focus: "name",
   };
-  if (returnTo !== undefined) {
-    screen.returnTo = returnTo;
+  if (options.returnTo !== undefined) {
+    screen.returnTo = options.returnTo;
   }
   return { ...state, screen };
 }
 
-function suggestForkBranch(
-  sourceBranch: string,
+function generatedForkBranch(sourceBranch: string, token: string): string {
+  return stableName({
+    profile: "path-segment",
+    display: [sourceBranch, "fork", token],
+    unique: [sourceBranch, "fork", token],
+  });
+}
+
+function availableForkBranch(
+  base: string,
   rows: readonly WorktreeRow[],
   projectId: WorktreeRow["projectId"],
 ): string {
-  // Only the source project's branches can collide (uniqueness is per repo).
+  // Only the source project's worktrees can collide in the current snapshot.
   const taken = new Set(rows.filter((row) => row.projectId === projectId).map((row) => row.branch));
-  const base = `${sourceBranch}-fork`;
-  // `taken` is finite, so an unused suffix is always found within taken.size + 1 tries.
   let candidate = base;
   for (let suffix = 2; taken.has(candidate); suffix += 1) {
     candidate = `${base}-${suffix}`;
@@ -169,7 +185,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
     return { state };
   }
 
-  if (screen.focus === "branch") {
+  if (screen.focus === "name") {
     const intent = editableTextInputIntentForInput({ input: key.input, key });
     if (intent.type !== "edit") {
       return { state };
@@ -179,8 +195,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
         ...state,
         screen: {
           ...screen,
-          draftBranch: transitionEditableTextInput(screen.draftBranch, intent.action),
-          nameSource: "edited",
+          draftTitle: transitionEditableTextInput(screen.draftTitle, intent.action),
         },
       },
     };
@@ -204,6 +219,7 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
   const command = buildForkSessionCommand({
     project: validation.project,
     sourceWorktreeId: validation.sourceWorktreeId,
+    title: validation.title,
     branch: validation.branch,
     copyDirty: validation.copyDirty,
   });
@@ -219,6 +235,7 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
         localId: `fork:${validation.sourceWorktreeId}:${validation.branch}`,
         projectId: screen.projectId,
         sourceWorktreeId: validation.sourceWorktreeId,
+        title: validation.title,
         branch: validation.branch,
         command,
       },
@@ -238,5 +255,5 @@ function cycleFocus(
   const index = FOCUS_ORDER.indexOf(focus);
   const delta = backwards ? -1 : 1;
   const next = (index + delta + FOCUS_ORDER.length) % FOCUS_ORDER.length;
-  return FOCUS_ORDER[next] ?? "branch";
+  return FOCUS_ORDER[next] ?? "name";
 }

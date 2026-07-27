@@ -410,7 +410,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
 │ Fork Session                               │                                  
 │ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│ > Branch cli-help-man-fork|                │code  idle           +14 -6 #5 x1 
+│ > Name   Hexagonal PT 12|                  │code  idle           +14 -6 #5 x1 
 │   Copy   [x] uncommitted changes           │code  unknown           +3 -1 #10 
 │ Source keeps running — copy is read-only.  │                                  
 │                                            │                    [sh] [qs] [▾] 

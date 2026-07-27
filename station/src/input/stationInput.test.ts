@@ -1880,17 +1880,24 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     return { store, runtime, observerService, source, stationViewStore, pressKey, settle, snapshot };
   }
 
-  // Open the wizard and read the branch the submit will use, without coupling to
-  // the internal screen shape (resolveNewSessionSubmit is the same resolver the
-  // overlay layer drives on Enter).
-  function openWizardAndCaptureBranch(harness: ReturnType<typeof newSessionHarness>): string {
+  // Open the wizard and read the submit the overlay drives on Enter. A custom
+  // title is edited through the real shared wizard while the branch stays hidden.
+  function openWizardAndCaptureSubmit(
+    harness: ReturnType<typeof newSessionHarness>,
+    title?: string,
+  ) {
     harness.store.actions.openOverlay(STATION_OVERLAY_ID);
     harness.pressKey("N");
+    if (title !== undefined) {
+      harness.pressKey("N");
+      harness.pressKey(title);
+      harness.pressKey("\r");
+    }
     const submit = resolveNewSessionSubmit(harness.stationViewStore);
     if (submit.kind !== "submit") {
       throw new Error("expected the New Session wizard to be on the review screen");
     }
-    return submit.branch;
+    return submit;
   }
 
   // Clone the snapshot with a freshly-created (agentless) worktree row for branch,
@@ -1920,7 +1927,8 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     const harness = newSessionHarness();
     const worktreeId = "wt_new_session";
     harness.observerService.nextPreparedLaunch = newSessionPlan(worktreeId);
-    const branch = openWizardAndCaptureBranch(harness);
+    const submit = openWizardAndCaptureSubmit(harness, "Hexagonal PT 12");
+    const { branch } = submit;
     const localId = `station-create:${PROJECT_ID}:${branch}`;
 
     expect(harness.pressKey("\r")).toBe(true);
@@ -1931,6 +1939,11 @@ describe("createStationInputRuntime New Session hosted launch", () => {
         .getState()
         .localRows.pendingCreate.map((row) => row.localId),
     ).toContain(localId);
+    expect(
+      harness.stationViewStore.getState().localRows.pendingCreate.find(
+        (row) => row.localId === localId,
+      ),
+    ).toMatchObject({ title: "Hexagonal PT 12", branch });
 
     // Let worktree.create dispatch + completion resolve and waitForWorktreeByBranch
     // subscribe, then deliver the created worktree row so the launch proceeds.
@@ -1947,7 +1960,12 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     });
     // The New Session flow forwards the wizard's harness pick to the prepare.
     expect(harness.observerService.preparedLaunches).toEqual([
-      { projectId: PROJECT_ID, worktreeId, harness: "codex" },
+      {
+        projectId: PROJECT_ID,
+        worktreeId,
+        harness: "codex",
+        title: "Hexagonal PT 12",
+      },
     ]);
     const agentPaneId = agentWorktreePaneId(worktreeId);
     expect(harness.store.getState().workspace.panes.some((pane) => pane.id === agentPaneId)).toBe(
@@ -1971,7 +1989,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
         message: "That branch already exists.",
       },
     };
-    const branch = openWizardAndCaptureBranch(harness);
+    const { branch } = openWizardAndCaptureSubmit(harness);
 
     expect(harness.pressKey("\r")).toBe(true);
     await harness.settle();
@@ -1996,7 +2014,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
         message: "Create failed mid-flight.",
       },
     };
-    const branch = openWizardAndCaptureBranch(harness);
+    const { branch } = openWizardAndCaptureSubmit(harness);
 
     expect(harness.pressKey("\r")).toBe(true);
     await harness.settle();
@@ -2038,7 +2056,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
 
   it("toasts when the created worktree never reaches the snapshot in time", async () => {
     const harness = newSessionHarness();
-    const branch = openWizardAndCaptureBranch(harness);
+    const { branch } = openWizardAndCaptureSubmit(harness);
     const localId = `station-create:${PROJECT_ID}:${branch}`;
 
     // Fire the 10s "worktree appeared" timeout deterministically instead of waiting
@@ -2132,10 +2150,17 @@ describe("createStationInputRuntime Fork hosted launch", () => {
 
   // Open fork details for the first row and read the submit the overlay drives on
   // Enter (resolveForkSessionSubmit), without coupling to the screen shape.
-  function openForkAndCaptureSubmit(harness: ReturnType<typeof forkHarness>) {
+  function openForkAndCaptureSubmit(
+    harness: ReturnType<typeof forkHarness>,
+    title?: string,
+  ) {
     harness.store.actions.openOverlay(STATION_OVERLAY_ID);
     harness.pressKey("F");
     harness.pressKey("1");
+    if (title !== undefined) {
+      harness.pressKey("\u0015");
+      harness.pressKey(title);
+    }
     const submit = resolveForkSessionSubmit(harness.stationViewStore);
     if (submit.kind !== "submit") {
       throw new Error("expected the fork flow to be on the details screen");
@@ -2177,7 +2202,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     const harness = forkHarness();
     const worktreeId = "wt_forked";
     harness.observerService.nextPreparedLaunch = forkPlan(worktreeId);
-    const submit = openForkAndCaptureSubmit(harness);
+    const submit = openForkAndCaptureSubmit(harness, "Hexagonal PT 12");
     const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
     const harnessProvider = inheritedHarness(harness, submit);
 
@@ -2187,8 +2212,12 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     expect(
       harness.stationViewStore
         .getState()
-        .localRows.pendingCreate.find((row) => row.localId === localId)?.harnessProvider,
-    ).toBe(harnessProvider);
+        .localRows.pendingCreate.find((row) => row.localId === localId),
+    ).toMatchObject({
+      title: "Hexagonal PT 12",
+      branch: submit.branch,
+      harnessProvider,
+    });
 
     await harness.settle();
     harness.source.setSnapshot(
@@ -2210,7 +2239,12 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     });
     // The inherited harness is forwarded to the prepare for the new worktree.
     expect(harness.observerService.preparedLaunches).toEqual([
-      { projectId: submit.projectId, worktreeId, harness: harnessProvider },
+      {
+        projectId: submit.projectId,
+        worktreeId,
+        harness: harnessProvider,
+        title: "Hexagonal PT 12",
+      },
     ]);
     const agentPaneId = agentWorktreePaneId(worktreeId);
     expect(harness.store.getState().workspace.panes.some((pane) => pane.id === agentPaneId)).toBe(

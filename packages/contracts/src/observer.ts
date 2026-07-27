@@ -29,7 +29,7 @@ import {
   ManagedTerminalAttachmentSchema,
   ProviderHealthSchema,
 } from "./providers.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
 export const ObserverHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
@@ -142,6 +142,7 @@ export const AgentPrepareExternalLaunchParamsSchema = z
     projectId: ProjectIdSchema,
     worktreeId: WorktreeIdSchema,
     harness: ProviderIdSchema.optional(),
+    title: userFacingTitleSchema.optional(),
   })
   .strict();
 

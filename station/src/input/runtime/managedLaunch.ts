@@ -29,6 +29,11 @@ export type ManagedLaunchTarget = {
   worktreeId: string;
   cwd: string;
   /**
+   * User-visible title to persist only when this preparation mints a fresh
+   * session; an existing session keeps its current title.
+   */
+  title?: string;
+  /**
    * Harness to launch when minting a fresh session (the New Session wizard's
    * pick). Absent for a row click, where the observer uses the worktree's
    * remembered harness or the project default.
@@ -52,7 +57,12 @@ export type ManagedLaunch = {
    * Create a new worktree and host its primary agent in a Station pane (the New
    * Session wizard's submit). Fire-and-forget like launchPrimaryAgent.
    */
-  launchHostedNewSession(target: { projectId: string; branch: string; harness: ProviderId }): void;
+  launchHostedNewSession(target: {
+    projectId: string;
+    title: string;
+    branch: string;
+    harness: ProviderId;
+  }): void;
   /**
    * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
    * harness in a Station pane (the Fork details submit). Fire-and-forget too.
@@ -60,6 +70,7 @@ export type ManagedLaunch = {
   launchHostedForkSession(target: {
     projectId: string;
     sourceWorktreeId: string;
+    title: string;
     branch: string;
     copyDirty: boolean;
   }): void;
@@ -209,6 +220,9 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         if (target.harness !== undefined) {
           prepareParams.harness = target.harness;
         }
+        if (target.title !== undefined) {
+          prepareParams.title = target.title;
+        }
         prepared = await observerService.prepareExternalLaunch(prepareParams);
       } catch (error) {
         pushLaunchError(error);
@@ -317,6 +331,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
   type HostedWorktreeLaunch = {
     localId: string;
     projectId: string;
+    title: string;
     branch: string;
     harness: ProviderId | undefined;
     command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
@@ -329,6 +344,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         addPendingCreateSessionRow(stationViewStore.getState(), {
           localId: spec.localId,
           projectId: spec.projectId,
+          title: spec.title,
           branch: spec.branch,
           createdAt: new Date().toISOString(),
           // Fork can inherit no harness (source has none, project has no default); the row still
@@ -385,6 +401,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       projectId: spec.projectId,
       worktreeId: row.id,
       cwd: row.path,
+      title: spec.title,
       background: true,
     };
     if (spec.harness !== undefined) {
@@ -407,6 +424,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       startHostedWorktreeLaunch({
         localId: `station-create:${target.projectId}:${target.branch}`,
         projectId: target.projectId,
+        title: target.title,
         branch: target.branch,
         harness: target.harness,
         command: {
@@ -422,12 +440,21 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       startHostedWorktreeLaunch({
         localId: `station-fork:${target.sourceWorktreeId}:${target.branch}`,
         projectId: target.projectId,
+        title: target.title,
         branch: target.branch,
         harness:
           stationViewStore === undefined
             ? undefined
             : inheritedForkHarness(stationViewStore, target.projectId, target.sourceWorktreeId),
-        command: { type: "worktree.fork", payload: { ...target } },
+        command: {
+          type: "worktree.fork",
+          payload: {
+            projectId: target.projectId,
+            sourceWorktreeId: target.sourceWorktreeId,
+            branch: target.branch,
+            copyDirty: target.copyDirty,
+          },
+        },
         verb: "fork",
       });
     },
