@@ -22,10 +22,14 @@ import type {
   SessionStore,
   WorktreeMetadataStore,
 } from "../persistence/index.js";
-import { providerObservationRetentionDays } from "../persistence/retention.js";
+import {
+  providerObservationExpiresAt,
+  providerObservationRetentionDays,
+} from "../persistence/retention.js";
 import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
+import { projectProviderHealthOntoSnapshot } from "./graph.js";
 import {
   buildInitialSnapshot,
   harnessesFromRegistry,
@@ -59,6 +63,7 @@ export type ObserverCoreHealth = {
 
 export type ObserverCore = {
   reconcile(reason?: string): Promise<StationSnapshot>;
+  commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
   updateConfig(config: StationConfig): void;
@@ -147,6 +152,46 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
 
       return enqueueSnapshotWrite(run);
     },
+    commitProviderHealthProbe: (health) =>
+      enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {
+        const current = providerHealth[health.providerId];
+        if (
+          current !== undefined &&
+          Date.parse(current.lastCheckedAt) > Date.parse(health.lastCheckedAt)
+        ) {
+          return undefined;
+        }
+        const event: StationEvent = {
+          type: "provider.healthChanged",
+          provider: health.providerId,
+          health,
+        };
+        // A reconcile can consume this exact cache object while its completion
+        // callback waits on the snapshot writer; it already persisted and projected it.
+        if (current === health) {
+          return event;
+        }
+        if (input.persistence !== undefined) {
+          const retentionDays = providerObservationRetentionDays(config.observability?.retention);
+          await input.persistence.recordProviderObservation({
+            provider: health.providerId,
+            providerType: "observer",
+            entityKind: "provider_health",
+            entityKey: health.providerId,
+            payload: health,
+            observedAt: health.lastCheckedAt,
+            expiresAt: providerObservationExpiresAt(health.lastCheckedAt, retentionDays),
+            coalesceUnchanged: true,
+          });
+        }
+        snapshot = projectProviderHealthOntoSnapshot({
+          snapshot,
+          health,
+          projectedAt: toIsoTimestamp(clock.now()),
+        });
+        providerHealth = snapshot.providerHealth;
+        return event;
+      }),
     projectHarnessEventStatus: async (report) => {
       const result = await enqueueSnapshotWrite(async (): Promise<StatusProjectionResult> => {
         const sessionId = report.correlation?.sessionId;

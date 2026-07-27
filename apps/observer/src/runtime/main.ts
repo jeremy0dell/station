@@ -230,9 +230,8 @@ async function runClaimedObserverRuntime(input: {
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
-  // Fire-and-forget boot probes: snapshots read cached results and fill in as they land.
+  // Fire-and-forget version probes only populate provider-owned cache state.
   void providers.refreshHarnessVersions();
-  void providers.healthCache.refreshAll();
   const featureFlags = createFeatureFlagEvaluator({
     ...(config.featureFlags === undefined ? {} : { overrides: config.featureFlags }),
     revisionSeed: loadedConfig.configPath,
@@ -376,6 +375,8 @@ async function runClaimedObserverRuntime(input: {
     clock: systemClock,
     logger,
   });
+  // Register health publication before boot probes so every completed result reaches the snapshot.
+  void providers.healthCache.refreshAll();
   const api: ObserverApi = {
     ...observerApi,
     health: () => startupGate.runHealth(observerApi.health),
