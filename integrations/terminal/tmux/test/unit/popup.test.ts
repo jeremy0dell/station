@@ -125,6 +125,30 @@ describe("tmux popup", () => {
     ]);
   });
 
+  it("pins a client-scoped persistent renderer to its owning client", async () => {
+    const calls: ExternalCommandInput[] = [];
+    await expect(
+      ensurePersistentPopupSession({
+        focusClientId: "/dev/ttys001",
+        uiSessionName: "_station-ui-client",
+        runner: async (input) => {
+          calls.push(input);
+          if (input.args?.[0] === "has-session") {
+            throw Object.assign(new Error("missing"), { code: 1 });
+          }
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).resolves.toEqual({ created: true, sessionName: "_station-ui-client" });
+
+    expect(calls.find((call) => call.args?.[0] === "new-session")?.args?.at(-1)).toBe(
+      "env STATION_TUI_POPUP=1 STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=/dev/ttys001 stn tui --popup --persistent",
+    );
+    expect(
+      calls.find((call) => call.args?.includes("@station_popup_ui_signature"))?.args?.at(-1),
+    ).toContain(":client=/dev/ttys001");
+  });
+
   it("refuses to replace an unsigned session without ownership evidence", async () => {
     const unsignedCalls: ExternalCommandInput[] = [];
     await expect(
@@ -278,6 +302,53 @@ describe("tmux popup", () => {
     );
     expect(claimWriteIndex).toBeLessThan(closeIndex);
     expect(fake.executedPopupActions.at(-1)).toContain("display-popup -c /dev/ttys001 -C");
+  });
+
+  it("keeps client-scoped claims and persistent renderers independent", async () => {
+    const fake = createPopupTmux();
+    const firstClient = { name: "/dev/ttys001", pid: 1234 };
+    const secondClient = { name: "/dev/ttys002", pid: 5678 };
+    const openForCurrentClient = () =>
+      openTmuxPopup({
+        config: { popupScope: "client" },
+        env: { TMUX: "/tmp/tmux/default,1,0" },
+        runner: fake.runner,
+      });
+
+    await expect(openForCurrentClient()).resolves.toEqual({ opened: true });
+    fake.setCurrentClient(secondClient);
+    await expect(openForCurrentClient()).resolves.toEqual({ opened: true });
+
+    const claimOptions = [...fake.globalOptions.keys()].filter((key) =>
+      key.startsWith("@station_popup_active_claim_c_"),
+    );
+    const clientSessions = [...fake.sessionSignatures.keys()].filter((name) =>
+      name.startsWith("_station-ui-c-"),
+    );
+    expect(claimOptions).toHaveLength(2);
+    expect(clientSessions).toHaveLength(2);
+    expect(new Set(clientSessions).size).toBe(2);
+    expect(
+      fake.executedPopupActions.some((action) =>
+        action.includes(`display-popup -c ${firstClient.name} -C`),
+      ),
+    ).toBe(false);
+
+    const firstTarget = await resolveTmuxPopupFocusTarget({
+      config: { popupScope: "client" },
+      env: { STATION_FOCUS_CLIENT_ID: firstClient.name },
+      runner: fake.runner,
+    });
+    expect(firstTarget?.origin.clientId).toBe(firstClient.name);
+    await expect(firstTarget?.dismissExact()).resolves.toEqual({ dismissed: true });
+    expect(
+      [...fake.globalOptions.keys()].filter((key) =>
+        key.startsWith("@station_popup_active_claim_c_"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      [...fake.globalOptions.values()].some((value) => value.includes(secondClient.name)),
+    ).toBe(true);
   });
 
   it("uses a valid claim for focus origin and falls back to the compatibility mirror", async () => {
@@ -726,8 +797,8 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
   const calls: ExternalCommandInput[] = [];
   const executedPopupActions: string[] = [];
   const root = options.root ?? "/opt/station/bin";
-  const clientName = options.clientName ?? "/dev/ttys001";
-  const clientPid = options.clientPid ?? 1234;
+  let clientName = options.clientName ?? "/dev/ttys001";
+  let clientPid = options.clientPid ?? 1234;
   const route = buildNormalPopupRoute({
     registrationNonce,
     root,
@@ -801,7 +872,8 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
       return tmuxCommandResult(input, `${clientName}\n`);
     }
     if (args[0] === "has-session") {
-      if (killedSessions.has(args[2] ?? "")) {
+      const sessionName = args[2] ?? "";
+      if (killedSessions.has(sessionName) || !sessionSignatures.has(sessionName)) {
         throw Object.assign(new Error("no such session"), { code: 1 });
       }
       return tmuxCommandResult(input);
@@ -871,9 +943,11 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
         }
         return tmuxCommandResult(input);
       }
-      if (command.startsWith("set-option -gq @station_popup_active_claim")) {
+      const claimOptionName =
+        /^set-option -gq (@station_popup_active_claim(?:_c_[a-f0-9]+)?) /.exec(command)?.[1];
+      if (claimOptionName !== undefined) {
         if (claimCasReplacementPending !== undefined) {
-          globalOptions.set("@station_popup_active_claim", claimCasReplacementPending);
+          globalOptions.set(claimOptionName, claimCasReplacementPending);
           globalOptions.set("@station_popup_client", "/dev/ttys099");
           globalOptions.set("@station_popup_focus_client", "/dev/ttys099");
           claimCasReplacementPending = undefined;
@@ -882,40 +956,49 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
           claimCasMisses -= 1;
           return tmuxCommandResult(input);
         }
-        const expected = extractComparedValue(condition, "@station_popup_active_claim");
-        if ((globalOptions.get("@station_popup_active_claim") ?? "") === expected) {
+        const expected = extractComparedValue(condition, claimOptionName);
+        if ((globalOptions.get(claimOptionName) ?? "") === expected) {
           setFromTmuxCommand(command, globalOptions);
         }
         return tmuxCommandResult(input);
       }
-      if (command.startsWith("set-option -gq -u @station_popup_active_claim")) {
+      const clearedClaimOptionName =
+        /^set-option -gq -u (@station_popup_active_claim(?:_c_[a-f0-9]+)?)/.exec(command)?.[1];
+      if (clearedClaimOptionName !== undefined) {
         if (replacementPending !== undefined) {
-          globalOptions.set("@station_popup_active_claim", replacementPending);
+          globalOptions.set(clearedClaimOptionName, replacementPending);
           globalOptions.set("@station_popup_client", "/dev/ttys099");
           globalOptions.set("@station_popup_focus_client", "/dev/ttys099");
           replacementPending = undefined;
         }
-        const expected = extractComparedValue(condition, "@station_popup_active_claim");
-        if (globalOptions.get("@station_popup_active_claim") === expected) {
-          globalOptions.delete("@station_popup_active_claim");
-          const client = extractComparedValue(command, "@station_popup_client");
-          if (globalOptions.get("@station_popup_client") === client) {
-            globalOptions.delete("@station_popup_client");
+        const expected = extractComparedValue(condition, clearedClaimOptionName);
+        if (globalOptions.get(clearedClaimOptionName) === expected) {
+          globalOptions.delete(clearedClaimOptionName);
+          const activeClientOption = clearedClaimOptionName.replace("active_claim", "client");
+          const focusClientOption = clearedClaimOptionName.replace("active_claim", "focus_client");
+          const client = extractComparedValue(command, activeClientOption);
+          if (globalOptions.get(activeClientOption) === client) {
+            globalOptions.delete(activeClientOption);
           }
-          if (globalOptions.get("@station_popup_focus_client") === client) {
-            globalOptions.delete("@station_popup_focus_client");
+          if (globalOptions.get(focusClientOption) === client) {
+            globalOptions.delete(focusClientOption);
           }
         }
         return tmuxCommandResult(input);
       }
-      if (condition.includes("@station_popup_active_claim") && command.includes("display-popup")) {
-        const expected = extractComparedValue(condition, "@station_popup_active_claim");
-        if ((globalOptions.get("@station_popup_active_claim") ?? "") !== expected) {
+      const guardedClaimOptionName =
+        /#\{==:#\{(@station_popup_active_claim(?:_c_[a-f0-9]+)?)\},/.exec(condition)?.[1];
+      if (guardedClaimOptionName !== undefined && command.includes("display-popup")) {
+        const expected = extractComparedValue(condition, guardedClaimOptionName);
+        if ((globalOptions.get(guardedClaimOptionName) ?? "") !== expected) {
           return tmuxCommandResult(input, "STATION_POPUP_CAS_MISS\n");
         }
-        for (const optionName of ["@station_popup_client", "@station_popup_focus_client"]) {
-          const value = new RegExp(`set-option -gq ${optionName} ([^ ;]+)`).exec(command)?.[1];
-          if (value !== undefined) globalOptions.set(optionName, value);
+        for (const match of command.matchAll(
+          /set-option -gq (@station_popup_(?:client|focus_client)(?:_c_[a-f0-9]+)?) ([^ ;]+)/g,
+        )) {
+          const optionName = match[1];
+          const value = match[2];
+          if (optionName !== undefined && value !== undefined) globalOptions.set(optionName, value);
         }
         executedPopupActions.push(command);
         if (options.displayExit !== undefined && !command.trimEnd().endsWith(" -C")) {
@@ -964,7 +1047,11 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     }
     if (args[0] === "new-session") {
       const nameIndex = args.indexOf("-s");
-      if (nameIndex >= 0) killedSessions.delete(args[nameIndex + 1] ?? "");
+      if (nameIndex >= 0) {
+        const sessionName = args[nameIndex + 1] ?? "";
+        killedSessions.delete(sessionName);
+        sessionSignatures.set(sessionName, "");
+      }
       return tmuxCommandResult(input);
     }
     if (args[0] === "display-popup" && !args.includes("-C") && options.displayExit !== undefined) {
@@ -1003,6 +1090,10 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
     root,
     runner,
     sessionSignatures,
+    setCurrentClient: (identity: { name: string; pid: number }) => {
+      clientName = identity.name;
+      clientPid = identity.pid;
+    },
   };
 }
 
@@ -1040,7 +1131,10 @@ function applySetOption(
 }
 
 function setFromTmuxCommand(command: string, globalOptions: Map<string, string>): void {
-  const match = /set-option -gq (@station_popup_(?:ui_route|active_claim)) ([^ ;]+)/.exec(command);
+  const match =
+    /set-option -gq (@station_popup_(?:ui_route|active_claim(?:_c_[a-f0-9]+)?)) ([^ ;]+)/.exec(
+      command,
+    );
   if (match?.[1] !== undefined && match[2] !== undefined) {
     globalOptions.set(match[1], match[2]);
   }

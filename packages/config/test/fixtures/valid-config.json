@@ -32,7 +32,8 @@
       "primaryAgentPane": true,
       "popupWidth": "50%",
       "popupHeight": "50%",
-      "popupPosition": "C"
+      "popupPosition": "C",
+      "popupScope": "server"
     }
   },
   "harness": {

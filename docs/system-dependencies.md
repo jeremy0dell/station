@@ -120,9 +120,11 @@ uses the canonical installed directory, the exact sibling `stn-tmux-popup`
 alias, and the resolved tmux executable. First use can invoke that full CLI
 fallback to initialize the hidden UI; a valid warm use directly attaches or
 toggles it without loading config or starting Bun or the Observer. Configured
-custom geometry uses the config-aware sibling alias instead so every open reads
-the requested size and position; setup with an explicit `--config` path also
-uses that alias so an existing hidden UI cannot mask a config change. Controlled
+custom geometry and `popup_scope = "client"` use the config-aware sibling alias
+instead so every open reads its geometry and ownership scope; setup with an
+explicit `--config` path also uses that alias so an existing hidden UI cannot
+mask a config change. Rerun `stn setup` after changing either setting so the
+managed binding is regenerated. Controlled
 binding failures are silent, return success to tmux, and show at most a
 temporary status-line message. Run `stn popup` directly for ordinary diagnostic
 output.

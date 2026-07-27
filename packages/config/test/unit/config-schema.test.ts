@@ -7,11 +7,14 @@ import {
   WorkspaceConfigSchema,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const fixtureUrl = (path: string) => new URL(`../fixtures/${path}`, import.meta.url);
 
-async function loadJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(fixtureUrl(path), "utf8"));
+async function loadJson(path: string): Promise<Record<string, unknown>> {
+  return z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(await readFile(fixtureUrl(path), "utf8")));
 }
 
 describe("config schemas", () => {
@@ -182,6 +185,21 @@ describe("config schemas", () => {
             command: "",
           },
         },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts tmux popup scopes and rejects unsupported ownership modes", async () => {
+    const config = ParsedStationConfigSchema.parse({
+      ...(await loadJson("valid-config.json")),
+      terminal: { tmux: { popupScope: "client" } },
+    });
+
+    expect(config.terminal?.tmux?.popupScope).toBe("client");
+    expect(
+      ParsedStationConfigSchema.safeParse({
+        ...config,
+        terminal: { tmux: { popupScope: "window" } },
       }).success,
     ).toBe(false);
   });

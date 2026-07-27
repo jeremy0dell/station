@@ -84,6 +84,7 @@ function normalizeTmuxConfig(value: unknown): unknown {
     popup_width: "popupWidth",
     popup_height: "popupHeight",
     popup_position: "popupPosition",
+    popup_scope: "popupScope",
   });
 }
 

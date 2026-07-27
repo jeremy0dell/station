@@ -130,6 +130,7 @@ accepted by config validation but become unavailable providers at runtime.
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
 | `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |
+| `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
 
 ### `[harness.<id>]` — agent harnesses (optional)
 

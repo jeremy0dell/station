@@ -321,7 +321,16 @@ describe("setup dependency checks", () => {
     );
   }, 15_000);
 
-  it("uses the config-aware popup alias for compiled bindings with custom geometry", async () => {
+  it.each([
+    {
+      label: "custom geometry",
+      popup: { popupWidth: "80", popupHeight: "24", popupPosition: "C" },
+    },
+    {
+      label: "client popup scope",
+      popup: { popupScope: "client" as const },
+    },
+  ])("uses the config-aware popup alias for compiled bindings with $label", async ({ popup }) => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const home = join(root, "home");
@@ -355,11 +364,7 @@ describe("setup dependency checks", () => {
         popupAlias,
       ]),
       fs: readOnlyFs({
-        [configPath]: configToml(repo, {
-          popupWidth: "80",
-          popupHeight: "24",
-          popupPosition: "C",
-        }),
+        [configPath]: configToml(repo, popup),
       }),
     });
 
@@ -2287,6 +2292,7 @@ function configToml(
     popupWidth?: string;
     popupHeight?: string;
     popupPosition?: string;
+    popupScope?: "server" | "client";
   } = {},
 ): string {
   const lines = [
@@ -2321,7 +2327,8 @@ function configToml(
   if (
     options.popupWidth !== undefined ||
     options.popupHeight !== undefined ||
-    options.popupPosition !== undefined
+    options.popupPosition !== undefined ||
+    options.popupScope !== undefined
   ) {
     lines.push("[terminal.tmux]");
     if (options.popupWidth !== undefined) {
@@ -2332,6 +2339,9 @@ function configToml(
     }
     if (options.popupPosition !== undefined) {
       lines.push(`popup_position = ${JSON.stringify(options.popupPosition)}`);
+    }
+    if (options.popupScope !== undefined) {
+      lines.push(`popup_scope = ${JSON.stringify(options.popupScope)}`);
     }
     lines.push("");
   }

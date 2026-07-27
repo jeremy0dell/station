@@ -233,8 +233,10 @@ async function enablePersistentPopupSessionMouse(
 export function persistentPopupSignature(
   tuiCommand: string,
   buildVersion = stationObserverBuildVersion(),
+  focusClientId?: string,
 ): string {
-  return `v2:${buildVersion}:${tuiCommand}`;
+  const focusIdentity = focusClientId === undefined ? "" : `:client=${focusClientId}`;
+  return `v2:${buildVersion}:${tuiCommand}${focusIdentity}`;
 }
 
 export async function ensurePersistentPopupSession(
@@ -244,7 +246,11 @@ export async function ensurePersistentPopupSession(
   const input = persistentSessionOptions(options, command);
   const sessionName = options.uiSessionName ?? defaultPersistentPopupSessionName;
   const tuiCommand = options.tuiCommand ?? defaultPersistentPopupTuiCommand;
-  const signature = persistentPopupSignature(tuiCommand);
+  const signature = persistentPopupSignature(
+    tuiCommand,
+    stationObserverBuildVersion(),
+    options.focusClientId,
+  );
   if (await hasTmuxSession(input, sessionName)) {
     const currentSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
     if (currentSignature === signature) {
@@ -284,7 +290,7 @@ export async function ensurePersistentPopupSession(
       sessionName,
       "-n",
       "station-ui",
-      buildPersistentPopupTuiCommand(tuiCommand),
+      buildPersistentPopupTuiCommand(tuiCommand, options.focusClientId),
     ],
     operation: "provider.tmux.popup.createPersistentUi",
     message: "tmux failed to create the persistent station popup UI.",
