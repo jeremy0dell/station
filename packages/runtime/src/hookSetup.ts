@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import {
   type ProviderHookArtifactOwner,
   ProviderHookArtifactOwnerSchema,
+  type ProviderHookArtifactOwnership,
 } from "@station/contracts";
 import type { StationBuildInfo } from "./buildInfo.js";
 import {
@@ -42,16 +43,7 @@ export type ProviderHookScriptOptions = {
 
 export const PROVIDER_HOOK_OWNER_MARKER = "station-provider-artifact-owner:v1:";
 
-export type ProviderHookArtifactOwnership =
-  | { status: "absent"; requested: ProviderHookArtifactOwner }
-  | { status: "same-owner"; requested: ProviderHookArtifactOwner; currentLauncher: string }
-  | {
-      status: "different-owner";
-      requested: ProviderHookArtifactOwner;
-      currentLauncher: string;
-      current?: ProviderHookArtifactOwner;
-    }
-  | { status: "legacy-unknown"; requested: ProviderHookArtifactOwner };
+export type { ProviderHookArtifactOwnership };
 
 export class ProviderHookArtifactOwnershipError extends Error {
   readonly code = "PROVIDER_HOOK_OWNERSHIP_CONFLICT";

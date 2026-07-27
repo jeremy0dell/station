@@ -33,6 +33,7 @@ import {
   type ProjectId,
   ProjectIdSchema,
   ProviderHealthSchema,
+  ProviderHookArtifactOwnershipSchema,
   ProviderHookEventSchema,
   ProviderHookReceiptSchema,
   ProviderHookSpoolRecordSchema,
@@ -84,6 +85,42 @@ function expectFails(schema: ZodType, value: unknown, label: string) {
 }
 
 describe("contract schemas", () => {
+  it("strictly parses provider hook artifact ownership", () => {
+    const requested = {
+      schemaVersion: 1,
+      launcher: "/source/bin/stn-ingress",
+      runtimeKind: "source",
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    } as const;
+    const current = {
+      schemaVersion: 1,
+      launcher: "/installed/stn-ingress",
+      runtimeKind: "compiled",
+      version: "0.7.1",
+      buildIdentity: "b".repeat(64),
+    } as const;
+
+    expect(
+      ProviderHookArtifactOwnershipSchema.parse({
+        status: "different-owner",
+        requested,
+        currentLauncher: current.launcher,
+        current,
+      }),
+    ).toMatchObject({ status: "different-owner", requested, current });
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
+      { status: "same-owner", requested, currentLauncher: "relative/stn-ingress" },
+      "ownership with a relative current launcher",
+    );
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
+      { status: "absent", requested, extra: true },
+      "ownership with an unknown field",
+    );
+  });
+
   it("keeps provider-native execution identity on harness run observations", () => {
     expect(
       HarnessRunObservationSchema.parse({

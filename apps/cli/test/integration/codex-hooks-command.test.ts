@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
@@ -91,6 +91,111 @@ describe("CLI Codex hook commands", () => {
     const overriddenScript = await readFile(hookScriptPath, "utf8");
     expect(overriddenScript).toContain("/explicit/stn-ingress");
     expect(overriddenScript).not.toContain(providerHookIngressLauncher);
+  });
+
+  it("treats an explicit hook executable as the requested artifact owner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-codex-hook-bin-owner-"));
+    const configPath = await writeConfig(root, true);
+    const env = codexEnv(root);
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const defaultOwner = artifactOwner(join(root, "installed", "stn-ingress"), "compiled", "a");
+    const customHookBin = join(root, "custom-stn-ingress");
+    await writeFile(customHookBin, "#!/bin/sh\nexit 0\n", "utf8");
+    await chmod(customHookBin, 0o700);
+    const options = {
+      env,
+      providerHookIngressLauncher: defaultOwner.launcher,
+      providerHookArtifactOwner: defaultOwner,
+    };
+
+    await runCli(["--config", configPath, "hooks", "install", "codex", "--yes"], options);
+    const beforeConflict = await readFile(hookScriptPath, "utf8");
+
+    await expect(
+      runCli(
+        ["--config", configPath, "hooks", "install", "codex", "--yes", "--hook-bin", customHookBin],
+        options,
+      ),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(beforeConflict);
+    expect(
+      (await readdir(join(root, "state", "hooks"))).some((name) => name.includes(".bak")),
+    ).toBe(false);
+
+    const takeover = await runCli(
+      [
+        "--config",
+        configPath,
+        "hooks",
+        "install",
+        "codex",
+        "--yes",
+        "--takeover",
+        "--hook-bin",
+        customHookBin,
+      ],
+      options,
+    );
+    const customOwner = { ...defaultOwner, launcher: customHookBin };
+    expect(takeover).toMatchObject({
+      code: 0,
+      output: { ownership: { status: "same-owner", requested: customOwner } },
+    });
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(
+      providerHookOwnerMarker(customOwner),
+    );
+    await expect(
+      runCli(
+        ["--config", configPath, "hooks", "doctor", "codex", "--hook-bin", customHookBin],
+        options,
+      ),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { status: "ok", ownership: { status: "same-owner", requested: customOwner } },
+    });
+    await expect(
+      runCli(["--config", configPath, "hooks", "doctor", "codex"], options),
+    ).resolves.toMatchObject({
+      code: 1,
+      output: { status: "warn", ownership: { status: "different-owner" } },
+    });
+
+    await runCli(
+      ["--config", configPath, "hooks", "install", "codex", "--yes", "--takeover"],
+      options,
+    );
+    await expect(
+      runCli(["--config", configPath, "hooks", "doctor", "codex"], options),
+    ).resolves.toMatchObject({ code: 0, output: { ownership: { status: "same-owner" } } });
+  });
+
+  it("rejects an unresolved explicit hook executable before writing artifacts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-codex-missing-hook-bin-"));
+    const configPath = await writeConfig(root, true);
+    const env = codexEnv(root);
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const owner = artifactOwner(join(root, "installed", "stn-ingress"), "compiled", "a");
+
+    await expect(
+      runCli(
+        [
+          "--config",
+          configPath,
+          "hooks",
+          "install",
+          "codex",
+          "--yes",
+          "--hook-bin",
+          join(root, "missing-stn-ingress"),
+        ],
+        {
+          env,
+          providerHookIngressLauncher: owner.launcher,
+          providerHookArtifactOwner: owner,
+        },
+      ),
+    ).rejects.toThrow("executable could not be resolved");
+    await expect(readFile(hookScriptPath, "utf8")).rejects.toThrow();
   });
 
   it("refuses cross-runtime overwrite until explicit takeover", async () => {

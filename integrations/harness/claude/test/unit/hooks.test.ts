@@ -128,6 +128,8 @@ describe("Claude hook setup", () => {
       hookBin: installedOwner.launcher,
       artifactOwner: installedOwner,
     });
+    const installedSettings = await readFile(options.claudeSettingsPath, "utf8");
+    const installedScript = await readFile(options.hookScriptPath, "utf8");
 
     await expect(
       doctorClaudeHooks({
@@ -151,6 +153,48 @@ describe("Claude hook setup", () => {
         artifactOwner: sourceOwner,
       }),
     ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(options.claudeSettingsPath, "utf8")).resolves.toBe(installedSettings);
+    await expect(readFile(options.hookScriptPath, "utf8")).resolves.toBe(installedScript);
+
+    await installClaudeHooks({
+      ...options,
+      hookBin: sourceOwner.launcher,
+      artifactOwner: sourceOwner,
+      takeover: true,
+    });
+    await expect(
+      doctorClaudeHooks({
+        ...options,
+        hookBin: sourceOwner.launcher,
+        artifactOwner: sourceOwner,
+        enabled: true,
+      }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      installed: true,
+      ownership: { status: "same-owner", requested: sourceOwner },
+    });
+    await expect(
+      installClaudeHooks({
+        ...options,
+        hookBin: installedOwner.launcher,
+        artifactOwner: installedOwner,
+      }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await installClaudeHooks({
+      ...options,
+      hookBin: installedOwner.launcher,
+      artifactOwner: installedOwner,
+      takeover: true,
+    });
+    await expect(
+      doctorClaudeHooks({
+        ...options,
+        hookBin: installedOwner.launcher,
+        artifactOwner: installedOwner,
+        enabled: true,
+      }),
+    ).resolves.toMatchObject({ status: "ok", ownership: { status: "same-owner" } });
   });
 
   it("generated script delivers to stn-ingress even without ownership env", async () => {

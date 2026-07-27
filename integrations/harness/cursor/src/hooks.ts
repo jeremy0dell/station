@@ -3,6 +3,7 @@
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
 import type { ProviderHookArtifactOwner } from "@station/contracts";
 import {
+  assertProviderHookArtifactOwnership,
   assignBackupPaths,
   classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
@@ -199,6 +200,33 @@ function sharedGeneratedHookScriptPath(
   return shared;
 }
 
+/** Guards the configured Station script before install migrates Cursor to another script path. */
+async function assertConfiguredCursorHookOwnership(
+  hooksPath: string,
+  requestedHookScriptPath: string,
+  options: CursorHookPlanOptions,
+): Promise<void> {
+  if (options.artifactOwner === undefined) return;
+  const source = await fileOps.readOptionalFile(hooksPath);
+  const currentHookScriptPath = sharedGeneratedHookScriptPath(
+    generatedCursorHookCommands(parseJsonDocument(source)),
+  );
+  if (currentHookScriptPath === undefined || currentHookScriptPath === requestedHookScriptPath) {
+    return;
+  }
+  const currentScript = await fileOps.readOptionalFile(currentHookScriptPath);
+  const legacyLauncher = providerHookScriptLauncher(currentScript, "cursor");
+  assertProviderHookArtifactOwnership({
+    provider: "cursor",
+    action: "install",
+    artifactPath: currentHookScriptPath,
+    contents: currentScript,
+    requested: options.artifactOwner,
+    ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+  });
+}
+
 export async function planCursorHooks(
   options: CursorHookPlanOptions = {},
 ): Promise<CursorHookPlan> {
@@ -239,6 +267,7 @@ export async function installCursorHooks(
   options: CursorHookPlanOptions = {},
 ): Promise<CursorHookInstallResult> {
   const plan = await planCursorHooks(options);
+  await assertConfiguredCursorHookOwnership(plan.hooksPath, plan.hookScriptPath, options);
   const backupPath = await installConfigScriptHook({
     configPath: plan.hooksPath,
     hookScriptPath: plan.hookScriptPath,

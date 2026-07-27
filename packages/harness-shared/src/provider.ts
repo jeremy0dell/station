@@ -14,6 +14,7 @@ import type {
   ProviderDoctorContext,
   ProviderHealth,
   ProviderHookArtifactOwner,
+  ProviderHookArtifactOwnership,
   ProviderId,
   RawHarnessEvent,
   SafeError,
@@ -294,15 +295,22 @@ export function harnessHookDoctorOptions(
 export function harnessHooksStatusFrom(
   provider: ProviderId,
   requested: boolean,
-  result: { installed: boolean; missing: readonly unknown[]; message: string },
+  result: {
+    installed: boolean;
+    missing: readonly unknown[];
+    message: string;
+    ownership?: ProviderHookArtifactOwnership;
+  },
 ): HarnessHooksStatus {
-  return {
+  const status: HarnessHooksStatus = {
     provider,
     installed: result.installed,
     requested,
     missing: result.missing.map((name) => String(name)),
     message: result.message,
   };
+  if (result.ownership !== undefined) status.ownership = result.ownership;
+  return status;
 }
 
 function harnessCapabilities<TOpts extends CommonHarnessProviderOptions>(

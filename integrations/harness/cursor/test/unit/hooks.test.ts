@@ -191,13 +191,18 @@ describe("Cursor hook setup", () => {
       hookBin: installedOwner.launcher,
       artifactOwner: installedOwner,
     });
+    const installedHooks = await readFile(hooksPath, "utf8");
+    const installedScript = await readFile(sharedHookScriptPath, "utf8");
+    const sourceOptions = {
+      cursorHooksPath: hooksPath,
+      hookScriptPath: requestedHookScriptPath,
+      hookBin: sourceOwner.launcher,
+      artifactOwner: sourceOwner,
+    };
 
     await expect(
       doctorCursorHooks({
-        cursorHooksPath: hooksPath,
-        hookScriptPath: requestedHookScriptPath,
-        hookBin: sourceOwner.launcher,
-        artifactOwner: sourceOwner,
+        ...sourceOptions,
         enabled: true,
       }),
     ).resolves.toMatchObject({
@@ -205,6 +210,37 @@ describe("Cursor hook setup", () => {
       installed: false,
       hookScriptPath: sharedHookScriptPath,
       ownership: { status: "different-owner" },
+    });
+    await expect(installCursorHooks(sourceOptions)).rejects.toMatchObject({
+      code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+    });
+    await expect(
+      uninstallCursorHooks({ ...sourceOptions, hookScriptPath: sharedHookScriptPath }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(hooksPath, "utf8")).resolves.toBe(installedHooks);
+    await expect(readFile(sharedHookScriptPath, "utf8")).resolves.toBe(installedScript);
+
+    await installCursorHooks({ ...sourceOptions, takeover: true });
+    await expect(doctorCursorHooks({ ...sourceOptions, enabled: true })).resolves.toMatchObject({
+      status: "ok",
+      installed: true,
+      hookScriptPath: requestedHookScriptPath,
+      ownership: { status: "same-owner", requested: sourceOwner },
+    });
+
+    const installedOptions = {
+      cursorHooksPath: hooksPath,
+      hookScriptPath: sharedHookScriptPath,
+      hookBin: installedOwner.launcher,
+      artifactOwner: installedOwner,
+    };
+    await expect(installCursorHooks(installedOptions)).rejects.toMatchObject({
+      code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+    });
+    await installCursorHooks({ ...installedOptions, takeover: true });
+    await expect(doctorCursorHooks({ ...installedOptions, enabled: true })).resolves.toMatchObject({
+      status: "ok",
+      ownership: { status: "same-owner", requested: installedOwner },
     });
   });
 

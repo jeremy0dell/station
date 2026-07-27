@@ -9,6 +9,7 @@ import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessHookDoctorOptions,
+  harnessHooksStatusFrom,
   type TerminalBoundHarnessProviderSpec,
 } from "../../src/provider";
 
@@ -167,6 +168,28 @@ describe("createTerminalBoundHarnessProvider", () => {
     expect("doctorChecks" in provider).toBe(true);
     expect("hooksStatus" in provider).toBe(true);
     expect(provider.acceptsPersistedEvent?.({ provider: "test", observedAt: now })).toBe(false);
+  });
+
+  it("preserves hook artifact ownership in shared status mapping", () => {
+    const requested = {
+      schemaVersion: 1 as const,
+      launcher: "/source/bin/stn-ingress",
+      runtimeKind: "source" as const,
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    };
+
+    expect(
+      harnessHooksStatusFrom("codex", true, {
+        installed: false,
+        missing: ["station-codex-hook.sh"],
+        message: "Another Station runtime owns the hook.",
+        ownership: { status: "legacy-unknown", requested },
+      }),
+    ).toMatchObject({
+      provider: "codex",
+      ownership: { status: "legacy-unknown", requested },
+    });
   });
 });
 

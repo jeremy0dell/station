@@ -1,5 +1,7 @@
+import { resolve } from "node:path";
 import { resolveObserverPaths, type StationConfig } from "@station/config";
 import type { ProviderHookArtifactOwner } from "@station/contracts";
+import { resolveExecutablePath } from "@station/runtime";
 import type { CliEnv } from "../env.js";
 
 type CommonHookOptions = {
@@ -151,7 +153,8 @@ export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>
   ): Promise<ProviderHooksCommandResult> {
     const [action] = args;
     const flags = parseHookFlags(args.slice(1), adapter.provider, flagSpec);
-    const hookOptions = adapter.buildOptions(flags, options);
+    const context = await resolveHookBinOwnership(flags, options, adapter.provider);
+    const hookOptions = adapter.buildOptions(flags, context);
     if (flags.takeover) hookOptions.takeover = true;
 
     if (action === "plan") {
@@ -175,6 +178,31 @@ export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>
     throw new Error(
       `Usage: station hooks plan|install|uninstall|doctor ${adapter.provider} [--yes]`,
     );
+  };
+}
+
+async function resolveHookBinOwnership(
+  flags: ParsedHookFlags,
+  context: ProviderHooksCommandOptions,
+  provider: string,
+): Promise<ProviderHooksCommandOptions> {
+  if (flags.hookBin === undefined || context.providerHookArtifactOwner === undefined) {
+    return context;
+  }
+  const resolveOptions = context.env?.PATH === undefined ? {} : { pathEnv: context.env.PATH };
+  const launcher = await resolveExecutablePath(flags.hookBin, resolveOptions);
+  if (launcher === undefined) {
+    throw new Error(
+      `Refusing ${provider} --hook-bin ${flags.hookBin}: the executable could not be resolved.`,
+    );
+  }
+  flags.hookBin = resolve(launcher);
+  return {
+    ...context,
+    providerHookArtifactOwner: {
+      ...context.providerHookArtifactOwner,
+      launcher: flags.hookBin,
+    },
   };
 }
 

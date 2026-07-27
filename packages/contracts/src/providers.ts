@@ -215,6 +215,38 @@ export const ProviderHookArtifactOwnerSchema = z
 
 export type ProviderHookArtifactOwner = z.infer<typeof ProviderHookArtifactOwnerSchema>;
 
+export const ProviderHookArtifactOwnershipSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("absent"),
+      requested: ProviderHookArtifactOwnerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("same-owner"),
+      requested: ProviderHookArtifactOwnerSchema,
+      currentLauncher: providerHookAbsolutePathSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("different-owner"),
+      requested: ProviderHookArtifactOwnerSchema,
+      currentLauncher: providerHookAbsolutePathSchema,
+      current: ProviderHookArtifactOwnerSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("legacy-unknown"),
+      requested: ProviderHookArtifactOwnerSchema,
+    })
+    .strict(),
+]);
+
+export type ProviderHookArtifactOwnership = z.infer<typeof ProviderHookArtifactOwnershipSchema>;
+
 export const ProviderHookRuntimeSchema = z
   .object({
     ingressLauncher: providerHookAbsolutePathSchema,
@@ -239,7 +271,8 @@ export type ProviderDoctorContext = {
 
 /**
  * Import-safe hook-install status for launch gates: `installed` is the gate,
- * `requested` separates missing hooks from config that never asked for them.
+ * `requested` separates missing hooks from config that never asked for them, and
+ * ownership preserves requester-versus-artifact provenance for setup diagnostics.
  */
 export type HarnessHooksStatus = {
   provider: ProviderId;
@@ -247,6 +280,7 @@ export type HarnessHooksStatus = {
   requested: boolean;
   missing: string[];
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type OpenWorkspaceRequest = {

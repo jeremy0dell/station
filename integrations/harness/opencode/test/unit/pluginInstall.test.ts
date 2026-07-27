@@ -160,6 +160,55 @@ describe("OpenCode plugin setup", () => {
     await expect(readFile(pluginPath, "utf8")).resolves.toContain(
       providerHookOwnerMarker(sourceOwner),
     );
+    await expect(
+      doctorOpenCodePlugin({ pluginPath, artifactOwner: sourceOwner, enabled: true }),
+    ).resolves.toMatchObject({
+      status: "ok",
+      installed: true,
+      ownership: { status: "same-owner", requested: sourceOwner },
+    });
+    const sourcePlugin = await readFile(pluginPath, "utf8");
+    await expect(
+      uninstallOpenCodePlugin({ pluginPath, artifactOwner: installedOwner }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(pluginPath, "utf8")).resolves.toBe(sourcePlugin);
+    await expect(
+      installOpenCodePlugin({ pluginPath, artifactOwner: installedOwner }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await installOpenCodePlugin({ pluginPath, artifactOwner: installedOwner, takeover: true });
+    await expect(
+      doctorOpenCodePlugin({ pluginPath, artifactOwner: installedOwner, enabled: true }),
+    ).resolves.toMatchObject({ status: "ok", ownership: { status: "same-owner" } });
+  });
+
+  it("requires takeover for a changed legacy Station plugin without creating a backup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-legacy-owner-"));
+    const pluginDir = join(root, "opencode", "plugins");
+    const pluginPath = join(pluginDir, "station-agent-state.js");
+    const owner = artifactOwner("/source/bin/stn-ingress", "source", "a");
+    await mkdir(pluginDir, { recursive: true });
+    const changedLegacy = `${expectedOpenCodePluginScript()}\n// local change\n`;
+    await writeFile(pluginPath, changedLegacy, "utf8");
+
+    await expect(
+      doctorOpenCodePlugin({ pluginPath, artifactOwner: owner, enabled: true }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "legacy-unknown", requested: owner },
+    });
+    await expect(installOpenCodePlugin({ pluginPath, artifactOwner: owner })).rejects.toMatchObject(
+      {
+        code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+      },
+    );
+    await expect(readFile(pluginPath, "utf8")).resolves.toBe(changedLegacy);
+    expect((await readdir(pluginDir)).some((name) => name.includes(".bak"))).toBe(false);
+
+    await installOpenCodePlugin({ pluginPath, artifactOwner: owner, takeover: true });
+    await expect(
+      doctorOpenCodePlugin({ pluginPath, artifactOwner: owner, enabled: true }),
+    ).resolves.toMatchObject({ status: "ok", ownership: { status: "same-owner" } });
   });
 
   it("filters streaming message events before delivery or spool", async () => {

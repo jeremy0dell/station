@@ -250,6 +250,30 @@ describe("runtime hookSetup", () => {
       ).toThrow(/--yes --takeover/u);
     });
 
+    it("allows version and build upgrades at the same launcher", () => {
+      const current = providerHookArtifactOwner("/opt/station/bin/stn-ingress", {
+        version: "0.7.1",
+        compiled: true,
+        buildIdentity: BUILD_A,
+      });
+      const requested = providerHookArtifactOwner(current.launcher, {
+        version: "0.7.2",
+        compiled: true,
+        buildIdentity: BUILD_B,
+      });
+
+      expect(
+        classifyProviderHookArtifactOwnership({
+          contents: `# ${providerHookOwnerMarker(current)}\n`,
+          requested,
+        }),
+      ).toEqual({
+        status: "same-owner",
+        requested,
+        currentLauncher: current.launcher,
+      });
+    });
+
     it("adopts legacy generated scripts only when their launcher matches", () => {
       const requested = providerHookArtifactOwner("/source path/bin/stn-ingress", {
         version: "0.0.0",

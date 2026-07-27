@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderHookArtifactOwner } from "@station/contracts";
@@ -171,6 +171,38 @@ describe("Worktrunk hook setup", () => {
       expectation: sourceExpectation,
     });
     await expect(readFile(configPath, "utf8")).resolves.not.toContain("stn-ingress");
+  });
+
+  it("requires takeover when lifecycle commands have mixed marker validity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-hooks-mixed-owner-"));
+    const configPath = join(root, "config.toml");
+    const owner = artifactOwner("/source/bin/stn-ingress", "source", "a");
+    const expectation = hookExpectation(owner.launcher, owner);
+    await installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation });
+    const installed = await readFile(configPath, "utf8");
+    const mixed = installed.replace(
+      /station-provider-artifact-owner:v1:[A-Za-z0-9_-]+/u,
+      "station-provider-artifact-owner:v1:malformed",
+    );
+    await writeFile(configPath, mixed, "utf8");
+
+    await expect(
+      doctorWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "legacy-unknown", requested: owner },
+    });
+    await expect(
+      installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(configPath, "utf8")).resolves.toBe(mixed);
+    expect((await readdir(root)).some((name) => name.includes(".bak"))).toBe(false);
+
+    await installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation, takeover: true });
+    await expect(
+      doctorWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
+    ).resolves.toMatchObject({ status: "ok", ownership: { status: "same-owner" } });
   });
 });
 
