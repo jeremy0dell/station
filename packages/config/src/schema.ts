@@ -126,6 +126,10 @@ export const WorktreeProvidersConfigSchema = z
   })
   .strict();
 
+export const TmuxPopupScopeSchema = z.enum(["server", "client"]);
+
+export type TmuxPopupScope = z.infer<typeof TmuxPopupScopeSchema>;
+
 export const TmuxConfigSchema = z
   .object({
     command: nonEmptyStringSchema.optional(),
@@ -137,6 +141,7 @@ export const TmuxConfigSchema = z
     popupWidth: nonEmptyStringSchema.optional(),
     popupHeight: nonEmptyStringSchema.optional(),
     popupPosition: nonEmptyStringSchema.optional(),
+    popupScope: TmuxPopupScopeSchema.optional(),
   })
   .strict();
 

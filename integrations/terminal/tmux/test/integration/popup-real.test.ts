@@ -23,6 +23,7 @@ import {
 } from "@station/runtime";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
+import { tmuxPopupRunShellCommand } from "../../../../../apps/cli/src/commands/setup/checks/tmuxBinding.js";
 import { mockObserverSnapshot } from "../../../../../station/src/sources/fixtures/mockObserverSnapshot.js";
 import { buildManagedFastPopupRunShellCommand, openTmuxPopup } from "../../src/popup";
 import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
@@ -1013,6 +1014,80 @@ describeRealTmux("real tmux dev popup routing", () => {
       },
     });
     await assertWrapperAudit(fixture);
+  }, 120_000);
+
+  it("client-scoped bindings keep two owners independent and toggle through nested clients", async () => {
+    const fixture = await createDashboardFixture(tmux, {
+      height: "50%",
+      position: "C",
+      width: "50%",
+    });
+    const validConfig = await readFile(fixture.configPath, "utf8");
+    await writeFile(
+      fixture.configPath,
+      validConfig.replace('popup_position = "C"', 'popup_position = "C"\npopup_scope = "client"'),
+      "utf8",
+    );
+    cleanup = () => cleanupDashboardFixture(fixture);
+
+    await tmuxExec(
+      fixture.wrapper,
+      ["new-session", "-d", "-s", "base", "-c", fixture.projectRoot, "sleep 300"],
+      fixture.env,
+    );
+    fixture.ptyClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base",
+      env: fixture.env,
+    });
+    await tmuxExec(
+      fixture.wrapper,
+      ["new-session", "-d", "-s", "base-cross", "-c", fixture.projectRoot, "sleep 300"],
+      fixture.env,
+    );
+    const secondClient = await startTmuxPtyClient({
+      tmux: fixture.wrapper,
+      sessionName: "base-cross",
+      env: fixture.env,
+    });
+    fixture.otherPtyClients.push(secondClient);
+
+    const fallbackAlias = join(dirname(await realpath(builtBinaryPath)), "stn-tmux-popup");
+    const runShellCommand = tmuxPopupRunShellCommand(fallbackAlias, fixture.configPath);
+    await tmuxExec(
+      fixture.wrapper,
+      ["bind-key", "Space", "run-shell", "-b", runShellCommand],
+      fixture.env,
+    );
+
+    await triggerPopupBinding(fixture.ptyClient);
+    const [firstSession] = await waitForClientScopedPopupSessions(fixture, 1);
+    if (firstSession === undefined) throw new Error("first client-scoped popup session missing");
+    await waitForTmuxSessionClientCount(fixture, firstSession, 1);
+    const firstPanePid = await panePid(fixture.wrapper, firstSession);
+
+    await triggerPopupBinding(secondClient);
+    const sessions = await waitForClientScopedPopupSessions(fixture, 2);
+    const secondSession = sessions.find((sessionName) => sessionName !== firstSession);
+    if (secondSession === undefined) throw new Error("second client-scoped popup session missing");
+    await waitForTmuxSessionClientCount(fixture, secondSession, 1);
+
+    await triggerPopupBinding(fixture.ptyClient);
+    await waitForTmuxSessionClientCount(fixture, firstSession, 0);
+    await waitForTmuxSessionClientCount(fixture, secondSession, 1);
+
+    await triggerPopupBinding(fixture.ptyClient);
+    await waitForTmuxSessionClientCount(fixture, firstSession, 1);
+    expect(await panePid(fixture.wrapper, firstSession)).toBe(firstPanePid);
+    expect(await clientScopedPopupSessions(fixture)).toEqual(sessions);
+
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
+    await waitForTmuxSessionClientCount(fixture, firstSession, 0);
+    await waitForTmuxSessionClientCount(fixture, secondSession, 1);
+
+    await triggerPopupBinding(secondClient);
+    await waitForTmuxSessionClientCount(fixture, secondSession, 0);
+    expect(await clientScopedPopupSessions(fixture)).toEqual(sessions);
   }, 120_000);
 
   it("compiled managed binding honors dashboard dismissal, reuses the warm UI, and fails without entering view mode", async () => {
@@ -3199,6 +3274,53 @@ async function makeCheckoutTempRoot(): Promise<string> {
     .replaceAll(/[^A-Za-z0-9_-]/g, "-")
     .slice(0, 24);
   return mkdtemp(join("/tmp", `stn-${checkout}-`));
+}
+
+async function clientScopedPopupSessions(fixture: DashboardFixture): Promise<string[]> {
+  const output = await tmuxExec(
+    fixture.wrapper,
+    ["list-sessions", "-F", "#{session_name}"],
+    fixture.env,
+  );
+  return nonEmptyLines(output).filter((sessionName) => sessionName.startsWith("_station-ui-c-"));
+}
+
+async function waitForClientScopedPopupSessions(
+  fixture: DashboardFixture,
+  expected: number,
+): Promise<string[]> {
+  const deadline = Date.now() + 10_000;
+  let sessions: string[] = [];
+  while (Date.now() < deadline) {
+    sessions = await clientScopedPopupSessions(fixture);
+    if (sessions.length === expected) return sessions;
+    await delay(100);
+  }
+  throw new Error(
+    `found ${sessions.length} client-scoped popup sessions instead of ${expected}: ${sessions.join(", ")}`,
+  );
+}
+
+async function waitForTmuxSessionClientCount(
+  fixture: DashboardFixture,
+  sessionName: string,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  let clients: string[] = [];
+  while (Date.now() < deadline) {
+    const output = await tmuxExec(
+      fixture.wrapper,
+      ["list-clients", "-t", sessionName, "-F", "#{client_name}"],
+      fixture.env,
+    );
+    clients = nonEmptyLines(output);
+    if (clients.length === expected) return;
+    await delay(100);
+  }
+  throw new Error(
+    `tmux session ${sessionName} had ${clients.length} clients instead of ${expected}; scoped sessions: ${(await clientScopedPopupSessions(fixture)).join(", ")}`,
+  );
 }
 
 async function waitForTmuxSession(tmux: string, sessionName: string): Promise<void> {

@@ -231,8 +231,8 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
   };
   const resolvedTmuxCommand =
     tmux.resolvedPath ?? (isAbsolute(tmux.command) ? tmux.command : undefined);
-  const defaultPopupGeometry = usesDefaultPopupGeometry(config);
-  const configAwarePopup = options.configPath !== undefined || !defaultPopupGeometry;
+  const managedFastPopup = usesManagedFastPopupDefaults(config);
+  const configAwarePopup = options.configPath !== undefined || !managedFastPopup;
   if (options.tmuxPopupOwnerRoot !== undefined && configAwarePopup) {
     tmuxBindingOptions.runShellCommand = tmuxPopupRunShellCommand(launcherCommand, config.path);
   } else if (options.tmuxPopupOwnerRoot !== undefined && resolvedTmuxCommand !== undefined) {
@@ -303,11 +303,12 @@ export async function checkSetupSocketEvidence(
   };
 }
 
-function usesDefaultPopupGeometry(config: SetupConfigFact): boolean {
+function usesManagedFastPopupDefaults(config: SetupConfigFact): boolean {
   if (config.status === "missing") return true;
   if (config.status !== "valid") return false;
   const tmux = resolveTmuxWorkbenchConfig(config.tmux);
   return (
+    tmux.popupScope === "server" &&
     tmux.popupWidth === defaultTmuxWorkbenchConfig.popupWidth &&
     tmux.popupHeight === defaultTmuxWorkbenchConfig.popupHeight &&
     tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition

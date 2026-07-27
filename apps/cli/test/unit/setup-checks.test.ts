@@ -321,7 +321,16 @@ describe("setup dependency checks", () => {
     );
   }, 15_000);
 
-  it("uses the config-aware popup alias for compiled bindings with custom geometry", async () => {
+  it.each([
+    {
+      label: "custom geometry",
+      popup: { popupWidth: "80", popupHeight: "24", popupPosition: "C" },
+    },
+    {
+      label: "client popup scope",
+      popup: { popupScope: "client" as const },
+    },
+  ])("uses the config-aware popup alias for compiled bindings with $label", async ({ popup }) => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const home = join(root, "home");
@@ -355,11 +364,7 @@ describe("setup dependency checks", () => {
         popupAlias,
       ]),
       fs: readOnlyFs({
-        [configPath]: configToml(repo, {
-          popupWidth: "80",
-          popupHeight: "24",
-          popupPosition: "C",
-        }),
+        [configPath]: configToml(repo, popup),
       }),
     });
 
@@ -1185,7 +1190,9 @@ scroll_on_output = "teleport"
     const binding = tmuxPopupBindingBlock();
     const clientNames = ["client one", "client'quote", "client;rm -rf", "client$(touch nope)"];
 
-    expect(binding).toContain("STATION_FOCUS_CLIENT_ID=#{q:client_name}");
+    expect(binding).toContain(
+      "STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}}",
+    );
     expect(binding).not.toContain('STATION_FOCUS_CLIENT_ID="#{client_name}"');
     for (const clientName of clientNames) {
       expect(binding).not.toContain(clientName);
@@ -1463,10 +1470,10 @@ scroll_on_output = "teleport"
     const calls: ExternalCommandInput[] = [];
 
     expect(runShellCommand).toBe(
-      "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/station-##{session_name}/stn-tmux-popup'",
+      "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}} '/tmp/station-##{session_name}/stn-tmux-popup'",
     );
     expect(tmuxPopupBindingBlock(launcherCommand)).toContain(
-      "STATION_FOCUS_CLIENT_ID=#{q:client_name}",
+      "STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}}",
     );
 
     await checkSetupTmuxBinding({
@@ -2287,6 +2294,7 @@ function configToml(
     popupWidth?: string;
     popupHeight?: string;
     popupPosition?: string;
+    popupScope?: "server" | "client";
   } = {},
 ): string {
   const lines = [
@@ -2321,7 +2329,8 @@ function configToml(
   if (
     options.popupWidth !== undefined ||
     options.popupHeight !== undefined ||
-    options.popupPosition !== undefined
+    options.popupPosition !== undefined ||
+    options.popupScope !== undefined
   ) {
     lines.push("[terminal.tmux]");
     if (options.popupWidth !== undefined) {
@@ -2332,6 +2341,9 @@ function configToml(
     }
     if (options.popupPosition !== undefined) {
       lines.push(`popup_position = ${JSON.stringify(options.popupPosition)}`);
+    }
+    if (options.popupScope !== undefined) {
+      lines.push(`popup_scope = ${JSON.stringify(options.popupScope)}`);
     }
     lines.push("");
   }

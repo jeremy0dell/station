@@ -387,9 +387,12 @@ describe("setup guided feedback e2e", () => {
       );
 
       expect(freshTmux.status, freshTmux.stderr).toBe(0);
-      expect(await readFile(fixture.popupMarker, "utf8")).toBe(
-        "/usr/bin:/bin\ntmux\n#{q:client_name}\n",
-      );
+      const popupMarker = (await readFile(fixture.popupMarker, "utf8")).trim().split("\n");
+      expect(popupMarker).toEqual([
+        "/usr/bin:/bin",
+        "tmux",
+        expect.stringContaining("client_name"),
+      ]);
     } finally {
       await fixture.cleanup();
     }

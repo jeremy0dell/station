@@ -15,6 +15,7 @@ import {
   defaultPersistentPopupSessionName,
   defaultPersistentPopupTuiCommand,
   persistentUiLeaseOption,
+  persistentUiOwnerClientOption,
   persistentUiRouteOption,
   persistentUiSignatureOption,
   registeredDevPopupCommandOption,
@@ -145,6 +146,25 @@ async function setPersistentPopupSessionLease(
   });
 }
 
+async function setPersistentPopupSessionOwnerClient(
+  input: TmuxCommandInput,
+  options: { clientId: string; sessionName: string },
+): Promise<void> {
+  await runTmuxPopupCommand(input, {
+    args: [
+      "set-option",
+      "-t",
+      options.sessionName,
+      "-q",
+      persistentUiOwnerClientOption,
+      options.clientId,
+    ],
+    operation: "provider.tmux.popup.setPersistentUiOwnerClient",
+    message: "tmux failed to record the persistent station popup owner client.",
+    timeoutMessage: "tmux persistent station popup owner client update timed out.",
+  });
+}
+
 function globalOptionEqualsFormat(optionName: string, value: string | undefined): string {
   const literal = (value ?? "").replaceAll("#", "##").replaceAll(",", "#,").replaceAll("}", "#}");
   return `#{==:#{${optionName}},${literal}}`;
@@ -229,12 +249,28 @@ async function enablePersistentPopupSessionMouse(
   });
 }
 
+async function configurePersistentPopupSession(
+  input: TmuxCommandInput,
+  sessionName: string,
+  focusClientId: string | undefined,
+): Promise<void> {
+  await enablePersistentPopupSessionMouse(input, sessionName);
+  if (focusClientId !== undefined) {
+    await setPersistentPopupSessionOwnerClient(input, {
+      clientId: focusClientId,
+      sessionName,
+    });
+  }
+}
+
 /** Identifies the exact renderer command and build allowed to own the persistent session. */
 export function persistentPopupSignature(
   tuiCommand: string,
   buildVersion = stationObserverBuildVersion(),
+  focusClientId?: string,
 ): string {
-  return `v2:${buildVersion}:${tuiCommand}`;
+  const focusIdentity = focusClientId === undefined ? "" : `:client=${focusClientId}`;
+  return `v2:${buildVersion}:${tuiCommand}${focusIdentity}`;
 }
 
 export async function ensurePersistentPopupSession(
@@ -244,11 +280,15 @@ export async function ensurePersistentPopupSession(
   const input = persistentSessionOptions(options, command);
   const sessionName = options.uiSessionName ?? defaultPersistentPopupSessionName;
   const tuiCommand = options.tuiCommand ?? defaultPersistentPopupTuiCommand;
-  const signature = persistentPopupSignature(tuiCommand);
+  const signature = persistentPopupSignature(
+    tuiCommand,
+    stationObserverBuildVersion(),
+    options.focusClientId,
+  );
   if (await hasTmuxSession(input, sessionName)) {
     const currentSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
     if (currentSignature === signature) {
-      await enablePersistentPopupSessionMouse(input, sessionName);
+      await configurePersistentPopupSession(input, sessionName, options.focusClientId);
       return { sessionName, created: false };
     }
     if (currentSignature !== undefined) {
@@ -258,7 +298,7 @@ export async function ensurePersistentPopupSession(
         // only its exact signature is reusable.
         const contenderSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
         if (contenderSignature === signature) {
-          await enablePersistentPopupSessionMouse(input, sessionName);
+          await configurePersistentPopupSession(input, sessionName, options.focusClientId);
           return { sessionName, created: false };
         }
         throw persistentPopupOwnershipError(
@@ -284,7 +324,7 @@ export async function ensurePersistentPopupSession(
       sessionName,
       "-n",
       "station-ui",
-      buildPersistentPopupTuiCommand(tuiCommand),
+      buildPersistentPopupTuiCommand(tuiCommand, options.focusClientId),
     ],
     operation: "provider.tmux.popup.createPersistentUi",
     message: "tmux failed to create the persistent station popup UI.",
@@ -294,7 +334,7 @@ export async function ensurePersistentPopupSession(
     sessionName,
     signature,
   });
-  await enablePersistentPopupSessionMouse(input, sessionName);
+  await configurePersistentPopupSession(input, sessionName, options.focusClientId);
   return { sessionName, created: true };
 }
 
