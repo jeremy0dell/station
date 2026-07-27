@@ -205,8 +205,10 @@ remains their authority.
 
 ### A1 — foundation: buildInfo + SQLite driver + real observer version
 
-**Status: implemented.** The mandatory `pnpm test:sqlite:bun` gate covers the
-SQLite driver contract and Node-to-Bun and Bun-to-Node database compatibility.
+**Status: implemented.** The hosted cross-runtime lane and focused
+`pnpm test:sqlite:bun` command cover the SQLite driver contract and Node-to-Bun and Bun-to-Node
+database compatibility. Pull requests use reduced race repetitions; release tags and the focused
+command retain the exhaustive stress counts.
 
 `packages/runtime/src/buildInfo.ts` (dev-safe `typeof`-guarded defines;
 exported from the package index).
@@ -267,9 +269,9 @@ through a **ctty helper** (S2, F6): `setsid()`,
 A2a checks in one portable POSIX C source. `bun run build:ctty-helper` uses the
 target's native `cc` to write the ignored development executable at
 `station/dist/ctty-helper`; no built helper is committed. Platform headers
-supply `TIOCSCTTY`, so TypeScript contains no platform ioctl constants. The
-pre-push gate compiles and tests that source natively on the developer's current
-platform, while hosted CI covers Linux and macOS across x64 and arm64.
+supply `TIOCSCTTY`, so TypeScript contains no platform ioctl constants. Focused local commands
+compile and test that source natively on the developer's current platform, while standard CI
+covers Linux and native release CI covers macOS and Linux across x64 and arm64.
 The helper stays C because it is a small direct wrapper over POSIX `setsid`,
 `ioctl`, and `execvp`; Zig or Rust would add a build toolchain without improving
 that boundary.
@@ -347,7 +349,7 @@ A4 owns the packaged helper lifecycle that A2a deliberately leaves out:
   may reload its extension path. Pi pruning waits for provider-process lifetime
   ownership rather than risking a live session.
 
-Local pre-push and hosted `standard-ci` binary smoke checks: `--version`,
+Focused local and path-selected hosted `standard-ci` binary smoke checks: `--version`,
 `--help`, exact popup alias symlinks, popup argv0 fallback routing, compiled
 setup binding generation, and `setup check --json`
 (asserting the `launchReady`/`workflowReady` split), compiled Codex hook
@@ -662,9 +664,10 @@ B-host → A5 → A6. B3's version half is supplied by the singleton roadmap.
 
 ## Verification (F11 — prove the headline UX, not a proxy)
 
-CI (every PR and `main`): the full pre-push gate on `ubuntu-24.04`, including
-vitest, the Bun renderer, cross-runtime SQLite, real PTY, installer, and compiled
-binary smoke coverage.
+CI (every ready PR): parallel `ubuntu-24.04` lanes cover Vitest, the Bun renderer,
+cross-runtime SQLite, real PTY, and path-selected installer and compiled-binary smoke coverage.
+Documentation-only pull requests run lint and diagnostics policy checks; `main` runs the static
+post-merge smoke.
 
 Native release CI: build, smoke, and draft-install the compiled binary on
 `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15-intel`, and `macos-15`.
