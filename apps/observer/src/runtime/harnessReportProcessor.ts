@@ -15,6 +15,7 @@ export type HarnessReportProcessorDeps = {
   core: ObserverCore;
   eventBus: ObserverEventBus;
   clock: RuntimeClock;
+  refreshProviderHealth?: (providerId: string) => Promise<void>;
   logger?: StationLogger;
 };
 
@@ -47,8 +48,8 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
 /**
  * USE CASE
  *
- * Persists one normalized report, projects authorized live status, publishes derived events, and
- * returns the required reconcile reason.
+ * Persists one normalized report, projects authorized live status, publishes derived events,
+ * revalidates contradictory provider health, and returns the required reconcile reason.
  */
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,
@@ -112,6 +113,22 @@ export async function processHarnessIngressReport(
   });
   for (const event of projection.value.events) {
     deps.eventBus.publish(event);
+  }
+  if (
+    projection.value.projected &&
+    report.status?.value === "starting" &&
+    projection.value.snapshot.providerHealth[report.provider]?.status === "unavailable" &&
+    deps.refreshProviderHealth !== undefined
+  ) {
+    void deps.refreshProviderHealth(report.provider).catch((error) =>
+      deps.logger
+        ?.error("Provider health revalidation after harness startup failed.", {
+          provider: report.provider,
+          reportId: report.reportId,
+          error,
+        })
+        .catch(() => undefined),
+    );
   }
   return {
     receipt: HarnessEventReportReceiptSchema.parse({
