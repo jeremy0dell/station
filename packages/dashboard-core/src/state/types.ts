@@ -101,10 +101,10 @@ export type TuiScreen =
       sourceBranch: string;
       sourceDirty: boolean;
       sourceAgentRunning: boolean;
-      draftBranch: EditableTextInputState;
-      nameSource: "generated" | "edited";
+      branch: string;
+      draftTitle: EditableTextInputState;
       copyDirty: boolean;
-      focus: "branch" | "copyDirty" | "submit";
+      focus: "name" | "copyDirty" | "submit";
       returnTo?: "dashboard";
       validationError?: string;
     }

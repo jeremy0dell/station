@@ -61,11 +61,11 @@ function ForkDetails({
   sheetWidth: number;
 }) {
   const focus = screen.focus;
-  const branchValue =
-    focus === "branch" ? (
-      <EditableTextInputView {...screen.draftBranch} />
+  const titleValue =
+    focus === "name" ? (
+      <EditableTextInputView {...screen.draftTitle} />
     ) : (
-      screen.draftBranch.value
+      screen.draftTitle.value
     );
   const extraRows = (screen.sourceAgentRunning ? 1 : 0) + (screen.validationError !== undefined ? 1 : 0);
   return (
@@ -85,9 +85,9 @@ function ForkDetails({
       />
       <SheetLabelValue
         width={contentWidth}
-        label={focusLabel("Branch", focus === "branch")}
+        label={focusLabel("Name", focus === "name")}
         labelWidth={LABEL_WIDTH}
-        value={branchValue}
+        value={titleValue}
       />
       <SheetLabelValue
         width={contentWidth}

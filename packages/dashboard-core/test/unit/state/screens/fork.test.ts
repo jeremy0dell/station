@@ -6,7 +6,7 @@ import {
   openForkDetailsForRow,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot, row } from "../../../fixtures/snapshots.js";
+import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const CTX = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
@@ -43,12 +43,12 @@ function openDetails(): TuiState {
   return drive(base(), [type("F"), type("1")]);
 }
 
-function clearBranch(state: TuiState): TuiState {
+function clearTitle(state: TuiState): TuiState {
   let current = state;
   while (
     current.screen.name === "fork" &&
     current.screen.step === "details" &&
-    current.screen.draftBranch.value.length > 0
+    current.screen.draftTitle.value.length > 0
   ) {
     current = step(current, BACKSPACE).state;
   }
@@ -61,12 +61,12 @@ describe("fork screen", () => {
     expect(state.screen).toEqual({ name: "fork", step: "chooseSlot" });
   });
 
-  it("opens details for a chosen row with a suggested -fork branch and copy on", () => {
+  it("starts with a title matching the hidden generated branch", () => {
     const screen = detailsScreen(openDetails());
-    expect(screen.draftBranch.value).toBe(`${screen.sourceBranch}-fork`);
+    expect(screen.branch).toBe(`${screen.sourceBranch}-fork`);
+    expect(screen.draftTitle.value).toBe(screen.branch);
     expect(screen.copyDirty).toBe(true);
-    expect(screen.focus).toBe("branch");
-    expect(screen.nameSource).toBe("generated");
+    expect(screen.focus).toBe("name");
     expect(screen.sourceWorktreeId.length).toBeGreaterThan(0);
   });
 
@@ -80,9 +80,11 @@ describe("fork screen", () => {
     const operation = transition.operations?.[0];
     expect(operation?.type).toBe("forkSession");
     if (operation?.type !== "forkSession") throw new Error("unreachable");
+    expect(operation.title).toBe(`${screen.sourceBranch}-fork`);
     expect(operation.branch).toBe(`${screen.sourceBranch}-fork`);
     expect(operation.sourceWorktreeId).toBe(screen.sourceWorktreeId);
     expect(operation.command.type).toBe("session.fork");
+    expect(operation.command.payload.title).toBe(operation.title);
     expect(operation.command.payload.copyDirty).toBe(true);
     expect(operation.command.payload.sourceWorktreeId).toBe(screen.sourceWorktreeId);
     // Base + harness are omitted so the observer pins the base and inherits the harness.
@@ -101,28 +103,44 @@ describe("fork screen", () => {
     expect(operation.command.payload.copyDirty).toBe(false);
   });
 
-  it("marks the branch as edited and updates the draft when typing", () => {
-    const edited = drive(openDetails(), [type("x")]);
-    const screen = detailsScreen(edited);
-    expect(screen.nameSource).toBe("edited");
-    expect(screen.draftBranch.value).toContain("x");
-    expect(screen.focus).toBe("branch");
+  it("allows a custom title without changing the hidden branch", () => {
+    const opened = openDetails();
+    const branch = detailsScreen(opened).branch;
+    const edited = drive(clearTitle(opened), "Hexagonal PT 12!".split("").map(type));
+    const transition = step(edited, ENTER);
+    const operation = transition.operations?.[0];
+    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
+    expect(operation.title).toBe("Hexagonal PT 12!");
+    expect(operation.branch).toBe(branch);
   });
 
-  it("rejects an empty branch without dispatching an operation", () => {
-    const cleared = clearBranch(openDetails());
+  it("rejects an empty title without dispatching an operation", () => {
+    const cleared = clearTitle(openDetails());
     const transition = step(cleared, ENTER);
     expect(transition.operations).toBeUndefined();
-    expect(detailsScreen(transition.state).validationError).toBeDefined();
+    expect(detailsScreen(transition.state).validationError).toBe("Session name cannot be empty.");
   });
 
-  it("rejects a branch that collides with an existing worktree", () => {
-    const cleared = clearBranch(openDetails());
-    const existing = base().snapshot?.rows[0]?.branch ?? "";
-    const typed = drive(cleared, existing.split("").map(type));
-    const transition = step(typed, ENTER);
-    expect(transition.operations).toBeUndefined();
-    expect(detailsScreen(transition.state).validationError).toContain(existing);
+  it("resolves a hidden branch collision with the next generated suffix", () => {
+    const opened = openDetails();
+    const screen = detailsScreen(opened);
+    const snapshot = opened.snapshot;
+    if (snapshot === undefined) throw new Error("expected snapshot");
+    const sourceRow = snapshot.rows.find((candidate) => candidate.id === screen.sourceWorktreeId);
+    if (sourceRow === undefined) throw new Error("expected source row");
+    const collided: TuiState = {
+      ...opened,
+      snapshot: {
+        ...snapshot,
+        rows: [...snapshot.rows, { ...sourceRow, id: "wt_web_late_fork", branch: screen.branch }],
+      },
+    };
+
+    const transition = step(collided, ENTER);
+    const operation = transition.operations?.[0];
+    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
+    expect(operation.title).toBe(screen.draftTitle.value);
+    expect(operation.branch).toBe(`${screen.sourceBranch}-fork-2`);
   });
 
   it("scopes branch collisions and suggestions to the source project", () => {
@@ -130,19 +148,19 @@ describe("fork screen", () => {
     // Branch uniqueness is per repo, so it must neither bump the suggestion nor
     // block the submit. (wt_web_idle is on "fix-nav-mobile" → suggests "-fork".)
     const base = createDashboardSnapshot();
+    const apiRow = base.rows.find((candidate) => candidate.projectId === "api");
+    if (apiRow === undefined) throw new Error("expected api row");
     const snapshot: StationSnapshot = {
       ...base,
-      rows: [
-        ...base.rows,
-        row({ id: "wt_api_fork", projectId: "api", branch: "fix-nav-mobile-fork", state: "idle" }),
-      ],
+      rows: [...base.rows, { ...apiRow, id: "wt_api_fork", branch: "fix-nav-mobile-fork" }],
     };
     const opened = openForkDetailsForRow(
       createInitialTuiState({ initialSnapshot: snapshot }),
       "ses_wt_web_idle",
     );
     const screen = detailsScreen(opened);
-    expect(screen.draftBranch.value).toBe("fix-nav-mobile-fork");
+    expect(screen.branch).toBe("fix-nav-mobile-fork");
+    expect(screen.draftTitle.value).toBe("fix-nav-mobile-fork");
 
     const transition = step(opened, ENTER);
     expect(transition.operations).toHaveLength(1);

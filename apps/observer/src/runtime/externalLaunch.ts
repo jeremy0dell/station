@@ -17,6 +17,7 @@ import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   rememberedHarnessProviderForWorktree,
+  seedSessionTitle,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
 import type { SessionStore } from "../persistence/index.js";
@@ -41,8 +42,9 @@ export type ExternalLaunchOutcome<T> = {
 /**
  * USE CASE
  *
- * Prepare Station-hosted agent identity, launch plan, and opaque managed attachment;
- * the managed target lets reconcile surface the session immediately.
+ * Prepare Station-hosted agent identity, persist an optional title before reconcile
+ * can expose it, and return a launch plan plus opaque managed attachment. Failed
+ * terminal preparation or process launch removes the title seed and managed target.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -155,7 +157,21 @@ export async function prepareExternalLaunch(
   const sessionId = defaultSessionCommandIdFactory.sessionId();
 
   let openedTargetId: TerminalTargetId | undefined;
+  let seededSessionTitle = false;
   try {
+    if (params.title !== undefined) {
+      // The title must be durable before a managed target lets reconcile publish the new session.
+      await seedSessionTitle({
+        persistence: deps.persistence,
+        sessionId,
+        projectId: project.id,
+        worktreeId: worktree.id,
+        title: params.title,
+        clock: deps.clock,
+      });
+      seededSessionTitle = true;
+    }
+
     const opened = await managedTerminal.openWorkspace({
       project,
       worktree,
@@ -198,6 +214,13 @@ export async function prepareExternalLaunch(
       reconcile: true,
     };
   } catch (error) {
+    if (seededSessionTitle) {
+      try {
+        await deps.persistence.deleteSessionTitleSeed(sessionId);
+      } catch {
+        // Cleanup must not replace the launch failure that explains why the seed was abandoned.
+      }
+    }
     // Unregister the half-prepared target so a retry is not blocked by a dangling
     // session and reconcile does not surface a launch that never spawned.
     if (openedTargetId !== undefined) {

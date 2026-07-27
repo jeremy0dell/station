@@ -111,7 +111,9 @@ describe("protocol client/server", () => {
   it.each([
     ["another build", `0.0.0+station.${"a".repeat(64)}`],
     ["a legacy Observer", undefined],
-  ] as const)("rejects a pinned mutation before invoking %s", async (_scenario, actualBuildVersion) => {
+  ] as const)("rejects a pinned mutation before invoking %s", async (_scenario: string, actualBuildVersion:
+    | string
+    | undefined) => {
     const { socketPath } = await createTempSocketPath();
     const expectedBuildVersion = `0.0.0+station.${"b".repeat(64)}`;
     const baseApi = createFakeObserverApi();
@@ -367,24 +369,28 @@ describe("protocol client/server", () => {
 
   it("round-trips agent.prepareExternalLaunch and agent.reportExternalExit", async () => {
     const { socketPath } = await createTempSocketPath();
+    const preparedParams: unknown[] = [];
     const api = createFakeObserverApi({
-      prepareExternalLaunch: async (params) => ({
-        kind: "prepared",
-        sessionId: "ses_round_trip",
-        terminalTargetId: `native:${params.worktreeId}`,
-        launchPlan: {
-          provider: "claude",
-          command: "claude",
-          args: ["--settings", "/tmp/station/settings.json"],
-          cwd: "/tmp/station/web/feature",
-          env: { STATION_SESSION_ID: "ses_round_trip" },
-          mode: "interactive",
-        },
-        attachment: {
-          kind: "managed-terminal",
+      prepareExternalLaunch: async (params) => {
+        preparedParams.push(params);
+        return {
+          kind: "prepared",
+          sessionId: "ses_round_trip",
           terminalTargetId: `native:${params.worktreeId}`,
-        },
-      }),
+          launchPlan: {
+            provider: "claude",
+            command: "claude",
+            args: ["--settings", "/tmp/station/settings.json"],
+            cwd: "/tmp/station/web/feature",
+            env: { STATION_SESSION_ID: "ses_round_trip" },
+            mode: "interactive",
+          },
+          attachment: {
+            kind: "managed-terminal",
+            terminalTargetId: `native:${params.worktreeId}`,
+          },
+        };
+      },
       reportExternalExit: async (params) => ({
         acknowledged: true,
         terminalTargetId: params.terminalTargetId,
@@ -395,7 +401,11 @@ describe("protocol client/server", () => {
 
     try {
       await expect(
-        client.prepareExternalLaunch({ projectId: "web", worktreeId: "wt_web_feature" }),
+        client.prepareExternalLaunch({
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          title: "Hexagonal PT 12",
+        }),
       ).resolves.toEqual({
         kind: "prepared",
         sessionId: "ses_round_trip",
@@ -413,6 +423,9 @@ describe("protocol client/server", () => {
           terminalTargetId: "native:wt_web_feature",
         },
       });
+      expect(preparedParams).toEqual([
+        { projectId: "web", worktreeId: "wt_web_feature", title: "Hexagonal PT 12" },
+      ]);
       await expect(
         client.reportExternalExit({ terminalTargetId: "native:wt_web_feature" }),
       ).resolves.toEqual({ acknowledged: true, terminalTargetId: "native:wt_web_feature" });

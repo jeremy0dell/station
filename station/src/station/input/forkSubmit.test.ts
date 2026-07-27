@@ -8,7 +8,7 @@ import { resolveForkSessionSubmit, resolveKeyForkSessionSubmit } from "./station
 // Station hosts a fork in a pane (worktree.fork + managed launch) rather than
 // the shared machine's tmux session.fork. These resolvers are the interception
 // point: Enter on the details screen becomes a hosted-launch submit; everything
-// else (including an invalid branch) falls through to the machine.
+// else (including an invalid title) falls through to the machine.
 function newStore() {
   const snapshot = manyProjectsSnapshot();
   return createTuiStore({
@@ -41,9 +41,25 @@ describe("resolveForkSessionSubmit", () => {
     if (submit.kind === "submit") {
       expect(submit.projectId).toBe(screen.projectId);
       expect(submit.sourceWorktreeId).toBe(screen.sourceWorktreeId);
-      expect(submit.branch).toBe(screen.draftBranch.value.trim());
+      expect(submit.title).toBe(screen.draftTitle.value.trim());
+      expect(submit.branch).toBe(screen.branch);
       expect(submit.copyDirty).toBe(true);
     }
+  });
+
+  it("carries a custom name independently from the generated branch", () => {
+    const store = storeOnForkDetails();
+    const initial = store.getState().screen;
+    if (initial.name !== "fork" || initial.step !== "details") throw new Error("expected details");
+    store.getState().handleKey({ input: "u", ctrl: true });
+    store.getState().handleKey({ input: "Hexagonal PT 12" });
+
+    const submit = resolveForkSessionSubmit(store);
+    expect(submit).toMatchObject({
+      kind: "submit",
+      title: "Hexagonal PT 12",
+      branch: initial.branch,
+    });
   });
 
   it("does not submit from the dashboard (no fork sheet open)", () => {

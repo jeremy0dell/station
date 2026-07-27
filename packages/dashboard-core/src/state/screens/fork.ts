@@ -22,6 +22,7 @@ export type ForkSessionCreateValidation =
       ok: true;
       project: ForkSnapshot["projects"][number];
       sourceWorktreeId: ForkDetailsScreen["sourceWorktreeId"];
+      title: string;
       branch: string;
       copyDirty: boolean;
     }
@@ -33,15 +34,15 @@ export function validateForkSessionCreate(
   snapshot: ForkSnapshot,
   screen: ForkDetailsScreen,
 ): ForkSessionCreateValidation {
-  const branch = screen.draftBranch.value.trim();
-  if (branch.length === 0) {
-    return { ok: false, message: "Branch name cannot be empty." };
+  const title = screen.draftTitle.value.trim();
+  if (title.length === 0) {
+    return { ok: false, message: "Session name cannot be empty." };
   }
-  // Branch names are unique per project/repo, not globally — only a worktree in
-  // the same project can collide.
-  if (snapshot.rows.some((row) => row.projectId === screen.projectId && row.branch === branch)) {
-    return { ok: false, message: `A worktree on "${branch}" already exists.` };
-  }
+  const branch = snapshot.rows.some(
+    (row) => row.projectId === screen.projectId && row.branch === screen.branch,
+  )
+    ? suggestForkBranch(screen.sourceBranch, snapshot.rows, screen.projectId)
+    : screen.branch;
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   if (project === undefined) {
     return { ok: false, message: "The source project is no longer available." };
@@ -50,12 +51,13 @@ export function validateForkSessionCreate(
     ok: true,
     project,
     sourceWorktreeId: screen.sourceWorktreeId,
+    title,
     branch,
     copyDirty: screen.copyDirty,
   };
 }
 
-const FOCUS_ORDER = ["branch", "copyDirty", "submit"] as const;
+const FOCUS_ORDER = ["name", "copyDirty", "submit"] as const;
 
 export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "fork") {
@@ -96,6 +98,7 @@ export function openForkDetailsForRow(
     return state;
   }
 
+  const branch = suggestForkBranch(row.branch, snapshot.rows, row.projectId);
   const screen: ForkDetailsScreen = {
     name: "fork",
     step: "details",
@@ -107,12 +110,10 @@ export function openForkDetailsForRow(
     sourceAgentRunning: snapshot.sessions.some(
       (session) => session.worktreeId === row.id && isRunningAgentState(session.status.value),
     ),
-    draftBranch: createEditableTextInputState(
-      suggestForkBranch(row.branch, snapshot.rows, row.projectId),
-    ),
-    nameSource: "generated",
+    branch,
+    draftTitle: createEditableTextInputState(branch),
     copyDirty: true,
-    focus: "branch",
+    focus: "name",
   };
   if (returnTo !== undefined) {
     screen.returnTo = returnTo;
@@ -169,7 +170,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
     return { state };
   }
 
-  if (screen.focus === "branch") {
+  if (screen.focus === "name") {
     const intent = editableTextInputIntentForInput({ input: key.input, key });
     if (intent.type !== "edit") {
       return { state };
@@ -179,8 +180,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
         ...state,
         screen: {
           ...screen,
-          draftBranch: transitionEditableTextInput(screen.draftBranch, intent.action),
-          nameSource: "edited",
+          draftTitle: transitionEditableTextInput(screen.draftTitle, intent.action),
         },
       },
     };
@@ -204,6 +204,7 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
   const command = buildForkSessionCommand({
     project: validation.project,
     sourceWorktreeId: validation.sourceWorktreeId,
+    title: validation.title,
     branch: validation.branch,
     copyDirty: validation.copyDirty,
   });
@@ -219,6 +220,7 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
         localId: `fork:${validation.sourceWorktreeId}:${validation.branch}`,
         projectId: screen.projectId,
         sourceWorktreeId: validation.sourceWorktreeId,
+        title: validation.title,
         branch: validation.branch,
         command,
       },
@@ -238,5 +240,5 @@ function cycleFocus(
   const index = FOCUS_ORDER.indexOf(focus);
   const delta = backwards ? -1 : 1;
   const next = (index + delta + FOCUS_ORDER.length) % FOCUS_ORDER.length;
-  return FOCUS_ORDER[next] ?? "branch";
+  return FOCUS_ORDER[next] ?? "name";
 }

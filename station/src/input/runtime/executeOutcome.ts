@@ -90,6 +90,7 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
     case "pane-launch-new-session":
       effects.launchHostedNewSession({
         projectId: outcome.projectId,
+        title: outcome.title,
         branch: outcome.branch,
         harness: outcome.harness,
       });
@@ -98,6 +99,7 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       effects.launchHostedForkSession({
         projectId: outcome.projectId,
         sourceWorktreeId: outcome.sourceWorktreeId,
+        title: outcome.title,
         branch: outcome.branch,
         copyDirty: outcome.copyDirty,
       });

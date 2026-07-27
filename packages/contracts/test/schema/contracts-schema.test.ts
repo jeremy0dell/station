@@ -151,14 +151,28 @@ describe("contract schemas", () => {
     expectTypeOf<ObserverApi>().toHaveProperty("prepareExternalLaunch");
     expectTypeOf<ObserverApi>().toHaveProperty("reportExternalExit");
 
-    expectParses(
-      AgentPrepareExternalLaunchParamsSchema,
-      {
+    expect(
+      AgentPrepareExternalLaunchParamsSchema.parse({
         projectId: "project_api",
         worktreeId: "wt_api",
         harness: "codex",
-      },
-      "external launch params",
+        title: "  Hexagonal PT 12!  ",
+      }),
+    ).toEqual({
+      projectId: "project_api",
+      worktreeId: "wt_api",
+      harness: "codex",
+      title: "Hexagonal PT 12!",
+    });
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      { projectId: "project_api", worktreeId: "wt_api", title: "   " },
+      "external launch params with blank title",
+    );
+    expectParses(
+      AgentPrepareExternalLaunchParamsSchema,
+      { projectId: "project_api", worktreeId: "wt_api" },
+      "external launch params without optional title",
     );
     expectFails(
       AgentPrepareExternalLaunchParamsSchema,
@@ -999,6 +1013,66 @@ describe("contract schemas", () => {
       },
       "session create terminal origin with provider-specific extra fields",
     );
+  });
+
+  it("keeps session titles optional, trimmed, and independent from branches", () => {
+    const create = {
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "station-e91f2b",
+        title: "  Hexagonal PT 12!  ",
+        harness: { provider: "codex" },
+        terminal: { provider: "tmux" },
+      },
+    };
+    expect(StationCommandSchema.parse(create)).toMatchObject({
+      payload: { branch: "station-e91f2b", title: "Hexagonal PT 12!" },
+    });
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "session.create",
+        payload: {
+          projectId: "web",
+          branch: "station-e91f2b",
+          harness: { provider: "codex" },
+          terminal: { provider: "tmux" },
+        },
+      },
+      "session create without optional title",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "session.fork",
+        payload: {
+          projectId: "web",
+          sourceWorktreeId: "wt_source",
+          branch: "station-fork-e91f2b",
+          title: "Hexagonal PT 12",
+        },
+      },
+      "session fork with title containing spaces",
+    );
+    for (const command of [
+      create,
+      {
+        type: "session.fork",
+        payload: {
+          projectId: "web",
+          sourceWorktreeId: "wt_source",
+          branch: "station-fork-e91f2b",
+        },
+      },
+      { type: "session.rename", payload: { sessionId: "ses_api", title: "old" } },
+    ]) {
+      expectFails(
+        StationCommandSchema,
+        { ...command, payload: { ...command.payload, title: "   " } },
+        `${command.type} with blank title`,
+      );
+    }
   });
 
   it("parses one event fixture for each event union member", async () => {

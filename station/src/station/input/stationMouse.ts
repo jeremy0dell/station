@@ -123,7 +123,13 @@ export type StationMouseOutcome =
    * Station pane. The create-hint click counterpart of the keyboard Enter on the
    * New Session review screen.
    */
-  | { kind: "launch-new-session"; projectId: string; branch: string; harness: ProviderId }
+  | {
+      kind: "launch-new-session";
+      projectId: string;
+      title: string;
+      branch: string;
+      harness: ProviderId;
+    }
   /**
    * Consumed; the router should seed a worktree off a source and host its agent
    * in a Station pane. The fork-button click counterpart of the keyboard Enter on
@@ -133,6 +139,7 @@ export type StationMouseOutcome =
       kind: "launch-fork";
       projectId: string;
       sourceWorktreeId: string;
+      title: string;
       branch: string;
       copyDirty: boolean;
     };
@@ -301,6 +308,7 @@ export function routeStationMouse(
         kind: "launch-fork",
         projectId: submit.projectId,
         sourceWorktreeId: submit.sourceWorktreeId,
+        title: submit.title,
         branch: submit.branch,
         copyDirty: submit.copyDirty,
       };
@@ -396,6 +404,7 @@ function fromQuickSessionSubmit(
     return {
       kind: "launch-new-session",
       projectId: result.projectId,
+      title: result.title,
       branch: result.branch,
       harness: result.harness,
     };

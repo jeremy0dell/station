@@ -235,6 +235,7 @@ describe("routeStationMouse", () => {
       expect(outcome.projectId).toBe("station");
       expect(outcome.sourceWorktreeId).toBe(worktreeId);
       expect(outcome.copyDirty).toBe(true);
+      expect(outcome.title).toBe(outcome.branch);
       expect(outcome.branch.length).toBeGreaterThan(0);
     }
     // The submit is intercepted, not dispatched to the machine — the sheet stays open
@@ -461,6 +462,7 @@ describe("routeStationMouse", () => {
       expect(outcome.projectId).toBe("station");
       expect(outcome.harness).toBe("codex"); // project.defaults.harness
       expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
+      expect(outcome.title).toBe(outcome.branch);
     }
   });
 

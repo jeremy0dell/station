@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type {
   BuildHarnessLaunchRequest,
   HarnessLaunchPlan,
@@ -89,6 +89,7 @@ describe("session command vertical slice", () => {
         id: "ses_web_feature",
         projectId: "web",
         worktreeId: "wt_web_feature",
+        title: "feature",
       }),
     ]);
     expect(fixture.core.getSnapshot().rows[0]?.agent).toMatchObject({
@@ -185,6 +186,7 @@ describe("session command vertical slice", () => {
       payload: {
         projectId: "web",
         branch: "runner-create",
+        title: "Hexagonal PT 12",
         harness: {
           provider: "fake-harness",
           mode: "interactive",
@@ -213,6 +215,13 @@ describe("session command vertical slice", () => {
       }),
     ]);
     expect(terminal.snapshot().launches).toEqual([]);
+    expect(await fixture.persistence.listSessions()).toEqual([
+      expect.objectContaining({
+        id: "ses_runner_create",
+        title: "Hexagonal PT 12",
+        worktreeId: "wt_web_runner_create",
+      }),
+    ]);
     fixture.sqlite.close();
   });
 
@@ -222,7 +231,7 @@ describe("session command vertical slice", () => {
     const fixture = createFixture({
       worktree,
       terminalIntentRunner,
-      sessionIds: ["ses_runner_fork"],
+      sessionIds: ["ses_runner_fork", "ses_runner_fork_fallback"],
     });
     await fixture.queue.dispatch({
       type: "worktree.create",
@@ -242,12 +251,26 @@ describe("session command vertical slice", () => {
         projectId: "web",
         sourceWorktreeId: source.id,
         branch: "runner-fork",
+        title: "Hexagonal PT 12 Fork",
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+    const fallbackReceipt = await fixture.queue.dispatch({
+      type: "session.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "runner-fork-fallback",
         terminal: { provider: "fake-terminal", focus: false },
       },
     });
     await fixture.queue.drain();
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(fixture.persistence.getCommand(fallbackReceipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
     expect(terminalIntentRunner.intents).toEqual([
@@ -258,7 +281,27 @@ describe("session command vertical slice", () => {
         sessionId: "ses_runner_fork",
         worktree: expect.objectContaining({ branch: "runner-fork" }),
       }),
+      expect.objectContaining({
+        type: "session.ensureAgentWorkspace",
+        commandId: fallbackReceipt.commandId,
+        sessionId: "ses_runner_fork_fallback",
+        worktree: expect.objectContaining({ branch: "runner-fork-fallback" }),
+      }),
     ]);
+    expect(await fixture.persistence.listSessions()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ses_runner_fork",
+          title: "Hexagonal PT 12 Fork",
+          worktreeId: expect.stringContaining("runner_fork"),
+        }),
+        expect.objectContaining({
+          id: "ses_runner_fork_fallback",
+          title: "runner-fork-fallback",
+          worktreeId: expect.stringContaining("runner_fork_fallback"),
+        }),
+      ]),
+    );
     fixture.sqlite.close();
   });
 
@@ -437,7 +480,7 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("keeps the session.create title stable when the provider branch changes before first reconcile", async () => {
+  it("keeps a custom session.create title independent when the provider branch changes", async () => {
     const worktree = new FakeWorktreeProvider({ now });
     const harness = new FakeHarnessProvider({ now });
     const terminal = new FakeTerminalProvider({
@@ -471,7 +514,8 @@ describe("session command vertical slice", () => {
       type: "session.create",
       payload: {
         projectId: "web",
-        branch: "original-session-title",
+        branch: "station-e91f2b",
+        title: "Hexagonal PT 12",
         harness: {
           provider: "fake-harness",
           mode: "interactive",
@@ -487,7 +531,7 @@ describe("session command vertical slice", () => {
 
     expect(fixture.core.getSnapshot().rows).toEqual([
       expect.objectContaining({
-        id: "wt_web_original_session_title",
+        id: "wt_web_station_e91f2b",
         branch: "agent-created-branch",
         agent: expect.objectContaining({
           sessionId: "ses_seeded_create",
@@ -498,8 +542,8 @@ describe("session command vertical slice", () => {
     expect(fixture.core.getSnapshot().sessions).toEqual([
       expect.objectContaining({
         id: "ses_seeded_create",
-        worktreeId: "wt_web_original_session_title",
-        title: "original-session-title",
+        worktreeId: "wt_web_station_e91f2b",
+        title: "Hexagonal PT 12",
       }),
     ]);
     fixture.sqlite.close();
@@ -1728,6 +1772,7 @@ function createFixture(
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

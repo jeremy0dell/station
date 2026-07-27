@@ -13,6 +13,7 @@ import type { TuiState } from "../types.js";
 
 export type QuickSessionIntent = {
   projectId: string;
+  title: string;
   branch: string;
   harnessProvider: ProviderId;
   token: string;
@@ -35,10 +36,12 @@ export function resolveQuickSessionIntent(
   if (resolution.kind !== "available") return resolution;
   const project = resolution.project;
   const token = createNewSessionNameToken();
+  const branch = generatedSessionBranch(project.id, token);
   return {
     kind: "submit",
     projectId: project.id,
-    branch: generatedSessionBranch(project.id, token),
+    title: branch,
+    branch,
     harnessProvider: project.defaults.harness,
     token,
   };
@@ -56,9 +59,9 @@ export function submitQuickSession(state: TuiState, projectId: string): TuiTrans
   );
   if (project === undefined) return { state };
 
-  const { branch, harnessProvider, token } = resolution;
+  const { title, branch, harnessProvider, token } = resolution;
   const localId = `create:${project.id}:${token}`;
-  const command = buildCreateSessionCommand({ project, branch, harnessProvider });
+  const command = buildCreateSessionCommand({ project, title, branch, harnessProvider });
   if (command.type !== "session.create") {
     return { state };
   }
@@ -67,6 +70,7 @@ export function submitQuickSession(state: TuiState, projectId: string): TuiTrans
     state: addPendingCreateSessionRow(state, {
       localId,
       projectId: project.id,
+      title,
       branch,
       harnessProvider,
       createdAt: new Date().toISOString(),
@@ -76,6 +80,7 @@ export function submitQuickSession(state: TuiState, projectId: string): TuiTrans
         type: "createSession",
         localId,
         projectId: project.id,
+        title,
         branch,
         harnessProvider,
         command,
