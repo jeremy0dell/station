@@ -41,14 +41,19 @@ describe("createOpenTuiSelectionCopyHandler", () => {
     }
   });
 
-  it("lets Ctrl-C fall through when there is no selection", () => {
+  it("lets Ctrl-C fall through without a non-empty selection", () => {
     const { effects, calls } = recordingEffects();
-    const handleCopy = createOpenTuiSelectionCopyHandler(
+    const withoutSelection = createOpenTuiSelectionCopyHandler(
       () => ({ getSelection: () => null }),
       effects,
     );
+    const withEmptySelection = createOpenTuiSelectionCopyHandler(
+      () => ({ getSelection: () => ({ getSelectedText: () => "" }) }),
+      effects,
+    );
 
-    expect(handleCopy("\x03")).toBe(false);
+    expect(withoutSelection("\x03")).toBe(false);
+    expect(withEmptySelection("\x03")).toBe(false);
     expect(calls).toEqual([]);
   });
 

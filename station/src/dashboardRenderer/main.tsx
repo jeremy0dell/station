@@ -95,10 +95,10 @@ export async function runDashboardMain(): Promise<void> {
     },
     ...popupRuntime.storeOptions,
   });
+  const copyNoticeText = (text: string): void => {
+    copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
+  };
   const mouseEffects: DashboardMouseEffects = {
-    copyText: (text) => {
-      copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
-    },
     openShell: ({ cwd }) => {
       const openShell = popupRuntime.openShell;
       if (openShell === undefined) {
@@ -186,6 +186,7 @@ export async function runDashboardMain(): Promise<void> {
       <FullscreenDashboard
         store={store}
         effects={mouseEffects}
+        onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
       />,
     );

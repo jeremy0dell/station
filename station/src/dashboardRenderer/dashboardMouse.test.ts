@@ -31,7 +31,6 @@ const LEFT_UP: StationMouseEvent = { ...LEFT_DOWN, type: "up" };
 const RIGHT_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "right", rawButton: 2 };
 const MIDDLE_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "middle", rawButton: 1 };
 const TEST_EFFECTS: DashboardMouseEffects = {
-  copyText: () => {},
   openShell: () => {},
   openUrl: () => {},
 };
@@ -253,7 +252,6 @@ describe("routeDashboardMouse", () => {
     const store = fixture.store;
     const openedShells: string[] = [];
     const effects = {
-      copyText: () => {},
       openShell: ({ cwd }: { cwd: string }) => openedShells.push(cwd),
       openUrl: () => {},
     };
@@ -328,7 +326,6 @@ describe("routeDashboardMouse", () => {
     const store = makeStore();
     const openedUrls: string[] = [];
     const effects = {
-      copyText: () => {},
       openShell: () => {},
       openUrl: (url: string) => openedUrls.push(url),
     };

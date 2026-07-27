@@ -74,7 +74,11 @@ export function ToastOverlayView({
           >
             {toastTitle(toast)}
           </text>
-          <ToastCopyControl text={toastCopyText(toast)} onCopy={onCopyNotice} />
+          <ToastCopyControl
+            key={toast.id}
+            text={toastCopyText(toast)}
+            onCopy={onCopyNotice}
+          />
           <text selectable={false}> </text>
           <ToastDismissControl />
         </box>
@@ -93,26 +97,21 @@ export function ToastOverlayView({
 
 function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
   const [hover, setHover] = useStationHoverState();
-  const [copied, setCopied] = useState(false);
+  const [copyFeedbackToken, setCopyFeedbackToken] = useState(0);
+  const copied = copyFeedbackToken > 0;
+  const style = toastCopyControlStyle(copied, hover);
   useEffect(() => {
     if (!copied) {
       return;
     }
-    const timer = setTimeout(() => setCopied(false), 1_500);
+    const timer = setTimeout(() => setCopyFeedbackToken(0), 1_500);
     return () => clearTimeout(timer);
-  }, [copied]);
+  }, [copied, copyFeedbackToken]);
 
   return (
     <text
       flexShrink={0}
-      fg={
-        copied
-          ? STATION_COLORS.green
-          : hover
-            ? STATION_COLORS.background
-            : STATION_COLORS.cyan
-      }
-      {...(hover && !copied ? { bg: STATION_COLORS.cyan } : {})}
+      {...style}
       selectable={false}
       onMouseDown={(event) => {
         event.stopPropagation();
@@ -120,7 +119,7 @@ function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: strin
           return;
         }
         onCopy(text);
-        setCopied(true);
+        setCopyFeedbackToken((token) => token + 1);
       }}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -128,6 +127,16 @@ function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: strin
       {copied ? "[ copied ]" : "[ copy ]"}
     </text>
   );
+}
+
+function toastCopyControlStyle(copied: boolean, hover: boolean) {
+  if (copied) {
+    return { fg: STATION_COLORS.green };
+  }
+  if (hover) {
+    return { fg: STATION_COLORS.background, bg: STATION_COLORS.cyan };
+  }
+  return { fg: STATION_COLORS.cyan };
 }
 
 function ToastDismissControl() {

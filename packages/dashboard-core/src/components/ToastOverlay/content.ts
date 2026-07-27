@@ -1,6 +1,5 @@
-// The pure toast presentation — title by kind, border color name by kind,
-// detail assembly, text width. Render adapters map the color names to their
-// own palette (Ink color names, Station theme hex).
+// Pure toast presentation: title, readable copy text, detail assembly, and
+// border color. Render adapters map color names to their own palette.
 import type { TuiToastEntry } from "../../state/types.js";
 
 export type ToastBorderColorName = "red" | "gray" | "green";

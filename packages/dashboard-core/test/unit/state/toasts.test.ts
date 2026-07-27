@@ -75,7 +75,7 @@ describe("TUI toast lifecycle state", () => {
     expect(activeTuiToast(state)?.toast.message).toBe("Fourth.");
   });
 
-  it("gives errors twice their previous lifetime while success and info stay short", () => {
+  it("keeps errors longer while success and info stay short", () => {
     expect(toastExpiryMs("success")).toBe(2_400);
     expect(toastExpiryMs("info")).toBe(3_200);
     expect(toastExpiryMs("error")).toBe(16_000);

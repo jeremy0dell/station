@@ -63,6 +63,17 @@ describe("ToastOverlayView actions", () => {
     expect(fixture.targets).toEqual([]);
     expect(fixture.store.getState().toasts).toHaveLength(1);
     expect(fixture.frame()).toContain("[ copied ]");
+
+    await act(async () => {
+      fixture.store.getState().pushToast({
+        ...NOTICE,
+        message: "A different operation failed.",
+      });
+      await Promise.resolve();
+    });
+    await fixture.setup.flush();
+    expect(fixture.frame()).toContain("[ copy ]");
+    expect(fixture.frame()).not.toContain("[ copied ]");
   });
 
   it("keeps hover feedback and dismissal isolated to the dismiss control", async () => {
