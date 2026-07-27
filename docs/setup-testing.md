@@ -19,7 +19,7 @@ exits `0` when `summary.requiredOk`, else `1` (the `2` exit code is reserved for
 bad args). Output is deterministic via `--json` + an injected clock, so
 comparisons are structural diffs, not log scraping.
 
-```
+```text
 profile { name, state: { platform, xcodeClt, git, insideRepo, brew, worktrunk,
                          tmux, bun, diffnav, gitDelta, harnesses[],
                          harnessTracking?, configToml? },
@@ -61,9 +61,10 @@ non-interaction; release acceptance owns proof in a genuinely new login shell.
 `apps/cli/test/integration/setup-profiles.test.ts` compiles each profile into the
 real `SetupCommandDeps` seam and runs `runCli([... "setup","check","--json"])`,
 asserting exit code + `requiredOk` + per-check status. Runs in the existing
-`pnpm test:integration` lane (so it is already in `pnpm test:all`, the
-pre-push gate, and hosted CI). This is the backbone and the canonical contract; it covers every
-profile, including the darwin `no-xcode-clt` case via an injected `platform`.
+`pnpm test:integration` lane (so it is already in `pnpm test:all` and hosted CI).
+The local pre-push hook is lint-only. This integration lane is the backbone and
+canonical contract; it covers every profile, including the darwin `no-xcode-clt`
+case via an injected `platform`.
 Hook-status fixtures return deterministic prepared, missing/drifted, probe-failed,
 or unsupported results and never inspect a developer's real provider homes.
 

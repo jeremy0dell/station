@@ -61,8 +61,15 @@ describe("setup dependency checks", () => {
     ).resolves.toEqual({ status: "missing", command: "/usr/sbin/lsof" });
   });
 
-  it("detects active-shell Worktrunk integration through its read-only dry run", async () => {
+  it.each([
+    { shell: "zsh", rcFile: ".zshrc" },
+    { shell: "bash", rcFile: ".bashrc" },
+  ] as const)("detects $shell Worktrunk integration through its read-only dry run", async ({
+    shell,
+    rcFile,
+  }) => {
     const pendingCalls: ExternalCommandInput[] = [];
+    const command = `wt -y config shell install --dry-run ${shell}`;
     const input = {
       worktrunk: {
         status: "ok" as const,
@@ -70,25 +77,25 @@ describe("setup dependency checks", () => {
         resolvedPath: "/fake/bin/wt",
       },
       homeDir: "/tmp/home",
-      env: { PATH: "/fake/bin", SHELL: "/bin/zsh" },
+      env: { PATH: "/fake/bin", SHELL: `/bin/${shell}` },
     };
 
     await expect(
       checkSetupWorktrunkShellIntegration({
         ...input,
         runner: fakeRunner(pendingCalls, {
-          "wt -y config shell install --dry-run zsh": "shell integration update pending\n",
+          [command]: "shell integration update pending\n",
         }),
       }),
     ).resolves.toMatchObject({
       status: "warning",
-      shell: "zsh",
-      rcPath: "/tmp/home/.zshrc",
+      shell,
+      rcPath: `/tmp/home/${rcFile}`,
     });
     expect(pendingCalls).toContainEqual(
       expect.objectContaining({
         command: "/fake/bin/wt",
-        args: ["-y", "config", "shell", "install", "--dry-run", "zsh"],
+        args: ["-y", "config", "shell", "install", "--dry-run", shell],
         env: expect.objectContaining({ HOME: "/tmp/home" }),
       }),
     );
@@ -96,13 +103,11 @@ describe("setup dependency checks", () => {
     await expect(
       checkSetupWorktrunkShellIntegration({
         ...input,
-        runner: fakeRunner([], {
-          "wt -y config shell install --dry-run zsh": "",
-        }),
+        runner: fakeRunner([], { [command]: "" }),
       }),
     ).resolves.toMatchObject({
       status: "ok",
-      message: "Worktrunk shell integration is installed for zsh.",
+      message: `Worktrunk shell integration is installed for ${shell}.`,
     });
   });
 
