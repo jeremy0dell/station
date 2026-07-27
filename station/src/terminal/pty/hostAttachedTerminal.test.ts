@@ -10,7 +10,23 @@ import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTer
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-function controllableAttachment(ack: HostAttachAck) {
+function deferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+type ControllableAttachmentBehavior = {
+  write?: (data: string) => Promise<void>;
+  resize?: (cols: number, rows: number) => Promise<void>;
+};
+
+function controllableAttachment(
+  ack: HostAttachAck,
+  behavior: ControllableAttachmentBehavior = {},
+) {
   const queue: HostFrame[] = [];
   const waiters: Array<(r: IteratorResult<HostFrame>) => void> = [];
   let ended = false;
@@ -45,9 +61,11 @@ function controllableAttachment(ack: HostAttachAck) {
     },
     write: async (data) => {
       writes.push(data);
+      await behavior.write?.(data);
     },
     resize: async (cols, rows) => {
       resizes.push({ cols, rows });
+      await behavior.resize?.(cols, rows);
     },
     detach: async () => {
       detached = true;
@@ -84,6 +102,24 @@ function ack(overrides: Partial<HostAttachAck> = {}): HostAttachAck {
   };
 }
 
+function clientForAttach(
+  attach: StationHostClient["attach"],
+  dispose: () => void = () => {},
+): StationHostClient {
+  return {
+    attach,
+    dispose,
+    health: async () => ({ ok: true, protocolVersion: 1 }),
+    stopIfIdle: async () => ({ stopping: true }),
+    spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+    write: async () => undefined,
+    resize: async () => undefined,
+    list: async () => [],
+    focus: async () => undefined,
+    close: async () => ({ closed: true }),
+  };
+}
+
 function terminalFor(attachment: HostAttachment) {
   let clientDisposed = false;
   const terminal = createHostAttachedTerminal({
@@ -91,20 +127,9 @@ function terminalFor(attachment: HostAttachment) {
     ptyId: "pty-1",
     size: { cols: 80, rows: 24 },
     clientFactory: () =>
-      ({
-        attach: async () => attachment,
-        dispose: () => {
-          clientDisposed = true;
-        },
-        health: async () => ({ ok: true, protocolVersion: 1 }),
-        stopIfIdle: async () => ({ stopping: true }),
-        spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
-        write: async () => undefined,
-        resize: async () => undefined,
-        list: async () => [],
-        focus: async () => undefined,
-        close: async () => ({ closed: true }),
-      }) satisfies StationHostClient,
+      clientForAttach(async () => attachment, () => {
+        clientDisposed = true;
+      }),
   });
   return { terminal, clientDisposed: () => clientDisposed };
 }
@@ -135,6 +160,67 @@ describe("createHostAttachedTerminal", () => {
     expect(ctrl.state.resizes).toEqual([{ cols: 100, rows: 30 }]);
   });
 
+  it("resends a resize that lands during initial geometry synchronization", async () => {
+    const initialResize = deferred<void>();
+    const initialResizeStarted = deferred<void>();
+    let blockInitialResize = true;
+    const ctrl = controllableAttachment(ack(), {
+      resize: async () => {
+        if (!blockInitialResize) {
+          return;
+        }
+        blockInitialResize = false;
+        initialResizeStarted.resolve(undefined);
+        await initialResize.promise;
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+
+    await initialResizeStarted.promise;
+    terminal.resize({ cols: 100, rows: 30 });
+    initialResize.resolve(undefined);
+    await flush();
+    await flush();
+
+    expect(ctrl.state.resizes).toEqual([
+      { cols: 80, rows: 24 },
+      { cols: 100, rows: 30 },
+    ]);
+    expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
+    terminal.dispose();
+  });
+
+  it("resends a resize that lands during the same-size repaint restore", async () => {
+    const restoreResize = deferred<void>();
+    const restoreResizeStarted = deferred<void>();
+    let resizeCalls = 0;
+    const ctrl = controllableAttachment(ack({ scrollback: ["history"] }), {
+      resize: async () => {
+        resizeCalls += 1;
+        if (resizeCalls === 3) {
+          restoreResizeStarted.resolve(undefined);
+          await restoreResize.promise;
+        }
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+
+    await restoreResizeStarted.promise;
+    terminal.resize({ cols: 100, rows: 30 });
+    restoreResize.resolve(undefined);
+    await flush();
+    await flush();
+
+    expect(ctrl.state.resizes).toEqual([
+      { cols: 80, rows: 24 },
+      { cols: 80, rows: 23 },
+      { cols: 80, rows: 24 },
+      { cols: 100, rows: 30 },
+    ]);
+    expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
+    terminal.dispose();
+  });
+
   it("surfaces an exit frame through onExit", async () => {
     const ctrl = controllableAttachment(ack());
     const { terminal } = terminalFor(ctrl.attachment);
@@ -152,6 +238,83 @@ describe("createHostAttachedTerminal", () => {
     await flush();
     terminal.dispose();
     expect(clientDisposed()).toBe(true);
+  });
+
+  it("stops before replay or activation when dispose races attach resolution", async () => {
+    const ctrl = controllableAttachment(ack({ scrollback: ["history"] }));
+    const pendingAttach = deferred<HostAttachment>();
+    let clientDisposed = false;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        clientForAttach(async () => pendingAttach.promise, () => {
+          clientDisposed = true;
+        }),
+    });
+    const received: string[] = [];
+    terminal.onData((data) => received.push(data));
+
+    terminal.dispose();
+    pendingAttach.resolve(ctrl.attachment);
+    await flush();
+
+    expect(clientDisposed).toBe(true);
+    expect(received).toEqual([]);
+    expect(ctrl.state.resizes).toEqual([]);
+    expect(ctrl.state.writes).toEqual([]);
+  });
+
+  it("stops activation when dispose lands during replay", async () => {
+    const replayGate = deferred<void>();
+    const ctrl = controllableAttachment(ack({ scrollback: ["history"] }));
+    const { terminal } = terminalFor(ctrl.attachment);
+    let replayStarted = false;
+    terminal.onReplay?.(async () => {
+      replayStarted = true;
+      await replayGate.promise;
+    });
+
+    await flush();
+    expect(replayStarted).toBe(true);
+    terminal.dispose();
+    replayGate.resolve(undefined);
+    await flush();
+
+    expect(ctrl.state.resizes).toEqual([]);
+    expect(ctrl.state.writes).toEqual([]);
+  });
+
+  it("treats an exited attach acknowledgement as terminal without retrying", async () => {
+    const ctrl = controllableAttachment(ack({ exited: true, scrollback: ["stale"] }));
+    let attachCalls = 0;
+    const sleeps: number[] = [];
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () =>
+        clientForAttach(async () => {
+          attachCalls += 1;
+          return ctrl.attachment;
+        }),
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+    });
+    const diagnostics: string[] = [];
+    const exits: number[] = [];
+    terminal.onDiagnostic((message) => diagnostics.push(message));
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    await flush();
+
+    expect(attachCalls).toBe(1);
+    expect(sleeps).toEqual([]);
+    expect(diagnostics).toEqual(["Station host PTY already exited."]);
+    expect(exits).toEqual([1]);
+    expect(ctrl.state.resizes).toEqual([]);
   });
 });
 
@@ -259,6 +422,195 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.kill();
     await flush();
     expect(tracking.closes).toEqual([]);
+  });
+
+  it("publishes only after buffered writes drain and catches a resize that arrives mid-drain", async () => {
+    const firstWrite = deferred<void>();
+    const ctrl = controllableAttachment(ack(), {
+      write: async (data) => {
+        if (data === "first") {
+          await firstWrite.promise;
+        }
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+
+    terminal.write("first");
+    await flush();
+    expect(ctrl.state.writes).toEqual(["first"]);
+
+    terminal.write("second");
+    terminal.resize({ cols: 100, rows: 30 });
+    firstWrite.resolve(undefined);
+    await flush();
+    await flush();
+
+    terminal.write("third");
+    await flush();
+
+    expect(ctrl.state.writes).toEqual(["first", "second", "third"]);
+    expect(ctrl.state.resizes).toEqual([
+      { cols: 80, rows: 24 },
+      { cols: 100, rows: 30 },
+    ]);
+    expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
+    terminal.dispose();
+  });
+
+  it("rejects a resize acknowledgement from an attachment after its stream drops", async () => {
+    const oldResize = deferred<void>();
+    const reconnectWait = deferred<void>();
+    const first = controllableAttachment(ack(), {
+      resize: async (cols, rows) => {
+        if (cols === 100 && rows === 30) {
+          await oldResize.promise;
+        }
+      },
+    });
+    const second = controllableAttachment(ack());
+    let clientCreations = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () => {
+        const selected = clientCreations === 0 ? first : second;
+        clientCreations += 1;
+        return clientForAttach(async () => selected.attachment);
+      },
+      sleep: async () => reconnectWait.promise,
+    });
+
+    await flush();
+    expect(terminal.ackedSize).toEqual({ cols: 80, rows: 24 });
+
+    terminal.resize({ cols: 100, rows: 30 });
+    await flush();
+    first.endStream();
+    await flush();
+    expect(terminal.ackedSize).toBeUndefined();
+
+    oldResize.resolve(undefined);
+    await flush();
+    expect(terminal.ackedSize).toBeUndefined();
+
+    reconnectWait.resolve(undefined);
+    await flush();
+    terminal.dispose();
+  });
+
+  it("retries the failed buffered-write head without duplicating successful writes", async () => {
+    const first = controllableAttachment(ack(), {
+      write: async (data) => {
+        if (data === "second") {
+          throw new Error("write transport dropped");
+        }
+      },
+    });
+    const second = controllableAttachment(ack());
+    let clientCreations = 0;
+    const sleeps: number[] = [];
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () => {
+        const selected = clientCreations === 0 ? first : second;
+        clientCreations += 1;
+        return clientForAttach(async () => selected.attachment);
+      },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+    });
+    const exits: number[] = [];
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    terminal.write("first");
+    terminal.write("second");
+    terminal.write("third");
+    await flush();
+
+    expect(first.state.writes).toEqual(["first", "second"]);
+    expect(second.state.writes).toEqual(["second", "third"]);
+    expect(sleeps).toEqual([250]);
+    expect(exits).toEqual([]);
+    terminal.dispose();
+  });
+
+  it("uses reconnect repaint when activation fails after the initial replay", async () => {
+    const first = controllableAttachment(ack({ scrollback: ["history-"] }), {
+      resize: async () => {
+        throw new Error("resize transport dropped");
+      },
+    });
+    const second = controllableAttachment(ack({ scrollback: ["history-", "gap-"] }));
+    let clientCreations = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () => {
+        const selected = clientCreations === 0 ? first : second;
+        clientCreations += 1;
+        return clientForAttach(async () => selected.attachment);
+      },
+      sleep: async () => {},
+    });
+    const received: string[] = [];
+    terminal.onData((data) => received.push(data));
+
+    await flush();
+
+    expect(received).toEqual([
+      "history-",
+      RECONNECT_REPAINT,
+      "history-",
+      "gap-",
+    ]);
+    terminal.dispose();
+  });
+
+  it("exits once after exhausting the consecutive transient retry budget", async () => {
+    let clientCreations = 0;
+    let attachCalls = 0;
+    let clientDisposals = 0;
+    const sleeps: number[] = [];
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () => {
+        clientCreations += 1;
+        return clientForAttach(
+          async () => {
+            attachCalls += 1;
+            throw new Error("socket unavailable");
+          },
+          () => {
+            clientDisposals += 1;
+          },
+        );
+      },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+    });
+    const diagnostics: string[] = [];
+    const exits: number[] = [];
+    terminal.onDiagnostic((message) => diagnostics.push(message));
+    terminal.onExit((event) => exits.push(event.exitCode));
+
+    await flush();
+
+    expect(attachCalls).toBe(6);
+    expect(clientCreations).toBe(6);
+    expect(clientDisposals).toBe(5);
+    expect(sleeps).toEqual([250, 500, 1_000, 2_000, 2_000]);
+    expect(diagnostics.filter((message) => message === "Station host reconnect failed.")).toHaveLength(
+      1,
+    );
+    expect(exits).toEqual([1]);
   });
 
   it("reconnects after a transient attach failure instead of killing the pane", async () => {
@@ -445,28 +797,21 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clock = 0;
     let attachCalls = 0;
     let current = controllableAttachment(ack());
+    const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
       ptyId: "pty-1",
       size: { cols: 80, rows: 24 },
       now: () => clock,
       clientFactory: () =>
-        ({
-          attach: async () => {
-            attachCalls += 1;
-            current = controllableAttachment(ack());
-            return current.attachment;
-          },
-          dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
-          stopIfIdle: async () => ({ stopping: true }),
-          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
-          write: async () => undefined,
-          resize: async () => undefined,
-          list: async () => [],
-          focus: async () => undefined,
-          close: async () => ({ closed: true }),
-        }) satisfies StationHostClient,
+        clientForAttach(async () => {
+          attachCalls += 1;
+          current = controllableAttachment(ack());
+          return current.attachment;
+        }),
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
     });
     const exits: number[] = [];
     terminal.onExit((event) => exits.push(event.exitCode));
@@ -477,10 +822,13 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     for (let i = 0; i < 8; i += 1) {
       clock += 5_000;
       current.endStream();
-      await new Promise((resolve) => setTimeout(resolve, 300)); // past healthy backoff
+      await flush();
     }
     expect(exits).toEqual([]); // never killed despite > MAX_ATTACH_ATTEMPTS drops
-    expect(attachCalls).toBeGreaterThan(8); // it kept redialing each time
+    expect(attachCalls).toBe(9); // it kept redialing each time
+    // The fresh-budget reset computes its preserved 125 ms delay from attempt -1.
+    expect(sleeps).toEqual(Array.from({ length: 8 }, () => 125));
+    terminal.dispose();
   });
 
   for (const code of ["HOST_ATTACH_GONE", "HOST_VERSION_INCOMPATIBLE"] as const) {
