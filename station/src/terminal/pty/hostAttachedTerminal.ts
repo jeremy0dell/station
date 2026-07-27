@@ -44,6 +44,37 @@ export const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${Contr
 const reconnectDelayMs = (attempt: number): number =>
   Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const unreachableAttachmentState = (_value: never): never => {
+  throw new Error("Unexpected Station Host attachment state.");
+};
+
+type AttachmentFailure =
+  | { kind: "fatal"; message: string }
+  | { kind: "transient"; message: string };
+
+type AttachmentStreamOutcome =
+  | { kind: "disconnected" }
+  | { kind: "exited"; exit: StationTerminalExit };
+
+type AttachAttemptOutcome =
+  | { kind: "complete" }
+  | {
+      kind: "reconnect";
+      replayed: boolean;
+      connectedAt: number | undefined;
+    };
+
+type AttachmentPreparationState = { replayed: boolean };
+
+type ReconnectPreparationOutcome =
+  | { kind: "stop" }
+  | { kind: "exhausted" }
+  | { kind: "retry"; attempt: number };
+
+type AttachLoopStep =
+  | { kind: "complete" }
+  | { kind: "exhausted" }
+  | { kind: "retry"; attempt: number; replayed: boolean };
 
 export type HostAttachedTerminalOptions = {
   hostSocketPath: string;
@@ -65,6 +96,8 @@ export type HostAttachedTerminalOptions = {
   clientFactory?: (socketPath: string) => StationHostClient;
   /** Test seam for the reconnect-budget clock; production uses wall time. */
   now?: () => number;
+  /** Test seam for reconnect waits; production uses wall-clock timers. */
+  sleep?: (milliseconds: number) => Promise<void>;
 };
 
 /**
@@ -83,6 +116,7 @@ export function createHostAttachedTerminal(
         expectedBuildVersion: stationBuildInfo().version,
       }));
   const now = options.now ?? (() => Date.now());
+  const sleep = options.sleep ?? delay;
   // Reassigned on reconnect: the host client does not auto-reconnect, so a dropped
   // connection is replaced with a fresh one.
   let client = makeClient(options.hostSocketPath);
@@ -175,9 +209,10 @@ export function createHostAttachedTerminal(
     await Promise.all(
       [...replayListeners].map(async (listener) => {
         try {
-          await listener({ size: recordedSize, chunks });
+          return await listener({ size: recordedSize, chunks });
         } catch (error) {
           emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
+          return;
         }
       }),
     );
@@ -205,137 +240,263 @@ export function createHostAttachedTerminal(
       });
   };
 
-  // Attach, replay scrollback once, then stream frames. A transient transport
-  // failure — or the stream ending with no exit frame — reconnects with backoff;
-  // only a genuinely-gone PTY (or exhausted retries) ends the pane.
-  const runAttachLoop = async (ptyId: string): Promise<void> => {
-    let replayed = false;
-    for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
-      // Stamped once this attempt actually streams; a connection that outlives
-      // the backoff window earns a fresh retry budget below (see the reset).
-      let connectedAt: number | undefined;
-      try {
-        const opened = await client.attach(ptyId);
-        if (disposed) {
-          // dispose() already closed the client connection; the host detaches via
-          // socket-close. No explicit detach (it would race the closed connection).
-          return;
-        }
-        pid = opened.ack.pid;
-        // Defensive: the host deletes exited entries, so attach normally throws
-        // HOST_ATTACH_GONE rather than acking exited. Don't fabricate a clean exit
-        // and don't retry.
-        if (opened.ack.exited) {
-          emitDiagnostic("Station host PTY already exited.");
-          emitExit({ exitCode: 1 });
-          return;
-        }
-        // First successful attach: replay the snapshot into the fresh client VT.
-        // On a RECONNECT the ack snapshot is the current ring — it captured output
-        // produced while we were detached — so repaint from it (clearing first so
-        // the already-shown history isn't duplicated) rather than dropping the gap.
-        const isReconnect = replayed;
-        const recordedSize = { cols: opened.ack.cols, rows: opened.ack.rows };
-        if (!replayed) {
-          await emitReplay(opened.ack.scrollback, recordedSize);
-          replayed = true;
-        } else if (opened.ack.scrollback.length > 0) {
-          await emitReplay([RECONNECT_REPAINT, ...opened.ack.scrollback], recordedSize);
-        }
-        // else: reconnect with an empty ring — clearing would just blank the pane
-        // with nothing to replay, so leave the shown frame and rely on the nudge.
-        // Sync the host PTY to THIS client's pane size on (re)attach — the host may
-        // have spawned it at a different size — then flush input typed before attach
-        // resolved. Expose `attachment` only AFTER the flush so later writes order
-        // after the buffered ones.
-        await opened.resize(size.cols, size.rows);
-        // A same-size resize is a no-op TIOCSWINSZ — no SIGWINCH — so a child
-        // whose frame may be stale would never repaint; flap the rows to force
-        // one. Needed whenever there was history to reflow OR this is a reconnect
-        // (the child may have produced state while we were detached). A real size
-        // change above already delivers the signal.
-        if (
-          (isReconnect || opened.ack.scrollback.length > 0) &&
-          opened.ack.cols === size.cols &&
-          opened.ack.rows === size.rows
-        ) {
-          await opened.resize(size.cols, size.rows > 1 ? size.rows - 1 : size.rows + 1);
-          await opened.resize(size.cols, size.rows);
-        }
-        // The size the host was just driven to; a resize arriving during the
-        // write drain below only updates `size` (resize() no-ops while detached).
-        const attachSentSize: StationTerminalSize = { cols: size.cols, rows: size.rows };
-        // Drain front-to-back so a mid-flush failure leaves only the un-sent
-        // writes to retry (no double-send on reconnect). New writes keep arriving
-        // at the back while attachment is still undefined, preserving order.
-        while (pendingWrites.length > 0) {
-          const data = pendingWrites[0];
-          if (data === undefined) {
-            break;
-          }
-          await opened.write(data);
-          pendingWrites.shift();
-        }
-        attachment = opened;
-        if (size.cols !== attachSentSize.cols || size.rows !== attachSentSize.rows) {
-          // A resize arrived during attach; resize() no-op'd then, so send it now.
-          applyHostResize(size);
-        } else {
-          // Host is at the size we just drove it to; record it as confirmed.
-          ackedSize = attachSentSize;
-        }
-        connectedAt = now();
-        for await (const frame of opened.frames) {
-          if (frame.type === "data") {
-            emitData(frame.data);
-          } else if (frame.type === "exit") {
-            emitExit({
+  // First attachment replays the initial snapshot; reconnects clear and repaint
+  // only when the fresh ring contains history that can replace the shown frame.
+  const replayAttachmentSnapshot = async (
+    opened: HostAttachment,
+    isReconnect: boolean,
+  ): Promise<void> => {
+    const recordedSize = { cols: opened.ack.cols, rows: opened.ack.rows };
+    if (!isReconnect) {
+      await emitReplay(opened.ack.scrollback, recordedSize);
+      return;
+    }
+    if (opened.ack.scrollback.length > 0) {
+      await emitReplay([RECONNECT_REPAINT, ...opened.ack.scrollback], recordedSize);
+    }
+    // An empty reconnect ring must not clear the pane with nothing to replace it;
+    // the geometry nudge below asks the child to repaint instead.
+  };
+
+  const synchronizeAttachmentGeometry = async (
+    opened: HostAttachment,
+    isReconnect: boolean,
+  ): Promise<StationTerminalSize> => {
+    await opened.resize(size.cols, size.rows);
+    if (disposed) {
+      return { cols: size.cols, rows: size.rows };
+    }
+    // A same-size TIOCSWINSZ emits no SIGWINCH, so stale same-size frames need a
+    // temporary row change whenever replay or reconnect requires a child repaint.
+    if (
+      (isReconnect || opened.ack.scrollback.length > 0) &&
+      opened.ack.cols === size.cols &&
+      opened.ack.rows === size.rows
+    ) {
+      await opened.resize(size.cols, size.rows > 1 ? size.rows - 1 : size.rows + 1);
+      await opened.resize(size.cols, size.rows);
+    }
+    // A resize arriving during the write drain only updates `size` because the
+    // attachment remains unpublished until every buffered write has been sent.
+    return { cols: size.cols, rows: size.rows };
+  };
+
+  const drainPendingWrites = async (opened: HostAttachment): Promise<void> => {
+    // Shift only after a successful write so reconnect retries the failed head
+    // without duplicating writes that the prior attachment already accepted.
+    while (!disposed && pendingWrites.length > 0) {
+      const data = pendingWrites[0];
+      if (data === undefined) {
+        break;
+      }
+      await opened.write(data);
+      pendingWrites.shift();
+    }
+  };
+
+  const publishPreparedAttachment = (
+    opened: HostAttachment,
+    attachSentSize: StationTerminalSize,
+  ): void => {
+    // Publishing after the drain keeps later writes behind every buffered write.
+    attachment = opened;
+    if (size.cols !== attachSentSize.cols || size.rows !== attachSentSize.rows) {
+      // A resize arrived during attach; resize() no-op'd then, so send it now.
+      applyHostResize(size);
+      return;
+    }
+    // Host is at the size we just drove it to; record it as confirmed.
+    ackedSize = attachSentSize;
+  };
+
+  const consumeAttachmentFrames = async (
+    opened: HostAttachment,
+  ): Promise<AttachmentStreamOutcome> => {
+    for await (const frame of opened.frames) {
+      switch (frame.type) {
+        case "data":
+          emitData(frame.data);
+          break;
+        case "exit":
+          return {
+            kind: "exited",
+            exit: {
               exitCode: frame.exitCode ?? 0,
               ...(frame.signal === undefined || frame.signal === null
                 ? {}
                 : { signal: frame.signal }),
-            });
-            return;
-          }
-          // a "focus" frame is best-effort and has no terminal-output meaning here
-        }
-        // Stream ended with no exit frame: the host dropped our connection while
-        // the PTY may still be alive. Fall through to reconnect.
-      } catch (error) {
-        if (disposed) {
-          return;
-        }
-        const compatibilityFailure = isStationHostCompatibilityError(error);
-        const safe = toSafeError(error, HOST_DATA_PLANE_FALLBACK);
-        if (PTY_GONE_CODES.has(safe.code) || compatibilityFailure) {
-          emitDiagnostic(safe.message);
-          emitExit({ exitCode: 1 });
-          return;
-        }
-        emitDiagnostic(safe.message);
+            },
+          };
+        case "focus":
+          // Focus is best-effort host metadata with no terminal-output meaning.
+          break;
+        default:
+          return unreachableAttachmentState(frame);
       }
-      // Transient: clear attachment so write() re-buffers, then drop the dead
-      // client and dial a fresh one before the next attempt. Clear ackedSize so
-      // a geometry check during the reconnect window does not read a stale ack.
-      attachment = undefined;
-      ackedSize = undefined;
-      if (disposed || closeRequested) {
+    }
+    // No exit frame means the transport vanished while the host PTY may live.
+    return { kind: "disconnected" };
+  };
+
+  const classifyAttachmentFailure = (error: unknown): AttachmentFailure => {
+    const compatibilityFailure = isStationHostCompatibilityError(error);
+    const safe = toSafeError(error, HOST_DATA_PLANE_FALLBACK);
+    if (PTY_GONE_CODES.has(safe.code) || compatibilityFailure) {
+      return { kind: "fatal", message: safe.message };
+    }
+    return { kind: "transient", message: safe.message };
+  };
+
+  const acceptAttachedPty = (opened: HostAttachment): boolean => {
+    if (disposed) {
+      // dispose() closed the client; an explicit detach would race socket-close.
+      return false;
+    }
+    pid = opened.ack.pid;
+    // The host normally rejects exited entries as HOST_ATTACH_GONE; an exited
+    // acknowledgement is defensive terminal evidence and must not be retried.
+    if (opened.ack.exited) {
+      emitDiagnostic("Station host PTY already exited.");
+      emitExit({ exitCode: 1 });
+      return false;
+    }
+    return true;
+  };
+
+  const prepareAttachmentForStreaming = async (
+    opened: HostAttachment,
+    state: AttachmentPreparationState,
+  ): Promise<boolean> => {
+    const isReconnect = state.replayed;
+    await replayAttachmentSnapshot(opened, isReconnect);
+    if (disposed) {
+      return false;
+    }
+    // Failures after replay must clear before replaying the next ring snapshot.
+    state.replayed = true;
+    const attachSentSize = await synchronizeAttachmentGeometry(opened, isReconnect);
+    if (disposed) {
+      return false;
+    }
+    await drainPendingWrites(opened);
+    if (disposed) {
+      return false;
+    }
+    publishPreparedAttachment(opened, attachSentSize);
+    return true;
+  };
+
+  const resolveAttachFailure = (
+    error: unknown,
+    state: AttachmentPreparationState,
+    connectedAt: number | undefined,
+  ): AttachAttemptOutcome => {
+    if (disposed) {
+      return { kind: "complete" };
+    }
+    const failure = classifyAttachmentFailure(error);
+    emitDiagnostic(failure.message);
+    if (failure.kind === "fatal") {
+      emitExit({ exitCode: 1 });
+      return { kind: "complete" };
+    }
+    return { kind: "reconnect", replayed: state.replayed, connectedAt };
+  };
+
+  const runAttachAttempt = async (
+    ptyId: string,
+    hadReplayed: boolean,
+  ): Promise<AttachAttemptOutcome> => {
+    const state: AttachmentPreparationState = { replayed: hadReplayed };
+    // Stamped only after this attempt is ready to stream so setup failures do not
+    // earn the healthy-connection retry reset.
+    let connectedAt: number | undefined;
+    try {
+      const opened = await client.attach(ptyId);
+      if (!acceptAttachedPty(opened)) {
+        return { kind: "complete" };
+      }
+      if (!(await prepareAttachmentForStreaming(opened, state))) {
+        return { kind: "complete" };
+      }
+      connectedAt = now();
+      const stream = await consumeAttachmentFrames(opened);
+      if (stream.kind === "exited") {
+        emitExit(stream.exit);
+        return { kind: "complete" };
+      }
+    } catch (error) {
+      return resolveAttachFailure(error, state, connectedAt);
+    }
+    return { kind: "reconnect", replayed: state.replayed, connectedAt };
+  };
+
+  const prepareReconnect = async (
+    attempt: number,
+    connectedAt: number | undefined,
+  ): Promise<ReconnectPreparationOutcome> => {
+    // Invalidate pending resize acknowledgements from the detached generation
+    // before clearing its published write path and confirmed geometry.
+    resizeSeq += 1;
+    attachment = undefined;
+    ackedSize = undefined;
+    if (disposed || closeRequested) {
+      return { kind: "stop" };
+    }
+
+    let backoffAttempt = attempt;
+    // A long-lived pane reconnects indefinitely, while a tight accept/drop flap
+    // still exhausts the bounded budget instead of spinning forever.
+    if (connectedAt !== undefined && now() - connectedAt > RECONNECT_MAX_MS) {
+      backoffAttempt = -1;
+    }
+    if (backoffAttempt >= MAX_ATTACH_ATTEMPTS - 1) {
+      return { kind: "exhausted" };
+    }
+
+    client.dispose();
+    client = makeClient(options.hostSocketPath);
+    emitDiagnostic("Station host connection lost; reconnecting…");
+    await sleep(reconnectDelayMs(backoffAttempt));
+    return { kind: "retry", attempt: backoffAttempt };
+  };
+
+  const advanceAttachLoop = async (
+    ptyId: string,
+    replayed: boolean,
+    attempt: number,
+  ): Promise<AttachLoopStep> => {
+    const outcome = await runAttachAttempt(ptyId, replayed);
+    if (outcome.kind === "complete") {
+      return { kind: "complete" };
+    }
+    const reconnect = await prepareReconnect(attempt, outcome.connectedAt);
+    switch (reconnect.kind) {
+      case "stop":
+        return { kind: "complete" };
+      case "exhausted":
+        return reconnect;
+      case "retry":
+        return { kind: "retry", attempt: reconnect.attempt, replayed: outcome.replayed };
+      default:
+        return unreachableAttachmentState(reconnect);
+    }
+  };
+
+  // Retry only transient transport loss; permanent host evidence or exhaustion
+  // ends the pane, while a healthy connection earns a fresh consecutive budget.
+  const runAttachLoop = async (ptyId: string): Promise<void> => {
+    let replayed = false;
+    for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
+      const step = await advanceAttachLoop(ptyId, replayed, attempt);
+      if (step.kind === "complete") {
         return;
       }
-      // Flap-safe budget reset: a connection that outlived the max backoff window
-      // was healthy, so a later drop earns a FRESH retry budget — a long-lived
-      // pane reconnects indefinitely across host restarts. A tight accept-then-
-      // drop flap (shorter than the window) does NOT reset, so it still exhausts
-      // the budget and ends the pane rather than spinning forever.
-      if (connectedAt !== undefined && now() - connectedAt > RECONNECT_MAX_MS) {
-        attempt = -1;
+      if (step.kind === "exhausted") {
+        break;
       }
-      if (attempt < MAX_ATTACH_ATTEMPTS - 1) {
-        client.dispose();
-        client = makeClient(options.hostSocketPath);
-        emitDiagnostic("Station host connection lost; reconnecting…");
-        await delay(reconnectDelayMs(attempt));
-      }
+      replayed = step.replayed;
+      attempt = step.attempt;
     }
     emitDiagnostic("Station host reconnect failed.");
     emitExit({ exitCode: 1 });
