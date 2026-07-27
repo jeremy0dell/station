@@ -221,12 +221,14 @@ describe("observer graph derivation", () => {
     const unattached = Array.from({ length: 10 }, (_, index) =>
       worktree(`wt_web_bare_${index}`, "web", `bare-${index}`),
     );
+    const readyRun = harness("run_session", attached.id, "idle");
+    readyRun.inputReady = true;
 
     const snapshot = build({
       projects: projects.slice(0, 1),
       worktrees: [attached, ...unattached],
       terminals: [terminal("term_session", attached.id, "run_session")],
-      harnessRuns: [harness("run_session", attached.id, "idle")],
+      harnessRuns: [readyRun],
     });
 
     expect(snapshot.rows).toHaveLength(11);
@@ -235,6 +237,10 @@ describe("observer graph derivation", () => {
       id: "ses_wt_web_session",
       worktreeId: attached.id,
       origin: "station",
+    });
+    expect(snapshot.rows.find((row) => row.id === attached.id)?.agent).toMatchObject({
+      state: "idle",
+      inputReady: true,
     });
     expect(snapshot.projects[0]?.counts).toMatchObject({
       sessions: 1,

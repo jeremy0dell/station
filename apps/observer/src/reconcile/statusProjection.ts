@@ -6,6 +6,7 @@ import {
   type SessionView,
   type StationEvent,
   type StationSnapshot,
+  type WorktreeAgentStateChangeSource,
   type WorktreeRow,
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
@@ -151,11 +152,10 @@ export function projectHarnessEventReportOntoSnapshot(input: {
     return unprojected(input.snapshot);
   }
 
-  const nextAgent = projectAgent(
-    currentAgent,
-    status,
-    input.report.signal?.kind !== "session_started",
-  );
+  const nextAgent = projectAgent(currentAgent, status, {
+    inputReady: status.value === "idle" && input.report.turn === undefined,
+    preserveTurnReadiness: input.report.signal?.kind !== "session_started",
+  });
   const nextRow = projectRow(currentRow, nextAgent, status);
   const agentStateValueChanged = currentAgent.state !== nextAgent.state;
   const rowChanged = !agentsEqual(currentAgent, nextAgent) || !displayEqual(currentRow, nextRow);
@@ -180,7 +180,7 @@ export function projectHarnessEventReportOntoSnapshot(input: {
       type: "worktree.agentStateChanged",
       worktreeId: nextRow.id,
       agent: nextAgent,
-      changeSource: "harness_event_report",
+      changeSource: stateChangeSource(input.report, status),
       harnessEventType: input.report.eventType,
       reportId: input.report.reportId,
     };
@@ -270,6 +270,15 @@ function singleTarget(
   };
 }
 
+function stateChangeSource(
+  report: HarnessEventReport,
+  status: ObservedStatus,
+): WorktreeAgentStateChangeSource {
+  if (report.signal?.kind === "session_started") return "harness_session_started";
+  if (status.value === "idle" && report.turn === undefined) return "harness_input_ready";
+  return "harness_event_report";
+}
+
 function shouldPreserveCurrentAgent(agent: WorktreeAgent, status: ObservedStatus): boolean {
   if (agent.state !== "exited" || agent.confidence !== "high") {
     return false;
@@ -280,7 +289,7 @@ function shouldPreserveCurrentAgent(agent: WorktreeAgent, status: ObservedStatus
 function projectAgent(
   agent: WorktreeAgent,
   status: ObservedStatus,
-  preserveTurnReadiness: boolean,
+  options: { inputReady: boolean; preserveTurnReadiness: boolean },
 ): WorktreeAgent {
   const nextAgent: WorktreeAgent = {
     harness: agent.harness,
@@ -290,10 +299,15 @@ function projectAgent(
     updatedAt: status.updatedAt,
   };
   if (status.attention !== undefined) nextAgent.attention = status.attention;
+  if (options.inputReady) nextAgent.inputReady = true;
   if (agent.pid !== undefined) nextAgent.pid = agent.pid;
   if (agent.runId !== undefined) nextAgent.runId = agent.runId;
   if (agent.sessionId !== undefined) nextAgent.sessionId = agent.sessionId;
-  if (preserveTurnReadiness && status.value === "idle" && agent.turnReadiness !== undefined) {
+  if (
+    options.preserveTurnReadiness &&
+    status.value === "idle" &&
+    agent.turnReadiness !== undefined
+  ) {
     nextAgent.turnReadiness = agent.turnReadiness;
   }
   return nextAgent;

@@ -13,6 +13,7 @@ import {
   uninstallConfigScriptHook,
 } from "@station/runtime";
 import {
+  codexHooksFeatureEnabled,
   documentContainsCommand,
   generatedStationHookEvents,
   installCodexHookCommands,
@@ -291,7 +292,10 @@ export async function doctorCodexHooks(
     };
   }
 
-  const installed = plan.missing.length === 0 && !plan.scriptChanged;
+  const installed =
+    plan.missing.length === 0 &&
+    codexHooksFeatureEnabled(parseTomlDocument(plan.before)) &&
+    !plan.scriptChanged;
   return {
     provider: "codex",
     configPath: plan.configPath,
@@ -377,8 +381,10 @@ async function buildGeneratedGlobalHookCleanup(input: {
 }
 
 function missingDescription(plan: CodexHookPlan): string {
-  const missing = plan.missing.length === 0 ? "none" : plan.missing.join(", ");
-  return plan.scriptChanged ? `${missing}; script is missing or stale` : missing;
+  const issues = [plan.missing.length === 0 ? "none" : plan.missing.join(", ")];
+  if (plan.configChanged) issues.push("profile config is missing or stale");
+  if (plan.scriptChanged) issues.push("script is missing or stale");
+  return issues.join("; ");
 }
 
 function doctorMessage(input: {

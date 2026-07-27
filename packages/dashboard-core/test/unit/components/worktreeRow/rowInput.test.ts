@@ -6,9 +6,16 @@ import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 type AgentRow = WorktreeRow & { agent: NonNullable<WorktreeRow["agent"]> };
 
 describe("worktree row startup readiness", () => {
-  it("distinguishes input-ready idle from unread completed output", () => {
+  it("shows input-ready startup without creating unread completed output", () => {
     const idle = idleRow();
-    const ready: WorktreeRow = {
+    const inputReady: WorktreeRow = {
+      ...idle,
+      agent: {
+        ...idle.agent,
+        inputReady: true,
+      },
+    };
+    const turnReady: WorktreeRow = {
       ...idle,
       agent: {
         ...idle.agent,
@@ -21,7 +28,9 @@ describe("worktree row startup readiness", () => {
     };
 
     expect(renderedStatus(idle)).toEqual({ marker: "○", activity: "idle" });
-    expect(renderedStatus(ready)).toEqual({ marker: "●", activity: "idle · ready" });
+    expect(renderedStatus(inputReady)).toEqual({ marker: "●", activity: "idle · ready" });
+    expect(renderedStatus(inputReady, true)).toEqual({ marker: "●", activity: "idle · ready" });
+    expect(renderedStatus(turnReady)).toEqual({ marker: "●", activity: "idle · ready" });
   });
 });
 
@@ -31,8 +40,10 @@ function idleRow(): AgentRow {
   return row as AgentRow;
 }
 
-function renderedStatus(row: WorktreeRow): { marker: string; activity: string } {
-  const input = worktreeRowGridInput({ row, slot: undefined });
+function renderedStatus(row: WorktreeRow, focused?: boolean): { marker: string; activity: string } {
+  const input = worktreeRowGridInput(
+    focused === undefined ? { row, slot: undefined } : { row, slot: undefined, focused },
+  );
   const marker = input.cells.identity?.segments.find(
     (segment) => segment.kind === "text" && (segment.text === "○" || segment.text === "●"),
   );

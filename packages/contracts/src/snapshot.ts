@@ -110,6 +110,7 @@ export const WorktreeAgentSchema = z
     reason: nonEmptyStringSchema,
     updatedAt: TimestampSchema,
     attention: AttentionKindSchema.optional(),
+    inputReady: z.literal(true).optional(),
     turnReadiness: TurnReadinessSchema.optional(),
   })
   .strict();

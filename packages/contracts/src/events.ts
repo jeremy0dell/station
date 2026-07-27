@@ -13,7 +13,12 @@ import { ProviderHealthSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { SessionViewSchema, WorktreeAgentSchema, WorktreeRowSchema } from "./snapshot.js";
 
-export const WorktreeAgentStateChangeSourceSchema = z.enum(["harness_event_report", "reconcile"]);
+export const WorktreeAgentStateChangeSourceSchema = z.enum([
+  "harness_event_report",
+  "harness_input_ready",
+  "harness_session_started",
+  "reconcile",
+]);
 export type WorktreeAgentStateChangeSource = z.infer<typeof WorktreeAgentStateChangeSourceSchema>;
 
 export const StationEventTypeSchema = z.enum([

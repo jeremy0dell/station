@@ -9,10 +9,12 @@ import type { PersistedProviderObservation } from "../persistence/index.js";
 export type ObserverHarnessRun = {
   run: HarnessRunObservation;
   status: ObservedStatus;
+  inputReady?: true;
 };
 
 type StatusOverlay = {
   status: ObservedStatus;
+  inputReady: boolean;
   observedAt: string;
   observationId: string;
 };
@@ -98,7 +100,7 @@ export function synthesizeExternalHarnessRuns(input: {
     if (endedIds.has(id)) {
       continue;
     }
-    synthesized.push({
+    const synthesizedRun: ObserverHarnessRun = {
       run: {
         id,
         provider: event.provider,
@@ -110,7 +112,11 @@ export function synthesizeExternalHarnessRuns(input: {
         observedAt: event.observedAt,
       },
       status,
-    });
+    };
+    if (status.value === "idle" && event.turn === undefined) {
+      synthesizedRun.inputReady = true;
+    }
+    synthesized.push(synthesizedRun);
   }
   return [...input.runs, ...synthesized];
 }
@@ -182,6 +188,7 @@ export function applyHarnessEventStatusOverlays(input: {
 
     const overlay: StatusOverlay = {
       status: event.status,
+      inputReady: event.status.value === "idle" && event.turn === undefined,
       observedAt: observation.observedAt,
       observationId: observation.id,
     };
@@ -215,10 +222,12 @@ function shouldPreserveLiveStatus(run: ObserverHarnessRun, status: ObservedStatu
 
 function applyStatusOverlay(run: ObserverHarnessRun, overlay: StatusOverlay): ObserverHarnessRun {
   const nextRun = runObservationWithStatus(run.run, overlay.status);
-  return {
+  const next: ObserverHarnessRun = {
     run: nextRun,
     status: overlay.status,
   };
+  if (overlay.inputReady) next.inputReady = true;
+  return next;
 }
 
 function runObservationWithStatus(

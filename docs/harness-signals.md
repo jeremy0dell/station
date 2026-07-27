@@ -39,6 +39,11 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
   `attention`.
 - `turn?: { kind: "turn_completed" }` — proves a completed assistant turn. A
   report cannot combine this marker with `session_started`.
+- `WorktreeAgent.inputReady?: true` — projection-only input readiness from plain
+  idle evidence. It drives the ready affordance without creating a
+  `turnReadiness` acknowledgement token. Its state-change event uses
+  `harness_input_ready` (or `harness_session_started` for startup), so it does not
+  match completed-turn notification hooks filtered to `harness_event_report`.
 - `attention: AttentionKind` — closed enum:
   `question | plan_approval | tool_approval | input`. Set by the provider
   whenever `status.value` is `needs_attention` and the state is a request for

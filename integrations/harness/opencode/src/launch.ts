@@ -128,7 +128,7 @@ function openCodeLaunchEnv(
 ): Record<string, string> {
   return harnessLaunchEnv("opencode", request, {
     ...options,
-    carryEnv: [{ from: "OPENCODE_CONFIG_DIR" }],
+    carryEnv: [{ from: "OPENCODE_CONFIG_DIR" }, { from: "STATION_INGRESS_BIN" }],
   });
 }
 

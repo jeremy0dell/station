@@ -36,6 +36,10 @@ export function installCodexHookCommands(
   commands: Record<CodexHookEventName, string>,
 ): Record<string, unknown> {
   const next = cloneRecord(document);
+  const featuresRecord = recordValue(next.features);
+  const features = featuresRecord === undefined ? {} : cloneRecord(featuresRecord);
+  features.hooks = true;
+  next.features = features;
   const hooksRecord = recordValue(next.hooks);
   const hooks = hooksRecord === undefined ? {} : cloneRecord(hooksRecord);
   for (const eventName of CODEX_OBSOLETE_HOOK_EVENT_NAMES) {
@@ -85,6 +89,10 @@ export function removeGeneratedCodexHookCommands(
     next.hooks = hooks;
   }
   return next;
+}
+
+export function codexHooksFeatureEnabled(document: Record<string, unknown>): boolean {
+  return recordValue(document.features)?.hooks === true;
 }
 
 export function missingCodexHookEvents(

@@ -211,6 +211,7 @@ export STATION_CONFIG_PATH="$CFG"
 # resolve this checkout's `stn-ingress`. Launched agents inherit these env vars,
 # so status reports target this observer instead of global station state.
 export PATH="$ROOT/bin:$PATH"
+export STATION_INGRESS_BIN="$ROOT/bin/stn-ingress"
 export CODEX_HOME="$DS/codex-home"
 # Seed isolated Codex auth/config: auth is a shared symlink, config is copied once
 # so project writes stay in this worktree-local home.

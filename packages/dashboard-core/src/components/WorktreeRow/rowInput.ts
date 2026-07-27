@@ -27,7 +27,7 @@ export function worktreeRowGridInput({
   const marker = statusMarker(row);
   const displayTitle = title ?? row.branch;
   const activity = activityCellForRow(row);
-  const ready = isReadyToRead(row);
+  const ready = isInputReady(row);
   const state = row.agent?.state ?? "none";
   const input: Parameters<typeof worktreeStyleRowGridInput>[0] = {
     id: id ?? row.id,
@@ -169,7 +169,7 @@ function activityCellForRow(row: WorktreeRowModel): {
       importance: "meaningful",
     };
   }
-  if (isReadyToRead(row)) {
+  if (isInputReady(row)) {
     return {
       text: "idle · ready",
       importance: "optional",
@@ -198,12 +198,19 @@ export function statusMarker(row: WorktreeRowModel): RowMarker {
   const state = row.agent?.state ?? "none";
   if (state === "needs_attention" || state === "stuck") return { kind: "text", text: "!" };
   if (state === "working") return { kind: "throbber", variant: "braille" };
-  if (isReadyToRead(row)) return { kind: "text", text: "●" };
+  if (isInputReady(row)) return { kind: "text", text: "●" };
   if (state === "idle") return { kind: "text", text: "○" };
   if (state === "starting") return { kind: "text", text: "+" };
   if (state === "unknown") return { kind: "text", text: "?" };
   if (state === "exited") return { kind: "text", text: "x" };
   return { kind: "text", text: "-" };
+}
+
+function isInputReady(row: WorktreeRowModel): boolean {
+  return (
+    row.agent?.state === "idle" &&
+    (row.agent.inputReady === true || row.agent.turnReadiness?.state === "ready_to_read")
+  );
 }
 
 export function isReadyToRead(row: WorktreeRowModel): boolean {

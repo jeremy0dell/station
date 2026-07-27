@@ -1282,6 +1282,19 @@ describe("contract schemas", () => {
       "worktree agent with turn readiness",
     );
     expectParses(
+      WorktreeAgentSchema,
+      {
+        harness: "pi",
+        state: "idle",
+        sessionId: "ses_web_task",
+        confidence: "high",
+        reason: "Pi is waiting for input.",
+        updatedAt: "2026-05-20T12:02:00.000Z",
+        inputReady: true,
+      },
+      "worktree agent with input readiness",
+    );
+    expectParses(
       ObservedStatusSchema,
       {
         value: "working",
@@ -1355,6 +1368,24 @@ describe("contract schemas", () => {
       },
     };
     expectParses(ObserverEventHookConfigSchema, eventHookConfig, "event hook config");
+    expectParses(
+      StationEventSchema,
+      {
+        type: "worktree.agentStateChanged",
+        worktreeId: "wt_web_task",
+        changeSource: "harness_session_started",
+      },
+      "session-start agent-state event",
+    );
+    expectParses(
+      StationEventSchema,
+      {
+        type: "worktree.agentStateChanged",
+        worktreeId: "wt_web_task",
+        changeSource: "harness_input_ready",
+      },
+      "input-ready agent-state event",
+    );
     expectFails(
       ObserverEventHookConfigSchema,
       { ...eventHookConfig, events: ["hook.ingested", "hook.spoolDrained"] },

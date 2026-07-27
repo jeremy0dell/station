@@ -161,9 +161,11 @@ describe("OpenCodeHarnessProvider", () => {
     });
   });
 
-  it("carries an isolated OPENCODE_CONFIG_DIR into the launch env", async () => {
-    const previous = process.env.OPENCODE_CONFIG_DIR;
+  it("carries isolated OpenCode config and ingress into the launch env", async () => {
+    const previousConfigDir = process.env.OPENCODE_CONFIG_DIR;
+    const previousIngressBin = process.env.STATION_INGRESS_BIN;
     process.env.OPENCODE_CONFIG_DIR = "/tmp/station/opencode-config";
+    process.env.STATION_INGRESS_BIN = "/tmp/station/bin/stn-ingress";
     try {
       const provider = createOpenCodeHarnessProvider();
 
@@ -171,13 +173,19 @@ describe("OpenCodeHarnessProvider", () => {
         env: {
           STATION_HARNESS_PROVIDER: "opencode",
           OPENCODE_CONFIG_DIR: "/tmp/station/opencode-config",
+          STATION_INGRESS_BIN: "/tmp/station/bin/stn-ingress",
         },
       });
     } finally {
-      if (previous === undefined) {
+      if (previousConfigDir === undefined) {
         delete process.env.OPENCODE_CONFIG_DIR;
       } else {
-        process.env.OPENCODE_CONFIG_DIR = previous;
+        process.env.OPENCODE_CONFIG_DIR = previousConfigDir;
+      }
+      if (previousIngressBin === undefined) {
+        delete process.env.STATION_INGRESS_BIN;
+      } else {
+        process.env.STATION_INGRESS_BIN = previousIngressBin;
       }
     }
   });

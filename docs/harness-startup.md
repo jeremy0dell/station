@@ -5,10 +5,10 @@ Status: living record for provider startup readiness evidence.
 Station distinguishes three facts:
 
 1. `signal.kind: session_started` proves provider-native lifecycle creation.
-2. `status.value: idle` proves the provider is waiting for user input.
-3. `turn.kind: turn_completed` proves assistant output completed and may create `ready_to_read`.
+2. `status.value: idle` without turn completion proves the provider is ready for input.
+3. `turn.kind: turn_completed` proves assistant output completed and may create durable `ready_to_read` evidence.
 
-A session start never implies a completed turn. Providers remain `starting` unless a native event or documented provider invariant proves input readiness; Station has no timer fallback.
+A session start never implies a completed turn. Startup idle renders the same ready-for-input affordance without creating a completed-turn acknowledgement token or firing completed-turn notification hooks. Providers remain `starting` unless a native event or documented provider invariant proves input readiness; Station has no timer fallback.
 
 ## Required census
 

@@ -20,6 +20,32 @@ const runObservedAt = "2026-05-21T12:00:00.000Z";
 const eventObservedAt = "2026-05-21T12:00:01.000Z";
 
 describe("harness event status overlays", () => {
+  it("keeps input readiness separate from completed-turn readiness", () => {
+    const startup = overlay({
+      runs: [run()],
+      observations: [
+        observation({
+          harnessRunId: "run_1",
+          signal: { kind: "session_started" },
+          status: status("idle", "high", "The session is waiting for input."),
+        }),
+      ],
+    });
+    const completed = overlay({
+      runs: [run()],
+      observations: [
+        observation({
+          harnessRunId: "run_1",
+          turn: { kind: "turn_completed" },
+          status: status("idle", "high", "The turn completed."),
+        }),
+      ],
+    });
+
+    expect(startup[0]).toMatchObject({ inputReady: true });
+    expect(completed[0]).not.toHaveProperty("inputReady");
+  });
+
   it("does not fall back to worktree correlation for a stale terminal target", () => {
     const result = overlay({
       runs: [run()],
@@ -515,6 +541,8 @@ function observation(
     terminalTargetId?: string | undefined;
     nativeSessionId?: string | undefined;
     rawEventType?: string;
+    signal?: HarnessEventObservation["signal"];
+    turn?: HarnessEventObservation["turn"];
     observedAt?: string;
   },
   overrides: { provider?: string } = {},
@@ -531,6 +559,8 @@ function observation(
   if (input.terminalTargetId !== undefined) payload.terminalTargetId = input.terminalTargetId;
   if (input.nativeSessionId !== undefined) payload.nativeSessionId = input.nativeSessionId;
   if (input.rawEventType !== undefined) payload.rawEventType = input.rawEventType;
+  if (input.signal !== undefined) payload.signal = input.signal;
+  if (input.turn !== undefined) payload.turn = input.turn;
 
   return persistedObservation(payload, {
     provider,
@@ -539,19 +569,20 @@ function observation(
 }
 
 function invalidObservation(): PersistedProviderObservation {
+  const payload = {
+    provider: "codex",
+    status: {
+      value: "definitely-not-a-state",
+    },
+    observedAt: eventObservedAt,
+  } as unknown as HarnessEventObservation;
   return {
     id: "obs_invalid",
     provider: "codex",
     providerType: "harness",
     entityKind: "harness_event",
     entityKey: "run_1",
-    payload: {
-      provider: "codex",
-      status: {
-        value: "definitely-not-a-state",
-      },
-      observedAt: eventObservedAt,
-    },
+    payload,
     observedAt: eventObservedAt,
     expired: false,
   };

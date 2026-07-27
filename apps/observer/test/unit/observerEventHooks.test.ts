@@ -39,6 +39,20 @@ describe("observer event hooks", () => {
         harnessEventType: "PermissionRequest",
       }),
     ).toBe(false);
+    expect(
+      observerEventHookMatches(hook, {
+        ...hookReportedStopEvent(),
+        changeSource: "harness_session_started",
+        harnessEventType: "SessionStart",
+      }),
+    ).toBe(false);
+    expect(
+      observerEventHookMatches(hook, {
+        ...hookReportedStopEvent(),
+        changeSource: "harness_input_ready",
+        harnessEventType: "IdlePrompt",
+      }),
+    ).toBe(false);
   });
 
   it("runs matching hooks with invocation JSON on stdin", async () => {
@@ -132,6 +146,8 @@ describe("observer event hooks", () => {
 
 const now = "2026-06-01T12:00:00.000Z";
 
+type AgentStateChangedEvent = Extract<StationEvent, { type: "worktree.agentStateChanged" }>;
+
 function notifyIdleHook(): ObserverEventHookConfig {
   return {
     id: "notify-agent-state",
@@ -158,7 +174,7 @@ function notifyCodexStopHook(): ObserverEventHookConfig {
   };
 }
 
-function agentEvent(state: "idle" | "working"): StationEvent {
+function agentEvent(state: "idle" | "working"): AgentStateChangedEvent {
   return {
     type: "worktree.agentStateChanged",
     worktreeId: "wt_web_task",
@@ -172,7 +188,7 @@ function agentEvent(state: "idle" | "working"): StationEvent {
   };
 }
 
-function hookReportedStopEvent(): StationEvent {
+function hookReportedStopEvent(): AgentStateChangedEvent {
   return {
     ...agentEvent("idle"),
     changeSource: "harness_event_report",

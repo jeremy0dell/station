@@ -47,6 +47,7 @@ describe("Codex hook setup", () => {
       "Stop",
     ]);
     expect(plan.commands.PreToolUse).toBe(hookScriptPath);
+    expect(plan.after).toContain("hooks = true");
     expect(plan.after).toContain("[[hooks.PreToolUse]]");
     expect(plan.after).not.toContain("[[hooks.SubagentStop]]");
     await expect(readFile(configPath, "utf8")).rejects.toThrow();
@@ -121,6 +122,7 @@ describe("Codex hook setup", () => {
     expect(installed.generatedGlobalCleanup.stale).toEqual(["PreToolUse", "SubagentStop"]);
     expect(second.changed).toBe(false);
     expect(config).toContain("echo existing");
+    expect(parseTomlDocument(config)).toMatchObject({ features: { hooks: true } });
     expect(config).toContain("echo user subagent stop");
     expect(config).toContain(hookScriptPath);
     expect(baseConfig).toContain("echo existing");
@@ -145,22 +147,26 @@ describe("Codex hook setup", () => {
     expect(script).not.toContain("payload_file=");
     expect(script).toContain("codex > /dev/null");
     expect(scriptMode).toBe(0o700);
-    await expect(
-      doctorCodexHooks({
-        hookScriptPath,
-        stationConfigPath: "/tmp/station/config.toml",
-        observerSocketPath: "/tmp/station/run/observer.sock",
-        stateDir: "/tmp/station/state",
-        hookSpoolDir: "/tmp/station/state/spool/hooks",
-        enabled: true,
-        env,
-      }),
-    ).resolves.toMatchObject({
+    const doctorOptions = {
+      hookScriptPath,
+      stationConfigPath: "/tmp/station/config.toml",
+      observerSocketPath: "/tmp/station/run/observer.sock",
+      stateDir: "/tmp/station/state",
+      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      enabled: true,
+      env,
+    };
+    await expect(doctorCodexHooks(doctorOptions)).resolves.toMatchObject({
       status: "ok",
       installed: true,
       profileConfigPath: configPath,
       baseConfigPath,
     });
+
+    await writeFile(configPath, config.replace("hooks = true", "hooks = false"), "utf8");
+    const disabledFeature = await doctorCodexHooks(doctorOptions);
+    expect(disabledFeature).toMatchObject({ status: "warn", installed: false });
+    expect(disabledFeature.message).toContain("profile config is missing or stale");
   });
 
   it("generated script delivers to stn-ingress even without ownership env", async () => {

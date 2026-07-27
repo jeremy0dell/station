@@ -216,7 +216,7 @@ providerHook.spoolDrained
 | --- | --- | --- |
 | `agent_state` | `none` \| `starting` \| `idle` \| `working` \| `needs_attention` \| `stuck` \| `exited` \| `unknown` | Matches observed agent state on `worktree.agentStateChanged` events. |
 | `harness` | string | Harness provider id. |
-| `change_source` | `harness_event_report` \| `reconcile` | Where an agent-state change came from. |
+| `change_source` | `harness_event_report` \| `harness_input_ready` \| `harness_session_started` \| `reconcile` | Where an agent-state change came from. Startup and other non-completion idle transitions use the two readiness-specific sources, so completed-turn notification hooks filtered to `harness_event_report` do not match them. |
 | `harness_event_type` | string | Native harness event type, when the event carried one. |
 
 ### `[[projects]]` — managed projects (REQUIRED array)
