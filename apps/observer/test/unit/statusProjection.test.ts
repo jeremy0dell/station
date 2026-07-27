@@ -249,6 +249,24 @@ describe("live harness status projection", () => {
     );
   });
 
+  it("drops stale turn readiness when startup settles directly to idle", () => {
+    const result = projectHarnessEventReportOntoSnapshot({
+      snapshot: snapshotWithTurnReadiness(snapshotFor({ state: "idle", confidence: "high" })),
+      report: report({
+        status: status("idle", "high", "Pi session started and is waiting for input."),
+        signal: { kind: "session_started" },
+        correlation: {
+          harnessRunId: "run_web_task",
+        },
+      }),
+      projectedAt: eventAt,
+    });
+
+    expect(result.projected).toBe(true);
+    expect(result.snapshot.rows[0]?.agent).toMatchObject({ state: "idle" });
+    expect(result.snapshot.rows[0]?.agent).not.toHaveProperty("turnReadiness");
+  });
+
   it("drops turn readiness when a projected report makes the agent non-idle", () => {
     const result = projectHarnessEventReportOntoSnapshot({
       snapshot: snapshotWithTurnReadiness(snapshotFor({ state: "idle", confidence: "high" })),
@@ -584,8 +602,9 @@ function report(input: {
   status: ObservedStatus;
   correlation: NonNullable<HarnessEventReport["correlation"]>;
   observedAt?: string;
+  signal?: HarnessEventReport["signal"];
 }): HarnessEventReport {
-  return {
+  const result: HarnessEventReport = {
     schemaVersion: STATION_SCHEMA_VERSION,
     reportId: "report_codex_1",
     provider: "codex",
@@ -598,6 +617,8 @@ function report(input: {
       rawEventType: "PreToolUse",
     },
   };
+  if (input.signal !== undefined) result.signal = input.signal;
+  return result;
 }
 
 function status(

@@ -158,7 +158,7 @@ export function row(input: {
   id: string;
   projectId: "web" | "api";
   branch: string;
-  state: WorktreeRow["agent"] extends { state: infer T } ? T | "none" : never;
+  state: NonNullable<WorktreeRow["agent"]>["state"] | "none";
   dirty?: boolean;
 }): WorktreeRow {
   const display = displayForState(input.state);

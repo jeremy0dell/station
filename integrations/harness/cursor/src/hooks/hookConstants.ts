@@ -5,6 +5,7 @@ export const GENERATED_HOOK_SCRIPT_NAME = "station-cursor-hook.sh";
 
 export const CURSOR_HOOK_EVENT_NAMES = [
   "sessionStart",
+  "beforeSubmitPrompt",
   "stop",
   "sessionEnd",
   "beforeShellExecution",

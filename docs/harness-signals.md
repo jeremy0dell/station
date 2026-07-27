@@ -30,10 +30,15 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
 
 - `eventType` — free-form string, provider-scoped (e.g. codex `PreToolUse`).
   Core must not branch on it; it exists for correlation, logging, and the TUI's
-  event metadata. A closed `signal` taxonomy will supersede it (see Target).
+  event metadata.
+- `signal?: { kind: "session_started" }` — closed provider-neutral lifecycle
+  evidence. It proves native session creation, not completed output. The adapter
+  independently chooses `starting` or input-ready `idle` from provider evidence.
 - `status: ObservedStatus` — `value` (working | idle | needs_attention | …),
   `confidence`, `reason` (human prose, display-only), `updatedAt`, and
   `attention`.
+- `turn?: { kind: "turn_completed" }` — proves a completed assistant turn. A
+  report cannot combine this marker with `session_started`.
 - `attention: AttentionKind` — closed enum:
   `question | plan_approval | tool_approval | input`. Set by the provider
   whenever `status.value` is `needs_attention` and the state is a request for
@@ -95,12 +100,12 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    trusting it forever. Attention and idle states never decay, and the next
    real event restores live status.
 8. **Native completion fails closed.** Active evidence may bind an unbound
-   provider plus Station session to one native execution; a replacement may
-   bind only after explicit `idle` or `exited` evidence. While an execution is
-   active, evidence from another native execution is diagnostic-only: it cannot
-   derive recovery, readiness, projected state changes, or completion
-   notifications. Worktree-only external sessions remain independently keyed
-   by native identity, and idle/completion evidence never establishes a binding.
+   provider plus Station session to one native execution; startup idle may do so
+   only when it carries `session_started`. A replacement may bind only after
+   explicit `idle` or `exited` evidence, and a start signal cannot replace an
+   active execution. While an execution is active, evidence from another native
+   execution is diagnostic-only. Plain or completed idle never establishes a
+   binding.
 9. **Inherited identity is corroborated.** A provider must withhold inherited
    Station project, worktree, session, terminal, and run correlation when its
    own origin evidence contradicts the Station stamp. It retains provider-native
@@ -118,17 +123,17 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
     The authoritative probe result updates health; startup traffic never assigns
     `healthy`, `idle`, or turn readiness directly.
 
-## Target Taxonomy (HarnessSignal)
+## Signal Taxonomy Evolution
 
-A closed `signal` field will supersede free-form `eventType` branching
-(additive; `eventType` stays for logging):
+`session_started` is the first implemented `HarnessSignal`. Future additive
+members may include:
 
 - `turn_started | turn_completed | turn_interrupted`
 - `attention_opened { kind, requestId, prompt? }`
 - `attention_resolved { requestId, outcome: answered | aborted | superseded }`
 - `user_message_submitted`
 - `tool_started | tool_completed`
-- `session_started | session_ended`
+- `session_ended`
 - `unclassified { rawEventType }` — retained and counted, never dropped
 
 Semantics: attention is an interval opened and closed by `requestId`

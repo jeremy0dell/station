@@ -12,7 +12,7 @@ station never asks an agent what it is doing. The observer takes the hook events
 | -------- | --------- |
 | `starting` | The harness session is launching. |
 | `working` | The agent is actively running a turn or a tool. |
-| `idle` | The agent finished and is waiting for input. The TUI shows **ready** the moment a turn completes and it is safe to prompt. |
+| `idle` | The harness is initialized and waiting for input. The TUI adds **ready** only when a distinct completed turn is waiting to be read. |
 | `needs attention` | The agent hit a permission prompt, a notification, or an error that wants you. |
 | `exited` | The agent process ended. |
 | `stuck` | The agent looks hung or unresponsive. |
@@ -48,7 +48,7 @@ Events (`integrations/harness/claude/src/ingressRules.ts`): `SessionStart`, `Use
 
 Hooks: station writes entries into Claude's `settings.json` that call a generated `station-claude-hook.sh` script, which forwards events to the observer through `stn-ingress`.
 
-Coverage: full. `PermissionRequest` and `Notification` drive **needs attention**, `Stop` drives **idle**, and `SessionStart`/`SessionEnd` drive **starting**/**exited**.
+Coverage: full. `PermissionRequest` and `Notification` drive **needs attention**, `Stop` drives completed-turn **idle**, and `SessionStart`/`SessionEnd` drive **starting**/**exited**. `Notification(idle_prompt)` may prove plain input-ready idle without marking a turn complete.
 
 ### Codex (Full)
 
@@ -72,7 +72,7 @@ Events (`integrations/harness/opencode/src/ingressRules.ts`): a rich plugin stre
 
 Hooks: an OpenCode plugin forwards events to the observer.
 
-Coverage: full, and the richest of the set. `permission.asked`, `question.asked`, and `session.error` drive **needs attention**; `session.idle` drives **idle**; `session.deleted` drives **exited**.
+Coverage: full, and the richest of the set. `permission.asked`, `question.asked`, and `session.error` drive **needs attention**; native `session.status: idle` drives plain input-ready **idle**; `session.idle` marks completion only when the plugin observed prior turn activity; `session.deleted` drives **exited**.
 
 ### Pi (Partial)
 
@@ -87,7 +87,8 @@ unavailable. Station requires Pi `0.80.5` or newer and reports older or
 unparseable versions as unavailable because they lack the required settlement
 edge.
 
-Coverage: partial. An `ask_user_question` tool start is only preflight and
+Coverage: partial. `session_start` proves the focused Pi UI can accept input,
+so it drives plain **idle** without readiness. An `ask_user_question` tool start is only preflight and
 remains **working**. Its stable prompt-open event drives **needs attention**
 with question intent; unrelated parallel tool events preserve that attention
 until the matching question ends. A question rejected before prompt-open never

@@ -1,9 +1,5 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { ObserverEventHookInvocationSchema } from "@station/contracts";
-import {
-  createCursorHarnessProvider,
-  cursorProviderHookPayloadToHarnessEventReport,
-} from "@station/cursor";
 import { createFakeExternalCommandRunner, type ExternalCommandInput } from "@station/runtime";
 import {
   createFakeTerminalTarget,
@@ -12,6 +8,10 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import {
+  createCursorHarnessProvider,
+  cursorProviderHookPayloadToHarnessEventReport,
+} from "../../../../integrations/harness/cursor/src/index.js";
 import { createObserverEventHookRuntime, ProviderRegistry } from "../../src/internal";
 import { createTestObserver } from "../support/testObserver";
 
@@ -104,9 +104,16 @@ describe("observer reconcile with Cursor harness", () => {
       );
       await waitFor(() => reconcileProbeCalls.length === 3);
       await waitFor(() => notificationCalls.length === 1);
-      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "idle" });
-      expect(core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
-      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        turnReadiness: {
+          state: "ready_to_read",
+          token: "report_cursor_a_stop",
+        },
+      });
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+        expect.objectContaining({ token: "report_cursor_a_stop" }),
+      ]);
       expect(parseNotificationReportId(notificationCalls[0]?.stdin)).toBe("report_cursor_a_stop");
 
       await reportAndReconcile(
@@ -121,6 +128,8 @@ describe("observer reconcile with Cursor harness", () => {
       );
       await waitFor(() => reconcileProbeCalls.length === 4);
       expect(core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "working" });
+      expect(core.getSnapshot().rows[0]?.agent).not.toHaveProperty("turnReadiness");
+      await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
       expect(notificationCalls).toHaveLength(1);
     } finally {
       await eventHooks.shutdown();
@@ -174,7 +183,11 @@ function cursorReport(input: {
 
 function parseNotificationReportId(stdin: string | undefined): string | undefined {
   if (stdin === undefined) throw new Error("Expected notification invocation stdin.");
-  return ObserverEventHookInvocationSchema.parse(JSON.parse(stdin)).event.reportId;
+  const invocation = ObserverEventHookInvocationSchema.parse(JSON.parse(stdin));
+  if (invocation.event.type !== "worktree.agentStateChanged") {
+    throw new Error("Expected a worktree agent-state notification.");
+  }
+  return invocation.event.reportId;
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {
@@ -235,6 +248,7 @@ function cursorProviders(): ProviderRegistry {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

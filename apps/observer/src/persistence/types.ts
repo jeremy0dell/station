@@ -5,6 +5,7 @@ import type {
   ErrorEnvelope,
   HarnessEventObservation,
   HarnessRunObservation,
+  HarnessSignal,
   ObservedStatus,
   ProviderHealth,
   ProviderId,
@@ -169,6 +170,7 @@ export type SessionHarnessExecutionEvidence = {
   provider: ProviderId;
   sessionId?: string;
   nativeSessionId?: string;
+  signal?: HarnessSignal;
   status?: ObservedStatus;
 };
 

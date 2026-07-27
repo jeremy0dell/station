@@ -330,6 +330,12 @@ async function persistTurnReadinessForReport(input: {
   // clear regardless of turn.kind so this writer agrees with the ingress
   // readiness policy for identical input.
   const status = input.report.status?.value;
+  if (input.report.signal?.kind === "session_started") {
+    if (input.result.sessionId !== undefined) {
+      await input.persistence.deleteSessionTurnReadiness({ sessionId: input.result.sessionId });
+    }
+    return undefined;
+  }
   if (status === "working" || status === "starting" || status === "needs_attention") {
     if (input.result.sessionId !== undefined) {
       await input.persistence.deleteSessionTurnReadiness({ sessionId: input.result.sessionId });

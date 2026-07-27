@@ -1,0 +1,65 @@
+{
+  "provider": "cursor",
+  "cliVersion": "2026.07.09-a3815c0",
+  "evidence": "sanitized expected sequence; authenticated no-prompt capture remains unresolved and sessionStart is lifecycle-only",
+  "scenarios": [
+    {
+      "name": "no_initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "hook_event_name": "sessionStart",
+            "session_id": "cursor_startup",
+            "cwd": "/fixture/worktree"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        }
+      ]
+    },
+    {
+      "name": "initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "hook_event_name": "sessionStart",
+            "session_id": "cursor_prompt",
+            "cwd": "/fixture/worktree"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "hook_event_name": "beforeSubmitPrompt",
+            "session_id": "cursor_prompt",
+            "generation_id": "generation_fixture",
+            "cwd": "/fixture/worktree"
+          },
+          "expected": { "signal": null, "status": "working", "turn": null }
+        },
+        {
+          "payload": {
+            "hook_event_name": "stop",
+            "session_id": "cursor_prompt",
+            "generation_id": "generation_fixture",
+            "cwd": "/fixture/worktree",
+            "status": "completed"
+          },
+          "expected": { "signal": null, "status": "idle", "turn": "turn_completed" }
+        }
+      ]
+    },
+    {
+      "name": "early_exit",
+      "events": [
+        {
+          "payload": {
+            "hook_event_name": "sessionEnd",
+            "session_id": "cursor_early",
+            "cwd": "/fixture/worktree"
+          },
+          "expected": { "signal": null, "status": "exited", "turn": null }
+        }
+      ]
+    }
+  ]
+}

@@ -1566,6 +1566,50 @@ export function observerPersistenceContract(
         });
       });
 
+      it("binds lifecycle-authorized startup idle and clears stale readiness idempotently", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.recordEventAndProviderObservationWithIngressDedupe(
+            harnessIngressInput({
+              reportId: "report_previous_active",
+              nativeSessionId: "native_previous",
+              state: "working",
+              observedAt: now,
+            }),
+          );
+          await persistence.recordEventAndProviderObservationWithIngressDedupe(
+            harnessIngressInput({
+              reportId: "report_previous_stop",
+              nativeSessionId: "native_previous",
+              state: "idle",
+              observedAt: later,
+            }),
+          );
+          const startup = harnessIngressInput({
+            reportId: "report_startup_idle",
+            nativeSessionId: "native_started",
+            state: "idle",
+            observedAt: latest,
+            sessionStarted: true,
+          });
+
+          await expect(
+            persistence.recordEventAndProviderObservationWithIngressDedupe(startup),
+          ).resolves.toMatchObject({ deduped: false });
+          await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+            expect.objectContaining({
+              nativeSessionId: "native_started",
+              state: "idle",
+            }),
+          ]);
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+
+          await expect(
+            persistence.recordEventAndProviderObservationWithIngressDedupe(startup),
+          ).resolves.toEqual({ deduped: true });
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+        });
+      });
+
       it("atomically repairs derived harness state without restoring acknowledged readiness", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const repaired = {
@@ -2573,8 +2617,10 @@ function harnessIngressInput(input: {
   nativeSessionId: string;
   state: AgentState;
   observedAt: string;
+  sessionStarted?: boolean;
 }): Parameters<ObserverPersistenceBundle["recordEventAndProviderObservationWithIngressDedupe"]>[0] {
-  const eventType = input.state === "idle" ? "Stop" : "PreToolUse";
+  const eventType =
+    input.sessionStarted === true ? "SessionStart" : input.state === "idle" ? "Stop" : "PreToolUse";
   const payload: HarnessEventObservation = {
     provider: "codex",
     reportId: input.reportId,
@@ -2592,7 +2638,11 @@ function harnessIngressInput(input: {
     },
     observedAt: input.observedAt,
   };
-  if (input.state === "idle") payload.turn = { kind: "turn_completed" };
+  if (input.sessionStarted === true) {
+    payload.signal = { kind: "session_started" };
+  } else if (input.state === "idle") {
+    payload.turn = { kind: "turn_completed" };
+  }
 
   const recoveryHandle: SessionRecoveryHandle = {
     id: input.reportId,
@@ -2610,22 +2660,25 @@ function harnessIngressInput(input: {
       sessionId: "ses_execution",
       nativeSessionId: input.nativeSessionId,
       status: payload.status,
+      ...(payload.signal === undefined ? {} : { signal: payload.signal }),
     },
     recoveryHandle,
     turnReadiness:
-      input.state === "idle"
-        ? {
-            action: "upsert",
-            value: {
-              sessionId: "ses_execution",
-              projectId: "web",
-              worktreeId: "wt_execution",
-              token: input.reportId,
-              completedAt: input.observedAt,
-              updatedAt: input.observedAt,
-            },
-          }
-        : { action: "delete", sessionId: "ses_execution" },
+      input.sessionStarted === true
+        ? { action: "delete", sessionId: "ses_execution" }
+        : input.state === "idle"
+          ? {
+              action: "upsert",
+              value: {
+                sessionId: "ses_execution",
+                projectId: "web",
+                worktreeId: "wt_execution",
+                token: input.reportId,
+                completedAt: input.observedAt,
+                updatedAt: input.observedAt,
+              },
+            }
+          : { action: "delete", sessionId: "ses_execution" },
   };
   return {
     event: {

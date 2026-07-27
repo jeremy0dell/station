@@ -1157,6 +1157,63 @@ describe("contract schemas", () => {
     };
 
     expectParses(HarnessEventReportSchema, harnessReport, "harness event report");
+    expect(HarnessEventReportSchema.parse(harnessReport)).not.toHaveProperty("signal");
+    expectParses(
+      HarnessEventReportSchema,
+      {
+        ...harnessReport,
+        eventType: "SessionStart",
+        signal: { kind: "session_started" },
+        status: {
+          ...(harnessReport.status as Record<string, unknown>),
+          value: "starting",
+          reason: "Codex session started.",
+        },
+      },
+      "harness event report with session-start lifecycle signal",
+    );
+    expectParses(
+      HarnessEventObservationSchema,
+      {
+        provider: "pi",
+        eventType: "session_start",
+        sessionId: "ses_web_task",
+        signal: { kind: "session_started" },
+        status: {
+          value: "idle",
+          confidence: "high",
+          reason: "Pi is waiting for input.",
+          source: "harness_event",
+          updatedAt: "2026-05-20T12:02:00.000Z",
+        },
+        observedAt: "2026-05-20T12:02:00.000Z",
+      },
+      "persisted harness event observation with session-start lifecycle signal",
+    );
+    expectFails(
+      HarnessEventReportSchema,
+      { ...harnessReport, signal: { kind: "unknown" } },
+      "harness event report rejects unknown lifecycle signals",
+    );
+    expectFails(
+      HarnessEventReportSchema,
+      {
+        ...harnessReport,
+        signal: { kind: "session_started" },
+        turn: { kind: "turn_completed" },
+      },
+      "harness event report rejects lifecycle start combined with turn completion",
+    );
+    expectFails(
+      HarnessEventObservationSchema,
+      {
+        provider: "pi",
+        signal: { kind: "session_started" },
+        turn: { kind: "turn_completed" },
+        observedAt: "2026-05-20T12:02:00.000Z",
+      },
+      "harness event observation rejects lifecycle start combined with turn completion",
+    );
     expectFails(
       HarnessEventReportSchema,
       {

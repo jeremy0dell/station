@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { AgentState, HarnessEventReport } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
@@ -27,6 +27,7 @@ const completedAt = "2026-06-17T12:00:01.000Z";
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
@@ -136,6 +137,71 @@ describe("observer turn readiness", () => {
       ),
     ).toBeUndefined();
     plainFixture.sqlite.close();
+  });
+
+  it("clears persisted and live readiness when a new session starts already idle", async () => {
+    const fixture = fixtureCore();
+    await fixture.core.reconcile("turn-readiness-startup-clear");
+
+    await fixture.core.projectHarnessEventStatus(
+      report({ reportId: "report_previous_turn", turnCompleted: true }),
+    );
+    const startup = await fixture.core.projectHarnessEventStatus(
+      report({
+        reportId: "report_new_session",
+        turnCompleted: false,
+        sessionStarted: true,
+        observedAt: "2026-06-17T12:00:02.000Z",
+      }),
+    );
+
+    expect(startup.projected).toBe(true);
+    expect(startup.snapshot.rows[0]?.agent).toMatchObject({ state: "idle" });
+    expect(startup.snapshot.rows[0]?.agent).not.toHaveProperty("turnReadiness");
+    expect(startup.snapshot.rows[0]?.agent).not.toHaveProperty("attention");
+    await expect(fixture.persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("keeps initial-prompt lifecycle distinct until real completion creates readiness", async () => {
+    const fixture = fixtureCore();
+    await fixture.core.reconcile("turn-readiness-initial-prompt");
+
+    const startup = await fixture.core.projectHarnessEventStatus(
+      report({
+        reportId: "report_prompt_startup",
+        turnCompleted: false,
+        sessionStarted: true,
+      }),
+    );
+    const working = await fixture.core.projectHarnessEventStatus(
+      workingReport("report_prompt_working", "2026-06-17T12:00:02.000Z"),
+    );
+    const attention = await fixture.core.projectHarnessEventStatus(
+      attentionReport("report_prompt_attention", "2026-06-17T12:00:03.000Z"),
+    );
+    const completed = await fixture.core.projectHarnessEventStatus(
+      report({
+        reportId: "report_prompt_completed",
+        turnCompleted: true,
+        observedAt: "2026-06-17T12:00:04.000Z",
+      }),
+    );
+
+    expect(startup.snapshot.rows[0]?.agent).not.toHaveProperty("turnReadiness");
+    expect(working.snapshot.rows[0]?.agent).toMatchObject({ state: "working" });
+    expect(attention.snapshot.rows[0]?.agent).toMatchObject({
+      state: "needs_attention",
+      attention: "input",
+    });
+    expect(completed.snapshot.rows[0]?.agent).toMatchObject({
+      state: "idle",
+      turnReadiness: {
+        state: "ready_to_read",
+        token: "report_prompt_completed",
+      },
+    });
+    fixture.sqlite.close();
   });
 
   it("clears ready-to-read when the session becomes active again", async () => {
@@ -411,6 +477,21 @@ function workingReport(
   };
 }
 
+function attentionReport(reportId: string, observedAt: string): HarnessEventReport {
+  return {
+    ...workingReport(reportId, observedAt),
+    eventType: "PermissionRequest",
+    status: {
+      value: "needs_attention",
+      confidence: "high",
+      reason: "Harness needs user input.",
+      source: "harness_event",
+      updatedAt: observedAt,
+      attention: "input",
+    },
+  };
+}
+
 function fixtureCore(
   options: {
     harnessState?: AgentState;
@@ -539,6 +620,7 @@ function report(input: {
   turnCompleted: boolean;
   observedAt?: string;
   nativeSessionId?: string;
+  sessionStarted?: boolean;
 }): HarnessEventReport {
   const observedAt = input.observedAt ?? completedAt;
   const report: HarnessEventReport = {
@@ -546,7 +628,7 @@ function report(input: {
     reportId: input.reportId,
     provider: "fake-harness",
     kind: "harness",
-    eventType: "Stop",
+    eventType: input.sessionStarted === true ? "session_start" : "Stop",
     observedAt,
     status: {
       value: "idle",
@@ -560,6 +642,9 @@ function report(input: {
       rawEventType: "Stop",
     },
   };
+  if (input.sessionStarted === true) {
+    report.signal = { kind: "session_started" };
+  }
   if (input.turnCompleted) {
     report.turn = { kind: "turn_completed" };
   }

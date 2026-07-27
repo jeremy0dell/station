@@ -36,6 +36,7 @@ describe("Cursor hook setup", () => {
       scriptChanged: true,
       missing: [
         "sessionStart",
+        "beforeSubmitPrompt",
         "stop",
         "sessionEnd",
         "beforeShellExecution",
@@ -45,7 +46,9 @@ describe("Cursor hook setup", () => {
         "postToolUseFailure",
       ],
     });
+    expect(plan.commands.beforeSubmitPrompt).toBe(hookScriptPath);
     expect(plan.commands.beforeShellExecution).toBe(hookScriptPath);
+    expect(plan.after).toContain('"beforeSubmitPrompt"');
     expect(plan.after).toContain('"beforeShellExecution"');
     await expect(readFile(hooksPath, "utf8")).rejects.toThrow();
     await expect(readFile(hookScriptPath, "utf8")).rejects.toThrow();

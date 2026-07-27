@@ -1,0 +1,85 @@
+{
+  "provider": "claude",
+  "cliVersion": "2.1.216",
+  "evidence": "sanitized expected sequence; authenticated no-prompt idle_prompt emission remains unresolved",
+  "scenarios": [
+    {
+      "name": "no_initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "session_id": "claude_startup",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "SessionStart",
+            "source": "startup"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "session_id": "claude_startup",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "Notification",
+            "notification_type": "idle_prompt"
+          },
+          "expected": { "signal": null, "status": "idle", "turn": null }
+        }
+      ]
+    },
+    {
+      "name": "initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "session_id": "claude_prompt",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "SessionStart",
+            "source": "startup"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "session_id": "claude_prompt",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[redacted]"
+          },
+          "expected": { "signal": null, "status": "working", "turn": null }
+        },
+        {
+          "payload": {
+            "session_id": "claude_prompt",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "Stop",
+            "stop_hook_active": false
+          },
+          "expected": { "signal": null, "status": "idle", "turn": "turn_completed" }
+        }
+      ]
+    },
+    {
+      "name": "early_exit",
+      "events": [
+        {
+          "payload": {
+            "session_id": "claude_early",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "SessionStart",
+            "source": "startup"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "session_id": "claude_early",
+            "cwd": "/fixture/worktree",
+            "hook_event_name": "SessionEnd",
+            "reason": "prompt_input_exit"
+          },
+          "expected": { "signal": null, "status": "exited", "turn": null }
+        }
+      ]
+    }
+  ]
+}

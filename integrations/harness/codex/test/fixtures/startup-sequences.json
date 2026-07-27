@@ -1,0 +1,53 @@
+{
+  "provider": "codex",
+  "cliVersion": "0.145.0",
+  "evidence": "sanitized expected sequence; authenticated no-prompt capture remains unresolved and SessionStart is not input-ready",
+  "scenarios": [
+    { "name": "no_initial_prompt", "events": [] },
+    {
+      "name": "initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "session_id": "codex_prompt",
+            "transcript_path": null,
+            "cwd": "/fixture/worktree",
+            "model": "fixture-model",
+            "permission_mode": "default",
+            "hook_event_name": "SessionStart",
+            "source": "startup"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "session_id": "codex_prompt",
+            "transcript_path": null,
+            "cwd": "/fixture/worktree",
+            "model": "fixture-model",
+            "permission_mode": "default",
+            "hook_event_name": "UserPromptSubmit",
+            "turn_id": "turn_fixture",
+            "prompt": "[redacted]"
+          },
+          "expected": { "signal": null, "status": "working", "turn": null }
+        },
+        {
+          "payload": {
+            "session_id": "codex_prompt",
+            "transcript_path": null,
+            "cwd": "/fixture/worktree",
+            "model": "fixture-model",
+            "permission_mode": "default",
+            "hook_event_name": "Stop",
+            "turn_id": "turn_fixture",
+            "stop_hook_active": false,
+            "last_assistant_message": null
+          },
+          "expected": { "signal": null, "status": "idle", "turn": "turn_completed" }
+        }
+      ]
+    },
+    { "name": "early_exit", "events": [] }
+  ]
+}

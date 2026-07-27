@@ -1,5 +1,9 @@
-import type { StationConfig } from "@station/config";
-import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import type {
+  HarnessEventObservation,
+  HarnessEventReportReceipt,
+  ProviderHookAdapter,
+} from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -470,6 +474,69 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
+  it("persists session-start signals, binds startup idle, and rejects plain idle binding", async () => {
+    const clock = { now: () => new Date(now) };
+    const sqlite = openObserverSqlite({ clock });
+    const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const ingestion = createHarnessEventReportIngestion({ persistence, clock });
+    await persistence.upsertSessionTurnReadiness({
+      sessionId: "ses_web_task",
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      token: "report_previous_turn",
+      completedAt: now,
+      updatedAt: now,
+    });
+    const startup = {
+      ...harnessReport("report_startup_idle"),
+      eventType: "SessionStart",
+      signal: { kind: "session_started" as const },
+      status: {
+        value: "idle" as const,
+        confidence: "high" as const,
+        reason: "Harness started and is waiting for input.",
+        source: "harness_event" as const,
+        updatedAt: now,
+      },
+      correlation: {
+        ...harnessReport("report_startup_idle").correlation,
+        nativeSessionId: "native_started",
+      },
+    };
+
+    await expect(ingestion.ingest(startup, { triggerReconcile: false })).resolves.toMatchObject({
+      accepted: true,
+      deduped: false,
+    });
+    await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
+      expect.objectContaining({ nativeSessionId: "native_started", state: "idle" }),
+    ]);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+    await expect(persistence.listProviderObservations()).resolves.toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ signal: { kind: "session_started" } }),
+      }),
+    ]);
+
+    const { signal: _startupSignal, ...plainIdle } = startup;
+    await ingestion.ingest(
+      {
+        ...plainIdle,
+        reportId: "report_plain_idle",
+        correlation: {
+          ...startup.correlation,
+          sessionId: "ses_plain_idle",
+          nativeSessionId: "native_plain_idle",
+        },
+      },
+      { triggerReconcile: false },
+    );
+    await expect(
+      persistence.getSessionHarnessExecution({ provider: "codex", sessionId: "ses_plain_idle" }),
+    ).resolves.toBeUndefined();
+    sqlite.close();
+  });
+
   it("keeps duplicate hook readiness aligned with the originally committed normalization", async () => {
     const clock = { now: () => new Date(now) };
     const harness = new ContextChangingReadinessHarnessProvider({ now });
@@ -750,6 +817,7 @@ describe("observer provider hook ingress", () => {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
@@ -894,7 +962,7 @@ class RecordingHarnessProvider extends FakeHarnessProvider {
     });
   }
 
-  override async ingestEvent() {
+  override async ingestEvent(): Promise<HarnessEventObservation[]> {
     this.ingestCalls += 1;
     return [
       {

@@ -156,6 +156,17 @@ export const HarnessEventDiagnosticsSchema = z
 
 export type HarnessEventDiagnostics = z.infer<typeof HarnessEventDiagnosticsSchema>;
 
+export const HarnessSignalSchema = z
+  .object({
+    kind: z.literal("session_started"),
+  })
+  .strict();
+
+/**
+ * Reports provider-proven harness lifecycle creation without implying that assistant output completed.
+ */
+export type HarnessSignal = z.infer<typeof HarnessSignalSchema>;
+
 export const HarnessTurnSchema = z
   .object({
     kind: z.literal("turn_completed"),
@@ -266,13 +277,23 @@ export const HarnessEventObservationSchema = z
     cwd: nonEmptyStringSchema.optional(),
     pid: z.number().int().positive().optional(),
     status: ObservedStatusSchema.optional(),
+    signal: HarnessSignalSchema.optional(),
     turn: HarnessTurnSchema.optional(),
     rawEventType: nonEmptyStringSchema.optional(),
     diagnostics: HarnessEventDiagnosticsSchema.optional(),
     providerData: optionalProviderDataSchema,
     observedAt: TimestampSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((observation, context) => {
+    if (observation.signal?.kind === "session_started" && observation.turn !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["turn"],
+        message: "A session-start signal cannot also report a completed turn.",
+      });
+    }
+  });
 
 export type HarnessEventObservation = z.infer<typeof HarnessEventObservationSchema>;
 

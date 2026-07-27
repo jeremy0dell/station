@@ -86,6 +86,7 @@ describe("harness report processor logging", () => {
         reportId: "report_inherited_identity",
         nativeSessionId: "native_background",
         cwd: "/tmp/codex-home/.codex/memories",
+        signal: { kind: "session_started" },
         correlationIssue: "station_identity_cwd_mismatch",
       }),
     );
@@ -104,6 +105,7 @@ describe("harness report processor logging", () => {
       message: "Harness event report processed.",
       attributes: {
         reportId: "report_inherited_identity",
+        signalKind: "session_started",
         projected: false,
         correlationIssue: "station_identity_cwd_mismatch",
       },
@@ -242,6 +244,7 @@ function report(input: {
   nativeSessionId: string;
   sessionId?: string;
   cwd: string;
+  signal?: HarnessEventReport["signal"];
   correlationIssue?: "station_identity_cwd_mismatch";
   status?: "starting" | "working";
 }): HarnessEventReport {
@@ -267,6 +270,9 @@ function report(input: {
   };
   if (input.sessionId !== undefined) {
     result.correlation = { ...result.correlation, sessionId: input.sessionId };
+  }
+  if (input.signal !== undefined) {
+    result.signal = input.signal;
   }
   if (input.correlationIssue !== undefined) {
     result.diagnostics = { correlationIssue: input.correlationIssue };

@@ -1,4 +1,5 @@
-import type { ObservedStatus, RawHarnessEvent } from "@station/contracts";
+import { readFileSync } from "node:fs";
+import type { HarnessEventReport, ObservedStatus, RawHarnessEvent } from "@station/contracts";
 import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactCodexHookPayload } from "../../src/compaction";
@@ -854,6 +855,22 @@ describe("Codex hook event parsing", () => {
     expect(observations[0]?.turn).toBeUndefined();
   });
 
+  it("replays sanitized startup census sequences", () => {
+    const fixture = startupSequenceFixture();
+    for (const scenario of fixture.scenarios) {
+      const reports = scenario.events.map(({ payload }, index) =>
+        codexHookPayloadToHarnessEventReport({
+          reportId: `report_startup_${scenario.name}_${index}`,
+          observedAt: now,
+          payload,
+        }),
+      );
+      expect(reports.map(normalizedLifecycleTuple), scenario.name).toEqual(
+        scenario.events.map(({ expected }) => [expected.signal, expected.status, expected.turn]),
+      );
+    }
+  });
+
   it("maps every supported Codex hook event to a provider-neutral report status", () => {
     const expected = [
       ["SessionStart", "starting", "high"],
@@ -878,6 +895,17 @@ describe("Codex hook event parsing", () => {
     expect(
       reports.map((report) => [report.eventType, report.status?.value, report.status?.confidence]),
     ).toEqual(expected);
+    expect(reports.map((report) => [report.eventType, report.signal?.kind ?? "none"])).toEqual([
+      ["SessionStart", "session_started"],
+      ["UserPromptSubmit", "none"],
+      ["PreToolUse", "none"],
+      ["PermissionRequest", "none"],
+      ["PostToolUse", "none"],
+      ["PreCompact", "none"],
+      ["PostCompact", "none"],
+      ["SubagentStart", "none"],
+      ["Stop", "none"],
+    ]);
     expect(reports.map((report) => [report.eventType, report.turn?.kind ?? "none"])).toEqual([
       ["SessionStart", "none"],
       ["UserPromptSubmit", "none"],
@@ -1056,6 +1084,26 @@ const CODEX_HOOK_FIXTURES = {
     last_assistant_message: null,
   },
 } satisfies CodexHookFixtures;
+
+type StartupSequenceFixture = {
+  scenarios: Array<{
+    name: string;
+    events: Array<{
+      payload: unknown;
+      expected: { signal: string | null; status: string; turn: string | null };
+    }>;
+  }>;
+};
+
+function startupSequenceFixture(): StartupSequenceFixture {
+  return JSON.parse(
+    readFileSync(new URL("../fixtures/startup-sequences.json", import.meta.url), "utf8"),
+  ) as StartupSequenceFixture;
+}
+
+function normalizedLifecycleTuple(report: HarnessEventReport): Array<string | null> {
+  return [report.signal?.kind ?? null, report.status?.value ?? null, report.turn?.kind ?? null];
+}
 
 function codexReportPayloads(): CodexHookEvent[] {
   return codexForwardedEventTypes.map((eventType) => CODEX_HOOK_FIXTURES[eventType]);

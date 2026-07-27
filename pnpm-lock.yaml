@@ -38,6 +38,9 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.12.4)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   apps/cli:
     dependencies:

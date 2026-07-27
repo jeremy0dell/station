@@ -1,0 +1,90 @@
+{
+  "provider": "opencode",
+  "cliVersion": "1.16.2",
+  "evidence": "sanitized expected sequence; pristine status-idle emission remains unresolved and completion requires transport-proven activity",
+  "scenarios": [
+    {
+      "name": "no_initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "event_type": "session.created",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_startup"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "session.status",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_startup",
+            "status_type": "idle"
+          },
+          "expected": { "signal": null, "status": "idle", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "session.idle",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_startup",
+            "turn_activity_observed": false
+          },
+          "expected": { "signal": null, "status": "idle", "turn": null }
+        }
+      ]
+    },
+    {
+      "name": "initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "event_type": "session.created",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_prompt"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "session.status",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_prompt",
+            "status_type": "busy"
+          },
+          "expected": { "signal": null, "status": "working", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "session.idle",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_prompt",
+            "turn_activity_observed": true
+          },
+          "expected": { "signal": null, "status": "idle", "turn": "turn_completed" }
+        }
+      ]
+    },
+    {
+      "name": "early_exit",
+      "events": [
+        {
+          "payload": {
+            "event_type": "session.created",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_early"
+          },
+          "expected": { "signal": "session_started", "status": "starting", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "session.deleted",
+            "cwd": "/fixture/worktree",
+            "opencode_session_id": "opencode_early"
+          },
+          "expected": { "signal": null, "status": "exited", "turn": null }
+        }
+      ]
+    }
+  ]
+}

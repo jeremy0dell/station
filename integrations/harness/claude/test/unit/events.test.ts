@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { HarnessEventContext } from "@station/contracts";
+import type { HarnessEventContext, HarnessEventReport } from "@station/contracts";
 import { HarnessEventReportSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactClaudeHookPayload } from "../../src/compaction";
@@ -99,7 +99,7 @@ describe("statusFromClaudeHookEvent", () => {
 
   it("treats an idle-prompt notification as the interrupt recovery edge", () => {
     const event = parseClaudeHookEvent({
-      ...fixture("notification-permission-prompt"),
+      ...parseClaudeHookEvent(fixture("notification-permission-prompt")),
       notification_type: "idle_prompt",
       message: "Claude is waiting for your input",
     });
@@ -112,7 +112,7 @@ describe("statusFromClaudeHookEvent", () => {
 
   it("produces no status for notification types it does not understand", () => {
     const event = parseClaudeHookEvent({
-      ...fixture("notification-permission-prompt"),
+      ...parseClaudeHookEvent(fixture("notification-permission-prompt")),
       notification_type: "something_new",
     });
 
@@ -121,7 +121,7 @@ describe("statusFromClaudeHookEvent", () => {
 
   it("keeps a row working when a user Stop hook forces continuation", () => {
     const event = parseClaudeHookEvent({
-      ...fixture("stop"),
+      ...parseClaudeHookEvent(fixture("stop")),
       stop_hook_active: true,
     });
 
@@ -162,7 +162,7 @@ describe("normalizeClaudeRawEvent", () => {
 
   it("prefers station identity fields over cwd correlation", () => {
     const payload = {
-      ...fixture("stop"),
+      ...parseClaudeHookEvent(fixture("stop")),
       station_session_id: "ses_env",
       station_worktree_id: "wt_env",
       station_terminal_target_id: "tmux:station:@1:%2",
@@ -271,10 +271,26 @@ describe("compactClaudeHookPayload", () => {
 });
 
 describe("claudeHookPayloadToHarnessEventReport", () => {
+  it("replays sanitized startup census sequences", () => {
+    const fixture = startupSequenceFixture();
+    for (const scenario of fixture.scenarios) {
+      const reports = scenario.events.map(({ payload }, index) =>
+        claudeHookPayloadToHarnessEventReport({
+          reportId: `report_startup_${scenario.name}_${index}`,
+          observedAt: now,
+          payload,
+        }),
+      );
+      expect(reports.map(normalizedLifecycleTuple), scenario.name).toEqual(
+        scenario.events.map(({ expected }) => [expected.signal, expected.status, expected.turn]),
+      );
+    }
+  });
+
   it("builds schema-valid provider-neutral reports from compacted payloads", () => {
     for (const name of fixtureNames) {
       const compacted = compactClaudeHookPayload({
-        ...fixture(name),
+        ...parseClaudeHookEvent(fixture(name)),
         station_session_id: "ses_env",
         station_worktree_id: "wt_env",
         station_terminal_target_id: "tmux:station:@1:%2",
@@ -302,6 +318,11 @@ describe("claudeHookPayloadToHarnessEventReport", () => {
           harnessRunId: "claude:tmux:station:@1:%2",
         },
       });
+      if (report.eventType === "SessionStart") {
+        expect(report.signal).toEqual({ kind: "session_started" });
+      } else {
+        expect(report.signal).toBeUndefined();
+      }
       if (report.eventType === "Stop") {
         expect(report.turn).toEqual({ kind: "turn_completed" });
       } else {
@@ -351,6 +372,26 @@ describe("claudeHookPayloadToHarnessEventReport", () => {
     );
   });
 });
+
+type StartupSequenceFixture = {
+  scenarios: Array<{
+    name: string;
+    events: Array<{
+      payload: unknown;
+      expected: { signal: string | null; status: string; turn: string | null };
+    }>;
+  }>;
+};
+
+function startupSequenceFixture(): StartupSequenceFixture {
+  return JSON.parse(
+    readFileSync(new URL("../fixtures/startup-sequences.json", import.meta.url), "utf8"),
+  ) as StartupSequenceFixture;
+}
+
+function normalizedLifecycleTuple(report: HarnessEventReport): Array<string | null> {
+  return [report.signal?.kind ?? null, report.status?.value ?? null, report.turn?.kind ?? null];
+}
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8"));

@@ -151,7 +151,11 @@ export function projectHarnessEventReportOntoSnapshot(input: {
     return unprojected(input.snapshot);
   }
 
-  const nextAgent = projectAgent(currentAgent, status);
+  const nextAgent = projectAgent(
+    currentAgent,
+    status,
+    input.report.signal?.kind !== "session_started",
+  );
   const nextRow = projectRow(currentRow, nextAgent, status);
   const agentStateValueChanged = currentAgent.state !== nextAgent.state;
   const rowChanged = !agentsEqual(currentAgent, nextAgent) || !displayEqual(currentRow, nextRow);
@@ -273,7 +277,11 @@ function shouldPreserveCurrentAgent(agent: WorktreeAgent, status: ObservedStatus
   return Date.parse(status.updatedAt) < Date.parse(agent.updatedAt);
 }
 
-function projectAgent(agent: WorktreeAgent, status: ObservedStatus): WorktreeAgent {
+function projectAgent(
+  agent: WorktreeAgent,
+  status: ObservedStatus,
+  preserveTurnReadiness: boolean,
+): WorktreeAgent {
   const nextAgent: WorktreeAgent = {
     harness: agent.harness,
     state: status.value,
@@ -285,7 +293,7 @@ function projectAgent(agent: WorktreeAgent, status: ObservedStatus): WorktreeAge
   if (agent.pid !== undefined) nextAgent.pid = agent.pid;
   if (agent.runId !== undefined) nextAgent.runId = agent.runId;
   if (agent.sessionId !== undefined) nextAgent.sessionId = agent.sessionId;
-  if (status.value === "idle" && agent.turnReadiness !== undefined) {
+  if (preserveTurnReadiness && status.value === "idle" && agent.turnReadiness !== undefined) {
     nextAgent.turnReadiness = agent.turnReadiness;
   }
   return nextAgent;

@@ -30,6 +30,7 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
     reportId: report.reportId,
     eventType: report.eventType,
     statusValue: report.status?.value,
+    signalKind: report.signal?.kind,
     attention: report.status?.attention,
     correlation: {
       harnessRunId: report.correlation?.harnessRunId,

@@ -249,6 +249,9 @@ export function normalizeCodexRawEvent(
     observedAt,
     providerData: providerDataFromCodexEvent(event),
   };
+  if (event.hook_event_name === "SessionStart") {
+    observation.signal = { kind: "session_started" };
+  }
   const turn = turnFromCodexHookEvent(event);
   if (turn !== undefined) {
     observation.turn = turn;
@@ -276,6 +279,9 @@ export function codexHookPayloadToHarnessEventReport(
     observedAt: input.observedAt,
     status: statusFromCodexHookEvent(event, input.observedAt),
   };
+  if (event.hook_event_name === "SessionStart") {
+    report.signal = { kind: "session_started" };
+  }
   const turn = turnFromCodexHookEvent(event);
   if (turn !== undefined) {
     report.turn = turn;

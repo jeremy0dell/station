@@ -19,4 +19,6 @@ The test creates a temporary git worktree, starts a unique tmux session, launche
 
 The assertion is intentionally conservative: station must observe a provider-neutral Cursor harness run with `unknown` low-confidence status. The shim log and tmux pane/process evidence prove the Cursor launch happened without asserting on Cursor screen text.
 
-This lane does not install or exercise Cursor hooks. Hook-driven state promotion requires manually configuring Cursor to call `stn-ingress cursor` from `.cursor/hooks.json` or `~/.cursor/hooks.json`.
+The launch test does not install or exercise Cursor hooks. Hook-driven state promotion requires the Station hook configuration in `.cursor/hooks.json` or `~/.cursor/hooks.json`, including `beforeSubmitPrompt`.
+
+`startup-signals.test.ts` validates a sanitized three-scenario census supplied through `STATION_REAL_CURSOR_STARTUP_CAPTURE`; see `docs/harness-startup.md`. It skips when no capture path is supplied.

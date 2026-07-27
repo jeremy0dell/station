@@ -4,7 +4,7 @@ import type { SessionTurnReadinessMutation } from "../persistence/index.js";
 /**
  * POLICY
  *
- * Converts normalized harness status into the durable readiness mutation owned by ingress completion.
+ * Converts normalized harness lifecycle and status into durable readiness, clearing prior turns on session start.
  */
 export function sessionTurnReadinessMutationFromHarnessObservation(input: {
   observation: HarnessEventObservation;
@@ -13,6 +13,10 @@ export function sessionTurnReadinessMutationFromHarnessObservation(input: {
   const { observation } = input;
   if (observation.sessionId === undefined) {
     return undefined;
+  }
+
+  if (observation.signal?.kind === "session_started") {
+    return { action: "delete", sessionId: observation.sessionId };
   }
 
   if (observation.turn?.kind === "turn_completed" && observation.status?.value === "idle") {

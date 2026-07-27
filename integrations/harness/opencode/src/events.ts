@@ -93,6 +93,9 @@ export function normalizeOpenCodeRawEvent(
   if (status !== undefined) {
     observation.status = status;
   }
+  if (event.event_type === "session.created") {
+    observation.signal = { kind: "session_started" };
+  }
   const turn = turnFromOpenCodeEvent(event);
   if (turn !== undefined) {
     observation.turn = turn;
@@ -135,6 +138,9 @@ export function openCodeHookPayloadToHarnessEventReport(
       : undefined;
   if (status !== undefined) {
     report.status = status;
+  }
+  if (event.event_type === "session.created") {
+    report.signal = { kind: "session_started" };
   }
   const turn = turnFromOpenCodeEvent(event);
   if (turn !== undefined) {
@@ -221,7 +227,9 @@ export function statusFromOpenCodeEvent(
 function turnFromOpenCodeEvent(
   event: OpenCodeCompactEvent,
 ): HarnessEventReport["turn"] | undefined {
-  return event.event_type === "session.idle" ? { kind: "turn_completed" } : undefined;
+  return event.event_type === "session.idle" && event.turn_activity_observed === true
+    ? { kind: "turn_completed" }
+    : undefined;
 }
 
 function statusFromSessionStatus(
@@ -290,6 +298,9 @@ function providerDataFromOpenCodeEvent(event: OpenCodeCompactEvent): Record<stri
   if (event.command_name !== undefined) providerData.commandName = event.command_name;
   if (event.file_path !== undefined) providerData.filePath = event.file_path;
   if (event.error_name !== undefined) providerData.errorName = event.error_name;
+  if (event.turn_activity_observed !== undefined) {
+    providerData.turnActivityObserved = event.turn_activity_observed;
+  }
   if (event.property_keys !== undefined) providerData.propertyKeys = event.property_keys;
   if (event.station_project_id !== undefined)
     providerData.stationProjectId = event.station_project_id;

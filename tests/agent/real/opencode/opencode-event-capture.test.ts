@@ -1,9 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
-import { writeDebugBundle } from "@station/observability";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
@@ -14,15 +12,26 @@ import {
   openObserverSqlite,
   ProviderRegistry,
   startObserverServer,
-} from "@station/observer/internal";
-import { createOpenCodeHarnessProvider, installOpenCodePlugin } from "@station/opencode";
+} from "../../../../apps/observer/src/internal.js";
+import {
+  createOpenCodeHarnessProvider,
+  installOpenCodePlugin,
+} from "../../../../integrations/harness/opencode/src/index.js";
+import {
+  DEFAULT_WORKSPACE_CONFIG,
+  type StationConfig,
+} from "../../../../packages/config/src/index.js";
+import { writeDebugBundle } from "../../../../packages/observability/src/index.js";
+import {
+  stationBuildInfo,
+  stationObserverBuildVersion,
+} from "../../../../packages/runtime/src/index.js";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
   FakeTerminalProvider,
   FakeWorktreeProvider,
-} from "@station/testing";
-import { afterEach, describe, expect, it } from "vitest";
+} from "../../../../packages/testing/src/index.js";
 import { requireRealE2eEnvironment, requireToolPath } from "../../../support/real-station/env";
 
 const realOpenCodeEnabled = process.env.STATION_REAL_OPENCODE === "1";
@@ -41,7 +50,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
   it("runs real OpenCode and ingests plugin events through the observer socket", async () => {
     const env = await requireRealE2eEnvironment({ opencode: true });
     const opencodeBin = requireToolPath(env, "opencode");
-    const root = await mkdtemp(join(tmpdir(), "station-real-opencode-"));
+    const root = await mkdtemp("/tmp/station-real-opencode-");
     const stateDir = join(root, "state");
     const diagnosticsDir = join(stateDir, "diagnostics");
     const hookSpoolDir = join(stateDir, "spool", "hooks");
@@ -131,6 +140,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
       stateDir,
       hookSpoolDir,
       hookReconcileDebounceMs: 0,
+      observerBuildVersion: stationObserverBuildVersion(stationBuildInfo()),
     });
     const server = await startObserverServer({
       socketPath,
@@ -157,6 +167,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
           STATION_OBSERVER_SOCKET_PATH: socketPath,
           STATION_OBSERVER_STATE_DIR: stateDir,
           STATION_HOOK_SPOOL_DIR: hookSpoolDir,
+          STATION_INGRESS_BIN: join(process.cwd(), "bin", "stn-ingress"),
           OPENCODE_CONFIG_DIR: opencodeConfigDir,
         },
       });
@@ -329,6 +340,7 @@ function config(input: {
 }): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: {
       stateDir: input.stateDir,
       socketPath: input.socketPath,

@@ -1,4 +1,5 @@
-import type { ProviderHookEvent } from "@station/contracts";
+import { readFileSync } from "node:fs";
+import type { HarnessEventReport, ProviderHookEvent } from "@station/contracts";
 import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactOpenCodeHookPayload } from "../../src/compaction";
@@ -14,6 +15,23 @@ import { openCodeForwardedEventTypes, openCodeIngressRules } from "../../src/ing
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("OpenCode event parsing", () => {
+  it("replays sanitized startup census sequences", () => {
+    const fixture = startupSequenceFixture();
+    for (const scenario of fixture.scenarios) {
+      const reports = scenario.events.map(({ payload }, index) =>
+        openCodeHookPayloadToHarnessEventReport({
+          reportId: `report_startup_${scenario.name}_${index}`,
+          eventType: (payload as { event_type: string }).event_type,
+          observedAt: now,
+          payload,
+        }),
+      );
+      expect(reports.map(normalizedLifecycleTuple), scenario.name).toEqual(
+        scenario.events.map(({ expected }) => [expected.signal, expected.status, expected.turn]),
+      );
+    }
+  });
+
   it("parses compact OpenCode events through the provider-local schema", () => {
     const event = {
       event_type: "session.status",
@@ -234,11 +252,12 @@ describe("OpenCode event parsing", () => {
     expect(report).not.toHaveProperty("turn");
   });
 
-  it("marks OpenCode session.idle events as completed turns", () => {
+  it("marks OpenCode session.idle events as completed turns only after proven activity", () => {
     const payload = {
       event_type: "session.idle",
       cwd: "/tmp/station/web/task",
       opencode_session_id: "opencode_session_123",
+      turn_activity_observed: true,
       station_worktree_id: "wt_web_task",
       station_terminal_target_id: "tmux:station:@1:%2",
     };
@@ -276,6 +295,15 @@ describe("OpenCode event parsing", () => {
         kind: "turn_completed",
       },
     });
+
+    const unproven = openCodeHookPayloadToHarnessEventReport({
+      reportId: "report_opencode_startup_idle",
+      eventType: "session.idle",
+      observedAt: now,
+      payload: { ...payload, turn_activity_observed: false },
+    });
+    expect(unproven.status?.value).toBe("idle");
+    expect(unproven).not.toHaveProperty("turn");
   });
 
   it("derives OpenCode status projection coverage from provider-local ingress rules", () => {
@@ -399,6 +427,7 @@ describe("OpenCode event parsing", () => {
         observed_at: observedAt,
         cwd: "/tmp/station/web/task",
         opencode_session_id: "opencode_session_123",
+        turn_activity_observed: true,
         station_worktree_id: "wt_web_task",
         station_session_id: "ses_web_task",
         station_terminal_target_id: "tmux:station:@1:%2",
@@ -442,6 +471,26 @@ describe("OpenCode event parsing", () => {
     });
   });
 });
+
+type StartupSequenceFixture = {
+  scenarios: Array<{
+    name: string;
+    events: Array<{
+      payload: unknown;
+      expected: { signal: string | null; status: string; turn: string | null };
+    }>;
+  }>;
+};
+
+function startupSequenceFixture(): StartupSequenceFixture {
+  return JSON.parse(
+    readFileSync(new URL("../fixtures/startup-sequences.json", import.meta.url), "utf8"),
+  ) as StartupSequenceFixture;
+}
+
+function normalizedLifecycleTuple(report: HarnessEventReport): Array<string | null> {
+  return [report.signal?.kind ?? null, report.status?.value ?? null, report.turn?.kind ?? null];
+}
 
 function context() {
   return {

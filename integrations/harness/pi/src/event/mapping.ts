@@ -170,6 +170,9 @@ export function normalizePiRawEvent(
     observedAt,
     providerData: providerDataFromPiEvent(event),
   };
+  if (event.event_type === "session_start") {
+    observation.signal = { kind: "session_started" };
+  }
   const turn = turnFromPiEvent(event);
   if (turn !== undefined) {
     observation.turn = turn;
@@ -199,6 +202,9 @@ export function piHookPayloadToHarnessEventReport(
     observedAt: input.observedAt,
     status: statusFromPiEvent(event, input.observedAt),
   };
+  if (event.event_type === "session_start") {
+    report.signal = { kind: "session_started" };
+  }
   const turn = turnFromPiEvent(event);
   if (turn !== undefined) {
     report.turn = turn;
@@ -332,12 +338,12 @@ export function statusFromPiEvent(event: PiCompactEvent, observedAt: string): Ob
   switch (event.event_type) {
     case "session_start":
       return {
-        value: "starting",
+        value: "idle",
         confidence: "high",
         reason:
           event.reason === undefined
-            ? "Pi session started."
-            : `Pi session started from ${event.reason}.`,
+            ? "Pi session started and is waiting for input."
+            : `Pi session started from ${event.reason} and is waiting for input.`,
         source: "harness_event",
         updatedAt: observedAt,
       };

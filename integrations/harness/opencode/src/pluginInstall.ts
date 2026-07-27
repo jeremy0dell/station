@@ -161,7 +161,7 @@ export function resolveOpenCodePluginPath(options: OpenCodePluginPlanOptions = {
 /**
  * ADAPTER
  *
- * Generates the OpenCode boundary that compacts events and delegates delivery to CLI ingress.
+ * Generates the OpenCode boundary that compacts events, tracks native turn activity, and delegates delivery to CLI ingress.
  */
 export function expectedOpenCodePluginScript(options: OpenCodePluginPlanOptions = {}): string {
   const observerSocketPath = options.observerSocketPath ?? "";
@@ -176,6 +176,34 @@ const fallbackStateDir = ${JSON.stringify(stateDir)};
 const fallbackSpoolDir = ${JSON.stringify(hookSpoolDir)};
 const ingressTimeoutMs = 5000;
 const sentOpenCodeEventTypes = new Set(${JSON.stringify(openCodeForwardedEventTypes)});
+const activeOpenCodeSessions = new Set();
+const turnActivityEventTypes = new Set([
+  "command.executed",
+  "permission.asked",
+  "permission.replied",
+  "question.asked",
+  "question.rejected",
+  "question.replied",
+  "session.compacted",
+  "session.next.compaction.started",
+  "session.next.compaction.delta",
+  "session.next.compaction.ended",
+  "session.next.prompted",
+  "session.next.shell.started",
+  "session.next.shell.ended",
+  "session.next.step.started",
+  "session.next.step.ended",
+  "session.next.step.failed",
+  "session.next.tool.called",
+  "session.next.tool.progress",
+  "session.next.tool.success",
+  "session.next.tool.failed",
+  "session.next.tool.input.started",
+  "session.next.tool.input.delta",
+  "session.next.tool.input.ended",
+  "tool.execute.before",
+  "tool.execute.after",
+]);
 
 export const StationObserverPlugin = async ({ directory, worktree }) => {
   return {
@@ -184,10 +212,28 @@ export const StationObserverPlugin = async ({ directory, worktree }) => {
         if (!isStationOpenCodeSession(process.env)) return;
         if (!shouldSendOpenCodeEvent(event)) return;
         const receivedAt = new Date().toISOString();
-        const payload = compactOpenCodeEvent(event, { directory, worktree, receivedAt });
+        const properties = recordValue(event?.properties);
+        const eventType = stringValue(event?.type) ?? "unknown";
+        const sessionId = openCodeSessionId(properties);
+        if (sessionId !== undefined && isTurnActivityEvent(eventType, properties)) {
+          activeOpenCodeSessions.add(sessionId);
+        }
+        const payload = compactOpenCodeEvent(event, {
+          directory,
+          worktree,
+          receivedAt,
+          turnActivityObserved:
+            eventType === "session.idle" && sessionId !== undefined
+              ? activeOpenCodeSessions.has(sessionId)
+              : undefined,
+        });
         if (payload.event_type === "session.idle") {
           sendHookEventSync(payload, payload.event_type, process.env);
+          if (sessionId !== undefined) activeOpenCodeSessions.delete(sessionId);
           return;
+        }
+        if (payload.event_type === "session.deleted" && sessionId !== undefined) {
+          activeOpenCodeSessions.delete(sessionId);
         }
         void sendHookEvent(payload, payload.event_type, process.env).catch(() => undefined);
       } catch {
@@ -236,6 +282,9 @@ function compactOpenCodeEvent(event, context) {
   assign(payload, "command_name", stringValue(properties?.command) ?? (eventType === "command.executed" ? stringValue(properties?.name) : undefined));
   assign(payload, "file_path", stringValue(properties?.file) ?? stringValue(properties?.path));
   assign(payload, "error_name", stringValue(recordValue(properties?.error)?.name));
+  if (context.turnActivityObserved !== undefined) {
+    payload.turn_activity_observed = context.turnActivityObserved;
+  }
   if (properties !== undefined) payload.property_keys = Object.keys(properties).sort().slice(0, 128);
   assignEnv(payload, "station_project_id", "STATION_PROJECT_ID");
   assignEnv(payload, "station_worktree_id", "STATION_WORKTREE_ID");
@@ -314,6 +363,14 @@ function appendIngressPath(args, flag, value) {
 
 function openCodeSessionId(properties) {
   return stringValue(properties?.sessionID) ?? stringValue(properties?.sessionId) ?? stringValue(recordValue(properties?.info)?.id);
+}
+
+function isTurnActivityEvent(eventType, properties) {
+  if (eventType === "session.status") {
+    const value = statusType(properties?.status);
+    return value === "busy" || value === "retry";
+  }
+  return turnActivityEventTypes.has(eventType);
 }
 
 function statusType(status) {

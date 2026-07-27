@@ -473,6 +473,9 @@ function harnessEventObservationFromReport(report: HarnessEventReport): HarnessE
   if (report.status !== undefined) {
     observation.status = report.status;
   }
+  if (report.signal !== undefined) {
+    observation.signal = report.signal;
+  }
   if (report.turn !== undefined) {
     observation.turn = report.turn;
   }

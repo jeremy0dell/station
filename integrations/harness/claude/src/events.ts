@@ -370,6 +370,9 @@ export function normalizeClaudeRawEvent(
   if (status !== undefined) {
     observation.status = status;
   }
+  if (event.hook_event_name === "SessionStart") {
+    observation.signal = { kind: "session_started" };
+  }
   const turn = turnFromClaudeHookEvent(event);
   if (turn !== undefined) {
     observation.turn = turn;
@@ -394,6 +397,9 @@ export function claudeHookPayloadToHarnessEventReport(
   const status = statusFromClaudeHookEvent(event, input.observedAt);
   if (status !== undefined) {
     report.status = status;
+  }
+  if (event.hook_event_name === "SessionStart") {
+    report.signal = { kind: "session_started" };
   }
   const turn = turnFromClaudeHookEvent(event);
   if (turn !== undefined) {

@@ -3,6 +3,7 @@ import type {
   HarnessEventObservation,
   HarnessEventReport,
   HarnessRunObservation,
+  HarnessSignal,
   ObservedStatus,
 } from "@station/contracts";
 import type {
@@ -19,6 +20,7 @@ type HarnessExecutionEvidence = {
   worktreeId?: string | undefined;
   terminalTargetId?: string | undefined;
   nativeSessionId?: string | undefined;
+  signal?: HarnessSignal | undefined;
   status?: ObservedStatus | undefined;
 };
 
@@ -109,6 +111,7 @@ export function sessionHarnessExecutionEvidenceFromReport(
   if (report.correlation?.nativeSessionId !== undefined) {
     evidence.nativeSessionId = report.correlation.nativeSessionId;
   }
+  if (report.signal !== undefined) evidence.signal = report.signal;
   if (report.status !== undefined) evidence.status = report.status;
   return evidence;
 }
@@ -123,6 +126,7 @@ export function sessionHarnessExecutionEvidenceFromObservation(
   if (observation.nativeSessionId !== undefined) {
     evidence.nativeSessionId = observation.nativeSessionId;
   }
+  if (observation.signal !== undefined) evidence.signal = observation.signal;
   if (observation.status !== undefined) evidence.status = observation.status;
   return evidence;
 }
@@ -131,9 +135,9 @@ export function sessionHarnessExecutionEvidenceFromObservation(
  * POLICY
  *
  * Authorizes state derivation for the bound provider-native execution and advances that binding
- * only from non-stale lifecycle evidence.
+ * only from non-stale lifecycle evidence, including startup idle carrying an explicit start signal.
  *
- * Completion cannot establish a binding, and a mismatch cannot replace an active binding.
+ * Completion and plain idle cannot establish a binding, and a start signal cannot replace an active binding.
  */
 export function decideSessionHarnessExecution(input: {
   current: PersistedSessionHarnessExecution | undefined;
@@ -149,7 +153,7 @@ export function decideSessionHarnessExecution(input: {
     if (
       nativeSessionId === undefined ||
       status === undefined ||
-      !ACTIVE_EXECUTION_STATES.has(status.value)
+      !canEstablishNativeBinding(status, input.evidence.signal)
     ) {
       return { mayDeriveState: nativeSessionId === undefined };
     }
@@ -168,7 +172,7 @@ export function decideSessionHarnessExecution(input: {
   if (current.nativeSessionId !== nativeSessionId) {
     if (
       status === undefined ||
-      !ACTIVE_EXECUTION_STATES.has(status.value) ||
+      !canEstablishNativeBinding(status, input.evidence.signal) ||
       !REPLACEABLE_EXECUTION_STATES.has(current.state) ||
       Date.parse(status.updatedAt) < Date.parse(current.statusUpdatedAt)
     ) {
@@ -237,6 +241,7 @@ function singleExecutionMatch(
   const decision = nativeExecutionDecision({
     currentNativeSessionId: run.nativeSessionId,
     evidenceNativeSessionId: evidence.nativeSessionId,
+    evidenceSignal: evidence.signal,
     evidenceStatus: evidence.status,
   });
   if (decision === "reject") return undefined;
@@ -253,6 +258,7 @@ function singleExecutionMatch(
 function nativeExecutionDecision(input: {
   currentNativeSessionId: string | undefined;
   evidenceNativeSessionId: string | undefined;
+  evidenceSignal: HarnessSignal | undefined;
   evidenceStatus: ObservedStatus | undefined;
 }): "accept" | "bind" | "reject" {
   if (input.currentNativeSessionId === input.evidenceNativeSessionId) {
@@ -260,13 +266,21 @@ function nativeExecutionDecision(input: {
   }
   if (
     input.evidenceNativeSessionId !== undefined &&
-    input.evidenceStatus !== undefined &&
-    ACTIVE_EXECUTION_STATES.has(input.evidenceStatus.value) &&
-    input.currentNativeSessionId === undefined
+    input.currentNativeSessionId === undefined &&
+    canEstablishNativeBinding(input.evidenceStatus, input.evidenceSignal)
   ) {
     return "bind";
   }
   return "reject";
+}
+
+function canEstablishNativeBinding(
+  status: ObservedStatus | undefined,
+  signal: HarnessSignal | undefined,
+): boolean {
+  if (status === undefined) return false;
+  if (ACTIVE_EXECUTION_STATES.has(status.value)) return true;
+  return status.value === "idle" && signal?.kind === "session_started";
 }
 
 function hasStationExecutionIdentity(

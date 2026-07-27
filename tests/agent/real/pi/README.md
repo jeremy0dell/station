@@ -44,3 +44,7 @@ Set `STATION_REAL_PI_ASK_USER_EXTENSION` when the question extension is
 installed outside its default Pi package path. Set
 `STATION_REAL_PI_PACKAGE_ROOT` only when `STATION_PI_BIN` is a wrapper whose
 real path does not identify the Pi package root.
+
+`startup-signals.test.ts` validates a sanitized three-scenario census supplied
+through `STATION_REAL_PI_STARTUP_CAPTURE`; see `docs/harness-startup.md`. It
+skips when no capture path is supplied.

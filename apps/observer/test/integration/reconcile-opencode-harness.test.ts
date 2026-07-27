@@ -1,6 +1,5 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { createOpenCodeHarnessProvider } from "@station/opencode";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -8,6 +7,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { createOpenCodeHarnessProvider } from "../../../../integrations/harness/opencode/src/index.js";
 import { createObserverCore, ProviderRegistry } from "../../src/internal";
 import { createTestObserver } from "../support/testObserver";
 
@@ -110,6 +110,7 @@ describe("observer reconcile with OpenCode harness", () => {
         event_type: "session.idle",
         cwd: "/tmp/station/web/task",
         opencode_session_id: "opencode_session_123",
+        turn_activity_observed: true,
         station_project_id: "web",
         station_worktree_id: "wt_web_task",
         station_session_id: "ses_web_task",
@@ -217,6 +218,7 @@ function opencodeProviders(): ProviderRegistry {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

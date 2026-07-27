@@ -23,13 +23,22 @@ coalesce instead of racing.
 ## 2. Run the census
 
 Before writing mapping code, capture what the harness actually emits per
-scenario. Minimum matrix: clarifying question during planning, plan approval,
-standalone question, tool/permission approval, user answers, user aborts,
-turn completes, session start/end, compaction.
+scenario. Startup evidence must include launch without an initial prompt,
+launch with an initial prompt through completion, and initialization failure or
+exit before the trusted ready edge. For each, record CLI version, intervening
+trust/auth/model/setup UI, native order, normalized signal/status/turn, final
+snapshot, attention, and turn readiness.
+
+The broader matrix also covers clarifying question during planning, plan
+approval, standalone question, tool/permission approval, user answers, user
+aborts, turn completion, session start/end, and compaction.
 
 Drive each scenario in the harness TUI while watching
 `stn debug logs "Harness event report"` and the harness's own native session
-log. Save raw payloads — they become fixtures.
+log. Save raw payloads — they become fixtures after prompt text, transcript content,
+credentials, and machine-specific paths are removed. If authenticated startup
+readiness cannot be proven, document it and keep the lifecycle event at
+`starting`; never infer readiness from elapsed time.
 
 ## 3. Write the normalizer
 

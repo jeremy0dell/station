@@ -38,6 +38,8 @@ describe("OpenCode plugin setup", () => {
     expect(plan.after).toContain("STATION_INGRESS_BIN");
     expect(plan.after).toContain('args.push("opencode", eventType)');
     expect(plan.after).toContain("shouldSendOpenCodeEvent");
+    expect(plan.after).toContain("activeOpenCodeSessions");
+    expect(plan.after).toContain("turn_activity_observed");
     expect(plan.after).not.toContain('"message.part.delta"');
     expect(plan.after).not.toContain('"message.part.updated"');
     expect(plan.after).toContain('"session.next.shell.started"');
@@ -313,7 +315,7 @@ describe("OpenCode plugin setup", () => {
     }
   }, 8_000);
 
-  it("waits for stn-ingress completion for session.idle without plugin-local spooling", async () => {
+  it("annotates completed idle after activity and waits for ingress without plugin-local spooling", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
     const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
     const spoolDir = join(root, "spool");
@@ -346,6 +348,16 @@ describe("OpenCode plugin setup", () => {
       const plugin = await pluginModule.StationObserverPlugin({ directory: root, worktree: root });
       await plugin.event({
         event: {
+          type: "session.status",
+          properties: {
+            sessionID: "opencode_session_1",
+            status: { type: "busy" },
+          },
+        },
+      });
+      await waitForFile(recorder.completedPath);
+      await plugin.event({
+        event: {
           type: "session.idle",
           properties: {
             sessionID: "opencode_session_1",
@@ -370,6 +382,7 @@ describe("OpenCode plugin setup", () => {
       expect(JSON.parse(await readFile(recorder.stdinPath, "utf8"))).toMatchObject({
         event_type: "session.idle",
         opencode_session_id: "opencode_session_1",
+        turn_activity_observed: true,
       });
     } finally {
       process.env = previousEnv;

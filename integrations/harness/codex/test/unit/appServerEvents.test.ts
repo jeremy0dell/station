@@ -28,6 +28,7 @@ describe("Codex app-server event parsing", () => {
 
     const event = parseCodexAppServerEvent({
       method: "item/completed",
+      emittedAtMs: 1781712000000,
       params: {
         threadId: "thr_plan",
         turnId: "turn_1",

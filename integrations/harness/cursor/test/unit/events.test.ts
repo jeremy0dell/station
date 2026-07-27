@@ -1,4 +1,5 @@
-import type { RawHarnessEvent } from "@station/contracts";
+import { readFileSync } from "node:fs";
+import type { HarnessEventReport, RawHarnessEvent } from "@station/contracts";
 import { HarnessEventObservationSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactCursorProviderHookPayload } from "../../src/compaction";
@@ -11,6 +12,22 @@ import {
 const now = "2026-06-03T12:00:00.000Z";
 
 describe("Cursor hook event parsing", () => {
+  it("replays sanitized startup census sequences", () => {
+    const fixture = startupSequenceFixture();
+    for (const scenario of fixture.scenarios) {
+      const reports = scenario.events.map(({ payload }, index) =>
+        cursorProviderHookPayloadToHarnessEventReport({
+          reportId: `report_startup_${scenario.name}_${index}`,
+          observedAt: now,
+          payload,
+        }),
+      );
+      expect(reports.map(normalizedLifecycleTuple), scenario.name).toEqual(
+        scenario.events.map(({ expected }) => [expected.signal, expected.status, expected.turn]),
+      );
+    }
+  });
+
   it("normalizes interactive Cursor session hooks through STATION identity", () => {
     const raw: RawHarnessEvent = {
       provider: "cursor",
@@ -51,6 +68,7 @@ describe("Cursor hook event parsing", () => {
       harnessRunId: "cursor:tmux:station:@1:%2",
       rawEventType: "sessionStart",
       nativeSessionId: "cursor_session_123",
+      signal: { kind: "session_started" },
       status: {
         value: "starting",
         confidence: "high",
@@ -135,6 +153,7 @@ describe("Cursor hook event parsing", () => {
         value: "idle",
         confidence: "high",
       },
+      turn: { kind: "turn_completed" },
       correlation: {
         harnessRunId: "cursor:tmux:station:@1:%2",
         projectId: "web",
@@ -231,6 +250,26 @@ describe("Cursor hook event parsing", () => {
     expect(observations[0]?.harnessRunId).toBeUndefined();
   });
 });
+
+type StartupSequenceFixture = {
+  scenarios: Array<{
+    name: string;
+    events: Array<{
+      payload: unknown;
+      expected: { signal: string | null; status: string; turn: string | null };
+    }>;
+  }>;
+};
+
+function startupSequenceFixture(): StartupSequenceFixture {
+  return JSON.parse(
+    readFileSync(new URL("../fixtures/startup-sequences.json", import.meta.url), "utf8"),
+  ) as StartupSequenceFixture;
+}
+
+function normalizedLifecycleTuple(report: HarnessEventReport): Array<string | null> {
+  return [report.signal?.kind ?? null, report.status?.value ?? null, report.turn?.kind ?? null];
+}
 
 function context() {
   return {

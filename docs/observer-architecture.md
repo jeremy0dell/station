@@ -492,13 +492,17 @@ diagnosis or retry. Startup reconcile waits for the single-flight spool and
 queue drain before its provider scan.
 
 Station-owned harness runs bind provider-native execution identity only from
-active evidence. The provider plus Station session selects the durable binding;
+active evidence or lifecycle-authorized startup idle carrying the normalized
+`session_started` signal. Plain and completed idle cannot establish a binding.
+The provider plus Station session selects the durable binding;
 worktree-only external sessions remain independent. Once a native execution is
 active, a mismatched native report is stored as diagnostic evidence but cannot
 mutate recovery handles, readiness, live or reconciled status, or emit derived
 state-change/completion notifications. A completion report cannot claim an
-unbound session, and a later active execution may bind only after explicit
-`idle` or `exited` evidence from the prior execution.
+unbound session, a start signal cannot replace an active execution, and a later
+active execution may bind only after explicit `idle` or `exited` evidence from
+the prior execution. Every accepted session-start lifecycle clears stale
+durable and live completed-turn readiness before startup idle is displayed.
 
 Harness adapters own the authority to corroborate inherited Station identity
 against provider-origin evidence and provider-required Station launch context.

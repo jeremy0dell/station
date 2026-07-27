@@ -28,6 +28,29 @@ describe("session harness execution identity", () => {
     expect(stopB).toEqual({ mayDeriveState: false });
   });
 
+  it("allows session-start idle to establish a binding while plain and completed idle cannot", () => {
+    const startupIdle = decide(
+      undefined,
+      evidence("native_a", status("idle", t1), { kind: "session_started" }),
+    );
+    expect(startupIdle).toMatchObject({
+      mayDeriveState: true,
+      binding: { nativeSessionId: "native_a", state: "idle" },
+    });
+
+    expect(decide(undefined, evidence("native_b", status("idle", t2)))).toEqual({
+      mayDeriveState: false,
+    });
+  });
+
+  it("does not let a start signal replace a different active execution", () => {
+    const active = binding(decide(undefined, evidence("native_a", status("working", t1))));
+
+    expect(
+      decide(active, evidence("native_b", status("idle", t2), { kind: "session_started" })),
+    ).toEqual({ mayDeriveState: false });
+  });
+
   it("fails closed for identityless or stale evidence after a native execution is bound", () => {
     const current = binding(decide(undefined, evidence("native_a", status("working", t2))));
     const identityless = decide(current, {
@@ -85,13 +108,16 @@ function binding(decision: SessionHarnessExecutionDecision): PersistedSessionHar
 function evidence(
   nativeSessionId: string,
   executionStatus: ObservedStatus,
+  signal?: SessionHarnessExecutionEvidence["signal"],
 ): SessionHarnessExecutionEvidence {
-  return {
+  const result: SessionHarnessExecutionEvidence = {
     provider: "codex",
     sessionId: "ses_1",
     nativeSessionId,
     status: executionStatus,
   };
+  if (signal !== undefined) result.signal = signal;
+  return result;
 }
 
 function status(value: AgentState, updatedAt: string): ObservedStatus {

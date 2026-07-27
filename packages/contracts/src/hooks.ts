@@ -18,6 +18,7 @@ import {
 } from "./ids.js";
 import {
   HarnessEventDiagnosticsSchema,
+  HarnessSignalSchema,
   HarnessTurnSchema,
   ObservedStatusSchema,
 } from "./observations.js";
@@ -91,12 +92,22 @@ export const HarnessEventReportSchema = z
     observedAt: TimestampSchema,
     coalesceKey: nonEmptyStringSchema.optional(),
     status: ObservedStatusSchema.optional(),
+    signal: HarnessSignalSchema.optional(),
     turn: HarnessTurnSchema.optional(),
     correlation: HarnessEventReportCorrelationSchema.optional(),
     diagnostics: HarnessEventReportDiagnosticsSchema.optional(),
     providerData: optionalProviderDataSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((report, context) => {
+    if (report.signal?.kind === "session_started" && report.turn !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["turn"],
+        message: "A session-start signal cannot also report a completed turn.",
+      });
+    }
+  });
 
 export type HarnessEventReport = z.infer<typeof HarnessEventReportSchema>;
 

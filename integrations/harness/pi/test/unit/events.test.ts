@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { ProviderHookEvent, RawHarnessEvent } from "@station/contracts";
+import type { HarnessEventReport, ProviderHookEvent, RawHarnessEvent } from "@station/contracts";
 import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { PiHarnessProviderError } from "../../src/errors";
@@ -17,6 +17,23 @@ import { piHookAdapter } from "../../src/hookAdapter";
 const now = "2026-05-27T12:00:00.000Z";
 
 describe("Pi compact event parsing", () => {
+  it("replays sanitized startup census sequences", () => {
+    const fixture = startupSequenceFixture();
+    for (const scenario of fixture.scenarios) {
+      const reports = scenario.events.map(({ payload }, index) =>
+        piHookPayloadToHarnessEventReport({
+          reportId: `report_startup_${scenario.name}_${index}`,
+          eventType: (payload as { event_type: string }).event_type,
+          observedAt: now,
+          payload,
+        }),
+      );
+      expect(reports.map(normalizedLifecycleTuple), scenario.name).toEqual(
+        scenario.events.map(({ expected }) => [expected.signal, expected.status, expected.turn]),
+      );
+    }
+  });
+
   it("strictly parses compact session_start events and normalizes them", () => {
     const raw: RawHarnessEvent = {
       provider: "pi",
@@ -55,8 +72,9 @@ describe("Pi compact event parsing", () => {
       worktreeId: "wt_web_task",
       harnessRunId: "pi:tmux:station:@1:%2",
       rawEventType: "session_start",
+      signal: { kind: "session_started" },
       status: {
-        value: "starting",
+        value: "idle",
         confidence: "high",
         source: "harness_event",
       },
@@ -314,7 +332,7 @@ describe("Pi compact event parsing", () => {
 
   it("maps every supported Pi event to the v1 status policy", () => {
     const expected = [
-      ["session_start", "starting", "high"],
+      ["session_start", "idle", "high"],
       ["session_shutdown", "exited", "high"],
       ["agent_start", "working", "high"],
       ["agent_end", "working", "medium"],
@@ -476,6 +494,26 @@ describe("Pi compact event parsing", () => {
     ).toEqual({ action: "ignore", reason: "missing-station-env" });
   });
 });
+
+type StartupSequenceFixture = {
+  scenarios: Array<{
+    name: string;
+    events: Array<{
+      payload: unknown;
+      expected: { signal: string | null; status: string; turn: string | null };
+    }>;
+  }>;
+};
+
+function startupSequenceFixture(): StartupSequenceFixture {
+  return JSON.parse(
+    readFileSync(new URL("../fixtures/startup-sequences.json", import.meta.url), "utf8"),
+  ) as StartupSequenceFixture;
+}
+
+function normalizedLifecycleTuple(report: HarnessEventReport): Array<string | null> {
+  return [report.signal?.kind ?? null, report.status?.value ?? null, report.turn?.kind ?? null];
+}
 
 function eventSequenceFixture(name: string) {
   let value: unknown;

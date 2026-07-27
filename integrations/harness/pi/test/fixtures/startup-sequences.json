@@ -1,0 +1,70 @@
+{
+  "provider": "pi",
+  "cliVersion": "0.81.1",
+  "evidence": "source-verified and sanitized startup census",
+  "scenarios": [
+    {
+      "name": "no_initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "event_type": "session_start",
+            "cwd": "/fixture/worktree",
+            "pi_session_id": "pi_startup",
+            "reason": "startup",
+            "station_extension_protocol": 2
+          },
+          "expected": { "signal": "session_started", "status": "idle", "turn": null }
+        }
+      ]
+    },
+    {
+      "name": "initial_prompt",
+      "events": [
+        {
+          "payload": {
+            "event_type": "session_start",
+            "cwd": "/fixture/worktree",
+            "pi_session_id": "pi_prompt",
+            "reason": "startup",
+            "station_extension_protocol": 2
+          },
+          "expected": { "signal": "session_started", "status": "idle", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "agent_start",
+            "cwd": "/fixture/worktree",
+            "pi_session_id": "pi_prompt",
+            "station_extension_protocol": 2
+          },
+          "expected": { "signal": null, "status": "working", "turn": null }
+        },
+        {
+          "payload": {
+            "event_type": "agent_settled",
+            "cwd": "/fixture/worktree",
+            "pi_session_id": "pi_prompt",
+            "station_extension_protocol": 2
+          },
+          "expected": { "signal": null, "status": "idle", "turn": "turn_completed" }
+        }
+      ]
+    },
+    {
+      "name": "early_exit",
+      "events": [
+        {
+          "payload": {
+            "event_type": "session_shutdown",
+            "cwd": "/fixture/worktree",
+            "pi_session_id": "pi_early",
+            "reason": "quit",
+            "station_extension_protocol": 2
+          },
+          "expected": { "signal": null, "status": "exited", "turn": null }
+        }
+      ]
+    }
+  ]
+}
