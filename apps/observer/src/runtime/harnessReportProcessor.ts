@@ -114,13 +114,14 @@ export async function processHarnessIngressReport(
   for (const event of projection.value.events) {
     deps.eventBus.publish(event);
   }
-  if (
+  const refreshProviderHealth = deps.refreshProviderHealth;
+  const shouldRevalidateProviderHealth =
     projection.value.projected &&
     report.status?.value === "starting" &&
     projection.value.snapshot.providerHealth[report.provider]?.status === "unavailable" &&
-    deps.refreshProviderHealth !== undefined
-  ) {
-    void deps.refreshProviderHealth(report.provider).catch((error) =>
+    refreshProviderHealth !== undefined;
+  if (shouldRevalidateProviderHealth) {
+    void refreshProviderHealth(report.provider).catch((error) =>
       deps.logger
         ?.error("Provider health revalidation after harness startup failed.", {
           provider: report.provider,
