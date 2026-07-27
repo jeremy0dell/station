@@ -102,7 +102,7 @@ export function parseHookFlags(
       continue;
     }
     if (arg !== undefined) {
-      throw new Error(`Unknown ${capitalize(provider)} hook option: ${arg}`);
+      throw new Error(`Unknown ${provider} hook option: ${arg}`);
     }
   }
 
@@ -139,7 +139,7 @@ export function assertHookConfirmed(
   action: "install" | "uninstall",
 ): void {
   if (!yes) {
-    throw new Error(`Refusing to ${action} ${capitalize(provider)} hooks without --yes.`);
+    throw new Error(`Refusing to ${action} ${provider} hooks without --yes.`);
   }
 }
 
@@ -204,8 +204,4 @@ async function resolveHookBinOwnership(
       launcher: flags.hookBin,
     },
   };
-}
-
-export function capitalize(value: string): string {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }

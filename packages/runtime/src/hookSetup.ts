@@ -55,7 +55,6 @@ export class ProviderHookArtifactOwnershipError extends Error {
     artifactPath: string;
     ownership: ProviderHookArtifactOwnership;
   }) {
-    const provider = capitalize(input.provider);
     const current =
       "currentLauncher" in input.ownership
         ? ` It currently belongs to ${input.ownership.currentLauncher}; the requested owner is ${input.ownership.requested.launcher}.`
@@ -66,7 +65,7 @@ export class ProviderHookArtifactOwnershipError extends Error {
         ? ` To perform this action as the current owner, run ${shellQuote(resolve(dirname(input.ownership.currentLauncher), "stn"))} hooks ${input.action} ${input.provider} --yes.`
         : "";
     super(
-      `Refusing to ${input.action} ${provider} hooks because ${input.artifactPath} is a shared Station artifact with a different or unknown owner.${current} Re-run ${takeover} only to transfer ownership.${repair}`,
+      `Refusing to ${input.action} ${input.provider} hooks because ${input.artifactPath} is a shared Station artifact with a different or unknown owner.${current} Re-run ${takeover} only to transfer ownership.${repair}`,
     );
     this.name = "ProviderHookArtifactOwnershipError";
     this.ownership = input.ownership;
@@ -633,8 +632,4 @@ function firstShellWord(command: string): string | undefined {
     return command[end + 1] === " " ? result : undefined;
   }
   return undefined;
-}
-
-function capitalize(value: string): string {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }
