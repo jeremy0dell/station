@@ -17,12 +17,7 @@ import { tuiCliCommand } from "./commands/registry/tui.js";
 import { worktrunkCliCommand } from "./commands/registry/worktrunk.js";
 
 export type {
-  CliCommandConfigErrorContext,
   CliCommandNode,
-  CliCommandOption,
-  CliCommandRoute,
-  CliCommandRunContext,
-  CliCommandTopic,
   CliHelpMode,
 } from "./commands/cliCommand/types.js";
 
@@ -65,7 +60,6 @@ export const cliCommandRegistry: CliCommandNode = {
 const registryApi = createCliCommandRegistryApi(cliCommandRegistry);
 
 export const isTopLevelCliCommand = registryApi.isTopLevelCliCommand;
-export const cliCommandRequiresConfig = registryApi.cliCommandRequiresConfig;
 export const resolveCliCommandRoute = registryApi.resolveCliCommandRoute;
 export const runCliCommandRoute = registryApi.runCliCommandRoute;
 export const handleCliCommandConfigError = registryApi.handleCliCommandConfigError;

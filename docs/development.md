@@ -193,6 +193,23 @@ pnpm smoke:release
 pnpm smoke:install
 ```
 
+Dead-code audits are repository-owned and cover both the pnpm monorepo and the separate
+`station/` Bun workspace:
+
+```bash
+pnpm deadcode                 # all source, tests, exports, and development dependencies
+pnpm deadcode:production      # code and dependencies reachable from shipped entrypoints
+```
+
+The full audit should pass cleanly. The production audit excludes test and development consumers,
+so it may list deliberate test-support exports alongside product-only cleanup candidates.
+`knip.jsonc` records executable files that are reached through package scripts, subprocess path
+strings, binary packaging, or Bun test discovery. TypeScript also rejects unused locals and
+parameters in both the root packages and Station workspace. Treat Knip findings as candidates:
+confirm dynamic and external entrypoints before removal, and do not use Knip's automatic file
+removal. Neither command is part of `test:all`; run the relevant focused tests and deterministic
+gates after each reviewed cleanup slice.
+
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
 public `curl` downloads and authenticated draft responses in temporary homes,
 including startup-file

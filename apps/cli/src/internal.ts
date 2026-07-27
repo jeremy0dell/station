@@ -15,8 +15,6 @@ export * from "./commands/reconcile.js";
 export * from "./commands/setup/index.js";
 export * from "./commands/snapshot.js";
 export * from "./commands/tui.js";
-export { runCliIngressMain } from "./ingressMain.js";
 export { runCliMain, shouldSuppressCliProcessOutput } from "./main.js";
-export { runCliObserverMain } from "./observerMain.js";
 export type { ChildProcessLike, ObserverProcessDeps } from "./observerProcess.js";
 export * from "./selfExec.js";

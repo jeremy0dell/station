@@ -1,10 +1,5 @@
 import type { TmuxCommandInput } from "../command.js";
-import {
-  resolveTmuxGlobalOption,
-  runTmuxPopupCommand,
-  runTmuxPopupQuery,
-  setTmuxGlobalOption,
-} from "./command.js";
+import { resolveTmuxGlobalOption, runTmuxPopupCommand, runTmuxPopupQuery } from "./command.js";
 import {
   activePopupClaimOption,
   activePopupClientOption,
@@ -173,25 +168,5 @@ export async function resolveFocusPopupClient(
     operation: "provider.tmux.popup.focusClient",
     message: "tmux failed to resolve the station popup focus client.",
     timeoutMessage: "tmux popup focus client lookup timed out.",
-  });
-}
-
-export async function setActivePopupClient(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await setTmuxGlobalOption(input, activePopupClientOption, input.clientId, {
-    operation: "provider.tmux.popup.setActiveClient",
-    message: "tmux failed to record the active station popup.",
-    timeoutMessage: "tmux active popup update timed out.",
-  });
-}
-
-export async function setFocusPopupClient(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await setTmuxGlobalOption(input, focusPopupClientOption, input.clientId, {
-    operation: "provider.tmux.popup.setFocusClient",
-    message: "tmux failed to record the station popup focus client.",
-    timeoutMessage: "tmux popup focus client update timed out.",
   });
 }

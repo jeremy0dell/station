@@ -20,5 +20,3 @@ export const RecoveryBreadcrumbSchema = z
     note: nonEmptyStringSchema.max(240).optional(),
   })
   .strict();
-
-export type RecoveryBreadcrumb = z.infer<typeof RecoveryBreadcrumbSchema>;

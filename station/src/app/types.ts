@@ -3,7 +3,6 @@ import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
   TuiIslandConfig,
-  TuiWidgetConfig,
 } from "@station/dashboard-core/widgets/types";
 import type { StoreApi } from "zustand/vanilla";
 import type { Automation, ScrollOnOutputMode } from "../config/stationConfig.js";

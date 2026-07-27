@@ -593,4 +593,3 @@ function buildDiagnosticDeps(
 }
 
 export { agentStateChangedEventsFromReconcile } from "./agentEvents.js";
-export { elapsedMs } from "./reconcileProfiling.js";

@@ -29,8 +29,6 @@ const AutomationStepSchema = z
   })
   .strict();
 
-export type AutomationStep = z.infer<typeof AutomationStepSchema>;
-
 /**
  * Named user-triggerable pane layout for the focused worktree; `enabled:false`
  * hides it from the context menu.

@@ -99,9 +99,6 @@ export type WorktreeMetadataCurrentPayloadByKind = {
   checks: WorktreeChecksSummary;
 };
 
-export type WorktreeMetadataCurrentPayload =
-  WorktreeMetadataCurrentPayloadByKind[WorktreeMetadataCurrentKind];
-
 type PersistedProviderObservationFields = {
   id: string;
   provider: ProviderId;
