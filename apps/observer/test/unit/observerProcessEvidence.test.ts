@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createLocalObserverProcessEvidence,
   parseObserverProcessList,
+  parseUnixSocketFdCount,
 } from "../../src/runtime/observerProcessEvidence.js";
 
 describe("local Observer process evidence", () => {
@@ -23,6 +24,7 @@ describe("local Observer process evidence", () => {
       expect.objectContaining({
         pid: 4005,
         socketPath: "/tmp/socket with spaces/observer.sock",
+        startupTimeoutMs: 10_000,
       }),
     ]);
   });
@@ -47,6 +49,34 @@ describe("local Observer process evidence", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("strictly counts all Unix-domain socket descriptors for one process", () => {
+    expect(parseUnixSocketFdCount("", 42)).toBe(0);
+    expect(parseUnixSocketFdCount("p42\nf7u\nnsocket-a\nf9\nnsocket-b\n", 42)).toBe(2);
+    expect(() => parseUnixSocketFdCount("p43\nf7\nnsocket-a\n", 42)).toThrow("unexpected process");
+    expect(() => parseUnixSocketFdCount("p42\nmalformed\n", 42)).toThrow("malformed");
+    expect(() => parseUnixSocketFdCount("p42\nnsocket-without-fd\n", 42)).toThrow("malformed");
+  });
+
+  it("distinguishes zero descriptors from unavailable lsof evidence", () => {
+    const zero = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 1, stdout: "", stderr: "" }),
+    });
+    const one = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 0, stdout: "p42\nf7\nnsocket-a\n", stderr: "" }),
+    });
+    const unavailable = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 2, stdout: "", stderr: "lsof failed" }),
+    });
+    const ambiguousEmpty = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 1, stdout: "", stderr: "permission denied" }),
+    });
+
+    expect(zero.unixSocketFdCount(42)).toBe(0);
+    expect(one.unixSocketFdCount(42)).toBe(1);
+    expect(() => unavailable.unixSocketFdCount(42)).toThrow("evidence failed");
+    expect(() => ambiguousEmpty.unixSocketFdCount(42)).toThrow("evidence failed");
   });
 
   it("normalizes strict holders, start-token, absence, and refusal results", () => {

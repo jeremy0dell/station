@@ -9,7 +9,12 @@ import {
   startObserver,
   stopObserver,
 } from "../observerProcess.js";
-import { type ObserverReapDeps, type ReapOutcome, runObserverReap } from "../observerReap.js";
+import {
+  type ObserverReapDeps,
+  type ReapOutcome,
+  type ReapTarget,
+  runObserverReap,
+} from "../observerReap.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
 
 export type ObserverCommandResult =
@@ -128,10 +133,17 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
       socketPath: plan.socketPath,
       keeper: plan.keeper ?? null,
       duplicates: plan.duplicates,
-      targets: plan.targets.map((t) => t.pid),
+      targets: plan.targets.map((target: ReapTarget) => target.pid),
+      automaticEligibility: plan.targets.map((target: ReapTarget) => ({
+        pid: target.pid,
+        ...target.automaticEligibility,
+      })),
       refusals: plan.refusals,
       applied,
       ...(applied ? { killed: result.killed, survived: result.survived } : {}),
+      ...(result.keeperPreservation === undefined
+        ? {}
+        : { keeperPreservation: result.keeperPreservation }),
       ...(result.aborted === undefined ? {} : { aborted: result.aborted }),
     };
   }

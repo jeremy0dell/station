@@ -1,14 +1,12 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolveObserverSocketForProcessArgs } from "@station/config";
 import { z } from "zod";
-import type {
-  ObserverProcessEntry,
-  ObserverProcessEvidenceSource,
-  ObserverProcessSignalResult,
-} from "./observerHandoff.js";
+import type { ObserverDuplicateProcessEvidenceSource } from "./observerDuplicateCleanup.js";
+import type { ObserverProcessEntry, ObserverProcessSignalResult } from "./observerHandoff.js";
 import { readObserverProcessIdentity } from "./observerPidfile.js";
 import { readObserverSocketHolderPids } from "./server.js";
+import { readSocketIdentity } from "./socketOwnership.js";
 
 const processListLinePattern =
   /^\s*(\d+)\s+([A-Z][a-z]{2} [A-Z][a-z]{2}\s+\d+ \d\d:\d\d:\d\d \d{4})\s+(.+)$/u;
@@ -18,9 +16,18 @@ const ErrorCodeSchema = z.object({ code: z.string() });
 const processListingMaxBufferBytes = 8 * 1024 * 1024;
 const observerArgFlags = ["config", "socket", "state-dir", "startup-timeout-ms"] as const;
 const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
+const lsofPath = process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
+const LsofProcessHeaderSchema = z.string().regex(/^p[1-9]\d*$/u);
+const LsofFileDescriptorSchema = z
+  .string()
+  .regex(/^f(?:[0-9]+[A-Za-z-]*|cwd|err|jld|ltx|m[0-9]*|mem|NOFD|pd|rtd|txt)$/u);
+const LsofNameSchema = z.string().regex(/^n.*$/u);
+
+type ExecFileStatus = { status: number | null; stdout: string; stderr: string };
 
 type LocalObserverProcessEvidenceDeps = {
   execFile?: (file: string, args: readonly string[]) => string;
+  execFileStatus?: (file: string, args: readonly string[]) => ExecFileStatus;
   socketHolders?: (socketPath: string) => number[];
   signal?: (pid: number, signal: NodeJS.Signals | 0) => void;
 };
@@ -28,20 +35,23 @@ type LocalObserverProcessEvidenceDeps = {
 /**
  * ADAPTER
  *
- * Translates ps, strict socket-holder evidence, pidfiles, and process signals
- * into conservative ownership evidence; holder failures throw instead of
- * meaning zero owners.
+ * Translates ps, strict socket-holder and per-process Unix-socket-FD evidence,
+ * pidfiles, socket identities, and process signals into conservative ownership
+ * evidence; unavailable evidence throws instead of meaning zero.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
-): ObserverProcessEvidenceSource {
+): ObserverDuplicateProcessEvidenceSource {
   const execFile = deps.execFile ?? defaultExecFile;
+  const execFileStatus = deps.execFileStatus ?? defaultExecFileStatus;
   const signal = deps.signal ?? process.kill;
   return {
     listObserverProcesses: () => parseObserverProcessList(execFile(psPath, processListArgs())),
     socketHolders: deps.socketHolders ?? readObserverSocketHolderPids,
     processStartToken: (pid) => readProcessStartToken(pid, execFile),
     readProcessIdentity: readObserverProcessIdentity,
+    socketIdentity: readSocketIdentity,
+    unixSocketFdCount: (pid) => readUnixSocketFdCount(pid, execFileStatus),
     signal: (pid, requestedSignal) => signalProcess(pid, requestedSignal, signal),
   };
 }
@@ -68,6 +78,12 @@ export function parseObserverProcessList(output: string): ObserverProcessEntry[]
         : resolveObserverSocketForProcessArgs([argv[0] ?? "", "--socket", explicitSocketPath]);
     const entry: ObserverProcessEntry = { pid: pid.data, argv, startToken };
     if (socketPath !== undefined) entry.socketPath = socketPath;
+    const advertisedStartupTimeout = PositivePidSchema.safeParse(
+      rawObserverFlagValue(command, "startup-timeout-ms"),
+    );
+    if (advertisedStartupTimeout.success) {
+      entry.startupTimeoutMs = advertisedStartupTimeout.data;
+    }
     entries.push(entry);
   }
   return entries;
@@ -133,6 +149,45 @@ function rawObserverFlagValue(
   return value.length === 0 ? undefined : value;
 }
 
+export function parseUnixSocketFdCount(output: string, expectedPid: number): number {
+  const lines = output.split("\n").filter((line) => line.length > 0);
+  if (lines.length === 0) return 0;
+  const expectedHeader = `p${expectedPid}`;
+  if (!LsofProcessHeaderSchema.safeParse(lines[0]).success || lines[0] !== expectedHeader) {
+    throw new Error("Unix-socket descriptor evidence named an unexpected process.");
+  }
+
+  let descriptors = 0;
+  let sawDescriptor = false;
+  for (const line of lines.slice(1)) {
+    if (LsofFileDescriptorSchema.safeParse(line).success) {
+      descriptors += 1;
+      sawDescriptor = true;
+      continue;
+    }
+    if (!sawDescriptor || !LsofNameSchema.safeParse(line).success) {
+      throw new Error("Unix-socket descriptor evidence was malformed.");
+    }
+  }
+  return descriptors;
+}
+
+function readUnixSocketFdCount(
+  pid: number,
+  execFileStatus: (file: string, args: readonly string[]) => ExecFileStatus,
+): number {
+  const result = execFileStatus(lsofPath, ["-nP", "-a", "-U", "-p", String(pid), "-F", "pfn"]);
+  if (result.status === 0) return parseUnixSocketFdCount(result.stdout, pid);
+  if (
+    result.status === 1 &&
+    result.stdout.trim().length === 0 &&
+    result.stderr.trim().length === 0
+  ) {
+    return 0;
+  }
+  throw new Error(`Unix-socket descriptor evidence failed for PID ${pid}.`);
+}
+
 function signalProcess(
   pid: number,
   signal: NodeJS.Signals | 0,
@@ -154,4 +209,14 @@ function defaultExecFile(file: string, args: readonly string[]): string {
     env: { ...process.env, LC_ALL: "C" },
     maxBuffer: processListingMaxBufferBytes,
   });
+}
+
+function defaultExecFileStatus(file: string, args: readonly string[]): ExecFileStatus {
+  const result = spawnSync(file, [...args], {
+    encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
+    maxBuffer: processListingMaxBufferBytes,
+  });
+  if (result.error !== undefined) throw result.error;
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }

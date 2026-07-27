@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createObserverStartupGate, runObserverMain } from "../../src/runtime/main.js";
 import {
   acquireObserverBootClaim,
+  createObserverBootClaimCleanupExclusion,
   observerBootClaimPath,
 } from "../../src/runtime/observerBootClaim.js";
 import type { SqlDatabase } from "../../src/sqlite/driver.js";
@@ -266,6 +267,54 @@ describe("observer boot claim", () => {
     expect(database.exec).toHaveBeenCalledWith("ROLLBACK");
     await expect(healthResult).resolves.toBe("healthy");
     expect(health).toHaveBeenCalledOnce();
+  });
+
+  it("runs cleanup under a non-waiting claim and releases after callback success", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+    const callback = vi.fn(async () => "done");
+
+    await expect(exclusion.runExclusive(callback)).resolves.toEqual({
+      status: "completed",
+      value: "done",
+      released: true,
+    });
+    expect(callback).toHaveBeenCalledOnce();
+    const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+    expect(claim.status).toBe("acquired");
+    if (claim.status === "acquired") claim.release();
+  });
+
+  it("refuses busy cleanup without invoking the callback", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const owner = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+    expect(owner.status).toBe("acquired");
+    if (owner.status !== "acquired") return;
+    const callback = vi.fn(async () => "must not run");
+    try {
+      const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+      await expect(exclusion.runExclusive(callback)).resolves.toEqual({ status: "busy" });
+      expect(callback).not.toHaveBeenCalled();
+    } finally {
+      owner.release();
+    }
+  });
+
+  it("releases cleanup exclusion after a callback failure", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+
+    await expect(
+      exclusion.runExclusive(async () => {
+        throw new Error("callback failed");
+      }),
+    ).resolves.toMatchObject({ status: "failed" });
+    const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+    expect(claim.status).toBe("acquired");
+    if (claim.status === "acquired") claim.release();
   });
 
   it("does not construct providers or mutate runtime ownership after claim failure", async () => {

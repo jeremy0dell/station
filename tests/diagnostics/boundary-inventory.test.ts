@@ -69,8 +69,8 @@ const setTimeoutAllowlist = new Map([
     "Station host requests use per-request socket timeouts at the host protocol boundary, outside shared observer runtime helpers.",
   ],
   [
-    "apps/cli/src/observerReap.ts",
-    "SIGTERM-to-SIGKILL grace delay for reaping duplicate observer processes is OS signal timing, not observer command timeout or retry plumbing.",
+    "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+    "Duplicate quarantine and SIGTERM or explicit SIGKILL grace delays are cancellable OS process timing, not command timeout or retry plumbing.",
   ],
   [
     "apps/cli/src/observerProcess/startup.ts",

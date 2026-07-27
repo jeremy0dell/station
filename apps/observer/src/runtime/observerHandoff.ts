@@ -62,6 +62,8 @@ export type ObserverProcessEntry = {
   startToken: string;
   /** Resolved bound socket; absent when argv cannot prove one. */
   socketPath?: string;
+  /** Positive startup exclusion budget advertised by current Observer argv. */
+  startupTimeoutMs?: number;
 };
 
 export type ObserverProcessSignalResult = "sent" | "absent" | "refused";
@@ -385,6 +387,7 @@ async function waitForExactExit(
     if (now() >= deadline) return false;
     if (await exactProcessAndSocketExited(socketPath, identity, deadline, deps, now)) return true;
     if (now() >= deadline) return false;
+    // pi-lens-ignore: await-in-loop
     await sleep(
       Math.min(
         deps.pollIntervalMs ?? DEFAULT_HANDOFF_POLL_INTERVAL_MS,
