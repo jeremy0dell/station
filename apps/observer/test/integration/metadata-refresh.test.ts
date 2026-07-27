@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type {
   ProviderHealth,
   RepositoryCapabilities,
@@ -9,7 +9,12 @@ import type {
   WorktreeChecksSummary,
   WorktreePullRequest,
 } from "@station/contracts";
-import type { ExternalCommandInput, ExternalCommandResult, RuntimeClock } from "@station/runtime";
+import type {
+  ExternalCommandInput,
+  ExternalCommandResult,
+  ExternalCommandRunner,
+  RuntimeClock,
+} from "@station/runtime";
 import { createFakeExternalCommandRunner } from "@station/runtime";
 import {
   createFakeWorktree,
@@ -22,11 +27,16 @@ import {
   createCommandQueue,
   createObserverApi,
   createObserverEventBus,
-  createWorktreeMetadataRefreshService,
+  createWorktreeMetadataRefreshService as createProductionWorktreeMetadataRefreshService,
   ProviderRegistry,
   providerProjectsFromConfig,
 } from "../../src/internal";
+import { createLocalGitWorktreeChangeSource } from "../../src/metadata/localGitChangeSummary.js";
 import { createTestObserver } from "../support/testObserver";
+import {
+  FakeWorktreeChangeSource,
+  FakeWorktreeMetadataInvalidationSource,
+} from "../support/worktreeMetadataSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const headSha = "2222222222222222222222222222222222222222";
@@ -36,6 +46,7 @@ const oldLocalMainSha = "3333333333333333333333333333333333333333";
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
@@ -60,7 +71,7 @@ const config: StationConfig = {
   ],
 };
 
-describe("observer worktree metadata refresh", () => {
+describe("observer worktree metadata refresh use case", () => {
   it("merges cached pull request and checks metadata into hot snapshots, including stale rows", async () => {
     const fixture = createFixture();
     await fixture.persistence.upsertWorktreeMetadataCurrent({
@@ -322,6 +333,241 @@ describe("observer worktree metadata refresh", () => {
     fixture.sqlite.close();
   });
 
+  it("deletes cached local evidence when the matching checkout is unavailable", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    await fixture.persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: "wt_web_feature",
+      kind: "change_summary",
+      cacheKey: "old",
+      expiresAt: "2026-05-20T12:05:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 1,
+        deletions: 0,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    worktreeChangeSource.result = { status: "unavailable" };
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => void reasons.push(reason),
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: new FakeWorktreeMetadataInvalidationSource(),
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-unavailable-checkout"));
+
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({
+        kind: "change_summary",
+        includeExpired: true,
+        now,
+      }),
+    ).resolves.toEqual([]);
+    expect(reasons).toEqual(["metadata:change_summary"]);
+    await service.shutdown();
+    fixture.sqlite.close();
+  });
+
+  it("retains cached local evidence when the Station identity is superseded", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    await fixture.persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: "wt_web_feature",
+      kind: "change_summary",
+      cacheKey: "old",
+      expiresAt: "2026-05-20T12:05:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 1,
+        deletions: 0,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    worktreeChangeSource.result = { status: "superseded" };
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => void reasons.push(reason),
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: new FakeWorktreeMetadataInvalidationSource(),
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-superseded-checkout"));
+
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({
+        kind: "change_summary",
+        includeExpired: true,
+        now,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_feature", cacheKey: "old", stale: false }),
+    ]);
+    expect(reasons).toEqual([]);
+    await service.shutdown();
+    fixture.sqlite.close();
+  });
+
+  it("substitutes both local metadata ports without Git or filesystem dependencies", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    worktreeChangeSource.result = {
+      status: "available",
+      evidence: {
+        summary: {
+          kind: "branch_diff",
+          additions: 2,
+          deletions: 1,
+          filesChanged: 1,
+          binaryFiles: 0,
+          baseRef: "main",
+          baseSha,
+          mergeBaseSha,
+          headRef: "feature",
+          headSha,
+          source: "local_git",
+          checkedAt: now,
+        },
+        cacheKey: "fake-change-evidence",
+      },
+    };
+    const invalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => void reasons.push(reason),
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: invalidationSource,
+    });
+
+    await service.refresh(await fixture.core.reconcile("metadata-substitution"));
+
+    expect(worktreeChangeSource.requests).toHaveLength(1);
+    expect(worktreeChangeSource.requests[0]?.target).not.toHaveProperty("path");
+    expect(invalidationSource.replacements[0]).toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_feature", branch: "feature" }),
+    ]);
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({ kind: "change_summary", now }),
+    ).resolves.toEqual([expect.objectContaining({ cacheKey: "fake-change-evidence" })]);
+    expect(reasons).toEqual(["metadata:change_summary"]);
+    await service.shutdown();
+    fixture.sqlite.close();
+  });
+
+  it("replaces the full watched identity set before metadata reads", async () => {
+    const fixture = createFixture();
+    const order: string[] = [];
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    worktreeChangeSource.onRead = async () => {
+      order.push("read");
+      return { status: "unavailable" };
+    };
+    const invalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    invalidationSource.onReplace = async () => {
+      order.push("replace");
+    };
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: () => undefined,
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: invalidationSource,
+    });
+    const snapshot = await fixture.core.reconcile("metadata-watch-replacement");
+
+    await service.refresh(snapshot);
+    await service.refresh({
+      ...snapshot,
+      rows: snapshot.rows.map((row) => ({
+        ...row,
+        branch: "replacement",
+        registrationIdentity: "registration-2",
+      })),
+    });
+
+    expect(invalidationSource.replacements).toEqual([
+      [expect.objectContaining({ branch: "feature" })],
+      [
+        expect.objectContaining({
+          branch: "replacement",
+          registrationIdentity: "registration-2",
+        }),
+      ],
+    ]);
+    expect(order).toEqual(["replace", "read", "replace", "read"]);
+    await service.shutdown();
+    fixture.sqlite.close();
+  });
+
+  it("aborts an in-flight local read and ignores its late result during shutdown", async () => {
+    const fixture = createFixture();
+    const reasons: string[] = [];
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    const invalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    let resolveRead:
+      | ((result: Awaited<ReturnType<typeof worktreeChangeSource.read>>) => void)
+      | undefined;
+    worktreeChangeSource.onRead = async () =>
+      new Promise((resolve) => {
+        resolveRead = resolve;
+      });
+    const service = createProductionWorktreeMetadataRefreshService({
+      projects: providerProjectsFromConfig(config),
+      persistence: fixture.persistence,
+      requestReconcile: (reason) => void reasons.push(reason),
+      clock: fixture.clock,
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource: invalidationSource,
+    });
+    const refresh = service.refresh(await fixture.core.reconcile("metadata-local-shutdown"));
+    await waitFor(() => resolveRead !== undefined);
+
+    const shutdown = service.shutdown();
+    expect(worktreeChangeSource.requests[0]?.signal.aborted).toBe(true);
+    resolveRead?.({
+      status: "available",
+      evidence: {
+        summary: {
+          kind: "branch_diff",
+          additions: 9,
+          deletions: 0,
+          filesChanged: 1,
+          binaryFiles: 0,
+          baseRef: "main",
+          baseSha,
+          mergeBaseSha,
+          headRef: "feature",
+          headSha,
+          source: "local_git",
+          checkedAt: now,
+        },
+        cacheKey: "late-result",
+      },
+    });
+    await shutdown;
+    await refresh;
+
+    await expect(
+      fixture.persistence.listWorktreeMetadataCurrent({ kind: "change_summary", now }),
+    ).resolves.toEqual([]);
+    expect(reasons).toEqual([]);
+    expect(invalidationSource.shutdownCount).toBe(1);
+    fixture.sqlite.close();
+  });
+
   it("does not fail API reconcile when background metadata refresh fails", async () => {
     const fixture = createFixture();
     const eventBus = createObserverEventBus();
@@ -341,6 +587,7 @@ describe("observer worktree metadata refresh", () => {
         refresh: async () => {
           throw new Error("metadata refresh failed");
         },
+        shutdown: async () => undefined,
       },
     });
 
@@ -623,13 +870,40 @@ describe("observer worktree metadata refresh", () => {
     const snapshot = await fixture.core.reconcile("metadata-repository-shutdown-before");
     const refresh = service.refresh(snapshot);
     await waitFor(() => started);
-    await service.shutdown?.();
+    await service.shutdown();
     await refresh;
 
     expect(aborted).toBe(true);
     fixture.sqlite.close();
   });
 });
+
+type TestMetadataRefreshOptions = Omit<
+  Parameters<typeof createProductionWorktreeMetadataRefreshService>[0],
+  "worktreeChangeSource" | "worktreeMetadataInvalidationSource"
+> & {
+  runner?: ExternalCommandRunner;
+};
+
+function createWorktreeMetadataRefreshService(options: TestMetadataRefreshOptions) {
+  const worktreeChangeSource = createLocalGitWorktreeChangeSource({
+    resolveWorktree: (target) => ({
+      status: "resolved",
+      worktree: {
+        ...target,
+        path: "/tmp/station/web/feature",
+      },
+    }),
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.runner === undefined ? {} : { runner: options.runner }),
+  });
+  const { runner: _runner, ...serviceOptions } = options;
+  return createProductionWorktreeMetadataRefreshService({
+    ...serviceOptions,
+    worktreeChangeSource,
+    worktreeMetadataInvalidationSource: new FakeWorktreeMetadataInvalidationSource(),
+  });
+}
 
 function createFixture(
   remote: RepositoryRemote = { host: "github.com", owner: "example", repo: "web" },
@@ -667,18 +941,12 @@ function gitRunner(responses: Record<string, string>, calls?: string[]) {
     const key = [input.command, ...(input.args ?? [])].slice(1).join(" ");
     calls?.push(key);
     const stdout = responses[key];
-    if (stdout === undefined) {
-      throw Object.assign(new Error(`No fake git response for ${key}`), {
-        code: 1,
-        stderr: "not found",
-      });
-    }
     return {
       command: input.command,
       args: input.args ?? [],
-      stdout,
-      stderr: "",
-      exitCode: 0,
+      stdout: stdout ?? "",
+      stderr: stdout === undefined ? "not found" : "",
+      exitCode: stdout === undefined ? 1 : 0,
     };
   });
 }
