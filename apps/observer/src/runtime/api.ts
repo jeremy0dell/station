@@ -12,6 +12,7 @@ import type {
   ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
+  ProviderHealth,
   ProviderHookEvent,
   ProviderHookReceipt,
   ReconcileReceipt,
@@ -110,25 +111,28 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
   const providerHealthCache = options.providers?.healthCache;
   const pendingProviderHealthPublications = new Set<Promise<void>>();
   let acceptingProviderHealthPublications = true;
+
+  const publishProviderHealthProbe = async (health: ProviderHealth): Promise<void> => {
+    try {
+      const event = await options.core.commitProviderHealthProbe(health);
+      if (event !== undefined) {
+        options.eventBus.publish(event);
+      }
+    } catch (error) {
+      await options.logger
+        ?.error("Completed provider health probe could not be published.", {
+          provider: health.providerId,
+          error,
+        })
+        .catch(() => undefined);
+    }
+  };
+
   const unsubscribeProviderHealth = providerHealthCache?.onProbeCompleted((health) => {
     if (!acceptingProviderHealthPublications) {
       return;
     }
-    const publication = options.core
-      .commitProviderHealthProbe(health)
-      .then((event) => {
-        if (event !== undefined) {
-          options.eventBus.publish(event);
-        }
-      })
-      .catch(async (error) => {
-        await options.logger
-          ?.error("Completed provider health probe could not be published.", {
-            provider: health.providerId,
-            error,
-          })
-          .catch(() => undefined);
-      });
+    const publication = publishProviderHealthProbe(health);
     pendingProviderHealthPublications.add(publication);
     void publication.finally(() => pendingProviderHealthPublications.delete(publication));
     return publication;
