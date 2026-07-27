@@ -11,6 +11,8 @@ import {
   startWidgetConfigWrites,
   type WidgetConfigWrites,
 } from "../config/tuiConfig.js";
+import { wireOpenTuiSelectionCopy } from "../copy/openTuiSelection.js";
+import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
@@ -42,6 +44,11 @@ function dashboardHotSlots(): DashboardHotSlots {
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
   const hotSlots = dashboardHotSlots();
+  const clipboardEffects = createRuntimeClipboardEffects({
+    env,
+    platform: process.platform,
+    writeToHost: (sequence) => process.stdout.write(sequence),
+  });
 
   // The prior OpenTUI owner must release process-global stdin synchronously before replacement.
   hotSlots.__stationDashboardHotDispose?.();
@@ -168,6 +175,8 @@ export async function runDashboardMain(): Promise<void> {
         store.getState().handleKey({ input: text });
       }
     });
+    // OpenTUI owns the visual highlight; Station owns delivery to the real clipboard.
+    wireOpenTuiSelectionCopy(nextRenderer, clipboardEffects);
 
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;

@@ -8,6 +8,7 @@ import {
   type ClipboardEffects,
 } from "./clipboard.js";
 import { createInternalClipboard } from "./internalClipboard.js";
+import { createRuntimeClipboardEffects } from "./runtimeClipboard.js";
 
 function recordingEffects(overrides?: Partial<ClipboardEffects>): {
   effects: ClipboardEffects;
@@ -91,5 +92,23 @@ describe("createClipboardEffects", () => {
     expect(internal.get()).toBe("yank");
     expect(host[0]?.startsWith("\x1b]52;c;")).toBe(true);
     expect(spawned).toEqual([{ command: "pbcopy", text: "yank" }]);
+  });
+});
+
+describe("createRuntimeClipboardEffects", () => {
+  it("shares host and platform clipboard delivery across renderer entrypoints", () => {
+    const host: string[] = [];
+    const spawned: Array<{ command: string; text: string }> = [];
+    const effects = createRuntimeClipboardEffects({
+      env: {},
+      platform: "darwin",
+      writeToHost: (sequence) => host.push(sequence),
+      spawnClipboard: (command, text) => spawned.push({ command: command.command, text }),
+    });
+
+    copyToClipboard("notice", DEFAULT_COPY_SINKS, effects);
+
+    expect(host[0]?.startsWith("\x1b]52;c;")).toBe(true);
+    expect(spawned).toEqual([{ command: "pbcopy", text: "notice" }]);
   });
 });
