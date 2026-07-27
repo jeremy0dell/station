@@ -59,8 +59,9 @@ install_hooks = true
 # Native Station workspace (TUI) behavior. Read only by the native Station UI;
 # the observer and CLI ignore it.
 [workspace]
-scroll_on_output = "freeze"  # freeze | shift | follow — scroll behavior while scrolled up
-welcome_on_boot = true       # show the welcome intro over the restored layout on cold boot
+scroll_on_output = "freeze" # freeze | shift | follow — scroll behavior while scrolled up
+scrollback_lines = 10000    # 0-10000 — lower values reduce pane memory and resize work
+welcome_on_boot = true      # show the welcome intro over the restored layout on cold boot
 # Named pane automations in the pane context menu. Omit `automations` to keep the
 # built-in "See diff (split right)"; set `automations = []` to turn it off.
 # [[workspace.automations]]

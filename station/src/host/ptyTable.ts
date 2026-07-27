@@ -117,7 +117,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     emit("agent.exit", { ptyId: entry.ptyId, exitCode: exitFrame.exitCode, reason });
   }
 
-  function require(ptyId: string): PtyEntry {
+  function requireEntry(ptyId: string): PtyEntry {
     const entry = entries.get(ptyId);
     if (entry === undefined) {
       throw new StationHostProviderError("HOST_PTY_NOT_FOUND", `No host PTY "${ptyId}".`);
@@ -216,11 +216,11 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     write(ptyId, data) {
-      require(ptyId).terminal.write(data);
+      requireEntry(ptyId).terminal.write(data);
     },
 
     resize(ptyId, cols, rows) {
-      const entry = require(ptyId);
+      const entry = requireEntry(ptyId);
       entry.cols = Math.max(MIN_COLS, cols);
       entry.rows = Math.max(MIN_ROWS, rows);
       entry.terminal.resize({ cols: entry.cols, rows: entry.rows });
@@ -242,7 +242,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     snapshot(ptyId) {
-      const entry = require(ptyId);
+      const entry = requireEntry(ptyId);
       const { scrollback, truncated } = entry.ring.snapshot();
       return {
         pid: entry.terminal.pid,

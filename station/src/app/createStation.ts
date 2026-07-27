@@ -137,12 +137,14 @@ function setupRegistry(
       createTerminal: options.createTerminal,
       onPaneExit: reportPaneExit,
       ...(options.scrollOnOutput === undefined ? {} : { scrollOnOutput: options.scrollOnOutput }),
+      ...(options.scrollbackLines === undefined ? {} : { scrollbackLines: options.scrollbackLines }),
     });
   // Refresh a (possibly HMR-reused) registry to this boot's config; createTerminal
   // is left untouched when omitted, so a reused registry keeps its live terminal creator.
   registry.setRuntimeOptions({
     ...(options.createTerminal === undefined ? {} : { createTerminal: options.createTerminal }),
     scrollOnOutput: options.scrollOnOutput,
+    scrollbackLines: options.scrollbackLines,
   });
   registry.setPaneExitHandler(reportPaneExit);
   return registry;

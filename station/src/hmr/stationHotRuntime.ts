@@ -8,7 +8,9 @@ import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyReg
 // triggers a clean reboot rather than reusing stale in-memory state.
 // v3: registry/screens gained corruption detectors and geometry checks; a
 // preserved v2 registry would leave hot-reloaded panes without them.
-export const STATION_HOT_RUNTIME_VERSION = 3;
+// v4: registries gained configurable scrollback; a preserved v3 registry would
+// ignore the refreshed depth when lazily creating screens after a hot reload.
+export const STATION_HOT_RUNTIME_VERSION = 4;
 
 export type StationHotRenderer = { destroy(): void };
 
@@ -53,7 +55,10 @@ export function getOrCreateStationHotRuntime(
   const runtime: StationHotRuntime = {
     version: STATION_HOT_RUNTIME_VERSION,
     store: createStationStore(storeOptions),
-    registry: createPtyRegistry({ scrollOnOutput: config.scroll_on_output }),
+    registry: createPtyRegistry({
+      scrollOnOutput: config.scroll_on_output,
+      scrollbackLines: config.scrollback_lines,
+    }),
   };
   slots.__stationHotRuntime = runtime;
   return runtime;
