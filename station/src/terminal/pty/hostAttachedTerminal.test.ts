@@ -160,6 +160,67 @@ describe("createHostAttachedTerminal", () => {
     expect(ctrl.state.resizes).toEqual([{ cols: 100, rows: 30 }]);
   });
 
+  it("resends a resize that lands during initial geometry synchronization", async () => {
+    const initialResize = deferred<void>();
+    const initialResizeStarted = deferred<void>();
+    let blockInitialResize = true;
+    const ctrl = controllableAttachment(ack(), {
+      resize: async () => {
+        if (!blockInitialResize) {
+          return;
+        }
+        blockInitialResize = false;
+        initialResizeStarted.resolve(undefined);
+        await initialResize.promise;
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+
+    await initialResizeStarted.promise;
+    terminal.resize({ cols: 100, rows: 30 });
+    initialResize.resolve(undefined);
+    await flush();
+    await flush();
+
+    expect(ctrl.state.resizes).toEqual([
+      { cols: 80, rows: 24 },
+      { cols: 100, rows: 30 },
+    ]);
+    expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
+    terminal.dispose();
+  });
+
+  it("resends a resize that lands during the same-size repaint restore", async () => {
+    const restoreResize = deferred<void>();
+    const restoreResizeStarted = deferred<void>();
+    let resizeCalls = 0;
+    const ctrl = controllableAttachment(ack({ scrollback: ["history"] }), {
+      resize: async () => {
+        resizeCalls += 1;
+        if (resizeCalls === 3) {
+          restoreResizeStarted.resolve(undefined);
+          await restoreResize.promise;
+        }
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+
+    await restoreResizeStarted.promise;
+    terminal.resize({ cols: 100, rows: 30 });
+    restoreResize.resolve(undefined);
+    await flush();
+    await flush();
+
+    expect(ctrl.state.resizes).toEqual([
+      { cols: 80, rows: 24 },
+      { cols: 80, rows: 23 },
+      { cols: 80, rows: 24 },
+      { cols: 100, rows: 30 },
+    ]);
+    expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
+    terminal.dispose();
+  });
+
   it("surfaces an exit frame through onExit", async () => {
     const ctrl = controllableAttachment(ack());
     const { terminal } = terminalFor(ctrl.attachment);

@@ -262,23 +262,37 @@ export function createHostAttachedTerminal(
     opened: HostAttachment,
     isReconnect: boolean,
   ): Promise<StationTerminalSize> => {
-    await opened.resize(size.cols, size.rows);
+    // Snapshot each target before awaiting so the returned acknowledgement always
+    // describes geometry the host actually applied, not a newer pane assertion.
+    const attachTarget = { cols: size.cols, rows: size.rows };
+    await opened.resize(attachTarget.cols, attachTarget.rows);
     if (disposed) {
-      return { cols: size.cols, rows: size.rows };
+      return attachTarget;
     }
     // A same-size TIOCSWINSZ emits no SIGWINCH, so stale same-size frames need a
     // temporary row change whenever replay or reconnect requires a child repaint.
+    const sizeUnchanged = size.cols === attachTarget.cols && size.rows === attachTarget.rows;
     if (
+      sizeUnchanged &&
       (isReconnect || opened.ack.scrollback.length > 0) &&
-      opened.ack.cols === size.cols &&
-      opened.ack.rows === size.rows
+      opened.ack.cols === attachTarget.cols &&
+      opened.ack.rows === attachTarget.rows
     ) {
-      await opened.resize(size.cols, size.rows > 1 ? size.rows - 1 : size.rows + 1);
-      await opened.resize(size.cols, size.rows);
+      const nudgeTarget = {
+        cols: attachTarget.cols,
+        rows: attachTarget.rows > 1 ? attachTarget.rows - 1 : attachTarget.rows + 1,
+      };
+      await opened.resize(nudgeTarget.cols, nudgeTarget.rows);
+      if (disposed) {
+        return nudgeTarget;
+      }
+      const restoreTarget = { cols: size.cols, rows: size.rows };
+      await opened.resize(restoreTarget.cols, restoreTarget.rows);
+      return restoreTarget;
     }
-    // A resize arriving during the write drain only updates `size` because the
-    // attachment remains unpublished until every buffered write has been sent.
-    return { cols: size.cols, rows: size.rows };
+    // Publication compares this exact sent size with the latest pane assertion,
+    // catching changes during geometry synchronization or the buffered-write drain.
+    return attachTarget;
   };
 
   const drainPendingWrites = async (opened: HostAttachment): Promise<void> => {
