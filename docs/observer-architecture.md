@@ -156,8 +156,8 @@ Composition is intentionally split:
 
 1. `apps/cli/src/observerProviders.ts` constructs concrete integrations,
    assigns provider roles, composes the fallback Worktrunk provider-hook
-   expectation from resolved runtime paths and the Observer ingress launcher, and
-   supplies a `ProviderRegistry` factory.
+   expectation from resolved runtime paths plus the Observer ingress launcher
+   and artifact owner, and supplies a `ProviderRegistry` factory.
 2. `apps/observer/src/runtime/main.ts` loads config and constructs Observer-
    private infrastructure: SQLite, persistence, logging, project-config, and local
    diagnostic-evidence adapters, event bus, command queue, core, handlers, ingress
@@ -575,7 +575,9 @@ health, persistence health, durable Observer records, config diagnostics,
 provider checks, and local runtime evidence. CLI full-doctor requests carry one
 strict provider-neutral hook-runtime context containing the requester's ingress
 launcher, socket, state and spool paths, auto-start policy, and optional Station
-config path. Provider hook adapters map the applicable fields from that context
+config path. It also carries the generated-artifact owner: canonical launcher,
+source or compiled runtime kind, display version, and immutable build identity.
+Provider hook adapters map the applicable fields from that context
 without mixing requester and Observer identities, so Worktrunk, Claude, Codex,
 Cursor, and OpenCode compare hook artifacts using the requester runtime identity
 even when an exact-build Observer from another checkout serves the request. Direct

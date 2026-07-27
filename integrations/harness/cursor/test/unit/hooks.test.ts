@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
@@ -177,6 +178,36 @@ describe("Cursor hook setup", () => {
     });
   });
 
+  it("does not accept a shared generated script owned by another Station runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-owner-"));
+    const hooksPath = join(root, "cursor", "hooks.json");
+    const sharedHookScriptPath = join(root, "default", "hooks", "station-cursor-hook.sh");
+    const requestedHookScriptPath = join(root, "requested", "hooks", "station-cursor-hook.sh");
+    const installedOwner = artifactOwner("/installed/stn-ingress", "compiled", "a");
+    const sourceOwner = artifactOwner("/source/bin/stn-ingress", "source", "b");
+    await installCursorHooks({
+      cursorHooksPath: hooksPath,
+      hookScriptPath: sharedHookScriptPath,
+      hookBin: installedOwner.launcher,
+      artifactOwner: installedOwner,
+    });
+
+    await expect(
+      doctorCursorHooks({
+        cursorHooksPath: hooksPath,
+        hookScriptPath: requestedHookScriptPath,
+        hookBin: sourceOwner.launcher,
+        artifactOwner: sourceOwner,
+        enabled: true,
+      }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      hookScriptPath: sharedHookScriptPath,
+      ownership: { status: "different-owner" },
+    });
+  });
+
   it("generated script delivers to stn-ingress even without ownership env", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cursor-hooks-"));
     const hooksPath = join(root, "cursor", "hooks.json");
@@ -342,6 +373,20 @@ describe("Cursor hook setup", () => {
     });
   });
 });
+
+function artifactOwner(
+  launcher: string,
+  runtimeKind: "compiled" | "source",
+  digit: string,
+): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind,
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.4",
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 async function runHookScript(
   scriptPath: string,

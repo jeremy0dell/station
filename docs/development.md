@@ -666,6 +666,15 @@ writes. For Codex, verify setup does not mutate trust or `[features] hooks`, the
 Prepared output names `/hooks` review, and approving the current definition can
 produce a Station event.
 
+For shared-hook ownership acceptance, use two Station launchers and one isolated
+provider home. Install each target with launcher A, then run plan, doctor, and
+install from launcher B. Plan and doctor must identify A as the current owner;
+`install --yes` must leave every provider artifact byte-for-byte unchanged and
+report the ownership conflict. `install --yes --takeover` must transfer the
+marker and generated command to B. Repeat uninstall from A to prove it cannot
+remove B's artifact. Finally run setup apply from A and confirm setup reports the
+conflict without synthesizing `--takeover`.
+
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.
 

@@ -1,4 +1,5 @@
 import { resolveObserverPaths, type StationConfig } from "@station/config";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import type { CliEnv } from "../env.js";
 
 type CommonHookOptions = {
@@ -10,6 +11,8 @@ type CommonHookOptions = {
   env?: CliEnv;
   hookBin?: string;
   hookScriptPath?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
 };
 
 type ProviderHooksAdapter<PlanOptions extends CommonHookOptions> = {
@@ -29,10 +32,12 @@ type HookCommandContext = {
   configPath?: string;
   env?: CliEnv;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };
 
 type ParsedHookFlags = {
   yes: boolean;
+  takeover: boolean;
   providerConfig?: string;
   hookScriptPath?: string;
   hookBin?: string;
@@ -52,6 +57,7 @@ export type ProviderHooksCommandOptions = {
   configPath?: string;
   env?: CliEnv;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };
 
 export type ProviderHooksCommandResult = unknown;
@@ -61,12 +67,16 @@ export function parseHookFlags(
   provider: string,
   spec: ProviderHookFlagSpec,
 ): ParsedHookFlags {
-  const flags: ParsedHookFlags = { yes: false };
+  const flags: ParsedHookFlags = { yes: false, takeover: false };
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--yes" || arg === "-y") {
       flags.yes = true;
+      continue;
+    }
+    if (arg === "--takeover") {
+      flags.takeover = true;
       continue;
     }
     const value = args[index + 1];
@@ -115,6 +125,9 @@ export function buildCommonHookOptions(context: HookCommandContext): CommonHookO
   if (context.providerHookIngressLauncher !== undefined) {
     options.hookBin = context.providerHookIngressLauncher;
   }
+  if (context.providerHookArtifactOwner !== undefined) {
+    options.artifactOwner = context.providerHookArtifactOwner;
+  }
   return options;
 }
 
@@ -139,6 +152,7 @@ export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>
     const [action] = args;
     const flags = parseHookFlags(args.slice(1), adapter.provider, flagSpec);
     const hookOptions = adapter.buildOptions(flags, options);
+    if (flags.takeover) hookOptions.takeover = true;
 
     if (action === "plan") {
       return adapter.plan(hookOptions);

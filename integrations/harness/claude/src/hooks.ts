@@ -1,11 +1,16 @@
 // Installs/uninstalls the STATION hook into Claude Code's settings.json hooks.
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import {
+  assertProviderHookArtifactOwnership,
+  classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
   expectedProviderHookScript,
   installConfigScriptHook,
+  type ProviderHookArtifactOwnership,
   type ProviderHookScriptOptions,
+  providerHookScriptLauncher,
   providerHookScriptOptions,
 } from "@station/runtime";
 import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
@@ -40,6 +45,8 @@ export type ClaudeHookPlanOptions = {
   autoStartFromHooks?: boolean;
   stationConfigPath?: string;
   hookBin?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
 };
@@ -66,6 +73,7 @@ export type ClaudeHookPlan = {
   userSettingsCleanup: ClaudeUserSettingsCleanup;
   before: string;
   after: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type ClaudeHookInstallResult = ClaudeHookPlan & {
@@ -88,6 +96,7 @@ export type ClaudeHookDoctorResult = {
   artifactInvalid: boolean;
   userSettingsCleanup: ClaudeUserSettingsCleanup;
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type ClaudeHookScriptOptions = ProviderHookScriptOptions & {
@@ -167,6 +176,7 @@ function installResultFromPlan(plan: ClaudeHookPlan, installed: boolean): Claude
     before: plan.before,
     after: plan.after,
     installed,
+    ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
   };
 }
 
@@ -216,9 +226,18 @@ export async function planClaudeHooks(
   const scriptBefore = await fileOps.readOptionalFile(hookScriptPath);
   const settingsChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
+  const legacyLauncher = providerHookScriptLauncher(scriptBefore, "claude");
+  const ownership =
+    options.artifactOwner === undefined
+      ? undefined
+      : classifyProviderHookArtifactOwnership({
+          contents: scriptBefore,
+          requested: options.artifactOwner,
+          ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+        });
   const { cleanup } = await buildUserSettingsCleanup(userSettingsPath);
 
-  return {
+  const result: ClaudeHookPlan = {
     provider: "claude",
     settingsPath,
     userSettingsPath,
@@ -233,6 +252,8 @@ export async function planClaudeHooks(
     before,
     after,
   };
+  if (ownership !== undefined) result.ownership = ownership;
+  return result;
 }
 
 export async function installClaudeHooks(
@@ -249,6 +270,9 @@ export async function installClaudeHooks(
     configChanged: plan.settingsChanged,
     scriptChanged: plan.scriptChanged,
     fileOps,
+    provider: "claude",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
   let userSettingsBackupPath: string | undefined;
 
@@ -258,6 +282,13 @@ export async function installClaudeHooks(
   }
 
   const result = installResultFromPlan({ ...plan, missing: [], artifactInvalid: false }, true);
+  if (options.artifactOwner !== undefined) {
+    result.ownership = {
+      status: "same-owner",
+      requested: options.artifactOwner,
+      currentLauncher: options.artifactOwner.launcher,
+    };
+  }
   const backupPaths: string[] = [];
   if (backupPath !== undefined) {
     result.backupPath = backupPath;
@@ -280,6 +311,17 @@ export async function uninstallClaudeHooks(
   const userSettingsPath = resolveClaudeUserSettingsPath(options);
   const hookScriptPath = resolveClaudeHookScriptPath(options);
   const before = await fileOps.readOptionalFile(settingsPath);
+  const currentScript = await fileOps.readOptionalFile(hookScriptPath);
+  const legacyLauncher = providerHookScriptLauncher(currentScript, "claude");
+  assertProviderHookArtifactOwnership({
+    provider: "claude",
+    action: "uninstall",
+    artifactPath: hookScriptPath,
+    contents: currentScript,
+    ...(options.artifactOwner === undefined ? {} : { requested: options.artifactOwner }),
+    ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+  });
   const { cleanup, document: cleanedUserDocument } =
     await buildUserSettingsCleanup(userSettingsPath);
   let userSettingsBackupPath: string | undefined;
@@ -338,26 +380,33 @@ export async function doctorClaudeHooks(
       message: staleUserEntries
         ? "Claude hooks are not requested in station config, but generated station hooks remain in the user Claude settings."
         : "Claude hooks are not requested in station config.",
+      ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
     };
   }
 
   const installed = !plan.settingsChanged && !plan.scriptChanged && !plan.artifactInvalid;
-  return {
+  const ownershipConflict =
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
+  const result: ClaudeHookDoctorResult = {
     provider: "claude",
     settingsPath: plan.settingsPath,
     userSettingsPath: plan.userSettingsPath,
     hookScriptPath: plan.hookScriptPath,
-    status: installed && !staleUserEntries ? "ok" : "warn",
-    installed,
+    status: installed && !staleUserEntries && !ownershipConflict ? "ok" : "warn",
+    installed: installed && !ownershipConflict,
     missing: plan.missing,
     artifactInvalid: plan.artifactInvalid,
     userSettingsCleanup: plan.userSettingsCleanup,
-    message: doctorMessage({
-      installed,
-      artifactInvalid: plan.artifactInvalid,
-      staleUserEntries,
-      missing: plan.missing,
-      scriptChanged: plan.scriptChanged,
-    }),
+    message: ownershipConflict
+      ? "Claude hook artifact ownership conflicts with this Station runtime; run `stn hooks install claude --yes --takeover` only to transfer it."
+      : doctorMessage({
+          installed,
+          artifactInvalid: plan.artifactInvalid,
+          staleUserEntries,
+          missing: plan.missing,
+          scriptChanged: plan.scriptChanged,
+        }),
   };
+  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  return result;
 }

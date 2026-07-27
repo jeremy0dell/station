@@ -1,17 +1,21 @@
 #!/usr/bin/env node
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import { runObserverMain } from "@station/observer";
+import { providerHookArtifactOwner, stationBuildInfo } from "@station/runtime";
 import { type CreateProviderRegistryOptions, createProviderRegistry } from "./observerProviders.js";
 import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type RunCliObserverMainOptions = {
   preparePiExtension?: (stateDir: string) => string | Promise<string>;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };
 
 /**
  * COMPOSITION ROOT
  *
- * Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle.
+ * Chooses CLI-owned provider composition, including requester-relative hook
+ * artifact ownership, and joins it to the Observer runtime lifecycle.
  */
 export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),
@@ -19,6 +23,9 @@ export async function runCliObserverMain(
 ): Promise<number> {
   const providerHookIngressLauncher =
     options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher();
+  const artifactOwner =
+    options.providerHookArtifactOwner ??
+    providerHookArtifactOwner(providerHookIngressLauncher, stationBuildInfo());
   return runObserverMain([...argv], {
     providerRegistryFactory: async (config, providerOptions) => {
       const registryOptions: CreateProviderRegistryOptions = {};
@@ -31,6 +38,7 @@ export async function runCliObserverMain(
         );
       }
       registryOptions.providerHookIngressLauncher = providerHookIngressLauncher;
+      registryOptions.providerHookArtifactOwner = artifactOwner;
       return createProviderRegistry(config, registryOptions);
     },
   });

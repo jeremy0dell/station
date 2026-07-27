@@ -1,14 +1,18 @@
 // Installs/uninstalls the STATION hook into Cursor's .cursor/hooks.json.
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import {
   assignBackupPaths,
+  classifyProviderHookArtifactOwnership,
   createHookSetupFileOps,
   expectedProviderHookScript,
   hookCommandsForEvents,
   installConfigScriptHook,
+  type ProviderHookArtifactOwnership,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
+  providerHookScriptLauncher,
   providerHookScriptOptions,
   providerHookScriptRoutesByStationEnv,
   uninstallConfigScriptHook,
@@ -38,6 +42,8 @@ export type CursorHookPlanOptions = {
   autoStartFromHooks?: boolean;
   stationConfigPath?: string;
   hookBin?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
 };
@@ -53,6 +59,7 @@ export type CursorHookPlan = {
   scriptChanged: boolean;
   before: string;
   after: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type CursorHookInstallResult = CursorHookPlan & {
@@ -71,6 +78,7 @@ export type CursorHookDoctorResult = {
   missing: CursorHookEventName[];
   commands: Record<CursorHookEventName, string>;
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type CursorHookScriptOptions = ProviderHookScriptOptions & {
@@ -142,15 +150,30 @@ async function sharedGeneratedHookPlan(
     return undefined;
   }
 
+  const legacyLauncher = providerHookScriptLauncher(scriptBefore, "cursor");
+  const ownership =
+    options.artifactOwner === undefined
+      ? undefined
+      : classifyProviderHookArtifactOwnership({
+          contents: scriptBefore,
+          requested: options.artifactOwner,
+          ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+        });
+  const ownershipConflict =
+    ownership?.status === "different-owner" || ownership?.status === "legacy-unknown";
+
   return {
     provider: "cursor",
     hooksPath: resolveCursorHooksPath(options),
     hookScriptPath,
-    status: "ok",
-    installed: true,
+    status: ownershipConflict ? "warn" : "ok",
+    installed: !ownershipConflict,
     missing: [],
     commands: expectedCursorHookCommands({ hookScriptPath }),
-    message: "Cursor hooks are installed.",
+    message: ownershipConflict
+      ? "Cursor hook artifact ownership conflicts with this Station runtime; run `stn hooks install cursor --yes --takeover` only to transfer it."
+      : "Cursor hooks are installed.",
+    ...(ownership === undefined ? {} : { ownership }),
   };
 }
 
@@ -192,9 +215,11 @@ export async function planCursorHooks(
     missingEvents: missingCursorHookEvents,
     expectedCommands: (path) => expectedCursorHookCommands({ hookScriptPath: path }),
     expectedScript: script,
+    provider: "cursor",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
   });
 
-  return {
+  const result: CursorHookPlan = {
     provider: "cursor",
     hooksPath,
     hookScriptPath,
@@ -206,6 +231,8 @@ export async function planCursorHooks(
     before: plan.before,
     after: plan.after,
   };
+  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  return result;
 }
 
 export async function installCursorHooks(
@@ -222,8 +249,18 @@ export async function installCursorHooks(
     configChanged: plan.configChanged,
     scriptChanged: plan.scriptChanged,
     fileOps,
+    provider: "cursor",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
   const result: CursorHookInstallResult = { ...plan, installed: true };
+  if (options.artifactOwner !== undefined) {
+    result.ownership = {
+      status: "same-owner",
+      requested: options.artifactOwner,
+      currentLauncher: options.artifactOwner.launcher,
+    };
+  }
   assignBackupPaths(result, [backupPath]);
   return result;
 }
@@ -244,6 +281,9 @@ export async function uninstallCursorHooks(
     documentContainsCommand,
     expectedCommands: (path) => expectedCursorHookCommands({ hookScriptPath: path }),
     fileOps,
+    provider: "cursor",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
   const result: CursorHookInstallResult = {
     provider: "cursor",
@@ -266,38 +306,44 @@ export async function uninstallCursorHooks(
 export async function doctorCursorHooks(
   options: CursorHookPlanOptions & { enabled?: boolean } = {},
 ): Promise<CursorHookDoctorResult> {
+  const plan = await planCursorHooks(options);
   if (options.enabled === false) {
-    const hookScriptPath = resolveCursorHookScriptPath(options);
     return {
       provider: "cursor",
-      hooksPath: resolveCursorHooksPath(options),
-      hookScriptPath,
+      hooksPath: plan.hooksPath,
+      hookScriptPath: plan.hookScriptPath,
       status: "ok",
       installed: false,
       missing: [],
-      commands: expectedCursorHookCommands({ hookScriptPath }),
+      commands: plan.commands,
       message: "Cursor hooks are not requested in station config.",
+      ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
     };
   }
 
-  const plan = await planCursorHooks(options);
   const installed = plan.missing.length === 0 && !plan.configChanged && !plan.scriptChanged;
+  const ownershipConflict =
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
   if (!installed) {
     const shared = await sharedGeneratedHookPlan(plan.before, options);
     if (shared !== undefined) {
       return shared;
     }
   }
-  return {
+  const result: CursorHookDoctorResult = {
     provider: "cursor",
     hooksPath: plan.hooksPath,
     hookScriptPath: plan.hookScriptPath,
-    status: installed ? "ok" : "warn",
-    installed,
+    status: installed && !ownershipConflict ? "ok" : "warn",
+    installed: installed && !ownershipConflict,
     missing: plan.missing,
     commands: plan.commands,
-    message: installed
-      ? "Cursor hooks are installed."
-      : `Cursor hooks are missing or stale: ${missingDescription(plan)}.`,
+    message: ownershipConflict
+      ? "Cursor hook artifact ownership conflicts with this Station runtime; run `stn hooks install cursor --yes --takeover` only to transfer it."
+      : installed
+        ? "Cursor hooks are installed."
+        : `Cursor hooks are missing or stale: ${missingDescription(plan)}.`,
   };
+  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  return result;
 }

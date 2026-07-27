@@ -250,6 +250,7 @@ export function runWorktrunkHooksCommand(
         const expectation = createWorktrunkHookExpectation(config, {
           stationConfigPath: context.configPath,
           ingressLauncher: context.providerHookIngressLauncher,
+          artifactOwner: context.providerHookArtifactOwner,
         });
         if (flags.hookBin !== undefined) {
           expectation.hookBin = flags.hookBin;

@@ -106,6 +106,37 @@ uses Worktrunk's default prompt behavior. Setup and doctor checks should report
 the effective automation mode and whether the installed `wt` supports the flag
 required by that mode.
 
+Hook doctor output also reports the requester-relative artifact owner. A
+`different-owner` result means another canonical Station launcher owns the
+shared provider artifact; `legacy-unknown` means the existing generated artifact
+cannot be attributed safely. Inspect the reported current and requested
+launchers before changing anything. `--yes` confirms a normal mutation but does
+not transfer ownership; only run
+`stn hooks install <target> --yes --takeover` when replacing that owner is
+intentional. Setup apply deliberately stops on this conflict instead of choosing
+an owner.
+
+## No-Action Mode
+
+If the user says "no action", keep debugging read-only.
+
+Do not start or restart the observer, retry commands, kill processes, mutate state, or write a new bundle unless explicitly asked.
+
+In no-action mode, inspect existing state only:
+
+- `stn debug trace <id>` or `stn debug trace --latest-failure`
+- `stn debug logs [query]`
+- existing bundles under `diagnostics/`
+- existing logs under `logs/`
+- existing bundle `commands.jsonl`, `errors.jsonl`, and derived indexes
+
+Avoid live observer commands in no-action mode, including `doctor`, `snapshot`,
+`observe`, `command get`, `command dispatch`, `reconcile`, `debug bundle`,
+`project add/remove`, hook install/uninstall, setup apply, and observer
+start/stop/restart/run. `stn observer status` is non-mutating, but it is still a
+live status check rather than an existing-state log read; use it only when live
+status is allowed by the request.
+
 ## State Directory
 
 The default observer state directory is:

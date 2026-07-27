@@ -27,6 +27,10 @@ export const worktrunkCliCommand: CliCommandNode = {
       options: [
         { name: "--yes, -y", description: "Confirm install or uninstall actions." },
         {
+          name: "--takeover",
+          description: "Transfer shared lifecycle hooks from another Station runtime.",
+        },
+        {
           name: "--worktrunk-config <path>",
           description: "Use a specific Worktrunk config file.",
         },
@@ -52,6 +56,10 @@ function worktrunkHookActionCommand(action: string): CliCommandNode {
     usage: [`stn worktrunk hooks ${action}${actionNeedsYes(action) ? " --yes" : ""} [options]`],
     options: [
       { name: "--yes, -y", description: "Required for install and uninstall actions." },
+      {
+        name: "--takeover",
+        description: "Transfer shared lifecycle hooks from another Station runtime.",
+      },
       { name: "--worktrunk-config <path>", description: "Use a specific Worktrunk config file." },
       { name: "--hook-bin <command>", description: "Use a specific stn-ingress command." },
     ],

@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import {
+  type ProviderHookArtifactOwner,
+  ProviderHookArtifactOwnerSchema,
+} from "@station/contracts";
+import type { StationBuildInfo } from "./buildInfo.js";
 import {
   pathExists,
   readTextFileIfPresent,
@@ -30,7 +36,163 @@ export type ProviderHookScriptOptions = {
   hookSpoolDir?: string;
   autoStartFromHooks?: boolean;
   hookBin?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
 };
+
+export const PROVIDER_HOOK_OWNER_MARKER = "station-provider-artifact-owner:v1:";
+
+export type ProviderHookArtifactOwnership =
+  | { status: "absent"; requested: ProviderHookArtifactOwner }
+  | { status: "same-owner"; requested: ProviderHookArtifactOwner; currentLauncher: string }
+  | {
+      status: "different-owner";
+      requested: ProviderHookArtifactOwner;
+      currentLauncher: string;
+      current?: ProviderHookArtifactOwner;
+    }
+  | { status: "legacy-unknown"; requested: ProviderHookArtifactOwner };
+
+export class ProviderHookArtifactOwnershipError extends Error {
+  readonly code = "PROVIDER_HOOK_OWNERSHIP_CONFLICT";
+  readonly ownership: ProviderHookArtifactOwnership;
+
+  constructor(input: {
+    provider: string;
+    action: "install" | "uninstall";
+    artifactPath: string;
+    ownership: ProviderHookArtifactOwnership;
+  }) {
+    const provider = capitalize(input.provider);
+    const current =
+      "currentLauncher" in input.ownership
+        ? ` It currently belongs to ${input.ownership.currentLauncher}; the requested owner is ${input.ownership.requested.launcher}.`
+        : " Its existing Station ownership cannot be determined safely.";
+    const takeover = `stn hooks ${input.action} ${input.provider} --yes --takeover`;
+    const repair =
+      "currentLauncher" in input.ownership
+        ? ` To perform this action as the current owner, run ${shellQuote(resolve(dirname(input.ownership.currentLauncher), "stn"))} hooks ${input.action} ${input.provider} --yes.`
+        : "";
+    super(
+      `Refusing to ${input.action} ${provider} hooks because ${input.artifactPath} is a shared Station artifact with a different or unknown owner.${current} Re-run ${takeover} only to transfer ownership.${repair}`,
+    );
+    this.name = "ProviderHookArtifactOwnershipError";
+    this.ownership = input.ownership;
+  }
+}
+
+export function providerHookArtifactOwner(
+  launcher: string,
+  buildInfo: StationBuildInfo,
+): ProviderHookArtifactOwner {
+  return ProviderHookArtifactOwnerSchema.parse({
+    schemaVersion: 1,
+    launcher: resolve(launcher),
+    runtimeKind: buildInfo.compiled ? "compiled" : "source",
+    version: buildInfo.version,
+    buildIdentity: buildInfo.buildIdentity,
+  });
+}
+
+export function providerHookOwnerMarker(owner: ProviderHookArtifactOwner): string {
+  const encoded = Buffer.from(
+    JSON.stringify(ProviderHookArtifactOwnerSchema.parse(owner)),
+    "utf8",
+  ).toString("base64url");
+  return `${PROVIDER_HOOK_OWNER_MARKER}${encoded}`;
+}
+
+export function parseProviderHookOwnerMarker(
+  contents: string,
+): ProviderHookArtifactOwner | undefined {
+  const markerIndex = contents.indexOf(PROVIDER_HOOK_OWNER_MARKER);
+  if (markerIndex < 0) return undefined;
+  const encoded = contents
+    .slice(markerIndex + PROVIDER_HOOK_OWNER_MARKER.length)
+    .match(/^[A-Za-z0-9_-]+/u)?.[0];
+  if (encoded === undefined) return undefined;
+  try {
+    return ProviderHookArtifactOwnerSchema.parse(
+      JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * POLICY
+ *
+ * Uses the canonical launcher path as the durable owner key so upgrades at one installed
+ * location remain automatic while source and installed runtimes cannot replace each other.
+ */
+export function classifyProviderHookArtifactOwnership(input: {
+  contents: string;
+  requested: ProviderHookArtifactOwner;
+  legacyLauncher?: string;
+}): ProviderHookArtifactOwnership {
+  if (input.contents.trim().length === 0) {
+    return { status: "absent", requested: input.requested };
+  }
+  const current = parseProviderHookOwnerMarker(input.contents);
+  if (current === undefined && input.contents.includes(PROVIDER_HOOK_OWNER_MARKER)) {
+    return { status: "legacy-unknown", requested: input.requested };
+  }
+  const currentLauncher = current?.launcher ?? input.legacyLauncher;
+  if (currentLauncher === undefined) {
+    return { status: "legacy-unknown", requested: input.requested };
+  }
+  if (resolve(currentLauncher) === resolve(input.requested.launcher)) {
+    return { status: "same-owner", requested: input.requested, currentLauncher };
+  }
+  const ownership: ProviderHookArtifactOwnership = {
+    status: "different-owner",
+    requested: input.requested,
+    currentLauncher,
+  };
+  if (current !== undefined) ownership.current = current;
+  return ownership;
+}
+
+export function assertProviderHookArtifactOwnership(input: {
+  provider: string;
+  action: "install" | "uninstall";
+  artifactPath: string;
+  contents: string;
+  requested?: ProviderHookArtifactOwner;
+  legacyLauncher?: string;
+  takeover?: boolean;
+}): ProviderHookArtifactOwnership | undefined {
+  if (input.requested === undefined) return undefined;
+  const ownership = classifyProviderHookArtifactOwnership({
+    contents: input.contents,
+    requested: input.requested,
+    ...(input.legacyLauncher === undefined ? {} : { legacyLauncher: input.legacyLauncher }),
+  });
+  if (
+    input.takeover !== true &&
+    (ownership.status === "different-owner" || ownership.status === "legacy-unknown")
+  ) {
+    throw new ProviderHookArtifactOwnershipError({
+      provider: input.provider,
+      action: input.action,
+      artifactPath: input.artifactPath,
+      ownership,
+    });
+  }
+  return ownership;
+}
+
+export function providerHookScriptLauncher(script: string, provider: string): string | undefined {
+  const command = script
+    .split("\n")
+    .find((line) => line.includes(`${shellQuote(provider)} > /dev/null`));
+  return command === undefined ? undefined : providerHookCommandLauncher(command);
+}
+
+export function providerHookCommandLauncher(command: string): string | undefined {
+  return firstShellWord(command);
+}
 
 export type ConfigScriptHookPlan<Document, EventName extends string> = {
   before: string;
@@ -41,6 +203,7 @@ export type ConfigScriptHookPlan<Document, EventName extends string> = {
   configChanged: boolean;
   scriptChanged: boolean;
   changed: boolean;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type ConfigScriptHookUninstallPlan<Document, EventName extends string> = {
@@ -224,6 +387,12 @@ export function providerHookScriptOptions(
   if (options.hookBin !== undefined) {
     input.hookBin = options.hookBin;
   }
+  if (options.artifactOwner !== undefined) {
+    input.artifactOwner = options.artifactOwner;
+  }
+  if (options.takeover !== undefined) {
+    input.takeover = options.takeover;
+  }
   return input;
 }
 
@@ -241,6 +410,9 @@ export function expectedProviderHookScript(input: {
   // scope — the observer correlates env-less events by their payload cwd.
   return [
     "#!/usr/bin/env bash",
+    ...(options.artifactOwner === undefined
+      ? []
+      : [`# ${providerHookOwnerMarker(options.artifactOwner)}`]),
     "set -euo pipefail",
     ...dynamicHookArg(
       "SOCKET_ARG",
@@ -295,6 +467,8 @@ export async function planConfigScriptHook<Document, EventName extends string>(i
   expectedCommands: (hookScriptPath: string) => Record<EventName, string>;
   expectedScript: string;
   extraChanged?: boolean;
+  provider?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
 }): Promise<ConfigScriptHookPlan<Document, EventName>> {
   const before = await input.readOptionalFile(input.configPath);
   const document = input.parseDocument(before);
@@ -305,8 +479,20 @@ export async function planConfigScriptHook<Document, EventName extends string>(i
   const configChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== input.expectedScript;
   const changed = configChanged || scriptChanged || input.extraChanged === true;
+  const legacyLauncher =
+    input.provider === undefined
+      ? undefined
+      : providerHookScriptLauncher(scriptBefore, input.provider);
+  const ownership =
+    input.provider === undefined || input.artifactOwner === undefined
+      ? undefined
+      : classifyProviderHookArtifactOwnership({
+          contents: scriptBefore,
+          requested: input.artifactOwner,
+          ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+        });
 
-  return {
+  const result: ConfigScriptHookPlan<Document, EventName> = {
     before,
     after,
     document,
@@ -316,6 +502,8 @@ export async function planConfigScriptHook<Document, EventName extends string>(i
     scriptChanged,
     changed,
   };
+  if (ownership !== undefined) result.ownership = ownership;
+  return result;
 }
 
 export async function installConfigScriptHook(input: {
@@ -326,7 +514,23 @@ export async function installConfigScriptHook(input: {
   configChanged: boolean;
   scriptChanged: boolean;
   fileOps: HookSetupFileOps;
+  provider?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
 }): Promise<string | undefined> {
+  if (input.provider !== undefined) {
+    const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
+    const legacyLauncher = providerHookScriptLauncher(currentScript, input.provider);
+    assertProviderHookArtifactOwnership({
+      provider: input.provider,
+      action: "install",
+      artifactPath: input.hookScriptPath,
+      contents: currentScript,
+      ...(input.artifactOwner === undefined ? {} : { requested: input.artifactOwner }),
+      ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+      ...(input.takeover === undefined ? {} : { takeover: input.takeover }),
+    });
+  }
   let backupPath: string | undefined;
   if (input.configChanged) {
     backupPath = await input.fileOps.backupIfPresent(input.configPath);
@@ -349,7 +553,23 @@ export async function uninstallConfigScriptHook<Document, EventName extends stri
   documentContainsCommand: (document: Document, command: string) => boolean;
   expectedCommands: (hookScriptPath: string) => Record<EventName, string>;
   fileOps: HookSetupFileOps;
+  provider?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
 }): Promise<ConfigScriptHookUninstallPlan<Document, EventName>> {
+  if (input.provider !== undefined) {
+    const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
+    const legacyLauncher = providerHookScriptLauncher(currentScript, input.provider);
+    assertProviderHookArtifactOwnership({
+      provider: input.provider,
+      action: "uninstall",
+      artifactPath: input.hookScriptPath,
+      contents: currentScript,
+      ...(input.artifactOwner === undefined ? {} : { requested: input.artifactOwner }),
+      ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
+      ...(input.takeover === undefined ? {} : { takeover: input.takeover }),
+    });
+  }
   const before = await input.readOptionalFile(input.configPath);
   const document = input.parseDocument(before);
   const commands = input.expectedCommands(input.hookScriptPath);
@@ -403,4 +623,26 @@ export function commandLine(args: readonly string[]): string {
 
 export function shellQuote(value: string): string {
   return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function firstShellWord(command: string): string | undefined {
+  if (!command.startsWith("'")) return command.match(/^[^\s]+/u)?.[0];
+  let result = "";
+  let index = 1;
+  while (index < command.length) {
+    const end = command.indexOf("'", index);
+    if (end < 0) return undefined;
+    result += command.slice(index, end);
+    if (command.slice(end, end + 4) === "'\\''") {
+      result += "'";
+      index = end + 4;
+      continue;
+    }
+    return command[end + 1] === " " ? result : undefined;
+  }
+  return undefined;
+}
+
+function capitalize(value: string): string {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }

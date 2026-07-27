@@ -203,6 +203,18 @@ const providerHookAbsolutePathSchema = nonEmptyStringSchema.refine(
   "Provider hook runtime paths must be absolute.",
 );
 
+export const ProviderHookArtifactOwnerSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    launcher: providerHookAbsolutePathSchema,
+    runtimeKind: z.enum(["compiled", "source"]),
+    version: nonEmptyStringSchema,
+    buildIdentity: z.string().regex(/^[0-9a-f]{64}$/u),
+  })
+  .strict();
+
+export type ProviderHookArtifactOwner = z.infer<typeof ProviderHookArtifactOwnerSchema>;
+
 export const ProviderHookRuntimeSchema = z
   .object({
     ingressLauncher: providerHookAbsolutePathSchema,
@@ -211,6 +223,7 @@ export const ProviderHookRuntimeSchema = z
     hookSpoolDir: providerHookAbsolutePathSchema,
     autoStartFromHooks: z.boolean(),
     stationConfigPath: providerHookAbsolutePathSchema.optional(),
+    artifactOwner: ProviderHookArtifactOwnerSchema.optional(),
   })
   .strict();
 

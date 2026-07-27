@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
-import { commandLine, providerHookScriptRoutesByStationEnv } from "@station/runtime";
+import {
+  commandLine,
+  providerHookOwnerMarker,
+  providerHookScriptRoutesByStationEnv,
+} from "@station/runtime";
 import { describe, expect, it } from "vitest";
 
 describe("CLI Codex hook commands", () => {
@@ -87,6 +91,92 @@ describe("CLI Codex hook commands", () => {
     const overriddenScript = await readFile(hookScriptPath, "utf8");
     expect(overriddenScript).toContain("/explicit/stn-ingress");
     expect(overriddenScript).not.toContain(providerHookIngressLauncher);
+  });
+
+  it("refuses cross-runtime overwrite until explicit takeover", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-codex-hooks-owner-"));
+    const configPath = await writeConfig(root, true);
+    const env = codexEnv(root);
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const installedOwner = artifactOwner(join(root, "installed", "stn-ingress"), "compiled", "a");
+    const sourceOwner = artifactOwner(join(root, "source", "bin", "stn-ingress"), "source", "b");
+
+    await runCli(["--config", configPath, "hooks", "install", "codex", "--yes"], {
+      env,
+      providerHookIngressLauncher: installedOwner.launcher,
+      providerHookArtifactOwner: installedOwner,
+    });
+    const installedScript = await readFile(hookScriptPath, "utf8");
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "plan", "codex"], {
+        env,
+        providerHookIngressLauncher: sourceOwner.launcher,
+        providerHookArtifactOwner: sourceOwner,
+      }),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: {
+        ownership: {
+          status: "different-owner",
+          current: installedOwner,
+          requested: sourceOwner,
+        },
+      },
+    });
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(installedScript);
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "install", "codex", "--yes"], {
+        env,
+        providerHookIngressLauncher: sourceOwner.launcher,
+        providerHookArtifactOwner: sourceOwner,
+      }),
+    ).rejects.toMatchObject({
+      code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+      message: expect.stringContaining("stn hooks install codex --yes --takeover"),
+    });
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(installedScript);
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "install", "codex", "--takeover"], {
+        env,
+        providerHookIngressLauncher: sourceOwner.launcher,
+        providerHookArtifactOwner: sourceOwner,
+      }),
+    ).rejects.toThrow("without --yes");
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "doctor", "codex"], {
+        env,
+        providerHookIngressLauncher: sourceOwner.launcher,
+        providerHookArtifactOwner: sourceOwner,
+      }),
+    ).resolves.toMatchObject({
+      code: 1,
+      output: {
+        status: "warn",
+        installed: false,
+        ownership: { status: "different-owner" },
+        message: expect.stringContaining("--yes --takeover"),
+      },
+    });
+
+    const takeover = await runCli(
+      ["--config", configPath, "hooks", "install", "codex", "--yes", "--takeover"],
+      {
+        env,
+        providerHookIngressLauncher: sourceOwner.launcher,
+        providerHookArtifactOwner: sourceOwner,
+      },
+    );
+    expect(takeover).toMatchObject({
+      code: 0,
+      output: { ownership: { status: "same-owner", requested: sourceOwner } },
+    });
+    const sourceScript = await readFile(hookScriptPath, "utf8");
+    expect(sourceScript).toContain(sourceOwner.launcher);
+    expect(sourceScript).toContain(providerHookOwnerMarker(sourceOwner));
   });
 
   it("installs and uninstalls through the generic hooks command", async () => {
@@ -479,6 +569,16 @@ describe("CLI Codex hook commands", () => {
     });
   });
 });
+
+function artifactOwner(launcher: string, runtimeKind: "compiled" | "source", digit: string) {
+  return {
+    schemaVersion: 1 as const,
+    launcher,
+    runtimeKind,
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.4",
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 function codexEnv(root: string): Record<string, string> {
   return { CODEX_HOME: join(root, "codex-home") };

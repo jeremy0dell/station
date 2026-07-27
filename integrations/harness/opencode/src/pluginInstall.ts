@@ -1,6 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createHookSetupFileOps } from "@station/runtime";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
+import {
+  assertProviderHookArtifactOwnership,
+  classifyProviderHookArtifactOwnership,
+  createHookSetupFileOps,
+  type ProviderHookArtifactOwnership,
+  providerHookOwnerMarker,
+} from "@station/runtime";
 import { openCodeForwardedEventTypes } from "./ingressRules.js";
 
 export const OPENCODE_STATION_PLUGIN_NAME = "station-agent-state.js";
@@ -14,6 +21,8 @@ export type OpenCodePluginPlanOptions = {
   hookSpoolDir?: string;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
 };
 
 export type OpenCodePluginPlan = {
@@ -24,6 +33,7 @@ export type OpenCodePluginPlan = {
   installed: boolean;
   before: string;
   after: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type OpenCodePluginInstallResult = OpenCodePluginPlan & {
@@ -40,6 +50,7 @@ export type OpenCodePluginDoctorResult = {
   installed: boolean;
   changed: boolean;
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 const fileOps = createHookSetupFileOps(({ operation, path, cause }) => {
@@ -54,7 +65,8 @@ export async function planOpenCodePlugin(
   const before = await fileOps.readOptionalFile(pluginPath);
   const after = expectedOpenCodePluginScript(options);
   const changed = before !== after;
-  return {
+  const ownership = openCodePluginOwnership(before, options);
+  const result: OpenCodePluginPlan = {
     provider: "opencode",
     configDir,
     pluginPath,
@@ -63,12 +75,16 @@ export async function planOpenCodePlugin(
     before,
     after,
   };
+  if (ownership !== undefined) result.ownership = ownership;
+  return result;
 }
 
 export async function installOpenCodePlugin(
   options: OpenCodePluginPlanOptions = {},
 ): Promise<OpenCodePluginInstallResult> {
   const plan = await planOpenCodePlugin(options);
+  const current = await fileOps.readOptionalFile(plan.pluginPath);
+  assertOpenCodePluginOwnership("install", plan.pluginPath, current, options);
   let backupPath: string | undefined;
   if (plan.changed) {
     backupPath = await fileOps.backupIfPresent(plan.pluginPath);
@@ -78,6 +94,13 @@ export async function installOpenCodePlugin(
     ...plan,
     installed: true,
   };
+  if (options.artifactOwner !== undefined) {
+    result.ownership = {
+      status: "same-owner",
+      requested: options.artifactOwner,
+      currentLauncher: options.artifactOwner.launcher,
+    };
+  }
   if (backupPath !== undefined) {
     result.backupPath = backupPath;
   }
@@ -88,6 +111,8 @@ export async function uninstallOpenCodePlugin(
   options: OpenCodePluginPlanOptions = {},
 ): Promise<OpenCodePluginInstallResult> {
   const plan = await planOpenCodePlugin(options);
+  const current = await fileOps.readOptionalFile(plan.pluginPath);
+  assertOpenCodePluginOwnership("uninstall", plan.pluginPath, current, options);
   let removed = false;
   if (plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER)) {
     removed = await fileOps.removeHookFileIfPresent(plan.pluginPath);
@@ -105,26 +130,32 @@ export async function doctorOpenCodePlugin(
 ): Promise<OpenCodePluginDoctorResult> {
   const plan = await planOpenCodePlugin(options);
   const installed = plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER);
+  const ownershipConflict =
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
   if (!installed && options.enabled === true) {
     return {
       provider: "opencode",
       configDir: plan.configDir,
       pluginPath: plan.pluginPath,
       status: "warn",
-      installed,
+      installed: ownershipConflict ? false : installed,
       changed: true,
       message: "OpenCode event plugin is not installed.",
+      ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
     };
   }
-  if (installed && plan.changed) {
+  if (installed && (plan.changed || ownershipConflict)) {
     return {
       provider: "opencode",
       configDir: plan.configDir,
       pluginPath: plan.pluginPath,
       status: "warn",
-      installed,
+      installed: ownershipConflict ? false : installed,
       changed: true,
-      message: "OpenCode event plugin is installed but differs from the expected STATION plugin.",
+      message: ownershipConflict
+        ? "OpenCode event plugin ownership conflicts with this Station runtime; run `stn hooks install opencode --yes --takeover` only to transfer it."
+        : "OpenCode event plugin is installed but differs from the expected STATION plugin.",
+      ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
     };
   }
   return {
@@ -137,6 +168,7 @@ export async function doctorOpenCodePlugin(
     message: installed
       ? "OpenCode event plugin is installed."
       : "OpenCode event plugin is not requested.",
+    ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
   };
 }
 
@@ -167,8 +199,16 @@ export function expectedOpenCodePluginScript(options: OpenCodePluginPlanOptions 
   const observerSocketPath = options.observerSocketPath ?? "";
   const stateDir = options.stateDir ?? "";
   const hookSpoolDir = options.hookSpoolDir ?? "";
-  return `// ${OPENCODE_STATION_PLUGIN_MARKER}
-// Generated by STATION. Do not edit by hand.
+  const ownerMarker =
+    options.artifactOwner === undefined
+      ? []
+      : [`// ${providerHookOwnerMarker(options.artifactOwner)}`];
+  const header = [
+    `// ${OPENCODE_STATION_PLUGIN_MARKER}`,
+    ...ownerMarker,
+    "// Generated by STATION. Do not edit by hand.",
+  ].join("\n");
+  return `${header}
 import { spawn, spawnSync } from "node:child_process";
 
 const fallbackSocketPath = ${JSON.stringify(observerSocketPath)};
@@ -350,4 +390,44 @@ function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
 }
 `;
+}
+
+function openCodePluginOwnership(
+  contents: string,
+  options: OpenCodePluginPlanOptions,
+): ProviderHookArtifactOwnership | undefined {
+  if (options.artifactOwner === undefined) return undefined;
+  const legacy = expectedOpenCodePluginScript(withoutOwnership(options));
+  return classifyProviderHookArtifactOwnership({
+    contents,
+    requested: options.artifactOwner,
+    ...(contents === legacy ? { legacyLauncher: options.artifactOwner.launcher } : {}),
+  });
+}
+
+function assertOpenCodePluginOwnership(
+  action: "install" | "uninstall",
+  pluginPath: string,
+  contents: string,
+  options: OpenCodePluginPlanOptions,
+): void {
+  const legacy = expectedOpenCodePluginScript(withoutOwnership(options));
+  assertProviderHookArtifactOwnership({
+    provider: "opencode",
+    action,
+    artifactPath: pluginPath,
+    contents,
+    ...(options.artifactOwner === undefined ? {} : { requested: options.artifactOwner }),
+    ...(contents === legacy && options.artifactOwner !== undefined
+      ? { legacyLauncher: options.artifactOwner.launcher }
+      : {}),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+  });
+}
+
+function withoutOwnership(options: OpenCodePluginPlanOptions): OpenCodePluginPlanOptions {
+  const legacyOptions = { ...options };
+  delete legacyOptions.artifactOwner;
+  delete legacyOptions.takeover;
+  return legacyOptions;
 }

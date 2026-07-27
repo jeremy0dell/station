@@ -33,6 +33,10 @@ export const hooksCliCommand: CliCommandNode = {
     { name: "<target>", description: `One of: ${hookTargets.join(", ")}.` },
     { name: "--yes, -y", description: "Confirm install or uninstall actions." },
     {
+      name: "--takeover",
+      description: "Transfer a shared hook artifact from another Station runtime.",
+    },
+    {
       name: "--hook-bin <command>",
       description: "Use a specific stn-ingress command for generated hooks.",
     },
@@ -117,6 +121,10 @@ function hookActionCommand(action: (typeof hookActions)[number]): CliCommandNode
     options: [
       { name: "<target>", description: `One of: ${hookTargets.join(", ")}.` },
       { name: "--yes, -y", description: "Required for install and uninstall actions." },
+      {
+        name: "--takeover",
+        description: "Transfer a shared hook artifact from another Station runtime.",
+      },
       {
         name: "--hook-bin <command>",
         description: "Use a specific stn-ingress command for generated hooks.",

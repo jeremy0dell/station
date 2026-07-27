@@ -207,6 +207,7 @@ describe("CLI setup command", () => {
         args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
       }),
     );
+    expect(calls.flatMap((call) => call.args ?? [])).not.toContain("--takeover");
     expect(installed).toContain("opencode");
   });
 

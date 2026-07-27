@@ -179,6 +179,9 @@ function openCodePluginDoctorOptions(
     pluginOptions.observerSocketPath = requesterRuntime.observerSocketPath;
     pluginOptions.stateDir = requesterRuntime.stateDir;
     pluginOptions.hookSpoolDir = requesterRuntime.hookSpoolDir;
+    if (requesterRuntime.artifactOwner !== undefined) {
+      pluginOptions.artifactOwner = requesterRuntime.artifactOwner;
+    }
   } else {
     if (options.observerSocketPath !== undefined) {
       pluginOptions.observerSocketPath = options.observerSocketPath;

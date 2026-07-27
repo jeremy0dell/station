@@ -13,6 +13,7 @@ import type {
   ProviderDoctorCheck,
   ProviderDoctorContext,
   ProviderHealth,
+  ProviderHookArtifactOwner,
   ProviderId,
   RawHarnessEvent,
   SafeError,
@@ -245,6 +246,7 @@ export type CommonHookDoctorOptions = {
   hookSpoolDir?: string;
   autoStartFromHooks?: boolean;
   stationConfigPath?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
 };
 
 /** Maps the whole requester hook runtime or preserves the incumbent provider options. */
@@ -262,6 +264,9 @@ export function harnessHookDoctorOptions(
     result.autoStartFromHooks = runtime.autoStartFromHooks;
     if (runtime.stationConfigPath !== undefined) {
       result.stationConfigPath = runtime.stationConfigPath;
+    }
+    if (runtime.artifactOwner !== undefined) {
+      result.artifactOwner = runtime.artifactOwner;
     }
     return result;
   }

@@ -2,9 +2,12 @@ import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
+import { providerHookOwnerMarker } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
   doctorOpenCodePlugin,
+  expectedOpenCodePluginScript,
   installOpenCodePlugin,
   planOpenCodePlugin,
   resolveOpenCodeConfigDir,
@@ -129,6 +132,34 @@ describe("OpenCode plugin setup", () => {
       removed: false,
     });
     await expect(readFile(pluginPath, "utf8")).resolves.toContain("UserPlugin");
+  });
+
+  it("adopts an exact legacy plugin but requires takeover across runtime owners", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-owner-"));
+    const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
+    const installedOwner = artifactOwner("/installed/stn-ingress", "compiled", "a");
+    const sourceOwner = artifactOwner("/source/bin/stn-ingress", "source", "b");
+    await mkdir(join(root, "opencode", "plugins"), { recursive: true });
+    await writeFile(pluginPath, expectedOpenCodePluginScript(), "utf8");
+
+    await installOpenCodePlugin({ pluginPath, artifactOwner: installedOwner });
+    const installedPlugin = await readFile(pluginPath, "utf8");
+    await expect(
+      installOpenCodePlugin({ pluginPath, artifactOwner: sourceOwner }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(pluginPath, "utf8")).resolves.toBe(installedPlugin);
+    await expect(
+      doctorOpenCodePlugin({ pluginPath, artifactOwner: sourceOwner, enabled: true }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "different-owner" },
+    });
+
+    await installOpenCodePlugin({ pluginPath, artifactOwner: sourceOwner, takeover: true });
+    await expect(readFile(pluginPath, "utf8")).resolves.toContain(
+      providerHookOwnerMarker(sourceOwner),
+    );
   });
 
   it("filters streaming message events before delivery or spool", async () => {
@@ -400,6 +431,20 @@ describe("OpenCode plugin setup", () => {
     });
   });
 });
+
+function artifactOwner(
+  launcher: string,
+  runtimeKind: "compiled" | "source",
+  digit: string,
+): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind,
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.4",
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 async function writeIngressRecorder(root: string) {
   const ingressPath = join(root, "stn-ingress");

@@ -45,6 +45,15 @@ drain. Raw hook payloads normalize exactly once through the selected
 Observer-side provider adapter; an already-normalized `HarnessEventReport`
 bypasses that adapter.
 
+Station-generated Codex, Claude, and Cursor scripts, the OpenCode plugin, and
+Worktrunk lifecycle commands carry a strict artifact-owner marker. The canonical
+launcher path is the durable owner key; runtime kind, display version, and build
+identity are diagnostic provenance. An upgrade at the same launcher may refresh
+the artifact, but another installed or source runtime cannot replace or remove it
+with ordinary `--yes`. Install and uninstall re-read ownership at the write
+boundary and require the explicit `--takeover` flag to transfer a different or
+unknown owner. Setup never adds that flag automatically.
+
 ## Pre-Delivery Ordering And Evidence
 
 After required JSON parsing, `stn-ingress` resolves the provider event and applies

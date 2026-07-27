@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
   doctorClaudeHooks,
@@ -110,6 +111,46 @@ describe("Claude hook setup", () => {
       installed: true,
       settingsPath,
     });
+  });
+
+  it("refuses install and uninstall from another Station runtime owner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-claude-hooks-owner-"));
+    const options = {
+      claudeSettingsPath: join(root, "state", "hooks", "station-claude-settings.json"),
+      claudeConfigDir: join(root, "claude-home"),
+      hookScriptPath: join(root, "state", "hooks", "station-claude-hook.sh"),
+      env: {},
+    };
+    const installedOwner = artifactOwner("/installed/stn-ingress", "compiled", "a");
+    const sourceOwner = artifactOwner("/source/bin/stn-ingress", "source", "b");
+    await installClaudeHooks({
+      ...options,
+      hookBin: installedOwner.launcher,
+      artifactOwner: installedOwner,
+    });
+
+    await expect(
+      doctorClaudeHooks({
+        ...options,
+        hookBin: sourceOwner.launcher,
+        artifactOwner: sourceOwner,
+        enabled: true,
+      }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "different-owner" },
+    });
+    await expect(
+      installClaudeHooks({ ...options, hookBin: sourceOwner.launcher, artifactOwner: sourceOwner }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(
+      uninstallClaudeHooks({
+        ...options,
+        hookBin: sourceOwner.launcher,
+        artifactOwner: sourceOwner,
+      }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
   });
 
   it("generated script delivers to stn-ingress even without ownership env", async () => {
@@ -259,6 +300,20 @@ describe("Claude hook setup", () => {
     expect(doctor.message).toContain("silently ignores");
   });
 });
+
+function artifactOwner(
+  launcher: string,
+  runtimeKind: "compiled" | "source",
+  digit: string,
+): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind,
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.4",
+    buildIdentity: digit.repeat(64),
+  };
+}
 
 function userSettingsWithGeneratedEntries(hookScriptPath: string): string {
   return JSON.stringify(

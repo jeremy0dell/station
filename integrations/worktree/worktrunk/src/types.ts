@@ -1,4 +1,9 @@
-import type { ExternalCommandRunner, RuntimeClock } from "@station/runtime";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type {
+  ExternalCommandRunner,
+  ProviderHookArtifactOwnership,
+  RuntimeClock,
+} from "@station/runtime";
 
 export const WORKTRUNK_HOOK_NAMES = [
   "post-create",
@@ -16,6 +21,7 @@ export type WorktrunkHookExpectation = {
   hookSpoolDir: string;
   autoStartFromHooks: boolean;
   stationConfigPath?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
 };
 
 export type WorktrunkHookPlanOptions = {
@@ -23,6 +29,7 @@ export type WorktrunkHookPlanOptions = {
   worktrunkConfigPath?: string;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+  takeover?: boolean;
 };
 
 export type WorktrunkHookPlan = {
@@ -33,6 +40,7 @@ export type WorktrunkHookPlan = {
   changed: boolean;
   before: string;
   after: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type WorktrunkHookInstallResult = WorktrunkHookPlan & {
@@ -48,6 +56,7 @@ export type WorktrunkHookDoctorResult = {
   missing: WorktrunkHookName[];
   commands: Record<WorktrunkHookName, string>;
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type WorktrunkHookSetupErrorCode =

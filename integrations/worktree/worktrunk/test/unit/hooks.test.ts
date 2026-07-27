@@ -1,11 +1,13 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import {
   doctorWorktrunkHooks,
   installWorktrunkHooks,
   planWorktrunkHooks,
   uninstallWorktrunkHooks,
+  type WorktrunkHookExpectation,
 } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
@@ -126,15 +128,78 @@ describe("Worktrunk hook setup", () => {
       }),
     ).resolves.toMatchObject({ status: "ok", installed: true });
   });
+
+  it("requires takeover before replacing or removing another runtime's lifecycle hooks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-hooks-owner-"));
+    const configPath = join(root, "config.toml");
+    const installedOwner = artifactOwner("/installed/stn-ingress", "compiled", "a");
+    const sourceOwner = artifactOwner("/source/bin/stn-ingress", "source", "b");
+    const installedExpectation = hookExpectation(installedOwner.launcher, installedOwner);
+    const sourceExpectation = hookExpectation(sourceOwner.launcher, sourceOwner);
+
+    await installWorktrunkHooks({
+      worktrunkConfigPath: configPath,
+      expectation: installedExpectation,
+    });
+    const beforeConflict = await readFile(configPath, "utf8");
+
+    await expect(
+      installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation: sourceExpectation }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(configPath, "utf8")).resolves.toBe(beforeConflict);
+    await expect(
+      doctorWorktrunkHooks({ worktrunkConfigPath: configPath, expectation: sourceExpectation }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "different-owner" },
+    });
+
+    await installWorktrunkHooks({
+      worktrunkConfigPath: configPath,
+      expectation: sourceExpectation,
+      takeover: true,
+    });
+    await expect(
+      uninstallWorktrunkHooks({
+        worktrunkConfigPath: configPath,
+        expectation: installedExpectation,
+      }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await uninstallWorktrunkHooks({
+      worktrunkConfigPath: configPath,
+      expectation: sourceExpectation,
+    });
+    await expect(readFile(configPath, "utf8")).resolves.not.toContain("stn-ingress");
+  });
 });
 
-function hookExpectation(hookBin = "stn-ingress") {
-  return {
+function hookExpectation(
+  hookBin = "stn-ingress",
+  artifactOwner?: ProviderHookArtifactOwner,
+): WorktrunkHookExpectation {
+  const expectation: WorktrunkHookExpectation = {
     hookBin,
     stationConfigPath: "/tmp/station/config.toml",
     observerSocketPath: "/tmp/station/run/observer.sock",
     stateDir: "/tmp/station/state",
     hookSpoolDir: "/tmp/station/state/spool/hooks",
     autoStartFromHooks: true,
+  };
+  if (artifactOwner !== undefined) expectation.artifactOwner = artifactOwner;
+  return expectation;
+}
+
+function artifactOwner(
+  launcher: string,
+  runtimeKind: "compiled" | "source",
+  digit: string,
+): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind,
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.4",
+    buildIdentity: digit.repeat(64),
   };
 }

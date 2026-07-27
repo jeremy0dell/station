@@ -234,6 +234,13 @@ describe("harnessHookDoctorOptions", () => {
     hookSpoolDir: "/checkout/B/state/spool/hooks",
     autoStartFromHooks: false,
     stationConfigPath: "/checkout/B/config.toml",
+    artifactOwner: {
+      schemaVersion: 1 as const,
+      launcher: "/checkout/B/bin/stn-ingress",
+      runtimeKind: "source" as const,
+      version: "0.0.0-test",
+      buildIdentity: "b".repeat(64),
+    },
   };
 
   it("uses the whole requester hook runtime instead of mixing incumbent fields", () => {
@@ -250,6 +257,7 @@ describe("harnessHookDoctorOptions", () => {
       hookSpoolDir: requesterRuntime.hookSpoolDir,
       autoStartFromHooks: requesterRuntime.autoStartFromHooks,
       stationConfigPath: requesterRuntime.stationConfigPath,
+      artifactOwner: requesterRuntime.artifactOwner,
     });
   });
 
