@@ -554,9 +554,10 @@ an existing session precedes the gate.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new
-session under its branch. Terminal-preparation or process-launch failure deletes
-the seed and releases the target. A title supplied while returning an existing
-session is ignored.
+session under its branch. Terminal-preparation or process-launch failure releases
+the target before deleting the seed; if target release cannot be confirmed, the
+seed remains so a dangling target cannot lose its title. A title supplied while
+returning an existing session is ignored.
 
 A managed launch result may include an opaque attachment that Station resolves
 to its host mechanics. An absent attachment permits Station's local launch path;

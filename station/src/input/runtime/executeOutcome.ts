@@ -200,7 +200,9 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
     case "forkSession":
       if (stationViewStore !== undefined) {
         stationViewStore.setState(
-          openForkDetailsForRow(stationViewStore.getState(), action.rowId, "dashboard"),
+          openForkDetailsForRow(stationViewStore.getState(), action.rowId, {
+            returnTo: "dashboard",
+          }),
         );
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }

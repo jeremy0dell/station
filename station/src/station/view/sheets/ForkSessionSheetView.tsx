@@ -1,5 +1,5 @@
 // OpenTUI bottom sheet for Fork Session: chooseSlot (pick a source row, mirrors
-// RemoveSessionSheetView) and details (branch field + copy-dirty toggle + submit,
+// RemoveSessionSheetView) and details (name field + copy-dirty toggle + submit,
 // mirrors NewSessionSheetView's EditName). The submit button is a click target so
 // the fork launches in Station (sheetSubmit → launch-fork), never the tmux path.
 import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";

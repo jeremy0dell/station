@@ -1,10 +1,12 @@
 import type { SessionId, WorktreeRow } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
+import { stableName } from "@station/runtime";
 import {
   createEditableTextInputState,
   editableTextInputIntentForInput,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
+import { createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardSessionRow } from "../../selectors/selectors.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
@@ -38,11 +40,7 @@ export function validateForkSessionCreate(
   if (title.length === 0) {
     return { ok: false, message: "Session name cannot be empty." };
   }
-  const branch = snapshot.rows.some(
-    (row) => row.projectId === screen.projectId && row.branch === screen.branch,
-  )
-    ? suggestForkBranch(screen.sourceBranch, snapshot.rows, screen.projectId)
-    : screen.branch;
+  const branch = availableForkBranch(screen.branch, snapshot.rows, screen.projectId);
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   if (project === undefined) {
     return { ok: false, message: "The source project is no longer available." };
@@ -74,12 +72,18 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
   return handleDetailsKey(state, key, state.screen);
 }
 
+export type OpenForkDetailsOptions = {
+  returnTo?: "dashboard";
+  /** Stable injection for deterministic callers; ordinary UI opens mint a fresh branch token. */
+  branchToken?: string;
+};
+
 // Builds the fork details step from a dashboard row. Exported so the context menu can
 // open it directly for a clicked row (skipping chooseSlot), like renameSession.
 export function openForkDetailsForRow(
   state: TuiState,
   rowId: SessionId,
-  returnTo?: "dashboard",
+  options: OpenForkDetailsOptions = {},
 ): TuiState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "fork") {
     return state;
@@ -98,7 +102,12 @@ export function openForkDetailsForRow(
     return state;
   }
 
-  const branch = suggestForkBranch(row.branch, snapshot.rows, row.projectId);
+  // A fresh hidden token on each open makes a provider-only Git-ref collision recoverable on retry.
+  const branch = availableForkBranch(
+    generatedForkBranch(row.branch, options.branchToken ?? createNewSessionNameToken()),
+    snapshot.rows,
+    row.projectId,
+  );
   const screen: ForkDetailsScreen = {
     name: "fork",
     step: "details",
@@ -111,25 +120,31 @@ export function openForkDetailsForRow(
       (session) => session.worktreeId === row.id && isRunningAgentState(session.status.value),
     ),
     branch,
-    draftTitle: createEditableTextInputState(branch),
+    draftTitle: createEditableTextInputState(`${row.branch}-fork`),
     copyDirty: true,
     focus: "name",
   };
-  if (returnTo !== undefined) {
-    screen.returnTo = returnTo;
+  if (options.returnTo !== undefined) {
+    screen.returnTo = options.returnTo;
   }
   return { ...state, screen };
 }
 
-function suggestForkBranch(
-  sourceBranch: string,
+function generatedForkBranch(sourceBranch: string, token: string): string {
+  return stableName({
+    profile: "path-segment",
+    display: [sourceBranch, "fork", token],
+    unique: [sourceBranch, "fork", token],
+  });
+}
+
+function availableForkBranch(
+  base: string,
   rows: readonly WorktreeRow[],
   projectId: WorktreeRow["projectId"],
 ): string {
-  // Only the source project's branches can collide (uniqueness is per repo).
+  // Only the source project's worktrees can collide in the current snapshot.
   const taken = new Set(rows.filter((row) => row.projectId === projectId).map((row) => row.branch));
-  const base = `${sourceBranch}-fork`;
-  // `taken` is finite, so an unused suffix is always found within taken.size + 1 tries.
   let candidate = base;
   for (let suffix = 2; taken.has(candidate); suffix += 1) {
     candidate = `${base}-${suffix}`;

@@ -39,8 +39,8 @@ function detailsScreen(state: TuiState) {
   return state.screen;
 }
 
-function openDetails(): TuiState {
-  return drive(base(), [type("F"), type("1")]);
+function openDetails(branchToken = "aaaaaa"): TuiState {
+  return openForkDetailsForRow(base(), "ses_wt_web_idle", { branchToken });
 }
 
 function clearTitle(state: TuiState): TuiState {
@@ -61,16 +61,25 @@ describe("fork screen", () => {
     expect(state.screen).toEqual({ name: "fork", step: "chooseSlot" });
   });
 
-  it("starts with a title matching the hidden generated branch", () => {
+  it("starts with a friendly title and a collision-resistant hidden branch", () => {
     const screen = detailsScreen(openDetails());
-    expect(screen.branch).toBe(`${screen.sourceBranch}-fork`);
-    expect(screen.draftTitle.value).toBe(screen.branch);
+    expect(screen.draftTitle.value).toBe(`${screen.sourceBranch}-fork`);
+    expect(screen.branch).toMatch(/^fix-nav-mobile-fork-[a-f0-9]+$/);
+    expect(screen.branch).not.toBe(screen.draftTitle.value);
     expect(screen.copyDirty).toBe(true);
     expect(screen.focus).toBe("name");
     expect(screen.sourceWorktreeId.length).toBeGreaterThan(0);
   });
 
-  it("submits a session.fork operation with the suggested branch and copyDirty", () => {
+  it("generates a different hidden branch when retrying an unseen Git-ref collision", () => {
+    const first = detailsScreen(openDetails("aaaaaa"));
+    const retry = detailsScreen(openDetails("bbbbbb"));
+
+    expect(retry.draftTitle.value).toBe(first.draftTitle.value);
+    expect(retry.branch).not.toBe(first.branch);
+  });
+
+  it("submits a session.fork operation with the generated branch and copyDirty", () => {
     const opened = openDetails();
     const screen = detailsScreen(opened);
     const transition = step(opened, ENTER);
@@ -81,7 +90,7 @@ describe("fork screen", () => {
     expect(operation?.type).toBe("forkSession");
     if (operation?.type !== "forkSession") throw new Error("unreachable");
     expect(operation.title).toBe(`${screen.sourceBranch}-fork`);
-    expect(operation.branch).toBe(`${screen.sourceBranch}-fork`);
+    expect(operation.branch).toBe(screen.branch);
     expect(operation.sourceWorktreeId).toBe(screen.sourceWorktreeId);
     expect(operation.command.type).toBe("session.fork");
     expect(operation.command.payload.title).toBe(operation.title);
@@ -140,33 +149,32 @@ describe("fork screen", () => {
     const operation = transition.operations?.[0];
     if (operation?.type !== "forkSession") throw new Error("expected fork operation");
     expect(operation.title).toBe(screen.draftTitle.value);
-    expect(operation.branch).toBe(`${screen.sourceBranch}-fork-2`);
+    expect(operation.branch).toBe(`${screen.branch}-2`);
   });
 
   it("scopes branch collisions and suggestions to the source project", () => {
-    // A DIFFERENT project already holds the name this web fork would suggest.
-    // Branch uniqueness is per repo, so it must neither bump the suggestion nor
-    // block the submit. (wt_web_idle is on "fix-nav-mobile" → suggests "-fork".)
-    const base = createDashboardSnapshot();
-    const apiRow = base.rows.find((candidate) => candidate.projectId === "api");
+    const initial = detailsScreen(openDetails());
+    const snapshot = createDashboardSnapshot();
+    const apiRow = snapshot.rows.find((candidate) => candidate.projectId === "api");
     if (apiRow === undefined) throw new Error("expected api row");
-    const snapshot: StationSnapshot = {
-      ...base,
-      rows: [...base.rows, { ...apiRow, id: "wt_api_fork", branch: "fix-nav-mobile-fork" }],
+    const withOtherProjectCollision: StationSnapshot = {
+      ...snapshot,
+      rows: [...snapshot.rows, { ...apiRow, id: "wt_api_fork", branch: initial.branch }],
     };
     const opened = openForkDetailsForRow(
-      createInitialTuiState({ initialSnapshot: snapshot }),
+      createInitialTuiState({ initialSnapshot: withOtherProjectCollision }),
       "ses_wt_web_idle",
+      { branchToken: "aaaaaa" },
     );
     const screen = detailsScreen(opened);
-    expect(screen.branch).toBe("fix-nav-mobile-fork");
-    expect(screen.draftTitle.value).toBe("fix-nav-mobile-fork");
+    expect(screen.branch).toBe(initial.branch);
+    expect(screen.draftTitle.value).toBe(`${screen.sourceBranch}-fork`);
 
     const transition = step(opened, ENTER);
     expect(transition.operations).toHaveLength(1);
     const operation = transition.operations?.[0];
     if (operation?.type !== "forkSession") throw new Error("expected fork operation");
-    expect(operation.branch).toBe("fix-nav-mobile-fork");
+    expect(operation.branch).toBe(initial.branch);
   });
 
   it("escapes from details back to chooseSlot, then to the dashboard", () => {

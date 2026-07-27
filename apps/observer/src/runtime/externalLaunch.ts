@@ -23,6 +23,7 @@ import {
 import type { SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
+import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
 
 export type ExternalLaunchDeps = {
@@ -31,6 +32,7 @@ export type ExternalLaunchDeps = {
   persistence: SessionStore;
   clock?: RuntimeClock | undefined;
   configPath?: string | undefined;
+  logger?: StationLogger | undefined;
 };
 
 export type ExternalLaunchOutcome<T> = {
@@ -44,7 +46,8 @@ export type ExternalLaunchOutcome<T> = {
  *
  * Prepare Station-hosted agent identity, persist an optional title before reconcile
  * can expose it, and return a launch plan plus opaque managed attachment. Failed
- * terminal preparation or process launch removes the title seed and managed target.
+ * terminal preparation or process launch releases the managed target before removing
+ * its title seed, retaining the title whenever target cleanup cannot be confirmed.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -214,20 +217,33 @@ export async function prepareExternalLaunch(
       reconcile: true,
     };
   } catch (error) {
-    if (seededSessionTitle) {
-      try {
-        await deps.persistence.deleteSessionTitleSeed(sessionId);
-      } catch {
-        // Cleanup must not replace the launch failure that explains why the seed was abandoned.
-      }
-    }
-    // Unregister the half-prepared target so a retry is not blocked by a dangling
-    // session and reconcile does not surface a launch that never spawned.
+    // Keep metadata while a target may still exist; reconcile must never expose a
+    // dangling managed session under a branch fallback after losing its chosen title.
+    let targetReleaseConfirmed = openedTargetId === undefined;
     if (openedTargetId !== undefined) {
       try {
         await managedTerminal.releaseTarget(openedTargetId);
-      } catch {
-        // Cleanup must not replace the launch failure that explains why the target was abandoned.
+        targetReleaseConfirmed = true;
+      } catch (cleanupError) {
+        await deps.logger
+          ?.warn("External launch cleanup could not release its managed target.", {
+            sessionId,
+            terminalTargetId: openedTargetId,
+            error: cleanupError,
+          })
+          .catch(() => undefined);
+      }
+    }
+    if (seededSessionTitle && targetReleaseConfirmed) {
+      try {
+        await deps.persistence.deleteSessionTitleSeed(sessionId);
+      } catch (cleanupError) {
+        await deps.logger
+          ?.warn("External launch cleanup could not delete its title seed.", {
+            sessionId,
+            error: cleanupError,
+          })
+          .catch(() => undefined);
       }
     }
     throw error;

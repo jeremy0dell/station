@@ -661,7 +661,7 @@ describe("prepareExternalLaunch", () => {
     expect(await station.listTargets()).toEqual([]);
   });
 
-  it("preserves the launch failure when rollback release also fails", async () => {
+  it("preserves the launch failure and title seed when rollback release also fails", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
         tag: "TerminalProviderError",
@@ -674,11 +674,17 @@ describe("prepareExternalLaunch", () => {
         message: "release failed",
       },
     });
+    const persistence = trackingPersistence();
 
     await expect(
-      prepareExternalLaunch(deps([row()], station), prepareParams),
+      prepareExternalLaunch(deps([row()], station, undefined, persistence.store), {
+        ...prepareParams,
+        title: "Hexagonal PT 12",
+      }),
     ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+    expect(persistence.deleted).toEqual([]);
+    expect(await station.listTargets()).toHaveLength(1);
   });
 });
 
