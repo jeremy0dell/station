@@ -5,7 +5,7 @@
 import { describe, expect, it } from "bun:test";
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
-import { selectDashboardViewport } from "@station/dashboard-core";
+import { addProjectSelectedIndex, selectDashboardViewport } from "@station/dashboard-core";
 import { addTuiToast } from "@station/dashboard-core";
 import {
   createEditableTextInputState,
@@ -342,7 +342,11 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     const before = store.getState().screen;
 
-    const outcome = routeStationMouse({ kind: "projectHeader", projectId: "station" }, RIGHT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "projectHeader", projectId: "station" },
+      RIGHT_DOWN,
+      store,
+    );
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toBe(before);
@@ -382,7 +386,11 @@ describe("routeStationMouse", () => {
 
   it("opens a shell pane for a project header click at the project root", () => {
     const store = makeStore();
-    const outcome = routeStationMouse({ kind: "openShellForProject", projectId: "station" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "openShellForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
     expect(outcome).toEqual({
       kind: "open-pane",
       paneId: "pane-proj-station",
@@ -415,7 +423,13 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "/" }); // enter search (non-dashboard) mode
 
-    expect(routeStationMouse({ kind: "openShellForRow", rowId: "ses_wt_station_idle" }, LEFT_DOWN, store)).toEqual({
+    expect(
+      routeStationMouse(
+        { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({
       kind: "handled",
     });
     expect(
@@ -425,7 +439,9 @@ describe("routeStationMouse", () => {
 
   it("treats an unresolvable row or project as an inert click", () => {
     const store = makeStore();
-    expect(routeStationMouse({ kind: "openShellForRow", rowId: "wt_nope" }, LEFT_DOWN, store)).toEqual({
+    expect(
+      routeStationMouse({ kind: "openShellForRow", rowId: "wt_nope" }, LEFT_DOWN, store),
+    ).toEqual({
       kind: "handled",
     });
     expect(
@@ -435,7 +451,11 @@ describe("routeStationMouse", () => {
 
   it("creates a session immediately via [+] quick-session affordance", () => {
     const store = makeStore();
-    const outcome = routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "quickSessionForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
     expect(outcome.kind).toBe("launch-new-session");
     if (outcome.kind === "launch-new-session") {
       expect(outcome.projectId).toBe("station");
@@ -448,11 +468,7 @@ describe("routeStationMouse", () => {
     const store = makeStore(snapshotWithBareProject("station"));
 
     expect(
-      routeStationMouse(
-        { kind: "quickSessionForProject", projectId: "station" },
-        LEFT_DOWN,
-        store,
-      ),
+      routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
     expect(store.getState().localRows.pendingCreate).toEqual([]);
     const toast = store.getState().toasts.at(-1)?.toast;
@@ -597,9 +613,9 @@ describe("routeStationMouse", () => {
     expect(
       routeStationMouse({ kind: "projectSettingsItem", itemId: "remove" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
-    expect(
-      routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store),
-    ).toEqual({ kind: "handled" });
+    expect(routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store)).toEqual({
+      kind: "handled",
+    });
     expect(store.getState().screen).toEqual(before);
   });
 });
@@ -736,14 +752,14 @@ describe("routeStationMouse widget settings", () => {
     if (opened.name !== "addProject" || opened.flow.mode !== "start") {
       throw new Error("expected addProject start");
     }
-    expect(opened.flow.selectedIndex).toBe(0);
+    expect(addProjectSelectedIndex(store.getState())).toBe(0);
 
     routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
     const moved = store.getState().screen;
     if (moved.name !== "addProject" || moved.flow.mode !== "start") {
       throw new Error("expected addProject start");
     }
-    expect(moved.flow.selectedIndex).toBe(1);
+    expect(addProjectSelectedIndex(store.getState())).toBe(1);
   });
 
   it("ignores an add-project row click outside addProject mode", () => {

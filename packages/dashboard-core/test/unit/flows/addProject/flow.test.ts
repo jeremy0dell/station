@@ -18,19 +18,18 @@ describe("add project flow", () => {
     ]);
   });
 
-  it("selects a start row by absolute index and clamps out-of-range clicks", () => {
+  it("opens an explicitly selected start path", () => {
     const started = createAddProjectFlow({
       cwd: "/Users/example/Developer/station",
       homeDir: "/Users/example",
     });
-    expect(started.selectedIndex).toBe(0);
 
-    const picked = transitionAddProjectFlow(started, { type: "select", index: 1 }).state;
-    expect(picked?.selectedIndex).toBe(1);
+    const opened = transitionAddProjectFlow(started, {
+      type: "startOpen",
+      path: "/Users/example",
+    });
 
-    // A stale click past the list clamps to the last row instead of going out of range.
-    const clamped = transitionAddProjectFlow(started, { type: "select", index: 9 }).state;
-    expect(clamped?.selectedIndex).toBe(started.choices.length - 1);
+    expect(opened.effects).toEqual([{ type: "loadDirectory", path: "/Users/example" }]);
   });
 
   it("uses wizard history and does not leak choose fields into review state", () => {
