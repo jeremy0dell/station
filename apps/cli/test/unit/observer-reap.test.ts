@@ -1,5 +1,6 @@
 import { type ObserverProcessEntry, parseObserverProcessList } from "@station/observer/internal";
 import { describe, expect, it } from "vitest";
+import { observerCommandSummary } from "../../src/commands/observer.js";
 import { runObserverReap, selectReapPlan } from "../../src/observerReap.js";
 
 const SOCK = "/Users/u/.local/state/station/observer.sock";
@@ -123,6 +124,18 @@ describe("runObserverReap", () => {
     );
     expect(out.applied).toBe(false);
     expect(out.plan.targets.map((t) => t.pid)).toEqual([200]);
+    expect(out.plan.targets[0]?.automaticEligibility).toMatchObject({
+      eligible: false,
+      refusalReasons: [expect.stringContaining("evidence is unavailable")],
+    });
+    expect(observerCommandSummary(out)).toMatchObject({
+      automaticEligibility: [
+        expect.objectContaining({
+          pid: 200,
+          eligible: false,
+        }),
+      ],
+    });
     expect(signals).toEqual([]);
   });
 

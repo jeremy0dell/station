@@ -270,13 +270,19 @@ claim gate makes no fairness claim.
 real stale-socket races, XDG/state divergence, explicit paths with spaces,
 claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
 same-version build-identity handoff and refusal, cross-version graceful handoff,
-inaccessible-socket preservation, displaced shutdown, and clean restart while
-the persistent claim remains. The compiled binary smoke
+inaccessible-socket preservation, displaced shutdown, clean restart while the
+persistent claim remains, and guarded duplicate inspection with keeper
+preservation. Duplicate-cleanup changes must additionally prove dormant
+candidates, startup-contender and unrelated-socket-FD refusal, quarantine
+cancellation, SIGTERM-only survivor behavior, and absence of automatic
+SIGKILL. The compiled binary smoke
 also builds a second artifact from one production-source change in an isolated
 detached worktree, queries both exact selectors, proves lower-to-higher
 same-version replacement and post-handoff mutation refusal, then proves
 source/compiled ordering and Station Host PTY continuity across both Observer
-replacements. It also chmods the physical Observer socket to `000`, proves status,
+replacements. Singleton-cleanup promotion must also prove the same guarded
+SIGTERM-only behavior under the compiled Bun artifact before production
+composition leaves report-only mode. The smoke also chmods the physical Observer socket to `000`, proves status,
 start, restart, doctor, and ingress preserve the original PID/socket/pidfile,
 then restores access and drains the one spooled event. Run both after `pnpm build` when changing startup, socket
 ownership, pidfiles, or claim lifecycle behavior.

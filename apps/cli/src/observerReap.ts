@@ -1,7 +1,6 @@
 import {
   createLocalObserverProcessEvidence,
   type ObserverDuplicateProcessEvidenceSource,
-  parseObserverProcessList,
   type ObserverReapOutcome as ReapOutcome,
   type ObserverReapPlan as ReapPlan,
   type ObserverReapTarget as ReapTarget,
@@ -57,8 +56,6 @@ export async function runObserverReap(
     ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
   });
 }
-
-export const parseObserverPsOutput = parseObserverProcessList;
 
 function observerSignal(
   signal: ObserverReapDeps["signal"],
