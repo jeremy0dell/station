@@ -12,6 +12,7 @@ import type {
   ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
+  ProviderHealth,
   ProviderHookEvent,
   ProviderHookReceipt,
   ReconcileReceipt,
@@ -111,11 +112,46 @@ export type CreateObserverApiOptions = {
  * COMPOSITION ROOT
  *
  * Wires Observer use cases, durable and local-metadata adapters, ingress workers,
- * scheduling, exact build publication, and adapter shutdown behind the application API.
+ * provider-health publication, scheduling, exact build publication, and adapter
+ * shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
   const reconciling = { reconciling: false };
+  const providerHealthCache = options.providers?.healthCache;
+  const pendingProviderHealthPublications = new Set<Promise<void>>();
+  let acceptingProviderHealthPublications = true;
+
+  const publishProviderHealthProbe = async (health: ProviderHealth): Promise<void> => {
+    try {
+      const event = await options.core.commitProviderHealthProbe(health);
+      if (event !== undefined) {
+        options.eventBus.publish(event);
+      }
+    } catch (error) {
+      await options.logger
+        ?.error("Completed provider health probe could not be published.", {
+          provider: health.providerId,
+          error,
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  const unsubscribeProviderHealth = providerHealthCache?.onProbeCompleted((health) => {
+    if (!acceptingProviderHealthPublications) {
+      return;
+    }
+    const publication = publishProviderHealthProbe(health);
+    pendingProviderHealthPublications.add(publication);
+    void publication.finally(() => pendingProviderHealthPublications.delete(publication));
+    return publication;
+  });
+  const stopProviderHealthPublication = async (): Promise<void> => {
+    acceptingProviderHealthPublications = false;
+    unsubscribeProviderHealth?.();
+    await Promise.all(pendingProviderHealthPublications);
+  };
 
   // Assigned after metadataRefresh + the drainer (which need the scheduler); the
   // scheduler/launch closures only read it once a reconcile actually runs.
@@ -164,6 +200,10 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
+  if (providerHealthCache !== undefined) {
+    harnessReportDeps.refreshProviderHealth = (providerId) =>
+      providerHealthCache.refresh(providerId);
+  }
 
   const harnessIngressQueue = buildHarnessIngressQueue(
     options,
@@ -223,7 +263,14 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
 
   const api: ObserverApi = {
     health: () => buildHealth(options, clock, harnessIngressQueue),
-    stop: () => buildStop(options, harnessIngressQueue, metadataRefresh, clock),
+    stop: () =>
+      buildStop(
+        options,
+        harnessIngressQueue,
+        metadataRefresh,
+        stopProviderHealthPublication,
+        clock,
+      ),
     getSnapshot: async () => options.core.getSnapshot(),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
@@ -491,10 +538,13 @@ async function buildStop(
   options: CreateObserverApiOptions,
   harnessIngressQueue: HarnessIngressQueue,
   metadataRefresh: WorktreeMetadataRefreshService | undefined,
+  stopProviderHealthPublication: () => Promise<void>,
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
+  const providerHealthStopped = stopProviderHealthPublication();
   await harnessIngressQueue.shutdown();
   await metadataRefresh?.shutdown();
+  await providerHealthStopped;
   await options.onStop?.();
   return {
     schemaVersion: STATION_SCHEMA_VERSION,

@@ -1,5 +1,6 @@
 import { existsSync, type FSWatcher, lstatSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import type { SafeError } from "@station/contracts";
 import { toSafeError } from "../diagnostics/errors.js";
 import type { StationLogger } from "../stationLogger.js";
 import type {
@@ -317,7 +318,7 @@ function uniqueTargets(targets: GitRefInvalidationTarget[]): GitRefInvalidationT
   return unique;
 }
 
-function localGitWatcherError(code: string, message: string) {
+function localGitWatcherError(code: string, message: string): SafeError {
   return {
     tag: "LocalGitMetadataError",
     code,

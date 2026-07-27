@@ -18,11 +18,7 @@ import {
   type TuiInputMode,
 } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
-import {
-  isPrimaryMouseEvent,
-  wheelDirection,
-  type StationMouseEvent,
-} from "../input/mouse.js";
+import { isPrimaryMouseEvent, wheelDirection, type StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 
 export type DashboardMouseEffects = {
@@ -37,6 +33,11 @@ const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "forkChooseSlot",
 ]);
 const SHEET_CHOICE_MODES: ReadonlySet<string> = new Set(Object.keys(LIST_REGISTRY));
+const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
+  "addProjectStart",
+  "addProjectChoose",
+  "addProjectFilter",
+]);
 const SCROLL_PAGE_ROWS = 5;
 const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
 
@@ -113,11 +114,7 @@ function routeSurfaceClick(
   }
 }
 
-function activateRowInMode(
-  store: StoreApi<TuiStore>,
-  rowId: string,
-  mode: TuiInputMode,
-): void {
+function activateRowInMode(store: StoreApi<TuiStore>, rowId: string, mode: TuiInputMode): void {
   if (ROW_INTERACTIVE_MODES.has(mode)) {
     activateCurrentRow(store, rowId);
   }
@@ -133,11 +130,7 @@ function toggleProjectInMode(
   }
 }
 
-function openLinkInMode(
-  url: string,
-  mode: TuiInputMode,
-  effects: DashboardMouseEffects,
-): void {
+function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardMouseEffects): void {
   if (mode === "dashboard") {
     effects.openUrl(url);
   }
@@ -167,7 +160,9 @@ function openProjectShellInMode(
   effects: DashboardMouseEffects,
 ): void {
   if (mode !== "dashboard") return;
-  const project = store.getState().snapshot?.projects.find((candidate) => candidate.id === projectId);
+  const project = store
+    .getState()
+    .snapshot?.projects.find((candidate) => candidate.id === projectId);
   if (project === undefined) {
     showNotice(store, STALE_TARGET_MESSAGE);
     return;
@@ -175,11 +170,7 @@ function openProjectShellInMode(
   effects.openShell({ cwd: project.root });
 }
 
-function pageInMode(
-  store: StoreApi<TuiStore>,
-  direction: "up" | "down",
-  mode: TuiInputMode,
-): void {
+function pageInMode(store: StoreApi<TuiStore>, direction: "up" | "down", mode: TuiInputMode): void {
   if (!ROW_INTERACTIVE_MODES.has(mode)) {
     return;
   }
@@ -216,7 +207,7 @@ function routeModalClick(
       confirmProjectRemoval(store, mode);
       return true;
     case "addProjectRow":
-      if (mode === "addProject") {
+      if (ADD_PROJECT_ROW_MODES.has(mode)) {
         store.setState(selectAddProjectRow(store.getState(), target.index));
       }
       return true;

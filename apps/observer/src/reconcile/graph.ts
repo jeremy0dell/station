@@ -216,6 +216,44 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
   return snapshot;
 }
 
+export function projectProviderHealthOntoSnapshot(input: {
+  snapshot: StationSnapshot;
+  health: ProviderHealth;
+  projectedAt: string;
+}): StationSnapshot {
+  const providerHealth: Record<string, ProviderHealth> = {
+    ...input.snapshot.providerHealth,
+    [input.health.providerId]: input.health,
+  };
+  const providerAlertIds = new Set([
+    providerHealthAlertId(input.health.providerId, "degraded"),
+    providerHealthAlertId(input.health.providerId, "unavailable"),
+  ]);
+  const alerts = [
+    ...input.snapshot.alerts.filter((alert) => !providerAlertIds.has(alert.id)),
+    ...alertsFromProviderHealth({ [input.health.providerId]: input.health }, input.projectedAt),
+  ];
+  const healthy =
+    !alerts.some((alert) => alert.severity === "error") &&
+    Object.values(providerHealth).every((health) => health.status !== "unavailable");
+
+  return {
+    ...input.snapshot,
+    generatedAt: input.projectedAt,
+    observer: {
+      ...input.snapshot.observer,
+      healthy,
+    },
+    providerHealth,
+    projects: input.snapshot.projects.map((project) =>
+      project.health.providerId === input.health.providerId
+        ? { ...project, health: input.health }
+        : project,
+    ),
+    alerts,
+  };
+}
+
 type BuildWorktreeRowInput = {
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
@@ -785,7 +823,7 @@ function alertsFromProviderHealth(
     .filter((health) => health.status === "unavailable" || health.status === "degraded")
     .map((health) => {
       const alert: StationAlert = {
-        id: `alert_${health.providerId}_${health.status}`,
+        id: providerHealthAlertId(health.providerId, health.status),
         severity: health.status === "unavailable" ? "error" : "warn",
         message:
           health.lastError?.message ??
@@ -798,6 +836,10 @@ function alertsFromProviderHealth(
       }
       return alert;
     });
+}
+
+function providerHealthAlertId(providerId: string, status: ProviderHealth["status"]): string {
+  return `alert_${providerId}_${status}`;
 }
 
 function orphans(

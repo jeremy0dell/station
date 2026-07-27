@@ -111,7 +111,6 @@ type InMemoryObserverPersistenceState = {
 type InsertProviderObservationInput = RecordProviderObservationInput & {
   id: string;
   observedAt: string;
-  coalesceUnchanged?: boolean;
 };
 
 export function createInMemoryObserverPersistence(

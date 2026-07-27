@@ -303,10 +303,11 @@ Current startup proceeds in this order:
    Observer core, command handlers, and configured event hooks around the awaited
    provider registry. Only the two application ports pass inward.
 7. The API constructs ingress queues, reconcile scheduling, metadata refresh,
-   diagnostics dependencies, and spool draining. Local Git readers and ref
-   invalidation are selected here; watches arm lazily on the first metadata
-   refresh, and each refresh replaces the complete watched identity set before
-   cache or metadata reads so a later ref move cannot be missed.
+   diagnostics dependencies, spool draining, and the provider-health completion
+   listener whose commits drain before persistence shutdown. Local Git readers
+   and ref invalidation are selected here; watches arm lazily on the first
+   metadata refresh, and each refresh replaces the complete watched identity set
+   before cache or metadata reads so a later ref move cannot be missed.
 8. The runtime constructs a private startup-and-health gate, then the protocol
    server binds the resolved socket before startup reconcile. Only the
    successful socket binder may publish process identity.
@@ -319,7 +320,8 @@ Current startup proceeds in this order:
 10. The startup gate marks the runtime ready, synchronously rolls back and closes
     the boot claim, then unblocks health responses. Startup reconcile follows
     outside the claim and establishes the first provider-backed snapshot;
-    provider health and harness-version probes fill caches in the background. A
+    provider-health probes commit into the current snapshot as they land, while
+    harness-version probes fill their cache in the background. A
     stop requested before readiness is terminal: health remains gated, socket
     and pidfile cleanup finish while the claim is held, and the outer lifecycle
     `finally` releases it before exit.
@@ -433,9 +435,12 @@ sessions. Terminal attachment requires matching session or run identity. Session
 and activity totals derive from canonical sessions; only worktree totals derive
 from rows.
 
-Observer core serializes full reconciles and harness-report authorization plus
-base snapshot projection on one non-poisoning writer chain. Readiness persistence
-and application happen after that base commit and revalidate the live snapshot.
+Observer core serializes full reconciles, completed provider-health commits, and
+harness-report authorization plus base snapshot projection on one non-poisoning
+writer chain. A health commit persists one observation, coherently updates the
+current health projection, and then publishes `provider.healthChanged` without a
+full provider scan. Readiness persistence and application happen after its base
+commit and revalidate the live snapshot.
 The scheduler debounces and coalesces reasons while ensuring only one scheduled
 run is active. Startup-compatible requests may join the startup flight; other
 direct requests retain the rule that their scan starts at or after the request.
@@ -587,7 +592,7 @@ from the diagnostic use case.
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
-| Background refresh | Provider probes and metadata refresh are best-effort and must report failure without blocking the primary reconcile result. |
+| Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. |
 
 Retry belongs at an adapter or runtime boundary whose owner can state why the
 operation is safe to repeat. Do not retry a mutation without an idempotency key,
