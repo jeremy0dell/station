@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
+import { persistentUiOwnerClientOption } from "@station/tmux";
 import type { SetupTmuxBindingFact } from "../model.js";
 import type { SetupFileSystemReader } from "./config.js";
 import { setupProbeTimeoutMs } from "./constants.js";
@@ -12,6 +13,8 @@ const bindingEditComment = "# Change Space to any tmux key; stn setup preserves 
 const supportedBindingKeyPattern =
   /^(?:[A-Za-z0-9]|Space|F(?:[1-9]|1[0-2])|[CM]-(?:[A-Za-z0-9]|Space|F(?:[1-9]|1[0-2])))$/;
 const quotedShellValuePattern = /^'[^']*'(?:\\''[^']*')*$/;
+// A popup binding runs through a nested tmux client, so prefer the renderer session's outer owner.
+const popupFocusClientFormat = `#{?#{${persistentUiOwnerClientOption}},#{q:${persistentUiOwnerClientOption}},#{q:client_name}}`;
 
 export type CheckSetupTmuxBindingOptions = {
   homeDir: string;
@@ -141,7 +144,7 @@ export function tmuxPopupRunShellCommand(
   }
   command.push(
     "STATION_FOCUS_PROVIDER=tmux",
-    "STATION_FOCUS_CLIENT_ID=#{q:client_name}",
+    `STATION_FOCUS_CLIENT_ID=${popupFocusClientFormat}`,
     quoteShellValue(escapeTmuxFormat(launcherCommand)),
   );
   if (configPath !== undefined) {

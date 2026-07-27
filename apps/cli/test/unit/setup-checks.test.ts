@@ -1190,7 +1190,9 @@ scroll_on_output = "teleport"
     const binding = tmuxPopupBindingBlock();
     const clientNames = ["client one", "client'quote", "client;rm -rf", "client$(touch nope)"];
 
-    expect(binding).toContain("STATION_FOCUS_CLIENT_ID=#{q:client_name}");
+    expect(binding).toContain(
+      "STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}}",
+    );
     expect(binding).not.toContain('STATION_FOCUS_CLIENT_ID="#{client_name}"');
     for (const clientName of clientNames) {
       expect(binding).not.toContain(clientName);
@@ -1468,10 +1470,10 @@ scroll_on_output = "teleport"
     const calls: ExternalCommandInput[] = [];
 
     expect(runShellCommand).toBe(
-      "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/station-##{session_name}/stn-tmux-popup'",
+      "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}} '/tmp/station-##{session_name}/stn-tmux-popup'",
     );
     expect(tmuxPopupBindingBlock(launcherCommand)).toContain(
-      "STATION_FOCUS_CLIENT_ID=#{q:client_name}",
+      "STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}}",
     );
 
     await checkSetupTmuxBinding({

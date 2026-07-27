@@ -1121,7 +1121,7 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       marker: "# >>> station popup binding >>>",
       launcherCommand: "/tmp/bin/stn-tmux-popup",
       runShellCommand:
-        "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{q:client_name} '/tmp/bin/stn-tmux-popup'",
+        "env STATION_FOCUS_PROVIDER=tmux STATION_FOCUS_CLIENT_ID=#{?#{@station_popup_ui_owner_client},#{q:@station_popup_ui_owner_client},#{q:client_name}} '/tmp/bin/stn-tmux-popup'",
       bindingKey: "Space",
       insideTmux: false,
       liveStatus: "unknown",

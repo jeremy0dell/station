@@ -190,14 +190,14 @@ describe("config schemas", () => {
   });
 
   it("accepts tmux popup scopes and rejects unsupported ownership modes", async () => {
-    const config = ParsedStationConfigSchema.parse({
+    const config = StationConfigSchema.parse({
       ...(await loadJson("valid-config.json")),
       terminal: { tmux: { popupScope: "client" } },
     });
 
     expect(config.terminal?.tmux?.popupScope).toBe("client");
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         terminal: { tmux: { popupScope: "window" } },
       }).success,

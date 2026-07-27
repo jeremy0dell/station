@@ -6,6 +6,7 @@ import {
   dismissTmuxPopup,
   ensurePersistentPopupSession,
   openTmuxPopup,
+  persistentUiOwnerClientOption,
   resolveRegisteredDevPopupUi,
   resolveTmuxPopupFocusTarget,
 } from "../../src/popup";
@@ -147,6 +148,14 @@ describe("tmux popup", () => {
     expect(
       calls.find((call) => call.args?.includes("@station_popup_ui_signature"))?.args?.at(-1),
     ).toContain(":client=/dev/ttys001");
+    expect(calls.map((call) => call.args)).toContainEqual([
+      "set-option",
+      "-t",
+      "_station-ui-client",
+      "-q",
+      persistentUiOwnerClientOption,
+      "/dev/ttys001",
+    ]);
   });
 
   it("refuses to replace an unsigned session without ownership evidence", async () => {

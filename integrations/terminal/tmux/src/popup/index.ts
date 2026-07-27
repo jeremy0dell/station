@@ -56,6 +56,7 @@ import type {
 } from "./types.js";
 
 export { buildTmuxPopupArgs } from "./args.js";
+export { persistentUiOwnerClientOption } from "./constants.js";
 export { buildManagedFastPopupRunShellCommand } from "./fastBinding.js";
 export { ensurePersistentPopupSession, resolveRegisteredDevPopupUi } from "./persistentUi.js";
 export type {
