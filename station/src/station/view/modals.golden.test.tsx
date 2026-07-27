@@ -277,7 +277,12 @@ describe("modal flow golden frames", () => {
       }
       modal.prepare?.(store);
       const setup = await testRender(
-        <DashboardRoot store={store} columns={SIZE.width} rows={SIZE.height} />,
+        <DashboardRoot
+          store={store}
+          columns={SIZE.width}
+          rows={SIZE.height}
+          onCopyNotice={() => {}}
+        />,
         SIZE,
       );
       teardowns.push(() => {
