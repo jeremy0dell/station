@@ -245,6 +245,19 @@ describe("observer reconcile persistence", () => {
       alerts: [],
     });
     expect(core.getHealth().providerHealth["fake-worktree"]?.status).toBe("healthy");
+
+    currentTime = "2026-05-20T12:02:00.000Z";
+    const repeatedHealthyEvent = events.next();
+    await providers.healthCache.refresh(providers.worktree.id);
+    expect(await repeatedHealthyEvent).toMatchObject({
+      done: false,
+      value: {
+        type: "provider.healthChanged",
+        provider: "fake-worktree",
+        health: { status: "healthy", lastCheckedAt: currentTime },
+      },
+    });
+
     await expect(
       core.commitProviderHealthProbe({
         providerId: "fake-worktree",
@@ -258,6 +271,7 @@ describe("observer reconcile persistence", () => {
       entityKind: "provider_health",
     });
     expect(healthRows.map((row) => row.payload.status)).toEqual(["unavailable", "healthy"]);
+    expect(healthRows[1]?.observedAt).toBe(currentTime);
 
     await events.return?.();
     await api.stop();

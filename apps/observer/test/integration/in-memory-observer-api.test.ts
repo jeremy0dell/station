@@ -8,7 +8,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
 import { registerObserverCommandHandlers } from "../../src/commands/router";
 import type { PersistenceHealthSource } from "../../src/persistence/ports";
@@ -155,6 +155,61 @@ describe("Observer API with in-memory persistence", () => {
     await expect(api.stop()).resolves.toMatchObject({ stopped: true, at: now });
     expect(metadataStopped).toBe(true);
     await expect(commandQueue.drain()).resolves.toBeUndefined();
+  });
+
+  it("waits for an in-flight provider health publication before stopping", async () => {
+    const clock = { now: () => new Date(now) };
+    const idFactory = observerIds();
+    const persistence = createInMemoryObserverPersistence({ clock, idFactory });
+    const eventBus = createObserverEventBus();
+    const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+    const providers = fakeProviders();
+    const core = createObserverCore({ config, providers, persistence, clock });
+    const commitProviderHealthProbe = core.commitProviderHealthProbe.bind(core);
+    let releaseCommit: () => void = () => undefined;
+    const commitBlocked = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let markCommitStarted: () => void = () => undefined;
+    const commitStarted = new Promise<void>((resolve) => {
+      markCommitStarted = resolve;
+    });
+    vi.spyOn(core, "commitProviderHealthProbe").mockImplementation(async (health) => {
+      markCommitStarted();
+      await commitBlocked;
+      return commitProviderHealthProbe(health);
+    });
+    let markMetadataStopped: () => void = () => undefined;
+    const metadataStopped = new Promise<void>((resolve) => {
+      markMetadataStopped = resolve;
+    });
+    const onStop = vi.fn(async () => undefined);
+    const api = createObserverApi({
+      core,
+      providers,
+      persistence,
+      persistenceHealth: { health: () => healthStub },
+      commandQueue,
+      eventBus,
+      clock,
+      config,
+      metadataRefresh: {
+        refresh: async () => undefined,
+        shutdown: async () => markMetadataStopped(),
+      },
+      onStop,
+    });
+
+    const refresh = providers.healthCache.refresh(providers.worktree.id);
+    await commitStarted;
+    const stop = api.stop();
+    await metadataStopped;
+
+    expect(onStop).not.toHaveBeenCalled();
+    releaseCommit();
+    await expect(stop).resolves.toMatchObject({ stopped: true });
+    await expect(refresh).resolves.toBeUndefined();
+    expect(onStop).toHaveBeenCalledOnce();
   });
 });
 

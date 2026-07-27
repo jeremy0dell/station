@@ -181,6 +181,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
             payload: health,
             observedAt: health.lastCheckedAt,
             expiresAt: providerObservationExpiresAt(health.lastCheckedAt, retentionDays),
+            coalesceUnchanged: true,
           });
         }
         snapshot = projectProviderHealthOntoSnapshot({
