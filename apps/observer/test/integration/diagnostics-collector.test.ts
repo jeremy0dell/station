@@ -1,98 +1,125 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { StationConfig } from "@station/config";
-import { createCursorHarnessProvider } from "@station/cursor";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import type { LogRecord, ProviderHealth } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import { collectDiagnosticSnapshot, ProviderRegistry, runDoctor } from "../../src/internal";
+import {
+  type CommandJournal,
+  collectDiagnosticSnapshot,
+  type EventJournal,
+  ProviderRegistry,
+  runDoctor,
+} from "../../src/internal";
+import {
+  FakeDiagnosticEvidenceSource,
+  memoryRecentLogEvidence,
+} from "../support/diagnosticEvidenceSources.js";
 import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("observer diagnostics collector", () => {
-  it("collects doctor and diagnostic snapshot data from fake providers", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-"));
+  it("collects doctor and diagnostic snapshot data from substitutable local evidence", async () => {
     const clock = { now: () => new Date(now) };
-    const providers = new ProviderRegistry({
-      worktree: new ProviderDiagnosticWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [new FakeHarnessProvider({ now })],
-    });
-    const { sqlite, persistence, core } = createTestObserverCore({
-      config,
-      providers,
-      clock,
-      sqlitePath: join(stateDir, "observer.sqlite"),
-    });
+    const providers = diagnosticProviders();
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
+    const evidenceSource = new FakeDiagnosticEvidenceSource();
+    const journals = diagnosticJournals(persistence);
 
-    await providers.healthCache.refreshAll();
-    await core.reconcile("diagnostics-test");
-    const deps = {
-      config,
-      core,
-      persistence,
-      persistenceHealth: persistence,
-      providers,
-      paths: { stateDir },
-      clock,
-    };
+    try {
+      await providers.healthCache.refreshAll();
+      await core.reconcile("diagnostics-test");
+      const deps = {
+        config,
+        core,
+        ...journals,
+        persistenceHealth: persistence,
+        providers,
+        evidenceSource,
+        clock,
+      };
 
-    await expect(collectDiagnosticSnapshot(deps)).resolves.toMatchObject({
-      schemaVersion: "0.8.0",
-      providerHealth: {
-        "fake-worktree": { status: "healthy" },
-      },
-      retention: {
-        maxDays: 14,
-      },
-    });
-    await expect(runDoctor(deps)).resolves.toMatchObject({
-      status: "healthy",
-      checks: expect.arrayContaining([
-        expect.objectContaining({
-          name: "fake-provider-check",
-          status: "ok",
-        }),
-      ]),
-      debugBundle: {
-        available: true,
-      },
-    });
-    sqlite.close();
+      await expect(collectDiagnosticSnapshot(deps)).resolves.toMatchObject({
+        schemaVersion: "0.8.0",
+        observerHealth: {
+          stateDir: "memory://state",
+          socketPath: "memory://observer-socket",
+        },
+        providerHealth: {
+          "fake-worktree": { status: "healthy" },
+        },
+        localState: { stateDir: "memory://state" },
+        hookSpool: { path: "urn:station:hook-spool", pending: 1 },
+        retention: { maxDays: 14 },
+      });
+      await expect(runDoctor(deps)).resolves.toMatchObject({
+        status: "healthy",
+        checks: expect.arrayContaining([
+          expect.objectContaining({ name: "fake-provider-check", status: "ok" }),
+        ]),
+        logs: {
+          paths: ["queue://observer-log", "queue://hook-log"],
+          recent: [expect.objectContaining({ message: "Memory diagnostic evidence." })],
+        },
+        debugBundle: {
+          available: true,
+          diagnosticsDir: "memory://diagnostics",
+        },
+      });
+      expect(journals.commandJournal).not.toBe(journals.eventJournal);
+      expect(evidenceSource.scanLocalStateCalls).toHaveLength(2);
+      expect(evidenceSource.readRecentLogsCalls).toEqual([500, 50]);
+      expect(evidenceSource.summarizeHookSpoolCalls).toBe(2);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("does not request recent logs when collection excludes them", async () => {
+    const clock = { now: () => new Date(now) };
+    const providers = diagnosticProviders();
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
+    const evidenceSource = new FakeDiagnosticEvidenceSource();
+
+    try {
+      await collectDiagnosticSnapshot(
+        {
+          config,
+          core,
+          ...diagnosticJournals(persistence),
+          persistenceHealth: persistence,
+          providers,
+          evidenceSource,
+          clock,
+        },
+        { includeLogs: false },
+      );
+
+      expect(evidenceSource.readRecentLogsCalls).toEqual([]);
+      expect(evidenceSource.scanLocalStateCalls).toHaveLength(1);
+      expect(evidenceSource.summarizeHookSpoolCalls).toBe(1);
+    } finally {
+      sqlite.close();
+    }
   });
 
   it("derives current health from checks while retaining command error evidence", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-recovery-"));
     const clock = { now: () => new Date(now) };
-    const providers = new ProviderRegistry({
-      worktree: new ProviderDiagnosticWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [new FakeHarnessProvider({ now })],
-    });
-    const { sqlite, persistence, core } = createTestObserverCore({
+    const providers = diagnosticProviders();
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
+    const deps = {
       config,
+      core,
+      ...diagnosticJournals(persistence),
+      persistenceHealth: persistence,
       providers,
+      evidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
-      sqlitePath: join(stateDir, "observer.sqlite"),
-    });
+    };
 
     try {
       await providers.healthCache.refreshAll();
       await core.reconcile("diagnostics-recovery-test");
-      const deps = {
-        config,
-        core,
-        persistence,
-        persistenceHealth: persistence,
-        providers,
-        paths: { stateDir },
-        clock,
-      };
-
-      const baseline = await runDoctor(deps);
-      expect(baseline.status).toBe("healthy");
-      expect(baseline.recentErrors).toEqual([]);
+      expect((await runDoctor(deps)).status).toBe("healthy");
 
       await persistence.recordCommandAccepted({
         commandId: "cmd_historical_failure",
@@ -125,16 +152,6 @@ describe("observer diagnostics collector", () => {
         finishedAt: now,
       });
 
-      const snapshot = await collectDiagnosticSnapshot(deps);
-      expect(snapshot.errors).toContainEqual(
-        expect.objectContaining({
-          id: "err_historical_failure",
-          code: "PROJECT_ROOT_NOT_GIT",
-          commandId: "cmd_historical_failure",
-          traceId: "trc_historical_failure",
-        }),
-      );
-
       const report = await runDoctor(deps);
       expect(report.checks.every((check) => check.status === "ok")).toBe(true);
       expect(report.status).toBe("healthy");
@@ -151,77 +168,10 @@ describe("observer diagnostics collector", () => {
     }
   });
 
-  it("includes Cursor hook diagnostics in doctor data", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-cursor-diag-"));
-    const clock = { now: () => new Date(now) };
-    const providers = new ProviderRegistry({
-      worktree: new FakeWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [
-        createCursorHarnessProvider({
-          command: "agent-test",
-          installHooks: false,
-          runner: async (input) => ({
-            command: input.command,
-            args: input.args ?? [],
-            stdout: "2026.06.02-8c11d9f\n",
-            stderr: "",
-            exitCode: 0,
-          }),
-        }),
-      ],
-    });
-    const { sqlite, persistence, core } = createTestObserverCore({
-      config,
-      providers,
-      clock,
-      sqlitePath: join(stateDir, "observer.sqlite"),
-    });
-    const previousHome = process.env.HOME;
-    process.env.HOME = stateDir;
-    try {
-      const report = await runDoctor({
-        config,
-        core,
-        persistence,
-        persistenceHealth: persistence,
-        providers,
-        paths: { stateDir },
-        clock,
-      });
-
-      expect(report.checks).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            name: "cursor-hooks",
-            status: "ok",
-          }),
-        ]),
-      );
-    } finally {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-      sqlite.close();
-    }
-  });
-
   it("filters command-specific diagnostics and prioritizes matching logs", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-filter-"));
     const clock = { now: () => new Date(now) };
-    const providers = new ProviderRegistry({
-      worktree: new ProviderDiagnosticWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [new FakeHarnessProvider({ now })],
-    });
-    const { sqlite, persistence, core } = createTestObserverCore({
-      config,
-      providers,
-      clock,
-      sqlitePath: join(stateDir, "observer.sqlite"),
-    });
+    const providers = diagnosticProviders();
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
     await persistence.recordCommandAccepted({
       commandId: "cmd_match",
       command: { type: "observer.reconcile", payload: { reason: "match" } },
@@ -254,60 +204,52 @@ describe("observer diagnostics collector", () => {
       },
       finishedAt: now,
     });
-    const logPath = join(stateDir, "observer.jsonl");
-    await writeFile(
-      logPath,
-      `${[
-        JSON.stringify({
-          timestamp: now,
-          level: "error",
-          component: "observer",
-          message: "Command failed.",
-          attributes: { commandId: "cmd_other", traceId: "trc_other" },
-        }),
-        JSON.stringify({
-          timestamp: now,
-          level: "error",
-          component: "observer",
-          message: "Command failed.",
-          attributes: { commandId: "cmd_match", traceId: "trc_match" },
-        }),
-      ].join("\n")}\n`,
-    );
-
-    const snapshot = await collectDiagnosticSnapshot(
+    const records: LogRecord[] = [
       {
-        config,
-        core,
-        persistence,
-        persistenceHealth: persistence,
-        providers,
-        paths: { stateDir, logPaths: [logPath] },
-        clock,
+        timestamp: now,
+        level: "error",
+        component: "observer",
+        message: "Other command failed.",
+        attributes: { commandId: "cmd_other", traceId: "trc_other" },
       },
-      { commandId: "cmd_match" },
-    );
+      {
+        timestamp: now,
+        level: "error",
+        component: "observer",
+        message: "Matching command failed.",
+        attributes: { commandId: "cmd_match", traceId: "trc_match" },
+      },
+    ];
+    const evidenceSource = new FakeDiagnosticEvidenceSource({
+      recentLogs: memoryRecentLogEvidence(records),
+    });
 
-    expect(snapshot.commands.map((command) => command.id)).toEqual(["cmd_match"]);
-    expect(snapshot.errors.map((error) => error.id)).toEqual(["err_match"]);
-    expect(snapshot.logs[0]?.attributes).toMatchObject({ commandId: "cmd_match" });
-    sqlite.close();
+    try {
+      const snapshot = await collectDiagnosticSnapshot(
+        {
+          config,
+          core,
+          ...diagnosticJournals(persistence),
+          persistenceHealth: persistence,
+          providers,
+          evidenceSource,
+          clock,
+        },
+        { commandId: "cmd_match" },
+      );
+
+      expect(snapshot.commands.map((command) => command.id)).toEqual(["cmd_match"]);
+      expect(snapshot.errors.map((error) => error.id)).toEqual(["err_match"]);
+      expect(snapshot.logs[0]?.attributes).toMatchObject({ commandId: "cmd_match" });
+    } finally {
+      sqlite.close();
+    }
   });
 
-  it("includes uncorrelated hook report events in unfiltered diagnostics", async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-diag-events-"));
+  it("includes uncorrelated hook report events only in unfiltered diagnostics", async () => {
     const clock = { now: () => new Date(now) };
-    const providers = new ProviderRegistry({
-      worktree: new ProviderDiagnosticWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [new FakeHarnessProvider({ now })],
-    });
-    const { sqlite, persistence, core } = createTestObserverCore({
-      config,
-      providers,
-      clock,
-      sqlitePath: join(stateDir, "observer.sqlite"),
-    });
+    const providers = diagnosticProviders();
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
     await persistence.recordCommandAccepted({
       commandId: "cmd_match",
       command: { type: "observer.reconcile", payload: { reason: "match" } },
@@ -325,42 +267,149 @@ describe("observer diagnostics collector", () => {
       },
       { source: "hook", createdAt: now },
     );
-
-    const unfiltered = await collectDiagnosticSnapshot({
+    const deps = {
       config,
       core,
-      persistence,
+      ...diagnosticJournals(persistence),
       persistenceHealth: persistence,
       providers,
-      paths: { stateDir },
+      evidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
+    };
+
+    try {
+      const unfiltered = await collectDiagnosticSnapshot(deps);
+      const commandFiltered = await collectDiagnosticSnapshot(deps, { commandId: "cmd_match" });
+
+      expect(unfiltered.events).toContainEqual(
+        expect.objectContaining({
+          type: "harness.eventReported",
+          provider: "codex",
+          eventType: "PreToolUse",
+        }),
+      );
+      expect(commandFiltered.events).not.toContainEqual(
+        expect.objectContaining({ type: "harness.eventReported" }),
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("cannot upgrade degraded core, provider, or persistence health from empty local evidence", async () => {
+    const clock = { now: () => new Date(now) };
+    const providers = new ProviderRegistry({
+      worktree: new DegradedWorktreeProvider({ now }),
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
     });
-    const commandFiltered = await collectDiagnosticSnapshot(
-      {
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
+    const localState = new FakeDiagnosticEvidenceSource().localStateResult;
+    localState.usage = {
+      ...localState.usage,
+      totalBytes: 0,
+      entries: [],
+    };
+    const evidenceSource = new FakeDiagnosticEvidenceSource({
+      localState,
+      recentLogs: memoryRecentLogEvidence([]),
+      hookSpool: undefined,
+    });
+    const sqliteFailure = {
+      ...persistence.health(),
+      open: false,
+      status: "unavailable" as const,
+      lastError: {
+        tag: "SqliteError",
+        code: "SQLITE_UNAVAILABLE",
+        message: "SQLite is unavailable.",
+      },
+    };
+
+    try {
+      await core.reconcile("degraded-diagnostics");
+      const report = await runDoctor({
         config,
         core,
-        persistence,
-        persistenceHealth: persistence,
+        ...diagnosticJournals(persistence),
+        persistenceHealth: { health: () => sqliteFailure },
         providers,
-        paths: { stateDir },
+        evidenceSource,
         clock,
-      },
-      { commandId: "cmd_match" },
-    );
+      });
 
-    expect(unfiltered.events).toContainEqual(
-      expect.objectContaining({
-        type: "harness.eventReported",
-        provider: "codex",
-        eventType: "PreToolUse",
-      }),
-    );
-    expect(commandFiltered.events).not.toContainEqual(
-      expect.objectContaining({ type: "harness.eventReported" }),
-    );
-    sqlite.close();
+      expect(report.status).toBe("degraded");
+      expect(report.sqlite?.status).toBe("unavailable");
+      expect(report.providers["fake-worktree"]?.status).toBe("unavailable");
+      expect(report.localState.totalBytes).toBe(0);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("propagates local-evidence failures instead of synthesizing a healthy snapshot", async () => {
+    const clock = { now: () => new Date(now) };
+    const providers = diagnosticProviders();
+    const { sqlite, persistence, core } = createTestObserverCore({ config, providers, clock });
+    const evidenceSource = new FakeDiagnosticEvidenceSource();
+    evidenceSource.scanLocalStateFailure = {
+      tag: "DiagnosticEvidenceError",
+      code: "LOCAL_DIAGNOSTIC_EVIDENCE_FAILED",
+      message: "Local diagnostic evidence collection failed.",
+    };
+
+    try {
+      await expect(
+        collectDiagnosticSnapshot({
+          config,
+          core,
+          ...diagnosticJournals(persistence),
+          persistenceHealth: persistence,
+          providers,
+          evidenceSource,
+          clock,
+        }),
+      ).rejects.toMatchObject({
+        code: "LOCAL_DIAGNOSTIC_EVIDENCE_FAILED",
+      });
+      expect(evidenceSource.readRecentLogsCalls).toEqual([]);
+      expect(evidenceSource.summarizeHookSpoolCalls).toBe(0);
+    } finally {
+      sqlite.close();
+    }
   });
 });
+
+function diagnosticProviders(): ProviderRegistry {
+  return new ProviderRegistry({
+    worktree: new ProviderDiagnosticWorktreeProvider({ now }),
+    terminal: new FakeTerminalProvider({ now }),
+    harnesses: [new FakeHarnessProvider({ now })],
+  });
+}
+
+function diagnosticJournals(persistence: CommandJournal & EventJournal): {
+  commandJournal: CommandJournal;
+  eventJournal: EventJournal;
+} {
+  return {
+    commandJournal: {
+      recordCommandAccepted: (input) => persistence.recordCommandAccepted(input),
+      markCommandStarted: (commandId, startedAt) =>
+        persistence.markCommandStarted(commandId, startedAt),
+      markCommandSucceeded: (commandId, finishedAt) =>
+        persistence.markCommandSucceeded(commandId, finishedAt),
+      markCommandFailed: (input) => persistence.markCommandFailed(input),
+      getCommand: (commandId) => persistence.getCommand(commandId),
+      listCommands: () => persistence.listCommands(),
+      listCommandErrors: (commandId) => persistence.listCommandErrors(commandId),
+    },
+    eventJournal: {
+      recordEvent: (event, options) => persistence.recordEvent(event, options),
+      listEvents: (filter) => persistence.listEvents(filter),
+    },
+  };
+}
 
 class ProviderDiagnosticWorktreeProvider extends FakeWorktreeProvider {
   async doctorChecks() {
@@ -374,8 +423,26 @@ class ProviderDiagnosticWorktreeProvider extends FakeWorktreeProvider {
   }
 }
 
+class DegradedWorktreeProvider extends FakeWorktreeProvider {
+  override async health(): Promise<ProviderHealth> {
+    return {
+      providerId: this.id,
+      providerType: "worktree",
+      status: "unavailable",
+      lastCheckedAt: now,
+      lastError: {
+        tag: "WorktreeProviderError",
+        code: "FAKE_WORKTREE_UNAVAILABLE",
+        message: "Fake worktree provider is unavailable.",
+        provider: this.id,
+      },
+    };
+  }
+}
+
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

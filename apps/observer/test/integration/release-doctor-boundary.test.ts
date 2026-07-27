@@ -1,11 +1,12 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { ProviderDoctorCheck } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { ProviderRegistry, runDoctor } from "../../src/internal";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-22T12:00:00.000Z";
@@ -29,10 +30,11 @@ describe("release doctor boundaries", () => {
     const report = await runDoctor({
       config,
       core,
-      persistence,
+      commandJournal: persistence,
+      eventJournal: persistence,
       persistenceHealth: persistence,
       providers,
-      paths: { stateDir },
+      evidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       providerDoctorTimeoutMs: 5,
     });
@@ -70,6 +72,7 @@ class SlowDoctorWorktreeProvider extends FakeWorktreeProvider {
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

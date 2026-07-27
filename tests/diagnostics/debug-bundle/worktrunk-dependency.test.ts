@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
-import { writeDebugBundle } from "@station/observability";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import { componentLogPath, writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
+  createLocalDiagnosticEvidenceSource,
   createObserverCore,
   createSqliteObserverPersistence,
   openObserverSqlite,
@@ -51,9 +52,14 @@ describe("Worktrunk dependency debug bundle diagnostics", () => {
       config,
       configPath: join(root, "config.toml"),
       core,
-      persistence,
+      commandJournal: persistence,
+      eventJournal: persistence,
       persistenceHealth: persistence,
-      paths: { stateDir, diagnosticsDir },
+      evidenceSource: createLocalDiagnosticEvidenceSource({
+        stateDir,
+        diagnosticsDir,
+        logPaths: [componentLogPath(stateDir, "observer")],
+      }),
       clock,
     });
     const manifest = await writeDebugBundle({
@@ -79,6 +85,7 @@ describe("Worktrunk dependency debug bundle diagnostics", () => {
 function stationConfig(stateDir: string): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: {
       stateDir,
     },

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { ObserverEventHookInvocationSchema } from "@station/contracts";
 import {
   createCommandQueue,
@@ -20,6 +20,7 @@ import type { ExternalCommandInput } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { FakeDiagnosticEvidenceSource } from "../../../apps/observer/test/support/diagnosticEvidenceSources.js";
 import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 import { runScriptedAgentLaunchPlan } from "../../support/fake-agent";
 import { createTempSocketPath } from "../../support/sockets";
@@ -104,6 +105,7 @@ describe("full session lifecycle e2e", () => {
       persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       socketPath,
       stateDir,
@@ -169,6 +171,7 @@ describe("full session lifecycle e2e", () => {
 function configFor(root: string, stateDir: string, socketPath: string): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: { stateDir, socketPath },
     defaults: {
       worktreeProvider: "fake-worktree",

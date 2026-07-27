@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { componentLogPath, writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
+  createLocalDiagnosticEvidenceSource,
   createObserverCore,
   createObserverEventBus,
   createObserverLogger,
@@ -125,13 +126,14 @@ describe("cleanup command debug bundle diagnostics", () => {
         config,
         configPath: join(root, "config.toml"),
         core,
-        persistence,
+        commandJournal: persistence,
+        eventJournal: persistence,
         persistenceHealth: persistence,
-        paths: {
+        evidenceSource: createLocalDiagnosticEvidenceSource({
           stateDir,
           diagnosticsDir,
           logPaths: [componentLogPath(stateDir, "observer")],
-        },
+        }),
         clock,
       },
       { includeLogs: true },
@@ -158,6 +160,7 @@ describe("cleanup command debug bundle diagnostics", () => {
 function configFor(root: string, stateDir: string): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: { stateDir },
     defaults: {
       worktreeProvider: "fake-worktree",

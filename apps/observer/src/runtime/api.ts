@@ -30,10 +30,10 @@ import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";
 import {
   collectDiagnosticSnapshot,
-  type DiagnosticRuntimePaths,
   type ObserverDiagnosticsDeps,
   runDoctor,
 } from "../diagnostics/collector.js";
+import type { DiagnosticEvidenceSource } from "../diagnostics/evidenceSource.js";
 import {
   createHarnessIngressQueue,
   type HarnessIngressQueue,
@@ -86,6 +86,7 @@ export type CreateObserverApiOptions = {
   persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
   eventBus: ObserverEventBus;
+  diagnosticEvidenceSource: DiagnosticEvidenceSource;
   clock?: RuntimeClock;
   providerHookIngress?: ProviderHookIngress;
   harnessEventReportIngestion?: HarnessEventReportIngestion;
@@ -95,8 +96,6 @@ export type CreateObserverApiOptions = {
   /** Exact handoff selector; legacy callers fall back to the core snapshot version. */
   observerBuildVersion?: string;
   stateDir?: string;
-  diagnosticsDir?: string;
-  logPaths?: string[];
   logger?: StationLogger;
   config?: StationConfig;
   configPath?: string;
@@ -111,9 +110,9 @@ export type CreateObserverApiOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires Observer use cases, durable and local-metadata adapters, ingress workers,
- * provider-health publication, scheduling, exact build publication, and adapter
- * shutdown behind the application API.
+ * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
+ * evidence roles, ingress workers, provider-health publication, scheduling, exact
+ * build publication, and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -567,22 +566,14 @@ async function getCommandById(
 function buildDiagnosticDeps(
   options: CreateObserverApiOptions,
   clock: RuntimeClock,
-): ObserverDiagnosticsDeps & { paths: DiagnosticRuntimePaths } {
-  const stateDir = options.stateDir ?? process.cwd();
-  const paths: DiagnosticRuntimePaths = {
-    stateDir,
-    diagnosticsDir: options.diagnosticsDir ?? `${stateDir}/diagnostics`,
-  };
-  if (options.socketPath !== undefined) paths.socketPath = options.socketPath;
-  if (options.hookSpoolDir !== undefined) paths.hookSpoolDir = options.hookSpoolDir;
-  if (options.logPaths !== undefined) paths.logPaths = options.logPaths;
-
-  const deps: ObserverDiagnosticsDeps & { paths: DiagnosticRuntimePaths } = {
+): ObserverDiagnosticsDeps {
+  const deps: ObserverDiagnosticsDeps = {
     config: options.config ?? emptyConfig(),
     core: options.core,
-    persistence: options.persistence,
+    commandJournal: options.persistence,
+    eventJournal: options.persistence,
     persistenceHealth: options.persistenceHealth,
-    paths,
+    evidenceSource: options.diagnosticEvidenceSource,
     clock,
   };
   if (options.configPath !== undefined) deps.configPath = options.configPath;

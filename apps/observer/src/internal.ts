@@ -9,6 +9,8 @@ export * from "./commands/terminalIntentRunner.js";
 export * from "./commands/worktree/index.js";
 export * from "./diagnostics/collector.js";
 export * from "./diagnostics/errors.js";
+export * from "./diagnostics/evidenceSource.js";
+export * from "./diagnostics/localEvidenceSource.js";
 export * from "./hooks/harnessIngressQueue.js";
 export * from "./hooks/ingestion.js";
 export * from "./hooks/observerEventHooks.js";

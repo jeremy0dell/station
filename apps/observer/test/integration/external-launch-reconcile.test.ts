@@ -24,6 +24,7 @@ import {
   providerIngressSpoolDir,
 } from "../../src/internal";
 import type { StationLogger } from "../../src/stationLogger";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -168,6 +169,7 @@ function createFixture(
     persistenceHealth: persistence,
     commandQueue: queue,
     eventBus,
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     hookSpoolDir: spoolDir,
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),

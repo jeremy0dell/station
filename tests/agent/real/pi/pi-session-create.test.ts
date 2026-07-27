@@ -8,6 +8,7 @@ import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
+  createLocalDiagnosticEvidenceSource,
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
@@ -293,6 +294,13 @@ describeRealPi("real Pi session.create launch lane", () => {
       clock,
       providerTimeoutMs: 20_000,
     });
+    const diagnosticEvidenceSource = createLocalDiagnosticEvidenceSource({
+      stateDir,
+      socketPath,
+      diagnosticsDir: join(stateDir, "diagnostics"),
+      logPaths: [join(stateDir, "logs", "observer.jsonl"), join(stateDir, "logs", "hooks.jsonl")],
+      hookSpoolDir,
+    });
     const api = createObserverApi({
       core,
       providers,
@@ -300,6 +308,7 @@ describeRealPi("real Pi session.create launch lane", () => {
       persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
+      diagnosticEvidenceSource,
       clock,
       config: testConfig,
       socketPath,
@@ -574,12 +583,18 @@ async function writeFailureBundle(input: {
   const snapshot = await collectDiagnosticSnapshot({
     config: input.config,
     core: input.core,
-    persistence: input.persistence,
+    commandJournal: input.persistence,
+    eventJournal: input.persistence,
     persistenceHealth: input.persistence,
-    paths: {
+    evidenceSource: createLocalDiagnosticEvidenceSource({
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,
-    },
+      logPaths: [
+        join(input.stateDir, "logs", "observer.jsonl"),
+        join(input.stateDir, "logs", "hooks.jsonl"),
+      ],
+      hookSpoolDir: join(input.stateDir, "spool", "hooks"),
+    }),
     clock: { now: () => new Date(now) },
   });
   await writeDebugBundle({
