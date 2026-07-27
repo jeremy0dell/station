@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
 import {
+  addProjectSelectedIndex,
   addTuiToast,
   createEditableTextInputState,
   openProjectSettings,
@@ -168,19 +169,11 @@ describe("routeDashboardMouse", () => {
   it("routes wheel over child targets and blocks background scrolling in modal modes", () => {
     const store = makeStore();
 
-    routeDashboardMouse(
-      { kind: "row", rowId: "ses_wt_station_working" },
-      SCROLL_DOWN,
-      store,
-    );
+    routeDashboardMouse({ kind: "row", rowId: "ses_wt_station_working" }, SCROLL_DOWN, store);
     expect(store.getState().scrollOffset).toBe(1);
 
     store.getState().handleKey({ input: "H" });
-    routeDashboardMouse(
-      { kind: "row", rowId: "ses_wt_station_working" },
-      SCROLL_DOWN,
-      store,
-    );
+    routeDashboardMouse({ kind: "row", rowId: "ses_wt_station_working" }, SCROLL_DOWN, store);
     expect(store.getState().scrollOffset).toBe(1);
   });
 
@@ -232,7 +225,8 @@ describe("routeDashboardMouse", () => {
     store.getState().handleKey({ input: "A" });
     routeDashboardMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
     const addProject = store.getState().screen;
-    expect(addProject.name === "addProject" && addProject.flow.mode === "start" && addProject.flow.selectedIndex).toBe(1);
+    expect(addProject.name === "addProject" && addProject.flow.mode === "start").toBe(true);
+    expect(addProjectSelectedIndex(store.getState())).toBe(1);
     store.getState().handleKey({ input: "", escape: true });
 
     store.setState({ widgets: [{ type: "time" }, { type: "moon" }] });
@@ -288,7 +282,9 @@ describe("routeDashboardMouse", () => {
     await waitFor(() =>
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
-    expect(fixture.service.dispatched.find((command) => command.type === "session.create")).toMatchObject({
+    expect(
+      fixture.service.dispatched.find((command) => command.type === "session.create"),
+    ).toMatchObject({
       payload: {
         projectId: "station",
         harness: { provider: "codex" },
@@ -319,11 +315,7 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().collapsedProjectIds).toEqual(before.collapsedProjectIds);
 
     store.getState().handleKey({ input: "H" });
-    routeDashboardMouse(
-      { kind: "row", rowId: "ses_wt_station_none" },
-      LEFT_DOWN,
-      store,
-    );
+    routeDashboardMouse({ kind: "row", rowId: "ses_wt_station_none" }, LEFT_DOWN, store);
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
     expect(store.getState().screen).toEqual({ name: "help" });
     expect(store.getState().localRows.pendingStart).toEqual([]);
@@ -352,8 +344,12 @@ describe("routeDashboardMouse", () => {
       Array.from({ length: 10 }, () => "https://github.com/example/station/pull/12"),
     );
     expect(store.getState().toasts.length).toBeLessThanOrEqual(3);
-    expect(store.getState().toasts.some((entry) =>
-      entry.toast.message === "That dashboard item is no longer available."
-    )).toBe(true);
+    expect(
+      store
+        .getState()
+        .toasts.some(
+          (entry) => entry.toast.message === "That dashboard item is no longer available.",
+        ),
+    ).toBe(true);
   });
 });

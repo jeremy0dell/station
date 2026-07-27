@@ -198,6 +198,9 @@ describe("list registry — migrated modes", () => {
     // Any accidental registration in an unmigrated mode flips this red, so the
     // set is asserted whole rather than sampled.
     expect(Object.keys(LIST_REGISTRY).sort()).toEqual([
+      "addProjectChoose",
+      "addProjectFilter",
+      "addProjectStart",
       "newSessionPickAgent",
       "newSessionPickProject",
       "projectCollapse",
