@@ -40,6 +40,8 @@
     "typecheck": "turbo run typecheck",
     "lint": "biome check . && node tools/lint/check-source-order.mjs && node tools/lint/check-no-raw-hex.mjs",
     "format": "biome format --write .",
+    "deadcode": "knip --no-config-hints",
+    "deadcode:production": "knip --production --no-config-hints",
     "test:unit": "vitest run --config config/vitest/vitest.unit.config.ts",
     "test:contracts": "vitest run --config config/vitest/vitest.contracts.config.ts",
     "test:integration": "pnpm build && vitest run --config config/vitest/vitest.integration.config.ts",
@@ -81,11 +83,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
     "@types/node": "^24.12.4",
-    "@types/react": "^19.2.15",
-    "@types/react-test-renderer": "^19.1.0",
-    "ink-testing-library": "^4.0.0",
+    "knip": "^6.29.0",
     "lefthook": "^1.13.6",
-    "react-test-renderer": "^19.2.6",
     "turbo": "^2.9.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,11 +13,6 @@ export async function createTempSocketPath(prefix = "station-protocol-"): Promis
     dir,
     socketPath: join(dir, "observer.sock"),
   };
-}
-
-export async function createStaleSocketFile(socketPath: string): Promise<void> {
-  await mkdir(dirname(socketPath), { recursive: true });
-  await writeFile(socketPath, "stale", { mode: 0o600 });
 }
 
 export async function createRealStaleSocket(socketPath: string): Promise<void> {

@@ -3,7 +3,6 @@ import { join } from "node:path";
 import type {
   DiagnosticEvidenceIndex,
   DiagnosticSnapshot,
-  RedactionReport,
   StationSnapshot,
 } from "@station/contracts";
 import { expect } from "vitest";
@@ -91,15 +90,4 @@ export function baseStationSnapshot(overrides: Partial<StationSnapshot> = {}): S
     alerts: [],
   };
   return { ...snapshot, ...overrides };
-}
-
-export function redactionReport(): RedactionReport {
-  return {
-    policyVersion: "station-redaction-v1",
-    generatedAt: diagnosticNow,
-    redactedFields: [],
-    redactedPatterns: [],
-    replacements: 0,
-    suspiciousSecretsFound: 0,
-  };
 }

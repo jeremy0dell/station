@@ -75,11 +75,7 @@ export const HarnessEventReportCorrelationSchema = z
   })
   .strict();
 
-export type HarnessEventReportCorrelation = z.infer<typeof HarnessEventReportCorrelationSchema>;
-
 export const HarnessEventReportDiagnosticsSchema = HarnessEventDiagnosticsSchema;
-
-export type HarnessEventReportDiagnostics = z.infer<typeof HarnessEventReportDiagnosticsSchema>;
 
 export const HarnessEventReportSchema = z
   .object({
@@ -168,8 +164,6 @@ export const ProviderHookEventNamePayloadSchema = z
     hook_event_name: nonEmptyStringSchema.optional(),
   })
   .passthrough();
-
-export type ProviderHookEventNamePayload = z.infer<typeof ProviderHookEventNamePayloadSchema>;
 
 export function parseProviderHookEventName(payload: unknown): string | undefined {
   const result = ProviderHookEventNamePayloadSchema.safeParse(payload);
@@ -281,8 +275,6 @@ export const ObserverEventHookFilterSchema = z
     harnessEventType: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ObserverEventHookFilter = z.infer<typeof ObserverEventHookFilterSchema>;
 
 export const ObserverEventHookConfigSchema = z
   .object({

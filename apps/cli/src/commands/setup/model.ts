@@ -53,10 +53,7 @@ export const SetupHarnessTrackingFactSchema = z
   });
 
 export type SetupTier = z.infer<typeof SetupTierSchema>;
-export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 export type SetupMode = z.infer<typeof SetupModeSchema>;
-export type SetupActionKind = z.infer<typeof SetupActionKindSchema>;
-export type SetupActionStatus = z.infer<typeof SetupActionStatusSchema>;
 export type SupportedHarnessId = z.infer<typeof SupportedHarnessIdSchema>;
 export type SetupHarnessSelectionSource = z.infer<typeof SetupHarnessSelectionSourceSchema>;
 export type SetupHarnessTrackingFact = z.infer<typeof SetupHarnessTrackingFactSchema>;
@@ -118,7 +115,6 @@ export const SetupPlanSchema = z
 
 export type SetupCheck = z.infer<typeof SetupCheckSchema>;
 export type SetupAction = z.infer<typeof SetupActionSchema>;
-export type SetupSummary = z.infer<typeof SetupSummarySchema>;
 export type SetupPlan = z.infer<typeof SetupPlanSchema>;
 
 export type SetupDependencyFact = {

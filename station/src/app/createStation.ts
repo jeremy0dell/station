@@ -109,7 +109,7 @@ export function createStation(options: CreateStationOptions): Station {
 
 // Re-exported so a single import yields both the runtime and its view.
 export { StationApp } from "./StationApp.js";
-export type { CreateStationOptions, Station, StationAppProps } from "./types.js";
+export type { CreateStationOptions, Station } from "./types.js";
 
 type Reconcilers = { reconcile: () => void; reapRemovedSessions: () => void };
 

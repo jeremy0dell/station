@@ -55,17 +55,13 @@ import type {
 } from "./types.js";
 
 export { buildTmuxPopupArgs } from "./args.js";
-export type { BuildManagedFastPopupRunShellCommandOptions } from "./fastBinding.js";
 export { buildManagedFastPopupRunShellCommand } from "./fastBinding.js";
 export { ensurePersistentPopupSession, resolveRegisteredDevPopupUi } from "./persistentUi.js";
 export type {
-  TmuxPersistentPopupSessionResult,
   TmuxPopupDismissResult,
   TmuxPopupFocusTarget,
   TmuxPopupOptions,
   TmuxPopupResult,
-  TmuxPopupShellResult,
-  TmuxRegisteredDevPopupUi,
 } from "./types.js";
 
 type PopupDisplayResult = "opened" | "dismissed";

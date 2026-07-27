@@ -26,18 +26,8 @@ import {
   stringifyClaudeSettings,
 } from "./hooks/hookSettings.js";
 
-export { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
-export { ClaudeHookSetupError, type ClaudeHookSetupErrorCode } from "./hooks/hookErrors.js";
-export {
-  resolveClaudeHookScriptPath,
-  resolveClaudeSettingsArtifactPath,
-  resolveClaudeUserSettingsPath,
-} from "./hooks/hookPaths.js";
-export {
-  expectedClaudeHookSettings,
-  generatedClaudeHookEvents,
-  parseClaudeSettingsDocument,
-} from "./hooks/hookSettings.js";
+export type { ClaudeHookEventName } from "./hooks/hookConstants.js";
+export { resolveClaudeSettingsArtifactPath } from "./hooks/hookPaths.js";
 export { expectedClaudeHookScript };
 
 export type ClaudeHookPlanOptions = {

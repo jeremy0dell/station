@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { HarnessEventReport } from "@station/contracts";
 import { systemClock, toIsoTimestamp } from "@station/runtime";
 import { parsePiCompactEvent } from "./event/compactEvent.js";
@@ -163,6 +162,13 @@ function removeQuestionCall(
   if (first !== undefined) questionCalls.delete(first.id);
 }
 
+/**
+ * ADAPTER
+ *
+ * Registers Station event reporting when Pi loads the extension by file path.
+ *
+ * @knipignore
+ */
 export default function stationPiExtension(pi: PiExtensionApi): void {
   registerStationPiExtension(pi);
 }
@@ -483,7 +489,3 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     ? (value as Record<string, unknown>)
     : undefined;
 }
-
-export const stationPiExtensionPath = fileURLToPath(
-  new URL("../dist/piExtension.js", import.meta.url),
-);

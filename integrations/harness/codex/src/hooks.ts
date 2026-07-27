@@ -36,13 +36,7 @@ import {
   resolveCodexHookScriptPath,
 } from "./hooks/hookPaths.js";
 
-export { CODEX_HOOK_EVENT_NAMES, type CodexHookEventName } from "./hooks/hookConstants.js";
-export { CodexHookSetupError, type CodexHookSetupErrorCode } from "./hooks/hookErrors.js";
-export {
-  resolveCodexBaseConfigPath,
-  resolveCodexConfigPath,
-  resolveCodexHookScriptPath,
-} from "./hooks/hookPaths.js";
+export type { CodexHookEventName } from "./hooks/hookConstants.js";
 export { expectedCodexHookCommands, expectedCodexHookScript };
 
 export type CodexHookPlanOptions = {

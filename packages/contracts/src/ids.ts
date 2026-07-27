@@ -22,7 +22,6 @@ export const SessionIdSchema = idSchema<"SessionId">();
 export const TerminalTargetIdSchema = idSchema<"TerminalTargetId">();
 export const HarnessRunIdSchema = idSchema<"HarnessRunId">();
 export const CommandIdSchema = idSchema<"CommandId">();
-export const EventIdSchema = idSchema<"EventId">();
 export const ProviderIdSchema = idSchema<"ProviderId">();
 export const TimestampSchema = timestampSchema;
 
@@ -32,5 +31,4 @@ export type SessionId = z.infer<typeof SessionIdSchema>;
 export type TerminalTargetId = z.infer<typeof TerminalTargetIdSchema>;
 export type HarnessRunId = z.infer<typeof HarnessRunIdSchema>;
 export type CommandId = z.infer<typeof CommandIdSchema>;
-export type EventId = z.infer<typeof EventIdSchema>;
 export type ProviderId = z.infer<typeof ProviderIdSchema>;

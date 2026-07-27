@@ -5,6 +5,7 @@ import {
   type StationState,
   type StationToast,
 } from "./types.js";
+
 // Components must select scalars (useSyncExternalStore compares snapshots
 // with Object.is); getState() returns the immutable root for everyone else.
 

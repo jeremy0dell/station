@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { WorktreeObservation } from "@station/contracts";
 import type { RealStationConfigFixture } from "./config";
 import type { RealE2eEnvironment } from "./env";
 import { requireToolPath } from "./env";
@@ -34,17 +33,6 @@ export async function runWorktrunkJson<T = unknown>(input: {
     },
   );
   return JSON.parse(output.stdout) as T;
-}
-
-export async function listRealWorktrunkWorktrees(input: {
-  env: RealE2eEnvironment;
-  config: RealStationConfigFixture;
-  repo: RealTempRepo;
-}): Promise<unknown> {
-  return runWorktrunkJson({
-    ...input,
-    args: ["list", "--format=json"],
-  });
 }
 
 export async function createRealWorktrunkWorktree(input: {
@@ -104,19 +92,4 @@ export async function removeRealWorktrunkWorktree(input: {
       },
     ).catch(() => undefined);
   }
-}
-
-export function findWorktrunkObservation(
-  value: unknown,
-  branch: string,
-): WorktreeObservation | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  return value.find((item): item is WorktreeObservation => {
-    if (typeof item !== "object" || item === null) {
-      return false;
-    }
-    return "branch" in item && item.branch === branch;
-  });
 }

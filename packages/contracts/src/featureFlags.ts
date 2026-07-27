@@ -19,18 +19,6 @@ export type FeatureFlagExposure = z.infer<typeof FeatureFlagExposureSchema>;
 export type FeatureFlagLifecycle = z.infer<typeof FeatureFlagLifecycleSchema>;
 export type FeatureFlagSurface = z.infer<typeof FeatureFlagSurfaceSchema>;
 
-export const FeatureFlagDefinitionSchema = z
-  .object({
-    defaultValue: z.boolean(),
-    exposure: FeatureFlagExposureSchema,
-    owner: FeatureFlagOwnerSchema,
-    surfaces: z.array(FeatureFlagSurfaceSchema).nonempty(),
-    lifecycle: FeatureFlagLifecycleSchema,
-    summary: nonEmptyStringSchema,
-  })
-  .strict();
-
-export type FeatureFlagDefinition = z.infer<typeof FeatureFlagDefinitionSchema>;
 export type FeatureFlagDefinitionInput = {
   defaultValue: boolean;
   exposure: FeatureFlagExposure;
@@ -63,25 +51,11 @@ export const FeatureFlagDefinitions = {
   },
 } as const satisfies FeatureFlagDefinitionsMap;
 
-export type FeatureFlagKey = keyof typeof FeatureFlagDefinitions & string;
-export type ClientFeatureFlagKey = ClientFeatureFlagKeyForDefinitions<
-  typeof FeatureFlagDefinitions
->;
-export type ServerFeatureFlagKey = ServerFeatureFlagKeyForDefinitions<
-  typeof FeatureFlagDefinitions
->;
-
 export type FeatureFlagKeyForDefinitions<Definitions extends FeatureFlagDefinitionsMap> =
   keyof Definitions & string;
 
 export type ClientFeatureFlagKeyForDefinitions<Definitions extends FeatureFlagDefinitionsMap> = {
   [Key in FeatureFlagKeyForDefinitions<Definitions>]: Definitions[Key]["exposure"] extends "client"
-    ? Key
-    : never;
-}[FeatureFlagKeyForDefinitions<Definitions>];
-
-export type ServerFeatureFlagKeyForDefinitions<Definitions extends FeatureFlagDefinitionsMap> = {
-  [Key in FeatureFlagKeyForDefinitions<Definitions>]: Definitions[Key]["exposure"] extends "server"
     ? Key
     : never;
 }[FeatureFlagKeyForDefinitions<Definitions>];
@@ -109,9 +83,6 @@ export type ClientFeatureFlagsForDefinitions<Definitions extends FeatureFlagDefi
   flags: ClientFeatureFlagValuesForDefinitions<Definitions>;
 };
 
-export type EvaluatedFeatureFlags = EvaluatedFeatureFlagsForDefinitions<
-  typeof FeatureFlagDefinitions
->;
 export type ClientFeatureFlags = ClientFeatureFlagsForDefinitions<typeof FeatureFlagDefinitions>;
 
 export const FeatureFlagConfigSchema = createFeatureFlagConfigSchema(
@@ -164,10 +135,6 @@ export function clientFeatureFlagKeys<Definitions extends FeatureFlagDefinitions
     (key): key is ClientFeatureFlagKeyForDefinitions<Definitions> =>
       definitions[key]?.exposure === "client",
   );
-}
-
-export function defaultClientFeatureFlagValue(key: ClientFeatureFlagKey): boolean {
-  return FeatureFlagDefinitions[key].defaultValue;
 }
 
 function clientFeatureFlagDefinitions(

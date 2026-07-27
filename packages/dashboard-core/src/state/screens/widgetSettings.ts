@@ -11,8 +11,6 @@ import type { TuiState } from "../types.js";
  */
 export const ADDABLE_WIDGET_TYPES = ["time", "fleet", "prs", "moon"] as const;
 
-export type AddableWidgetType = (typeof ADDABLE_WIDGET_TYPES)[number];
-
 /** One human label per widget entry, shown in the settings list. */
 export function widgetSettingsRowLabel(config: TuiWidgetConfig): string {
   switch (config.type) {

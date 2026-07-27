@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStation, StationApp } from "./createStation.js";
 import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";
-import { readLayoutSnapshotSync, writeLayoutSnapshotSync } from "../state/layout/layoutPersistence.js";
+import { readLayoutSnapshotSync } from "../state/layout/layoutPersistence.js";
 import { planLayoutRestoreColdShells } from "../state/layout/restoreLayout.js";
 import { createStationStore } from "../state/store.js";
 import { MAIN_PANE_ID } from "../state/types.js";

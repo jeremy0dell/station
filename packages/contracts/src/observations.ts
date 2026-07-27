@@ -36,14 +36,10 @@ export const ObservedStatusSourceSchema = z.enum([
 ]);
 
 export type Confidence = z.infer<typeof ConfidenceSchema>;
-export type WorktreeState = z.infer<typeof WorktreeStateSchema>;
 export type TerminalState = z.infer<typeof TerminalStateSchema>;
 export type AgentState = z.infer<typeof AgentStateSchema>;
-export type ObservedStatusSource = z.infer<typeof ObservedStatusSourceSchema>;
 
 export const WorktreeSourceSchema = z.enum(["worktrunk", "station", "manual", "unknown"]);
-export type WorktreeSource = z.infer<typeof WorktreeSourceSchema>;
-
 export const RepositoryRemoteSchema = z
   .object({
     host: nonEmptyStringSchema,
@@ -126,8 +122,6 @@ export type WorktreeChecksSummary = z.infer<typeof WorktreeChecksSummarySchema>;
 // boundary so core and the TUI never match on provider prose.
 export const AttentionKindSchema = z.enum(["question", "plan_approval", "tool_approval", "input"]);
 
-export type AttentionKind = z.infer<typeof AttentionKindSchema>;
-
 export const ObservedStatusSchema = z
   .object({
     value: AgentStateSchema,
@@ -161,8 +155,6 @@ export const HarnessTurnSchema = z
     kind: z.literal("turn_completed"),
   })
   .strict();
-
-export type HarnessTurn = z.infer<typeof HarnessTurnSchema>;
 
 export const WorktreeObservationSchema = z
   .object({

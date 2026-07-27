@@ -11,7 +11,6 @@ export type {
   SetupCommandOptions,
   SetupCommandResult,
   SetupPromptAdapter,
-  SetupPromptChoice,
 } from "./types.js";
 
 export async function runSetupCommand(

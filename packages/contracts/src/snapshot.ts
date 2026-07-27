@@ -97,8 +97,6 @@ export const TurnReadinessSchema = z
   })
   .strict();
 
-export type TurnReadiness = z.infer<typeof TurnReadinessSchema>;
-
 export const WorktreeAgentSchema = z
   .object({
     harness: ProviderIdSchema,
@@ -167,8 +165,6 @@ export const WorktreeRowSchema = z
 export type WorktreeRow = z.infer<typeof WorktreeRowSchema>;
 
 export const SessionOriginSchema = z.enum(["station", "external"]);
-
-export type SessionOrigin = z.infer<typeof SessionOriginSchema>;
 
 export const SessionViewSchema = z
   .object({

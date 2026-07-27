@@ -27,8 +27,6 @@ export const CreateWorktreePayloadSchema = z
   })
   .strict();
 
-export type CreateWorktreePayload = z.infer<typeof CreateWorktreePayloadSchema>;
-
 export const RemoveWorktreePayloadSchema = z
   .object({
     worktreeId: WorktreeIdSchema,
@@ -52,8 +50,6 @@ export const ForkWorktreePayloadSchema = z
     copyDirty: z.boolean().optional(),
   })
   .strict();
-
-export type ForkWorktreePayload = z.infer<typeof ForkWorktreePayloadSchema>;
 
 export const HarnessCommandOptionsSchema = z
   .object({
@@ -103,8 +99,6 @@ export const CreateSessionPayloadSchema = z
   })
   .strict();
 
-export type CreateSessionPayload = z.infer<typeof CreateSessionPayloadSchema>;
-
 export const StartAgentPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -115,8 +109,6 @@ export const StartAgentPayloadSchema = z
   })
   .strict();
 
-export type StartAgentPayload = z.infer<typeof StartAgentPayloadSchema>;
-
 export const ResumeAgentPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -126,8 +118,6 @@ export const ResumeAgentPayloadSchema = z
     initialPrompt: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ResumeAgentPayload = z.infer<typeof ResumeAgentPayloadSchema>;
 
 export const ForkSessionPayloadSchema = z
   .object({
@@ -141,8 +131,6 @@ export const ForkSessionPayloadSchema = z
     initialPrompt: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ForkSessionPayload = z.infer<typeof ForkSessionPayloadSchema>;
 
 export const TerminalFocusPayloadSchema = z
   .object({
@@ -180,16 +168,12 @@ export const CloseSessionPayloadSchema = z
   })
   .strict();
 
-export type CloseSessionPayload = z.infer<typeof CloseSessionPayloadSchema>;
-
 export const RenameSessionPayloadSchema = z
   .object({
     sessionId: SessionIdSchema,
     title: nonEmptyStringSchema,
   })
   .strict();
-
-export type RenameSessionPayload = z.infer<typeof RenameSessionPayloadSchema>;
 
 export const AcknowledgeTurnPayloadSchema = z
   .object({
@@ -198,15 +182,11 @@ export const AcknowledgeTurnPayloadSchema = z
   })
   .strict();
 
-export type AcknowledgeTurnPayload = z.infer<typeof AcknowledgeTurnPayloadSchema>;
-
 export const ObserverReconcilePayloadSchema = z
   .object({
     reason: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ObserverReconcilePayload = z.infer<typeof ObserverReconcilePayloadSchema>;
 
 export const AddProjectPayloadSchema = z
   .object({
