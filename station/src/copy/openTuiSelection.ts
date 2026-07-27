@@ -1,4 +1,6 @@
 import type { Selection } from "@opentui/core";
+import { kittySequenceToLegacy } from "../terminal/input/kittyToLegacy.js";
+import { stripTerminalReplies } from "../terminal/input/terminalReplies.js";
 import {
   copyToClipboard,
   DEFAULT_COPY_SINKS,
@@ -6,16 +8,27 @@ import {
 } from "./clipboard.js";
 
 type ClipboardSelection = Pick<Selection, "getSelectedText">;
-type SelectionEmitter = {
-  on(event: "selection", listener: (selection: ClipboardSelection) => void): unknown;
+type SelectionSource = {
+  getSelection(): ClipboardSelection | null;
 };
 
-/** Copy a completed OpenTUI drag through the same sinks as a terminal-pane yank. */
-export function wireOpenTuiSelectionCopy(
-  emitter: SelectionEmitter,
+/**
+ * Intercept Ctrl-C only when OpenTUI owns a non-empty selection; otherwise the
+ * sequence falls through so Station preserves its normal interrupt/exit path.
+ */
+export function createOpenTuiSelectionCopyHandler(
+  getSource: () => SelectionSource | undefined,
   effects: ClipboardEffects,
-): void {
-  emitter.on("selection", (selection) => {
-    copyToClipboard(selection.getSelectedText(), DEFAULT_COPY_SINKS, effects);
-  });
+): (sequence: string) => boolean {
+  return (sequence) => {
+    const legacy = kittySequenceToLegacy(stripTerminalReplies(sequence));
+    if (legacy !== "\x03") {
+      return false;
+    }
+    const selection = getSource()?.getSelection();
+    if (selection === null || selection === undefined) {
+      return false;
+    }
+    return copyToClipboard(selection.getSelectedText(), DEFAULT_COPY_SINKS, effects).copied;
+  };
 }

@@ -47,7 +47,12 @@ export function FullscreenDashboard({
     <StationHoverProvider value={hoverEnabled}>
       <StationMouseProvider value={dispatch}>
         <box width={width} height={height} flexDirection="column">
-          <DashboardRoot store={store} columns={width} rows={height} />
+          <DashboardRoot
+            store={store}
+            columns={width}
+            rows={height}
+            onCopyNotice={effects.copyText}
+          />
           <DashboardFrameTitle
             store={store}
             frame={{ left: 0, top: 0, width }}

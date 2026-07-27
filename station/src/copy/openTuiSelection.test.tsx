@@ -1,21 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import type { ClipboardEffects } from "./clipboard.js";
-import { wireOpenTuiSelectionCopy } from "./openTuiSelection.js";
-
-type ClipboardSelection = { getSelectedText(): string };
-
-class FakeSelectionEmitter {
-  listener: ((selection: ClipboardSelection) => void) | undefined;
-
-  on(_event: "selection", listener: (selection: ClipboardSelection) => void): void {
-    this.listener = listener;
-  }
-
-  finish(text: string): void {
-    this.listener?.({ getSelectedText: () => text });
-  }
-}
+import { createOpenTuiSelectionCopyHandler } from "./openTuiSelection.js";
 
 function recordingEffects(): { effects: ClipboardEffects; calls: string[] } {
   const calls: string[] = [];
@@ -30,18 +16,21 @@ function recordingEffects(): { effects: ClipboardEffects; calls: string[] } {
   };
 }
 
-describe("wireOpenTuiSelectionCopy", () => {
-  it("copies a completed OpenTUI drag through every clipboard sink", async () => {
+describe("createOpenTuiSelectionCopyHandler", () => {
+  it("waits for Ctrl-C before copying an OpenTUI drag", async () => {
     const { effects, calls } = recordingEffects();
     const setup = await testRender(<text selectable>actionable error details</text>, {
       width: 32,
       height: 1,
     });
     try {
-      wireOpenTuiSelectionCopy(setup.renderer, effects);
+      const handleCopy = createOpenTuiSelectionCopyHandler(() => setup.renderer, effects);
       await setup.renderOnce();
       await setup.mockMouse.drag(0, 0, "actionable".length, 0);
 
+      expect(calls).toEqual([]);
+      expect(handleCopy("x")).toBe(false);
+      expect(handleCopy("\x03")).toBe(true);
       expect(calls).toEqual([
         "internal:actionable",
         "osc52:actionable",
@@ -52,13 +41,29 @@ describe("wireOpenTuiSelectionCopy", () => {
     }
   });
 
-  it("does not touch the clipboard for an empty selection", () => {
-    const emitter = new FakeSelectionEmitter();
+  it("lets Ctrl-C fall through when there is no selection", () => {
     const { effects, calls } = recordingEffects();
+    const handleCopy = createOpenTuiSelectionCopyHandler(
+      () => ({ getSelection: () => null }),
+      effects,
+    );
 
-    wireOpenTuiSelectionCopy(emitter, effects);
-    emitter.finish("");
-
+    expect(handleCopy("\x03")).toBe(false);
     expect(calls).toEqual([]);
+  });
+
+  it("accepts the Kitty Ctrl-C sequence used by Station", () => {
+    const { effects, calls } = recordingEffects();
+    const handleCopy = createOpenTuiSelectionCopyHandler(
+      () => ({ getSelection: () => ({ getSelectedText: () => "trace trace_123" }) }),
+      effects,
+    );
+
+    expect(handleCopy("\x1b[99;5u")).toBe(true);
+    expect(calls).toEqual([
+      "internal:trace trace_123",
+      "osc52:trace trace_123",
+      "platform:trace trace_123",
+    ]);
   });
 });

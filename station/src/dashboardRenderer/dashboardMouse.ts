@@ -22,6 +22,7 @@ import { isPrimaryMouseEvent, wheelDirection, type StationMouseEvent } from "../
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 
 export type DashboardMouseEffects = {
+  copyText(text: string): void;
   openShell(target: { cwd: string }): void;
   openUrl(url: string): void;
 };

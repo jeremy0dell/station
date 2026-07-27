@@ -10,6 +10,7 @@ import { FullscreenDashboard } from "./FullscreenDashboard.js";
 const SURFACE = { width: 80, height: 24 };
 const WIDGET_SURFACE = { width: 99, height: 25 };
 const TEST_EFFECTS: DashboardMouseEffects = {
+  copyText: () => {},
   openShell: () => {},
   openUrl: () => {},
 };
@@ -80,6 +81,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const fixture = makeStationTestStore({ terminalRows: size.height });
     const openedShells: string[] = [];
     const setup = await render(fixture.store, size, {
+      copyText: () => {},
       openShell: ({ cwd }) => openedShells.push(cwd),
       openUrl: () => {},
     });
@@ -116,6 +118,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const fixture = makeStationTestStore({ terminalRows: size.height });
     const openedUrls: string[] = [];
     const setup = await render(fixture.store, size, {
+      copyText: () => {},
       openShell: () => {},
       openUrl: (url) => openedUrls.push(url),
     });

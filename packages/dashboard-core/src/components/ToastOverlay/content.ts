@@ -30,6 +30,16 @@ export function toastTitle(entry: TuiToastEntry): string {
   return entry.toast.message === "Observer reconnected." ? "connected" : "saved";
 }
 
+/** The complete readable notice copied by the explicit toast action. */
+export function toastCopyText(entry: TuiToastEntry): string {
+  const lines = [toastTitle(entry), entry.toast.message];
+  const detail = toastDetail(entry);
+  if (detail !== undefined) {
+    lines.push(detail);
+  }
+  return lines.join("\n");
+}
+
 export function toastBorderColor(entry: TuiToastEntry): ToastBorderColorName {
   if (entry.toast.kind === "error") {
     return "red";

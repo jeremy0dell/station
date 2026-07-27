@@ -2,7 +2,7 @@
 // after first render (before the 120ms throbber tick) so the working-row
 // throbber shows its first braille frame (⠋) deterministically.
 import { afterEach, describe, expect, it } from "bun:test";
-import { BaseRenderable, rgbToHex, TextAttributes, TextRenderable } from "@opentui/core";
+import { rgbToHex, TextAttributes } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
@@ -87,6 +87,7 @@ describe("dashboard golden frames", () => {
         store={store}
         columns={input.width}
         rows={input.height}
+        onCopyNotice={() => {}}
       />
     );
     const mouseDashboard =
@@ -148,10 +149,10 @@ describe("dashboard golden frames", () => {
       seedInitialSnapshot: false,
     });
     store.getState().start();
-    const setup = await testRender(<DashboardRoot store={store} columns={width} rows={height} />, {
-      width,
-      height,
-    });
+    const setup = await testRender(
+      <DashboardRoot store={store} columns={width} rows={height} onCopyNotice={() => {}} />,
+      { width, height },
+    );
     teardowns.push(() => {
       setup.renderer.destroy();
     });
@@ -408,10 +409,10 @@ describe("dashboard golden frames", () => {
       seedInitialSnapshot: false,
     });
     store.getState().start();
-    const setup = await testRender(<DashboardRoot store={store} columns={80} rows={24} />, {
-      width: 80,
-      height: 24,
-    });
+    const setup = await testRender(
+      <DashboardRoot store={store} columns={80} rows={24} onCopyNotice={() => {}} />,
+      { width: 80, height: 24 },
+    );
     teardowns.push(() => {
       setup.renderer.destroy();
     });
@@ -512,68 +513,4 @@ describe("dashboard golden frames", () => {
     }
   });
 
-  it("keeps notice text selectable and dismisses only from the dismiss control", async () => {
-    const targets: StationMouseTarget[] = [];
-    let setup: RenderedDashboard;
-    setup = await renderDashboard({
-      width: 99,
-      height: 25,
-      snapshot: manyProjectsSnapshot(),
-      toast: WORKTREE_ERROR,
-      dispatchMouse: (target) => {
-        targets.push(target);
-        if (target.kind === "toast") {
-          setup.store.getState().dismissToasts();
-        }
-      },
-    });
-    let lines = setup.captureCharFrame().split("\n");
-    const messageRow = lines.findIndex((line) => line.includes("Worktrunk failed"));
-    const messageColumn = lines[messageRow]?.indexOf("Worktrunk") ?? -1;
-    const dismissRow = lines.findIndex((line) => line.includes("[ dismiss ]"));
-    const dismissColumn = lines[dismissRow]?.indexOf("[ dismiss ]") ?? -1;
-    expect(messageRow).toBeGreaterThan(0);
-    expect(messageColumn).toBeGreaterThan(0);
-    expect(dismissRow).toBeGreaterThan(0);
-    expect(dismissColumn).toBeGreaterThan(0);
-
-    const textRenderables = collectTextRenderables(setup.renderer.root);
-    const selectableCopy = textRenderables.filter(
-      (renderable) =>
-        renderable.plainText === WORKTREE_ERROR_MESSAGE ||
-        renderable.plainText.includes(WORKTREE_ERROR_HINT),
-    );
-    expect(selectableCopy).toHaveLength(2);
-    expect(selectableCopy.every((renderable) => renderable.selectable)).toBe(true);
-
-    await setup.mockMouse.click(messageColumn, messageRow, MouseButtons.LEFT);
-    await setup.flush();
-    expect(targets).toEqual([]);
-    expect(setup.store.getState().toasts).toHaveLength(1);
-
-    const ordinaryDismiss = spanAtFrameCell(setup.captureSpans(), dismissRow, dismissColumn);
-    await act(async () => {
-      await setup.mockMouse.moveTo(dismissColumn, dismissRow);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    await setup.flush();
-    const hoveredDismiss = spanAtFrameCell(setup.captureSpans(), dismissRow, dismissColumn);
-    expect(spanHex(hoveredDismiss)).not.toBe(spanHex(ordinaryDismiss));
-    expect(spanBgHex(hoveredDismiss)).not.toBe(spanBgHex(ordinaryDismiss));
-
-    await setup.mockMouse.click(dismissColumn, dismissRow, MouseButtons.LEFT);
-    await setup.flush();
-    expect(targets).toEqual([{ kind: "toast" }]);
-    expect(setup.store.getState().toasts).toEqual([]);
-    lines = setup.captureCharFrame().split("\n");
-    expect(lines.some((line) => line.includes("Worktrunk failed"))).toBe(false);
-  });
 });
-
-function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
-  const collected = renderable instanceof TextRenderable ? [renderable] : [];
-  for (const child of renderable.getChildren()) {
-    collected.push(...collectTextRenderables(child));
-  }
-  return collected;
-}

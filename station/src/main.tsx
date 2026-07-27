@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { createCliRenderer } from "@opentui/core";
+import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
-import { wireOpenTuiSelectionCopy } from "./copy/openTuiSelection.js";
+import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
 import {
@@ -225,7 +225,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
       process.exit(0);
     },
   });
-  let rendererForInput: { destroy(): void } | undefined;
+  let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
 
   // Under `bun --hot`, OpenTUI's stdin ownership is a process-global that outlives
@@ -240,9 +240,13 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
   // apart (Shift+Enter and friends). See singleInstance.ts.
   await rivalsReaped;
 
+  const copySelectedText = createOpenTuiSelectionCopyHandler(
+    () => rendererForInput,
+    clipboardEffects,
+  );
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
-    prependInputHandlers: [station.stationInput.handleSequence],
+    prependInputHandlers: [copySelectedText, station.stationInput.handleSequence],
     useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
   });
   rendererForInput = renderer;
@@ -252,8 +256,6 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
   renderer.keyInput.on("paste", (event) => {
     station.stationInput.handlePaste(event);
   });
-  // OpenTUI owns the visual highlight; Station owns delivery to the real clipboard.
-  wireOpenTuiSelectionCopy(renderer, clipboardEffects);
   const root = createRoot(renderer);
   rootForShutdown = root;
 

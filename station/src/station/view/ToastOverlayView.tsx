@@ -1,13 +1,15 @@
 // Render layer: a bottom-anchored notice that grows upward for actionable errors.
 // Only the header dismiss control routes dismissal; body text stays selectable.
-import { TextAttributes } from "@opentui/core";
+import { MouseButton, TextAttributes } from "@opentui/core";
 import {
   toastBorderColor,
+  toastCopyText,
   toastDetail,
   toastOverlayLayout,
   toastTitle,
   type TuiToastEntry,
 } from "@station/dashboard-core";
+import { useEffect, useState } from "react";
 import { STATION_COLORS, toastBorderColorHex } from "./theme.js";
 import {
   useStationHoverState,
@@ -21,6 +23,7 @@ export type ToastOverlayViewProps = {
   toast: TuiToastEntry | undefined;
   promptRows: number;
   hiddenByScreen: boolean;
+  onCopyNotice: (text: string) => void;
 };
 
 export function ToastOverlayView({
@@ -29,6 +32,7 @@ export function ToastOverlayView({
   toast,
   promptRows,
   hiddenByScreen,
+  onCopyNotice,
 }: ToastOverlayViewProps) {
   if (hiddenByScreen || toast === undefined) {
     return null;
@@ -70,6 +74,8 @@ export function ToastOverlayView({
           >
             {toastTitle(toast)}
           </text>
+          <ToastCopyControl text={toastCopyText(toast)} onCopy={onCopyNotice} />
+          <text selectable={false}> </text>
           <ToastDismissControl />
         </box>
         <text fg={STATION_COLORS.foreground} wrapMode="word" selectable>
@@ -82,6 +88,45 @@ export function ToastOverlayView({
         )}
       </box>
     </box>
+  );
+}
+
+function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+  const [hover, setHover] = useStationHoverState();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timer = setTimeout(() => setCopied(false), 1_500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <text
+      flexShrink={0}
+      fg={
+        copied
+          ? STATION_COLORS.green
+          : hover
+            ? STATION_COLORS.background
+            : STATION_COLORS.cyan
+      }
+      {...(hover && !copied ? { bg: STATION_COLORS.cyan } : {})}
+      selectable={false}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+        if (event.button !== MouseButton.LEFT) {
+          return;
+        }
+        onCopy(text);
+        setCopied(true);
+      }}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {copied ? "[ copied ]" : "[ copy ]"}
+    </text>
   );
 }
 

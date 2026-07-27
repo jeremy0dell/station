@@ -25,9 +25,10 @@ export type DashboardRootProps = {
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
+  onCopyNotice: (text: string) => void;
 };
 
-export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
+export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardRootProps) {
   const snapshot = useStore(store, (state) => state.snapshot);
   const loading = useStore(store, (state) => state.loading);
   const screen = useStore(store, (state) => state.screen);
@@ -79,6 +80,7 @@ export function DashboardRoot({ store, columns, rows }: DashboardRootProps) {
       toast={activeToast}
       promptRows={commandPromptRows(screen)}
       hiddenByScreen={toastHiddenByScreen}
+      onCopyNotice={onCopyNotice}
     />
   );
 
