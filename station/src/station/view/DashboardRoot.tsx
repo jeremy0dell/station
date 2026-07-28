@@ -7,16 +7,22 @@ import { useEffect, useRef } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import {
+  activeTuiToast,
   commandPromptRows,
   isTuiToastHiddenByScreen,
+  nextTuiToastExpiry,
   snapshotLoadingLines,
+  tuiScreenClickAwayMode,
+  type TuiStore,
 } from "@station/dashboard-core";
-import type { TuiStore } from "@station/dashboard-core";
-import { activeTuiToast, nextTuiToastExpiry } from "@station/dashboard-core";
 import { CommandPromptView } from "./CommandPromptView.js";
 import { DashboardFooterView } from "./DashboardFooterView.js";
 import { DashboardView, Divider } from "./DashboardView.js";
 import { OverlayHostView } from "./OverlayHostView.js";
+import {
+  StationHoverProvider,
+  useStationHoverEnabled,
+} from "./stationMouseContext.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { STATION_COLORS } from "./theme.js";
 
@@ -43,8 +49,11 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
   const activeToast = useStore(store, activeTuiToast);
   const nextExpiry = useStore(store, nextTuiToastExpiry);
+  const hoverEnabled = useStationHoverEnabled();
 
   const toastHiddenByScreen = isTuiToastHiddenByScreen(screen);
+  const backgroundHoverEnabled =
+    hoverEnabled && tuiScreenClickAwayMode(screen) === "passthrough";
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
 
   // The store's terminalRows feeds the keyboard scroll-clamping machinery;
@@ -107,22 +116,24 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
 
   return (
     <box width="100%" flexGrow={1} flexDirection="column">
-      <DashboardView
-        snapshot={snapshot}
-        viewState={{
-          searchQuery,
-          collapsedProjectIds,
-          scrollOffset,
-          terminalRows: rows,
-          localRows,
-          selection,
-          ...(focusedRowId === undefined ? {} : { focusedRowId }),
-        }}
-        columns={columns}
-      />
-      <DashboardFooterView store={store} columns={contentColumns} />
-      <CommandPromptView screen={screen} />
-      {toastOverlay}
+      <StationHoverProvider value={backgroundHoverEnabled}>
+        <DashboardView
+          snapshot={snapshot}
+          viewState={{
+            searchQuery,
+            collapsedProjectIds,
+            scrollOffset,
+            terminalRows: rows,
+            localRows,
+            selection,
+            ...(focusedRowId === undefined ? {} : { focusedRowId }),
+          }}
+          columns={columns}
+        />
+        <DashboardFooterView store={store} columns={contentColumns} />
+        <CommandPromptView screen={screen} />
+        {toastOverlay}
+      </StationHoverProvider>
       <OverlayHostView
         snapshot={snapshot}
         screen={screen}

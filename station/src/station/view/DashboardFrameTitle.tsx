@@ -6,6 +6,7 @@ import {
   headerStrip,
   observerHeaderStatusForConnection,
   selectFleetSummary,
+  tuiScreenClickAwayMode,
   type TuiStore,
 } from "@station/dashboard-core";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
@@ -43,9 +44,11 @@ export function DashboardFrameTitle({
   zIndex,
 }: DashboardFrameTitleProps) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
+  const [hovered, setHover] = useStationHoverState();
   const snapshot = useStore(store, (state) => state.snapshot);
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
+  const screen = useStore(store, (state) => state.screen);
+  const hover = hovered && tuiScreenClickAwayMode(screen) === "passthrough";
 
   const needsYou = snapshot === undefined ? 0 : selectFleetSummary(snapshot).needsYou;
   const subtitle =
