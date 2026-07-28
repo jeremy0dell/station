@@ -188,12 +188,49 @@ describe("dashboard viewport selector", () => {
     expect(viewport.items.filter((item) => item.type === "createLocalRow")).toEqual([]);
   });
 
+  it("shows a failed create row when only the retained bare worktree exists", () => {
+    const snapshot = createDashboardSnapshot();
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        localRows: {
+          pendingCreate: [],
+          failedCreate: [
+            {
+              localId: "local_create_failed",
+              projectId: "web",
+              title: "Failed launch",
+              branch: "feature-auth",
+              error: {
+                tag: "ClientObserverError",
+                code: "PREPARE_FAILED",
+                message: "Harness preparation failed.",
+              },
+              expiresAt: Date.now() + 4_000,
+            },
+          ],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      }),
+    );
+
+    const failed = viewport.items.find(
+      (item) => item.type === "createLocalRow" && item.row.localId === "local_create_failed",
+    );
+    expect(failed).toMatchObject({ type: "createLocalRow", row: { status: "failed" } });
+    expect(viewport.rowChoices.map((choice) => choice.value.worktree.branch)).not.toContain(
+      "feature-auth",
+    );
+  });
+
   it("orders mixed local and real rows by resolved display title", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_stuck" ? { ...session, title: "aaa stable task" } : session,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_stuck" ? { ...row, title: "aaa stable task" } : row,
       ),
     };
     const viewport = selectDashboardViewport(
@@ -369,8 +406,8 @@ describe("dashboard viewport selector", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_idle" ? { ...session, title: "Readable feature task" } : session,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_idle" ? { ...row, title: "Readable feature task" } : row,
       ),
     };
     const viewport = selectDashboardViewport(titled, createInitialTuiState());

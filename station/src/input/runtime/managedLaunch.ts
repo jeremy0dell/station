@@ -5,9 +5,11 @@ import type { StationStore } from "../../state/store.js";
 import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import { dispatchStationKey } from "../../station/input/stationActions.js";
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
-import type { ProviderId, StationCommand } from "@station/contracts";
+import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
 import {
   addPendingCreateSessionRow,
+  failPendingCreateSessionRow,
+  FAILED_CREATE_ROW_TTL_MS,
   removeCreateSessionLocalRow,
   type TuiStore,
 } from "@station/dashboard-core";
@@ -72,6 +74,21 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
     if (stationViewStore !== undefined) {
       stationViewStore.setState(removeCreateSessionLocalRow(stationViewStore.getState(), localId));
     }
+  }
+
+  function failPendingCreateRow(localId: string, error: SafeError): void {
+    if (stationViewStore === undefined) {
+      return;
+    }
+    stationViewStore.setState(
+      failPendingCreateSessionRow(
+        stationViewStore.getState(),
+        localId,
+        error,
+        Date.now() + FAILED_CREATE_ROW_TTL_MS,
+      ),
+    );
+    setTimeout(() => clearPendingCreateRow(localId), FAILED_CREATE_ROW_TTL_MS);
   }
 
   /**
@@ -162,7 +179,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       pushLaunchError(completion.error);
       return;
     }
-    // The optimistic row auto-prunes when the worktree reaches the snapshot, which is also when this resolves.
+    // A bare worktree does not prune the optimistic row; only the matching canonical session does.
     const row = await waitForWorktreeByBranch(stationViewStore, spec.projectId, spec.branch);
     if (row === undefined) {
       clearPendingCreateRow(spec.localId);
@@ -179,7 +196,10 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
     if (spec.harness !== undefined) {
       launchTarget.harness = spec.harness;
     }
-    await runManagedLaunchAttempt(agentWorktreePaneId(row.id), launchTarget);
+    const result = await runManagedLaunchAttempt(agentWorktreePaneId(row.id), launchTarget);
+    if (result.kind === "preparation-failed") {
+      failPendingCreateRow(spec.localId, result.error);
+    }
   }
 
   return {

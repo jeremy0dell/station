@@ -130,8 +130,10 @@ describe("TUI selectors", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_idle" ? { ...session, title: "middle stable session" } : session,
+      rows: snapshot.rows.map((candidate) =>
+        candidate.id === "wt_web_idle"
+          ? { ...candidate, title: "middle stable session" }
+          : candidate,
       ),
     };
     const branchChanged = {
@@ -183,15 +185,20 @@ describe("TUI selectors", () => {
   it("resolves session labels with pending overrides", () => {
     const snapshot = createDashboardSnapshot();
     const session = snapshot.sessions.find((candidate) => candidate.id === "ses_wt_web_idle");
-    if (session === undefined) throw new Error("missing fixture session");
-    const titled = { ...session, title: "Readable feature task" };
+    const worktree = snapshot.rows.find((candidate) => candidate.id === "wt_web_idle");
+    if (session === undefined || worktree === undefined) throw new Error("missing fixture session");
+    const titledWorktree = { ...worktree, title: "Readable feature task" };
+    const staleSession = { ...session, title: "Stale session projection" };
 
-    expect(sessionRowDisplayTitle({ session: titled }, createInitialTuiState().localRows)).toBe(
-      "Readable feature task",
-    );
     expect(
       sessionRowDisplayTitle(
-        { session: titled },
+        { session: staleSession, worktree: titledWorktree },
+        createInitialTuiState().localRows,
+      ),
+    ).toBe("Readable feature task");
+    expect(
+      sessionRowDisplayTitle(
+        { session: staleSession, worktree: titledWorktree },
         {
           pendingCreate: [],
           failedCreate: [],
@@ -207,6 +214,41 @@ describe("TUI selectors", () => {
         },
       ),
     ).toBe("Optimistic readable title");
+  });
+
+  it("renders a retained no-agent session from canonical row title through pending launch state", () => {
+    const snapshot = createDashboardSnapshot();
+    const bareWorktree = snapshot.rows.find((candidate) => candidate.id === "wt_web_no_agent");
+    const sourceSession = snapshot.sessions[0];
+    if (bareWorktree === undefined || sourceSession === undefined) {
+      throw new Error("missing retained no-agent fixture inputs");
+    }
+    const worktree = { ...bareWorktree, title: "Durable no-agent workspace" };
+    const session = {
+      ...sourceSession,
+      id: "ses_retained_no_agent",
+      worktreeId: worktree.id,
+      title: "Stale branch-derived projection",
+    };
+    const localRows = {
+      pendingCreate: [],
+      failedCreate: [],
+      pendingRemove: [],
+      pendingStart: [
+        {
+          localId: "start-retained",
+          operation: "resumeAgent" as const,
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          branch: worktree.branch,
+          createdAt: "2026-05-31T12:00:00.000Z",
+        },
+      ],
+    };
+
+    expect(sessionRowDisplayTitle({ session, worktree }, localRows)).toBe(
+      "Durable no-agent workspace",
+    );
   });
 
   it("resolves an external row by run identity before retained Station membership", () => {
@@ -273,10 +315,10 @@ describe("TUI selectors", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_stuck"
-          ? { ...session, title: "aaa readable feature task" }
-          : session,
+      rows: snapshot.rows.map((candidate) =>
+        candidate.id === "wt_web_stuck"
+          ? { ...candidate, title: "aaa readable feature task" }
+          : candidate,
       ),
     };
     const searched: TuiViewState = {

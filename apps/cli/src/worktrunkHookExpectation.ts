@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveObserverPaths, type StationConfig } from "@station/config";
-import type { ProviderHookRuntime } from "@station/contracts";
+import type { ProviderHookArtifactOwner, ProviderHookRuntime } from "@station/contracts";
 import { isCompiledBinary } from "@station/runtime";
 import type { WorktrunkHookExpectation } from "@station/worktrunk";
 
@@ -11,6 +11,7 @@ export type ProviderHookRuntimeOptions = {
   compiled?: boolean | undefined;
   execPath?: string | undefined;
   sourceRoot?: string | undefined;
+  artifactOwner?: ProviderHookArtifactOwner | undefined;
 };
 
 /** Builds the one Worktrunk hook expectation shared by CLI setup and provider diagnostics. */
@@ -29,6 +30,9 @@ export function createWorktrunkHookExpectation(
   if (runtime.stationConfigPath !== undefined) {
     expectation.stationConfigPath = runtime.stationConfigPath;
   }
+  if (runtime.artifactOwner !== undefined) {
+    expectation.artifactOwner = runtime.artifactOwner;
+  }
   return expectation;
 }
 
@@ -46,6 +50,9 @@ export function createProviderHookRuntime(
   };
   if (options.stationConfigPath !== undefined) {
     runtime.stationConfigPath = options.stationConfigPath;
+  }
+  if (options.artifactOwner !== undefined) {
+    runtime.artifactOwner = options.artifactOwner;
   }
   return runtime;
 }

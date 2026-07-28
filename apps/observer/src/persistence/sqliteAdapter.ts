@@ -24,6 +24,7 @@ import type {
   ObserverIdFactory,
   SessionTurnReadinessMutation,
 } from "./types.js";
+import * as worktreeDisplayTitleStore from "./worktreeDisplayTitles.js";
 import * as worktreeMetadataCurrentStore from "./worktreeMetadataCurrent.js";
 
 export type CreateSqliteObserverPersistenceOptions = {
@@ -271,6 +272,9 @@ export function createSqliteObserverPersistence(
 
     listSessions: () => transaction(correlationStore.listSessions),
 
+    listWorktreeDisplayTitles: () =>
+      transaction(worktreeDisplayTitleStore.listWorktreeDisplayTitles),
+
     getSessionHarnessExecution: (input) =>
       transaction((database) =>
         sessionHarnessExecutionStore.getSessionHarnessExecution(database, input),
@@ -321,11 +325,11 @@ export function createSqliteObserverPersistence(
         correlationStore.findRememberedHarnessProviderForWorktree(database, input),
       ),
 
-    seedSessionTitle: (input) =>
-      transaction((database) => correlationStore.seedSessionTitle(database, input)),
+    seedSession: (input) =>
+      transaction((database) => correlationStore.seedSession(database, input)),
 
-    deleteSessionTitleSeed: (sessionId) =>
-      transaction((database) => correlationStore.deleteSessionTitleSeed(database, sessionId)),
+    discardSessionSeed: (input) =>
+      transaction((database) => correlationStore.discardSessionSeed(database, input)),
 
     markSessionsEnded: (input) =>
       transaction((database) => correlationStore.markSessionsEnded(database, input)),
@@ -335,6 +339,11 @@ export function createSqliteObserverPersistence(
 
     renameSession: (input) =>
       transaction((database) => correlationStore.renameSession(database, input)),
+
+    retireRemovedWorktreeSessionState: (input) =>
+      transaction((database) =>
+        correlationStore.retireRemovedWorktreeSessionState(database, input),
+      ),
 
     upsertSessionRecoveryHandle: (input) =>
       transaction((database) =>

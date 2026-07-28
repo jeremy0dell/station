@@ -29,6 +29,7 @@ import type { SessionStore } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { prepareExternalLaunch, reportExternalExit } from "../../src/runtime/externalLaunch";
+import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 
 const now = "2026-05-21T12:00:00.000Z";
 
@@ -205,6 +206,7 @@ function row(
     id: "wt_web_feature",
     projectId: "web",
     projectLabel: "Web",
+    title: "Readable login task",
     branch: "feature/login",
     path: "/tmp/station/web/feature",
     worktree: { state: "exists", source: "worktrunk" },
@@ -244,20 +246,25 @@ function fakeCore(rows: WorktreeRow[]): ObserverCore {
 }
 
 function trackingPersistence() {
-  const seeded: Array<Parameters<SessionStore["seedSessionTitle"]>[0]> = [];
-  const deleted: string[] = [];
+  const seeded: Array<Parameters<SessionStore["seedSession"]>[0]> = [];
+  const renamed: Array<Parameters<SessionStore["renameSession"]>[0]> = [];
+  const discarded: Array<Parameters<SessionStore["discardSessionSeed"]>[0]> = [];
   const store = {
     findRememberedHarnessProviderForWorktree: async () => undefined,
-    seedSessionTitle: async (input: Parameters<SessionStore["seedSessionTitle"]>[0]) => {
+    seedSession: async (input: Parameters<SessionStore["seedSession"]>[0]) => {
       seeded.push(input);
-      return {} as Awaited<ReturnType<SessionStore["seedSessionTitle"]>>;
+      return {} as Awaited<ReturnType<SessionStore["seedSession"]>>;
     },
-    deleteSessionTitleSeed: async (sessionId: string) => {
-      deleted.push(sessionId);
-      return 1;
+    renameSession: async (input: Parameters<SessionStore["renameSession"]>[0]) => {
+      renamed.push(input);
+      return {} as Awaited<ReturnType<SessionStore["renameSession"]>>;
+    },
+    discardSessionSeed: async (input: Parameters<SessionStore["discardSessionSeed"]>[0]) => {
+      discarded.push(input);
+      return { discardedSessions: 1, discardedWorktreeTitles: 0 };
     },
   } as unknown as SessionStore;
-  return { store, seeded, deleted };
+  return { store, seeded, renamed, discarded };
 }
 
 const fakePersistence = trackingPersistence().store;
@@ -302,7 +309,9 @@ function deps(
   rows: WorktreeRow[],
   managedTerminal: ManagedTerminalLifecycle,
   harnesses?: Harnesses,
-  persistence: SessionStore = fakePersistence,
+  persistence: SessionStore = createInMemoryObserverPersistence({
+    clock: { now: () => new Date(now) },
+  }),
 ) {
   return {
     core: fakeCore(rows),
@@ -345,7 +354,8 @@ describe("ProviderRegistry managed terminal role", () => {
 describe("prepareExternalLaunch", () => {
   it("mints one session + one managed target + a launch plan", async () => {
     const station = new FakeManagedTerminalLifecycle();
-    const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
+    const launchDeps = deps([row()], station);
+    const result = await prepareExternalLaunch(launchDeps, prepareParams);
 
     expect(result.reconcile).toBe(true);
     expect(result.outcome.kind).toBe("prepared");
@@ -359,6 +369,19 @@ describe("prepareExternalLaunch", () => {
     const targets = await station.listTargets();
     expect(targets).toHaveLength(1);
     expect(targets[0]?.harnessBinding?.role).toBe("main-agent");
+    await expect(launchDeps.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({
+        id: result.outcome.sessionId,
+        title: "Readable login task",
+      }),
+    ]);
+    await expect(launchDeps.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        title: "Readable login task",
+      }),
+    ]);
   });
 
   it("persists a custom title before exposing a newly prepared session", async () => {
@@ -377,10 +400,16 @@ describe("prepareExternalLaunch", () => {
         sessionId: result.outcome.sessionId,
         projectId: "web",
         worktreeId: "wt_web_feature",
+        initialTitle: "Hexagonal PT 12",
+      }),
+    ]);
+    expect(persistence.renamed).toEqual([
+      expect.objectContaining({
+        sessionId: result.outcome.sessionId,
         title: "Hexagonal PT 12",
       }),
     ]);
-    expect(persistence.deleted).toEqual([]);
+    expect(persistence.discarded).toEqual([]);
   });
 
   it("rejects when the harness's status hooks are not installed", async () => {
@@ -440,7 +469,8 @@ describe("prepareExternalLaunch", () => {
     // The fake core never reconciles, so row.agent is still undefined — but the
     // station provider already holds a target, so a second prepare must not mint
     // a second identity.
-    const second = await prepareExternalLaunch(deps([row()], station), prepareParams);
+    const secondDeps = deps([row()], station);
+    const second = await prepareExternalLaunch(secondDeps, prepareParams);
     expect(second).toEqual({
       outcome: {
         kind: "existing-session",
@@ -451,6 +481,7 @@ describe("prepareExternalLaunch", () => {
       reconcile: false,
     });
     expect(await station.listTargets()).toHaveLength(1);
+    await expect(secondDeps.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
   });
 
   it("returns the existing session id without applying a requested title", async () => {
@@ -470,7 +501,8 @@ describe("prepareExternalLaunch", () => {
     });
     // No title or target is created when an agent already exists.
     expect(persistence.seeded).toEqual([]);
-    expect(persistence.deleted).toEqual([]);
+    expect(persistence.renamed).toEqual([]);
+    expect(persistence.discarded).toEqual([]);
     expect(await station.listTargets()).toEqual([]);
   });
 
@@ -640,7 +672,7 @@ describe("prepareExternalLaunch", () => {
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
   });
 
-  it("releases the opened target and deletes its title seed when process launch fails", async () => {
+  it("releases the opened target and discards only the failed session projection", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
         tag: "TerminalProviderError",
@@ -648,20 +680,23 @@ describe("prepareExternalLaunch", () => {
         message: "launch failed",
       },
     });
-    const persistence = trackingPersistence();
+    const launchDeps = deps([row()], station);
 
-    await expect(
-      prepareExternalLaunch(deps([row()], station, undefined, persistence.store), {
-        ...prepareParams,
-        title: "Hexagonal PT 12",
-      }),
-    ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
+    await expect(prepareExternalLaunch(launchDeps, prepareParams)).rejects.toMatchObject({
+      code: "MANAGED_LAUNCH_FAILED",
+    });
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
-    expect(persistence.deleted).toEqual([persistence.seeded[0]?.sessionId]);
     expect(await station.listTargets()).toEqual([]);
+    await expect(launchDeps.persistence.listSessions()).resolves.toEqual([]);
+    await expect(launchDeps.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        worktreeId: "wt_web_feature",
+        title: "Readable login task",
+      }),
+    ]);
   });
 
-  it("preserves the launch failure and title seed when rollback release also fails", async () => {
+  it("preserves the launch failure while independently discarding its session seed", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
         tag: "TerminalProviderError",
@@ -683,7 +718,7 @@ describe("prepareExternalLaunch", () => {
       }),
     ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
     expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
-    expect(persistence.deleted).toEqual([]);
+    expect(persistence.discarded).toEqual([{ sessionId: persistence.seeded[0]?.sessionId }]);
     expect(await station.listTargets()).toHaveLength(1);
   });
 });

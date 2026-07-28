@@ -33,6 +33,7 @@ import {
   type ProjectId,
   ProjectIdSchema,
   ProviderHealthSchema,
+  ProviderHookArtifactOwnershipSchema,
   ProviderHookEventSchema,
   ProviderHookReceiptSchema,
   ProviderHookSpoolRecordSchema,
@@ -62,6 +63,7 @@ import {
   WorktreeChecksStateSchema,
   type WorktreeId,
   WorktreeObservationSchema,
+  WorktreeRowSchema,
 } from "@station/contracts";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ZodType } from "zod";
@@ -84,6 +86,50 @@ function expectFails(schema: ZodType, value: unknown, label: string) {
 }
 
 describe("contract schemas", () => {
+  it("strictly parses provider hook artifact ownership", () => {
+    const requested = {
+      schemaVersion: 1,
+      launcher: "/source/bin/stn-ingress",
+      runtimeKind: "source",
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    } as const;
+    const current = {
+      schemaVersion: 1,
+      launcher: "/installed/stn-ingress",
+      runtimeKind: "compiled",
+      version: "0.7.1",
+      buildIdentity: "b".repeat(64),
+    } as const;
+
+    expect(
+      ProviderHookArtifactOwnershipSchema.parse({
+        status: "different-owner",
+        requested,
+        currentLauncher: current.launcher,
+        current,
+      }),
+    ).toMatchObject({ status: "different-owner", requested, current });
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
+      { status: "same-owner", requested, currentLauncher: "relative/stn-ingress" },
+      "ownership with a relative current launcher",
+    );
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
+      { status: "different-owner", requested, currentLauncher: current.launcher },
+      "different ownership without current owner provenance",
+    );
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
+      { status: "absent", requested, extra: true },
+      "ownership with an unknown field",
+    );
+    expect(
+      ProviderHookArtifactOwnershipSchema.parse({ status: "unknown-owner", requested }),
+    ).toEqual({ status: "unknown-owner", requested });
+  });
+
   it("keeps provider-native execution identity on harness run observations", () => {
     expect(
       HarnessRunObservationSchema.parse({
@@ -108,7 +154,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.8.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.9.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -642,6 +688,7 @@ describe("contract schemas", () => {
       id: "wt_web_feature_auth",
       projectId: "web",
       projectLabel: "web",
+      title: "Readable feature task",
       branch: "feature/auth",
       path: "/tmp/station-fixtures/web/worktrees/feature-auth",
       worktree: {
@@ -685,6 +732,11 @@ describe("contract schemas", () => {
     };
 
     expectParses(StationSnapshotSchema, snapshot, "snapshot with normalized branch metadata");
+    expectFails(
+      WorktreeRowSchema,
+      { ...row, title: undefined },
+      "worktree row without canonical title",
+    );
     expectFails(
       StationSnapshotSchema,
       {

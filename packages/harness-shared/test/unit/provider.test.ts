@@ -9,6 +9,7 @@ import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessHookDoctorOptions,
+  harnessHooksStatusFrom,
   type TerminalBoundHarnessProviderSpec,
 } from "../../src/provider";
 
@@ -168,6 +169,28 @@ describe("createTerminalBoundHarnessProvider", () => {
     expect("hooksStatus" in provider).toBe(true);
     expect(provider.acceptsPersistedEvent?.({ provider: "test", observedAt: now })).toBe(false);
   });
+
+  it("preserves hook artifact ownership in shared status mapping", () => {
+    const requested = {
+      schemaVersion: 1 as const,
+      launcher: "/source/bin/stn-ingress",
+      runtimeKind: "source" as const,
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    };
+
+    expect(
+      harnessHooksStatusFrom("codex", true, {
+        installed: false,
+        missing: ["station-codex-hook.sh"],
+        message: "Another Station runtime owns the hook.",
+        ownership: { status: "unknown-owner", requested },
+      }),
+    ).toMatchObject({
+      provider: "codex",
+      ownership: { status: "unknown-owner", requested },
+    });
+  });
 });
 
 describe("versionInfo", () => {
@@ -234,6 +257,13 @@ describe("harnessHookDoctorOptions", () => {
     hookSpoolDir: "/checkout/B/state/spool/hooks",
     autoStartFromHooks: false,
     stationConfigPath: "/checkout/B/config.toml",
+    artifactOwner: {
+      schemaVersion: 1 as const,
+      launcher: "/checkout/B/bin/stn-ingress",
+      runtimeKind: "source" as const,
+      version: "0.0.0-test",
+      buildIdentity: "b".repeat(64),
+    },
   };
 
   it("uses the whole requester hook runtime instead of mixing incumbent fields", () => {
@@ -250,6 +280,7 @@ describe("harnessHookDoctorOptions", () => {
       hookSpoolDir: requesterRuntime.hookSpoolDir,
       autoStartFromHooks: requesterRuntime.autoStartFromHooks,
       stationConfigPath: requesterRuntime.stationConfigPath,
+      artifactOwner: requesterRuntime.artifactOwner,
     });
   });
 

@@ -11,7 +11,7 @@ import {
 } from "@station/cli/internal";
 import { loadConfig, setTuiWidgetsInConfig, type TuiConfig } from "@station/config";
 import { TUI_RENDERER_CONTROL_PROTOCOL_VERSION } from "@station/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
 
@@ -23,6 +23,7 @@ const nestedTuiDisabledError = {
   message: "Nested Station is disabled.",
   hint: "Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.",
 } as const;
+const inheritedStationPane = process.env.STATION_PANE;
 const tuiConfig: TuiConfig = {
   widgets: [
     {
@@ -41,11 +42,11 @@ const tuiConfig: TuiConfig = {
 
 function emptySnapshot(reason: string) {
   return {
-    schemaVersion: "0.8.0",
+    schemaVersion: "0.9.0",
     reason,
     reconciledAt: now,
     snapshot: {
-      schemaVersion: "0.8.0",
+      schemaVersion: "0.9.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
       providerHealth: {},
@@ -93,7 +94,7 @@ function runningObserverDeps(
         health: async () => {
           if (!running) throw new Error("stopped");
           return {
-            schemaVersion: "0.8.0",
+            schemaVersion: "0.9.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -114,6 +115,15 @@ function runningObserverDeps(
 }
 
 describe("CLI tui command", () => {
+  beforeEach(() => {
+    delete process.env.STATION_PANE;
+  });
+
+  afterEach(() => {
+    if (inheritedStationPane === undefined) delete process.env.STATION_PANE;
+    else process.env.STATION_PANE = inheritedStationPane;
+  });
+
   it("prefers the configured popup command over the environment and default", () => {
     expect(resolvePopupTmuxCommand("config-tmux", { STATION_TMUX_BIN: "env-tmux" })).toBe(
       "config-tmux",
@@ -288,7 +298,7 @@ describe("CLI tui command", () => {
                   if (!spawned) throw new Error("stopped");
                   await healthReady;
                   return {
-                    schemaVersion: "0.8.0",
+                    schemaVersion: "0.9.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -354,7 +364,7 @@ describe("CLI tui command", () => {
               clientFactory: () =>
                 ({
                   health: async () => ({
-                    schemaVersion: "0.8.0",
+                    schemaVersion: "0.9.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,

@@ -176,9 +176,11 @@ and panes intact.
 
 There is no deletable "session" unit and no `session.remove` command. The durable, deletable unit is the worktree.
 
+The UX calls the display value a **session name**, but its durable authority is the worktree-scoped title keyed by `(projectId, worktreeId)`. `WorktreeRow.title` and every `SessionView.title` for that worktree project the same value. Agent session IDs remain lifecycle-specific: a fresh agent can receive a new `ses_<uuid>` while inheriting the worktree title. Branch supplies only the initial fallback when no canonical or historical non-ended title exists; later branch changes do not rename the workspace.
+
 ### Worktree
 
-A worktree is the durable, deletable unit: the git worktree, its branch, and its checkout. Worktree ids are **provider-supplied** (e.g. Worktrunk), not minted by the observer, so code must not parse or validate the `wt_` prefix. Removing a worktree also tears down its session and panes.
+A worktree is the durable, deletable unit: the git worktree, its branch, its checkout, and its Observer-owned display title. Worktree ids are **provider-supplied** (e.g. Worktrunk), not minted by the observer, so code must not parse or validate the `wt_` prefix. Removing a worktree also tears down its session and panes.
 
 ### Pane Tree
 

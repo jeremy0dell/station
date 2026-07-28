@@ -6,6 +6,9 @@ import { createCommandSnapshot, fixtureNow, row } from "../support/snapshots.js"
 describe("client snapshot reducer", () => {
   it("applies direct worktree row updates without requesting a snapshot refresh", () => {
     const snapshot = createCommandSnapshot("idle");
+    const firstRow = snapshot.rows[0];
+    if (firstRow === undefined) throw new Error("Expected an idle fixture row.");
+    snapshot.rows[0] = { ...firstRow, title: "Durable workspace" };
     const event: StationEvent = {
       type: "worktree.updated",
       worktreeId: "wt_web_idle",
@@ -22,6 +25,27 @@ describe("client snapshot reducer", () => {
     const result = applyStationEvent(snapshot, event);
     expect(result.needsSnapshotRefresh).toBe(false);
     expect(result.snapshot.rows[0]?.display.statusLabel).toBe("working");
+    expect(result.snapshot.rows[0]?.title).toBe("Durable workspace");
+  });
+
+  it("applies direct title patches without dropping row state", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const before = snapshot.rows[0];
+    if (before === undefined) throw new Error("Expected an idle fixture row.");
+
+    const result = applyStationEvent(snapshot, {
+      type: "worktree.updated",
+      worktreeId: before.id,
+      patch: { title: "Renamed workspace" },
+    });
+
+    expect(result.needsSnapshotRefresh).toBe(false);
+    expect(result.snapshot.rows[0]).toMatchObject({
+      title: "Renamed workspace",
+      branch: before.branch,
+      agent: before.agent,
+      display: before.display,
+    });
   });
 
   it("applies readiness-only worktree row updates", () => {

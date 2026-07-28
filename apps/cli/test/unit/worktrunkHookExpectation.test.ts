@@ -25,10 +25,18 @@ const config: StationConfig = {
 
 describe("Worktrunk hook expectation composition", () => {
   it("collects every command input from resolved CLI composition", () => {
+    const artifactOwner = {
+      schemaVersion: 1 as const,
+      launcher: "/opt/station/stn-ingress",
+      runtimeKind: "compiled" as const,
+      version: "0.7.1",
+      buildIdentity: "a".repeat(64),
+    };
     expect(
       createWorktrunkHookExpectation(config, {
         stationConfigPath: "/tmp/station/config.toml",
         ingressLauncher: "/opt/station/stn-ingress",
+        artifactOwner,
       }),
     ).toEqual({
       hookBin: "/opt/station/stn-ingress",
@@ -37,6 +45,7 @@ describe("Worktrunk hook expectation composition", () => {
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
       autoStartFromHooks: false,
+      artifactOwner,
     });
   });
 

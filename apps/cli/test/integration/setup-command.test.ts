@@ -136,6 +136,74 @@ describe("CLI setup command", () => {
     });
   });
 
+  it("reports conflicting hook runtime provenance in setup check JSON", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const source = setupConfigToml(repo, { includeHarness: true }).replace(
+      "[[projects]]",
+      ["install_hooks = true", "", "[[projects]]"].join("\n"),
+    );
+    const requested = {
+      schemaVersion: 1 as const,
+      launcher: join(root, "source", "bin", "stn-ingress"),
+      runtimeKind: "source" as const,
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    };
+    const current = {
+      schemaVersion: 1 as const,
+      launcher: join(root, "installed", "stn-ingress"),
+      runtimeKind: "compiled" as const,
+      version: "0.7.1",
+      buildIdentity: "b".repeat(64),
+    };
+
+    const result = await runCli(["--config", configPath, "setup", "check", "--json"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: readySetupAccess(),
+        fs: readOnlyFs({ [configPath]: source }),
+        probeHarnessHooksStatus: async () => ({
+          provider: "codex",
+          requested: true,
+          installed: false,
+          missing: ["station-codex-hook.sh"],
+          message: "Another Station runtime owns the hook.",
+          ownership: {
+            status: "different-owner",
+            requested,
+            currentLauncher: current.launcher,
+            current,
+          },
+        }),
+      },
+    });
+
+    const plan = result.output as {
+      checks: Array<{ id: string; details?: Record<string, string> }>;
+    };
+    expect(plan.checks.find((check) => check.id === "harness-tracking:codex")?.details).toEqual(
+      expect.objectContaining({
+        ownership: "different-owner",
+        requestedLauncher: requested.launcher,
+        requestedBuildIdentity: requested.buildIdentity,
+        currentLauncher: current.launcher,
+        currentBuildIdentity: current.buildIdentity,
+      }),
+    );
+  });
+
   it("repairs persisted tracking intent for a configured secondary harness", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -207,6 +275,7 @@ describe("CLI setup command", () => {
         args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
       }),
     );
+    expect(calls.flatMap((call) => call.args ?? [])).not.toContain("--takeover");
     expect(installed).toContain("opencode");
   });
 

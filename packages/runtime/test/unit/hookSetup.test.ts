@@ -2,16 +2,22 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  assertProviderHookArtifactOwnership,
   assignBackupPaths,
+  classifyProviderHookArtifactOwnership,
   commandLine,
   createHookSetupFileOps,
   expectedProviderHookScript,
   type HookSetupErrorFactory,
   hookCommandsForEvents,
   installConfigScriptHook,
+  isSafeError,
+  PROVIDER_HOOK_OWNER_MARKER,
   planConfigScriptHook,
+  providerHookArtifactOwner,
   providerHookCommandArgs,
   providerHookCommandLine,
+  providerHookOwnerMarker,
   providerHookScriptOptions,
   providerHookScriptRoutesByStationEnv,
   shellQuote,
@@ -24,6 +30,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type Doc = Record<string, string>;
 const EVENTS = ["PreToolUse", "PostToolUse"] as const;
 type Event = (typeof EVENTS)[number];
+const BUILD_A = "a".repeat(64);
+const BUILD_B = "b".repeat(64);
 
 const docSpec = (scriptPath: string) => ({
   readOptionalFile: readViaOps,
@@ -178,6 +186,125 @@ describe("runtime hookSetup", () => {
       expect(script).toContain("SPOOL_DIR_ARG=(--spool-dir /tmp/stale/spool/hooks)");
     });
 
+    it("embeds and classifies strict artifact ownership without changing the command", () => {
+      const owner = providerHookArtifactOwner("/opt/station/bin/stn-ingress", {
+        version: "0.7.1",
+        compiled: true,
+        buildIdentity: BUILD_A,
+      });
+      const script = expectedProviderHookScript({
+        provider: "codex",
+        options: { hookBin: owner.launcher, artifactOwner: owner },
+      });
+
+      expect(script).toContain(`# ${providerHookOwnerMarker(owner)}`);
+      expect(classifyProviderHookArtifactOwnership({ contents: script, requested: owner })).toEqual(
+        {
+          status: "same-owner",
+          requested: owner,
+          currentLauncher: owner.launcher,
+        },
+      );
+    });
+
+    it("classifies absent, different, and unknown-owner artifacts", () => {
+      const requested = providerHookArtifactOwner("/source/bin/stn-ingress", {
+        version: "0.0.0",
+        compiled: false,
+        buildIdentity: BUILD_A,
+      });
+      const current = providerHookArtifactOwner("/installed/bin/stn-ingress", {
+        version: "0.7.1",
+        compiled: true,
+        buildIdentity: BUILD_B,
+      });
+      expect(classifyProviderHookArtifactOwnership({ contents: "", requested }).status).toBe(
+        "absent",
+      );
+      expect(
+        classifyProviderHookArtifactOwnership({
+          contents: `# ${providerHookOwnerMarker(current)}\n`,
+          requested,
+        }),
+      ).toMatchObject({ status: "different-owner", currentLauncher: current.launcher });
+      expect(
+        classifyProviderHookArtifactOwnership({ contents: "# old generated hook\n", requested })
+          .status,
+      ).toBe("unknown-owner");
+      expect(
+        classifyProviderHookArtifactOwnership({
+          contents: `# ${PROVIDER_HOOK_OWNER_MARKER}malformed\n/source/bin/stn-ingress codex`,
+          requested,
+        }).status,
+      ).toBe("unknown-owner");
+      expect(() =>
+        assertProviderHookArtifactOwnership({
+          provider: "codex",
+          action: "install",
+          artifactPath: "/shared/hook.sh",
+          contents: `# ${providerHookOwnerMarker(current)}\n`,
+          requested,
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          action: "install",
+          artifactPath: "/shared/hook.sh",
+          ownership: expect.objectContaining({ status: "different-owner" }),
+        }),
+      );
+    });
+
+    it("allows version and build upgrades at the same launcher", () => {
+      const current = providerHookArtifactOwner("/opt/station/bin/stn-ingress", {
+        version: "0.7.1",
+        compiled: true,
+        buildIdentity: BUILD_A,
+      });
+      const requested = providerHookArtifactOwner(current.launcher, {
+        version: "0.7.2",
+        compiled: true,
+        buildIdentity: BUILD_B,
+      });
+
+      expect(
+        classifyProviderHookArtifactOwnership({
+          contents: `# ${providerHookOwnerMarker(current)}\n`,
+          requested,
+        }),
+      ).toEqual({
+        status: "same-owner",
+        requested,
+        currentLauncher: current.launcher,
+      });
+    });
+
+    it("requires takeover for an unmarked generated script", () => {
+      const requested = providerHookArtifactOwner("/source path/bin/stn-ingress", {
+        version: "0.0.0",
+        compiled: false,
+        buildIdentity: BUILD_A,
+      });
+      const script = expectedProviderHookScript({
+        provider: "claude",
+        options: { hookBin: requested.launcher },
+      });
+      expect(
+        classifyProviderHookArtifactOwnership({
+          contents: script,
+          requested,
+        }).status,
+      ).toBe("unknown-owner");
+      expect(() =>
+        assertProviderHookArtifactOwnership({
+          provider: "claude",
+          action: "install",
+          artifactPath: "/shared/hook.sh",
+          contents: script,
+          requested,
+        }),
+      ).toThrowError(expect.objectContaining({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" }));
+    });
+
     it("recognizes generated scripts that route through runtime Station env", () => {
       const script = expectedProviderHookScript({
         provider: "cursor",
@@ -257,6 +384,62 @@ describe("runtime hookSetup", () => {
       expect(replan.configChanged).toBe(false);
       expect(replan.scriptChanged).toBe(false);
       expect(replan.changed).toBe(true);
+    });
+
+    it("re-reads ownership before mutation and refuses a raced owner change", async () => {
+      const configPath = join(root, "config.json");
+      const scriptPath = join(root, "hook.sh");
+      const requested = providerHookArtifactOwner("/source/bin/stn-ingress", {
+        version: "0.0.0",
+        compiled: false,
+        buildIdentity: BUILD_A,
+      });
+      const current = providerHookArtifactOwner("/installed/bin/stn-ingress", {
+        version: "0.7.1",
+        compiled: true,
+        buildIdentity: BUILD_B,
+      });
+      const expectedScript = expectedProviderHookScript({
+        provider: "codex",
+        options: { hookBin: requested.launcher, artifactOwner: requested },
+      });
+      const plan = await planConfigScriptHook({
+        ...docSpec(scriptPath),
+        configPath,
+        expectedScript,
+      });
+      await writeFile(
+        scriptPath,
+        expectedProviderHookScript({
+          provider: "codex",
+          options: { hookBin: current.launcher, artifactOwner: current },
+        }),
+      );
+
+      const refusal = installConfigScriptHook({
+        configPath,
+        hookScriptPath: scriptPath,
+        after: plan.after,
+        expectedScript,
+        configChanged: plan.configChanged,
+        scriptChanged: plan.scriptChanged,
+        fileOps: ops,
+        provider: "codex",
+        artifactOwner: requested,
+      });
+      await expect(refusal).rejects.toMatchObject({
+        tag: "ProviderHookArtifactOwnershipError",
+        code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+        provider: "codex",
+        action: "install",
+        artifactPath: scriptPath,
+        ownership: expect.objectContaining({ status: "different-owner", current }),
+      });
+      await expect(refusal.catch((error: unknown) => isSafeError(error))).resolves.toBe(true);
+      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(scriptPath, "utf8")).resolves.toContain(
+        providerHookOwnerMarker(current),
+      );
     });
 
     it("backs up the existing config when a reinstall changes it", async () => {

@@ -289,35 +289,39 @@ export async function rememberedHarnessProviderForWorktree(input: {
   });
 }
 
-export async function seedSessionTitle(input: {
+export async function seedSession(input: {
   persistence: SessionStore;
   sessionId: SessionId;
   projectId: string;
   worktreeId: string;
-  title: string;
+  initialTitle: string;
   clock?: RuntimeClock | undefined;
 }): Promise<void> {
   const seededAt = toIsoTimestamp((input.clock ?? systemClock).now());
-  await input.persistence.seedSessionTitle({
+  await input.persistence.seedSession({
     sessionId: input.sessionId,
     projectId: input.projectId,
     worktreeId: input.worktreeId,
-    title: input.title.trim(),
+    initialTitle: input.initialTitle.trim(),
     createdAt: seededAt,
     lastSeenAt: seededAt,
   });
 }
 
-export async function deleteSessionTitleSeedBestEffort(input: {
+export async function discardSessionSeedBestEffort(input: {
   persistence: SessionStore;
   sessionId: SessionId;
+  removedWorktree?: { projectId: string; worktreeId: string };
   context: CommandHandlerContext;
   logger?: StationLogger | undefined;
 }): Promise<void> {
   try {
-    await input.persistence.deleteSessionTitleSeed(input.sessionId);
+    await input.persistence.discardSessionSeed({
+      sessionId: input.sessionId,
+      ...(input.removedWorktree === undefined ? {} : { removedWorktree: input.removedWorktree }),
+    });
   } catch (error) {
-    await input.logger?.warn("Session cleanup failed to delete a pre-launch title seed.", {
+    await input.logger?.warn("Session cleanup failed to discard a pre-launch seed.", {
       commandId: input.context.commandId,
       traceId: input.context.trace.traceId,
       sessionId: input.sessionId,
@@ -439,7 +443,7 @@ export async function removeWorktreeBestEffort(input: {
   logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
-}): Promise<void> {
+}): Promise<boolean> {
   if (input.expectedRegistrationIdentity === undefined) {
     await input.logger?.warn("Session cleanup skipped an unverified worktree removal.", {
       commandId: input.context.commandId,
@@ -450,7 +454,7 @@ export async function removeWorktreeBestEffort(input: {
       worktreeId: input.worktreeId,
       refusalReason: "registration_unverified",
     });
-    return;
+    return false;
   }
   const expectedRegistrationIdentity = input.expectedRegistrationIdentity;
   try {
@@ -477,6 +481,7 @@ export async function removeWorktreeBestEffort(input: {
           force: true,
         }),
     );
+    return true;
   } catch (error) {
     await input.logger?.warn("Session cleanup failed to remove worktree.", {
       commandId: input.context.commandId,
@@ -487,6 +492,7 @@ export async function removeWorktreeBestEffort(input: {
       worktreeId: input.worktreeId,
       error,
     });
+    return false;
   }
 }
 

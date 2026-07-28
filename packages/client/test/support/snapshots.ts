@@ -46,7 +46,8 @@ export function row(input: {
   id: string;
   projectId: "web" | "api";
   branch: string;
-  state: WorktreeRow["agent"] extends { state: infer T } ? T | "none" : never;
+  title?: string;
+  state: NonNullable<WorktreeRow["agent"]>["state"] | "none";
   dirty?: boolean;
 }): WorktreeRow {
   const display = displayForState(input.state);
@@ -54,6 +55,7 @@ export function row(input: {
     id: input.id,
     projectId: input.projectId,
     projectLabel: input.projectId,
+    title: input.title ?? input.branch,
     branch: input.branch,
     path: `/tmp/station/${input.projectId}/worktrees/${input.branch.replaceAll("/", "-")}`,
     worktree: {

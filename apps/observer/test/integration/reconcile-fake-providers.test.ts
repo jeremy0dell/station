@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { StationSnapshotSchema } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -16,6 +16,7 @@ const now = "2026-05-20T12:00:00.000Z";
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",
@@ -296,11 +297,11 @@ describe("observer reconcile with fake providers", () => {
       providers,
       clock: { now: () => new Date(now) },
     });
-    await persistence.seedSessionTitle({
+    await persistence.seedSession({
       sessionId,
       projectId: "web",
       worktreeId: oldWorktreeId,
-      title: "Branch Fix too",
+      initialTitle: "Branch Fix too",
       createdAt: now,
       lastSeenAt: now,
     });

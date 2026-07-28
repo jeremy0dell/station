@@ -198,6 +198,9 @@ export class WorktrunkProvider implements WorktreeProvider {
         if (runtime.stationConfigPath !== undefined) {
           expectation.stationConfigPath = runtime.stationConfigPath;
         }
+        if (runtime.artifactOwner !== undefined) {
+          expectation.artifactOwner = runtime.artifactOwner;
+        }
       }
       const hookOptions: Parameters<typeof doctorWorktrunkHooks>[0] = {
         expectation,
@@ -215,7 +218,11 @@ export class WorktrunkProvider implements WorktreeProvider {
       if (result.status !== "ok") {
         check.error = {
           tag: "WorktrunkHookSetupError",
-          code: "WORKTRUNK_HOOKS_MISSING",
+          code:
+            result.ownership?.status === "different-owner" ||
+            result.ownership?.status === "unknown-owner"
+              ? "WORKTRUNK_HOOK_OWNERSHIP_CONFLICT"
+              : "WORKTRUNK_HOOKS_MISSING",
           message: result.message,
           provider: this.id,
         };

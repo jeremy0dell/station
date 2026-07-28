@@ -14,6 +14,7 @@ import type {
   PersistedEvent,
   PersistedProviderObservation,
   PersistedSession,
+  PersistedWorktreeDisplayTitle,
   ProviderObservationType,
 } from "./types.js";
 
@@ -57,6 +58,14 @@ export type SqliteProviderObservationRow = {
   payload_json: string;
   observed_at: string;
   expires_at: string | null;
+};
+
+export type SqliteWorktreeDisplayTitleRow = {
+  project_id: string;
+  worktree_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type SqliteSessionRow = {
@@ -133,6 +142,18 @@ export function providerObservationFromRow(
   };
   if (expiresAt !== undefined) observation.expiresAt = expiresAt;
   return observation;
+}
+
+export function worktreeDisplayTitleFromRow(
+  row: SqliteWorktreeDisplayTitleRow,
+): PersistedWorktreeDisplayTitle {
+  return {
+    projectId: row.project_id,
+    worktreeId: row.worktree_id,
+    title: row.title,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 export function sessionFromRow(row: SqliteSessionRow): PersistedSession {

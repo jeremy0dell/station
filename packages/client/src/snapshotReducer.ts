@@ -121,6 +121,7 @@ function mergeRowPatch(row: WorktreeRow, patch: OptionalPatch<WorktreeRow>): Wor
     id: patch.id ?? row.id,
     projectId: patch.projectId ?? row.projectId,
     projectLabel: patch.projectLabel ?? row.projectLabel,
+    title: patch.title ?? row.title,
     branch: patch.branch ?? row.branch,
     path: patch.path ?? row.path,
     worktree: row.worktree,

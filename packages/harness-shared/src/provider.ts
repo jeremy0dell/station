@@ -13,6 +13,8 @@ import type {
   ProviderDoctorCheck,
   ProviderDoctorContext,
   ProviderHealth,
+  ProviderHookArtifactOwner,
+  ProviderHookArtifactOwnership,
   ProviderId,
   RawHarnessEvent,
   SafeError,
@@ -245,6 +247,7 @@ export type CommonHookDoctorOptions = {
   hookSpoolDir?: string;
   autoStartFromHooks?: boolean;
   stationConfigPath?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
 };
 
 /** Maps the whole requester hook runtime or preserves the incumbent provider options. */
@@ -262,6 +265,9 @@ export function harnessHookDoctorOptions(
     result.autoStartFromHooks = runtime.autoStartFromHooks;
     if (runtime.stationConfigPath !== undefined) {
       result.stationConfigPath = runtime.stationConfigPath;
+    }
+    if (runtime.artifactOwner !== undefined) {
+      result.artifactOwner = runtime.artifactOwner;
     }
     return result;
   }
@@ -289,15 +295,22 @@ export function harnessHookDoctorOptions(
 export function harnessHooksStatusFrom(
   provider: ProviderId,
   requested: boolean,
-  result: { installed: boolean; missing: readonly unknown[]; message: string },
+  result: {
+    installed: boolean;
+    missing: readonly unknown[];
+    message: string;
+    ownership?: ProviderHookArtifactOwnership;
+  },
 ): HarnessHooksStatus {
-  return {
+  const status: HarnessHooksStatus = {
     provider,
     installed: result.installed,
     requested,
     missing: result.missing.map((name) => String(name)),
     message: result.message,
   };
+  if (result.ownership !== undefined) status.ownership = result.ownership;
+  return status;
 }
 
 function harnessCapabilities<TOpts extends CommonHarnessProviderOptions>(

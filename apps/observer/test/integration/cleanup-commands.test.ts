@@ -373,11 +373,11 @@ describe("cleanup command handlers", () => {
 
   it("force-removes an active worktree after stopping harness and closing terminal", async () => {
     const fixture = createFixture({ dirty: true, state: "working" });
-    await fixture.persistence.seedSessionTitle({
+    await fixture.persistence.seedSession({
       sessionId: "ses_web_cleanup_older",
       projectId: "web",
       worktreeId: "wt_web_cleanup",
-      title: "older cleanup session",
+      initialTitle: "older cleanup session",
       createdAt: "2026-05-21T11:00:00.000Z",
       lastSeenAt: "2026-05-21T11:00:00.000Z",
     });
@@ -431,6 +431,11 @@ describe("cleanup command handlers", () => {
       { id: "ses_web_cleanup", lifecycle: "ended" },
       { id: "ses_web_cleanup_older", lifecycle: "ended" },
     ]);
+    expect(
+      (await fixture.persistence.listWorktreeDisplayTitles()).some(
+        (title) => title.projectId === "web" && title.worktreeId === "wt_web_cleanup",
+      ),
+    ).toBe(false);
     fixture.sqlite.close();
   });
 

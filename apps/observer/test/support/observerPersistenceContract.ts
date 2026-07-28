@@ -780,10 +780,14 @@ export function observerPersistenceContract(
             includeExpired: true,
             now: latest,
           });
-          expect(observations.map((observation) => observation.payload.status)).toEqual([
-            "healthy",
-            "degraded",
-          ]);
+          expect(
+            observations.map((observation) => {
+              if (observation.entityKind !== "provider_health") {
+                throw new Error("Expected only provider health observations.");
+              }
+              return observation.payload.status;
+            }),
+          ).toEqual(["healthy", "degraded"]);
         });
       });
 
@@ -1631,19 +1635,19 @@ export function observerPersistenceContract(
 
       it("orders sessions by ID and preserves seeded and renamed titles", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
-          await persistence.seedSessionTitle({
+          await persistence.seedSession({
             sessionId: "ses_z",
             projectId: "web",
             worktreeId: "wt_z",
-            title: "z title",
+            initialTitle: "z title",
             createdAt: now,
             lastSeenAt: now,
           });
-          await persistence.seedSessionTitle({
+          await persistence.seedSession({
             sessionId: "ses_a",
             projectId: "web",
             worktreeId: "wt_a",
-            title: "a title",
+            initialTitle: "a title",
             createdAt: now,
             lastSeenAt: now,
           });
@@ -1652,19 +1656,19 @@ export function observerPersistenceContract(
             "ses_z",
           ]);
 
-          await persistence.seedSessionTitle({
+          await persistence.seedSession({
             sessionId: "ses_seeded",
             projectId: "web",
             worktreeId: "wt_seeded",
-            title: "original title",
+            initialTitle: "original title",
             createdAt: earlier,
             lastSeenAt: earlier,
           });
-          const reseeded = await persistence.seedSessionTitle({
+          const reseeded = await persistence.seedSession({
             sessionId: "ses_seeded",
             projectId: "web",
             worktreeId: "wt_seeded",
-            title: "ignored replacement",
+            initialTitle: "ignored replacement",
             createdAt: later,
             lastSeenAt: later,
           });
@@ -1701,7 +1705,11 @@ export function observerPersistenceContract(
           ).toMatchObject({ title: "original title" });
 
           await expect(
-            persistence.renameSession({ sessionId: "ses_seeded", title: "user title" }),
+            persistence.renameSession({
+              sessionId: "ses_seeded",
+              title: "user title",
+              renamedAt: latest,
+            }),
           ).resolves.toMatchObject({ title: "user title" });
           await persistence.persistReconcileResult({
             projects: [project],
@@ -1721,20 +1729,52 @@ export function observerPersistenceContract(
           expect(
             (await persistence.listSessions()).find((session) => session.id === "ses_seeded"),
           ).toMatchObject({ title: "user title" });
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                projectId: "web",
+                worktreeId: "wt_seeded",
+                title: "user title",
+                createdAt: earlier,
+                updatedAt: latest,
+              }),
+            ]),
+          );
           await expect(
-            persistence.renameSession({ sessionId: "ses_missing", title: "missing" }),
+            persistence.renameSession({
+              sessionId: "ses_missing",
+              title: "missing",
+              renamedAt: latest,
+            }),
           ).resolves.toBeUndefined();
 
-          await persistence.seedSessionTitle({
+          await persistence.seedSession({
             sessionId: "ses_delete",
             projectId: "web",
             worktreeId: "wt_delete",
-            title: "delete me",
+            initialTitle: "delete me",
             createdAt: now,
             lastSeenAt: now,
           });
-          await expect(persistence.deleteSessionTitleSeed("ses_delete")).resolves.toBe(1);
-          await expect(persistence.deleteSessionTitleSeed("ses_delete")).resolves.toBe(0);
+          await expect(
+            persistence.discardSessionSeed({ sessionId: "ses_delete" }),
+          ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ worktreeId: "wt_delete", title: "delete me" }),
+            ]),
+          );
+          await expect(
+            persistence.discardSessionSeed({
+              sessionId: "ses_delete",
+              removedWorktree: { projectId: "web", worktreeId: "wt_delete" },
+            }),
+          ).resolves.toEqual({ discardedSessions: 0, discardedWorktreeTitles: 1 });
+          expect(
+            (await persistence.listWorktreeDisplayTitles()).some(
+              (title) => title.worktreeId === "wt_delete",
+            ),
+          ).toBe(false);
         });
       });
 
@@ -2282,11 +2322,11 @@ export function observerPersistenceContract(
           });
           expect(observation).not.toHaveProperty("expiresAt");
 
-          const session = await persistence.seedSessionTitle({
+          const session = await persistence.seedSession({
             sessionId: "ses_optional",
             projectId: "web",
             worktreeId: "wt_optional",
-            title: "optional",
+            initialTitle: "optional",
             createdAt: now,
             lastSeenAt: now,
           });
@@ -2575,6 +2615,13 @@ function harnessIngressInput(input: {
   observedAt: string;
 }): Parameters<ObserverPersistenceBundle["recordEventAndProviderObservationWithIngressDedupe"]>[0] {
   const eventType = input.state === "idle" ? "Stop" : "PreToolUse";
+  const status: NonNullable<HarnessEventObservation["status"]> = {
+    value: input.state,
+    confidence: "high",
+    reason: input.state,
+    source: "harness_event",
+    updatedAt: input.observedAt,
+  };
   const payload: HarnessEventObservation = {
     provider: "codex",
     reportId: input.reportId,
@@ -2583,13 +2630,7 @@ function harnessIngressInput(input: {
     worktreeId: "wt_execution",
     sessionId: "ses_execution",
     nativeSessionId: input.nativeSessionId,
-    status: {
-      value: input.state,
-      confidence: "high",
-      reason: input.state,
-      source: "harness_event",
-      updatedAt: input.observedAt,
-    },
+    status,
     observedAt: input.observedAt,
   };
   if (input.state === "idle") payload.turn = { kind: "turn_completed" };
@@ -2609,7 +2650,7 @@ function harnessIngressInput(input: {
       provider: "codex",
       sessionId: "ses_execution",
       nativeSessionId: input.nativeSessionId,
-      status: payload.status,
+      status,
     },
     recoveryHandle,
     turnReadiness:

@@ -75,7 +75,7 @@ describe("diagnostic evidence index", () => {
     const index = buildDiagnosticEvidenceIndex(
       baseDiagnosticSnapshot({
         observerHealth: {
-          schemaVersion: "0.8.0",
+          schemaVersion: "0.9.0",
           status: "degraded",
           pid: 1234,
           startedAt: diagnosticNow,
@@ -114,6 +114,7 @@ describe("diagnostic evidence index", () => {
               id: "wt_web_stale",
               projectId: "web",
               projectLabel: "web",
+              title: "feature/stale",
               branch: "feature/stale",
               path: "/tmp/station/web/feature-stale",
               worktree: { state: "exists", source: "worktrunk" },

@@ -162,13 +162,15 @@ async function probeHarnessTrackingFact(
     if (status === undefined) {
       throw setupHarnessProbeUnavailable;
     }
-    return SetupHarnessTrackingFactSchema.parse({
+    const fact: SetupHarnessTrackingFact = {
       harnessId,
       capability: "supported",
       requested: status.requested,
       installed: status.installed,
       detail: status.message,
-    });
+    };
+    if (status.ownership !== undefined) fact.ownership = status.ownership;
+    return SetupHarnessTrackingFactSchema.parse(fact);
   } catch (error) {
     const safeError = safeErrorFromUnknown(error, setupHarnessProbeFailed);
     return SetupHarnessTrackingFactSchema.parse({

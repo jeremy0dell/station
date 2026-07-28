@@ -41,6 +41,7 @@ export type ObserverGraphInput = {
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: ObserverHarnessRun[];
   sessionMetadata?: readonly ObserverSessionMetadata[];
+  worktreeDisplayTitles?: readonly ObserverWorktreeDisplayTitle[];
   recoveryHandles?: readonly SessionRecoveryHandle[];
   turnReadiness?: readonly ObserverTurnReadiness[];
   alerts?: StationAlert[];
@@ -59,6 +60,12 @@ export type ObserverSessionMetadata = {
   createdAt: string;
   endedAt?: string;
   lastSeenAt: string;
+};
+
+export type ObserverWorktreeDisplayTitle = {
+  projectId: string;
+  worktreeId: string;
+  title: string;
 };
 
 export type ObserverTurnReadiness = {
@@ -91,7 +98,8 @@ const confidenceRank = {
 /**
  * POLICY
  *
- * Correlates provider observations and durable session records into canonical snapshot truth.
+ * Correlates provider observations with canonical worktree title input and durable session records.
+ * Branch names remain only the defensive title fallback when persistence is unavailable.
  */
 export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
@@ -103,6 +111,12 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
   const harnessRunsById = new Map(harnessRuns.map((run) => [run.run.id, run.run]));
   const sessionMetadataById = new Map(
     input.sessionMetadata?.map((session) => [session.id, session]),
+  );
+  const titleByWorktree = new Map(
+    input.worktreeDisplayTitles?.map((title) => [
+      sessionWorktreeKey(title.projectId, title.worktreeId),
+      title.title,
+    ]),
   );
   const retainedSessionByWorktree = newestRetainedSessionByWorktree(input.sessionMetadata ?? []);
   const turnReadinessBySessionId = new Map(
@@ -123,9 +137,12 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
           terminal === undefined
             ? undefined
             : input.providerHealth[terminal.provider]?.capabilities;
+        const title =
+          titleByWorktree.get(sessionWorktreeKey(project.id, worktree.id)) ?? worktree.branch;
         const rowInput: BuildWorktreeRowInput = {
           project,
           worktree,
+          title,
         };
         if (terminal !== undefined) rowInput.terminal = terminal;
         if (harnessRun !== undefined) rowInput.harnessRun = harnessRun;
@@ -146,6 +163,7 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
         const sessionInput: BuildSessionInput = {
           project,
           worktree,
+          title,
           harnessCapabilities: input.harnessCapabilities ?? {},
           sessionMetadataById,
         };
@@ -257,6 +275,7 @@ export function projectProviderHealthOntoSnapshot(input: {
 type BuildWorktreeRowInput = {
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
+  title: string;
   terminal?: TerminalTargetObservation;
   harnessRun?: ObserverHarnessRun;
   terminalCapabilities?: Record<string, boolean>;
@@ -294,6 +313,7 @@ function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
     id: input.worktree.id,
     projectId: input.project.id,
     projectLabel: input.project.label,
+    title: input.title,
     branch: input.worktree.branch,
     path: input.worktree.path,
     worktree,
@@ -423,6 +443,7 @@ function rowAgent(harnessRun: ObserverHarnessRun): WorktreeRow["agent"] {
 type BuildSessionInput = {
   project: ProviderProjectConfig;
   worktree: WorktreeObservation;
+  title: string;
   terminal?: TerminalTargetObservation;
   harnessRun?: ObserverHarnessRun;
   harnessCapabilities: Record<string, HarnessCapabilities>;
@@ -465,7 +486,7 @@ function buildStationSession(input: BuildSessionInput): SessionView | undefined 
     harnessProvider,
     status,
     createdAt,
-    title: identity.metadata?.title ?? input.worktree.branch,
+    title: input.title,
     ...(identity.harnessRun === undefined ? {} : { harnessRun: identity.harnessRun }),
     ...(terminal === undefined ? {} : { terminal }),
   });
@@ -491,7 +512,7 @@ function buildExternalSession(input: BuildSessionInput): SessionView | undefined
     harnessRun,
     status: harnessRun.status,
     createdAt: run.observedAt,
-    title: input.worktree.branch,
+    title: input.title,
     ...(terminal === undefined ? {} : { terminal }),
   });
 }

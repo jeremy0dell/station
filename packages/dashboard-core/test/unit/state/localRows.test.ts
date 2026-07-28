@@ -1,8 +1,10 @@
 import {
+  addPendingCreateSessionRow,
   addPendingStartAgentRow,
   bindPendingStartAgentRow,
   createEmptyTuiLocalRows,
   createInitialTuiState,
+  failPendingCreateSessionRow,
   pruneLocalRowsForSnapshot,
   removePendingStartAgentRow,
 } from "@station/dashboard-core";
@@ -10,6 +12,35 @@ import { describe, expect, it } from "vitest";
 import { createCommandSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI local rows", () => {
+  it("atomically replaces the matching pending create row with a failed row", () => {
+    const pending = addPendingCreateSessionRow(createInitialTuiState(), {
+      localId: "create:web:feature-failed",
+      projectId: "web",
+      title: "Failed launch",
+      branch: "feature-failed",
+      createdAt: "2026-06-01T12:00:00.000Z",
+    });
+    const error = {
+      tag: "ClientObserverError" as const,
+      code: "PREPARE_FAILED",
+      message: "Harness preparation failed.",
+    };
+
+    const failed = failPendingCreateSessionRow(pending, "create:web:feature-failed", error, 1234);
+
+    expect(failed.localRows.pendingCreate).toEqual([]);
+    expect(failed.localRows.failedCreate).toEqual([
+      {
+        localId: "create:web:feature-failed",
+        projectId: "web",
+        title: "Failed launch",
+        branch: "feature-failed",
+        error,
+        expiresAt: 1234,
+      },
+    ]);
+  });
+
   it("adds, binds, and removes pending start-agent rows", () => {
     const state = addPendingStartAgentRow(createInitialTuiState(), {
       localId: "start:wt_web_no_agent",

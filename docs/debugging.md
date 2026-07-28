@@ -106,6 +106,17 @@ uses Worktrunk's default prompt behavior. Setup and doctor checks should report
 the effective automation mode and whether the installed `wt` supports the flag
 required by that mode.
 
+Hook doctor output and the `harness-tracking:*` details from
+`stn setup check --json` report the requester-relative artifact owner, including
+launcher and build provenance. A `different-owner` result means another
+canonical Station launcher owns the shared provider artifact; `legacy-unknown`
+means the existing generated artifact cannot be attributed safely. Inspect the
+reported current and requested launchers before changing anything. `--yes`
+confirms a normal mutation but does not transfer ownership; only run
+`stn hooks install <target> --yes --takeover` when replacing that owner is
+intentional. Setup apply deliberately stops on this conflict instead of choosing
+an owner.
+
 ## State Directory
 
 The default observer state directory is:

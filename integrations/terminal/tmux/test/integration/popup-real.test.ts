@@ -2911,6 +2911,7 @@ function deterministicDashboardSnapshot(projectRoot: string): StationSnapshot {
       id: worktreeId,
       projectId: "popup-real",
       projectLabel: "POPUP ACCEPTANCE",
+      title: `popup-${sequence}`,
       branch: `popup-${sequence}`,
       path: join(projectRoot, `popup-${sequence}`),
       worktree,

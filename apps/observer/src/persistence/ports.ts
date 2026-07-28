@@ -23,6 +23,7 @@ import type {
   PersistedSession,
   PersistedSessionHarnessExecution,
   PersistedSessionTurnReadiness,
+  PersistedWorktreeDisplayTitle,
   PersistedWorktreeMetadataCurrent,
   PersistReconcileResultInput,
   ProviderObservationKind,
@@ -128,6 +129,7 @@ export interface ObservationStore {
  * DRIVEN PORT
  *
  * Persists the Observer's correlated reconcile projection as one atomic capability.
+ * Missing canonical worktree titles initialize insert-only before session projections synchronize.
  */
 export interface ReconcileStore {
   persistReconcileResult(input: PersistReconcileResultInput): Promise<void>;
@@ -136,11 +138,12 @@ export interface ReconcileStore {
 /**
  * DRIVEN PORT
  *
- * Maintains Observer-owned session lifecycle, provider-native execution bindings, titles,
- * remembered harness selection, recovery handles, and turn readiness.
+ * Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical
+ * worktree-scoped title authority, synchronized session projections, recovery, and readiness.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
+  listWorktreeDisplayTitles(): Promise<PersistedWorktreeDisplayTitle[]>;
   getSessionHarnessExecution(input: {
     provider: ProviderId;
     sessionId: string;
@@ -155,15 +158,18 @@ export interface SessionStore {
     worktreeId: string;
     worktreePath: string;
   }): Promise<ProviderId | undefined>;
-  seedSessionTitle(input: {
+  seedSession(input: {
     sessionId: string;
     projectId: string;
     worktreeId: string;
-    title: string;
+    initialTitle: string;
     createdAt: string;
     lastSeenAt: string;
   }): Promise<PersistedSession>;
-  deleteSessionTitleSeed(sessionId: string): Promise<number>;
+  discardSessionSeed(input: {
+    sessionId: string;
+    removedWorktree?: { projectId: string; worktreeId: string };
+  }): Promise<{ discardedSessions: number; discardedWorktreeTitles: number }>;
   markSessionsEnded(input: {
     subject:
       | { kind: "session"; sessionId: string }
@@ -171,7 +177,16 @@ export interface SessionStore {
     endedAt: string;
   }): Promise<number>;
   reopenSession(sessionId: string): Promise<PersistedSession | undefined>;
-  renameSession(input: { sessionId: string; title: string }): Promise<PersistedSession | undefined>;
+  renameSession(input: {
+    sessionId: string;
+    title: string;
+    renamedAt: string;
+  }): Promise<PersistedSession | undefined>;
+  retireRemovedWorktreeSessionState(input: {
+    projectId: string;
+    worktreeId: string;
+    endedAt: string;
+  }): Promise<{ endedSessions: number; deletedWorktreeTitles: number }>;
   upsertSessionRecoveryHandle(input: SessionRecoveryHandle): Promise<SessionRecoveryHandle>;
   getSessionRecoveryHandle(handleId: string): Promise<SessionRecoveryHandle | undefined>;
   listSessionRecoveryHandles(

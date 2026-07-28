@@ -158,7 +158,9 @@ function notifyCodexStopHook(): ObserverEventHookConfig {
   };
 }
 
-function agentEvent(state: "idle" | "working"): StationEvent {
+type AgentStateChangedEvent = Extract<StationEvent, { type: "worktree.agentStateChanged" }>;
+
+function agentEvent(state: "idle" | "working"): AgentStateChangedEvent {
   return {
     type: "worktree.agentStateChanged",
     worktreeId: "wt_web_task",
@@ -172,7 +174,7 @@ function agentEvent(state: "idle" | "working"): StationEvent {
   };
 }
 
-function hookReportedStopEvent(): StationEvent {
+function hookReportedStopEvent(): AgentStateChangedEvent {
   return {
     ...agentEvent("idle"),
     changeSource: "harness_event_report",
@@ -218,6 +220,7 @@ function row(
     id: "wt_web_task",
     projectId: "web",
     projectLabel: "web",
+    title: "task",
     branch: "task",
     path: "/tmp/station/web/task",
     worktree: {

@@ -17,7 +17,6 @@ import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   rememberedHarnessProviderForWorktree,
-  seedSessionTitle,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
 import type { SessionStore } from "../persistence/index.js";
@@ -44,10 +43,8 @@ export type ExternalLaunchOutcome<T> = {
 /**
  * USE CASE
  *
- * Prepare Station-hosted agent identity, persist an optional title before reconcile
- * can expose it, and return a launch plan plus opaque managed attachment. Failed
- * terminal preparation or process launch releases the managed target before removing
- * its title seed, retaining the title whenever target cleanup cannot be confirmed.
+ * Prepares Station-hosted identity by durably seeding its canonical title before target registration.
+ * Failed launch cleanup independently releases its target and discards only the fresh session projection.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -158,21 +155,26 @@ export async function prepareExternalLaunch(
   // which reconcile later reaps) rather than two targets. A single UI is already
   // covered by Station's `launchesInFlight` guard; a server-side lock is out of scope.
   const sessionId = defaultSessionCommandIdFactory.sessionId();
-
+  const seededAt = nowIso(deps.clock);
   let openedTargetId: TerminalTargetId | undefined;
-  let seededSessionTitle = false;
+  let sessionSeeded = false;
   try {
-    if (params.title !== undefined) {
-      // The title must be durable before a managed target lets reconcile publish the new session.
-      await seedSessionTitle({
-        persistence: deps.persistence,
+    await deps.persistence.seedSession({
+      sessionId,
+      projectId: project.id,
+      worktreeId: worktree.id,
+      initialTitle: params.title ?? row.title,
+      createdAt: seededAt,
+      lastSeenAt: seededAt,
+    });
+    sessionSeeded = true;
+    if (params.title !== undefined && params.title !== row.title) {
+      // New-session intent may replace reconcile's branch fallback before the target becomes visible.
+      await deps.persistence.renameSession({
         sessionId,
-        projectId: project.id,
-        worktreeId: worktree.id,
         title: params.title,
-        clock: deps.clock,
+        renamedAt: seededAt,
       });
-      seededSessionTitle = true;
     }
 
     const opened = await managedTerminal.openWorkspace({
@@ -217,13 +219,10 @@ export async function prepareExternalLaunch(
       reconcile: true,
     };
   } catch (error) {
-    // Keep metadata while a target may still exist; reconcile must never expose a
-    // dangling managed session under a branch fallback after losing its chosen title.
-    let targetReleaseConfirmed = openedTargetId === undefined;
+    // Cleanup attempts stay independent so one failure cannot suppress the other or replace the launch error.
     if (openedTargetId !== undefined) {
       try {
         await managedTerminal.releaseTarget(openedTargetId);
-        targetReleaseConfirmed = true;
       } catch (cleanupError) {
         await deps.logger
           ?.warn("External launch cleanup could not release its managed target.", {
@@ -234,12 +233,12 @@ export async function prepareExternalLaunch(
           .catch(() => undefined);
       }
     }
-    if (seededSessionTitle && targetReleaseConfirmed) {
+    if (sessionSeeded) {
       try {
-        await deps.persistence.deleteSessionTitleSeed(sessionId);
+        await deps.persistence.discardSessionSeed({ sessionId });
       } catch (cleanupError) {
         await deps.logger
-          ?.warn("External launch cleanup could not delete its title seed.", {
+          ?.warn("External launch cleanup could not discard its session seed.", {
             sessionId,
             error: cleanupError,
           })
