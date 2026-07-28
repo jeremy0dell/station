@@ -120,7 +120,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
     projectId: string;
     title: string;
     branch: string;
-    harness: ProviderId | undefined;
+    harness: ProviderId;
     command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
     verb: "create" | "fork";
   };
@@ -134,9 +134,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
           title: spec.title,
           branch: spec.branch,
           createdAt: new Date().toISOString(),
-          // Fork can inherit no harness (source has none, project has no default); the row still
-          // shows, agent column blank until the launch picks a default.
-          ...(spec.harness === undefined ? {} : { harnessProvider: spec.harness }),
+          harnessProvider: spec.harness,
         }),
       );
     }
@@ -192,10 +190,8 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       cwd: row.path,
       title: spec.title,
       background: true,
+      harness: spec.harness,
     };
-    if (spec.harness !== undefined) {
-      launchTarget.harness = spec.harness;
-    }
     const result = await runManagedLaunchAttempt(agentWorktreePaneId(row.id), launchTarget);
     if (result.kind === "preparation-failed") {
       failPendingCreateRow(spec.localId, result.error);
@@ -221,7 +217,11 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         harness: target.harness,
         command: {
           type: "worktree.create",
-          payload: { projectId: target.projectId, branch: target.branch },
+          payload: {
+            projectId: target.projectId,
+            branch: target.branch,
+            launchHarness: target.harness,
+          },
         },
         verb: "create",
       });
@@ -229,15 +229,25 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
     launchHostedForkSession: (target) => {
       // Fork inherits the source's harness (the seeded worktree has none yet).
       closeForkSheet();
+      const harness =
+        stationViewStore === undefined
+          ? undefined
+          : inheritedForkHarness(stationViewStore, target.projectId, target.sourceWorktreeId);
+      if (harness === undefined) {
+        pushLaunchError({
+          tag: "CommandValidationError",
+          code: "HARNESS_PROVIDER_UNAVAILABLE",
+          message: "Station could not resolve a harness for the fork.",
+          hint: "Configure a project default harness and retry.",
+        });
+        return;
+      }
       startHostedWorktreeLaunch({
         localId: `station-fork:${target.sourceWorktreeId}:${target.branch}`,
         projectId: target.projectId,
         title: target.title,
         branch: target.branch,
-        harness:
-          stationViewStore === undefined
-            ? undefined
-            : inheritedForkHarness(stationViewStore, target.projectId, target.sourceWorktreeId),
+        harness,
         command: {
           type: "worktree.fork",
           payload: {
@@ -245,6 +255,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
             sourceWorktreeId: target.sourceWorktreeId,
             branch: target.branch,
             copyDirty: target.copyDirty,
+            launchHarness: harness,
           },
         },
         verb: "fork",

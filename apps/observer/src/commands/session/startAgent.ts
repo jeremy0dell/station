@@ -7,6 +7,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
+import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
@@ -32,6 +33,7 @@ export type CreateSessionStartAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
+  launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
   eventBus?: ObserverEventBus | undefined;
@@ -44,8 +46,8 @@ export type CreateSessionStartAgentHandlerOptions = {
 /**
  * USE CASE
  *
- * Starts a fresh agent lifecycle while inheriting the worktree's canonical display title.
- * Failed launches discard only the fresh session projection.
+ * Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical
+ * display title. Failed launches discard only the fresh session projection.
  */
 export function createSessionStartAgentHandler(
   options: CreateSessionStartAgentHandlerOptions,
@@ -94,6 +96,7 @@ export function createSessionStartAgentHandler(
       })) ??
       project.defaults.harness;
     resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
+    await options.launchPreflight(harnessProviderId, context.signal);
 
     let sessionSeeded = false;
 

@@ -18,6 +18,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
+import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
@@ -42,6 +43,7 @@ export type CreateSessionResumeAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
+  launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
   featureFlags: FeatureFlagEvaluator;
@@ -55,8 +57,8 @@ export type CreateSessionResumeAgentHandlerOptions = {
 /**
  * USE CASE
  *
- * Resumes provider-native recovery into an existing Station identity or a fresh titled session.
- * Failed launch cleanup discards only a newly minted session projection.
+ * Validates and preflights provider-native recovery into an existing Station identity or a fresh
+ * titled session. Failed launch cleanup discards only a newly minted session projection.
  */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
@@ -120,6 +122,7 @@ export function createSessionResumeAgentHandler(
     assertHandleMatchesWorktree(handle, worktree);
     const harnessProvider = resolveHarnessProviderOrThrow(options.providers, handle.provider);
     assertHarnessCanResume(harnessProvider, handle);
+    await options.launchPreflight(handle.provider, context.signal);
 
     const sessionIdIsFresh = handle.sessionId === undefined;
     const sessionId = handle.sessionId ?? idFactory.sessionId();

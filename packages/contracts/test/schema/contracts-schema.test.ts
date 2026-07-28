@@ -931,6 +931,49 @@ describe("contract schemas", () => {
       "invalid command fixture",
     );
 
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "worktree.create",
+        payload: { projectId: "web", branch: "feature/agent", launchHarness: "codex" },
+      },
+      "managed worktree create with launch harness",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "worktree.fork",
+        payload: {
+          projectId: "web",
+          sourceWorktreeId: "wt_web_main",
+          branch: "feature/fork",
+        },
+      },
+      "worktree-only fork without launch harness",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "worktree.create",
+        payload: { projectId: "web", branch: "feature/agent", launchHarness: "" },
+      },
+      "managed worktree create with invalid launch harness",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "worktree.fork",
+        payload: {
+          projectId: "web",
+          sourceWorktreeId: "wt_web_main",
+          branch: "feature/fork",
+          launchHarness: "codex",
+          readiness: true,
+        },
+      },
+      "managed worktree fork with an unknown field",
+    );
+
     expectFails(
       StationCommandSchema,
       {

@@ -2029,7 +2029,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     );
     expect(createCommand).toEqual({
       type: "worktree.create",
-      payload: { projectId: PROJECT_ID, branch },
+      payload: { projectId: PROJECT_ID, branch, launchHarness: "codex" },
     });
     // The New Session flow forwards the wizard's harness pick to the prepare.
     expect(harness.observerService.preparedLaunches).toEqual([
@@ -2404,6 +2404,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
         sourceWorktreeId: submit.sourceWorktreeId,
         branch: submit.branch,
         copyDirty: true,
+        launchHarness: harnessProvider,
       },
     });
     // The inherited harness is forwarded to the prepare for the new worktree.
@@ -2421,6 +2422,33 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     );
     // Background launch: the dashboard overlay stays up.
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("blocks a fork before dispatch when no inherited or default harness resolves", async () => {
+    const harness = forkHarness();
+    const submit = openForkAndCaptureSubmit(harness);
+    const sourceRow = harness.snapshot.rows.find((row) => row.id === submit.sourceWorktreeId);
+    const project = harness.snapshot.projects.find(
+      (candidate) => candidate.id === submit.projectId,
+    );
+    if (sourceRow === undefined || project === undefined) {
+      throw new Error("expected fork source and project fixtures");
+    }
+    delete sourceRow.agent;
+    delete sourceRow.recovery;
+    delete (project.defaults as Partial<typeof project.defaults>).harness;
+
+    expect(harness.pressKey("\r")).toBe(true);
+    await harness.settle();
+
+    expect(harness.observerService.dispatched).toEqual([]);
+    expect(harness.observerService.preparedLaunches).toEqual([]);
+    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
+    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Station could not resolve a harness for the fork.",
+      hint: "Configure a project default harness and retry.",
+    });
   });
 
   it("shows a failed optimistic row without deleting the retained fork when preparation rejects", async () => {

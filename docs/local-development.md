@@ -430,10 +430,11 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   reported "unavailable" and PTYs fall back to non-persistent with no error. Set
   `STATION_HOST_ENTRY` only to override the resolved path (non-standard
   layout / pinned host build).
-- **"<harness> status hooks are not installed" on launch** → the launch path
-  (`externalLaunch.ts` → `assertHooksInstalledOrThrow`) refuses to spawn an agent
-  whose status hooks aren't installed *for this observer*, so it never spawns a
-  half-wired agent. Supported provider hooks normally live in global provider
+- **"<harness> status hooks are not installed" on launch** → the shared launch
+  preflight refreshes only the selected harness health and then refuses to spawn
+  an agent whose required status hooks aren't installed *for this observer*.
+  New, Fork, classic create/start/resume, and the final terminal-open boundary
+  use the same policy; focusing an existing live agent skips it. Supported provider hooks normally live in global provider
   homes (`~/.codex`, `~/.claude`, `~/.cursor`, or `~/.config/opencode`), so the
   isolated lanes redirect those homes before installing hooks. Codex uses
   `CODEX_HOME`; Claude uses `CLAUDE_CONFIG_DIR`; Cursor uses `STATION_CURSOR_HOME`;

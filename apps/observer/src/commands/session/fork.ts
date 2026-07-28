@@ -6,6 +6,7 @@ import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
+import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
@@ -31,6 +32,7 @@ export type CreateSessionForkHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
+  launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
   eventBus?: ObserverEventBus | undefined;
@@ -43,8 +45,9 @@ export type CreateSessionForkHandlerOptions = {
 /**
  * USE CASE
  *
- * Forks an existing worktree onto an internal branch, durably seeds its independent title,
- * and launches a fresh agent; cleanup retires title authority only after verified rollback.
+ * Resolves and preflights the selected harness, forks an existing worktree onto an internal
+ * branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title
+ * authority only after verified rollback.
  */
 export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
   const idFactory = {
@@ -83,6 +86,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       })) ??
       project.defaults.harness;
     resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
+    await options.launchPreflight(harnessProviderId, context.signal);
 
     const sessionId = idFactory.sessionId();
     const runtime = {
