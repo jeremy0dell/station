@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { IBufferCell, Terminal } from "@xterm/headless";
 import { rgbToHexColor, stationVtPalette256 } from "./theme.js";
+import { resolveXtermCellHyperlink } from "./xtermHyperlinks.js";
 
 export type VtSpan = {
   text: string;
@@ -8,6 +9,8 @@ export type VtSpan = {
   width: number;
   fg?: string;
   bg?: string;
+  /** Exact OSC 8 URI owned by every cell in the span; absent means ordinary unlinked text. */
+  link?: string;
   attributes: number;
 };
 
@@ -25,8 +28,10 @@ export type BuildVisibleRowsOptions = {
 /**
  * Converts the terminal's viewport into rows of style-merged spans. With
  * `offset === 0` this is the live bottom page; a positive offset renders that
- * many lines up into scrollback. The cursor is composited only at the bottom —
- * a live cursor drawn over historical rows would be misleading.
+ * many lines up into scrollback. Runs merge only when visual style and OSC 8
+ * URI identity match, so links follow the selected active-buffer lines through
+ * xterm's scrollback. The cursor is composited only at the bottom — a live
+ * cursor drawn over historical rows would be misleading.
  */
 export function buildVisibleRows(
   terminal: Terminal,
@@ -59,6 +64,7 @@ export function buildVisibleRows(
     let runWidth = 0;
     let runFg: string | undefined;
     let runBg: string | undefined;
+    let runLink: string | undefined;
     let runAttributes = 0;
 
     const flushRun = (): void => {
@@ -71,6 +77,9 @@ export function buildVisibleRows(
       }
       if (runBg !== undefined) {
         span.bg = runBg;
+      }
+      if (runLink !== undefined) {
+        span.link = runLink;
       }
       spans.push(span);
       runText = "";
@@ -87,6 +96,7 @@ export function buildVisibleRows(
 
         const fg = cellForeground(cell, palette);
         const bg = cellBackground(cell, palette);
+        const link = resolveXtermCellHyperlink(terminal, cell);
         let attributes = cellAttributes(cell);
         if (cursorVisible && rowIndex === cursorRow && colIndex === cursorCol) {
           // XOR so a cursor over already-inverse content flips back to normal.
@@ -94,10 +104,16 @@ export function buildVisibleRows(
         }
 
         const text = cell.getChars() || " ";
-        if (fg !== runFg || bg !== runBg || attributes !== runAttributes) {
+        if (
+          fg !== runFg ||
+          bg !== runBg ||
+          link !== runLink ||
+          attributes !== runAttributes
+        ) {
           flushRun();
           runFg = fg;
           runBg = bg;
+          runLink = link;
           runAttributes = attributes;
         }
         runText += text;
@@ -170,6 +186,7 @@ function trimTrailingPlainWhitespace(spans: VtSpan[]): void {
       last === undefined ||
       last.fg !== undefined ||
       last.bg !== undefined ||
+      last.link !== undefined ||
       last.attributes !== 0
     ) {
       return;
