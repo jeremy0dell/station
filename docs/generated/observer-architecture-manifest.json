@@ -9720,7 +9720,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection."
+          "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely."
         },
         {
           "name": "reportExternalExit",
@@ -12618,7 +12618,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection.",
+      "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -13256,7 +13256,7 @@
       "declaration": "ManagedTerminalLifecycle",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns the single managed terminal target used for an external Station launch. Attachments expose only adapter-owned target identity, and at most one target may exist per worktree.",
+      "purpose": "Owns the single managed terminal target used for an external Station launch. Attachments expose only adapter-owned target identity. A local fallback may instead carry a provider-neutral output policy for the caller-owned process, and at most one target may exist per worktree.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

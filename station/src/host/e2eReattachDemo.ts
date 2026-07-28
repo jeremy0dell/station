@@ -77,7 +77,13 @@ async function main(): Promise<void> {
   const samePid = attach2.ack.pid === livePid;
   log(`  pid=${attach2.ack.pid} — same agent as before (pid ${livePid})? ${samePid ? "YES ✓" : "NO ✗"}`);
   log(`  replayed scrollback (ticks emitted while detached):`);
-  log(`    ${attach2.ack.scrollback.join("").trim().replace(/\n/g, " | ")}`);
+  log(
+    `    ${attach2.ack.replay.events
+      .flatMap((event) => (event.type === "data" ? [event.data] : []))
+      .join("")
+      .trim()
+      .replace(/\n/g, " | ")}`,
+  );
   await readFramesFor(attach2, 3000, (data) => process.stdout.write(`  [c2] ${data}`));
   client2.dispose();
   log("");

@@ -1,6 +1,8 @@
 import {
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
+  HostAttachAckSchema,
+  HostFrameSchema,
   HostRequestSchema,
   hostFailure,
   hostSuccess,
@@ -73,6 +75,54 @@ function clientAgainstFakeRouter() {
 }
 
 describe("createStationHostClient", () => {
+  it("accepts only strict ordered resize frames", () => {
+    const frame = { type: "resize", ptyId: "pty-1", cols: 5, rows: 4 };
+
+    expect(HostFrameSchema.safeParse(frame)).toMatchObject({ success: true, data: frame });
+    expect(HostFrameSchema.safeParse({ ...frame, unexpected: true }).success).toBe(false);
+    expect(HostFrameSchema.safeParse({ ...frame, cols: 5.5 }).success).toBe(false);
+    expect(HostFrameSchema.safeParse({ ...frame, rows: 0 }).success).toBe(false);
+  });
+
+  it("accepts only strict ordered replay events", () => {
+    const ack = {
+      subscribed: true,
+      ptyId: "pty-1",
+      pid: 42,
+      cols: 5,
+      rows: 4,
+      exited: false,
+      replay: {
+        initialCols: 10,
+        initialRows: 4,
+        events: [
+          { type: "data", data: "before" },
+          { type: "resize", cols: 5, rows: 4 },
+          { type: "data", data: "after" },
+        ],
+        truncated: false,
+      },
+    };
+
+    expect(HostAttachAckSchema.safeParse(ack).success).toBe(true);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: {
+          ...ack.replay,
+          events: [{ type: "resize", cols: 5, rows: 4, ptyId: "pty-1" }],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: { ...ack.replay, events: [{ type: "resize", cols: 2.5, rows: 4 }] },
+      }).success,
+    ).toBe(false);
+    expect(HostAttachAckSchema.safeParse({ ...ack, cols: 6 }).success).toBe(false);
+  });
+
   it("round-trips unary requests over one multiplexed connection", async () => {
     const client = clientAgainstFakeRouter();
     await expect(client.health()).resolves.toEqual({

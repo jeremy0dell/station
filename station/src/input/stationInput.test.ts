@@ -1123,7 +1123,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   const CWD = "/Users/example/.worktrees/station/pty-buffer";
   const TERMINAL_TARGET_ID = `native:${WORKTREE_ID}`;
 
-  function preparedPlan(): AgentPrepareExternalLaunchResult {
+  function preparedPlan() {
     return {
       kind: "prepared",
       sessionId: "ses_managed",
@@ -1136,7 +1136,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
         env: { STATION_SESSION_ID: "ses_managed", STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID },
         mode: "interactive",
       },
-    };
+    } satisfies AgentPrepareExternalLaunchResult;
   }
 
   // Records the role on createPane, the spawn options on ensure, and every

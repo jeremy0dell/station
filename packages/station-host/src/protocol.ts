@@ -1,11 +1,11 @@
-import { SafeErrorSchema } from "@station/contracts";
+import { SafeErrorSchema, TerminalOutputCompatibilitySchema } from "@station/contracts";
 import { z } from "zod";
 
 /**
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 2;
+export const HOST_PROTOCOL_VERSION = 3;
 
 const idSchema = z.string().min(1);
 
@@ -86,6 +86,7 @@ export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
   cwd: z.string().min(1),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
+  outputCompatibility: TerminalOutputCompatibilitySchema.optional(),
 }).strict();
 export type HostSpawnParams = z.infer<typeof HostSpawnParamsSchema>;
 
@@ -153,11 +154,33 @@ export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
 export const HostAttachParamsSchema = z.object({ ptyId: idSchema }).strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 
+export const HostReplayEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("data"), data: z.string() }).strict(),
+  z
+    .object({
+      type: z.literal("resize"),
+      cols: z.number().int().positive(),
+      rows: z.number().int().positive(),
+    })
+    .strict(),
+]);
+export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
+
+export const HostReplaySchema = z
+  .object({
+    initialCols: z.number().int().positive(),
+    initialRows: z.number().int().positive(),
+    events: z.array(HostReplayEventSchema),
+    truncated: z.boolean(),
+  })
+  .strict();
+export type HostReplay = z.infer<typeof HostReplaySchema>;
+
 /**
- * Attach acknowledgement: the scrollback snapshot is captured atomically with
- * registering the live listener, so `scrollback ++ live frames` reproduces the
- * full output stream with no gap or overlap. Scrollback entries are the bridge's
- * data-event strings verbatim (what `StationVtScreen.feed` consumes).
+ * Attach acknowledgement: the ordered replay is captured atomically with the
+ * live listener, so `replay ++ live frames` reproduces output with no gap or
+ * overlap. Top-level geometry is current; replay geometry records the sizes at
+ * which retained data was produced.
  */
 export const HostAttachAckSchema = z
   .object({
@@ -167,15 +190,39 @@ export const HostAttachAckSchema = z
     cols: z.number().int(),
     rows: z.number().int(),
     exited: z.boolean(),
-    scrollback: z.array(z.string()),
-    truncated: z.boolean(),
+    replay: HostReplaySchema,
   })
-  .strict();
+  .strict()
+  .superRefine((ack, context) => {
+    let replayCols = ack.replay.initialCols;
+    let replayRows = ack.replay.initialRows;
+    for (const event of ack.replay.events) {
+      if (event.type === "resize") {
+        replayCols = event.cols;
+        replayRows = event.rows;
+      }
+    }
+    if (replayCols !== ack.cols || replayRows !== ack.rows) {
+      context.addIssue({
+        code: "custom",
+        path: ["replay"],
+        message: "Replay must end at the Host's current geometry.",
+      });
+    }
+  });
 export type HostAttachAck = z.infer<typeof HostAttachAckSchema>;
 
 export const HostDetachParamsSchema = z.object({ ptyId: idSchema }).strict();
 export const HostFrameSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("data"), ptyId: idSchema, data: z.string() }).strict(),
+  z
+    .object({
+      type: z.literal("resize"),
+      ptyId: idSchema,
+      cols: z.number().int().positive(),
+      rows: z.number().int().positive(),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("exit"),

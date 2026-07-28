@@ -110,6 +110,98 @@ describe("createPtyTable", () => {
     expect(table.list()).toMatchObject([{ ptyId, worktreeId: "wt-1", alive: true }]);
   });
 
+  it("stores and broadcasts the same compatible output and reports only the first rewrite", async () => {
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const scripted = createScriptedTerminal({ cols: 80, rows: 51 });
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      onEvent: (event, attributes) => events.push({ event, attributes }),
+    });
+    const { ptyId } = table.spawn({
+      ...baseParams,
+      rows: 51,
+      outputCompatibility: "top-region-scrollback",
+    });
+    const attachment = table.attach(ptyId);
+    const iterator = attachment.frames[Symbol.asyncIterator]();
+    const input = "\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J";
+    const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
+
+    scripted.helpers.emitData(input);
+    expect(await iterator.next()).toEqual({
+      done: false,
+      value: { type: "data", ptyId, data: expected },
+    });
+    expect(table.snapshot(ptyId).scrollback).toEqual([expected]);
+
+    scripted.helpers.emitData(input);
+    expect(await iterator.next()).toMatchObject({ value: { data: expected } });
+    expect(events.filter(({ event }) => event === "pty.output.compatibility-rewrite")).toEqual([
+      {
+        event: "pty.output.compatibility-rewrite",
+        attributes: { ptyId, policy: "top-region-scrollback", count: 1 },
+      },
+    ]);
+    await iterator.return?.();
+  });
+
+  it("keeps policy-disabled output byte-for-byte exact", () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn(baseParams);
+    const input = "\x1b[1;23r\x1b[3S\x1b[r";
+
+    scripted.helpers.emitData(input);
+
+    expect(table.snapshot(ptyId).scrollback).toEqual([input]);
+  });
+
+  it("flushes an incomplete compatibility prefix before the exit frame", async () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn({
+      ...baseParams,
+      outputCompatibility: "top-region-scrollback",
+    });
+    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const partial = "before\x1b[1;23r\x1b[";
+
+    scripted.helpers.emitData(partial);
+    table.close(ptyId);
+
+    const first = await iterator.next();
+    const second = await iterator.next();
+    expect(`${first.value?.type === "data" ? first.value.data : ""}${
+      second.value?.type === "data" ? second.value.data : ""
+    }`).toBe(partial);
+    expect(await iterator.next()).toMatchObject({ value: { type: "exit" } });
+  });
+
+  it("flushes buffered compatibility bytes before an ordered resize barrier", async () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn({
+      ...baseParams,
+      outputCompatibility: "top-region-scrollback",
+    });
+    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const partial = "before\x1b[1;23r\x1b[";
+
+    scripted.helpers.emitData(partial);
+    table.resize(ptyId, 100, 30);
+
+    expect(await iterator.next()).toMatchObject({ value: { type: "data", data: "before" } });
+    expect(await iterator.next()).toMatchObject({
+      value: { type: "data", data: "\x1b[1;23r\x1b[" },
+    });
+    expect(await iterator.next()).toMatchObject({
+      value: { type: "resize", cols: 100, rows: 30 },
+    });
+    expect(table.attach(ptyId).ack.replay.events).toEqual([
+      { type: "data", data: "before" },
+      { type: "data", data: "\x1b[1;23r\x1b[" },
+      { type: "resize", cols: 100, rows: 30 },
+    ]);
+    await iterator.return?.();
+  });
+
   it("bounds the default warm-reattach replay to 256 KiB", () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
@@ -244,7 +336,16 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("before-"); // lands in the ring (snapshot)
 
     const { ack, frames } = table.attach(ptyId);
-    expect(ack).toMatchObject({ ptyId, exited: false, scrollback: ["before-"], truncated: false });
+    expect(ack).toMatchObject({
+      ptyId,
+      exited: false,
+      replay: {
+        initialCols: 80,
+        initialRows: 24,
+        events: [{ type: "data", data: "before-" }],
+        truncated: false,
+      },
+    });
 
     const iterator = frames[Symbol.asyncIterator]();
     scripted.helpers.emitData("after"); // live frame
@@ -255,12 +356,41 @@ describe("createPtyTable", () => {
     await iterator.return?.();
   });
 
+  it("orders live data around the resize barrier applied by the Host", async () => {
+    const scripted = createScriptedTerminal({ cols: 10, rows: 4 });
+    const table = createPtyTable({ createTerminal: () => scripted.terminal });
+    const { ptyId } = table.spawn({ ...baseParams, cols: 10, rows: 4 });
+    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+
+    scripted.helpers.emitData("before-resize");
+    table.resize(ptyId, 5, 4);
+    scripted.helpers.emitData("after-resize");
+
+    const frames = await Promise.all([iterator.next(), iterator.next(), iterator.next()]);
+    expect(frames.map(({ value }) => value)).toEqual([
+      { type: "data", ptyId, data: "before-resize" },
+      { type: "resize", ptyId, cols: 5, rows: 4 },
+      { type: "data", ptyId, data: "after-resize" },
+    ]);
+    expect(table.attach(ptyId).ack.replay).toEqual({
+      initialCols: 10,
+      initialRows: 4,
+      events: [
+        { type: "data", data: "before-resize" },
+        { type: "resize", cols: 5, rows: 4 },
+        { type: "data", data: "after-resize" },
+      ],
+      truncated: false,
+    });
+    await iterator.return?.();
+  });
+
   it("replays the same scrollback to a second attachment", () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("xyz");
-    expect(table.attach(ptyId).ack.scrollback).toEqual(["xyz"]);
-    expect(table.attach(ptyId).ack.scrollback).toEqual(["xyz"]);
+    expect(table.attach(ptyId).ack.replay.events).toEqual([{ type: "data", data: "xyz" }]);
+    expect(table.attach(ptyId).ack.replay.events).toEqual([{ type: "data", data: "xyz" }]);
   });
 
   it("broadcasts data and exit to every attachment, then ends each stream", async () => {

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
 import type {
+  StationTerminalDisposable,
   StationTerminalProcess,
+  StationTerminalReplay,
   StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../types.js";
@@ -34,6 +36,45 @@ function harness(options?: { count?: number; resizeDebounceMs?: number }) {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function orderedGeometryHarness() {
+  const scripted = createScriptedTerminal({ cols: 10, rows: 4 });
+  let replayListener:
+    | ((replay: StationTerminalReplay) => void | Promise<void>)
+    | undefined;
+  let geometryListener:
+    | ((size: StationTerminalSize) => void | Promise<void>)
+    | undefined;
+  const terminal = scripted.terminal as StationTerminalProcess & {
+    onGeometry(
+      listener: (size: StationTerminalSize) => void | Promise<void>,
+    ): StationTerminalDisposable;
+  };
+  terminal.onReplay = (listener) => {
+    replayListener = listener;
+    return { dispose: () => {} };
+  };
+  terminal.onGeometry = (listener) => {
+    geometryListener = listener;
+    return { dispose: () => {} };
+  };
+  const registry = createPtyRegistry({ createTerminal: () => terminal });
+  registry.resize(PANE_A, { cols: 5, rows: 4 });
+
+  return {
+    registry,
+    scripted,
+    replay: async (replay: StationTerminalReplay) => {
+      if (replayListener === undefined) {
+        throw new Error("Registry did not subscribe to replay events.");
+      }
+      await replayListener(replay);
+    },
+    geometry: async (size: StationTerminalSize) => {
+      await geometryListener?.(size);
+    },
+  };
+}
 
 describe("createPtyRegistry", () => {
   it("does not spawn a PTY until the pane is first resized", () => {
@@ -178,6 +219,36 @@ describe("createPtyRegistry", () => {
     expect(screen?.bufferStats().baseY).toBe(0);
   });
 
+  it("applies selected output compatibility to a locally owned PTY", async () => {
+    const { registry, scripted } = harness();
+    registry.ensure(PANE_A, { outputCompatibility: "top-region-scrollback" });
+    registry.resize(PANE_A, { cols: 40, rows: 51 });
+
+    const rows = Array.from({ length: 51 }, (_, index) => `captured-row-${index + 1}`);
+    scripted[0].helpers.emitData(
+      `\x1b[H${rows.join("\r\n")}\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J`,
+    );
+    const screen = registry.get(PANE_A)?.screen;
+    await screen?.whenIdle();
+
+    expect(screen?.bufferStats().baseY).toBe(3);
+  });
+
+  it("finishes local old-width output before applying a resize", async () => {
+    const { registry, scripted } = harness({ resizeDebounceMs: 1 });
+    registry.ensure(PANE_A, { outputCompatibility: "top-region-scrollback" });
+    registry.resize(PANE_A, { cols: 10, rows: 4 });
+    scripted[0].helpers.emitData("1234567890\rX\x1b[1;3r\x1b[");
+
+    registry.resize(PANE_A, { cols: 5, rows: 4 });
+    await sleep(20);
+    const screen = registry.get(PANE_A)?.screen;
+    await screen?.whenIdle();
+
+    expect(screen?.viewRowText(0)).toBe("X2345");
+    expect(screen?.viewRowText(1).trimEnd()).toBe("");
+  });
+
   it("round-trips device queries from the screen back to the pty", async () => {
     const { registry, scripted } = harness();
     registry.resize(PANE_A, SIZE);
@@ -232,6 +303,49 @@ describe("createPtyRegistry", () => {
     const resizes = scripted[0].helpers.resizes;
     expect(resizes.at(-1)).toEqual({ cols: 50, rows: 14 });
     expect(resizes.some((size) => size.cols === 60 && size.rows === 20)).toBe(false);
+  });
+
+  it("keeps an ordered Host screen at replay geometry until the resize barrier", async () => {
+    const { registry, replay, geometry } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+
+    await replay({ initialSize: { cols: 10, rows: 4 }, events: [] });
+    expect(screen?.bufferStats()).toMatchObject({ cols: 10, rows: 4 });
+
+    await geometry({ cols: 5, rows: 4 });
+    expect(screen?.bufferStats()).toMatchObject({ cols: 5, rows: 4 });
+  });
+
+  it("replays retained bytes at each recorded Host geometry", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+
+    await replay({
+      initialSize: { cols: 10, rows: 4 },
+      events: [
+        { type: "data", data: "1234567890\rX" },
+        { type: "resize", cols: 5, rows: 4 },
+      ],
+    });
+
+    expect(screen?.viewRowText(0)).toBe("X2345");
+    expect(screen?.viewRowText(1).trimEnd()).toBe("");
+    expect(screen?.cursor()).toEqual({ x: 1, y: 0 });
+  });
+
+  it("parses pre-barrier output at 10 columns before reflowing it to 5", async () => {
+    const { registry, scripted, replay, geometry } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+
+    await replay({ initialSize: { cols: 10, rows: 4 }, events: [] });
+    scripted.helpers.emitData("1234567890\rX");
+    await screen?.whenIdle();
+    await geometry({ cols: 5, rows: 4 });
+    await screen?.whenIdle();
+
+    expect(screen?.viewRowText(0)).toBe("X2345");
+    expect(screen?.viewRowText(1).trimEnd()).toBe("");
+    expect(screen?.cursor()).toEqual({ x: 1, y: 0 });
   });
 
   it("records a spawn failure once and never retries on later resizes", () => {

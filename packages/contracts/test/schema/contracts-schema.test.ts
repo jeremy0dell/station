@@ -262,6 +262,55 @@ describe("contract schemas", () => {
       },
       "prepared external launch result",
     );
+    expectParses(
+      AgentPrepareExternalLaunchResultSchema,
+      {
+        kind: "prepared",
+        sessionId: "ses_api",
+        terminalTargetId: "native:wt_api",
+        launchPlan: {
+          provider: "codex",
+          command: "codex",
+          args: ["--resume"],
+          mode: "interactive",
+        },
+        outputCompatibility: "top-region-scrollback",
+      },
+      "prepared external launch result with local output compatibility",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchResultSchema,
+      {
+        kind: "prepared",
+        sessionId: "ses_api",
+        terminalTargetId: "native:wt_api",
+        launchPlan: {
+          provider: "codex",
+          command: "codex",
+          args: [],
+          mode: "interactive",
+        },
+        outputCompatibility: "provider-specific-workaround",
+      },
+      "prepared external launch result with unknown output compatibility",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchResultSchema,
+      {
+        kind: "prepared",
+        sessionId: "ses_api",
+        terminalTargetId: "native:wt_api",
+        launchPlan: {
+          provider: "codex",
+          command: "codex",
+          args: [],
+          mode: "interactive",
+        },
+        attachment,
+        outputCompatibility: "top-region-scrollback",
+      },
+      "prepared external launch result with attachment and local output compatibility",
+    );
     expectFails(
       AgentPrepareExternalLaunchResultSchema,
       {

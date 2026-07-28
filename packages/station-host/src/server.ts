@@ -184,8 +184,8 @@ async function runAttach(
   connection.send(hostSuccess(id, attachment.ack));
   logger.onEvent?.("agent.attach", {
     ptyId: attachment.ack.ptyId,
-    scrollbackEntries: attachment.ack.scrollback.length,
-    truncated: attachment.ack.truncated,
+    replayEntries: attachment.ack.replay.events.length,
+    truncated: attachment.ack.replay.truncated,
   });
 
   // End this stream when the socket closes — a disconnected client must not leave

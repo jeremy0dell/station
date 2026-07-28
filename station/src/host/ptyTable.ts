@@ -16,6 +16,10 @@ import type {
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
 import { ScrollbackRing } from "./scrollbackRing.js";
+import {
+  createPtyOutputCompatibility,
+  type PtyOutputCompatibility,
+} from "../terminal/ptyOutputCompatibility.js";
 
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
@@ -29,7 +33,7 @@ export type PtyTableOptions = {
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
 };
 
-/** Snapshot used to build a `host.attach` ack (and assert capture in tests). */
+/** Data-only diagnostic snapshot; `attach` exposes the full ordered replay. */
 export type PtySnapshot = {
   pid: number;
   cols: number;
@@ -48,8 +52,9 @@ export type PtyTable = {
   /**
    * Open an attachment: capture the scrollback snapshot and register the live
    * sink ATOMICALLY (same tick), so `snapshot ++ live frames` has no gap or
-   * overlap. The frame stream ends on PTY exit (after delivering the exit frame),
-   * on `frames.return()` (detach), or when the host disposes the PTY.
+   * overlap. Resize barriers share the output stream so clients apply each
+   * geometry before parsing later data. The stream ends on PTY exit (after the
+   * exit frame), on `frames.return()` (detach), or when the host disposes the PTY.
    */
   attach(ptyId: string): HostAttachmentSource;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
@@ -65,6 +70,8 @@ type PtyEntry = {
   identity: HostPtyIdentity;
   terminal: StationTerminalProcess;
   ring: ScrollbackRing;
+  outputCompatibility: PtyOutputCompatibility;
+  compatibilityRewriteReported: boolean;
   cols: number;
   rows: number;
   exited: boolean;
@@ -101,11 +108,34 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     }
   }
 
+  function publishOutput(entry: PtyEntry, data: string): void {
+    if (data.length === 0) {
+      return;
+    }
+    entry.ring.push(data);
+    broadcast(entry, { type: "data", ptyId: entry.ptyId, data });
+  }
+
+  function transformAndPublish(entry: PtyEntry, data: string): void {
+    const transformed = entry.outputCompatibility.transform(data, entry.rows);
+    // Transform before storage and broadcast so replay and live clients consume identical bytes.
+    publishOutput(entry, transformed.data);
+    if (transformed.rewriteCount > 0 && !entry.compatibilityRewriteReported) {
+      entry.compatibilityRewriteReported = true;
+      emit("pty.output.compatibility-rewrite", {
+        ptyId: entry.ptyId,
+        policy: "top-region-scrollback",
+        count: transformed.rewriteCount,
+      });
+    }
+  }
+
   // Broadcast a terminal exit, release the terminal's resources, and DROP the
   // entry. Used by natural exit, guarded close, and shutdown — so the host never
   // accumulates dead entries (each retaining its scrollback ring) and a re-spawn
   // for a worktree never finds a stale exited entry under the same target id.
   function reap(entry: PtyEntry, exitFrame: HostExitFrame, reason: string): void {
+    publishOutput(entry, entry.outputCompatibility.flush());
     entry.exited = true;
     entry.lastExit = exitFrame;
     broadcast(entry, exitFrame);
@@ -172,7 +202,9 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         ptyId: `pty-${sequence}`,
         identity: identityOf(params),
         terminal,
-        ring: new ScrollbackRing(maxScrollbackBytes),
+        ring: new ScrollbackRing(maxScrollbackBytes, { cols, rows }),
+        outputCompatibility: createPtyOutputCompatibility(params.outputCompatibility),
+        compatibilityRewriteReported: false,
         cols,
         rows,
         exited: false,
@@ -192,8 +224,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
       entry.subscriptions.push(
         terminal.onData((data) => {
-          entry.ring.push(data);
-          broadcast(entry, { type: "data", ptyId: entry.ptyId, data });
+          transformAndPublish(entry, data);
         }),
       );
       entry.subscriptions.push(
@@ -221,8 +252,20 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
     resize(ptyId, cols, rows) {
       const entry = requireEntry(ptyId);
+      // A compatibility parser may retain an incomplete pre-resize sequence;
+      // publish it before the geometry barrier so its production order survives.
+      publishOutput(entry, entry.outputCompatibility.flush());
       entry.cols = Math.max(MIN_COLS, cols);
       entry.rows = Math.max(MIN_ROWS, rows);
+      entry.ring.resize({ cols: entry.cols, rows: entry.rows });
+      // Publish first so output synchronously triggered by TIOCSWINSZ is ordered
+      // after the geometry it was produced for on every attachment.
+      broadcast(entry, {
+        type: "resize",
+        ptyId: entry.ptyId,
+        cols: entry.cols,
+        rows: entry.rows,
+      });
       entry.terminal.resize({ cols: entry.cols, rows: entry.rows });
     },
 
@@ -243,14 +286,16 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
     snapshot(ptyId) {
       const entry = requireEntry(ptyId);
-      const { scrollback, truncated } = entry.ring.snapshot();
+      const replay = entry.ring.snapshot();
       return {
         pid: entry.terminal.pid,
         cols: entry.cols,
         rows: entry.rows,
         exited: entry.exited,
-        scrollback,
-        truncated,
+        scrollback: replay.events.flatMap((event) =>
+          event.type === "data" ? [event.data] : [],
+        ),
+        truncated: replay.truncated,
       };
     },
 
@@ -272,8 +317,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         cols: entry.cols,
         rows: entry.rows,
         exited: entry.exited,
-        scrollback: snap.scrollback,
-        truncated: snap.truncated,
+        replay: snap,
       };
       let sink: ((frame: HostFrame) => void) | undefined;
       const stream = createFrameStream(() => {
@@ -282,7 +326,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         }
       });
       if (entry.exited) {
-        // PTY already gone: ack carries exited+scrollback; no live frames follow.
+        // PTY already gone: ack carries exited+replay; no live frames follow.
         stream.end();
       } else {
         sink = (frame) => {

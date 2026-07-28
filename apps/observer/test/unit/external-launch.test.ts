@@ -40,6 +40,7 @@ function managedTargetId(worktreeId: string): TerminalTargetId {
 type FakeManagedTerminalOptions = {
   started?: boolean;
   attachment?: ManagedTerminalAttachment;
+  outputCompatibility?: "top-region-scrollback";
   launchFailure?: SafeError;
   releaseFailure?: SafeError;
 };
@@ -53,6 +54,7 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
   readonly #terminal: FakeTerminalProvider;
   readonly #started: boolean;
   readonly #attachment: ManagedTerminalAttachment | undefined;
+  readonly #outputCompatibility: "top-region-scrollback" | undefined;
   readonly #launchFailure: SafeError | undefined;
   readonly #releaseFailure: SafeError | undefined;
 
@@ -64,6 +66,7 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     });
     this.#started = options.started ?? false;
     this.#attachment = options.attachment;
+    this.#outputCompatibility = options.outputCompatibility;
     this.#launchFailure = options.launchFailure;
     this.#releaseFailure = options.releaseFailure;
   }
@@ -133,7 +136,13 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
       agentEndpointId: request.agentEndpointId,
     };
     if (!this.#started) {
-      return { ...result, started: false };
+      return {
+        ...result,
+        started: false,
+        ...(this.#outputCompatibility === undefined
+          ? {}
+          : { outputCompatibility: this.#outputCompatibility }),
+      } as ManagedTerminalLaunchProcessResult;
     }
     if (this.#attachment === undefined) {
       throw new Error("Fake managed terminal needs an attachment when started.");
@@ -371,6 +380,7 @@ describe("prepareExternalLaunch", () => {
     expect(result.outcome.terminalTargetId).toBe(managedTargetId("wt_web_feature"));
     expect(result.outcome.launchPlan.provider).toBe("fake-harness");
     expect(result.outcome.launchPlan.env?.STATION_SESSION_ID).toBe(result.outcome.sessionId);
+    expect(result.outcome).not.toHaveProperty("outputCompatibility");
 
     // Exactly one station target was registered for the worktree.
     const targets = await station.listTargets();
@@ -389,6 +399,19 @@ describe("prepareExternalLaunch", () => {
         title: "Readable login task",
       }),
     ]);
+  });
+
+  it("propagates local output compatibility from the managed terminal adapter", async () => {
+    const station = new FakeManagedTerminalLifecycle({
+      outputCompatibility: "top-region-scrollback",
+    });
+
+    const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
+
+    expect(result.outcome).toMatchObject({
+      kind: "prepared",
+      outputCompatibility: "top-region-scrollback",
+    });
   });
 
   it("persists a custom title before exposing a newly prepared session", async () => {
@@ -853,6 +876,7 @@ describe("prepareExternalLaunch managed attachments", () => {
     const result = await prepareExternalLaunch(deps([row()], station), prepareParams);
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
     expect(result.outcome.attachment).toBe(attachment);
+    expect(result.outcome).not.toHaveProperty("outputCompatibility");
   });
 
   it("passes the adapter's opaque attachment through to an existing-session result", async () => {

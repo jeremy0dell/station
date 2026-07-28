@@ -89,8 +89,35 @@ describe("StationTerminalProvider", () => {
         mode: "interactive",
       },
     });
-    expect(result.started).toBe(false);
+    expect(result).toEqual({
+      terminalTargetId: stationTargetId(worktree.id),
+      agentEndpointId: "native:web-feature",
+      started: false,
+    });
     await expect(provider.attachmentForTarget("native:web-feature")).resolves.toBeUndefined();
+  });
+
+  it("carries generic output compatibility when a Codex PTY falls back to the UI", async () => {
+    const provider = new StationTerminalProvider({ clock });
+    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
+
+    const result = await provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: opened.target,
+      agentEndpointId: opened.agentEndpointId,
+      launchPlan: {
+        provider: "codex",
+        command: "codex",
+        args: [],
+        mode: "interactive",
+      },
+    });
+
+    expect(result).toMatchObject({
+      started: false,
+      outputCompatibility: "top-region-scrollback",
+    });
   });
 
   it("reports healthy", async () => {
@@ -307,12 +334,55 @@ describe("StationTerminalProvider (host-backed)", () => {
     });
   });
 
+  it("selects top-region scrollback compatibility from the effective Codex binding", async () => {
+    const spawn = vi.fn(async (_input: Parameters<StationHostClient["spawn"]>[0]) => ({
+      ptyId: "pty-1",
+      pid: 99,
+    }));
+    const provider = hostBackedProvider(fakeHostClient({ spawn }));
+    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
+
+    const result = await provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: opened.target,
+      agentEndpointId: opened.agentEndpointId,
+      launchPlan,
+    });
+
+    expect(spawn.mock.calls[0]?.[0]).toMatchObject({
+      harnessProvider: "codex",
+      outputCompatibility: "top-region-scrollback",
+    });
+    expect(result).not.toHaveProperty("outputCompatibility");
+  });
+
+  it("gives the harness binding precedence over a Codex launch plan", async () => {
+    const spawn = vi.fn(async (_input: Parameters<StationHostClient["spawn"]>[0]) => ({
+      ptyId: "pty-1",
+      pid: 99,
+    }));
+    const provider = hostBackedProvider(fakeHostClient({ spawn }));
+    const opened = await provider.openWorkspace(openRequest());
+
+    await provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: opened.target,
+      agentEndpointId: opened.agentEndpointId,
+      launchPlan: { ...launchPlan, provider: "codex", command: "codex" },
+    });
+
+    expect(spawn.mock.calls[0]?.[0]).toMatchObject({ harnessProvider: "claude" });
+    expect(spawn.mock.calls[0]?.[0]).not.toHaveProperty("outputCompatibility");
+  });
+
   it("keeps generic host unreachability as a UI-hosted launch fallback", async () => {
     const provider = providerWithEnsureError(
       fakeHostClient(),
       stationHostSafeError("HOST_UNREACHABLE", "Station host is unavailable."),
     );
-    const opened = await provider.openWorkspace(openRequest());
+    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
 
     await expect(
       provider.launchProcess({
@@ -320,9 +390,12 @@ describe("StationTerminalProvider (host-backed)", () => {
         worktree,
         terminalTarget: opened.target,
         agentEndpointId: opened.agentEndpointId,
-        launchPlan,
+        launchPlan: { ...launchPlan, provider: "codex", command: "codex" },
       }),
-    ).resolves.toMatchObject({ started: false });
+    ).resolves.toMatchObject({
+      started: false,
+      outputCompatibility: "top-region-scrollback",
+    });
   });
 
   it("propagates a live-PTY upgrade block instead of falling back to a local spawn", async () => {

@@ -10,6 +10,12 @@ import {
   resetTerminalDiagnosticsForTest,
   terminalCorruptionCounters,
 } from "../diagnostics.js";
+import type {
+  StationTerminalDisposable,
+  StationTerminalProcess,
+  StationTerminalReplay,
+  StationTerminalSize,
+} from "../types.js";
 import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -92,17 +98,29 @@ function controllableAttachment(
   };
 }
 
-function ack(overrides: Partial<HostAttachAck> = {}): HostAttachAck {
+type AckOverrides = Omit<Partial<HostAttachAck>, "replay"> & {
+  replay?: HostAttachAck["replay"];
+  scrollback?: readonly string[];
+};
+
+function ack(overrides: AckOverrides = {}): HostAttachAck {
+  const { replay, scrollback = [], ...fields } = overrides;
+  const cols = fields.cols ?? 80;
+  const rows = fields.rows ?? 24;
   return {
     subscribed: true,
     ptyId: "pty-1",
     pid: 4242,
-    cols: 80,
-    rows: 24,
+    cols,
+    rows,
     exited: false,
-    scrollback: [],
-    truncated: false,
-    ...overrides,
+    ...fields,
+    replay: replay ?? {
+      initialCols: cols,
+      initialRows: rows,
+      events: scrollback.map((data) => ({ type: "data" as const, data })),
+      truncated: false,
+    },
   };
 }
 
@@ -124,12 +142,15 @@ function clientForAttach(
   };
 }
 
-function terminalFor(attachment: HostAttachment) {
+function terminalFor(
+  attachment: HostAttachment,
+  size: StationTerminalSize = { cols: 80, rows: 24 },
+) {
   let clientDisposed = false;
   const terminal = createHostAttachedTerminal({
     hostSocketPath: "/tmp/unused.sock",
     ptyId: "pty-1",
-    size: { cols: 80, rows: 24 },
+    size,
     clientFactory: () =>
       clientForAttach(async () => attachment, () => {
         clientDisposed = true;
@@ -154,6 +175,54 @@ describe("createHostAttachedTerminal", () => {
     expect(terminal.pid).toBe(4242);
   });
 
+  it("delivers ordered replay in one awaited callback before live frames", async () => {
+    const replay: StationTerminalReplay = {
+      initialSize: { cols: 10, rows: 4 },
+      events: [
+        { type: "data", data: "before" },
+        { type: "resize", cols: 5, rows: 4 },
+        { type: "data", data: "after" },
+      ],
+    };
+    const ctrl = controllableAttachment(
+      ack({
+        cols: 10,
+        rows: 4,
+        replay: {
+          initialCols: replay.initialSize.cols,
+          initialRows: replay.initialSize.rows,
+          events: [...replay.events],
+          truncated: false,
+        },
+      }),
+    );
+    const { terminal } = terminalFor(ctrl.attachment, { cols: 5, rows: 4 });
+    const replayGate = deferred<void>();
+    const receivedReplays: StationTerminalReplay[] = [];
+    const receivedData: string[] = [];
+    terminal.onReplay?.(async (received) => {
+      receivedReplays.push(received);
+      await replayGate.promise;
+    });
+    terminal.onData((data) => receivedData.push(data));
+
+    try {
+      await flush();
+      ctrl.push({ type: "data", ptyId: "pty-1", data: "live" });
+      expect(receivedReplays).toEqual([replay]);
+      expect(receivedData).toEqual([]);
+      expect(ctrl.state.resizes).toEqual([]);
+
+      replayGate.resolve(undefined);
+      await flush();
+      expect(receivedData).toEqual(["live"]);
+      expect(ctrl.state.resizes).toEqual([{ cols: 5, rows: 4 }]);
+    } finally {
+      replayGate.resolve(undefined);
+      terminal.dispose();
+    }
+  });
+
   it("buffers writes/resizes before attach resolves, then flushes them", async () => {
     const ctrl = controllableAttachment(ack());
     const { terminal } = terminalFor(ctrl.attachment);
@@ -162,6 +231,78 @@ describe("createHostAttachedTerminal", () => {
     await flush();
     expect(ctrl.state.writes).toEqual(["pre"]);
     expect(ctrl.state.resizes).toEqual([{ cols: 100, rows: 30 }]);
+  });
+
+  it("does not acknowledge requested geometry until its ordered resize frame is consumed", async () => {
+    const ctrl = controllableAttachment(ack({ cols: 10, rows: 4 }));
+    const { terminal } = terminalFor(ctrl.attachment, { cols: 5, rows: 4 });
+    try {
+      await flush();
+      await flush();
+
+      expect(ctrl.state.resizes).toEqual([{ cols: 5, rows: 4 }]);
+      expect(terminal.ackedSize).not.toEqual({ cols: 5, rows: 4 });
+
+      ctrl.push({
+        type: "resize",
+        ptyId: "pty-1",
+        cols: 5,
+        rows: 4,
+      } as unknown as HostFrame);
+      await flush();
+
+      expect(terminal.ackedSize).toEqual({ cols: 5, rows: 4 });
+    } finally {
+      terminal.dispose();
+    }
+  });
+
+  it("awaits ordered geometry listeners before delivering post-barrier data", async () => {
+    const ctrl = controllableAttachment(ack({ cols: 10, rows: 4, scrollback: ["snapshot"] }));
+    const { terminal } = terminalFor(ctrl.attachment, { cols: 5, rows: 4 });
+    const geometryGate = deferred<void>();
+    const events: string[] = [];
+    terminal.onReplay?.(({ initialSize }) => {
+      events.push(`replay:${initialSize.cols}x${initialSize.rows}`);
+    });
+    terminal.onData((data) => events.push(`data:${data}`));
+    const ordered = terminal as StationTerminalProcess & {
+      onGeometry?: (
+        listener: (size: StationTerminalSize) => void | Promise<void>,
+      ) => StationTerminalDisposable;
+    };
+    ordered.onGeometry?.(async (size) => {
+      events.push(`geometry:${size.cols}x${size.rows}`);
+      await geometryGate.promise;
+    });
+
+    try {
+      await flush();
+      ctrl.push({ type: "data", ptyId: "pty-1", data: "before" });
+      ctrl.push({
+        type: "resize",
+        ptyId: "pty-1",
+        cols: 5,
+        rows: 4,
+      } as unknown as HostFrame);
+      ctrl.push({ type: "data", ptyId: "pty-1", data: "after" });
+      await flush();
+
+      expect(events).toEqual(["replay:10x4", "data:before", "geometry:5x4"]);
+      expect(terminal.ackedSize).toEqual({ cols: 5, rows: 4 });
+
+      geometryGate.resolve(undefined);
+      await flush();
+      expect(events).toEqual([
+        "replay:10x4",
+        "data:before",
+        "geometry:5x4",
+        "data:after",
+      ]);
+    } finally {
+      geometryGate.resolve(undefined);
+      terminal.dispose();
+    }
   });
 
   it("resends a resize that lands during initial geometry synchronization", async () => {
@@ -190,6 +331,9 @@ describe("createHostAttachedTerminal", () => {
       { cols: 80, rows: 24 },
       { cols: 100, rows: 30 },
     ]);
+    expect(terminal.ackedSize).toBeUndefined();
+    ctrl.push({ type: "resize", ptyId: "pty-1", cols: 100, rows: 30 });
+    await flush();
     expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
     terminal.dispose();
   });
@@ -221,6 +365,9 @@ describe("createHostAttachedTerminal", () => {
       { cols: 80, rows: 24 },
       { cols: 100, rows: 30 },
     ]);
+    expect(terminal.ackedSize).toBeUndefined();
+    ctrl.push({ type: "resize", ptyId: "pty-1", cols: 100, rows: 30 });
+    await flush();
     expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
     terminal.dispose();
   });
@@ -496,11 +643,14 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
       { cols: 80, rows: 24 },
       { cols: 100, rows: 30 },
     ]);
+    expect(terminal.ackedSize).toBeUndefined();
+    ctrl.push({ type: "resize", ptyId: "pty-1", cols: 100, rows: 30 });
+    await flush();
     expect(terminal.ackedSize).toEqual({ cols: 100, rows: 30 });
     terminal.dispose();
   });
 
-  it("rejects a resize acknowledgement from an attachment after its stream drops", async () => {
+  it("rejects resize confirmation from an attachment after its stream drops", async () => {
     const oldResize = deferred<void>();
     const reconnectWait = deferred<void>();
     const first = controllableAttachment(ack(), {
@@ -525,6 +675,8 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     });
 
     await flush();
+    first.push({ type: "resize", ptyId: "pty-1", cols: 80, rows: 24 });
+    await flush();
     expect(terminal.ackedSize).toEqual({ cols: 80, rows: 24 });
 
     terminal.resize({ cols: 100, rows: 30 });
@@ -534,6 +686,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     expect(terminal.ackedSize).toBeUndefined();
 
     oldResize.resolve(undefined);
+    first.push({ type: "resize", ptyId: "pty-1", cols: 100, rows: 30 });
     await flush();
     expect(terminal.ackedSize).toBeUndefined();
 

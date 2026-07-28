@@ -42,6 +42,10 @@ function screenText(screen: ReturnType<typeof createStationVtScreen>): string {
   return rows.map((row) => row.spans.map((span) => span.text).join("")).join("\n");
 }
 
+function visibleRows(screen: ReturnType<typeof createStationVtScreen>): string[] {
+  return Array.from({ length: screen.unsafeEngine.rows }, (_, index) => screen.rowText(index));
+}
+
 describe("data-plane reattach (host PTY → host-attached terminal → VT screen)", () => {
   it("restores an OSC 8 URI by replaying the complete pre-attach PTY data event", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
@@ -128,6 +132,49 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     expect((await control.list())[0]).toMatchObject({ ptyId, alive: true });
 
     control.dispose();
+  });
+
+  it("reattaches through the same compatible stream that rescued live xterm history", async () => {
+    const scripted = createScriptedTerminal({ cols: 40, rows: 51 });
+    const socketPath = await startHostWith(scripted);
+    const control = createStationHostClient({ socketPath });
+    const { ptyId } = await control.spawn({
+      ...identity,
+      harnessProvider: "codex",
+      command: "codex",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 40,
+      rows: 51,
+      outputCompatibility: "top-region-scrollback",
+    });
+    const rows = Array.from({ length: 51 }, (_, index) => `captured-row-${index + 1}`);
+    const initial = `\x1b[H${rows.join("\r\n")}`;
+    const captured = "\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J";
+    scripted.helpers.emitData(initial + captured);
+
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: socketPath,
+      ptyId,
+      size: { cols: 40, rows: 51 },
+    });
+    const reattached = createStationVtScreen({ size: { cols: 40, rows: 51 }, scrollback: 100 });
+    const unmodified = createStationVtScreen({ size: { cols: 40, rows: 51 }, scrollback: 100 });
+    terminal.onData((data) => reattached.feed(data));
+    unmodified.feed(initial + captured);
+    try {
+      await waitFor(() => reattached.unsafeEngine.buffer.normal.baseY === 3);
+      await Promise.all([reattached.whenIdle(), unmodified.whenIdle()]);
+
+      expect(visibleRows(reattached)).toEqual(visibleRows(unmodified));
+      expect(unmodified.unsafeEngine.buffer.normal.baseY).toBe(0);
+      expect(reattached.unsafeEngine.buffer.normal.baseY).toBe(3);
+    } finally {
+      terminal.dispose();
+      reattached.dispose();
+      unmodified.dispose();
+      control.dispose();
+    }
   });
 });
 

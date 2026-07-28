@@ -43,7 +43,8 @@ export type ExternalLaunchOutcome<T> = {
  *
  * Returns existing live identity without a gate; otherwise freshly preflights the selected harness
  * before seeding the canonical title or registering a target. Failed launch cleanup independently
- * releases its target and discards only the fresh session projection.
+ * releases its target and discards only the fresh session projection. Local fallbacks retain the
+ * managed terminal's provider-neutral output policy; attachments consume compatibility remotely.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -206,16 +207,20 @@ export async function prepareExternalLaunch(
       agentEndpointId: opened.agentEndpointId,
       launchPlan,
     });
-    const attachment = launched.started ? launched.attachment : undefined;
+    const outcome: Extract<AgentPrepareExternalLaunchResult, { kind: "prepared" }> = {
+      kind: "prepared",
+      sessionId,
+      terminalTargetId: opened.target.targetId,
+      launchPlan,
+    };
+    if (launched.started) {
+      outcome.attachment = launched.attachment;
+    } else if (launched.outputCompatibility !== undefined) {
+      outcome.outputCompatibility = launched.outputCompatibility;
+    }
 
     return {
-      outcome: {
-        kind: "prepared",
-        sessionId,
-        terminalTargetId: opened.target.targetId,
-        launchPlan,
-        ...(attachment === undefined ? {} : { attachment }),
-      },
+      outcome,
       reconcile: true,
     };
   } catch (error) {

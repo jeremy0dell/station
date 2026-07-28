@@ -28,6 +28,7 @@ import {
   HarnessLaunchPlanSchema,
   ManagedTerminalAttachmentSchema,
   ProviderHealthSchema,
+  TerminalOutputCompatibilitySchema,
 } from "./providers.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
@@ -150,16 +151,22 @@ export type AgentPrepareExternalLaunchParams = z.infer<
   typeof AgentPrepareExternalLaunchParamsSchema
 >;
 
-export const AgentPrepareExternalLaunchResultSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("prepared"),
-      sessionId: SessionIdSchema,
-      terminalTargetId: TerminalTargetIdSchema,
-      launchPlan: HarnessLaunchPlanSchema,
-      attachment: ManagedTerminalAttachmentSchema.optional(),
-    })
-    .strict(),
+const AgentPreparedExternalLaunchBaseSchema = z.object({
+  kind: z.literal("prepared"),
+  sessionId: SessionIdSchema,
+  terminalTargetId: TerminalTargetIdSchema,
+  launchPlan: HarnessLaunchPlanSchema,
+});
+
+export const AgentPrepareExternalLaunchResultSchema = z.union([
+  AgentPreparedExternalLaunchBaseSchema.extend({
+    attachment: ManagedTerminalAttachmentSchema.optional(),
+    outputCompatibility: z.never().optional(),
+  }).strict(),
+  AgentPreparedExternalLaunchBaseSchema.extend({
+    attachment: z.never().optional(),
+    outputCompatibility: TerminalOutputCompatibilitySchema.optional(),
+  }).strict(),
   z
     .object({
       kind: z.literal("existing-session"),
@@ -207,6 +214,7 @@ export type ObserverApi = {
   reconcile(reason?: string): Promise<ReconcileReceipt>;
   ingestProviderHookEvent(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
   reportHarnessEvent(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
+  /** Prepares either an attachable managed process or a caller-owned local launch. */
   prepareExternalLaunch(
     params: AgentPrepareExternalLaunchParams,
   ): Promise<AgentPrepareExternalLaunchResult>;

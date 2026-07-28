@@ -191,7 +191,7 @@ describe("startStationHost", () => {
 
       scripted.helpers.emitData("scroll-"); // captured into the ring before attach
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.scrollback).toEqual(["scroll-"]);
+      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: "scroll-" }]);
 
       const iterator = attachment.frames[Symbol.asyncIterator]();
       scripted.helpers.emitData("live");
@@ -199,6 +199,36 @@ describe("startStationHost", () => {
 
       await attachment.detach();
       expect((await client.list())[0]).toMatchObject({ ptyId, alive: true });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("applies output compatibility before replay and live delivery", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 51 });
+    const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
+    const client = createStationHostClient({ socketPath });
+    try {
+      const { ptyId } = await client.spawn({
+        ...identity,
+        command: "codex",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 51,
+        outputCompatibility: "top-region-scrollback",
+      });
+      const input = "\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J";
+      const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
+
+      scripted.helpers.emitData(input);
+      const attachment = await client.attach(ptyId);
+      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: expected }]);
+
+      const iterator = attachment.frames[Symbol.asyncIterator]();
+      scripted.helpers.emitData(input);
+      expect(await iterator.next()).toMatchObject({ value: { type: "data", data: expected } });
+      await attachment.detach();
     } finally {
       client.dispose();
     }
@@ -281,7 +311,7 @@ describe("startStationHost", () => {
 
       agent.helpers.emitData("scrollback");
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.scrollback).toEqual(["scrollback"]);
+      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: "scrollback" }]);
       const frames = attachment.frames[Symbol.asyncIterator]();
 
       await expect(client.stopIfIdle("next-build")).rejects.toMatchObject({

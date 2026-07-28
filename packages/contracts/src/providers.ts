@@ -366,6 +366,11 @@ export const ManagedTerminalAttachmentSchema = z
 
 export type ManagedTerminalAttachment = z.infer<typeof ManagedTerminalAttachmentSchema>;
 
+/** Provider-neutral output policy for the component that owns a terminal process. */
+export const TerminalOutputCompatibilitySchema = z.enum(["top-region-scrollback"]);
+
+export type TerminalOutputCompatibility = z.infer<typeof TerminalOutputCompatibilitySchema>;
+
 export type TerminalLaunchProcessResult = {
   terminalTargetId: TerminalTargetId;
   agentEndpointId: string;
@@ -494,18 +499,22 @@ export type ManagedTerminalLaunchProcessResult =
   | (Omit<TerminalLaunchProcessResult, "started" | "attachment"> & {
       started: false;
       attachment?: never;
+      /** Compatibility the caller must apply when it owns the fallback process. */
+      outputCompatibility?: TerminalOutputCompatibility;
     })
   | (Omit<TerminalLaunchProcessResult, "started" | "attachment"> & {
       started: true;
       attachment: ManagedTerminalAttachment;
+      outputCompatibility?: never;
     });
 
 /**
  * DRIVEN PORT
  *
  * Owns the single managed terminal target used for an external Station launch.
- * Attachments expose only adapter-owned target identity, and at most one target
- * may exist per worktree.
+ * Attachments expose only adapter-owned target identity. A local fallback may
+ * instead carry a provider-neutral output policy for the caller-owned process,
+ * and at most one target may exist per worktree.
  */
 export interface ManagedTerminalLifecycle extends TerminalProvider {
   launchProcess(request: TerminalLaunchProcessRequest): Promise<ManagedTerminalLaunchProcessResult>;
