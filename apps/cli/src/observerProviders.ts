@@ -66,6 +66,23 @@ export type CreateProviderRegistryOptions = {
   providerHookIngressLauncher?: string | undefined;
 };
 
+type HarnessProviderBuilderContext = {
+  config: StationConfig;
+  providerConfig: HarnessProviderConfig | undefined;
+  registryOptions: CreateProviderRegistryOptions;
+};
+
+type HarnessProviderBuilder = (context: HarnessProviderBuilderContext) => HarnessProvider;
+type KnownHarnessProviderId =
+  | "scripted"
+  | "claude"
+  | "codex"
+  | "cursor"
+  | "opencode"
+  | "pi"
+  | "noop-harness";
+type HarnessProviderBuilderRegistry = Record<KnownHarnessProviderId, HarnessProviderBuilder>;
+
 /**
  * ADAPTER
  *
@@ -238,130 +255,200 @@ function createHarnessProviders(
   return Array.from(ids).map((id) => createHarnessProvider(id, config, options));
 }
 
+function buildScriptedHarnessProvider({
+  config,
+  providerConfig,
+}: HarnessProviderBuilderContext): HarnessProvider {
+  const options: ConstructorParameters<typeof ScriptedAgentHarnessProvider>[0] = {
+    stateDir: join(config.observer?.stateDir ?? process.cwd(), "scripted"),
+  };
+  if (providerConfig?.command !== undefined) {
+    options.nodeCommand = providerConfig.command;
+  }
+  return new ScriptedAgentHarnessProvider(options);
+}
+
+function buildClaudeHarnessProvider({
+  config,
+  providerConfig,
+  registryOptions,
+}: HarnessProviderBuilderContext): HarnessProvider {
+  const options: ClaudeHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) {
+    options.command = providerConfig.command;
+  }
+  if (providerConfig?.profile !== undefined) {
+    options.profile = providerConfig.profile;
+  }
+  const permissionMode = resolveClaudePermissionMode(config);
+  if (permissionMode !== undefined) {
+    options.permissionMode = permissionMode;
+  }
+  if (providerConfig?.approvalPolicy !== undefined) {
+    options.approvalPolicy = providerConfig.approvalPolicy;
+  }
+  if (providerConfig?.sandboxMode !== undefined) {
+    options.sandboxMode = providerConfig.sandboxMode;
+  }
+  if (providerConfig?.installHooks !== undefined) {
+    options.installHooks = providerConfig.installHooks;
+  }
+  if (providerConfig?.resume !== undefined) {
+    options.resume = providerConfig.resume;
+  }
+  if (registryOptions.providerHookIngressLauncher !== undefined) {
+    options.hookBin = registryOptions.providerHookIngressLauncher;
+  }
+  applyObserverPaths(options, config, true);
+  return createClaudeHarnessProvider(options);
+}
+
+function buildCodexHarnessProvider({
+  config,
+  providerConfig,
+  registryOptions,
+}: HarnessProviderBuilderContext): HarnessProvider {
+  const options: CodexHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) {
+    options.command = providerConfig.command;
+  }
+  const permissionMode = resolveHarnessPermissionMode(config, "codex");
+  if (permissionMode !== undefined) {
+    options.permissionMode = permissionMode;
+  }
+  if (providerConfig?.approvalPolicy !== undefined) {
+    options.approvalPolicy = providerConfig.approvalPolicy;
+  }
+  if (providerConfig?.sandboxMode !== undefined) {
+    options.sandboxMode = providerConfig.sandboxMode;
+  }
+  if (providerConfig?.installHooks !== undefined) {
+    options.installHooks = providerConfig.installHooks;
+  }
+  if (providerConfig?.profile !== undefined) {
+    options.profile = providerConfig.profile;
+  }
+  if (providerConfig?.resume !== undefined) {
+    options.resume = providerConfig.resume;
+  }
+  if (registryOptions.providerHookIngressLauncher !== undefined) {
+    options.hookBin = registryOptions.providerHookIngressLauncher;
+  }
+  applyObserverPaths(options, config, true);
+  return createCodexHarnessProvider(options);
+}
+
+function buildCursorHarnessProvider({
+  config,
+  providerConfig,
+  registryOptions,
+}: HarnessProviderBuilderContext): HarnessProvider {
+  const options: CursorHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) {
+    options.command = providerConfig.command;
+  }
+  if (providerConfig?.installHooks !== undefined) {
+    options.installHooks = providerConfig.installHooks;
+  }
+  if (providerConfig?.resume !== undefined) {
+    options.resume = providerConfig.resume;
+  }
+  if (registryOptions.configPath !== undefined) {
+    options.configPath = registryOptions.configPath;
+  }
+  if (registryOptions.providerHookIngressLauncher !== undefined) {
+    options.hookBin = registryOptions.providerHookIngressLauncher;
+  }
+  applyObserverPaths(options, config, true);
+  return createCursorHarnessProvider(options);
+}
+
+function buildOpenCodeHarnessProvider({
+  config,
+  providerConfig,
+  registryOptions,
+}: HarnessProviderBuilderContext): HarnessProvider {
+  const options: OpenCodeHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) {
+    options.command = providerConfig.command;
+  }
+  const permissionMode = resolveHarnessPermissionMode(config, "opencode");
+  if (permissionMode !== undefined) {
+    options.permissionMode = permissionMode;
+  }
+  if (providerConfig?.approvalPolicy !== undefined) {
+    options.approvalPolicy = providerConfig.approvalPolicy;
+  }
+  if (providerConfig?.sandboxMode !== undefined) {
+    options.sandboxMode = providerConfig.sandboxMode;
+  }
+  if (providerConfig?.installHooks !== undefined) {
+    options.installHooks = providerConfig.installHooks;
+  }
+  if (providerConfig?.profile !== undefined) {
+    options.profile = providerConfig.profile;
+  }
+  if (providerConfig?.resume !== undefined) {
+    options.resume = providerConfig.resume;
+  }
+  if (registryOptions.configPath !== undefined) {
+    options.configPath = registryOptions.configPath;
+  }
+  applyObserverPaths(options, config, false);
+  return createOpenCodeHarnessProvider(options);
+}
+
+function buildPiHarnessProvider({
+  config,
+  providerConfig,
+  registryOptions,
+}: HarnessProviderBuilderContext): HarnessProvider {
+  const options: PiHarnessProviderOptions = {};
+  if (providerConfig?.command !== undefined) {
+    options.command = providerConfig.command;
+  }
+  if (providerConfig?.resume !== undefined) {
+    options.resume = providerConfig.resume;
+  }
+  if (registryOptions.configPath !== undefined) {
+    options.configPath = registryOptions.configPath;
+  }
+  if (registryOptions.piExtensionPath !== undefined) {
+    options.extensionPath = registryOptions.piExtensionPath;
+  }
+  applyObserverPaths(options, config, false);
+  return createPiHarnessProvider(options);
+}
+
+function buildNoopHarnessProvider(): HarnessProvider {
+  return new NoopHarnessProvider("noop-harness");
+}
+
+const HARNESS_PROVIDER_BUILDERS = {
+  scripted: buildScriptedHarnessProvider,
+  claude: buildClaudeHarnessProvider,
+  codex: buildCodexHarnessProvider,
+  cursor: buildCursorHarnessProvider,
+  opencode: buildOpenCodeHarnessProvider,
+  pi: buildPiHarnessProvider,
+  "noop-harness": buildNoopHarnessProvider,
+} satisfies HarnessProviderBuilderRegistry;
+
 function createHarnessProvider(
   id: string,
   config: StationConfig,
   registryOptions: CreateProviderRegistryOptions,
 ): HarnessProvider {
-  const providerConfig = harnessProviderConfig(config, id);
-
-  if (id === "scripted") {
-    const options: ConstructorParameters<typeof ScriptedAgentHarnessProvider>[0] = {
-      stateDir: join(config.observer?.stateDir ?? process.cwd(), "scripted"),
-    };
-    if (providerConfig?.command !== undefined) {
-      options.nodeCommand = providerConfig.command;
-    }
-    return new ScriptedAgentHarnessProvider(options);
+  const builders = HARNESS_PROVIDER_BUILDERS as Partial<Record<string, HarnessProviderBuilder>>;
+  const builder = builders[id];
+  if (builder === undefined) {
+    return new UnavailableHarnessProvider(id);
   }
-
-  if (id === "claude") {
-    const options: ClaudeHarnessProviderOptions = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    if (providerConfig?.profile !== undefined) {
-      options.profile = providerConfig.profile;
-    }
-    const permissionMode = resolveClaudePermissionMode(config);
-    if (permissionMode !== undefined) {
-      options.permissionMode = permissionMode;
-    }
-    if (providerConfig?.approvalPolicy !== undefined) {
-      options.approvalPolicy = providerConfig.approvalPolicy;
-    }
-    if (providerConfig?.sandboxMode !== undefined) {
-      options.sandboxMode = providerConfig.sandboxMode;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.providerHookIngressLauncher !== undefined) {
-      options.hookBin = registryOptions.providerHookIngressLauncher;
-    }
-    applyObserverPaths(options, config, true);
-    return createClaudeHarnessProvider(options);
-  }
-
-  if (id === "codex") {
-    const options: CodexHarnessProviderOptions = {};
-    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
-    if (providerConfig?.profile !== undefined) {
-      options.profile = providerConfig.profile;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.providerHookIngressLauncher !== undefined) {
-      options.hookBin = registryOptions.providerHookIngressLauncher;
-    }
-    applyObserverPaths(options, config, true);
-    return createCodexHarnessProvider(options);
-  }
-
-  if (id === "cursor") {
-    const options: CursorHarnessProviderOptions = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    if (providerConfig?.installHooks !== undefined) {
-      options.installHooks = providerConfig.installHooks;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    if (registryOptions.providerHookIngressLauncher !== undefined) {
-      options.hookBin = registryOptions.providerHookIngressLauncher;
-    }
-    applyObserverPaths(options, config, true);
-    return createCursorHarnessProvider(options);
-  }
-
-  if (id === "opencode") {
-    const options: OpenCodeHarnessProviderOptions = {};
-    applyHarnessAgentOptions(options, providerConfig, resolveHarnessPermissionMode(config, id));
-    if (providerConfig?.profile !== undefined) {
-      options.profile = providerConfig.profile;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    applyObserverPaths(options, config, false);
-    return createOpenCodeHarnessProvider(options);
-  }
-
-  if (id === "pi") {
-    const options: PiHarnessProviderOptions = {};
-    if (providerConfig?.command !== undefined) {
-      options.command = providerConfig.command;
-    }
-    if (providerConfig?.resume !== undefined) {
-      options.resume = providerConfig.resume;
-    }
-    if (registryOptions.configPath !== undefined) {
-      options.configPath = registryOptions.configPath;
-    }
-    if (registryOptions.piExtensionPath !== undefined) {
-      options.extensionPath = registryOptions.piExtensionPath;
-    }
-    applyObserverPaths(options, config, false);
-    return createPiHarnessProvider(options);
-  }
-
-  if (id === "noop-harness") {
-    return new NoopHarnessProvider(id);
-  }
-
-  return new UnavailableHarnessProvider(id);
+  return builder({
+    config,
+    providerConfig: harnessProviderConfig(config, id),
+    registryOptions,
+  });
 }
 
 function createRepositoryProviders(config: StationConfig): RepositoryProvider[] {
@@ -431,28 +518,6 @@ function applyObserverPaths(
   if (withAutoStart) {
     options.autoStartFromHooks = config.observer?.autoStartFromHooks !== false;
   }
-}
-
-/** Permission/approval/sandbox/hook fields shared by the codex and opencode adapters. */
-function applyHarnessAgentOptions(
-  options: {
-    command?: string;
-    permissionMode?: HarnessPermissionMode;
-    approvalPolicy?: string;
-    sandboxMode?: string;
-    installHooks?: boolean;
-  },
-  providerConfig: HarnessProviderConfig | undefined,
-  permissionMode: HarnessPermissionMode | undefined,
-): void {
-  if (providerConfig?.command !== undefined) options.command = providerConfig.command;
-  if (permissionMode !== undefined) options.permissionMode = permissionMode;
-  if (providerConfig?.approvalPolicy !== undefined) {
-    options.approvalPolicy = providerConfig.approvalPolicy;
-  }
-  if (providerConfig?.sandboxMode !== undefined) options.sandboxMode = providerConfig.sandboxMode;
-  if (providerConfig?.installHooks !== undefined)
-    options.installHooks = providerConfig.installHooks;
 }
 
 function health(providerId: string, providerType: ProviderHealth["providerType"]): ProviderHealth {

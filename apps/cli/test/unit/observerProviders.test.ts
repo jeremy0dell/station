@@ -1,19 +1,55 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createClaudeHarnessProvider } from "@station/claude";
+import { createCodexHarnessProvider } from "@station/codex";
 import {
   DEFAULT_WORKSPACE_CONFIG,
   HarnessProvidersConfigSchema,
   loadConfig,
+  resolveObserverPaths,
   type StationConfig,
 } from "@station/config";
 import * as contracts from "@station/contracts";
-import { installCursorHooks } from "@station/cursor";
-import { openCodeHookAdapter } from "@station/opencode";
+import { createCursorHarnessProvider, installCursorHooks } from "@station/cursor";
+import { createOpenCodeHarnessProvider, openCodeHookAdapter } from "@station/opencode";
 import { createPiHarnessProvider } from "@station/pi";
+import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
 import { createProviderRegistry, probeHarnessHooksStatus } from "../../src/observerProviders";
+
+vi.mock("@station/claude", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@station/claude")>();
+  return {
+    ...actual,
+    createClaudeHarnessProvider: vi.fn(actual.createClaudeHarnessProvider),
+  };
+});
+
+vi.mock("@station/codex", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@station/codex")>();
+  return {
+    ...actual,
+    createCodexHarnessProvider: vi.fn(actual.createCodexHarnessProvider),
+  };
+});
+
+vi.mock("@station/cursor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@station/cursor")>();
+  return {
+    ...actual,
+    createCursorHarnessProvider: vi.fn(actual.createCursorHarnessProvider),
+  };
+});
+
+vi.mock("@station/opencode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@station/opencode")>();
+  return {
+    ...actual,
+    createOpenCodeHarnessProvider: vi.fn(actual.createOpenCodeHarnessProvider),
+  };
+});
 
 vi.mock("@station/terminal", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@station/terminal")>();
@@ -242,6 +278,199 @@ describe("observer providers", () => {
     });
 
     expect([...allBuiltIns.harnesses.keys()]).toEqual(["codex", "cursor", "pi", "opencode"]);
+  });
+
+  it("dispatches every known harness id through its registered provider builder", async () => {
+    vi.mocked(createClaudeHarnessProvider).mockClear();
+    vi.mocked(createCodexHarnessProvider).mockClear();
+    vi.mocked(createCursorHarnessProvider).mockClear();
+    vi.mocked(createOpenCodeHarnessProvider).mockClear();
+    vi.mocked(createPiHarnessProvider).mockClear();
+    const registry = createProviderRegistry({
+      ...config,
+      defaults: { ...config.defaults, harness: "claude" },
+      projects: [
+        {
+          ...firstProject(),
+          defaults: { ...firstProject().defaults, harness: "codex" },
+        },
+      ],
+      harness: {
+        scripted: {},
+        claude: {},
+        codex: {},
+        cursor: {},
+        opencode: {},
+        pi: {},
+        "noop-harness": {},
+      },
+    });
+
+    expect([...registry.harnesses.keys()]).toEqual([
+      "claude",
+      "codex",
+      "scripted",
+      "cursor",
+      "opencode",
+      "pi",
+      "noop-harness",
+    ]);
+    expect(createClaudeHarnessProvider).toHaveBeenCalledTimes(1);
+    expect(createCodexHarnessProvider).toHaveBeenCalledTimes(1);
+    expect(createCursorHarnessProvider).toHaveBeenCalledTimes(1);
+    expect(createOpenCodeHarnessProvider).toHaveBeenCalledTimes(1);
+    expect(createPiHarnessProvider).toHaveBeenCalledTimes(1);
+    expect(registry.harnesses.get("scripted")).toBeInstanceOf(ScriptedAgentHarnessProvider);
+    await expect(registry.harnesses.get("noop-harness")?.health()).resolves.toMatchObject({
+      providerId: "noop-harness",
+      status: "healthy",
+    });
+  });
+
+  it("constructs only provider-supported runtime options", async () => {
+    vi.mocked(createClaudeHarnessProvider).mockClear();
+    vi.mocked(createCodexHarnessProvider).mockClear();
+    vi.mocked(createCursorHarnessProvider).mockClear();
+    vi.mocked(createOpenCodeHarnessProvider).mockClear();
+    vi.mocked(createPiHarnessProvider).mockClear();
+    const stateDir = "/tmp/station/provider-table-state";
+    const observerSocketPath = "/tmp/station/provider-table-observer.sock";
+    const configPath = "/tmp/station/provider-table-config.toml";
+    const ingressLauncher = "/tmp/station/bin/stn-ingress";
+    const piExtensionPath = "/tmp/station/assets/pi-extension.mjs";
+    const providerConfig: StationConfig = {
+      ...config,
+      observer: {
+        stateDir,
+        socketPath: observerSocketPath,
+        autoStartFromHooks: false,
+      },
+      defaults: {
+        ...config.defaults,
+        harness: "claude",
+        harnessPermissionMode: "yolo",
+      },
+      projects: [
+        {
+          ...firstProject(),
+          defaults: { ...firstProject().defaults, harness: "codex" },
+        },
+      ],
+      harness: {
+        scripted: { command: "node-scripted" },
+        claude: {
+          command: "claude-custom",
+          profile: "claude-profile",
+          permissionMode: "standard",
+          approvalPolicy: "claude-approval",
+          sandboxMode: "claude-sandbox",
+          installHooks: true,
+          resume: true,
+        },
+        codex: {
+          command: "codex-custom",
+          profile: "codex-profile",
+          permissionMode: "standard",
+          approvalPolicy: "codex-approval",
+          sandboxMode: "codex-sandbox",
+          installHooks: true,
+          resume: true,
+        },
+        cursor: { command: "cursor-custom", installHooks: true, resume: true },
+        opencode: {
+          command: "opencode-custom",
+          profile: "opencode-profile",
+          permissionMode: "standard",
+          approvalPolicy: "opencode-approval",
+          sandboxMode: "opencode-sandbox",
+          installHooks: true,
+          resume: true,
+        },
+        pi: { command: "pi-custom", resume: true },
+      },
+    };
+
+    const registry = createProviderRegistry(providerConfig, {
+      configPath,
+      piExtensionPath,
+      providerHookIngressLauncher: ingressLauncher,
+    });
+    const observerPaths = resolveObserverPaths(providerConfig);
+    expect(vi.mocked(createClaudeHarnessProvider).mock.calls.at(-1)?.[0]).toEqual({
+      command: "claude-custom",
+      profile: "claude-profile",
+      permissionMode: "standard",
+      approvalPolicy: "claude-approval",
+      sandboxMode: "claude-sandbox",
+      installHooks: true,
+      resume: true,
+      hookBin: ingressLauncher,
+      observerSocketPath: observerPaths.socketPath,
+      stateDir: observerPaths.stateDir,
+      hookSpoolDir: observerPaths.hookSpoolDir,
+      autoStartFromHooks: false,
+    });
+    expect(vi.mocked(createCodexHarnessProvider).mock.calls.at(-1)?.[0]).toEqual({
+      command: "codex-custom",
+      profile: "codex-profile",
+      permissionMode: "standard",
+      approvalPolicy: "codex-approval",
+      sandboxMode: "codex-sandbox",
+      installHooks: true,
+      resume: true,
+      hookBin: ingressLauncher,
+      observerSocketPath: observerPaths.socketPath,
+      stateDir: observerPaths.stateDir,
+      hookSpoolDir: observerPaths.hookSpoolDir,
+      autoStartFromHooks: false,
+    });
+    expect(vi.mocked(createCursorHarnessProvider).mock.calls.at(-1)?.[0]).toEqual({
+      command: "cursor-custom",
+      installHooks: true,
+      resume: true,
+      configPath,
+      hookBin: ingressLauncher,
+      observerSocketPath: observerPaths.socketPath,
+      stateDir: observerPaths.stateDir,
+      hookSpoolDir: observerPaths.hookSpoolDir,
+      autoStartFromHooks: false,
+    });
+    expect(vi.mocked(createOpenCodeHarnessProvider).mock.calls.at(-1)?.[0]).toEqual({
+      command: "opencode-custom",
+      profile: "opencode-profile",
+      permissionMode: "standard",
+      approvalPolicy: "opencode-approval",
+      sandboxMode: "opencode-sandbox",
+      installHooks: true,
+      resume: true,
+      configPath,
+      observerSocketPath: observerPaths.socketPath,
+      stateDir: observerPaths.stateDir,
+      hookSpoolDir: observerPaths.hookSpoolDir,
+    });
+    expect(vi.mocked(createPiHarnessProvider).mock.calls.at(-1)?.[0]).toEqual({
+      command: "pi-custom",
+      resume: true,
+      configPath,
+      extensionPath: piExtensionPath,
+      observerSocketPath: observerPaths.socketPath,
+      stateDir: observerPaths.stateDir,
+      hookSpoolDir: observerPaths.hookSpoolDir,
+    });
+
+    const scripted = registry.harnesses.get("scripted");
+    await expect(scripted?.buildLaunch(launchRequest("scripted"))).resolves.toMatchObject({
+      provider: "scripted",
+      command: "node-scripted",
+      env: { STATION_SCRIPTED_STATE_DIR: join(stateDir, "scripted") },
+      providerData: { stateDir: join(stateDir, "scripted") },
+    });
+    await expect(
+      registry.harnesses.get("opencode")?.buildLaunch(launchRequest("opencode")),
+    ).resolves.toMatchObject({
+      provider: "opencode",
+      command: "opencode-custom",
+    });
   });
 
   it("forwards a prepared extension path only to the Pi provider", () => {
@@ -969,6 +1198,27 @@ const config: StationConfig = {
     },
   ],
 };
+
+function launchRequest(harness: string): Parameters<contracts.HarnessProvider["buildLaunch"]>[0] {
+  const project = firstProject();
+  return {
+    project: {
+      ...project,
+      defaults: { ...project.defaults, harness },
+    },
+    worktree: {
+      id: "wt_web_task",
+      provider: "worktrunk",
+      projectId: project.id,
+      branch: "task",
+      path: "/tmp/station/web/task",
+      state: "exists",
+      source: "worktrunk",
+      observedAt: now,
+    },
+    mode: "interactive",
+  };
+}
 
 function firstProject(): StationConfig["projects"][number] {
   const project = config.projects[0];
