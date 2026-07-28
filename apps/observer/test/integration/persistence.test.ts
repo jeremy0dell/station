@@ -702,6 +702,7 @@ describe("observer persistence", () => {
     await persistence.renameSession({
       sessionId: "ses_web_feature",
       title: "Readable feature task",
+      renamedAt: now,
     });
     await persistence.persistReconcileResult({
       projects: [project],
@@ -754,19 +755,19 @@ describe("observer persistence", () => {
       now: later,
     });
 
-    await persistence.seedSessionTitle({
+    await persistence.seedSession({
       sessionId: "ses_web_seeded",
       projectId: "web",
       worktreeId: "wt_web_seeded",
-      title: "original-session-title",
+      initialTitle: "original-session-title",
       createdAt: now,
       lastSeenAt: now,
     });
-    await persistence.seedSessionTitle({
+    await persistence.seedSession({
       sessionId: "ses_web_seeded",
       projectId: "web",
       worktreeId: "wt_web_seeded",
-      title: "agent-created-branch",
+      initialTitle: "agent-created-branch",
       createdAt: later,
       lastSeenAt: later,
     });
@@ -798,12 +799,13 @@ describe("observer persistence", () => {
     await persistence.renameSession({
       sessionId: "ses_web_seeded",
       title: "user renamed session",
+      renamedAt: later,
     });
-    await persistence.seedSessionTitle({
+    await persistence.seedSession({
       sessionId: "ses_web_seeded",
       projectId: "web",
       worktreeId: "wt_web_seeded",
-      title: "ignored later seed",
+      initialTitle: "ignored later seed",
       createdAt: later,
       lastSeenAt: later,
     });
@@ -825,16 +827,25 @@ describe("observer persistence", () => {
       idFactory: ids(),
     });
 
-    await persistence.seedSessionTitle({
+    await persistence.seedSession({
       sessionId: "ses_cleanup_seed",
       projectId: "web",
       worktreeId: "wt_web_cleanup_seed",
-      title: "cleanup-seed",
+      initialTitle: "cleanup-seed",
       createdAt: now,
       lastSeenAt: now,
     });
-    await expect(persistence.deleteSessionTitleSeed("ses_cleanup_seed")).resolves.toBe(1);
+    await expect(
+      persistence.discardSessionSeed({ sessionId: "ses_cleanup_seed" }),
+    ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
     await expect(persistence.listSessions()).resolves.toEqual([]);
+    await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "web",
+        worktreeId: "wt_web_cleanup_seed",
+        title: "cleanup-seed",
+      }),
+    ]);
     sqlite.close();
   });
 

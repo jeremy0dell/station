@@ -15,6 +15,11 @@ export type CreateSessionRenameHandlerOptions = {
   clock?: RuntimeClock | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Renames the canonical worktree title and its session projections before publishing convergence.
+ */
 export function createSessionRenameHandler(
   options: CreateSessionRenameHandlerOptions,
 ): CommandHandler {
@@ -40,7 +45,8 @@ export function createSessionRenameHandler(
       throw sessionMissingError(sessionId);
     }
 
-    const updated = await options.persistence.renameSession({ sessionId, title });
+    const renamedAt = nowIso(options.clock);
+    const updated = await options.persistence.renameSession({ sessionId, title, renamedAt });
     if (updated === undefined) {
       throw sessionMissingError(sessionId);
     }
@@ -63,7 +69,7 @@ export function createSessionRenameHandler(
       commandId: context.commandId,
       traceId: context.trace.traceId,
       spanId: context.trace.spanId,
-      createdAt: nowIso(options.clock),
+      createdAt: renamedAt,
     });
     options.eventBus?.publish(event);
   };

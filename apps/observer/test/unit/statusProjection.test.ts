@@ -70,6 +70,30 @@ describe("live harness status projection", () => {
     ]);
   });
 
+  it("preserves the canonical row title while applying a harness status patch", () => {
+    const base = snapshotFor();
+    const snapshot = {
+      ...base,
+      rows: base.rows.map((row) => ({ ...row, title: "Durable task workspace" })),
+      sessions: base.sessions.map((session) => ({
+        ...session,
+        title: "Durable task workspace",
+      })),
+    };
+
+    const result = projectHarnessEventReportOntoSnapshot({
+      snapshot,
+      report: report({
+        status: status("working", "high", "Codex is working."),
+        correlation: { sessionId: "ses_web_task" },
+      }),
+      projectedAt: eventAt,
+    });
+
+    expect(result.snapshot.rows[0]?.title).toBe("Durable task workspace");
+    expect(result.snapshot.sessions[0]?.title).toBe("Durable task workspace");
+  });
+
   it("projects attention and idle reports through weaker unique correlations", () => {
     const attention = projectHarnessEventReportOntoSnapshot({
       snapshot: snapshotFor(),

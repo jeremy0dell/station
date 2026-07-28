@@ -16,7 +16,7 @@ const harnessCapabilities = {
 };
 
 export const mockObserverSnapshot = {
-  schemaVersion: "0.8.0",
+  schemaVersion: "0.9.0",
   generatedAt: fixtureNow,
   observer: {
     pid: 4242,
@@ -80,6 +80,7 @@ export const mockObserverSnapshot = {
       id: "wt_station_design",
       projectId: "station",
       projectLabel: "STATION",
+      title: "station-design",
       branch: "station-design",
       path: "/Users/example/.worktrees/station/station-design",
       worktree: {
@@ -134,6 +135,7 @@ export const mockObserverSnapshot = {
       id: "wt_notify_cleanup",
       projectId: "station",
       projectLabel: "STATION",
+      title: "notify-cleanup",
       branch: "notify-cleanup",
       path: "/Users/example/.worktrees/station/notify-cleanup",
       worktree: {
@@ -174,6 +176,7 @@ export const mockObserverSnapshot = {
       id: "wt_docs_only",
       projectId: "station",
       projectLabel: "STATION",
+      title: "docs-only",
       branch: "docs-only",
       path: "/Users/example/.worktrees/station/docs-only",
       worktree: {

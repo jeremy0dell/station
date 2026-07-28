@@ -47,10 +47,11 @@ No single layer owns all truth.
 - Terminal providers are authoritative for terminal topology and provider-owned target identity.
 - Harness providers are authoritative for agent launch, discovery, event ingestion, and status signals they can prove.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
-- Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, provider observations, and current metadata cache rows.
+- Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
 - Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
-  worktree inventory; `sessions` is canonical session membership. Session and activity counts
-  derive from `sessions`, while worktree counts derive from `rows`.
+  worktree inventory; `sessions` is canonical session membership. `WorktreeRow.title` is the
+  display authority, while `SessionView.title` is its lifecycle projection. Session and activity
+  counts derive from `sessions`, while worktree counts derive from `rows`.
 - JSONL logs and debug bundles are diagnostic evidence, not runtime truth.
 
 When these disagree, reconcile from config, providers, and current observer state first. Treat stale logs, old bundles, and historical plans as evidence to inspect, not as authority.

@@ -8,6 +8,7 @@
     "test/support/diagnosticEvidenceSources.ts",
     "test/support/harnessRuns.ts",
     "test/support/inMemoryObserverPersistence.ts",
+    "test/support/observerPersistenceContract.ts",
     "test/support/projectConfigWriter.ts",
     "test/support/worktreeMetadataSources.ts"
   ]

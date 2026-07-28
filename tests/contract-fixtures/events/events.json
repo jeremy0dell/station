@@ -18,6 +18,7 @@
       "id": "wt_web_feature_auth",
       "projectId": "web",
       "projectLabel": "web",
+      "title": "feature/auth",
       "branch": "feature/auth",
       "path": "/tmp/station-fixtures/web/worktrees/feature-auth",
       "worktree": {

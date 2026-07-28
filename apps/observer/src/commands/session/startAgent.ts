@@ -14,7 +14,7 @@ import {
   assertNoCurrentAgent,
   buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
-  deleteSessionTitleSeedBestEffort,
+  discardSessionSeedBestEffort,
   findProjectOrThrow,
   lookupWorktree,
   publishSessionCreated,
@@ -22,7 +22,7 @@ import {
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
-  seedSessionTitle,
+  seedSession,
   throwIfAborted,
   validateSnapshotRow,
   worktreeObservationFromRow,
@@ -41,6 +41,12 @@ export type CreateSessionStartAgentHandlerOptions = {
   commandTimeoutMs?: number | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Starts a fresh agent lifecycle while inheriting the worktree's canonical display title.
+ * Failed launches discard only the fresh session projection.
+ */
 export function createSessionStartAgentHandler(
   options: CreateSessionStartAgentHandlerOptions,
 ): CommandHandler {
@@ -89,18 +95,18 @@ export function createSessionStartAgentHandler(
       project.defaults.harness;
     resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
 
-    let seededSessionTitle = false;
+    let sessionSeeded = false;
 
     try {
-      await seedSessionTitle({
+      await seedSession({
         persistence: options.persistence,
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
-        title: worktree.branch,
+        initialTitle: row?.title ?? worktree.branch,
         clock: options.clock,
       });
-      seededSessionTitle = true;
+      sessionSeeded = true;
       throwIfAborted(context.signal);
 
       const receipt = await options.terminalIntentRunner.submitIntent(
@@ -128,8 +134,8 @@ export function createSessionStartAgentHandler(
       }
       throwIfAborted(context.signal);
     } catch (error) {
-      if (seededSessionTitle) {
-        await deleteSessionTitleSeedBestEffort({
+      if (sessionSeeded) {
+        await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
           context,

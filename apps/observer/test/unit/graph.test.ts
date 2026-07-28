@@ -11,6 +11,7 @@ import {
   buildStationSnapshot,
   type ObserverSessionMetadata,
   type ObserverTurnReadiness,
+  type ObserverWorktreeDisplayTitle,
   projectProviderHealthOntoSnapshot,
 } from "../../src/reconcile/graph";
 import type { ObserverHarnessRun } from "../../src/reconcile/harnessEventStatus";
@@ -149,6 +150,7 @@ function build(overrides: {
   terminals?: TerminalTargetObservation[];
   harnessRuns?: ObserverHarnessRun[];
   sessionMetadata?: ObserverSessionMetadata[];
+  worktreeDisplayTitles?: ObserverWorktreeDisplayTitle[];
   turnReadiness?: ObserverTurnReadiness[];
   providerHealth?: Record<string, ProviderHealth>;
 }) {
@@ -164,6 +166,7 @@ function build(overrides: {
     terminalTargets: overrides.terminals ?? [],
     harnessRuns: overrides.harnessRuns ?? [],
     sessionMetadata: overrides.sessionMetadata ?? [],
+    worktreeDisplayTitles: overrides.worktreeDisplayTitles ?? [],
     turnReadiness: overrides.turnReadiness ?? [],
   });
 }
@@ -256,6 +259,9 @@ describe("observer graph derivation", () => {
     const snapshot = build({
       projects: projects.slice(0, 1),
       worktrees: [retained],
+      worktreeDisplayTitles: [
+        { projectId: "web", worktreeId: retained.id, title: "retained title" },
+      ],
       sessionMetadata: [
         {
           id: "ses_older",
@@ -279,7 +285,8 @@ describe("observer graph derivation", () => {
       ],
     });
 
-    expect(snapshot.rows[0]?.agent).toBeUndefined();
+    expect(snapshot.rows[0]?.title).toBe("retained title");
+    expect(snapshot.rows[0]).not.toHaveProperty("agent");
     expect(snapshot.sessions).toEqual([
       expect.objectContaining({
         id: "ses_retained",
@@ -352,6 +359,9 @@ describe("observer graph derivation", () => {
       observedAt: generatedAt,
     });
     const observedTerminal = terminal("term_mixed", mixed.id, externalRun.run.id);
+    const worktreeDisplayTitles = [
+      { projectId: "web", worktreeId: mixed.id, title: "Canonical mixed workspace" },
+    ];
 
     const active = build({
       projects: projects.slice(0, 1),
@@ -359,6 +369,7 @@ describe("observer graph derivation", () => {
       terminals: [observedTerminal],
       harnessRuns: [externalRun],
       sessionMetadata: [retained],
+      worktreeDisplayTitles,
     });
     const inactive = build({
       projects: projects.slice(0, 1),
@@ -372,8 +383,11 @@ describe("observer graph derivation", () => {
         },
       ],
       sessionMetadata: [retained],
+      worktreeDisplayTitles,
     });
 
+    expect(active.rows[0]?.title).toBe("Canonical mixed workspace");
+    expect(active.sessions.every((session) => session.title === active.rows[0]?.title)).toBe(true);
     expect(active.sessions).toEqual([
       expect.objectContaining({ id: retained.id, origin: "station" }),
       expect.objectContaining({ id: externalRun.run.id, origin: "external" }),
