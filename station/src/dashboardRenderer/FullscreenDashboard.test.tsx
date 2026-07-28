@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { STATION_COLORS } from "../station/view/theme.js";
+import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardMouseEffects } from "./dashboardMouse.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 
@@ -51,18 +54,130 @@ describe("FullscreenDashboard mouse composition", () => {
     expect([...fixture.store.getState().collapsedProjectIds]).toEqual(["station"]);
   });
 
-  it("lets modal controls intercept a dashboard row beneath them", async () => {
+  it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {
     const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
     const setup = await render(fixture.store);
-    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+    const frame = setup.captureCharFrame();
+    const row = cellFor(frame, "docs-cleanup");
+    const titleAction = cellFor(frame, "[+]");
     await actOn(async () => {
       fixture.store.getState().handleKey({ input: "H" });
       await setup.flush();
+    });
+    await actOn(async () => {
+      await setup.mockMouse.moveTo(row.col, row.row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).not.toBe(
+      STATION_COLORS.hoverBackground,
+    );
+
+    await actOn(async () => {
+      await setup.mockMouse.moveTo(titleAction.col, titleAction.row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+
+    expect(spanHex(spanAtFrameCell(setup.captureSpans(), titleAction.row, titleAction.col))).toBe(
+      STATION_COLORS.gray,
+    );
+
+    await actOn(async () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
     });
 
-    expect(fixture.store.getState().screen).toEqual({ name: "help" });
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
     expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+  });
+
+  it("dismisses a bounded screen from the obscured title row", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    const titleAction = cellFor(setup.captureCharFrame(), "[+]");
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+
+    await actOn(() =>
+      setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT),
+    );
+
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+  });
+
+  it("dismisses outside a bounded screen while its inner surface still consumes clicks", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+    const help = cellFor(setup.captureCharFrame(), "station help");
+
+    await actOn(() => setup.mockMouse.click(help.col, help.row, MouseButtons.LEFT));
+    expect(fixture.store.getState().screen).toEqual({ name: "help" });
+
+    await actOn(() => setup.mockMouse.click(0, 0, MouseButtons.LEFT));
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("keeps controls inside a bounded screen interactive", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "W" });
+      await setup.flush();
+    });
+    const addWidget = cellFor(setup.captureCharFrame(), "[ + add widget ]");
+
+    await actOn(async () => {
+      await setup.mockMouse.moveTo(addWidget.col, addWidget.row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), addWidget.row, addWidget.col))).toBe(
+      STATION_COLORS.hoverBackground,
+    );
+
+    await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
+
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "widgetSettings",
+      focus: "picker",
+    });
+  });
+
+  it("omits click-away interception while choose-row screens select dashboard rows", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "X" });
+      await setup.flush();
+    });
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+
+    await actOn(async () => {
+      await setup.mockMouse.moveTo(row.col, row.row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).toBe(
+      STATION_COLORS.hoverBackground,
+    );
+
+    await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
+
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "removeWorktree",
+      step: "confirm",
+      rowId: "ses_wt_station_none",
+    });
   });
 
   it("scrolls when the wheel is used over a child row", async () => {
@@ -247,6 +362,14 @@ function cellFor(frame: string, needle: string): { col: number; row: number } {
     throw new Error(`Could not find ${JSON.stringify(needle)} in frame:\n${frame}`);
   }
   return { col, row };
+}
+
+function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
+  return span?.fg === undefined ? undefined : rgbToHex(span.fg);
+}
+
+function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
+  return span?.bg === undefined ? undefined : rgbToHex(span.bg);
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

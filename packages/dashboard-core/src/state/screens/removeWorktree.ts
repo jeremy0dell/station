@@ -14,18 +14,29 @@ import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
+type RemoveWorktreeScreen = Extract<TuiState["screen"], { name: "removeWorktree" }>;
+
+const removeWorktreeChooseSlotBehavior = {};
+const removeWorktreeDismissBehavior = { clickAway: cancelRemoveWorktree };
+
+export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreen) {
+  switch (screen.step) {
+    case "chooseSlot":
+      return removeWorktreeChooseSlotBehavior;
+    case "unavailable":
+    case "confirm":
+      return removeWorktreeDismissBehavior;
+  }
+  return assertNever(screen);
+}
+
 export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "removeWorktree") {
     return { state };
   }
 
   if (key.escape === true) {
-    return {
-      state: {
-        ...state,
-        screen: { name: "dashboard" },
-      },
-    };
+    return { state: cancelRemoveWorktree(state) };
   }
 
   if (state.screen.step === "chooseSlot") {
@@ -38,12 +49,7 @@ export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransi
     if (!isReturnKey(key)) {
       return { state };
     }
-    return {
-      state: {
-        ...state,
-        screen: { name: "dashboard" },
-      },
-    };
+    return { state: cancelRemoveWorktree(state) };
   }
 
   return handleConfirmKey(state, key);
@@ -106,12 +112,7 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
   const input = key.input.toLowerCase();
 
   if (input === "n" || key.escape === true || isReturnKey(key)) {
-    return {
-      state: {
-        ...state,
-        screen: { name: "dashboard" },
-      },
-    };
+    return { state: cancelRemoveWorktree(state) };
   }
 
   if (input !== "y") {
@@ -204,4 +205,12 @@ function removeWorktreeForceRequired(row: DashboardSessionRow, snapshot: Station
         session.worktreeId === row.worktree.id && isRunningAgentState(session.status.value),
     )
   );
+}
+
+function cancelRemoveWorktree(state: TuiState): TuiState {
+  return { ...state, screen: { name: "dashboard" } };
+}
+
+function assertNever(_value: never): never {
+  throw new Error("Unhandled Remove Worktree screen variant.");
 }

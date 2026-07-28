@@ -172,6 +172,18 @@ Pending rows remain inert; stale targets show bounded, deduplicated feedback. Pr
 toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
 modal surfaces intercept background clicks and scrolling.
 
+Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
+`TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
+cancellation. Shared composition uses the presence of that capability for both the viewport
+backdrop and background-hover suppression without knowing whether cancellation closes the screen,
+backs up one step, or clears nested state. Active-screen controls retain hover, and individual
+sheets continue swallowing inside input;
+non-primary buttons, mouse-up, and wheel input remain consumed without dismissing or reaching the
+dashboard. Remove, rename, and fork choose-row modes expose no click-away behavior so row clicks
+and hover keep selecting; search and the dashboard likewise remain unchanged. In native Station,
+the inner screen receives the click before the outer popup backdrop, so one click closes only the
+topmost safe surface.
+
 Native and standalone rendering expose the same project actions. Quick-session
 intent resolves the same project and default harness before terminal-specific
 execution: native Station hosts the session in a Station pane, while the

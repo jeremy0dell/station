@@ -33,6 +33,8 @@ type AddProjectInputIntent =
   | { type: "retry"; path: string }
   | { type: "transition"; action: AddProjectFlowAction };
 
+export const addProjectScreenBehavior = { clickAway: cancelAddProject };
+
 export function openAddProject(state: TuiState, input: CreateAddProjectFlowInput): TuiState {
   return reconcileAddProjectSelection(
     {
@@ -57,7 +59,7 @@ export function handleAddProjectKey(state: TuiState, key: TuiKey): TuiTransition
     case "none":
       return { state };
     case "close":
-      return { state: { ...state, screen: { name: "dashboard" } } };
+      return { state: closeAddProject(state) };
     case "retry":
       return {
         state,
@@ -66,6 +68,24 @@ export function handleAddProjectKey(state: TuiState, key: TuiKey): TuiTransition
     case "transition":
       return applyAddProjectAction(state, intent.action, dirname);
   }
+}
+
+function cancelAddProject(state: TuiState): TuiState {
+  if (state.screen.name !== "addProject") {
+    return state;
+  }
+  const flow = state.screen.flow;
+  if (flow.mode === "review" && flow.editingId !== undefined) {
+    return applyAddProjectAction(state, { type: "editIdCancel" }).state;
+  }
+  if (flow.mode === "choose" && (flow.filterMode || flow.filter.length > 0)) {
+    return applyAddProjectAction(state, { type: "filterClear" }).state;
+  }
+  return closeAddProject(state);
+}
+
+function closeAddProject(state: TuiState): TuiState {
+  return { ...state, screen: { name: "dashboard" } };
 }
 
 function addProjectIntentForInput(state: TuiState, key: TuiKey): AddProjectInputIntent {
