@@ -1,8 +1,8 @@
 // Layer conformance for the STATION dashboard registration: real normalized
 // byte sequences through the real keymap stack and input runtime, against
 // the real coordination store. Pins the stack semantics the spike plan
-// documents — reserved chords pierce the overlay layer, the overlay is
-// modal (every sequence consumed), dismiss intents close via the
+// documents — app-level exit/toggle chords pierce the overlay layer, pane
+// management stays disabled, dismiss intents close via the
 // coordination store, and terminal passthrough is untouched when the
 // overlay is down.
 import { describe, expect, it } from "bun:test";
@@ -13,7 +13,15 @@ import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { routeKey } from "./router.js";
-import { createStationKeymap, OVERLAY_TOGGLE_LEGACY, STATION_EXIT_LEGACY } from "./keymap/stationBindings.js";
+import {
+  CLOSE_PANE_LEGACY,
+  createStationKeymap,
+  FOCUS_NEXT_LEGACY,
+  OVERLAY_TOGGLE_LEGACY,
+  SPLIT_BELOW_LEGACY,
+  SPLIT_RIGHT_LEGACY,
+  STATION_EXIT_LEGACY,
+} from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
 function makeViewStore(): StoreApi<TuiStore> {
@@ -85,7 +93,7 @@ describe("station overlay layer in the keymap stack", () => {
     });
   });
 
-  it("lets reserved chords pierce the dashboard layer from any mode", () => {
+  it("lets exit and toggle chords pierce the dashboard layer from any mode", () => {
     const view = makeViewStore();
     const station = makeStationStore(true);
     const keymap = createStationKeymap(view);
@@ -103,6 +111,21 @@ describe("station overlay layer in the keymap stack", () => {
     });
     // The search mode never saw the chords as text.
     expect(view.getState().screen).toMatchObject({ name: "search", value: "" });
+  });
+
+  it("swallows native pane commands while the dashboard is open", () => {
+    const view = makeViewStore();
+    const station = makeStationStore(true);
+    const keymap = createStationKeymap(view);
+
+    for (const key of [
+      SPLIT_RIGHT_LEGACY,
+      SPLIT_BELOW_LEGACY,
+      FOCUS_NEXT_LEGACY,
+      CLOSE_PANE_LEGACY,
+    ]) {
+      expect(routeKey(key, station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    }
   });
 
   it("swallows unknown escape sequences without polluting text inputs", () => {

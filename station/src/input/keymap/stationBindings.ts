@@ -12,6 +12,7 @@ import {
   paneLaunchNewSessionOutcome,
   type MouseBindings,
   type RouteOutcome,
+  type StationCommandId,
 } from "../router.js";
 import {
   isPrimaryMouseEvent,
@@ -45,6 +46,16 @@ function stationOverlayToggleOutcome(state: StationState): RouteOutcome {
     return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
   }
   return { kind: "overlay-open", overlayId: STATION_OVERLAY_ID };
+}
+
+function paneManagementCommandOutcome(
+  state: StationState,
+  commandId: StationCommandId,
+): RouteOutcome {
+  if (state.input.activeOverlay === STATION_OVERLAY_ID) {
+    return { kind: "swallowed" };
+  }
+  return { kind: "command", commandId };
 }
 
 /**
@@ -190,28 +201,27 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
       reserved: true,
       action: stationOverlayToggleOutcome,
     },
-    // Reserved so they pierce the terminal-passthrough catch-all (a pane is
-    // focused most of the time) and the overlay swallow, the same way Ctrl-Q /
-    // Ctrl-O do. The commands resolve the active pane at execution time.
+    // Pane chords stay reserved to bypass terminal passthrough, but the dashboard
+    // owns the full canvas and must not mutate the hidden native pane layout.
     {
       keys: [SPLIT_RIGHT_LEGACY],
       reserved: true,
-      action: () => ({ kind: "command", commandId: "station.splitRight" }),
+      action: (state) => paneManagementCommandOutcome(state, "station.splitRight"),
     },
     {
       keys: [SPLIT_BELOW_LEGACY],
       reserved: true,
-      action: () => ({ kind: "command", commandId: "station.splitBelow" }),
+      action: (state) => paneManagementCommandOutcome(state, "station.splitBelow"),
     },
     {
       keys: [FOCUS_NEXT_LEGACY],
       reserved: true,
-      action: () => ({ kind: "command", commandId: "station.focusNextPane" }),
+      action: (state) => paneManagementCommandOutcome(state, "station.focusNextPane"),
     },
     {
       keys: [CLOSE_PANE_LEGACY],
       reserved: true,
-      action: () => ({ kind: "command", commandId: "station.closeActivePane" }),
+      action: (state) => paneManagementCommandOutcome(state, "station.closeActivePane"),
     },
   ],
 };

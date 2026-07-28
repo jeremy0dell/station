@@ -194,7 +194,7 @@ describe("station input end to end", () => {
     await waitFor(() => station.scripted.helpers.writes.join("").includes("ok"));
   });
 
-  it("reserved chords stay live while the overlay is open", async () => {
+  it("Ctrl-Q stays live while the overlay is open", async () => {
     const station = await renderScripted(false);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
