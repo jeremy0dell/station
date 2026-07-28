@@ -117,6 +117,15 @@ try {
     "restoring socket access did not reconnect to the original devbox Observer",
   );
 
+  devbox(["restart"], "restart");
+  const restartedStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
+    label: "restarted isolated observer status",
+  });
+  assert(
+    JSON.parse(restartedStatus.stdout).health?.pid !== originalPid,
+    "devbox restart did not replace the isolated Observer",
+  );
+
   // stop removes the isolated observer + host sockets (teardown scoped to .dev-state).
   devbox(["stop"], "stop");
   assert(!existsSync(observerSock), `stop did not remove ${observerSock}`);
