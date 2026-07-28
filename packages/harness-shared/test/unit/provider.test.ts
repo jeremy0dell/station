@@ -184,11 +184,11 @@ describe("createTerminalBoundHarnessProvider", () => {
         installed: false,
         missing: ["station-codex-hook.sh"],
         message: "Another Station runtime owns the hook.",
-        ownership: { status: "legacy-unknown", requested },
+        ownership: { status: "unknown-owner", requested },
       }),
     ).toMatchObject({
       provider: "codex",
-      ownership: { status: "legacy-unknown", requested },
+      ownership: { status: "unknown-owner", requested },
     });
   });
 });

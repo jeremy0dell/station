@@ -9,7 +9,6 @@ import {
   expectedProviderHookScript,
   installConfigScriptHook,
   type ProviderHookScriptOptions,
-  providerHookScriptLauncher,
   providerHookScriptOptions,
 } from "@station/runtime";
 import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
@@ -225,14 +224,12 @@ export async function planClaudeHooks(
   const scriptBefore = await fileOps.readOptionalFile(hookScriptPath);
   const settingsChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== script;
-  const legacyLauncher = providerHookScriptLauncher(scriptBefore, "claude");
   const ownership =
     options.artifactOwner === undefined
       ? undefined
       : classifyProviderHookArtifactOwnership({
           contents: scriptBefore,
           requested: options.artifactOwner,
-          ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
         });
   const { cleanup } = await buildUserSettingsCleanup(userSettingsPath);
 
@@ -311,14 +308,12 @@ export async function uninstallClaudeHooks(
   const hookScriptPath = resolveClaudeHookScriptPath(options);
   const before = await fileOps.readOptionalFile(settingsPath);
   const currentScript = await fileOps.readOptionalFile(hookScriptPath);
-  const legacyLauncher = providerHookScriptLauncher(currentScript, "claude");
   assertProviderHookArtifactOwnership({
     provider: "claude",
     action: "uninstall",
     artifactPath: hookScriptPath,
     contents: currentScript,
     ...(options.artifactOwner === undefined ? {} : { requested: options.artifactOwner }),
-    ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
   const { cleanup, document: cleanedUserDocument } =
@@ -385,7 +380,7 @@ export async function doctorClaudeHooks(
 
   const installed = !plan.settingsChanged && !plan.scriptChanged && !plan.artifactInvalid;
   const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
   const result: ClaudeHookDoctorResult = {
     provider: "claude",
     settingsPath: plan.settingsPath,

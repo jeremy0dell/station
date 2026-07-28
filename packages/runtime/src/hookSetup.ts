@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   type ProviderHookArtifactOwner,
   ProviderHookArtifactOwnerSchema,
@@ -48,8 +48,12 @@ export class ProviderHookArtifactOwnershipError extends Error {
   readonly tag = "ProviderHookArtifactOwnershipError";
   readonly code = "PROVIDER_HOOK_OWNERSHIP_CONFLICT";
   readonly provider: ProviderId;
-  readonly hint: string;
-  readonly ownership: ProviderHookArtifactOwnership;
+  readonly action: "install" | "uninstall";
+  readonly artifactPath: string;
+  readonly ownership: Extract<
+    ProviderHookArtifactOwnership,
+    { status: "different-owner" | "unknown-owner" }
+  >;
 
   constructor(input: {
     provider: ProviderId;
@@ -57,28 +61,14 @@ export class ProviderHookArtifactOwnershipError extends Error {
     artifactPath: string;
     ownership: Extract<
       ProviderHookArtifactOwnership,
-      { status: "different-owner" | "legacy-unknown" }
+      { status: "different-owner" | "unknown-owner" }
     >;
   }) {
-    const requested = input.ownership.requested;
-    const requestedOwner = `${requested.runtimeKind} ${requested.version} build ${requested.buildIdentity} via ${requested.launcher}`;
-    const currentOwner =
-      input.ownership.status === "legacy-unknown"
-        ? "unknown because the existing ownership marker is missing or invalid"
-        : input.ownership.current === undefined
-          ? `legacy artifact invoking ${input.ownership.currentLauncher}`
-          : `${input.ownership.current.runtimeKind} ${input.ownership.current.version} build ${input.ownership.current.buildIdentity} via ${input.ownership.current.launcher}`;
-    const takeover = `stn hooks ${input.action} ${input.provider} --yes --takeover`;
-    const repair =
-      input.ownership.status === "different-owner"
-        ? ` To perform this action as the current owner, run ${shellQuote(resolve(dirname(input.ownership.currentLauncher), "stn"))} hooks ${input.action} ${input.provider} --yes.`
-        : "";
-    super(
-      `Refusing to ${input.action} ${input.provider} hooks because ${input.artifactPath} belongs to another Station runtime. Current owner: ${currentOwner}. Requested owner: ${requestedOwner}.`,
-    );
+    super(`Provider hook artifact ownership conflicts at ${input.artifactPath}.`);
     this.name = this.tag;
     this.provider = input.provider;
-    this.hint = `Run ${takeover} only to transfer ownership.${repair}`;
+    this.action = input.action;
+    this.artifactPath = input.artifactPath;
     this.ownership = input.ownership;
   }
 }
@@ -126,34 +116,30 @@ export function parseProviderHookOwnerMarker(
  * POLICY
  *
  * Uses the canonical launcher path as the durable owner key so upgrades at one installed
- * location remain automatic while source and installed runtimes cannot replace each other.
+ * location remain automatic. Only a valid marker establishes ownership; unmarked or malformed
+ * artifacts require explicit takeover.
  */
 export function classifyProviderHookArtifactOwnership(input: {
   contents: string;
   requested: ProviderHookArtifactOwner;
-  legacyLauncher?: string;
 }): ProviderHookArtifactOwnership {
   if (input.contents.trim().length === 0) {
     return { status: "absent", requested: input.requested };
   }
   const current = parseProviderHookOwnerMarker(input.contents);
-  if (current === undefined && input.contents.includes(PROVIDER_HOOK_OWNER_MARKER)) {
-    return { status: "legacy-unknown", requested: input.requested };
+  if (current === undefined) {
+    return { status: "unknown-owner", requested: input.requested };
   }
-  const currentLauncher = current?.launcher ?? input.legacyLauncher;
-  if (currentLauncher === undefined) {
-    return { status: "legacy-unknown", requested: input.requested };
-  }
+  const currentLauncher = current.launcher;
   if (resolve(currentLauncher) === resolve(input.requested.launcher)) {
     return { status: "same-owner", requested: input.requested, currentLauncher };
   }
-  const ownership: ProviderHookArtifactOwnership = {
+  return {
     status: "different-owner",
     requested: input.requested,
     currentLauncher,
+    current,
   };
-  if (current !== undefined) ownership.current = current;
-  return ownership;
 }
 
 export function assertProviderHookArtifactOwnership(input: {
@@ -162,18 +148,16 @@ export function assertProviderHookArtifactOwnership(input: {
   artifactPath: string;
   contents: string;
   requested?: ProviderHookArtifactOwner;
-  legacyLauncher?: string;
   takeover?: boolean;
 }): ProviderHookArtifactOwnership | undefined {
   if (input.requested === undefined) return undefined;
   const ownership = classifyProviderHookArtifactOwnership({
     contents: input.contents,
     requested: input.requested,
-    ...(input.legacyLauncher === undefined ? {} : { legacyLauncher: input.legacyLauncher }),
   });
   if (
     input.takeover !== true &&
-    (ownership.status === "different-owner" || ownership.status === "legacy-unknown")
+    (ownership.status === "different-owner" || ownership.status === "unknown-owner")
   ) {
     throw new ProviderHookArtifactOwnershipError({
       provider: input.provider,
@@ -183,17 +167,6 @@ export function assertProviderHookArtifactOwnership(input: {
     });
   }
   return ownership;
-}
-
-export function providerHookScriptLauncher(script: string, provider: string): string | undefined {
-  const command = script
-    .split("\n")
-    .find((line) => line.includes(`${shellQuote(provider)} > /dev/null`));
-  return command === undefined ? undefined : providerHookCommandLauncher(command);
-}
-
-export function providerHookCommandLauncher(command: string): string | undefined {
-  return firstShellWord(command);
 }
 
 export type ConfigScriptHookPlan<Document, EventName extends string> = {
@@ -469,7 +442,7 @@ export async function planConfigScriptHook<Document, EventName extends string>(i
   expectedCommands: (hookScriptPath: string) => Record<EventName, string>;
   expectedScript: string;
   extraChanged?: boolean;
-  provider?: string;
+  provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
 }): Promise<ConfigScriptHookPlan<Document, EventName>> {
   const before = await input.readOptionalFile(input.configPath);
@@ -481,17 +454,12 @@ export async function planConfigScriptHook<Document, EventName extends string>(i
   const configChanged = before.trim() !== after.trim();
   const scriptChanged = scriptBefore !== input.expectedScript;
   const changed = configChanged || scriptChanged || input.extraChanged === true;
-  const legacyLauncher =
-    input.provider === undefined
-      ? undefined
-      : providerHookScriptLauncher(scriptBefore, input.provider);
   const ownership =
     input.provider === undefined || input.artifactOwner === undefined
       ? undefined
       : classifyProviderHookArtifactOwnership({
           contents: scriptBefore,
           requested: input.artifactOwner,
-          ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
         });
 
   const result: ConfigScriptHookPlan<Document, EventName> = {
@@ -516,20 +484,18 @@ export async function installConfigScriptHook(input: {
   configChanged: boolean;
   scriptChanged: boolean;
   fileOps: HookSetupFileOps;
-  provider?: string;
+  provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
 }): Promise<string | undefined> {
   if (input.provider !== undefined) {
     const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
-    const legacyLauncher = providerHookScriptLauncher(currentScript, input.provider);
     assertProviderHookArtifactOwnership({
       provider: input.provider,
       action: "install",
       artifactPath: input.hookScriptPath,
       contents: currentScript,
       ...(input.artifactOwner === undefined ? {} : { requested: input.artifactOwner }),
-      ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
       ...(input.takeover === undefined ? {} : { takeover: input.takeover }),
     });
   }
@@ -555,20 +521,18 @@ export async function uninstallConfigScriptHook<Document, EventName extends stri
   documentContainsCommand: (document: Document, command: string) => boolean;
   expectedCommands: (hookScriptPath: string) => Record<EventName, string>;
   fileOps: HookSetupFileOps;
-  provider?: string;
+  provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
 }): Promise<ConfigScriptHookUninstallPlan<Document, EventName>> {
   if (input.provider !== undefined) {
     const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
-    const legacyLauncher = providerHookScriptLauncher(currentScript, input.provider);
     assertProviderHookArtifactOwnership({
       provider: input.provider,
       action: "uninstall",
       artifactPath: input.hookScriptPath,
       contents: currentScript,
       ...(input.artifactOwner === undefined ? {} : { requested: input.artifactOwner }),
-      ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
       ...(input.takeover === undefined ? {} : { takeover: input.takeover }),
     });
   }
@@ -625,22 +589,4 @@ export function commandLine(args: readonly string[]): string {
 
 export function shellQuote(value: string): string {
   return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function firstShellWord(command: string): string | undefined {
-  if (!command.startsWith("'")) return command.match(/^[^\s]+/u)?.[0];
-  let result = "";
-  let index = 1;
-  while (index < command.length) {
-    const end = command.indexOf("'", index);
-    if (end < 0) return undefined;
-    result += command.slice(index, end);
-    if (command.slice(end, end + 4) === "'\\''") {
-      result += "'";
-      index = end + 4;
-      continue;
-    }
-    return command[end + 1] === " " ? result : undefined;
-  }
-  return undefined;
 }

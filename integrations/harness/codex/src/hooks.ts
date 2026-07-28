@@ -310,7 +310,7 @@ export async function doctorCodexHooks(
 
   const installed = plan.missing.length === 0 && !plan.scriptChanged;
   const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
   const result: CodexHookDoctorResult = {
     provider: "codex",
     configPath: plan.configPath,

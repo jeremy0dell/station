@@ -99,34 +99,69 @@ describe("Worktrunk hook setup", () => {
     });
   });
 
-  it("repairs exact legacy bare commands to the canonical absolute launcher", async () => {
+  it("requires takeover before replacing unmarked commands", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-wt-hooks-"));
     const configPath = join(root, "config.toml");
     await installWorktrunkHooks({
       worktrunkConfigPath: configPath,
       expectation: hookExpectation(),
     });
+    const owner = artifactOwner("/opt/station/stn-ingress", "compiled", "a");
+    const expectation = hookExpectation(owner.launcher, owner);
+    const unmarked = await readFile(configPath, "utf8");
 
     await expect(
       doctorWorktrunkHooks({
         worktrunkConfigPath: configPath,
-        expectation: hookExpectation("/opt/station/stn-ingress"),
+        expectation,
       }),
-    ).resolves.toMatchObject({ status: "warn", installed: false });
-
-    await installWorktrunkHooks({
-      worktrunkConfigPath: configPath,
-      expectation: hookExpectation("/opt/station/stn-ingress"),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "unknown-owner", requested: owner },
     });
+
+    await expect(
+      installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(configPath, "utf8")).resolves.toBe(unmarked);
+    await installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation, takeover: true });
     const contents = await readFile(configPath, "utf8");
     expect(contents).toContain("/opt/station/stn-ingress");
     expect(contents).not.toMatch(/= "stn-ingress --socket/);
     await expect(
-      doctorWorktrunkHooks({
-        worktrunkConfigPath: configPath,
-        expectation: hookExpectation("/opt/station/stn-ingress"),
-      }),
+      doctorWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
     ).resolves.toMatchObject({ status: "ok", installed: true });
+  });
+
+  it("refuses an occupied Station slot without removing unrelated Worktrunk commands", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-hooks-reserved-slot-"));
+    const configPath = join(root, "config.toml");
+    const owner = artifactOwner("/source/bin/stn-ingress", "source", "a");
+    const expectation = hookExpectation(owner.launcher, owner);
+    const before = '[post-create]\nstation = "echo user"\nkeep = "echo keep"\n';
+    await writeFile(configPath, before, "utf8");
+
+    await expect(
+      installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
+    ).rejects.toMatchObject({
+      code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
+      ownership: { status: "unknown-owner" },
+    });
+    await expect(
+      uninstallWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(configPath, "utf8")).resolves.toBe(before);
+
+    await installWorktrunkHooks({
+      worktrunkConfigPath: configPath,
+      expectation,
+      takeover: true,
+    });
+    const after = await readFile(configPath, "utf8");
+    expect(after).toContain('keep = "echo keep"');
+    expect(after).not.toContain('station = "echo user"');
+    expect(after).toContain("station-provider-artifact-owner:v1:");
   });
 
   it("requires takeover before replacing or removing another runtime's lifecycle hooks", async () => {
@@ -191,7 +226,7 @@ describe("Worktrunk hook setup", () => {
     ).resolves.toMatchObject({
       status: "warn",
       installed: false,
-      ownership: { status: "legacy-unknown", requested: owner },
+      ownership: { status: "unknown-owner", requested: owner },
     });
     await expect(
       installWorktrunkHooks({ worktrunkConfigPath: configPath, expectation }),

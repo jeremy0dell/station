@@ -1,7 +1,11 @@
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { resolveObserverPaths, type StationConfig } from "@station/config";
-import type { ProviderHookArtifactOwner } from "@station/contracts";
-import { resolveExecutablePath } from "@station/runtime";
+import type { ProviderHookArtifactOwner, ProviderId, SafeError } from "@station/contracts";
+import {
+  ProviderHookArtifactOwnershipError,
+  resolveExecutablePath,
+  shellQuote,
+} from "@station/runtime";
 import type { CliEnv } from "../env.js";
 
 type CommonHookOptions = {
@@ -18,7 +22,7 @@ type CommonHookOptions = {
 };
 
 type ProviderHooksAdapter<PlanOptions extends CommonHookOptions> = {
-  provider: string;
+  provider: ProviderId;
   plan: (options: PlanOptions) => Promise<unknown>;
   install: (options: PlanOptions) => Promise<unknown>;
   uninstall: (options: PlanOptions) => Promise<unknown>;
@@ -66,7 +70,7 @@ export type ProviderHooksCommandResult = unknown;
 
 export function parseHookFlags(
   args: string[],
-  provider: string,
+  provider: ProviderId,
   spec: ProviderHookFlagSpec,
 ): ParsedHookFlags {
   const flags: ParsedHookFlags = { yes: false, takeover: false };
@@ -135,7 +139,7 @@ export function buildCommonHookOptions(context: HookCommandContext): CommonHookO
 
 export function assertHookConfirmed(
   yes: boolean,
-  provider: string,
+  provider: ProviderId,
   action: "install" | "uninstall",
 ): void {
   if (!yes) {
@@ -157,22 +161,29 @@ export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>
     const hookOptions = adapter.buildOptions(flags, context);
     if (flags.takeover) hookOptions.takeover = true;
 
-    if (action === "plan") {
-      return adapter.plan(hookOptions);
-    }
-    if (action === "install") {
-      assertHookConfirmed(flags.yes, adapter.provider, "install");
-      return adapter.install(hookOptions);
-    }
-    if (action === "uninstall") {
-      assertHookConfirmed(flags.yes, adapter.provider, "uninstall");
-      return adapter.uninstall(hookOptions);
-    }
-    if (action === "doctor") {
-      return adapter.doctor({
-        ...hookOptions,
-        enabled: adapter.isEnabled(options.config),
-      });
+    try {
+      if (action === "plan") {
+        return await adapter.plan(hookOptions);
+      }
+      if (action === "install") {
+        assertHookConfirmed(flags.yes, adapter.provider, "install");
+        return await adapter.install(hookOptions);
+      }
+      if (action === "uninstall") {
+        assertHookConfirmed(flags.yes, adapter.provider, "uninstall");
+        return await adapter.uninstall(hookOptions);
+      }
+      if (action === "doctor") {
+        return await adapter.doctor({
+          ...hookOptions,
+          enabled: adapter.isEnabled(options.config),
+        });
+      }
+    } catch (error) {
+      if (error instanceof ProviderHookArtifactOwnershipError) {
+        throw providerHookOwnershipSafeError(error);
+      }
+      throw error;
     }
 
     throw new Error(
@@ -184,7 +195,7 @@ export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>
 async function resolveHookBinOwnership(
   flags: ParsedHookFlags,
   context: ProviderHooksCommandOptions,
-  provider: string,
+  provider: ProviderId,
 ): Promise<ProviderHooksCommandOptions> {
   if (flags.hookBin === undefined || context.providerHookArtifactOwner === undefined) {
     return context;
@@ -203,5 +214,26 @@ async function resolveHookBinOwnership(
       ...context.providerHookArtifactOwner,
       launcher: flags.hookBin,
     },
+  };
+}
+
+function providerHookOwnershipSafeError(error: ProviderHookArtifactOwnershipError): SafeError {
+  const requested = error.ownership.requested;
+  const requestedOwner = `${requested.runtimeKind} ${requested.version} build ${requested.buildIdentity} via ${JSON.stringify(requested.launcher)}`;
+  let currentOwner = "unknown because the existing ownership marker is missing or invalid";
+  let reason = "has no valid Station ownership marker";
+  let repair = "";
+  if (error.ownership.status === "different-owner") {
+    const current = error.ownership.current;
+    currentOwner = `${current.runtimeKind} ${current.version} build ${current.buildIdentity} via ${JSON.stringify(current.launcher)}`;
+    reason = "is owned by another Station runtime";
+    repair = ` To perform this action as the current owner, run ${shellQuote(resolve(dirname(current.launcher), "stn"))} hooks ${error.action} ${error.provider} --yes.`;
+  }
+  return {
+    tag: error.tag,
+    code: error.code,
+    provider: error.provider,
+    message: `Refusing to ${error.action} ${error.provider} hooks because ${JSON.stringify(error.artifactPath)} ${reason}. Current owner: ${currentOwner}. Requested owner: ${requestedOwner}.`,
+    hint: `Run stn hooks ${error.action} ${error.provider} --yes --takeover only to transfer ownership.${repair}`,
   };
 }

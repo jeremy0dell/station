@@ -134,7 +134,7 @@ describe("OpenCode plugin setup", () => {
     await expect(readFile(pluginPath, "utf8")).resolves.toContain("UserPlugin");
   });
 
-  it("adopts an exact legacy plugin but requires takeover across runtime owners", async () => {
+  it("requires takeover for an exact unmarked plugin and across runtime owners", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-opencode-owner-"));
     const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
     const installedOwner = artifactOwner("/installed/stn-ingress", "compiled", "a");
@@ -142,7 +142,17 @@ describe("OpenCode plugin setup", () => {
     await mkdir(join(root, "opencode", "plugins"), { recursive: true });
     await writeFile(pluginPath, expectedOpenCodePluginScript(), "utf8");
 
-    await installOpenCodePlugin({ pluginPath, artifactOwner: installedOwner });
+    await expect(
+      doctorOpenCodePlugin({ pluginPath, artifactOwner: installedOwner, enabled: true }),
+    ).resolves.toMatchObject({
+      status: "warn",
+      installed: false,
+      ownership: { status: "unknown-owner", requested: installedOwner },
+    });
+    await expect(
+      installOpenCodePlugin({ pluginPath, artifactOwner: installedOwner }),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await installOpenCodePlugin({ pluginPath, artifactOwner: installedOwner, takeover: true });
     const installedPlugin = await readFile(pluginPath, "utf8");
     await expect(
       installOpenCodePlugin({ pluginPath, artifactOwner: sourceOwner }),
@@ -181,28 +191,28 @@ describe("OpenCode plugin setup", () => {
     ).resolves.toMatchObject({ status: "ok", ownership: { status: "same-owner" } });
   });
 
-  it("requires takeover for a changed legacy Station plugin without creating a backup", async () => {
-    const root = await mkdtemp(join(tmpdir(), "station-opencode-legacy-owner-"));
+  it("requires takeover for a changed unmarked Station plugin without creating a backup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-unknown-owner-"));
     const pluginDir = join(root, "opencode", "plugins");
     const pluginPath = join(pluginDir, "station-agent-state.js");
     const owner = artifactOwner("/source/bin/stn-ingress", "source", "a");
     await mkdir(pluginDir, { recursive: true });
-    const changedLegacy = `${expectedOpenCodePluginScript()}\n// local change\n`;
-    await writeFile(pluginPath, changedLegacy, "utf8");
+    const changedUnmarked = `${expectedOpenCodePluginScript()}\n// local change\n`;
+    await writeFile(pluginPath, changedUnmarked, "utf8");
 
     await expect(
       doctorOpenCodePlugin({ pluginPath, artifactOwner: owner, enabled: true }),
     ).resolves.toMatchObject({
       status: "warn",
       installed: false,
-      ownership: { status: "legacy-unknown", requested: owner },
+      ownership: { status: "unknown-owner", requested: owner },
     });
     await expect(installOpenCodePlugin({ pluginPath, artifactOwner: owner })).rejects.toMatchObject(
       {
         code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
       },
     );
-    await expect(readFile(pluginPath, "utf8")).resolves.toBe(changedLegacy);
+    await expect(readFile(pluginPath, "utf8")).resolves.toBe(changedUnmarked);
     expect((await readdir(pluginDir)).some((name) => name.includes(".bak"))).toBe(false);
 
     await installOpenCodePlugin({ pluginPath, artifactOwner: owner, takeover: true });

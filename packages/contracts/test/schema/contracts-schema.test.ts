@@ -116,8 +116,21 @@ describe("contract schemas", () => {
     );
     expectFails(
       ProviderHookArtifactOwnershipSchema,
+      { status: "different-owner", requested, currentLauncher: current.launcher },
+      "different ownership without current owner provenance",
+    );
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
       { status: "absent", requested, extra: true },
       "ownership with an unknown field",
+    );
+    expect(
+      ProviderHookArtifactOwnershipSchema.parse({ status: "unknown-owner", requested }),
+    ).toEqual({ status: "unknown-owner", requested });
+    expectFails(
+      ProviderHookArtifactOwnershipSchema,
+      { status: "legacy-unknown", requested },
+      "removed legacy ownership status",
     );
   });
 

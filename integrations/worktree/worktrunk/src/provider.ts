@@ -220,7 +220,7 @@ export class WorktrunkProvider implements WorktreeProvider {
           tag: "WorktrunkHookSetupError",
           code:
             result.ownership?.status === "different-owner" ||
-            result.ownership?.status === "legacy-unknown"
+            result.ownership?.status === "unknown-owner"
               ? "WORKTRUNK_HOOK_OWNERSHIP_CONFLICT"
               : "WORKTRUNK_HOOKS_MISSING",
           message: result.message,

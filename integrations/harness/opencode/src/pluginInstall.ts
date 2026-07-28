@@ -130,7 +130,7 @@ export async function doctorOpenCodePlugin(
   const plan = await planOpenCodePlugin(options);
   const installed = plan.before.includes(OPENCODE_STATION_PLUGIN_MARKER);
   const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
   if (!installed && options.enabled === true) {
     return {
       provider: "opencode",
@@ -396,11 +396,9 @@ function openCodePluginOwnership(
   options: OpenCodePluginPlanOptions,
 ): ProviderHookArtifactOwnership | undefined {
   if (options.artifactOwner === undefined) return undefined;
-  const legacy = expectedOpenCodePluginScript(withoutOwnership(options));
   return classifyProviderHookArtifactOwnership({
     contents,
     requested: options.artifactOwner,
-    ...(contents === legacy ? { legacyLauncher: options.artifactOwner.launcher } : {}),
   });
 }
 
@@ -410,23 +408,12 @@ function assertOpenCodePluginOwnership(
   contents: string,
   options: OpenCodePluginPlanOptions,
 ): void {
-  const legacy = expectedOpenCodePluginScript(withoutOwnership(options));
   assertProviderHookArtifactOwnership({
     provider: "opencode",
     action,
     artifactPath: pluginPath,
     contents,
     ...(options.artifactOwner === undefined ? {} : { requested: options.artifactOwner }),
-    ...(contents === legacy && options.artifactOwner !== undefined
-      ? { legacyLauncher: options.artifactOwner.launcher }
-      : {}),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
-}
-
-function withoutOwnership(options: OpenCodePluginPlanOptions): OpenCodePluginPlanOptions {
-  const legacyOptions = { ...options };
-  delete legacyOptions.artifactOwner;
-  delete legacyOptions.takeover;
-  return legacyOptions;
 }

@@ -234,12 +234,12 @@ export const ProviderHookArtifactOwnershipSchema = z.discriminatedUnion("status"
       status: z.literal("different-owner"),
       requested: ProviderHookArtifactOwnerSchema,
       currentLauncher: providerHookAbsolutePathSchema,
-      current: ProviderHookArtifactOwnerSchema.optional(),
+      current: ProviderHookArtifactOwnerSchema,
     })
     .strict(),
   z
     .object({
-      status: z.literal("legacy-unknown"),
+      status: z.literal("unknown-owner"),
       requested: ProviderHookArtifactOwnerSchema,
     })
     .strict(),

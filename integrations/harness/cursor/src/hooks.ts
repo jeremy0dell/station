@@ -12,7 +12,6 @@ import {
   installConfigScriptHook,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
-  providerHookScriptLauncher,
   providerHookScriptOptions,
   providerHookScriptRoutesByStationEnv,
   uninstallConfigScriptHook,
@@ -150,17 +149,15 @@ async function sharedGeneratedHookPlan(
     return undefined;
   }
 
-  const legacyLauncher = providerHookScriptLauncher(scriptBefore, "cursor");
   const ownership =
     options.artifactOwner === undefined
       ? undefined
       : classifyProviderHookArtifactOwnership({
           contents: scriptBefore,
           requested: options.artifactOwner,
-          ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
         });
   const ownershipConflict =
-    ownership?.status === "different-owner" || ownership?.status === "legacy-unknown";
+    ownership?.status === "different-owner" || ownership?.status === "unknown-owner";
 
   return {
     provider: "cursor",
@@ -214,14 +211,12 @@ async function assertConfiguredCursorHookOwnership(
     return;
   }
   const currentScript = await fileOps.readOptionalFile(currentHookScriptPath);
-  const legacyLauncher = providerHookScriptLauncher(currentScript, "cursor");
   assertProviderHookArtifactOwnership({
     provider: "cursor",
     action: "install",
     artifactPath: currentHookScriptPath,
     contents: currentScript,
     requested: options.artifactOwner,
-    ...(legacyLauncher === undefined ? {} : { legacyLauncher }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
 }
@@ -351,7 +346,7 @@ export async function doctorCursorHooks(
 
   const installed = plan.missing.length === 0 && !plan.configChanged && !plan.scriptChanged;
   const ownershipConflict =
-    plan.ownership?.status === "different-owner" || plan.ownership?.status === "legacy-unknown";
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
   if (!installed) {
     const shared = await sharedGeneratedHookPlan(plan.before, options);
     if (shared !== undefined) {

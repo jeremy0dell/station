@@ -18,7 +18,6 @@ import {
   providerHookCommandArgs,
   providerHookCommandLine,
   providerHookOwnerMarker,
-  providerHookScriptLauncher,
   providerHookScriptOptions,
   providerHookScriptRoutesByStationEnv,
   shellQuote,
@@ -187,7 +186,7 @@ describe("runtime hookSetup", () => {
       expect(script).toContain("SPOOL_DIR_ARG=(--spool-dir /tmp/stale/spool/hooks)");
     });
 
-    it("embeds and recovers strict artifact ownership without changing the command", () => {
+    it("embeds and classifies strict artifact ownership without changing the command", () => {
       const owner = providerHookArtifactOwner("/opt/station/bin/stn-ingress", {
         version: "0.7.1",
         compiled: true,
@@ -199,7 +198,6 @@ describe("runtime hookSetup", () => {
       });
 
       expect(script).toContain(`# ${providerHookOwnerMarker(owner)}`);
-      expect(providerHookScriptLauncher(script, "codex")).toBe(owner.launcher);
       expect(classifyProviderHookArtifactOwnership({ contents: script, requested: owner })).toEqual(
         {
           status: "same-owner",
@@ -209,7 +207,7 @@ describe("runtime hookSetup", () => {
       );
     });
 
-    it("classifies absent, different, and unknown legacy artifacts", () => {
+    it("classifies absent, different, and unknown-owner artifacts", () => {
       const requested = providerHookArtifactOwner("/source/bin/stn-ingress", {
         version: "0.0.0",
         compiled: false,
@@ -232,14 +230,13 @@ describe("runtime hookSetup", () => {
       expect(
         classifyProviderHookArtifactOwnership({ contents: "# old generated hook\n", requested })
           .status,
-      ).toBe("legacy-unknown");
+      ).toBe("unknown-owner");
       expect(
         classifyProviderHookArtifactOwnership({
           contents: `# ${PROVIDER_HOOK_OWNER_MARKER}malformed\n/source/bin/stn-ingress codex`,
           requested,
-          legacyLauncher: requested.launcher,
         }).status,
-      ).toBe("legacy-unknown");
+      ).toBe("unknown-owner");
       expect(() =>
         assertProviderHookArtifactOwnership({
           provider: "codex",
@@ -250,7 +247,9 @@ describe("runtime hookSetup", () => {
         }),
       ).toThrowError(
         expect.objectContaining({
-          hint: expect.stringContaining("stn hooks install codex --yes --takeover"),
+          action: "install",
+          artifactPath: "/shared/hook.sh",
+          ownership: expect.objectContaining({ status: "different-owner" }),
         }),
       );
     });
@@ -279,7 +278,7 @@ describe("runtime hookSetup", () => {
       });
     });
 
-    it("adopts legacy generated scripts only when their launcher matches", () => {
+    it("requires takeover for an unmarked generated script", () => {
       const requested = providerHookArtifactOwner("/source path/bin/stn-ingress", {
         version: "0.0.0",
         compiled: false,
@@ -289,14 +288,21 @@ describe("runtime hookSetup", () => {
         provider: "claude",
         options: { hookBin: requested.launcher },
       });
-      expect(providerHookScriptLauncher(script, "claude")).toBe(requested.launcher);
       expect(
         classifyProviderHookArtifactOwnership({
           contents: script,
           requested,
-          legacyLauncher: providerHookScriptLauncher(script, "claude"),
         }).status,
-      ).toBe("same-owner");
+      ).toBe("unknown-owner");
+      expect(() =>
+        assertProviderHookArtifactOwnership({
+          provider: "claude",
+          action: "install",
+          artifactPath: "/shared/hook.sh",
+          contents: script,
+          requested,
+        }),
+      ).toThrowError(expect.objectContaining({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" }));
     });
 
     it("recognizes generated scripts that route through runtime Station env", () => {
@@ -425,12 +431,9 @@ describe("runtime hookSetup", () => {
         tag: "ProviderHookArtifactOwnershipError",
         code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT",
         provider: "codex",
-        message: expect.stringContaining(
-          `Current owner: compiled 0.7.1 build ${BUILD_B} via /installed/bin/stn-ingress.`,
-        ),
-        hint: expect.stringContaining(
-          "To perform this action as the current owner, run /installed/bin/stn hooks install codex --yes.",
-        ),
+        action: "install",
+        artifactPath: scriptPath,
+        ownership: expect.objectContaining({ status: "different-owner", current }),
       });
       await expect(refusal.catch((error: unknown) => isSafeError(error))).resolves.toBe(true);
       await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
