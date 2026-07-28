@@ -5,6 +5,7 @@ import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
+import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { findProjectOrThrow, runProviderMutation, throwIfAborted } from "../session/shared.js";
@@ -12,6 +13,7 @@ import { findProjectOrThrow, runProviderMutation, throwIfAborted } from "../sess
 export type CreateWorktreeCreateHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
+  launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -20,8 +22,11 @@ export type CreateWorktreeCreateHandlerOptions = {
 };
 
 /**
+ * USE CASE
+ *
  * Worktree-only half of session.create for Station: create and publish the
- * worktree, then Station hosts the agent itself via prepareExternalLaunch.
+ * worktree, preflighting the selected launch harness before mutation when Station
+ * will immediately host an agent through prepareExternalLaunch.
  */
 export function createWorktreeCreateHandler(
   options: CreateWorktreeCreateHandlerOptions,
@@ -32,6 +37,9 @@ export function createWorktreeCreateHandler(
 
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
+    if (payload.launchHarness !== undefined) {
+      await options.launchPreflight(payload.launchHarness, context.signal);
+    }
 
     const request: CreateWorktreeRequest = { project, branch: payload.branch };
     if (payload.base !== undefined) {

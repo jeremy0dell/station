@@ -4,6 +4,7 @@
     "payload": {
       "projectId": "web",
       "branch": "feature/auth",
+      "launchHarness": "codex",
       "base": "main",
       "source": {
         "kind": "branch",
@@ -17,6 +18,7 @@
       "projectId": "web",
       "sourceWorktreeId": "wt_web_main",
       "branch": "feature/auth-fork",
+      "launchHarness": "codex",
       "base": "main",
       "copyDirty": true
     }
