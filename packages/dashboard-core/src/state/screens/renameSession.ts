@@ -12,6 +12,21 @@ import type { TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 import { openRenameEditForRow } from "./sessionRows.js";
 
+type RenameSessionScreen = Extract<TuiState["screen"], { name: "renameSession" }>;
+
+const renameSessionChooseSlotBehavior = {};
+const renameSessionEditNameBehavior = { clickAway: backFromRenameEdit };
+
+export function renameSessionScreenBehavior(screen: RenameSessionScreen) {
+  switch (screen.step) {
+    case "chooseSlot":
+      return renameSessionChooseSlotBehavior;
+    case "editName":
+      return renameSessionEditNameBehavior;
+  }
+  return assertNever(screen);
+}
+
 function handleChooseSlotKey(state: TuiState, key: TuiKey): TuiTransition {
   if (key.escape === true) {
     return {
@@ -40,15 +55,7 @@ function handleEditNameKey(state: TuiState, key: TuiKey): TuiTransition {
   }
 
   if (key.escape === true) {
-    return {
-      state: {
-        ...state,
-        screen:
-          state.screen.returnTo === "dashboard"
-            ? { name: "dashboard" }
-            : { name: "renameSession", step: "chooseSlot" },
-      },
-    };
+    return { state: backFromRenameEdit(state) };
   }
 
   if (isReturnKey(key)) {
@@ -151,6 +158,19 @@ export function handleRenameSessionKey(state: TuiState, key: TuiKey): TuiTransit
   return handleEditNameKey(state, key);
 }
 
+function backFromRenameEdit(state: TuiState): TuiState {
+  if (state.screen.name !== "renameSession" || state.screen.step !== "editName") {
+    return state;
+  }
+  return {
+    ...state,
+    screen:
+      state.screen.returnTo === "dashboard"
+        ? { name: "dashboard" }
+        : { name: "renameSession", step: "chooseSlot" },
+  };
+}
+
 function renameEditScreen(input: {
   screen: Extract<TuiState["screen"], { name: "renameSession"; step: "editName" }>;
   draftTitle: Extract<
@@ -170,4 +190,8 @@ function renameEditScreen(input: {
     screen.returnTo = input.screen.returnTo;
   }
   return screen;
+}
+
+function assertNever(_value: never): never {
+  throw new Error("Unhandled Rename Session screen variant.");
 }

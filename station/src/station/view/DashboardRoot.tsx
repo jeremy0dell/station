@@ -12,13 +12,13 @@ import {
   isTuiToastHiddenByScreen,
   nextTuiToastExpiry,
   snapshotLoadingLines,
-  tuiScreenClickAwayMode,
+  tuiScreenBehavior,
   type TuiStore,
 } from "@station/dashboard-core";
+import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
 import { CommandPromptView } from "./CommandPromptView.js";
 import { DashboardFooterView } from "./DashboardFooterView.js";
 import { DashboardView, Divider } from "./DashboardView.js";
-import { OverlayHostView } from "./OverlayHostView.js";
 import {
   StationHoverProvider,
   useStationHoverEnabled,
@@ -52,8 +52,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   const hoverEnabled = useStationHoverEnabled();
 
   const toastHiddenByScreen = isTuiToastHiddenByScreen(screen);
-  const backgroundHoverEnabled =
-    hoverEnabled && tuiScreenClickAwayMode(screen) === "passthrough";
+  const backgroundHoverEnabled = hoverEnabled && tuiScreenBehavior(screen).clickAway === undefined;
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
 
   // The store's terminalRows feeds the keyboard scroll-clamping machinery;
@@ -134,7 +133,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
         <CommandPromptView screen={screen} />
         {toastOverlay}
       </StationHoverProvider>
-      <OverlayHostView
+      <ActiveScreenOverlayView
         snapshot={snapshot}
         screen={screen}
         selection={selection}

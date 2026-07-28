@@ -2,7 +2,6 @@ import type { TuiStore } from "@station/dashboard-core";
 import {
   clampDashboardStateScroll,
   deriveTuiInputMode,
-  dismissTuiScreenOnClickAway,
   focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
@@ -12,6 +11,7 @@ import {
   selectAddProjectRow,
   selectDashboardSessionRow,
   selectDashboardViewport,
+  tuiScreenBehavior,
   widgetSettingsAddFromPicker,
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
@@ -193,7 +193,11 @@ function routeModalClick(
     return true;
   }
   if (target.kind === "screenBackdrop") {
-    store.setState(dismissTuiScreenOnClickAway(store.getState()));
+    const state = store.getState();
+    const clickAway = tuiScreenBehavior(state.screen).clickAway;
+    if (clickAway !== undefined) {
+      store.setState(clickAway(state));
+    }
     return true;
   }
   switch (target.kind) {

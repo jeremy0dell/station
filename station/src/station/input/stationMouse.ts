@@ -8,9 +8,9 @@ import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
 import {
   deriveTuiInputMode,
-  dismissTuiScreenOnClickAway,
   isRemoveProjectArmed,
   LIST_REGISTRY,
+  tuiScreenBehavior,
   type ProjectSettingsItemId,
   type TuiInputMode,
   type TuiStore,
@@ -316,9 +316,14 @@ export function routeStationMouse(
         copyDirty: submit.copyDirty,
       };
     }
-    case "screenBackdrop":
-      store.setState(dismissTuiScreenOnClickAway(store.getState()));
+    case "screenBackdrop": {
+      const state = store.getState();
+      const clickAway = tuiScreenBehavior(state.screen).clickAway;
+      if (clickAway !== undefined) {
+        store.setState(clickAway(state));
+      }
       return { kind: "handled" };
+    }
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };

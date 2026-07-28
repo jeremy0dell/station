@@ -4,6 +4,8 @@ import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
+export const widgetSettingsScreenBehavior = { clickAway: backFromWidgetSettings };
+
 /**
  * Widget types addable from the picker: the parameterless ones only. weather
  * and tz need config fields (city, zones), so they are added in config.toml
@@ -116,7 +118,7 @@ function handleListKey(state: TuiState, screen: WidgetSettingsScreen, key: TuiKe
   const widgets = state.widgets;
   const cursor = clampCursor(screen.cursor, widgets.length);
   if (key.escape === true) {
-    return { state: { ...state, screen: { name: "dashboard" } } };
+    return { state: closeWidgetSettings(state) };
   }
   if (key.upArrow === true) {
     return { state: withScreen(state, { ...screen, cursor: Math.max(0, cursor - 1) }) };
@@ -174,7 +176,7 @@ function handlePickerKey(
   key: TuiKey,
 ): TuiTransition {
   if (key.escape === true) {
-    return { state: withScreen(state, { ...screen, focus: "list" }) };
+    return { state: backFromWidgetSettings(state) };
   }
   if (key.upArrow === true) {
     return {
@@ -207,6 +209,19 @@ function handlePickerKey(
 
 function withScreen(state: TuiState, screen: WidgetSettingsScreen): TuiState {
   return { ...state, screen };
+}
+
+function backFromWidgetSettings(state: TuiState): TuiState {
+  if (state.screen.name !== "widgetSettings") {
+    return state;
+  }
+  return state.screen.focus === "picker"
+    ? withScreen(state, { ...state.screen, focus: "list" })
+    : closeWidgetSettings(state);
+}
+
+function closeWidgetSettings(state: TuiState): TuiState {
+  return { ...state, screen: { name: "dashboard" } };
 }
 
 function clampCursor(cursor: number, length: number): number {

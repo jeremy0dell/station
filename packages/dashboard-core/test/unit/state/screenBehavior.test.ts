@@ -5,7 +5,6 @@ import {
   createEditableTextInputState,
   createInitialTuiState,
   createNewSessionFlow,
-  dismissTuiScreenOnClickAway,
   failedStateForError,
   type NewSessionFlowState,
   reviewStateForFolder,
@@ -13,7 +12,7 @@ import {
   type TuiScreen,
   type TuiState,
   transitionNewSessionFlow,
-  tuiScreenClickAwayMode,
+  tuiScreenBehavior,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
@@ -64,19 +63,19 @@ const forkDetails: Extract<TuiScreen, { name: "fork"; step: "details" }> = {
   focus: "name",
 };
 
-const screenPolicyCases: readonly [
+const screenBehaviorCases: readonly [
   label: string,
   screen: TuiScreen,
-  expected: "dismiss" | "passthrough",
+  expected: "present" | "absent",
 ][] = [
-  ["dashboard", { name: "dashboard" }, "passthrough"],
-  ["search", { name: "search", value: "api" }, "passthrough"],
-  ["help", { name: "help" }, "dismiss"],
-  ["project collapse picker", { name: "projectCollapse" }, "dismiss"],
-  ["project settings picker", { name: "projectSettingsPicker" }, "dismiss"],
-  ["project default-agent picker", { name: "projectDefaultAgent", projectId: "web" }, "dismiss"],
-  ["remove choose-row", { name: "removeWorktree", step: "chooseSlot" }, "passthrough"],
-  ["remove unavailable", { name: "removeWorktree", step: "unavailable" }, "dismiss"],
+  ["dashboard", { name: "dashboard" }, "absent"],
+  ["search", { name: "search", value: "api" }, "absent"],
+  ["help", { name: "help" }, "present"],
+  ["project collapse picker", { name: "projectCollapse" }, "present"],
+  ["project settings picker", { name: "projectSettingsPicker" }, "present"],
+  ["project default-agent picker", { name: "projectDefaultAgent", projectId: "web" }, "present"],
+  ["remove choose-row", { name: "removeWorktree", step: "chooseSlot" }, "absent"],
+  ["remove unavailable", { name: "removeWorktree", step: "unavailable" }, "present"],
   [
     "remove confirmation",
     {
@@ -86,21 +85,21 @@ const screenPolicyCases: readonly [
       forceRequired: false,
       label: "web",
     },
-    "dismiss",
+    "present",
   ],
-  ["rename choose-row", { name: "renameSession", step: "chooseSlot" }, "passthrough"],
-  ["rename details", renameEdit, "dismiss"],
-  ["fork choose-row", { name: "fork", step: "chooseSlot" }, "passthrough"],
-  ["fork details", forkDetails, "dismiss"],
-  ["add project start", { name: "addProject", flow: addStart }, "dismiss"],
-  ["add project choose", { name: "addProject", flow: addChoose }, "dismiss"],
-  ["add project review", { name: "addProject", flow: addReview }, "dismiss"],
-  ["add project success", { name: "addProject", flow: addSuccess }, "dismiss"],
-  ["add project failed", { name: "addProject", flow: addFailed }, "dismiss"],
-  ["new session review", { name: "newSession", flow: newReview }, "dismiss"],
-  ["new session name editor", { name: "newSession", flow: newEdit }, "dismiss"],
-  ["new session project picker", { name: "newSession", flow: newPickProject }, "dismiss"],
-  ["new session agent picker", { name: "newSession", flow: newPickAgent }, "dismiss"],
+  ["rename choose-row", { name: "renameSession", step: "chooseSlot" }, "absent"],
+  ["rename details", renameEdit, "present"],
+  ["fork choose-row", { name: "fork", step: "chooseSlot" }, "absent"],
+  ["fork details", forkDetails, "present"],
+  ["add project start", { name: "addProject", flow: addStart }, "present"],
+  ["add project choose", { name: "addProject", flow: addChoose }, "present"],
+  ["add project review", { name: "addProject", flow: addReview }, "present"],
+  ["add project success", { name: "addProject", flow: addSuccess }, "present"],
+  ["add project failed", { name: "addProject", flow: addFailed }, "present"],
+  ["new session review", { name: "newSession", flow: newReview }, "present"],
+  ["new session name editor", { name: "newSession", flow: newEdit }, "present"],
+  ["new session project picker", { name: "newSession", flow: newPickProject }, "present"],
+  ["new session agent picker", { name: "newSession", flow: newPickAgent }, "present"],
   [
     "project settings list",
     {
@@ -110,7 +109,7 @@ const screenPolicyCases: readonly [
       activeId: "agent",
       removeDraft: createEditableTextInputState(),
     },
-    "dismiss",
+    "present",
   ],
   [
     "project settings detail",
@@ -121,23 +120,24 @@ const screenPolicyCases: readonly [
       activeId: "remove",
       removeDraft: createEditableTextInputState("delete web"),
     },
-    "dismiss",
+    "present",
   ],
   [
     "widget settings list",
     { name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 },
-    "dismiss",
+    "present",
   ],
   [
     "widget add picker",
     { name: "widgetSettings", focus: "picker", cursor: 0, pickerCursor: 1 },
-    "dismiss",
+    "present",
   ],
 ];
 
-describe("TUI screen click-away policy", () => {
-  it.each(screenPolicyCases)("classifies %s as %s", (_label, screen, expected) => {
-    expect(tuiScreenClickAwayMode(screen)).toBe(expected);
+describe("TUI screen behavior", () => {
+  it.each(screenBehaviorCases)("resolves click-away for %s", (_label, screen, expected) => {
+    const presence = tuiScreenBehavior(screen).clickAway === undefined ? "absent" : "present";
+    expect(presence).toBe(expected);
   });
 
   it("backs nested New Session steps to review and discards the nested draft", () => {
@@ -146,17 +146,21 @@ describe("TUI screen click-away policy", () => {
       draftName: createEditableTextInputState("discard me"),
     };
 
-    const dismissed = dismiss(withScreen({ name: "newSession", flow: edited }));
+    const dismissed = clickAway(withScreen({ name: "newSession", flow: edited }));
 
     expect(dismissed.screen).toEqual({
       name: "newSession",
       flow: { ...newReview, reviewFocus: "create" },
     });
-    expect(dismiss(withScreen({ name: "newSession", flow: newPickProject })).screen).toEqual({
+    expect(clickAway(withScreen({ name: "newSession", flow: newPickProject })).screen).toEqual({
       name: "newSession",
       flow: { ...newReview, reviewFocus: "create" },
     });
-    expect(dismiss(withScreen({ name: "newSession", flow: newReview })).screen).toEqual({
+    expect(clickAway(withScreen({ name: "newSession", flow: newPickAgent })).screen).toEqual({
+      name: "newSession",
+      flow: { ...newReview, reviewFocus: "create" },
+    });
+    expect(clickAway(withScreen({ name: "newSession", flow: newReview })).screen).toEqual({
       name: "dashboard",
     });
   });
@@ -166,9 +170,9 @@ describe("TUI screen click-away policy", () => {
       ...addReview,
       editingId: createEditableTextInputState("discard-me"),
     };
-    const editorCancelled = dismiss(withScreen({ name: "addProject", flow: editing }));
+    const editorCancelled = clickAway(withScreen({ name: "addProject", flow: editing }));
     expect(editorCancelled.screen).toEqual({ name: "addProject", flow: addReview });
-    expect(dismiss(editorCancelled).screen).toEqual({ name: "dashboard" });
+    expect(clickAway(editorCancelled).screen).toEqual({ name: "dashboard" });
 
     const filtering: AddProjectFlowState = {
       ...addChoose,
@@ -178,7 +182,7 @@ describe("TUI screen click-away policy", () => {
       searching: true,
       searchTruncated: true,
     };
-    const filterCleared = dismiss({
+    const filterCleared = clickAway({
       ...withScreen({ name: "addProject", flow: filtering }),
       selection: new Map([["addProjectChoose", "/tmp/station"]]),
     });
@@ -194,7 +198,15 @@ describe("TUI screen click-away policy", () => {
       },
     });
     expect(filterCleared.selection.get("addProjectChoose")).toBe(addChoose.currentPath);
-    expect(dismiss(filterCleared).screen).toEqual({ name: "dashboard" });
+    expect(clickAway(filterCleared).screen).toEqual({ name: "dashboard" });
+  });
+
+  it("closes ordinary Add Project states", () => {
+    for (const flow of [addStart, addChoose, addReview, addSuccess, addFailed]) {
+      expect(clickAway(withScreen({ name: "addProject", flow })).screen).toEqual({
+        name: "dashboard",
+      });
+    }
   });
 
   it("closes Project Settings from either pane and discards the remove phrase", () => {
@@ -207,18 +219,18 @@ describe("TUI screen click-away policy", () => {
         removeDraft: createEditableTextInputState("delete web"),
       });
 
-      expect(dismiss(state).screen).toEqual({ name: "dashboard" });
+      expect(clickAway(state).screen).toEqual({ name: "dashboard" });
     }
   });
 
   it("cancels remove information and confirmation without adding effects", () => {
-    for (const screen of screenPolicyCases
+    for (const screen of screenBehaviorCases
       .map(([, screen]) => screen)
       .filter(
         (screen): screen is Extract<TuiScreen, { name: "removeWorktree" }> =>
           screen.name === "removeWorktree" && screen.step !== "chooseSlot",
       )) {
-      const dismissed = dismiss(withScreen(screen));
+      const dismissed = clickAway(withScreen(screen));
       expect(dismissed.screen).toEqual({ name: "dashboard" });
       expect("commands" in dismissed).toBe(false);
       expect("operations" in dismissed).toBe(false);
@@ -231,7 +243,7 @@ describe("TUI screen click-away policy", () => {
       widgets: [{ type: "time", enabled: false }, { type: "moon" }],
     };
 
-    const pickerDismissed = dismiss(state);
+    const pickerDismissed = clickAway(state);
     expect(pickerDismissed.screen).toEqual({
       name: "widgetSettings",
       focus: "list",
@@ -239,21 +251,24 @@ describe("TUI screen click-away policy", () => {
       pickerCursor: 2,
     });
     expect(pickerDismissed.widgets).toBe(state.widgets);
-    const panelDismissed = dismiss(pickerDismissed);
+    const panelDismissed = clickAway(pickerDismissed);
     expect(panelDismissed.screen).toEqual({ name: "dashboard" });
     expect(panelDismissed.widgets).toBe(state.widgets);
   });
 
   it("follows rename and fork returnTo contracts while row-choice modes pass through", () => {
-    expect(dismiss(withScreen(renameEdit)).screen).toEqual({
+    expect(clickAway(withScreen(renameEdit)).screen).toEqual({
       name: "renameSession",
       step: "chooseSlot",
     });
-    expect(dismiss(withScreen({ ...renameEdit, returnTo: "dashboard" })).screen).toEqual({
+    expect(clickAway(withScreen({ ...renameEdit, returnTo: "dashboard" })).screen).toEqual({
       name: "dashboard",
     });
-    expect(dismiss(withScreen(forkDetails)).screen).toEqual({ name: "fork", step: "chooseSlot" });
-    expect(dismiss(withScreen({ ...forkDetails, returnTo: "dashboard" })).screen).toEqual({
+    expect(clickAway(withScreen(forkDetails)).screen).toEqual({
+      name: "fork",
+      step: "chooseSlot",
+    });
+    expect(clickAway(withScreen({ ...forkDetails, returnTo: "dashboard" })).screen).toEqual({
       name: "dashboard",
     });
 
@@ -265,7 +280,7 @@ describe("TUI screen click-away policy", () => {
       { name: "dashboard" },
     ] satisfies TuiScreen[]) {
       const state = withScreen(screen);
-      expect(dismiss(state)).toBe(state);
+      expect(clickAway(state)).toBe(state);
     }
   });
 });
@@ -274,8 +289,9 @@ function withScreen(screen: TuiScreen): TuiState {
   return { ...createInitialTuiState({ initialSnapshot: snapshot }), screen };
 }
 
-function dismiss(state: TuiState): TuiState {
-  return dismissTuiScreenOnClickAway(state);
+function clickAway(state: TuiState): TuiState {
+  const handler = tuiScreenBehavior(state.screen).clickAway;
+  return handler === undefined ? state : handler(state);
 }
 
 function requiredNewSessionFlow(): Extract<NewSessionFlowState, { mode: "review" }> {
