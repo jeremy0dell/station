@@ -78,6 +78,7 @@ When these disagree, reconcile from config, providers, and current observer stat
 - Provider hooks are ingress notifications and fast status reports. They can trigger persistence, projection, spool fallback, or scheduled reconcile, but they are not authoritative graph truth by themselves. Observer event hooks are configured commands triggered by STATION events and should not be conflated with provider hook ingress.
 - Every managed agent launch preflights only its selected active harness immediately before mutation: launch capability, a fresh provider-health probe, and provider-owned hook status when supported remain separate authoritative facts coordinated by one ephemeral Observer use case. This creates no readiness catalog, cache, or durable readiness state, and returning an existing live session remains ungated.
 - Terminal topology is provider-owned. Shared contracts and Station UI behavior should express product intent where possible, not provider target mechanics.
+- Harness integrations may select generic terminal-output compatibility behavior at the managed-PTY launch boundary. The Host applies that behavior before durable replay storage and live delivery without receiving or inferring provider identity.
 
 ## Station UI Module Layout
 
@@ -91,6 +92,7 @@ See [Observer Architecture](observer-architecture.md).
 The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime:
 
 - The `station-station-host` daemon (`packages/station-host`) owns PTYs that outlive the UI. Its socket defaults beside the observer socket at `<state_dir>/run/station-host.sock` (override `STATION_HOST_SOCKET_PATH`).
+- Host output compatibility is an optional spawn policy selected by integrations and applied before both scrollback retention and attached-client broadcast, so live and warm-reattached views consume one byte stream.
 - Host reuse requires exact protocol and build-version equality. A different-build host is replaced only through its atomic stop-if-idle operation; a host with any agent or auxiliary PTY is preserved and the upgrade fails visibly. Attach transfers scrollback bytes and frames, not PTY handles, so Station does not claim live PTY handoff between host processes.
 - Observer external-launch results carry only an opaque managed-terminal target identity. Station resolves that identity to a live Station Host PTY immediately before pane creation, keeping socket paths and PTY IDs on the Station side of the boundary.
 - Pane liveness is split from pane layout. On a UI restart while the host survives, panes **warm-reattach** to live PTYs with scrollback via the host's attach call; on a cold start (reboot or host down) the saved layout spec **cold-respawns** fresh shells in their saved working directory. Layout persists to `<state_dir>/station/layout.json` (override `STATION_LAYOUT_PATH`), which deliberately does not fall back to `XDG_RUNTIME_DIR` so it survives a reboot.

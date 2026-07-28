@@ -265,6 +265,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
   keeps a binding table because its screen handler executes those actions directly.
 - `station/src/station/` holds the STATION overlay (the dashboard surface): `view/` is the OpenTUI render layer over `@station/dashboard-core`, `input/` is the overlay keymap and mouse routing, and `store/` is the overlay store.
 - `station/src/terminal/` is the app-local PTY boundary (VT parser/screen model under `terminal/vt/`); `station/src/host/` is the PTY-host client for warm/cold reattach.
+- Managed Codex launches select a generic Host output policy that converts the affected row-1 region scroll into an equivalent full-screen scroll before replay storage and live delivery. Host remains provider-neutral; manually starting Codex in an auxiliary shell is intentionally outside this compatibility scope.
 - In `@station/dashboard-core`: `selectors/` for snapshot-to-view grouping/filtering, `state/commandBuilders.ts` for typed observer command construction, `state/screens/*` for pure screen-owned key transitions, `state/observerBridge.ts` and `state/operations/*` for command/operation flow, and `components/`/`widgets/` for shared layout/content logic.
 - Station may import only the linked `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`); it must never import `apps/tui` or `ink` (enforced by `station/src/station/importBoundaries.test.ts`).
 

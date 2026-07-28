@@ -110,6 +110,71 @@ describe("createPtyTable", () => {
     expect(table.list()).toMatchObject([{ ptyId, worktreeId: "wt-1", alive: true }]);
   });
 
+  it("stores and broadcasts the same compatible output and reports only the first rewrite", async () => {
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const scripted = createScriptedTerminal({ cols: 80, rows: 51 });
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      onEvent: (event, attributes) => events.push({ event, attributes }),
+    });
+    const { ptyId } = table.spawn({
+      ...baseParams,
+      rows: 51,
+      outputCompatibility: "top-region-scrollback",
+    });
+    const attachment = table.attach(ptyId);
+    const iterator = attachment.frames[Symbol.asyncIterator]();
+    const input = "\x1b[1;50r\x1b[3S\x1b[r";
+    const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H";
+
+    scripted.helpers.emitData(input);
+    expect(await iterator.next()).toEqual({
+      done: false,
+      value: { type: "data", ptyId, data: expected },
+    });
+    expect(table.snapshot(ptyId).scrollback).toEqual([expected]);
+
+    scripted.helpers.emitData(input);
+    expect(await iterator.next()).toMatchObject({ value: { data: expected } });
+    expect(events.filter(({ event }) => event === "pty.output.compatibility-rewrite")).toEqual([
+      {
+        event: "pty.output.compatibility-rewrite",
+        attributes: { ptyId, policy: "top-region-scrollback", count: 1 },
+      },
+    ]);
+    await iterator.return?.();
+  });
+
+  it("keeps policy-disabled output byte-for-byte exact", () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn(baseParams);
+    const input = "\x1b[1;23r\x1b[3S\x1b[r";
+
+    scripted.helpers.emitData(input);
+
+    expect(table.snapshot(ptyId).scrollback).toEqual([input]);
+  });
+
+  it("flushes an incomplete compatibility prefix before the exit frame", async () => {
+    const { table, scripted } = singleTable();
+    const { ptyId } = table.spawn({
+      ...baseParams,
+      outputCompatibility: "top-region-scrollback",
+    });
+    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const partial = "before\x1b[1;23r\x1b[";
+
+    scripted.helpers.emitData(partial);
+    table.close(ptyId);
+
+    const first = await iterator.next();
+    const second = await iterator.next();
+    expect(`${first.value?.type === "data" ? first.value.data : ""}${
+      second.value?.type === "data" ? second.value.data : ""
+    }`).toBe(partial);
+    expect(await iterator.next()).toMatchObject({ value: { type: "exit" } });
+  });
+
   it("bounds the default warm-reattach replay to 256 KiB", () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);

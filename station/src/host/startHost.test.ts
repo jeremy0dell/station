@@ -204,6 +204,36 @@ describe("startStationHost", () => {
     }
   });
 
+  it("applies output compatibility before replay and live delivery", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 51 });
+    const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
+    const client = createStationHostClient({ socketPath });
+    try {
+      const { ptyId } = await client.spawn({
+        ...identity,
+        command: "codex",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 51,
+        outputCompatibility: "top-region-scrollback",
+      });
+      const input = "\x1b[1;50r\x1b[3S\x1b[r";
+      const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H";
+
+      scripted.helpers.emitData(input);
+      const attachment = await client.attach(ptyId);
+      expect(attachment.ack.scrollback).toEqual([expected]);
+
+      const iterator = attachment.frames[Symbol.asyncIterator]();
+      scripted.helpers.emitData(input);
+      expect(await iterator.next()).toMatchObject({ value: { type: "data", data: expected } });
+      await attachment.detach();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("host.close drops the PTY; attaching to a missing PTY is HOST_ATTACH_GONE", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });

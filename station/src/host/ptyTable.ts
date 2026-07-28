@@ -16,6 +16,10 @@ import type {
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
 import { ScrollbackRing } from "./scrollbackRing.js";
+import {
+  createPtyOutputCompatibility,
+  type PtyOutputCompatibility,
+} from "./ptyOutputCompatibility.js";
 
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
@@ -65,6 +69,8 @@ type PtyEntry = {
   identity: HostPtyIdentity;
   terminal: StationTerminalProcess;
   ring: ScrollbackRing;
+  outputCompatibility: PtyOutputCompatibility;
+  compatibilityRewriteReported: boolean;
   cols: number;
   rows: number;
   exited: boolean;
@@ -101,11 +107,34 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     }
   }
 
+  function publishOutput(entry: PtyEntry, data: string): void {
+    if (data.length === 0) {
+      return;
+    }
+    entry.ring.push(data);
+    broadcast(entry, { type: "data", ptyId: entry.ptyId, data });
+  }
+
+  function transformAndPublish(entry: PtyEntry, data: string): void {
+    const transformed = entry.outputCompatibility.transform(data, entry.rows);
+    // Transform before storage and broadcast so replay and live clients consume identical bytes.
+    publishOutput(entry, transformed.data);
+    if (transformed.rewriteCount > 0 && !entry.compatibilityRewriteReported) {
+      entry.compatibilityRewriteReported = true;
+      emit("pty.output.compatibility-rewrite", {
+        ptyId: entry.ptyId,
+        policy: "top-region-scrollback",
+        count: transformed.rewriteCount,
+      });
+    }
+  }
+
   // Broadcast a terminal exit, release the terminal's resources, and DROP the
   // entry. Used by natural exit, guarded close, and shutdown — so the host never
   // accumulates dead entries (each retaining its scrollback ring) and a re-spawn
   // for a worktree never finds a stale exited entry under the same target id.
   function reap(entry: PtyEntry, exitFrame: HostExitFrame, reason: string): void {
+    publishOutput(entry, entry.outputCompatibility.flush());
     entry.exited = true;
     entry.lastExit = exitFrame;
     broadcast(entry, exitFrame);
@@ -173,6 +202,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         identity: identityOf(params),
         terminal,
         ring: new ScrollbackRing(maxScrollbackBytes),
+        outputCompatibility: createPtyOutputCompatibility(params.outputCompatibility),
+        compatibilityRewriteReported: false,
         cols,
         rows,
         exited: false,
@@ -192,8 +223,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
       entry.subscriptions.push(
         terminal.onData((data) => {
-          entry.ring.push(data);
-          broadcast(entry, { type: "data", ptyId: entry.ptyId, data });
+          transformAndPublish(entry, data);
         }),
       );
       entry.subscriptions.push(

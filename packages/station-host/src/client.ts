@@ -17,10 +17,10 @@ import {
   HostHealthResultSchema,
   HostListResultSchema,
   HostOkResultSchema,
-  type HostPtyIdentity,
   type HostPtyKind,
   type HostResponse,
   HostResponseSchema,
+  type HostSpawnParams,
   type HostSpawnResult,
   HostSpawnResultSchema,
   type HostStopIfIdleResult,
@@ -61,16 +61,10 @@ export type StationHostClient = {
 };
 
 type HostListResult = z.infer<typeof HostListResultSchema>;
-export type HostSpawnParamsInput = Omit<HostPtyIdentity, "kind"> & {
-  // Optional on input: the schema defaults it to "agent", so existing agent
-  // spawns omit it and only Station-owned aux shells pass "aux".
+/** Host spawn contract with defaulted kind and absent-by-default output compatibility. */
+export type HostSpawnParamsInput = Omit<HostSpawnParams, "kind"> & {
+  // Optional on input: existing agent spawns omit it and only Station-owned aux shells pass "aux".
   kind?: HostPtyKind;
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
-  cwd: string;
-  cols: number;
-  rows: number;
 };
 
 type Pending = {

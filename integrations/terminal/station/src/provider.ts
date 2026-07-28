@@ -379,18 +379,22 @@ function buildSpawnParams(request: TerminalLaunchProcessRequest): HostSpawnParam
       "Cannot host-spawn a station agent without a session id.",
     );
   }
+  const harnessProvider = binding.harnessBinding?.harnessProvider ?? request.launchPlan.provider;
   return {
     terminalTargetId: binding.targetId,
     worktreeId: binding.worktreeId ?? request.worktree.id,
     projectId: binding.projectId ?? request.project.id,
     sessionId,
     worktreePath: binding.harnessBinding?.worktreePath ?? request.worktree.path,
-    harnessProvider: binding.harnessBinding?.harnessProvider ?? request.launchPlan.provider,
+    harnessProvider,
     command: request.launchPlan.command,
     args: request.launchPlan.args,
     ...(request.launchPlan.env === undefined ? {} : { env: request.launchPlan.env }),
     cwd: request.launchPlan.cwd ?? request.worktree.path,
     cols: DEFAULT_COLS,
     rows: DEFAULT_ROWS,
+    ...(harnessProvider === "codex"
+      ? { outputCompatibility: "top-region-scrollback" as const }
+      : {}),
   };
 }

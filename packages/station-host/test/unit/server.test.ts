@@ -4,6 +4,7 @@ import {
   type HostFrame,
   type HostHandlers,
   HostResponseSchema,
+  HostSpawnParamsSchema,
   hostRequest,
   serveHostConnection,
 } from "@station/host";
@@ -107,6 +108,36 @@ describe("serveHostConnection", () => {
       provider: "native",
       code: "HOST_BAD_REQUEST",
     });
+    client.dispose();
+  });
+
+  it("carries the optional generic output compatibility policy through host.spawn", async () => {
+    let received: unknown;
+    const client = wire({
+      unary: {
+        "host.spawn": (params) => {
+          received = HostSpawnParamsSchema.parse(params);
+          return { ptyId: "p1", pid: 7 };
+        },
+      },
+    });
+
+    await client.spawn({
+      terminalTargetId: "native:wt-1",
+      worktreeId: "wt-1",
+      projectId: "proj-1",
+      sessionId: "ses-1",
+      worktreePath: "/repo/wt-1",
+      harnessProvider: "codex",
+      command: "codex",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 80,
+      rows: 24,
+      outputCompatibility: "top-region-scrollback",
+    });
+
+    expect(received).toMatchObject({ outputCompatibility: "top-region-scrollback" });
     client.dispose();
   });
 

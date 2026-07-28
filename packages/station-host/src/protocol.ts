@@ -79,6 +79,10 @@ export const HostPtyIdentitySchema = z
   .strict();
 export type HostPtyIdentity = z.infer<typeof HostPtyIdentitySchema>;
 
+/** Generic terminal-output behavior selected outside Host's provider-neutral boundary. */
+export const HostOutputCompatibilitySchema = z.enum(["top-region-scrollback"]);
+export type HostOutputCompatibility = z.infer<typeof HostOutputCompatibilitySchema>;
+
 export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
   command: z.string().min(1),
   args: z.array(z.string()),
@@ -86,6 +90,7 @@ export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
   cwd: z.string().min(1),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
+  outputCompatibility: HostOutputCompatibilitySchema.optional(),
 }).strict();
 export type HostSpawnParams = z.infer<typeof HostSpawnParamsSchema>;
 
