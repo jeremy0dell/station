@@ -14,11 +14,8 @@ import { sessionHarnessExecutionsMigration } from "./013_session_harness_executi
 import { nativeBindingIngressClaimsMigration } from "./014_native_binding_ingress_claims.js";
 import { dropRecoveryBreadcrumbsMigration } from "./015_drop_recovery_breadcrumbs.js";
 
-export type ObserverSqliteMigration = {
-  version: number;
-  name: string;
-  sql: string;
-};
+/** @knipignore Retains the historical migration type import surface. */
+export type { ObserverSqliteMigration } from "./migration.js";
 
 export const migrations = [
   observerMetaMigration,

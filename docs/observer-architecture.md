@@ -212,7 +212,7 @@ areas contain the following responsibilities:
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
 | `commands/` | command queue, routing, scopes, cancellation, terminal-intent execution, and command use cases | Driving application behavior; terminal-intent execution coordinates terminal and harness ports as a use case. |
-| `reconcile/` | provider reads, correlation, graph construction, projection, and core state | Reconcile use case plus deterministic policies; provider I/O remains at its driven edges. |
+| `reconcile/` | provider reads, correlation, graph construction, projection, and core state | Reconcile use case plus deterministic policies; provider I/O remains at its driven edges. `run.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
@@ -220,7 +220,7 @@ areas contain the following responsibilities:
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
 | `metadata/` | metadata refresh, repository lookup, local Git execution, and ref watching | The refresh use case depends on path-free local-metadata ports; local Git command and filesystem adapters resolve Station identities privately, while runtime composition selects and shuts down both roles. |
 | `persistence/ports.ts`, `persistence/types.ts` | seven purpose-owned persistence ports, their seven-port composition bundle, the separate persistence-health port, and Observer application records and inputs | Observer-private application boundary; no SQL, SQLite handles, or SQLite row representations. The bundle is composition-only. |
-| `persistence/sqliteAdapter.ts`, SQLite implementation modules, `migrations/`, `sqlite.ts` | SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Production outbound adapter edge selected and lifecycle-managed by runtime composition. |
+| `persistence/sqliteAdapter.ts`, SQLite implementation modules, `migrations/`, `sqlite.ts` | SQL and row translation, transactions, migrations, driver compatibility, health, and durable-handle mechanics | Production outbound adapter edge selected and lifecycle-managed by runtime composition. `migrations/migration.ts` owns the adapter-private `ObserverSqliteMigration` record; the ordered aggregator only re-exports that type. |
 | `test/support/inMemoryObserverPersistence.ts`, `persistence/observationParser.ts` | Process-local persistence test support plus representation-neutral observation parsing and coalescing | Test-only storage substitute and shared boundary translation used to prove substitution; production source and runtime remain SQLite-only. |
 | `diagnostics/` | doctor and diagnostic collection, the local-evidence port, and local representation translation | Diagnostic use cases aggregate core, journal, persistence-health, provider, configuration, and typed local evidence; `localEvidenceSource.ts` alone owns state, JSONL log, and hook-spool filesystem traversal. |
 | `features/` | feature-flag evaluation | Deterministic application policy. |
@@ -795,35 +795,56 @@ Architecture is protected by several forms of evidence:
 - focused tests for ordering, cancellation, dedupe, and substitution;
 - whole-application execution with adapters replaced at composition.
 
-Current enforcement is partial. The boundary inventory catches forbidden
-package imports but cannot detect copied provider IDs, reconstructed target
-formats, or application logic that selects a concrete adapter. Marker and
-declared-seam checks begin with documented or touched seams. Persistence substitution is covered by shared contracts and a no-SQLite
-application lane. Diagnostic-evidence substitution is covered by a deliberately
-non-local fake, local-adapter translation tests, runtime path-capture coverage,
-and import diagnostics; complete conformance still requires the remaining
-major-module dependency-direction remediation tracked below.
+The source-derived gate is `tools/lint/check-observer-architecture.mjs`. It reads
+the Observer compiler inventory and recursive filesystem inventory, resolves
+source aliases and re-exports through TypeScript, validates controlled markers,
+checks declaration-level role direction and package boundaries, and rejects
+production source cycles. Runtime, type-only, export-from, barrel, workspace-
+alias, import-equals, literal `require`, and literal `import()` edges all
+participate. Nonliteral dynamic module edges fail because their ownership cannot
+be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
+remain recorded external edges rather than source-cycle members.
 
-The final architecture manifest is generated from named exported declarations,
-their controlled JSDoc markers and purpose prose, and the source/import graph.
-It must not repeat roles or declaration paths in a separately hand-maintained
-registry. Adapter substitution and composition relationships that cannot be
-derived reliably remain executable contract or composition tests.
+The current Observer graph contains 127 production modules and no strongly
+connected component. `migrations/migration.ts` now owns
+`ObserverSqliteMigration`, so numbered migration declarations do not depend on
+their ordered aggregator. `reconcile/run.ts` owns `ReconcileTiming`, so the
+reconcile use case no longer depends back on its calling core facade.
 
-A new architecture diagnostic must enforce declarations and dependency facts,
-not subjective prose. Human review remains responsible for whether a port names
-a purposeful conversation and whether policy belongs inside the application.
+The reproducible evidence is committed at
+`docs/generated/observer-architecture-manifest.json`. It inventories every
+Observer production module, named export, import edge, and intentionally
+unmarked `role: null` export; its controlled declarations and purpose prose come
+only from attached source JSDoc. It is generated evidence, not a second role
+registry. `pnpm architecture:observer:generate` atomically refreshes it after
+successful validation, while `pnpm architecture:observer:check` validates the
+graph and byte-compares the checked-in artifact.
+
+Role checks are declaration-level rather than file-level and evaluate every
+controlled production declaration participating in an Observer seam, including
+CLI composition, contracts, protocol, and integrations. A marked composition
+root receives the broad wiring allowance only for dependencies reachable from
+that declaration through same-file private helpers. Unrelated exports in the
+same module retain their own role and direction. Adapter substitution and
+composition relationships that cannot be inferred reliably remain executable
+contract or composition tests.
+
+`pnpm lint` runs the check once. The pre-push hook, `pnpm test:all`, pull-request
+static validation, documentation-only validation, and the `main` smoke inherit
+that execution through lint. Specialized SQLite, logging/config, metadata,
+diagnostics, tmux, and error-normalization boundary tests remain active for
+semantic rules that source roles cannot prove.
+
+Automation still cannot prove that a role is truthful, a purpose paragraph is
+accurate, a policy is free of hidden IO, or an adapter is substitutable. Review,
+pure policy tests, deliberately different fakes, port contracts, adapter tests,
+and composition tests provide that evidence.
 
 ## Active Deviations
 
-Active deviations are accepted migration debt, not alternative architecture.
-Each remains active until its exit evidence is in the repository. A change may
-add a deviation only when it also records the risk, containment, tracking work,
-and exit condition here.
-
-| ID | Current evidence and risk | Containment and exit evidence | Tracking |
-| --- | --- | --- | --- |
-| `OBS-HEX-007` | Terminal intent orchestration now belongs to `commands/`, resolving that provider/application back-edge. Unrelated type-only ownership cycles remain, so not every major module role is yet explainable without source cycles. | A dependency diagnostic prevents `providers/**` from importing `commands/**`. Exit when the remaining major-module type cycles are removed and final dependency-direction enforcement covers every major Observer module. | Internal ownership remediation. |
+There are no active Observer hexagonal-architecture deviations. A future
+accepted deviation must record its risk, containment, tracking work, and exit
+condition here.
 
 The managed-terminal lifecycle leak formerly tracked as `OBS-HEX-001` is
 resolved: application code receives `ManagedTerminalLifecycle` from composition,
@@ -841,7 +862,10 @@ seven-port contract, and a complete ObserverApi composition runs against memory
 without importing SQLite or its row translation.
 `OBS-HEX-006` is resolved: the two unsupported command members are gone, and
 production registration is constructed from one handler map that is exhaustive
-over `StationCommand["type"]`. `OBS-HEX-009` is
+over `StationCommand["type"]`. `OBS-HEX-007` is resolved: the remaining
+migration and reconcile type-ownership cycles are removed, every Observer
+production module participates in the generated source graph, and lint enforces
+controlled-role and package dependency direction. `OBS-HEX-009` is
 resolved: external launch exposes only an opaque managed-terminal attachment,
 Station owns host PTY and socket resolution, and an advertised attachment can
 never fail over to a duplicate local spawn.

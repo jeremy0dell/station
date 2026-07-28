@@ -3,7 +3,6 @@ import type {
   HarnessEventReport,
   ProviderHealth,
   ProviderProjectConfig,
-  SafeError,
   StationEvent,
   StationSnapshot,
   WorktreeRow,
@@ -34,6 +33,7 @@ import {
   buildInitialSnapshot,
   harnessesFromRegistry,
   type ProviderReadOptions,
+  type ReconcileTiming,
   runReconcileOnce,
 } from "./run.js";
 import {
@@ -41,18 +41,7 @@ import {
   type StatusProjectionResult,
 } from "./statusProjection.js";
 
-export type ReconcileTiming = {
-  reason: string;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  projectsScanned: number;
-  worktreesObserved: number;
-  terminalTargetsObserved: number;
-  harnessRunsObserved: number;
-  eventsEmitted: number;
-  errors: SafeError[];
-};
+export type { ReconcileTiming } from "./run.js";
 
 export type ObserverCoreHealth = {
   status: "healthy" | "degraded";

@@ -33,10 +33,10 @@ export type {
 } from "./observerProcess/types.js";
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Reports inaccessible socket ownership without spawning, unlinking, stopping,
- * or signaling another process.
+ * Translates Observer socket and process evidence into a CLI-safe status without
+ * spawning, unlinking, stopping, or signaling another process.
  */
 export async function getObserverStatus(
   options: ObserverProcessOptions = {},
@@ -75,11 +75,10 @@ export async function getObserverStatus(
 }
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Attaches to an exact or winning incumbent build, starts a child to negotiate
- * replacement of an older build, and refuses incomplete ownership evidence.
- * Socket ownership mutation remains inside the child's serialized boot lifecycle.
+ * Translates CLI startup intent into exact-build Observer attachment or child
+ * startup while leaving socket ownership mutation to the child's boot lifecycle.
  */
 export async function startObserver(
   options: ObserverProcessOptions = {},
@@ -146,9 +145,9 @@ export async function startObserver(
 }
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Stops only the exact Observer process attributed by the initial health response.
+ * Translates a CLI stop request into a pinned Observer lifecycle operation.
  */
 export async function stopObserver(
   options: ObserverProcessOptions = {},
@@ -284,9 +283,9 @@ function hasLegacyObserverBuildIdentity(health: ObserverHealth): boolean {
 }
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Restarts an exact or replaceable incumbent without stopping a newer winning build.
+ * Translates a CLI restart request while preserving a newer winning Observer build.
  */
 export async function restartObserver(
   options: ObserverProcessOptions = {},

@@ -40,10 +40,9 @@ const nonSpoolableErrorCodes = new Set([
 ]);
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Gates delivery on compatible ownership and spools inaccessible failures
- * without delivery, auto-start lock mutation, or competing Observer startup.
+ * Coordinates CLI ingress delivery across Observer startup, socket transport, and spool storage without competing ownership mutation.
  */
 export async function deliverProviderHookWithSpooling(input: {
   paths: ObserverPaths;

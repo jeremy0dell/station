@@ -1,4 +1,4 @@
-import type { ObserverSqliteMigration } from "./index.js";
+import type { ObserverSqliteMigration } from "./migration.js";
 
 export const providerObservationLookupIndexesMigration: ObserverSqliteMigration = {
   version: 4,

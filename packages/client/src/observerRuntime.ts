@@ -35,10 +35,9 @@ type RefreshFlightOutcome =
   | { status: "failure"; error: SafeError; raw: unknown; permanent: boolean };
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Maintains one live Observer projection through either an injected service or
- * a socket transport pinned to the build selector already accepted by its caller.
+ * Translates an injected service or pinned Observer socket transport into one live client projection.
  */
 export function createStationClientRuntime(
   options: StationClientRuntimeOptions,

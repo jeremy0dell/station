@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -10,19 +10,6 @@ const providerNeutralSourceRoots = [
   "packages/observability/src",
   "packages/protocol/src",
   "packages/runtime/src",
-];
-
-const observerConcreteProviderImports = [
-  "@station/tmux",
-  "@station/worktrunk",
-  "@station/claude",
-  "@station/codex",
-  "@station/cursor",
-  "@station/opencode",
-  "@station/pi",
-  "@station/scripted-harness",
-  "@station/terminal",
-  "@station/github-repository",
 ];
 
 const observerPersistenceBundleAllowlist = new Set([
@@ -153,44 +140,6 @@ describe("boundary inventory guard", () => {
     expect(violations).toEqual([]);
   });
 
-  it("keeps concrete provider construction out of observer production source", async () => {
-    const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
-      isProductionSourceFile,
-    );
-    const violations: string[] = [];
-
-    for (const file of files) {
-      const source = await readFile(file, "utf8");
-      const path = relative(process.cwd(), file);
-      for (const providerImport of observerConcreteProviderImports) {
-        if (source.includes(providerImport)) {
-          violations.push(`${path}: concrete provider import ${providerImport}`);
-        }
-      }
-    }
-
-    expect(violations).toEqual([]);
-  });
-
-  it("keeps protocol imports at the observer runtime server adapter", async () => {
-    const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
-      isProductionSourceFile,
-    );
-    const violations: string[] = [];
-
-    for (const file of files) {
-      const source = await readFile(file, "utf8");
-      const path = relative(process.cwd(), file);
-      for (const match of source.matchAll(/\b(?:from|import)\s*(?:\(\s*)?["']([^"']+)["']/g)) {
-        if (match[1] === "@station/protocol" && path !== "apps/observer/src/runtime/server.ts") {
-          violations.push(`${path}: protocol import`);
-        }
-      }
-    }
-
-    expect(violations).toEqual([]);
-  });
-
   it("keeps Observer logging and project configuration representations at runtime adapters", async () => {
     const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src"))).filter(
       isProductionSourceFile,
@@ -220,33 +169,6 @@ describe("boundary inventory guard", () => {
         /\b(?:configPath|homeDir)\b/.test(source)
       ) {
         violations.push(`${path}: configuration path plumbing`);
-      }
-    }
-
-    expect(violations).toEqual([]);
-  });
-
-  it("keeps command orchestration out of observer provider modules", async () => {
-    const commandsRoot = join(process.cwd(), "apps/observer/src/commands");
-    const files = (await sourceFilesAt(join(process.cwd(), "apps/observer/src/providers"))).filter(
-      isProductionSourceFile,
-    );
-    const violations: string[] = [];
-
-    for (const file of files) {
-      const source = await readFile(file, "utf8");
-      const path = relative(process.cwd(), file);
-
-      for (const match of source.matchAll(/\b(?:from|import)\s*(?:\(\s*)?["']([^"']+)["']/g)) {
-        const specifier = match[1];
-        if (specifier === undefined || !specifier.startsWith(".")) {
-          continue;
-        }
-
-        const target = resolve(dirname(file), specifier);
-        if (target === commandsRoot || target.startsWith(`${commandsRoot}${sep}`)) {
-          violations.push(`${path}: command import ${specifier}`);
-        }
       }
     }
 

@@ -9,10 +9,9 @@ export type RunCliObserverMainOptions = {
 };
 
 /**
- * ADAPTER
+ * COMPOSITION ROOT
  *
- * Translates raw process arguments plus compiled asset and provider-hook launcher
- * inputs into CLI-owned Observer provider composition.
+ * Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle.
  */
 export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),

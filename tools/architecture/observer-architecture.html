@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Observer Architecture</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/d3.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Station · source-derived graph</p>
+        <h1>Observer Architecture</h1>
+      </div>
+      <div id="summary" class="summary" aria-live="polite">
+        Loading manifest…
+      </div>
+    </header>
+
+    <section class="controls" aria-label="Graph controls">
+      <label>
+        View
+        <select id="view">
+          <option value="roles">Hexagonal roles</option>
+          <option value="modules">Module imports</option>
+        </select>
+      </label>
+      <label>
+        Find
+        <input
+          id="search"
+          type="search"
+          placeholder="use case, reconcile, sqlite…"
+        />
+      </label>
+      <label>
+        Dependency type
+        <select id="edge-kind">
+          <option value="all">All dependencies</option>
+          <option value="runtime">Runtime</option>
+          <option value="type-only">Type only</option>
+        </select>
+      </label>
+      <label id="external-control" class="checkbox" hidden>
+        <input id="external" type="checkbox" />
+        Show external targets
+      </label>
+      <button id="reset" type="button">Reset view</button>
+      <span id="hint" class="hint"
+        >Scroll to zoom · click a role for details</span
+      >
+    </section>
+
+    <main>
+      <section
+        id="graph-shell"
+        class="graph-shell"
+        aria-label="Observer architecture dependency graph"
+      >
+        <svg
+          id="graph"
+          role="img"
+          aria-label="Observer architecture graph"
+        ></svg>
+        <div id="graph-error" class="graph-error" hidden></div>
+      </section>
+
+      <aside aria-label="Selected architecture details">
+        <div id="details-empty" class="details-empty">
+          <strong id="details-empty-title">Select a role</strong>
+          <span id="details-empty-copy"
+            >Arrows aggregate static declaration references, not runtime calls.</span
+          >
+        </div>
+        <div id="details" hidden></div>
+      </aside>
+    </main>
+  </body>
+</html>
