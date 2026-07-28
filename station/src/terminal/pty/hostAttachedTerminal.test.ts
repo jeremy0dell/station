@@ -116,10 +116,10 @@ function ack(overrides: AckOverrides = {}): HostAttachAck {
     exited: false,
     ...fields,
     replay: replay ?? {
+      kind: "raw-complete",
       initialCols: cols,
       initialRows: rows,
       events: scrollback.map((data) => ({ type: "data" as const, data })),
-      truncated: false,
     },
   };
 }
@@ -177,11 +177,13 @@ describe("createHostAttachedTerminal", () => {
 
   it("delivers ordered replay in one awaited callback before live frames", async () => {
     const replay: StationTerminalReplay = {
+      kind: "raw-complete",
       initialSize: { cols: 10, rows: 4 },
       events: [
         { type: "data", data: "before" },
         { type: "resize", cols: 5, rows: 4 },
         { type: "data", data: "after" },
+        { type: "resize", cols: 10, rows: 4 },
       ],
     };
     const ctrl = controllableAttachment(
@@ -189,10 +191,10 @@ describe("createHostAttachedTerminal", () => {
         cols: 10,
         rows: 4,
         replay: {
+          kind: "raw-complete",
           initialCols: replay.initialSize.cols,
           initialRows: replay.initialSize.rows,
           events: [...replay.events],
-          truncated: false,
         },
       }),
     );
@@ -767,7 +769,45 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.dispose();
   });
 
-  it("exits once after exhausting the consecutive transient retry budget", async () => {
+  it("replays a semantic reconnect snapshot without a raw-history repaint prefix", async () => {
+    const first = controllableAttachment(ack({ scrollback: ["history-"] }));
+    const semanticData = "\x1bcsemantic-state";
+    const second = controllableAttachment(
+      ack({
+        replay: {
+          kind: "semantic-truncation-recovery",
+          initialCols: 80,
+          initialRows: 24,
+          events: [{ type: "data", data: semanticData }],
+        },
+      }),
+    );
+    let clientCreations = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-1",
+      size: { cols: 80, rows: 24 },
+      clientFactory: () => {
+        const selected = clientCreations === 0 ? first : second;
+        clientCreations += 1;
+        return clientForAttach(async () => selected.attachment);
+      },
+      sleep: async () => {},
+    });
+    const received: string[] = [];
+    terminal.onData((data) => received.push(data));
+
+    await flush();
+    first.endStream();
+    await flush();
+    await flush();
+
+    expect(received).toEqual(["history-", semanticData]);
+    expect(received).not.toContain(RECONNECT_REPAINT);
+    terminal.dispose();
+  });
+
+  it("becomes unavailable after exhausting the consecutive transient retry budget", async () => {
     let clientCreations = 0;
     let attachCalls = 0;
     let clientDisposals = 0;
@@ -794,8 +834,10 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     });
     const diagnostics: string[] = [];
     const exits: number[] = [];
+    const unavailable: string[] = [];
     terminal.onDiagnostic((message) => diagnostics.push(message));
     terminal.onExit((event) => exits.push(event.exitCode));
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
 
     await flush();
 
@@ -806,7 +848,8 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     expect(diagnostics.filter((message) => message === "Station host reconnect failed.")).toHaveLength(
       1,
     );
-    expect(exits).toEqual([1]);
+    expect(exits).toEqual([]);
+    expect(unavailable).toEqual(["HOST_UNREACHABLE"]);
   });
 
   it("reconnects after a transient attach failure instead of killing the pane", async () => {
@@ -1027,8 +1070,68 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.dispose();
   });
 
-  for (const code of ["HOST_ATTACH_GONE", "HOST_VERSION_INCOMPATIBLE"] as const) {
-    it(`ends the pane without retrying ${code}`, async () => {
+  it("retries HOST_SNAPSHOT_PENDING before declaring attachment unavailable", async () => {
+    let attachCalls = 0;
+    const opened = controllableAttachment(ack());
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-pending",
+      size: { cols: 80, rows: 24 },
+      sleep: async () => undefined,
+      clientFactory: () =>
+        clientForAttach(async () => {
+          attachCalls += 1;
+          if (attachCalls === 1) {
+            throw new StationHostProviderError(
+              "HOST_SNAPSHOT_PENDING",
+              "terminal parser sequence is unfinished",
+            );
+          }
+          return opened.attachment;
+        }),
+    });
+    const unavailable: string[] = [];
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
+
+    await flush();
+    await flush();
+    expect(attachCalls).toBe(2);
+    expect(unavailable).toEqual([]);
+    terminal.dispose();
+  });
+
+  it("reports HOST_SNAPSHOT_PENDING when parser-boundary retries are exhausted", async () => {
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-pending",
+      size: { cols: 80, rows: 24 },
+      sleep: async () => undefined,
+      clientFactory: () =>
+        clientForAttach(async () => {
+          attachCalls += 1;
+          throw new StationHostProviderError(
+            "HOST_SNAPSHOT_PENDING",
+            "terminal parser sequence is unfinished",
+          );
+        }),
+    });
+    const unavailable: string[] = [];
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
+
+    await flush();
+    expect(attachCalls).toBe(6);
+    expect(unavailable).toEqual(["HOST_SNAPSHOT_PENDING"]);
+  });
+
+  for (const code of [
+    "HOST_ATTACH_GONE",
+    "HOST_SNAPSHOT_FAILED",
+    "HOST_VERSION_INCOMPATIBLE",
+    "HOST_UPGRADE_BLOCKED",
+    "HOST_BAD_REQUEST",
+  ] as const) {
+    it(`classifies ${code} without retrying or fabricating process state`, async () => {
       let attachCalls = 0;
       const terminal = createHostAttachedTerminal({
         hostSocketPath: "/tmp/x.sock",
@@ -1052,9 +1155,12 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           }) satisfies StationHostClient,
       });
       const exits: number[] = [];
+      const unavailable: string[] = [];
       terminal.onExit((event) => exits.push(event.exitCode));
+      terminal.onUnavailable?.((event) => unavailable.push(event.code));
       await flush();
-      expect(exits).toEqual([1]);
+      expect(exits).toEqual(code === "HOST_ATTACH_GONE" ? [1] : []);
+      expect(unavailable).toEqual(code === "HOST_ATTACH_GONE" ? [] : [code]);
       expect(attachCalls).toBe(1);
     });
   }

@@ -2,6 +2,7 @@ import type {
   StationTerminalExit,
   StationTerminalProcess,
   StationTerminalSize,
+  StationTerminalUnavailable,
 } from "../types.js";
 
 export type ScriptedTerminal = {
@@ -13,6 +14,7 @@ export type ScriptedTerminal = {
     isDisposed(): boolean;
     emitData(data: string): void;
     emitExit(event: StationTerminalExit): void;
+    emitUnavailable(event: StationTerminalUnavailable): void;
   };
 };
 
@@ -22,6 +24,7 @@ export function createScriptedTerminal(
 ): ScriptedTerminal {
   const dataListeners = new Set<(data: string) => void>();
   const exitListeners = new Set<(event: StationTerminalExit) => void>();
+  const unavailableListeners = new Set<(event: StationTerminalUnavailable) => void>();
   const writes: string[] = [];
   const resizes: StationTerminalSize[] = [];
   let size = initialSize;
@@ -53,6 +56,10 @@ export function createScriptedTerminal(
     onDiagnostic() {
       return { dispose: () => {} };
     },
+    onUnavailable(listener) {
+      unavailableListeners.add(listener);
+      return { dispose: () => unavailableListeners.delete(listener) };
+    },
     write(data) {
       writes.push(data);
     },
@@ -80,6 +87,11 @@ export function createScriptedTerminal(
       },
       emitExit: (event) => {
         for (const listener of [...exitListeners]) {
+          listener(event);
+        }
+      },
+      emitUnavailable: (event) => {
+        for (const listener of [...unavailableListeners]) {
           listener(event);
         }
       },

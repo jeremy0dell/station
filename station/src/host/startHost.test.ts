@@ -191,7 +191,12 @@ describe("startStationHost", () => {
 
       scripted.helpers.emitData("scroll-"); // captured into the ring before attach
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: "scroll-" }]);
+      expect(attachment.ack.replay).toEqual({
+        kind: "raw-complete",
+        initialCols: 80,
+        initialRows: 24,
+        events: [{ type: "data", data: "scroll-" }],
+      });
 
       const iterator = attachment.frames[Symbol.asyncIterator]();
       scripted.helpers.emitData("live");
@@ -223,12 +228,53 @@ describe("startStationHost", () => {
 
       scripted.helpers.emitData(input);
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: expected }]);
+      expect(attachment.ack.replay).toEqual({
+        kind: "raw-complete",
+        initialCols: 80,
+        initialRows: 51,
+        events: [{ type: "data", data: expected }],
+      });
 
       const iterator = attachment.frames[Symbol.asyncIterator]();
       scripted.helpers.emitData(input);
       expect(await iterator.next()).toMatchObject({ value: { type: "data", data: expected } });
       await attachment.detach();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("returns HOST_SNAPSHOT_FAILED without dropping a truncated PTY", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const socketPath = await startOnTempSocket({
+      createTerminal: () => scripted.terminal,
+      maxScrollbackBytes: 5,
+      createSemanticTerminal: () => ({
+        write() {},
+        resize() {},
+        capture: async () => {
+          throw new Error("serializer failed");
+        },
+        dispose() {},
+      }),
+    });
+    const client = createStationHostClient({ socketPath });
+    try {
+      const { ptyId } = await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      scripted.helpers.emitData("first");
+      scripted.helpers.emitData("second");
+
+      await expect(client.attach(ptyId)).rejects.toMatchObject({
+        code: "HOST_SNAPSHOT_FAILED",
+      });
+      expect(await client.list()).toMatchObject([{ ptyId, alive: true }]);
     } finally {
       client.dispose();
     }
@@ -311,7 +357,12 @@ describe("startStationHost", () => {
 
       agent.helpers.emitData("scrollback");
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: "scrollback" }]);
+      expect(attachment.ack.replay).toEqual({
+        kind: "raw-complete",
+        initialCols: 80,
+        initialRows: 24,
+        events: [{ type: "data", data: "scrollback" }],
+      });
       const frames = attachment.frames[Symbol.asyncIterator]();
 
       await expect(client.stopIfIdle("next-build")).rejects.toMatchObject({

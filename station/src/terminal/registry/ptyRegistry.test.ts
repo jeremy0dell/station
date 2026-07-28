@@ -155,6 +155,30 @@ describe("createPtyRegistry", () => {
     expect(exited).toEqual([PANE_A]);
   });
 
+  it("marks attachment unavailable without reporting a pane exit or forwarding I/O", () => {
+    const scripted = createScriptedTerminal();
+    const exited: string[] = [];
+    const registry = createPtyRegistry({
+      createTerminal: () => scripted.terminal,
+      onPaneExit: (paneId) => exited.push(paneId),
+    });
+    registry.resize(PANE_A, SIZE);
+
+    scripted.helpers.emitUnavailable({
+      code: "HOST_SNAPSHOT_FAILED",
+      message: "snapshot failed",
+    });
+
+    expect(registry.get(PANE_A)).toMatchObject({
+      exited: false,
+      status: "attachment unavailable",
+    });
+    expect(registry.write(PANE_A, "late")).toBe(false);
+    registry.resize(PANE_A, { cols: 40, rows: 10 });
+    expect(scripted.helpers.resizes).toEqual([]);
+    expect(exited).toEqual([]);
+  });
+
   it("uses the latest pane-exit handler after replacement", () => {
     const scripted = createScriptedTerminal();
     const firstHandler: string[] = [];
@@ -309,7 +333,7 @@ describe("createPtyRegistry", () => {
     const { registry, replay, geometry } = orderedGeometryHarness();
     const screen = registry.get(PANE_A)?.screen;
 
-    await replay({ initialSize: { cols: 10, rows: 4 }, events: [] });
+    await replay({ kind: "raw-complete", initialSize: { cols: 10, rows: 4 }, events: [] });
     expect(screen?.bufferStats()).toMatchObject({ cols: 10, rows: 4 });
 
     await geometry({ cols: 5, rows: 4 });
@@ -321,6 +345,7 @@ describe("createPtyRegistry", () => {
     const screen = registry.get(PANE_A)?.screen;
 
     await replay({
+      kind: "raw-complete",
       initialSize: { cols: 10, rows: 4 },
       events: [
         { type: "data", data: "1234567890\rX" },
@@ -337,7 +362,7 @@ describe("createPtyRegistry", () => {
     const { registry, scripted, replay, geometry } = orderedGeometryHarness();
     const screen = registry.get(PANE_A)?.screen;
 
-    await replay({ initialSize: { cols: 10, rows: 4 }, events: [] });
+    await replay({ kind: "raw-complete", initialSize: { cols: 10, rows: 4 }, events: [] });
     scripted.helpers.emitData("1234567890\rX");
     await screen?.whenIdle();
     await geometry({ cols: 5, rows: 4 });

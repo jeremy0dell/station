@@ -1,9 +1,11 @@
 import {
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
+  HostAttachAckSchema,
   type HostFrame,
   type HostHandlers,
   HostResponseSchema,
+  type HostServerLogger,
   HostSpawnParamsSchema,
   hostRequest,
   serveHostConnection,
@@ -11,20 +13,24 @@ import {
 import { inMemoryNdjsonConnectionPair } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 
-function wire(handlers: Omit<HostHandlers, "hostIdentity">) {
+function wire(handlers: Omit<HostHandlers, "hostIdentity">, logger: HostServerLogger = {}) {
   const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
-  void serveHostConnection(server, {
-    hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
-    ...handlers,
-    unary: {
-      "host.health": () => ({
-        ok: true,
-        protocolVersion: HOST_PROTOCOL_VERSION,
-        buildVersion: "test-build",
-      }),
-      ...handlers.unary,
+  void serveHostConnection(
+    server,
+    {
+      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      ...handlers,
+      unary: {
+        "host.health": () => ({
+          ok: true,
+          protocolVersion: HOST_PROTOCOL_VERSION,
+          buildVersion: "test-build",
+        }),
+        ...handlers.unary,
+      },
     },
-  });
+    logger,
+  );
   return createStationHostClient({
     socketPath: "unused",
     expectedBuildVersion: "test-build",
@@ -161,35 +167,54 @@ describe("serveHostConnection", () => {
 
   it("acks the attach snapshot, streams live frames, and ends on host.detach", async () => {
     const stream = controllableStream();
-    const client = wire({
-      attach: () => ({
-        ack: {
-          subscribed: true,
-          ptyId: "p1",
-          pid: 7,
-          cols: 100,
-          rows: 30,
-          exited: false,
-          replay: {
-            initialCols: 80,
-            initialRows: 24,
-            events: [
-              { type: "data", data: "snap" },
-              { type: "resize", cols: 100, rows: 30 },
-              { type: "data", data: "after-resize" },
-            ],
-            truncated: false,
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const client = wire(
+      {
+        attach: () => ({
+          ack: {
+            subscribed: true,
+            ptyId: "p1",
+            pid: 7,
+            cols: 100,
+            rows: 30,
+            exited: false,
+            replay: {
+              kind: "raw-complete",
+              initialCols: 80,
+              initialRows: 24,
+              events: [
+                { type: "data", data: "snap" },
+                { type: "resize", cols: 100, rows: 30 },
+                { type: "data", data: "after-resize" },
+              ],
+            },
           },
-        },
-        frames: stream.frames,
-      }),
-    });
+          frames: stream.frames,
+          captureDurationMs: 12.5,
+        }),
+      },
+      {
+        onEvent: (event, attributes) => events.push({ event, attributes }),
+      },
+    );
     const attachment = await client.attach("p1");
     expect(attachment.ack.replay.events).toEqual([
       { type: "data", data: "snap" },
       { type: "resize", cols: 100, rows: 30 },
       { type: "data", data: "after-resize" },
     ]);
+    expect(events).toContainEqual({
+      event: "agent.attach",
+      attributes: {
+        ptyId: "p1",
+        replayKind: "raw-complete",
+        replayEntries: 3,
+        replayBytes: 16,
+        cols: 100,
+        rows: 30,
+        captureDurationMs: 12.5,
+      },
+    });
 
     const iterator = attachment.frames[Symbol.asyncIterator]();
     stream.push({ type: "data", ptyId: "p1", data: "live" });
@@ -201,6 +226,63 @@ describe("serveHostConnection", () => {
     await attachment.detach();
     expect(await iterator.next()).toEqual({ done: true, value: undefined });
     client.dispose();
+  });
+
+  it("strictly distinguishes ordered raw replay from current-geometry semantic replay", () => {
+    const ack = {
+      subscribed: true as const,
+      ptyId: "p1",
+      pid: 7,
+      cols: 100,
+      rows: 30,
+      exited: false,
+    };
+
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: {
+          kind: "raw-complete",
+          initialCols: 80,
+          initialRows: 24,
+          events: [{ type: "resize", cols: 100, rows: 30 }],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: {
+          kind: "semantic-truncation-recovery",
+          initialCols: 100,
+          initialRows: 30,
+          events: [{ type: "data", data: "\x1bcsemantic" }],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: {
+          kind: "semantic-truncation-recovery",
+          initialCols: 80,
+          initialRows: 24,
+          events: [{ type: "resize", cols: 100, rows: 30 }],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: {
+          kind: "raw-complete",
+          initialCols: 100,
+          initialRows: 30,
+          events: [],
+          chunks: [],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps simultaneous attach streams isolated by PTY id", async () => {
@@ -218,13 +300,14 @@ describe("serveHostConnection", () => {
             rows: 24,
             exited: false,
             replay: {
+              kind: "raw-complete",
               initialCols: 80,
               initialRows: 24,
               events: [{ type: "data", data: `snap-${params.ptyId}` }],
-              truncated: false,
             },
           },
           frames: stream.frames,
+          captureDurationMs: 0,
         };
       },
     });

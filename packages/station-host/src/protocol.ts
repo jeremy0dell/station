@@ -5,7 +5,7 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 3;
+export const HOST_PROTOCOL_VERSION = 4;
 
 const idSchema = z.string().min(1);
 
@@ -154,8 +154,11 @@ export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
 export const HostAttachParamsSchema = z.object({ ptyId: idSchema }).strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 
+export const HostReplayDataEventSchema = z
+  .object({ type: z.literal("data"), data: z.string() })
+  .strict();
 export const HostReplayEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("data"), data: z.string() }).strict(),
+  HostReplayDataEventSchema,
   z
     .object({
       type: z.literal("resize"),
@@ -166,21 +169,31 @@ export const HostReplayEventSchema = z.discriminatedUnion("type", [
 ]);
 export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
 
-export const HostReplaySchema = z
-  .object({
-    initialCols: z.number().int().positive(),
-    initialRows: z.number().int().positive(),
-    events: z.array(HostReplayEventSchema),
-    truncated: z.boolean(),
-  })
-  .strict();
+/** Verbatim complete history or self-contained VT restoring a truncated terminal model. */
+export const HostReplaySchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("raw-complete"),
+      initialCols: z.number().int().positive(),
+      initialRows: z.number().int().positive(),
+      events: z.array(HostReplayEventSchema),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("semantic-truncation-recovery"),
+      initialCols: z.number().int().positive(),
+      initialRows: z.number().int().positive(),
+      events: z.array(HostReplayDataEventSchema).min(1),
+    })
+    .strict(),
+]);
 export type HostReplay = z.infer<typeof HostReplaySchema>;
 
 /**
- * Attach acknowledgement: the ordered replay is captured atomically with the
- * live listener, so `replay ++ live frames` reproduces output with no gap or
- * overlap. Top-level geometry is current; replay geometry records the sizes at
- * which retained data was produced.
+ * Attach acknowledgement captured atomically with the live listener. Raw replay
+ * preserves production geometry; semantic replay is a self-contained snapshot
+ * painted at the Host's current geometry.
  */
 export const HostAttachAckSchema = z
   .object({

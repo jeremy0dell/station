@@ -78,6 +78,22 @@ describe("createStationVtScreen", () => {
     expect(screen.isCursorVisible()).toBe(true);
   });
 
+  it("ris clears the title and notifies title subscribers", async () => {
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 5 } }));
+    const titles: Array<string | undefined> = [];
+    screen.onTitleChange(() => {
+      titles.push(screen.getTitle());
+    });
+
+    screen.feed("\x1b]2;working\x07");
+    await screen.whenIdle();
+    screen.feed("\x1bc");
+    await screen.whenIdle();
+
+    expect(screen.getTitle()).toBeUndefined();
+    expect(titles).toEqual(["working", undefined]);
+  });
+
   it("resize changes the grid and bumps the version", async () => {
     const screen = track(createStationVtScreen({ size: { cols: 20, rows: 5 } }));
     screen.resize({ cols: 100, rows: 40 });
@@ -437,6 +453,40 @@ describe("createStationVtScreen", () => {
     screen.feed("\x1b[=2u\x1b[>4u\x1b[<u");
     await screen.whenIdle();
     expect(screen.isKittyKeyboardEnabled()).toBe(true);
+
+    responses.length = 0;
+    screen.feed("\x1b[=2u\x1b[>5u\x1bc\x1b[?u\x1b[<u\x1b[?u");
+    await screen.whenIdle();
+    expect(screen.isKittyKeyboardEnabled()).toBe(false);
+    expect(responses).toEqual(["\x1b[?0u", "\x1b[?0u"]);
+  });
+
+  it("applies kitty modes, pop counts, bounded eviction, and per-buffer state", async () => {
+    const responses: string[] = [];
+    const screen = track(
+      createStationVtScreen({
+        size: { cols: 20, rows: 5 },
+        onResponse: (data) => responses.push(data),
+      }),
+    );
+    const pushes = Array.from({ length: 65 }, (_, index) => `\x1b[>${index + 1}u`).join("");
+
+    screen.feed(
+      `\x1b[=1u\x1b[=2;2u${pushes}\x1b[<64u\x1b[?u` +
+        `\x1b[?1049h\x1b[=4u\x1b[?u\x1b[?1049l\x1b[?u` +
+        `\x1b[<999999999u\x1b[?u`,
+    );
+    await screen.whenIdle();
+
+    expect(responses).toEqual(["\x1b[?1u", "\x1b[?4u", "\x1b[?1u", "\x1b[?0u"]);
+  });
+
+  it("does not treat private-mode subparameters as independent modes", async () => {
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 5 } }));
+    screen.feed("\x1b[?1000h\x1b[?25:1006h");
+    await screen.whenIdle();
+
+    expect(screen.mouseProtocol()).toEqual({ tracking: "vt200", encoding: "x10" });
   });
 
   it("flags soft-wrap continuation rows", async () => {

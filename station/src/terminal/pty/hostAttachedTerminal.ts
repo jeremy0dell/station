@@ -1,6 +1,5 @@
 import {
   createStationHostClient,
-  isStationHostCompatibilityError,
   STATION_HOST_PROVIDER_ID,
   type HostAttachment,
   type HostFrame,
@@ -17,6 +16,7 @@ import type {
   StationTerminalProcess,
   StationTerminalReplay,
   StationTerminalSize,
+  StationTerminalUnavailable,
 } from "../types.js";
 
 // Host data-plane faults arrive as StationHostProviderError (a SafeError);
@@ -33,11 +33,17 @@ const HOST_DATA_PLANE_FALLBACK: SafeErrorFallback = {
 // A dropped attach connection (host restart, socket hiccup, hot-reload) is
 // transient: reconnect a bounded number of times with backoff before giving up,
 // so a blip doesn't permanently kill a pane whose PTY is still alive. Permanent
-// host faults end the pane because retrying cannot recover this attachment.
+// host faults are classified as gone, unavailable, or retryable transport loss.
 const MAX_ATTACH_ATTEMPTS = 6;
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 2_000;
 const PTY_GONE_CODES = new Set(["HOST_ATTACH_GONE", "HOST_PTY_NOT_FOUND"]);
+const PTY_UNAVAILABLE_CODES = new Set([
+  "HOST_SNAPSHOT_FAILED",
+  "HOST_VERSION_INCOMPATIBLE",
+  "HOST_UPGRADE_BLOCKED",
+  "HOST_BAD_REQUEST",
+]);
 // Reconnect repaint: cursor home, clear screen, clear scrollback. Lets us replay
 // the fresh ring snapshot on reconnect (which holds output produced while we were
 // detached) without stacking it on top of the history the VT already shows.
@@ -51,8 +57,9 @@ const unreachableAttachmentState = (_value: never): never => {
 };
 
 type AttachmentFailure =
-  | { kind: "fatal"; message: string }
-  | { kind: "transient"; message: string };
+  | { kind: "gone"; error: StationTerminalUnavailable }
+  | { kind: "unavailable"; error: StationTerminalUnavailable }
+  | { kind: "transient"; error: StationTerminalUnavailable };
 
 type AttachmentStreamOutcome =
   | { kind: "disconnected" }
@@ -64,6 +71,7 @@ type AttachAttemptOutcome =
       kind: "reconnect";
       replayed: boolean;
       connectedAt: number | undefined;
+      error?: StationTerminalUnavailable;
     };
 
 type AttachmentPreparationState = { replayed: boolean };
@@ -75,8 +83,8 @@ type ReconnectPreparationOutcome =
 
 type AttachLoopStep =
   | { kind: "complete" }
-  | { kind: "exhausted" }
-  | { kind: "retry"; attempt: number; replayed: boolean };
+  | { kind: "exhausted"; error?: StationTerminalUnavailable }
+  | { kind: "retry"; attempt: number; replayed: boolean; error?: StationTerminalUnavailable };
 
 export type HostAttachedTerminalOptions = {
   hostSocketPath: string;
@@ -103,10 +111,10 @@ export type HostAttachedTerminalOptions = {
 };
 
 /**
- * Host-attached `StationTerminalProcess`: attach, replay scrollback, then consume
- * ordered data and geometry frames. `dispose()` only detaches, so the host keeps
- * the PTY alive for the next reattach and PtyRegistry needs no persistent-agent
- * special case.
+ * Host-attached `StationTerminalProcess`: attach, replay, then stream live
+ * data and geometry frames. Proven PTY loss emits exit; reconstruction or
+ * compatibility failures emit unavailable so Observer never mistakes an
+ * attachment fault for process death. `dispose()` detaches without killing.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -130,6 +138,7 @@ export function createHostAttachedTerminal(
   const dataListeners = new Set<(data: string) => void>();
   const exitListeners = new Set<(event: StationTerminalExit) => void>();
   const diagnosticListeners = new Set<(message: string) => void>();
+  const unavailableListeners = new Set<(event: StationTerminalUnavailable) => void>();
   const replayListeners = new Set<(replay: StationTerminalReplay) => void | Promise<void>>();
   const geometryListeners = new Set<
     (size: StationTerminalSize) => void | Promise<void>
@@ -143,6 +152,8 @@ export function createHostAttachedTerminal(
   let ackedSize: StationTerminalSize | undefined;
   let pid = 0;
   let exited = false;
+  let unavailable = false;
+  let lastUnavailable: StationTerminalUnavailable | undefined;
   let disposed = false;
   let resolvedPtyId = options.ptyId;
   let closeRequested = false;
@@ -199,6 +210,16 @@ export function createHostAttachedTerminal(
     }
     for (const listener of diagnosticListeners) {
       listener(message);
+    }
+  };
+  const emitUnavailable = (event: StationTerminalUnavailable): void => {
+    unavailable = true;
+    lastUnavailable = event;
+    attachment = undefined;
+    ackedSize = undefined;
+    pendingWrites.length = 0;
+    for (const listener of unavailableListeners) {
+      listener(event);
     }
   };
   // A wired replay listener gets the ordered production geometry and is awaited
@@ -274,8 +295,13 @@ export function createHostAttachedTerminal(
         rows: opened.ack.replay.initialRows,
       },
       events: opened.ack.replay.events,
+      kind: opened.ack.replay.kind,
     };
     if (!isReconnect) {
+      await emitReplay(replay);
+      return;
+    }
+    if (replay.kind === "semantic-truncation-recovery") {
       await emitReplay(replay);
       return;
     }
@@ -284,6 +310,10 @@ export function createHostAttachedTerminal(
         ...replay,
         events: [{ type: "data", data: RECONNECT_REPAINT }, ...replay.events],
       });
+      return;
+    }
+    if (replay.events.length > 0) {
+      await emitReplay(replay);
     }
     // An empty reconnect ring must not clear the pane with nothing to replace it;
     // the geometry nudge below asks the child to repaint instead.
@@ -389,12 +419,15 @@ export function createHostAttachedTerminal(
   };
 
   const classifyAttachmentFailure = (error: unknown): AttachmentFailure => {
-    const compatibilityFailure = isStationHostCompatibilityError(error);
     const safe = toSafeError(error, HOST_DATA_PLANE_FALLBACK);
-    if (PTY_GONE_CODES.has(safe.code) || compatibilityFailure) {
-      return { kind: "fatal", message: safe.message };
+    const classified = { code: safe.code, message: safe.message };
+    if (PTY_GONE_CODES.has(safe.code)) {
+      return { kind: "gone", error: classified };
     }
-    return { kind: "transient", message: safe.message };
+    if (PTY_UNAVAILABLE_CODES.has(safe.code)) {
+      return { kind: "unavailable", error: classified };
+    }
+    return { kind: "transient", error: classified };
   };
 
   const acceptAttachedPty = (opened: HostAttachment): boolean => {
@@ -445,12 +478,16 @@ export function createHostAttachedTerminal(
       return { kind: "complete" };
     }
     const failure = classifyAttachmentFailure(error);
-    emitDiagnostic(failure.message);
-    if (failure.kind === "fatal") {
+    emitDiagnostic(failure.error.message);
+    if (failure.kind === "gone") {
       emitExit({ exitCode: 1 });
       return { kind: "complete" };
     }
-    return { kind: "reconnect", replayed: state.replayed, connectedAt };
+    if (failure.kind === "unavailable") {
+      emitUnavailable(failure.error);
+      return { kind: "complete" };
+    }
+    return { kind: "reconnect", replayed: state.replayed, connectedAt, error: failure.error };
   };
 
   const runAttachAttempt = async (
@@ -524,9 +561,14 @@ export function createHostAttachedTerminal(
       case "stop":
         return { kind: "complete" };
       case "exhausted":
-        return reconnect;
+        return { ...reconnect, ...(outcome.error === undefined ? {} : { error: outcome.error }) };
       case "retry":
-        return { kind: "retry", attempt: reconnect.attempt, replayed: outcome.replayed };
+        return {
+          kind: "retry",
+          attempt: reconnect.attempt,
+          replayed: outcome.replayed,
+          ...(outcome.error === undefined ? {} : { error: outcome.error }),
+        };
       default:
         return unreachableAttachmentState(reconnect);
     }
@@ -536,19 +578,29 @@ export function createHostAttachedTerminal(
   // ends the pane, while a healthy connection earns a fresh consecutive budget.
   const runAttachLoop = async (ptyId: string): Promise<void> => {
     let replayed = false;
+    let lastError: StationTerminalUnavailable | undefined;
     for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
       const step = await advanceAttachLoop(ptyId, replayed, attempt);
       if (step.kind === "complete") {
         return;
       }
       if (step.kind === "exhausted") {
+        lastError = step.error;
         break;
       }
       replayed = step.replayed;
+      lastError = step.error;
       attempt = step.attempt;
     }
+    const unavailable =
+      lastError?.code === "HOST_SNAPSHOT_PENDING"
+        ? lastError
+        : {
+            code: "HOST_UNREACHABLE",
+            message: "Station host reconnect failed; PTY liveness is unknown.",
+          };
     emitDiagnostic("Station host reconnect failed.");
-    emitExit({ exitCode: 1 });
+    emitUnavailable(unavailable);
   };
 
   void (async () => {
@@ -576,8 +628,12 @@ export function createHostAttachedTerminal(
       return;
     }
     if (resolvedPtyId === undefined) {
-      emitDiagnostic("Station host attach failed: no pty id.");
-      emitExit({ exitCode: 1 });
+      const event = {
+        code: "HOST_INVALID_ATTACHMENT",
+        message: "Station host attach failed: no PTY id.",
+      };
+      emitDiagnostic(event.message);
+      emitUnavailable(event);
       return;
     }
     await runAttachLoop(resolvedPtyId);
@@ -614,6 +670,13 @@ export function createHostAttachedTerminal(
       diagnosticListeners.add(listener);
       return disposableFor(diagnosticListeners, listener);
     },
+    onUnavailable(listener) {
+      unavailableListeners.add(listener);
+      if (lastUnavailable !== undefined) {
+        listener(lastUnavailable);
+      }
+      return disposableFor(unavailableListeners, listener);
+    },
     onReplay(listener) {
       replayListeners.add(listener);
       return disposableFor(replayListeners, listener);
@@ -623,7 +686,7 @@ export function createHostAttachedTerminal(
       return disposableFor(geometryListeners, listener);
     },
     write(data) {
-      if (disposed || exited) {
+      if (disposed || exited || unavailable) {
         return;
       }
       if (attachment === undefined) {
@@ -637,6 +700,9 @@ export function createHostAttachedTerminal(
     },
     resize(next) {
       size = next;
+      if (unavailable) {
+        return;
+      }
       // Requested via applyHostResize and confirmed by the ordered stream frame;
       // a no-op while detached, then re-sent once attachment is published.
       applyHostResize(next);
@@ -665,6 +731,7 @@ export function createHostAttachedTerminal(
       dataListeners.clear();
       exitListeners.clear();
       diagnosticListeners.clear();
+      unavailableListeners.clear();
       replayListeners.clear();
       geometryListeners.clear();
       // DETACH, never kill: closing this pane's connection makes the host release

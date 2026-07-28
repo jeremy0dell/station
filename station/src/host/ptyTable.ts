@@ -17,6 +17,11 @@ import type {
 } from "../terminal/types.js";
 import { ScrollbackRing } from "./scrollbackRing.js";
 import {
+  createSemanticTerminalSnapshot,
+  type SemanticTerminalModel,
+  TerminalSnapshotPendingError,
+} from "./semanticTerminalSnapshot.js";
+import {
   createPtyOutputCompatibility,
   type PtyOutputCompatibility,
 } from "../terminal/ptyOutputCompatibility.js";
@@ -29,18 +34,20 @@ export type PtyTableOptions = {
   /** Test seam: inject a fake terminal so unit tests need no real node-pty. */
   createTerminal?: (options: StationTerminalSpawnOptions) => StationTerminalProcess;
   maxScrollbackBytes?: number;
+  /** Test seam for deterministic capture barriers and serializer failures. */
+  createSemanticTerminal?: (cols: number, rows: number) => SemanticTerminalModel;
   /** Lifecycle observability — redaction-safe ids/counts only, never PTY data/env. */
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
 };
 
-/** Data-only diagnostic snapshot; `attach` exposes the full ordered replay. */
+/** Raw-ring diagnostic used by Host tests; wire replay is chosen asynchronously by attach. */
 export type PtySnapshot = {
   pid: number;
   cols: number;
   rows: number;
   exited: boolean;
-  scrollback: string[];
-  truncated: boolean;
+  rawChunks: string[];
+  rawComplete: boolean;
 };
 
 export type PtyTable = {
@@ -50,13 +57,12 @@ export type PtyTable = {
   list(): HostListEntry[];
   snapshot(ptyId: string): PtySnapshot;
   /**
-   * Open an attachment: capture the scrollback snapshot and register the live
-   * sink ATOMICALLY (same tick), so `snapshot ++ live frames` has no gap or
-   * overlap. Resize barriers share the output stream so clients apply each
-   * geometry before parsing later data. The stream ends on PTY exit (after the
-   * exit frame), on `frames.return()` (detach), or when the host disposes the PTY.
+   * Register the live sink before capturing raw history or semantic state, so
+   * output after the capture boundary is queued exactly once as live frames.
+   * Ordered resize barriers keep every replayed and live byte at its production
+   * geometry.
    */
-  attach(ptyId: string): HostAttachmentSource;
+  attach(ptyId: string): Promise<HostAttachmentSource>;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
   close(ptyId: string): boolean;
   /** Best-effort focus: broadcast a focus frame to attached clients. */
@@ -70,6 +76,7 @@ type PtyEntry = {
   identity: HostPtyIdentity;
   terminal: StationTerminalProcess;
   ring: ScrollbackRing;
+  semantic: SemanticTerminalModel;
   outputCompatibility: PtyOutputCompatibility;
   compatibilityRewriteReported: boolean;
   cols: number;
@@ -83,6 +90,8 @@ type PtyEntry = {
 export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   const createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   const maxScrollbackBytes = options.maxScrollbackBytes ?? DEFAULT_SCROLLBACK_BYTES;
+  const createSemanticTerminal =
+    options.createSemanticTerminal ?? createSemanticTerminalSnapshot;
   const emit = options.onEvent ?? (() => undefined);
   const entries = new Map<string, PtyEntry>();
   let sequence = 0;
@@ -112,7 +121,9 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     if (data.length === 0) {
       return;
     }
+    // Keep raw completeness, semantic state, and live delivery on one transformed byte stream.
     entry.ring.push(data);
+    entry.semantic.write(data);
     broadcast(entry, { type: "data", ptyId: entry.ptyId, data });
   }
 
@@ -143,6 +154,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       subscription.dispose();
     }
     entry.terminal.dispose();
+    entry.semantic.dispose();
     entries.delete(entry.ptyId);
     emit("agent.exit", { ptyId: entry.ptyId, exitCode: exitFrame.exitCode, reason });
   }
@@ -197,12 +209,24 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         );
       }
 
+      let semantic: SemanticTerminalModel;
+      try {
+        semantic = createSemanticTerminal(cols, rows);
+      } catch (error) {
+        terminal.dispose();
+        throw new StationHostProviderError(
+          "HOST_SPAWN_FAILED",
+          "Could not initialize semantic terminal recovery.",
+          { cause: error, worktreeId: params.worktreeId, sessionId: params.sessionId },
+        );
+      }
       sequence += 1;
       const entry: PtyEntry = {
         ptyId: `pty-${sequence}`,
         identity: identityOf(params),
         terminal,
         ring: new ScrollbackRing(maxScrollbackBytes, { cols, rows }),
+        semantic,
         outputCompatibility: createPtyOutputCompatibility(params.outputCompatibility),
         compatibilityRewriteReported: false,
         cols,
@@ -258,6 +282,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       entry.cols = Math.max(MIN_COLS, cols);
       entry.rows = Math.max(MIN_ROWS, rows);
       entry.ring.resize({ cols: entry.cols, rows: entry.rows });
+      entry.semantic.resize(entry.cols, entry.rows);
       // Publish first so output synchronously triggered by TIOCSWINSZ is ordered
       // after the geometry it was produced for on every attachment.
       broadcast(entry, {
@@ -286,20 +311,20 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
     snapshot(ptyId) {
       const entry = requireEntry(ptyId);
-      const replay = entry.ring.snapshot();
+      const raw = entry.ring.snapshot();
       return {
         pid: entry.terminal.pid,
         cols: entry.cols,
         rows: entry.rows,
         exited: entry.exited,
-        scrollback: replay.events.flatMap((event) =>
+        rawChunks: raw.events.flatMap((event) =>
           event.type === "data" ? [event.data] : [],
         ),
-        truncated: replay.truncated,
+        rawComplete: raw.complete,
       };
     },
 
-    attach(ptyId) {
+    async attach(ptyId) {
       const entry = entries.get(ptyId);
       if (entry === undefined) {
         // Attach-specific code: the agent the client expected is gone. A
@@ -309,35 +334,78 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           `No host PTY "${ptyId}" to attach to.`,
         );
       }
-      const snap = entry.ring.snapshot();
-      const ack: HostAttachAck = {
-        subscribed: true,
-        ptyId: entry.ptyId,
-        pid: entry.terminal.pid,
-        cols: entry.cols,
-        rows: entry.rows,
-        exited: entry.exited,
-        replay: snap,
-      };
       let sink: ((frame: HostFrame) => void) | undefined;
       const stream = createFrameStream(() => {
         if (sink !== undefined) {
           entry.sinks.delete(sink);
         }
       });
-      if (entry.exited) {
-        // PTY already gone: ack carries exited+replay; no live frames follow.
-        stream.end();
-      } else {
-        sink = (frame) => {
-          stream.push(frame);
-          if (frame.type === "exit") {
-            stream.end();
-          }
+      sink = (frame) => {
+        stream.push(frame);
+        if (frame.type === "exit") {
+          stream.end();
+        }
+      };
+      entry.sinks.add(sink);
+
+      const raw = entry.ring.snapshot();
+      const recorded = {
+        cols: entry.cols,
+        rows: entry.rows,
+        pid: entry.terminal.pid,
+      };
+      const captureStartedAt = performance.now();
+      let replay: HostAttachAck["replay"];
+      let captureDurationMs = 0;
+      if (raw.complete) {
+        replay = {
+          kind: "raw-complete",
+          initialCols: raw.initialCols,
+          initialRows: raw.initialRows,
+          events: raw.events,
         };
-        entry.sinks.add(sink);
+      } else {
+        // Incomplete raw bytes are not a terminal state and must never cross the wire.
+        try {
+          replay = {
+            kind: "semantic-truncation-recovery",
+            initialCols: recorded.cols,
+            initialRows: recorded.rows,
+            events: (await entry.semantic.capture()).map((data) => ({ type: "data", data })),
+          };
+          captureDurationMs = performance.now() - captureStartedAt;
+        } catch (error) {
+          if (sink !== undefined) {
+            entry.sinks.delete(sink);
+          }
+          stream.end();
+          if (entry.exited || !entries.has(ptyId)) {
+            throw new StationHostProviderError(
+              "HOST_ATTACH_GONE",
+              `Host PTY "${ptyId}" exited while its snapshot was captured.`,
+              { cause: error },
+            );
+          }
+          const pending = error instanceof TerminalSnapshotPendingError;
+          throw new StationHostProviderError(
+            pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
+            pending
+              ? `Host PTY "${ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
+              : `Could not capture terminal state for host PTY "${ptyId}".`,
+            { cause: error },
+          );
+        }
       }
-      return { ack, frames: stream.frames };
+      const ack: HostAttachAck = {
+        subscribed: true,
+        ptyId: entry.ptyId,
+        pid: recorded.pid,
+        cols: recorded.cols,
+        rows: recorded.rows,
+        exited: false,
+        replay,
+      };
+      return { ack, frames: stream.frames, captureDurationMs };
     },
 
     close(ptyId) {

@@ -13,6 +13,7 @@ import {
 } from "../diagnostics.js";
 import { CsiFinal, EraseInDisplayMode } from "../protocol/controlBytes.js";
 import { DecMode } from "../protocol/decset.js";
+import { KittyKeyboard } from "../protocol/kitty.js";
 import {
   MouseEncoding,
   MouseTracking,
@@ -226,7 +227,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   });
   // Headless xterm defaults to Unicode 6 widths; OpenTUI measures with modern
   // tables. Without this, every cell after an emoji drifts one column.
-  terminal.loadAddon(new Unicode11Addon());
+  terminal.loadAddon(new Unicode11Addon() as never);
   terminal.unicode.activeVersion = "11";
 
   const scrollOnOutput = options.scrollOnOutput ?? DEFAULT_SCROLL_ON_OUTPUT;
@@ -293,12 +294,23 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // Lines scrolled up from the live bottom (0 = at the bottom).
   let scrollOffset = 0;
   let normalBufferIsSynchronizedFrame = false;
-  let kittyKeyboardFlags = 0;
+  type KittyKeyboardState = { flags: number; stack: number[] };
+  const kittyKeyboard = new Map<"alternate" | "normal", KittyKeyboardState>([
+    ["normal", { flags: 0, stack: [] }],
+    ["alternate", { flags: 0, stack: [] }],
+  ]);
+  const activeKittyKeyboard = (): KittyKeyboardState => {
+    const bufferType = terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
+    const state = kittyKeyboard.get(bufferType);
+    if (state === undefined) {
+      throw new Error(`Missing kitty keyboard state for ${bufferType} buffer.`);
+    }
+    return state;
+  };
   // The most recent OSC 0/2 title; mirrors xterm's onTitleChange so the pane
   // border can show it without reaching into the engine.
   let oscTitle: string | undefined;
   const titleListeners = new Set<() => void>();
-  const kittyKeyboardFlagStack: number[] = [];
   // For freeze/follow: a marker pinned to the top visible buffer line. It moves
   // with scrollback eviction, so it tracks how far content has scrolled even at
   // the scrollback cap where baseY plateaus. `shift` never anchors (it slides).
@@ -448,6 +460,16 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     cursorVisible = true;
     sgrMouse = false;
     normalBufferIsSynchronizedFrame = false;
+    for (const state of kittyKeyboard.values()) {
+      state.flags = 0;
+      state.stack.length = 0;
+    }
+    if (oscTitle !== undefined) {
+      oscTitle = undefined;
+      for (const listener of [...titleListeners]) {
+        listener();
+      }
+    }
     return false;
   });
   terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
@@ -456,24 +478,40 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     return false;
   });
   terminal.parser.registerCsiHandler({ prefix: ">", final: "u" }, (params) => {
-    kittyKeyboardFlagStack.push(kittyKeyboardFlags);
-    const flags = params[0];
-    if (typeof flags === "number") {
-      kittyKeyboardFlags = flags;
+    const state = activeKittyKeyboard();
+    if (state.stack.length === KittyKeyboard.StackLimit) {
+      state.stack.shift();
     }
+    state.stack.push(state.flags);
+    state.flags = primaryParams(params)[0] ?? 0;
     return true;
   });
   terminal.parser.registerCsiHandler({ prefix: "=", final: "u" }, (params) => {
-    const flags = params[0];
-    kittyKeyboardFlags = typeof flags === "number" ? flags : 0;
+    const state = activeKittyKeyboard();
+    const [flags = 0, mode = 1] = primaryParams(params);
+    if (mode === 2) {
+      state.flags |= flags;
+    } else if (mode === 3) {
+      state.flags &= ~flags;
+    } else {
+      state.flags = flags;
+    }
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "<", final: "u" }, () => {
-    kittyKeyboardFlags = kittyKeyboardFlagStack.pop() ?? 0;
+  terminal.parser.registerCsiHandler({ prefix: "<", final: "u" }, (params) => {
+    const state = activeKittyKeyboard();
+    const count = Math.max(1, primaryParams(params)[0] ?? 1);
+    if (count > state.stack.length) {
+      state.flags = 0;
+      state.stack.length = 0;
+    } else {
+      state.flags = state.stack[state.stack.length - count] ?? 0;
+      state.stack.length -= count;
+    }
     return true;
   });
   terminal.parser.registerCsiHandler({ prefix: "?", final: "u" }, () => {
-    emitResponse(`\x1b[?${kittyKeyboardFlags}u`);
+    emitResponse(`\x1b[?${activeKittyKeyboard().flags}u`);
     return true;
   });
 
@@ -713,7 +751,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       return { tracking, encoding: sgrMouse ? MouseEncoding.Sgr : MouseEncoding.Legacy };
     },
     isApplicationCursorKeys: () => terminal.modes.applicationCursorKeysMode,
-    isKittyKeyboardEnabled: () => kittyKeyboardFlags !== 0,
+    isKittyKeyboardEnabled: () => activeKittyKeyboard().flags !== 0,
     rowText: (index) => visibleRowText(index),
     corruptionEvidence,
     cursor: () => {
@@ -770,9 +808,11 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
 }
 
 function paramListIncludes(params: (number | number[])[], target: number): boolean {
-  return params.some((param) =>
-    Array.isArray(param) ? param.includes(target) : param === target,
-  );
+  return primaryParams(params).includes(target);
+}
+
+function primaryParams(params: (number | number[])[]): number[] {
+  return params.filter((param): param is number => !Array.isArray(param));
 }
 
 /** "#d4d4d8" -> "rgb:d4d4/d4d4/d8d8" (xterm's 16-bit-per-channel reply form). */
