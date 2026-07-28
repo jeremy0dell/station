@@ -51,7 +51,7 @@ describe("FullscreenDashboard mouse composition", () => {
     expect([...fixture.store.getState().collapsedProjectIds]).toEqual(["station"]);
   });
 
-  it("lets modal controls intercept a dashboard row beneath them", async () => {
+  it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {
     const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
     const setup = await render(fixture.store);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
@@ -61,8 +61,59 @@ describe("FullscreenDashboard mouse composition", () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
     });
 
-    expect(fixture.store.getState().screen).toEqual({ name: "help" });
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
     expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+  });
+
+  it("dismisses outside a bounded screen while its inner surface still consumes clicks", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+    const help = cellFor(setup.captureCharFrame(), "station help");
+
+    await actOn(() => setup.mockMouse.click(help.col, help.row, MouseButtons.LEFT));
+    expect(fixture.store.getState().screen).toEqual({ name: "help" });
+
+    await actOn(() => setup.mockMouse.click(0, 0, MouseButtons.LEFT));
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("keeps controls inside a bounded screen interactive", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "W" });
+      await setup.flush();
+    });
+    const addWidget = cellFor(setup.captureCharFrame(), "[ + add widget ]");
+
+    await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
+
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "widgetSettings",
+      focus: "picker",
+    });
+  });
+
+  it("omits click-away interception while choose-row screens select dashboard rows", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "X" });
+      await setup.flush();
+    });
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+
+    await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
+
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "removeWorktree",
+      step: "confirm",
+      rowId: "ses_wt_station_none",
+    });
   });
 
   it("scrolls when the wheel is used over a child row", async () => {

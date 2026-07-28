@@ -172,6 +172,13 @@ Pending rows remain inert; stale targets show bounded, deduplicated feedback. Pr
 toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
 modal surfaces intercept background clicks and scrolling.
 
+Bounded screens add one screen-host click-away layer: a primary mouse-down outside the visible
+surface performs that screen's existing safe cancel or back transition. Clicks inside the surface,
+non-primary buttons, mouse-up, and wheel input remain consumed without dismissing or reaching the
+dashboard. Remove, rename, and fork choose-row modes omit the layer so row clicks keep selecting;
+search and the dashboard remain unchanged. In native Station the inner screen receives the click
+before the outer Station popup, so one click closes only the topmost safe surface.
+
 Native and standalone rendering expose the same project actions. Quick-session
 intent resolves the same project and default harness before terminal-specific
 execution: native Station hosts the session in a Station pane, while the

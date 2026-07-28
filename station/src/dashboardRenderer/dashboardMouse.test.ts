@@ -45,6 +45,7 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   projectSettingsItem: true,
   quickSessionForProject: true,
   row: true,
+  screenBackdrop: true,
   scrollIndicator: true,
   sheetBackdrop: true,
   sheetButton: true,
@@ -175,6 +176,23 @@ describe("routeDashboardMouse", () => {
     store.getState().handleKey({ input: "H" });
     routeDashboardMouse({ kind: "row", rowId: "ses_wt_station_working" }, SCROLL_DOWN, store);
     expect(store.getState().scrollOffset).toBe(1);
+  });
+
+  it("dismisses a bounded screen only on primary-down and keeps stale backdrop wheels inert", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "H" });
+
+    for (const event of [LEFT_UP, RIGHT_DOWN, MIDDLE_DOWN, SCROLL_DOWN]) {
+      routeDashboardMouse({ kind: "screenBackdrop" }, event, store);
+      expect(store.getState().screen).toEqual({ name: "help" });
+    }
+
+    routeDashboardMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+
+    routeDashboardMouse({ kind: "screenBackdrop" }, SCROLL_DOWN, store);
+    routeDashboardMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
+    expect(store.getState().scrollOffset).toBe(0);
   });
 
   it("maps row pickers, sheet choices, confirmations, and fork submit to keyboard transitions", async () => {

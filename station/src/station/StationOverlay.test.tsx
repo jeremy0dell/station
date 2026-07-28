@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import type { TuiStore } from "@station/dashboard-core";
+import type { StoreApi } from "zustand/vanilla";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
+import { routeStationMouse } from "./input/stationMouse.js";
 import { makeStationTestStore } from "./test/support/makeStationTestStore.js";
 import { StationOverlay, stationPopupLayout } from "./StationOverlay.js";
 
@@ -108,12 +111,31 @@ describe("StationOverlay", () => {
       target: { kind: "row", rowId: "ses_wt_station_working" },
     });
   });
+
+  it("lets an inner screen consume popup click-away before the outer overlay", async () => {
+    const { store } = makeStationTestStore();
+    store.getState().handleKey({ input: "H" });
+    const calls: MouseTargetRef[] = [];
+    const setup = await renderOverlay((target, event) => {
+      calls.push(target);
+      if (target.kind === "station") {
+        routeStationMouse(target.target, event, store);
+      }
+      return true;
+    }, store);
+    const layout = stationPopupLayout(SURFACE.width, SURFACE.height);
+
+    await setup.mockMouse.click(layout.left + 1, layout.top + 1, MouseButtons.LEFT);
+
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(calls).toEqual([{ kind: "station", target: { kind: "screenBackdrop" } }]);
+  });
 });
 
 async function renderOverlay(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
+  store: StoreApi<TuiStore> = makeStationTestStore().store,
 ) {
-  const { store } = makeStationTestStore();
   const setup = await testRender(
     <StationOverlay store={store} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />,
     SURFACE,

@@ -2,6 +2,7 @@ import type { TuiStore } from "@station/dashboard-core";
 import {
   clampDashboardStateScroll,
   deriveTuiInputMode,
+  dismissTuiScreenOnClickAway,
   focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
@@ -51,7 +52,11 @@ export function routeDashboardMouse(
   const mode = deriveTuiInputMode(store.getState());
   const scrollDirection = wheelDirection(event);
   if (scrollDirection !== null) {
-    if (target.kind !== "sheetBackdrop" && ROW_INTERACTIVE_MODES.has(mode)) {
+    if (
+      target.kind !== "screenBackdrop" &&
+      target.kind !== "sheetBackdrop" &&
+      ROW_INTERACTIVE_MODES.has(mode)
+    ) {
       store.getState().handleKey({ input: "", mouseScroll: scrollDirection });
     }
     return;
@@ -185,6 +190,10 @@ function routeModalClick(
   mode: TuiInputMode,
 ): boolean {
   if (target.kind === "sheetBackdrop") {
+    return true;
+  }
+  if (target.kind === "screenBackdrop") {
+    store.setState(dismissTuiScreenOnClickAway(store.getState()));
     return true;
   }
   switch (target.kind) {

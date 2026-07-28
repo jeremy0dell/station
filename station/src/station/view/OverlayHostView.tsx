@@ -2,8 +2,14 @@
 // its overlay (help panel, bottom sheets) in an absolute layer above the
 // dashboard. The dashboard never reflows for overlays.
 import type { StationSnapshot } from "@station/contracts";
-import type { TuiLocalRows, TuiScreen, TuiSelectionState } from "@station/dashboard-core";
+import {
+  tuiScreenClickAwayMode,
+  type TuiLocalRows,
+  type TuiScreen,
+  type TuiSelectionState,
+} from "@station/dashboard-core";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
+import type { ReactNode } from "react";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
@@ -14,6 +20,7 @@ import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
+import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export type OverlayHostViewProps = {
   snapshot: StationSnapshot;
@@ -38,11 +45,12 @@ export function OverlayHostView({
   widgets = [],
   widgetsPersisted = true,
 }: OverlayHostViewProps) {
+  const dispatch = useStationMouse();
+  let overlay: ReactNode = null;
   if (screen.name === "help") {
-    return <HelpOverlayView columns={columns} rows={rows} />;
-  }
-  if (screen.name === "widgetSettings") {
-    return (
+    overlay = <HelpOverlayView columns={columns} rows={rows} />;
+  } else if (screen.name === "widgetSettings") {
+    overlay = (
       <WidgetSettingsPanelView
         screen={screen}
         widgets={widgets}
@@ -51,9 +59,8 @@ export function OverlayHostView({
         rows={rows}
       />
     );
-  }
-  if (screen.name === "addProject") {
-    return (
+  } else if (screen.name === "addProject") {
+    overlay = (
       <AddProjectSheetView
         columns={columns}
         rows={rows}
@@ -61,9 +68,8 @@ export function OverlayHostView({
         selection={selection}
       />
     );
-  }
-  if (screen.name === "newSession") {
-    return (
+  } else if (screen.name === "newSession") {
+    overlay = (
       <NewSessionSheetView
         columns={columns}
         rows={rows}
@@ -72,9 +78,8 @@ export function OverlayHostView({
         selection={selection}
       />
     );
-  }
-  if (screen.name === "projectDefaultAgent") {
-    return (
+  } else if (screen.name === "projectDefaultAgent") {
+    overlay = (
       <ProjectDefaultAgentSheetView
         columns={columns}
         rows={rows}
@@ -83,9 +88,8 @@ export function OverlayHostView({
         selection={selection}
       />
     );
-  }
-  if (screen.name === "projectCollapse" || screen.name === "projectSettingsPicker") {
-    return (
+  } else if (screen.name === "projectCollapse" || screen.name === "projectSettingsPicker") {
+    overlay = (
       <ProjectChoiceSheetView
         columns={columns}
         rows={rows}
@@ -94,15 +98,12 @@ export function OverlayHostView({
         selection={selection}
       />
     );
-  }
-  if (screen.name === "renameSession" && screen.step === "editName") {
-    return <RenameSessionSheetView columns={columns} rows={rows} state={screen} />;
-  }
-  if (screen.name === "removeWorktree") {
-    return <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
-  }
-  if (screen.name === "projectSettings") {
-    return (
+  } else if (screen.name === "renameSession" && screen.step === "editName") {
+    overlay = <RenameSessionSheetView columns={columns} rows={rows} state={screen} />;
+  } else if (screen.name === "removeWorktree") {
+    overlay = <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
+  } else if (screen.name === "projectSettings") {
+    overlay = (
       <ProjectSettingsPanelView
         columns={columns}
         rows={rows}
@@ -112,9 +113,24 @@ export function OverlayHostView({
         localRows={localRows}
       />
     );
+  } else if (screen.name === "fork") {
+    overlay = <ForkSessionSheetView columns={columns} rows={rows} screen={screen} />;
   }
-  if (screen.name === "fork") {
-    return <ForkSessionSheetView columns={columns} rows={rows} screen={screen} />;
-  }
-  return null;
+
+  return (
+    <>
+      {tuiScreenClickAwayMode(screen) === "dismiss" ? (
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width={columns}
+          height={rows}
+          zIndex={9}
+          {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
+        />
+      ) : null}
+      {overlay}
+    </>
+  );
 }

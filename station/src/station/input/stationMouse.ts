@@ -8,6 +8,7 @@ import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
 import {
   deriveTuiInputMode,
+  dismissTuiScreenOnClickAway,
   isRemoveProjectArmed,
   LIST_REGISTRY,
   type ProjectSettingsItemId,
@@ -77,6 +78,8 @@ export type StationMouseTarget =
   | { kind: "addProjectRow"; index: number }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
+  /** The viewport outside a bounded screen; primary-down safely cancels that screen. */
+  | { kind: "screenBackdrop" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
   | { kind: "sheetBackdrop" };
 
@@ -313,6 +316,9 @@ export function routeStationMouse(
         copyDirty: submit.copyDirty,
       };
     }
+    case "screenBackdrop":
+      store.setState(dismissTuiScreenOnClickAway(store.getState()));
+      return { kind: "handled" };
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };
@@ -355,7 +361,11 @@ function routeStationWheel(
   mode: TuiInputMode,
 ): StationMouseOutcome {
   // Sheets and prompts must not scroll the dashboard beneath them.
-  if (target.kind === "sheetBackdrop" || !ROW_INTERACTIVE_MODES.has(mode)) {
+  if (
+    target.kind === "screenBackdrop" ||
+    target.kind === "sheetBackdrop" ||
+    !ROW_INTERACTIVE_MODES.has(mode)
+  ) {
     return { kind: "handled" };
   }
   scrollStationView(store, eventKind === "scroll-up" ? -1 : 1);
