@@ -28,8 +28,10 @@ type CacheEntry = {
 
 /**
  * Out-of-band provider health cache: reconcile reads synchronously and never
- * awaits a health probe. Each unique probe notifies completion listeners before
- * its in-flight slot clears, including boot, stale, and eager refreshes.
+ * awaits a health probe during reconcile. Explicit launch preflights await the
+ * selected provider's refresh while retaining the same single-flight operation.
+ * Each unique probe notifies completion listeners before its in-flight slot clears,
+ * including boot, stale, eager, and launch refreshes.
  * `stn doctor` keeps probing providers live, bypassing this cache.
  */
 export class ProviderHealthCache {

@@ -242,12 +242,20 @@ describe("harnessHookDoctorOptions", () => {
     stateDir: "/checkout/A/state",
     hookSpoolDir: "/checkout/A/state/spool/hooks",
     autoStartFromHooks: true,
+    artifactOwner: {
+      schemaVersion: 1 as const,
+      launcher: "/checkout/A/bin/stn-ingress",
+      runtimeKind: "source" as const,
+      version: "0.0.0-test",
+      buildIdentity: "a".repeat(64),
+    },
   };
 
   it("preserves the incumbent hook launcher without a requester runtime", () => {
     expect(harnessHookDoctorOptions(incumbent)).toMatchObject({
       enabled: true,
       hookBin: incumbent.hookBin,
+      artifactOwner: incumbent.artifactOwner,
     });
   });
   const requesterRuntime = {

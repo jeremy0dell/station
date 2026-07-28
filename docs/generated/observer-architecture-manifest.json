@@ -495,6 +495,55 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+      "exports": [
+        {
+          "name": "assertHarnessLaunchPreconditionsOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation."
+        },
+        {
+          "name": "HarnessLaunchPreflight",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "HarnessLaunchPreflightOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./cancellation.js",
+          "resolvedPath": "apps/observer/src/commands/cancellation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertHooksInstalledOrThrow", "resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderId", "SafeError"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/project.ts",
       "exports": [
         {
@@ -854,6 +903,18 @@
       ],
       "imports": [
         {
+          "specifier": "./harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertHarnessLaunchPreconditionsOrThrow"]
+        },
+        {
+          "specifier": "./harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
+        },
+        {
           "specifier": "./project.js",
           "resolvedPath": "apps/observer/src/commands/project.ts",
           "edgeKind": "runtime",
@@ -1186,7 +1247,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1201,6 +1262,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "../queue.js",
@@ -1295,7 +1362,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1310,6 +1377,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "../queue.js",
@@ -1449,7 +1522,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1461,7 +1534,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
+          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1473,7 +1546,7 @@
           "name": "createSessionStartAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
+          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -1709,7 +1782,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
+          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1724,6 +1797,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "../queue.js",
@@ -2077,7 +2156,7 @@
           "name": "createSessionStartAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
+          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -2092,6 +2171,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "../queue.js",
@@ -2343,7 +2428,7 @@
           "name": "TerminalIntentRunner",
           "kind": "type",
           "role": "USE CASE",
-          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports."
+          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation."
         },
         {
           "name": "TerminalIntentSubmitContext",
@@ -2358,6 +2443,12 @@
           "resolvedPath": "apps/observer/src/commands/cancellation.ts",
           "edgeKind": "runtime",
           "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "./session/shared.js",
@@ -2520,8 +2611,8 @@
         {
           "name": "createWorktreeCreateHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch."
         },
         {
           "name": "CreateWorktreeCreateHandlerOptions",
@@ -2536,6 +2627,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "../queue.js",
@@ -2599,8 +2696,8 @@
         {
           "name": "createWorktreeForkHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot."
         },
         {
           "name": "WorktreeForkHandlerOptions",
@@ -2615,6 +2712,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
         },
         {
           "specifier": "../queue.js",
@@ -4253,7 +4356,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -4265,7 +4368,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
+          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -4277,7 +4380,7 @@
           "name": "createSessionStartAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
+          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -5339,7 +5442,7 @@
           "name": "TerminalIntentRunner",
           "kind": "type",
           "role": "USE CASE",
-          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports."
+          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation."
         },
         {
           "name": "TerminalIntentSubmitContext",
@@ -9617,7 +9720,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Prepares Station-hosted identity by durably seeding its canonical title before target registration. Failed launch cleanup independently releases its target and discards only the fresh session projection."
+          "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection."
         },
         {
           "name": "reportExternalExit",
@@ -9634,10 +9737,16 @@
           "bindings": ["worktreeMissingError"]
         },
         {
+          "specifier": "../commands/harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertHarnessLaunchPreconditionsOrThrow"]
+        },
+        {
           "specifier": "../commands/providers.js",
           "resolvedPath": "apps/observer/src/commands/providers.ts",
           "edgeKind": "runtime",
-          "bindings": ["assertHooksInstalledOrThrow", "resolveHarnessProviderOrThrow"]
+          "bindings": ["resolveHarnessProviderOrThrow"]
         },
         {
           "specifier": "../commands/session/shared.js",
@@ -9876,6 +9985,18 @@
         }
       ],
       "imports": [
+        {
+          "specifier": "../commands/harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertHarnessLaunchPreconditionsOrThrow"]
+        },
+        {
+          "specifier": "../commands/harnessLaunchPreflight.js",
+          "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessLaunchPreflight"]
+        },
         {
           "specifier": "../commands/queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
@@ -11693,6 +11814,14 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+      "declaration": "assertHarnessLaunchPreconditionsOrThrow",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/commands/project.ts",
       "declaration": "createProjectAddHandler",
       "kind": "function",
@@ -11731,6 +11860,13 @@
       "role": "COMPOSITION ROOT",
       "purpose": "Constructs process-lifetime Observer command use cases and registers their handlers with the command queue.",
       "dependencies": [
+        {
+          "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "declaration": "assertHarnessLaunchPreconditionsOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/observer/src/commands/project.ts",
           "declaration": "createProjectAddHandler",
@@ -11788,6 +11924,20 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/worktree/create.ts",
+          "declaration": "createWorktreeCreateHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/commands/worktree/fork.ts",
+          "declaration": "createWorktreeForkHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/worktree/remove.ts",
           "declaration": "createWorktreeRemoveHandler",
           "kind": "function",
@@ -11801,7 +11951,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback.",
       "dependencies": []
     },
     {
@@ -11809,7 +11959,7 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback.",
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback.",
       "dependencies": []
     },
     {
@@ -11825,7 +11975,7 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection.",
+      "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -11848,7 +11998,7 @@
       "declaration": "createSessionStartAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection.",
+      "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection.",
       "dependencies": []
     },
     {
@@ -11856,7 +12006,23 @@
       "declaration": "TerminalIntentRunner",
       "kind": "type",
       "role": "USE CASE",
-      "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports.",
+      "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/worktree/create.ts",
+      "declaration": "createWorktreeCreateHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/worktree/fork.ts",
+      "declaration": "createWorktreeForkHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.",
       "dependencies": []
     },
     {
@@ -12452,8 +12618,16 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Prepares Station-hosted identity by durably seeding its canonical title before target registration. Failed launch cleanup independently releases its target and discards only the fresh session projection.",
-      "dependencies": []
+      "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "declaration": "assertHarnessLaunchPreconditionsOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/runtime/externalLaunch.ts",
@@ -12502,6 +12676,13 @@
       "role": "COMPOSITION ROOT",
       "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, ownership-aware shutdown, and exact build health publication.",
       "dependencies": [
+        {
+          "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
+          "declaration": "assertHarnessLaunchPreconditionsOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/observer/src/commands/router.ts",
           "declaration": "registerObserverCommandHandlers",
@@ -13004,7 +13185,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

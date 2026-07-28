@@ -23,6 +23,7 @@ import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime
 import { toSafeError } from "../diagnostics/errors.js";
 import type { StationLogger } from "../stationLogger.js";
 import { throwIfAborted } from "./cancellation.js";
+import type { HarnessLaunchPreflight } from "./harnessLaunchPreflight.js";
 import { launchHarnessInTerminal, runProviderMutation } from "./session/shared.js";
 
 export type TerminalIntentSubmitContext = {
@@ -34,8 +35,8 @@ export type TerminalIntentSubmitContext = {
 /**
  * USE CASE
  *
- * Executes terminal workspace, focus, and close intents by coordinating
- * terminal and harness ports.
+ * Executes terminal workspace, focus, and close intents by coordinating terminal and harness
+ * ports, repeating the selected-harness preflight immediately before workspace mutation.
  *
  * A process-lifetime instance deduplicates submissions by command ID and
  * intent type.
@@ -54,6 +55,7 @@ export type TerminalIntentProviderAccess = {
 
 export type DefaultTerminalIntentRunnerOptions = {
   providers: TerminalIntentProviderAccess;
+  launchPreflight: HarnessLaunchPreflight;
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
   commandTimeoutMs?: number | undefined;
@@ -61,6 +63,7 @@ export type DefaultTerminalIntentRunnerOptions = {
 
 class DefaultTerminalIntentRunner implements TerminalIntentRunner {
   readonly #providers: TerminalIntentProviderAccess;
+  readonly #launchPreflight: HarnessLaunchPreflight;
   readonly #clock: RuntimeClock;
   readonly #logger: StationLogger | undefined;
   readonly #commandTimeoutMs: number | undefined;
@@ -68,6 +71,7 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
 
   constructor(options: DefaultTerminalIntentRunnerOptions) {
     this.#providers = options.providers;
+    this.#launchPreflight = options.launchPreflight;
     this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger;
     this.#commandTimeoutMs = options.commandTimeoutMs;
@@ -166,6 +170,7 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
       defaultCommandTimeoutMs: this.#commandTimeoutMs,
       context,
     });
+    await this.#launchPreflight(harness.id, context.signal);
     let opened: Awaited<ReturnType<TerminalProvider["openWorkspace"]>> | undefined;
 
     try {

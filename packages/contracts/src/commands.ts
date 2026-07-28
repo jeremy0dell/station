@@ -21,6 +21,7 @@ export const CreateWorktreePayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
     branch: nonEmptyStringSchema,
+    launchHarness: ProviderIdSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     path: nonEmptyStringSchema.optional(),
     source: CommandSourceSchema.optional(),
@@ -46,6 +47,7 @@ export const ForkWorktreePayloadSchema = z
     projectId: ProjectIdSchema,
     sourceWorktreeId: WorktreeIdSchema,
     branch: nonEmptyStringSchema,
+    launchHarness: ProviderIdSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     copyDirty: z.boolean().optional(),
   })

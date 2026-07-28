@@ -1,5 +1,6 @@
 import {
   createNewSessionNameToken,
+  type NewSessionFlowAction,
   newSessionIntentForInput,
   transitionNewSessionFlow,
   validateNewSessionCreate,
@@ -12,6 +13,8 @@ import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
+
+export const newSessionScreenBehavior = { clickAway: cancelNewSession };
 
 export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "newSession") {
@@ -42,21 +45,30 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
   }
 
   const flow = transitionNewSessionFlow(state.screen.flow, intent.action);
-  if (flow === undefined) {
-    return {
-      state: {
-        ...state,
-        screen: { name: "dashboard" },
-      },
-    };
-  }
+  return { state: applyNewSessionFlow(state, flow) };
+}
 
-  return {
-    state: seedNewSessionPickerCursor({
-      ...state,
-      screen: { name: "newSession", flow },
-    }),
-  };
+function cancelNewSession(state: TuiState): TuiState {
+  if (state.screen.name !== "newSession") {
+    return state;
+  }
+  return applyNewSessionAction(state, { type: "cancel" });
+}
+
+function applyNewSessionAction(state: TuiState, action: NewSessionFlowAction): TuiState {
+  if (state.screen.name !== "newSession") {
+    return state;
+  }
+  return applyNewSessionFlow(state, transitionNewSessionFlow(state.screen.flow, action));
+}
+
+function applyNewSessionFlow(
+  state: TuiState,
+  flow: Extract<TuiState["screen"], { name: "newSession" }>["flow"] | undefined,
+): TuiState {
+  return flow === undefined
+    ? { ...state, screen: { name: "dashboard" } }
+    : seedNewSessionPickerCursor({ ...state, screen: { name: "newSession", flow } });
 }
 
 function submitNewSession(state: TuiState): TuiTransition {

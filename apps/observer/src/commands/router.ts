@@ -7,6 +7,10 @@ import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
+  assertHarnessLaunchPreconditionsOrThrow,
+  type HarnessLaunchPreflight,
+} from "./harnessLaunchPreflight.js";
+import {
   createProjectAddHandler,
   createProjectRemoveHandler,
   createProjectSetDefaultHarnessHandler,
@@ -41,6 +45,7 @@ export type RegisterObserverCommandHandlersOptions = {
   logger?: StationLogger | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   commandTimeoutMs?: number | undefined;
+  launchPreflight?: HarnessLaunchPreflight | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
   projectConfigWriter: ProjectConfigWriter;
 };
@@ -51,14 +56,22 @@ export type RegisterObserverCommandHandlersOptions = {
  * Constructs process-lifetime Observer command use cases and registers their
  * handlers with the command queue.
  *
- * Terminal intent orchestration and ProjectConfigWriter are prebound here;
- * handlers never receive configuration or home paths.
+ * Terminal intent orchestration, runtime-prebound config-aware launch preflight, and
+ * ProjectConfigWriter are composed here; handlers never receive configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
 ): void {
   const getProjects = options.getProjects ?? (() => options.projects);
   const featureFlags = options.featureFlags ?? createFeatureFlagEvaluator();
+  const launchPreflight: HarnessLaunchPreflight =
+    options.launchPreflight ??
+    ((providerId, signal) =>
+      assertHarnessLaunchPreconditionsOrThrow({
+        providers: options.providers,
+        providerId,
+        ...(signal === undefined ? {} : { signal }),
+      }));
   const terminalIntentRunner =
     options.terminalIntentRunner ??
     createTerminalIntentRunner({
@@ -66,6 +79,7 @@ export function registerObserverCommandHandlers(
         terminals: options.providers.terminals,
         harnesses: options.providers.harnesses,
       },
+      launchPreflight,
       clock: options.clock,
       logger: options.logger,
       commandTimeoutMs: options.commandTimeoutMs,
@@ -74,6 +88,7 @@ export function registerObserverCommandHandlers(
     "worktree.create": createWorktreeCreateHandler({
       getProjects,
       providers: options.providers,
+      launchPreflight,
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
@@ -84,6 +99,7 @@ export function registerObserverCommandHandlers(
       getProjects,
       core: options.core,
       providers: options.providers,
+      launchPreflight,
       eventBus: options.eventBus,
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
@@ -104,6 +120,7 @@ export function registerObserverCommandHandlers(
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
+      launchPreflight,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -116,6 +133,7 @@ export function registerObserverCommandHandlers(
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
+      launchPreflight,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -128,6 +146,7 @@ export function registerObserverCommandHandlers(
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
+      launchPreflight,
       core: options.core,
       persistence: options.persistence,
       featureFlags,
@@ -140,6 +159,7 @@ export function registerObserverCommandHandlers(
       getProjects,
       providers: options.providers,
       terminalIntentRunner,
+      launchPreflight,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,

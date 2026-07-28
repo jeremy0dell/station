@@ -43,6 +43,47 @@ function screenText(screen: ReturnType<typeof createStationVtScreen>): string {
 }
 
 describe("data-plane reattach (host PTY → host-attached terminal → VT screen)", () => {
+  it("restores an OSC 8 URI by replaying the complete pre-attach PTY data event", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const socketPath = await startHostWith(scripted);
+    const control = createStationHostClient({ socketPath });
+    const { ptyId } = await control.spawn({
+      ...identity,
+      command: "claude",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 80,
+      rows: 24,
+    });
+    const uri = "https://example.com/complete-host-replay";
+    scripted.helpers.emitData(`\x1b]8;;${uri}\x1b\\reattached\x1b]8;;\x1b\\`);
+
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: socketPath,
+      ptyId,
+      size: { cols: 80, rows: 24 },
+    });
+    const screen = createStationVtScreen({ size: { cols: 80, rows: 24 } });
+    terminal.onData((data) => screen.feed(data));
+
+    try {
+      await waitFor(() =>
+        screen
+          .buildRows({ cursorVisible: false })
+          .some((row) => row.spans.some((span) => span.link === uri)),
+      );
+      expect(
+        screen
+          .buildRows({ cursorVisible: false })
+          .some((row) => row.spans.some((span) => span.text === "reattached" && span.link === uri)),
+      ).toBe(true);
+    } finally {
+      terminal.dispose();
+      screen.dispose();
+      control.dispose();
+    }
+  });
+
   it("replays scrollback then streams live output into a fresh screen, and detach keeps the PTY", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startHostWith(scripted);

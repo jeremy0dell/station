@@ -250,6 +250,27 @@ describe("station input through the station runtime", () => {
     expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
   });
 
+  it("gives bounded-screen barriers first refusal without opening a context menu", () => {
+    const { view, station, runtime } = makeRuntime(true);
+    view.getState().handleKey({ input: "H" });
+
+    for (const target of [{ kind: "screenBackdrop" }, { kind: "sheetBackdrop" }] as const) {
+      expect(runtime.dispatchMouse({ kind: "station", target }, RIGHT_DOWN)).toBe(true);
+      expect(runtime.dispatchMouse({ kind: "station", target }, WHEEL_UP)).toBe(true);
+      expect(view.getState().screen).toEqual({ name: "help" });
+      expect(station.getState().input.contextMenu).toBeNull();
+    }
+
+    expect(
+      runtime.dispatchMouse(
+        { kind: "station", target: { kind: "screenBackdrop" } },
+        LEFT_DOWN,
+      ),
+    ).toBe(true);
+    expect(view.getState().screen).toEqual({ name: "dashboard" });
+    expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+  });
+
   it("closes STATION from the backdrop through the runtime path", () => {
     const { station, runtime } = makeRuntime(true);
 

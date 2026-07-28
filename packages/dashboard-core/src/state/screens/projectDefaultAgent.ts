@@ -2,6 +2,8 @@ import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
+export const projectDefaultAgentScreenBehavior = { clickAway: closeProjectDefaultAgent };
+
 export function openProjectDefaultAgentPicker(state: TuiState, projectId: string): TuiState {
   if (state.snapshot === undefined) {
     return state;
@@ -28,7 +30,11 @@ export function handleProjectDefaultAgentKey(state: TuiState, key: TuiKey): TuiT
     return { state };
   }
   if (key.escape === true) {
-    return { state: { ...state, screen: { name: "dashboard" } } };
+    return { state: closeProjectDefaultAgent(state) };
   }
   return { state };
+}
+
+function closeProjectDefaultAgent(state: TuiState): TuiState {
+  return { ...state, screen: { name: "dashboard" } };
 }
