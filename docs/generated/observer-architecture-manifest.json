@@ -10943,14 +10943,14 @@
       "path": "apps/cli/src/commands/doctor.ts",
       "declaration": "runDoctorCommand",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Coordinates Observer diagnostics, requester hook identity, and local checks for one CLI request.",
+      "role": "ADAPTER",
+      "purpose": "Translates one CLI doctor request into pinned Observer diagnostics and local runtime checks.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "startObserver",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -10980,7 +10980,7 @@
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "startObserver",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -11048,14 +11048,14 @@
       "path": "apps/cli/src/ingress/deliveryPolicy.ts",
       "declaration": "deliverProviderHookWithSpooling",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Gates delivery on compatible ownership and spools inaccessible failures without delivery, auto-start lock mutation, or competing Observer startup.",
+      "role": "ADAPTER",
+      "purpose": "Coordinates CLI ingress delivery across Observer startup, socket transport, and spool storage without competing ownership mutation.",
       "dependencies": [
         {
           "path": "apps/cli/src/ingress/observerStartup.ts",
           "declaration": "startProviderHookObserver",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11064,8 +11064,8 @@
       "path": "apps/cli/src/ingress/observerStartup.ts",
       "declaration": "startProviderHookObserver",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Attaches provider-hook delivery to a compatible incumbent and auto-starts only from stopped or proven-stale ownership; inaccessible and listening- unhealthy sockets never authorize mutation.",
+      "role": "ADAPTER",
+      "purpose": "Translates provider-hook delivery into compatible Observer attachment or child startup; inaccessible and listening-unhealthy sockets never authorize mutation.",
       "dependencies": []
     },
     {
@@ -11079,7 +11079,7 @@
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11095,7 +11095,7 @@
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11111,7 +11111,7 @@
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11127,7 +11127,7 @@
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11143,7 +11143,7 @@
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11152,14 +11152,14 @@
       "path": "apps/cli/src/ingress/sender.ts",
       "declaration": "sendProviderHookEvent",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Validates shared provider-hook ingress, pins delivery to the accepted Observer build, and applies the centralized delivery-or-spool policy.",
+      "role": "ADAPTER",
+      "purpose": "Translates shared provider-hook ingress into delivery pinned to the accepted Observer build, including the centralized delivery-or-spool policy.",
       "dependencies": [
         {
           "path": "apps/cli/src/ingress/deliveryPolicy.ts",
           "declaration": "deliverProviderHookWithSpooling",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -11207,8 +11207,8 @@
       "path": "apps/cli/src/observerMain.ts",
       "declaration": "runCliObserverMain",
       "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates raw process arguments plus compiled asset and provider-hook launcher inputs into CLI-owned Observer provider composition.",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProviders.ts",
@@ -11230,8 +11230,8 @@
       "path": "apps/cli/src/observerProcess.ts",
       "declaration": "getObserverStatus",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Reports inaccessible socket ownership without spawning, unlinking, stopping, or signaling another process.",
+      "role": "ADAPTER",
+      "purpose": "Translates Observer socket and process evidence into a CLI-safe status without spawning, unlinking, stopping, or signaling another process.",
       "dependencies": [
         {
           "path": "packages/protocol/src/client.ts",
@@ -11253,21 +11253,21 @@
       "path": "apps/cli/src/observerProcess.ts",
       "declaration": "restartObserver",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Restarts an exact or replaceable incumbent without stopping a newer winning build.",
+      "role": "ADAPTER",
+      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "startObserver",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -11283,14 +11283,14 @@
       "path": "apps/cli/src/observerProcess.ts",
       "declaration": "startObserver",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Attaches to an exact or winning incumbent build, starts a child to negotiate replacement of an older build, and refuses incomplete ownership evidence. Socket ownership mutation remains inside the child's serialized boot lifecycle.",
+      "role": "ADAPTER",
+      "purpose": "Translates CLI startup intent into exact-build Observer attachment or child startup while leaving socket ownership mutation to the child's boot lifecycle.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -11299,14 +11299,14 @@
       "path": "apps/cli/src/observerProcess.ts",
       "declaration": "stopObserver",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Stops only the exact Observer process attributed by the initial health response.",
+      "role": "ADAPTER",
+      "purpose": "Translates a CLI stop request into a pinned Observer lifecycle operation.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
           "kind": "function",
-          "role": "USE CASE",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -12714,8 +12714,8 @@
       "path": "packages/client/src/observerRuntime.ts",
       "declaration": "createStationClientRuntime",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Maintains one live Observer projection through either an injected service or a socket transport pinned to the build selector already accepted by its caller.",
+      "role": "ADAPTER",
+      "purpose": "Translates an injected service or pinned Observer socket transport into one live client projection.",
       "dependencies": [
         {
           "path": "packages/client/src/observerService.ts",

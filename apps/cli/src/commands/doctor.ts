@@ -30,9 +30,9 @@ export type DoctorCommandOptions = {
 };
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Coordinates Observer diagnostics, requester hook identity, and local checks for one CLI request.
+ * Translates one CLI doctor request into pinned Observer diagnostics and local runtime checks.
  */
 export async function runDoctorCommand(
   args: string[],

@@ -122,10 +122,10 @@ export async function sendWorktrunkHookEvent(
 }
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Validates shared provider-hook ingress, pins delivery to the accepted
- * Observer build, and applies the centralized delivery-or-spool policy.
+ * Translates shared provider-hook ingress into delivery pinned to the accepted
+ * Observer build, including the centralized delivery-or-spool policy.
  */
 export async function sendProviderHookEvent(
   input: SendProviderHookEventInput,

@@ -820,7 +820,9 @@ registry. `pnpm architecture:observer:generate` atomically refreshes it after
 successful validation, while `pnpm architecture:observer:check` validates the
 graph and byte-compares the checked-in artifact.
 
-Role checks are declaration-level rather than file-level. A marked composition
+Role checks are declaration-level rather than file-level and evaluate every
+controlled production declaration participating in an Observer seam, including
+CLI composition, contracts, protocol, and integrations. A marked composition
 root receives the broad wiring allowance only for dependencies reachable from
 that declaration through same-file private helpers. Unrelated exports in the
 same module retain their own role and direction. Adapter substitution and

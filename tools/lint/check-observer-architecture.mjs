@@ -925,12 +925,7 @@ function leftmostIdentifier(node) {
 
 function evaluateRoleDirections(input) {
   for (const group of input.declarationState.groups.values()) {
-    if (
-      !group.path.startsWith(`${input.sourceRoot}/`) ||
-      (!group.exported && group.marker === undefined)
-    ) {
-      continue;
-    }
+    if (group.marker === undefined) continue;
     const dependencies = input.dependencyState.get(group.key) ?? [];
     for (const dependency of dependencies) {
       const targetRole = dependency.target.marker?.role;
@@ -1544,7 +1539,7 @@ function lineAndColumn(sourceFile, position) {
 }
 
 function walkTypeScriptFiles(root) {
-  return walkFiles(root, (name) => /\.(?:ts|tsx)$/.test(name));
+  return walkFiles(root, (name) => /\.(?:ts|tsx|mts|cts)$/.test(name));
 }
 
 function walkNamedFiles(root, expectedName) {
@@ -1565,9 +1560,11 @@ function walkFiles(root, includeFile) {
 
 function isProductionSourcePath(file, rootDir) {
   const path = relativePosix(rootDir, file);
-  if (!/\.(?:ts|tsx)$/.test(path) || path.endsWith(".d.ts")) return false;
+  if (!/\.(?:ts|tsx|mts|cts)$/.test(path) || /\.d\.(?:ts|mts|cts)$/.test(path)) {
+    return false;
+  }
   if (!path.split("/").includes("src")) return false;
-  if (/\.(?:test|spec)\.(?:ts|tsx)$/.test(path)) return false;
+  if (/\.(?:test|spec)\.(?:ts|tsx|mts|cts)$/.test(path)) return false;
   return !path.split("/").some((part) => testPathParts.has(part));
 }
 

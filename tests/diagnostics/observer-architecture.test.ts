@@ -242,6 +242,42 @@ export interface ForbiddenDrivingPort extends LocalDrivenPort {}
     expect(rendered).toContain("apps/observer/src/targets.ts#");
   });
 
+  it("enforces role direction from controlled seams outside Observer source", async () => {
+    const root = await createFixture({
+      "apps/observer/src/useCase.ts": `
+/**
+ * USE CASE
+ *
+ * Coordinates the fixture application intent.
+ */
+export function runFixtureUseCase(): void {}
+`,
+      "apps/cli/src/adapter.ts": `
+import { runFixtureUseCase } from "../../observer/src/useCase.js";
+/**
+ * ADAPTER
+ *
+ * Deliberately reaches a use case from an outer boundary adapter.
+ */
+export function forbiddenCliAdapter(): void { runFixtureUseCase(); }
+`,
+    });
+
+    const direction = analyzeObserverArchitecture({ rootDir: root }).diagnostics.filter(
+      (diagnostic) => diagnostic.code === "OBS_ARCH_DIRECTION",
+    );
+    expect(direction).toEqual([
+      expect.objectContaining({
+        path: "apps/cli/src/adapter.ts",
+        declaration: "forbiddenCliAdapter",
+        role: "ADAPTER",
+        targetDeclaration: "runFixtureUseCase",
+        targetRole: "USE CASE",
+        ruleId: "CONTROLLED_ROLE_DIRECTION",
+      }),
+    ]);
+  });
+
   it("detects runtime and type-only source cycles with every participating edge", async () => {
     const root = await createFixture({
       "apps/observer/src/runtimeA.ts": `import { runtimeB } from "./runtimeB.js"; export const runtimeA = runtimeB;`,
@@ -536,6 +572,37 @@ export function ordinaryUnmarkedHelper(): void {}
           path: "apps/observer/src/omitted.ts",
         }),
         expect.objectContaining({ code: "OBS_ARCH_WORKSPACE_EXPORT", targetPath: "@station/bad" }),
+      ]),
+    );
+  });
+
+  it("includes .mts and .cts Observer production modules in the inventory", async () => {
+    const root = await createFixture(
+      {
+        "apps/observer/src/esm.mts": `export const esmModule = true;`,
+        "apps/observer/src/common.cts": `export const commonModule = true;`,
+        "apps/observer/src/ambient.d.mts": `declare const ambientEsm: boolean;`,
+        "apps/observer/src/ambient.d.cts": `declare const ambientCommon: boolean;`,
+      },
+      {
+        observerConfig: {
+          extends: "../../tsconfig.base.json",
+          compilerOptions: { rootDir: "src", outDir: "dist" },
+          files: ["src/esm.mts", "src/common.cts", "src/ambient.d.mts", "src/ambient.d.cts"],
+        },
+      },
+    );
+
+    const result = analyzeObserverArchitecture({ rootDir: root });
+    expect(result.diagnostics).toEqual([]);
+    const modulePaths = result.manifest.modules.map((module) => module.path);
+    expect(modulePaths).toEqual(
+      expect.arrayContaining(["apps/observer/src/common.cts", "apps/observer/src/esm.mts"]),
+    );
+    expect(modulePaths).not.toEqual(
+      expect.arrayContaining([
+        "apps/observer/src/ambient.d.cts",
+        "apps/observer/src/ambient.d.mts",
       ]),
     );
   });

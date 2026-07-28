@@ -246,10 +246,14 @@ Dependencies between controlled declarations follow this table:
 | `ADAPTER` | `ADAPTER`, `DRIVING PORT`, `DRIVEN PORT`, `POLICY` |
 | `COMPOSITION ROOT` | all six controlled roles |
 
-No non-composition declaration may depend on a composition root. A composition
-marker is not a file-wide exemption: the checker follows only same-file private
-helpers reachable from the marked root and attributes that wiring to the root.
-An unrelated export in the same file remains subject to its own role.
+The table applies to every controlled production declaration that participates in
+an Observer seam, including declarations in CLI composition, contracts, protocol,
+and integrations; it is not limited to declarations under `apps/observer/src`.
+No controlled non-composition declaration may depend on a composition root. A
+composition marker is not a file-wide exemption: the checker follows only
+same-file private helpers reachable from the marked root and attributes that
+wiring to the root. An unrelated export in the same file remains subject to its
+own role.
 
 ## Enforcement Limits
 

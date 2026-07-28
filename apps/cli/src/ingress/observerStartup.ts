@@ -119,11 +119,10 @@ export async function getProviderHookObserverStatus(
 }
 
 /**
- * USE CASE
+ * ADAPTER
  *
- * Attaches provider-hook delivery to a compatible incumbent and auto-starts
- * only from stopped or proven-stale ownership; inaccessible and listening-
- * unhealthy sockets never authorize mutation.
+ * Translates provider-hook delivery into compatible Observer attachment or child
+ * startup; inaccessible and listening-unhealthy sockets never authorize mutation.
  */
 export async function startProviderHookObserver(
   options: ProviderHookObserverStartupOptions,
