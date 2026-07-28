@@ -14,8 +14,7 @@ export type RunCliObserverMainOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Chooses CLI-owned provider composition, including requester-relative hook
- * artifact ownership, and joins it to the Observer runtime lifecycle.
+ * Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle.
  */
 export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),

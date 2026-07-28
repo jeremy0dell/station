@@ -11192,7 +11192,7 @@
       "declaration": "runCliMain",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates process arguments, output, and exit semantics around `runCli` while composing process-owned provider-hook identity.",
+      "purpose": "Translates process arguments, output, and exit semantics around `runCli` while composing process-owned provider-hook launcher and artifact-owner identity.",
       "dependencies": [
         {
           "path": "apps/cli/src/main.ts",
@@ -11323,7 +11323,7 @@
       "declaration": "createProviderRegistry",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path and canonical provider-hook launcher supplied by compiled CLI composition, and assigns their Observer roles.",
+      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles.",
       "dependencies": [
         {
           "path": "integrations/harness/claude/src/provider.ts",
@@ -12890,6 +12890,14 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Reads canonical lsof holder evidence, treating only its empty status-1 result as proof that no process owns the socket.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/runtime/src/hookSetup.ts",
+      "declaration": "classifyProviderHookArtifactOwnership",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Uses the canonical launcher path as the durable owner key so upgrades at one installed location remain automatic. Only a valid marker establishes ownership; unmarked or malformed artifacts require explicit takeover.",
       "dependencies": []
     }
   ]
