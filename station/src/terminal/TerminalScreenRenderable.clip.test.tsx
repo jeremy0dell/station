@@ -4,6 +4,7 @@
 // scissor at the pane edge, so those tails escaped into the pane border and
 // neighboring panes; renderSelf now clips all paint to its own bounds.
 import { afterEach, describe, expect, it } from "bun:test";
+import { getLinkId } from "@opentui/core";
 import { createElement } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
@@ -75,6 +76,16 @@ describe("renderSelf scissors paint to the pane bounds", () => {
     const { setup } = await mountNarrowPane("ABCDEFGHIJ");
     expect(setup.captureCharFrame().split("\n")[0] ?? "").toContain("ABCDEFGHIJ");
     expect(paintedExtent(setup)).toBe(PANE_COLS);
+  });
+
+  it("does not carry a final-column link into the neighboring frame cell", async () => {
+    const uri = "https://example.com/final-column";
+    const { setup } = await mountNarrowPane(
+      `\x1b]8;;${uri}\x1b\\ABCDEFGHIJ\x1b]8;;\x1b\\`,
+    );
+    const attributes = setup.renderer.currentRenderBuffer.buffers.attributes;
+    expect(getLinkId(attributes[PANE_COLS - 1] ?? 0)).toBeGreaterThan(0);
+    expect(getLinkId(attributes[PANE_COLS] ?? 0)).toBe(0);
   });
 
   it("control: a CJK row filling the pane paints exactly to the pane edge", async () => {

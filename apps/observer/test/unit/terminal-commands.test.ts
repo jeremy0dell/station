@@ -307,6 +307,7 @@ function terminalIntentRunnerFor(providers: ProviderRegistry) {
       terminals: providers.terminals,
       harnesses: providers.harnesses,
     },
+    launchPreflight: async () => undefined,
   });
 }
 

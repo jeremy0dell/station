@@ -88,6 +88,23 @@ describe("pty pipeline smoke", () => {
     }
   });
 
+  it("real shell OSC 8 output lands linked in the vt screen", async () => {
+    if (gated()) return;
+    const pipeline = startPipeline(
+      "printf '\\033]8;;https://example.com/pty-smoke\\033\\\\PTY-LINK\\033]8;;\\033\\\\\\n'",
+    );
+    try {
+      await waitFor(() => someRowIncludes(pipeline.screen, "PTY-LINK") >= 0, 5_000);
+      const row = someRowIncludes(pipeline.screen, "PTY-LINK");
+      const col = visibleRowText(pipeline.screen, row).indexOf("PTY-LINK");
+      expect(spanAtColumn(pipeline.screen, row, col)?.link).toBe(
+        "https://example.com/pty-smoke",
+      );
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
   it("the real Pi detector sees only Station-owned terminal capabilities", async () => {
     if (gated()) return;
     const pipeline = startArgvPipeline(
@@ -118,6 +135,7 @@ describe("pty pipeline smoke", () => {
         "TERM=xterm-256color",
         "COLORTERM=truecolor",
         "TERM_PROGRAM=Station",
+        "FORCE_HYPERLINK=unset",
         "GHOSTTY=unset",
         "KITTY=unset",
         "WEZTERM=unset",

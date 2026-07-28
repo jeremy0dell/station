@@ -35,6 +35,17 @@ const RIGHT_DOWN: StationMouseEvent = {
   rawButton: 2,
 };
 
+const LEFT_UP: StationMouseEvent = {
+  ...LEFT_DOWN,
+  type: "up",
+};
+
+const MIDDLE_DOWN: StationMouseEvent = {
+  ...LEFT_DOWN,
+  button: "middle",
+  rawButton: 1,
+};
+
 const SCROLL_DOWN: StationMouseEvent = {
   ...LEFT_DOWN,
   type: "scroll",
@@ -310,6 +321,35 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     const outcome = routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
     expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().scrollOffset).toBe(0);
+  });
+
+  it("dismisses a bounded screen only on primary-down over the screen backdrop", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "H" });
+
+    for (const event of [LEFT_UP, RIGHT_DOWN, MIDDLE_DOWN, SCROLL_DOWN]) {
+      expect(routeStationMouse({ kind: "screenBackdrop" }, event, store)).toEqual({
+        kind: "handled",
+      });
+      expect(store.getState().screen).toEqual({ name: "help" });
+    }
+
+    expect(routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store)).toEqual({
+      kind: "handled",
+    });
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("keeps stale screen and sheet backdrop wheel events from scrolling after dismissal", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "H" });
+    routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
+
+    routeStationMouse({ kind: "screenBackdrop" }, SCROLL_DOWN, store);
+    routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
+
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
     expect(store.getState().scrollOffset).toBe(0);
   });
 

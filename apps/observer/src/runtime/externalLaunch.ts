@@ -9,10 +9,8 @@ import type {
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import { worktreeMissingError } from "../commands/errors.js";
-import {
-  assertHooksInstalledOrThrow,
-  resolveHarnessProviderOrThrow,
-} from "../commands/providers.js";
+import { assertHarnessLaunchPreconditionsOrThrow } from "../commands/harnessLaunchPreflight.js";
+import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
 import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
@@ -43,8 +41,9 @@ export type ExternalLaunchOutcome<T> = {
 /**
  * USE CASE
  *
- * Prepares Station-hosted identity by durably seeding its canonical title before target registration.
- * Failed launch cleanup independently releases its target and discards only the fresh session projection.
+ * Returns existing live identity without a gate; otherwise freshly preflights the selected harness
+ * before seeding the canonical title or registering a target. Failed launch cleanup independently
+ * releases its target and discards only the fresh session projection.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -111,10 +110,11 @@ export async function prepareExternalLaunch(
     project.defaults.harness;
   const harness = resolveHarnessProviderOrThrow(deps.providers, harnessProviderId);
 
-  await assertHooksInstalledOrThrow(
-    harness,
-    deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath },
-  );
+  await assertHarnessLaunchPreconditionsOrThrow({
+    providers: deps.providers,
+    providerId: harnessProviderId,
+    ...(deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath }),
+  });
 
   const managedTerminal = deps.providers.managedTerminal;
   if (managedTerminal === undefined) {

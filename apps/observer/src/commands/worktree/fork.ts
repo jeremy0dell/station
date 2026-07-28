@@ -5,6 +5,7 @@ import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
+import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
@@ -18,6 +19,7 @@ import {
 export type WorktreeForkHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
+  launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -26,10 +28,12 @@ export type WorktreeForkHandlerOptions = {
 };
 
 /**
+ * USE CASE
+ *
  * Worktree-only half of session.fork: branch off the source HEAD and seed its
  * working tree (when copyDirty), minting no session and launching no terminal so
- * Station can host the inherited harness itself. No live-agent guard on the
- * source — the seed is a read-only snapshot.
+ * Station can host the inherited harness itself. A selected launch harness is
+ * preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.
  */
 export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): CommandHandler {
   return async (context) => {
@@ -50,6 +54,9 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
         projectId: payload.projectId,
         worktreeId: payload.sourceWorktreeId,
       });
+    }
+    if (payload.launchHarness !== undefined) {
+      await options.launchPreflight(payload.launchHarness, context.signal);
     }
 
     const copyDirty = payload.copyDirty ?? true;

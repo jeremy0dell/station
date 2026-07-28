@@ -136,7 +136,7 @@ describe("createStationChildPtyEnvironment", () => {
     });
   });
 
-  it("makes the real Pi detector fail closed for the reported outer-terminal environment", () => {
+  it("keeps the pinned Pi detector and hyperlink override fail closed", () => {
     const reportedEnvironment = {
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
@@ -153,9 +153,11 @@ describe("createStationChildPtyEnvironment", () => {
       KITTY_WINDOW_ID: "7",
       WEZTERM_PANE: "4",
     });
-    expect(runPiCapabilitiesProbe(childEnvironment)).toContain(
+    const output = runPiCapabilitiesProbe(childEnvironment);
+    expect(output).toContain(
       'CAPABILITIES={"images":null,"trueColor":true,"hyperlinks":false}',
     );
+    expect(output).toContain("FORCE_HYPERLINK=unset");
   });
 
   it("removes direct tmux identity while preserving explicit outer-server access", () => {

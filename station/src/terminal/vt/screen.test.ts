@@ -186,6 +186,107 @@ describe("createStationVtScreen", () => {
       .join("");
   // 10 single-line rows in a 4-row viewport → 6 lines of scrollback (baseY 6).
   const tenLines = Array.from({ length: 10 }, (_, index) => `L${index}`).join("\r\n");
+  const rowLinks = (screen: StationVtScreen, row = 0): string[] =>
+    (screen.buildRows({ cursorVisible: false })[row]?.spans ?? [])
+      .map((span) => span.link)
+      .filter((link): link is string => link !== undefined);
+
+  it("parses OSC 8 opens and closes split across feed chunks", async () => {
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 4 } }));
+    screen.feed("\x1b]8;;https://example.com/chunk");
+    screen.feed("-split\x1b\\linked");
+    screen.feed("\x1b]8;;");
+    screen.feed("\x1b\\ plain");
+    await screen.whenIdle();
+
+    const spans = screen.buildRows({ cursorVisible: false })[0]?.spans ?? [];
+    expect(spans.map(({ text, link }) => ({ text, link }))).toEqual([
+      { text: "linked", link: "https://example.com/chunk-split" },
+      { text: " plain", link: undefined },
+    ]);
+  });
+
+  it("lets overwrite, erase, and RIS remove xterm-owned link metadata", async () => {
+    const uri = "https://example.com/lifecycle";
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 4 } }));
+    await feedAndFlush(screen, `\x1b]8;;${uri}\x1b\\ABC\x1b]8;;\x1b\\`);
+
+    await feedAndFlush(screen, "\r\x1b[1CX");
+    const overwritten = screen.buildRows({ cursorVisible: false })[0]?.spans ?? [];
+    expect(overwritten.map(({ text, link }) => ({ text, link }))).toEqual([
+      { text: "A", link: uri },
+      { text: "X", link: undefined },
+      { text: "C", link: uri },
+    ]);
+
+    await feedAndFlush(screen, "\r\x1b[2K");
+    expect(rowLinks(screen)).toEqual([]);
+
+    await feedAndFlush(screen, `\x1b]8;;${uri}\x1b\\Z\x1b]8;;\x1b\\\x1bc`);
+    expect(screen.buildRows({ cursorVisible: false }).flatMap((row) => row.spans)).toEqual([]);
+  });
+
+  it("keeps normal and alternate-buffer links isolated", async () => {
+    const normalUri = "https://example.com/normal";
+    const alternateUri = "file:///tmp/alternate";
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 4 } }));
+    await feedAndFlush(screen, `\x1b]8;;${normalUri}\x1b\\normal\x1b]8;;\x1b\\`);
+
+    await feedAndFlush(
+      screen,
+      `\x1b[?1049h\x1b]8;;${alternateUri}\x1b\\alternate\x1b]8;;\x1b\\`,
+    );
+    expect(rowLinks(screen)).toEqual([alternateUri]);
+
+    await feedAndFlush(screen, "\x1b[?1049l");
+    expect(rowLinks(screen)).toEqual([normalUri]);
+  });
+
+  it("preserves link ownership through resize reflow and retained scrollback", async () => {
+    const uri = "custom:reflow";
+    const screen = track(
+      createStationVtScreen({ size: { cols: 6, rows: 2 }, scrollback: 4 }),
+    );
+    await feedAndFlush(screen, `\x1b]8;;${uri}\x1b\\abcdefghij\x1b]8;;\x1b\\`);
+    screen.resize({ cols: 4, rows: 3 });
+    await screen.whenIdle();
+    expect(
+      screen
+        .buildRows({ cursorVisible: false })
+        .flatMap((row) => row.spans)
+        .filter((span) => span.text.trim().length > 0)
+        .every((span) => span.link === uri),
+    ).toBe(true);
+
+    await feedAndFlush(
+      screen,
+      Array.from(
+        { length: 12 },
+        (_, index) => `\r\n\x1b]8;;https://example.com/${index}\x1b\\L${index}\x1b]8;;\x1b\\`,
+      ).join(""),
+    );
+    screen.scrollBy(99);
+    const retained = screen.buildRows({ cursorVisible: false }).flatMap((row) => row.spans);
+    expect(retained.some((span) => span.link !== undefined)).toBe(true);
+    expect(retained.every((span) => span.link !== "https://example.com/0")).toBe(true);
+  });
+
+  it("resolves repeated OSC ids by both id and URI without bleeding", async () => {
+    const first = "https://example.com/reused";
+    const second = "mailto:changed@example.com";
+    const screen = track(createStationVtScreen({ size: { cols: 20, rows: 4 } }));
+    await feedAndFlush(
+      screen,
+      `\x1b]8;id=same;${first}\x1b\\A\x1b]8;;\x1b\\` +
+        `\x1b]8;id=same;${first}\x1b\\B\x1b]8;;\x1b\\` +
+        `\x1b]8;id=same;${second}\x1b\\C\x1b]8;;\x1b\\`,
+    );
+    const spans = screen.buildRows({ cursorVisible: false })[0]?.spans ?? [];
+    expect(spans.map(({ text, link }) => ({ text, link }))).toEqual([
+      { text: "AB", link: first },
+      { text: "C", link: second },
+    ]);
+  });
 
   it("scrolls scrollback up and clamps at the oldest line", async () => {
     const screen = track(createStationVtScreen({ size: { cols: 20, rows: 4 } }));

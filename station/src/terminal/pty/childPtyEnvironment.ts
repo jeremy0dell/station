@@ -59,7 +59,7 @@ type Environment = Readonly<Record<string, string | undefined>>;
  * Builds the environment for a Station-rendered child PTY without mutating the
  * outer renderer environment; ordinary launch values, including authentication,
  * provider context, and color preferences, pass through. Station-owned terminal
- * identity is applied after known outer-only hints are removed.
+ * identity is applied after inherited outer-only hints are removed.
  */
 export function createStationChildPtyEnvironment(
   inheritedEnvironment: Environment,

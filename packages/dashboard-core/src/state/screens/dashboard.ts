@@ -18,6 +18,8 @@ import { openAddProject } from "./addProjectScreen.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
 import { openWidgetSettings } from "./widgetSettings.js";
 
+export const dashboardScreenBehavior = {};
+
 export function handleDashboardKey(
   state: TuiState,
   key: TuiKey,

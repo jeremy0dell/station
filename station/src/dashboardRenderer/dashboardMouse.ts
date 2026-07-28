@@ -11,6 +11,7 @@ import {
   selectAddProjectRow,
   selectDashboardSessionRow,
   selectDashboardViewport,
+  tuiScreenBehavior,
   widgetSettingsAddFromPicker,
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
@@ -51,7 +52,11 @@ export function routeDashboardMouse(
   const mode = deriveTuiInputMode(store.getState());
   const scrollDirection = wheelDirection(event);
   if (scrollDirection !== null) {
-    if (target.kind !== "sheetBackdrop" && ROW_INTERACTIVE_MODES.has(mode)) {
+    if (
+      target.kind !== "screenBackdrop" &&
+      target.kind !== "sheetBackdrop" &&
+      ROW_INTERACTIVE_MODES.has(mode)
+    ) {
       store.getState().handleKey({ input: "", mouseScroll: scrollDirection });
     }
     return;
@@ -185,6 +190,14 @@ function routeModalClick(
   mode: TuiInputMode,
 ): boolean {
   if (target.kind === "sheetBackdrop") {
+    return true;
+  }
+  if (target.kind === "screenBackdrop") {
+    const state = store.getState();
+    const clickAway = tuiScreenBehavior(state.screen).clickAway;
+    if (clickAway !== undefined) {
+      store.setState(clickAway(state));
+    }
     return true;
   }
   switch (target.kind) {

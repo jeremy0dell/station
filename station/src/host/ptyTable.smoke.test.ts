@@ -85,6 +85,7 @@ if (SMOKE) {
           "TERM=xterm-256color",
           "COLORTERM=truecolor",
           "TERM_PROGRAM=Station",
+          "FORCE_HYPERLINK=unset",
           "GHOSTTY=unset",
           "KITTY=unset",
           "WEZTERM=unset",
