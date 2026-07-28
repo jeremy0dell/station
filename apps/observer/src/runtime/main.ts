@@ -17,6 +17,7 @@ import type {
 import { componentLogPath } from "@station/observability";
 import {
   parseStationObserverBuildVersion,
+  safeErrorFromUnknown,
   stationObserverBuildVersion,
   systemClock,
   toIsoTimestamp,
@@ -322,11 +323,16 @@ async function runClaimedObserverRuntime(input: {
           try {
             await removeObserverProcessIdentity(processIdentity);
           } catch (error) {
+            const cleanupError = safeErrorFromUnknown(error, {
+              tag: "ObserverLifecycleError",
+              code: "OBSERVER_IDENTITY_REMOVE_FAILED",
+              message: "Observer process identity could not be removed.",
+            });
             await logger
               .warn("Observer process identity could not be removed during shutdown.", {
                 socketPath,
                 pid: processIdentity.pid,
-                error,
+                error: cleanupError,
               })
               .catch(() => undefined);
           }

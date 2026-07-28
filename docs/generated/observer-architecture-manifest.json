@@ -10088,6 +10088,7 @@
           "edgeKind": "runtime",
           "bindings": [
             "parseStationObserverBuildVersion",
+            "safeErrorFromUnknown",
             "stationObserverBuildVersion",
             "systemClock",
             "toIsoTimestamp"

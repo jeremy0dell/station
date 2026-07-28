@@ -415,8 +415,13 @@ async function preparePersistentPopup(
   );
   const prepared: PreparedPersistentPopup = { persistent: true, ui };
   if (context.scope.registerFastPopup && ui.registerFastPopup) {
-    const route = await registerFastPopupUi(context.tmuxCommand, ui).catch(() => undefined);
-    if (route !== undefined) prepared.registrationNonce = route.registrationNonce;
+    try {
+      const route = await registerFastPopupUi(context.tmuxCommand, ui);
+      if (route !== undefined) prepared.registrationNonce = route.registrationNonce;
+    } catch {
+      // Registration only accelerates later binding opens; this popup is already usable,
+      // and a later full launch retries registration.
+    }
   }
   return prepared;
 }

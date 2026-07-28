@@ -41,11 +41,15 @@ type AssetSpec = {
   mode: number;
 };
 
-/** @internal Deterministic seams for cache contention and execution-boundary tests. */
+type StalePathRemovalOptions = { force: true; recursive?: true };
+type StalePathRemover = (path: string, options: StalePathRemovalOptions) => Promise<void>;
+
+/** @internal Deterministic seams for cache contention, stale pruning, and execution tests. */
 export type PackagedAssetDeps = {
   helperExitCode?: (path: string) => Promise<number>;
   lockTimeoutMs?: number;
   lockWaitMs?: number;
+  removeStalePath?: StalePathRemover;
 };
 
 export type PreparedPtyRuntime = {
@@ -95,7 +99,7 @@ export async function preparePackagedPtyRuntime(
     );
     await probeCttyHelper(helperPath, deps.helperExitCode ?? spawnExitCode);
     const lease = await createHelperLease(helperPath);
-    await pruneStaleHelpers(cttyDir, dirname(helperPath));
+    await pruneStaleHelpers(cttyDir, dirname(helperPath), deps.removeStalePath ?? rm);
 
     return {
       implementation,
@@ -376,7 +380,11 @@ async function createHelperLease(helperPath: string): Promise<{ dispose(): void 
   };
 }
 
-async function pruneStaleHelpers(cttyDir: string, currentDir: string): Promise<void> {
+async function pruneStaleHelpers(
+  cttyDir: string,
+  currentDir: string,
+  removeStalePath: StalePathRemover,
+): Promise<void> {
   let entries;
   try {
     entries = await readdir(cttyDir, { withFileTypes: true });
@@ -388,14 +396,21 @@ async function pruneStaleHelpers(cttyDir: string, currentDir: string): Promise<v
       continue;
     }
     const assetDir = join(cttyDir, entry.name);
-    if (assetDir === currentDir || (await hasLiveLease(assetDir))) {
+    if (assetDir === currentDir || (await hasLiveLease(assetDir, removeStalePath))) {
       continue;
     }
-    await rm(assetDir, { recursive: true, force: true }).catch(() => undefined);
+    await removeStalePathBestEffort(
+      assetDir,
+      { recursive: true, force: true },
+      removeStalePath,
+    );
   }
 }
 
-async function hasLiveLease(assetDir: string): Promise<boolean> {
+async function hasLiveLease(
+  assetDir: string,
+  removeStalePath: StalePathRemover,
+): Promise<boolean> {
   const leasesDir = join(assetDir, ".leases");
   let leases: string[];
   try {
@@ -407,12 +422,24 @@ async function hasLiveLease(assetDir: string): Promise<boolean> {
   for (const lease of leases) {
     const match = /^(\d+)-/.exec(lease);
     if (match === null || !processIsAlive(Number(match[1]))) {
-      await rm(join(leasesDir, lease), { force: true }).catch(() => undefined);
+      await removeStalePathBestEffort(join(leasesDir, lease), { force: true }, removeStalePath);
     } else {
       live = true;
     }
   }
   return live;
+}
+
+async function removeStalePathBestEffort(
+  path: string,
+  options: StalePathRemovalOptions,
+  removeStalePath: StalePathRemover,
+): Promise<void> {
+  try {
+    await removeStalePath(path, options);
+  } catch {
+    // Stale cache deletion must not block a validated, leased helper; later starts retry it.
+  }
 }
 
 function safePathComponent(value: string): string {
