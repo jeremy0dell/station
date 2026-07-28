@@ -7,6 +7,7 @@ import {
   RGBA,
 } from "@opentui/core";
 import { extend } from "@opentui/react";
+import { attributesWithOpenTuiHyperlink } from "./openTuiHyperlinks.js";
 import type { StationTerminalSize } from "./types.js";
 import { buildMouseReportSequence } from "./input/mouseReport.js";
 import { type MouseButtonName, MouseTracking } from "./protocol/mouse.js";
@@ -488,13 +489,17 @@ export class TerminalScreenRenderable extends Renderable {
           // Highlight the selected sub-range of this span via drawText's selection
           // arg (columns are char indices here; exact for single-width cells).
           const selection = selectionForSpan(selectedCols, col, span.width, selectionBg);
+          const attributes =
+            span.link === undefined
+              ? span.attributes
+              : attributesWithOpenTuiHyperlink(buffer, span.attributes, span.link);
           buffer.drawText(
             text,
             this.x + col,
             this.y + rowIndex,
             span.fg === undefined ? defaultFg : rgbaForHex(span.fg),
             span.bg === undefined ? undefined : rgbaForHex(span.bg),
-            span.attributes,
+            attributes,
             selection,
           );
           col += span.width;

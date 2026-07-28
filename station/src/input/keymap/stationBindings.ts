@@ -315,7 +315,11 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
       if (state.input.activeOverlay !== STATION_OVERLAY_ID || stationViewStore === undefined) {
         return { kind: "swallowed" };
       }
-      if (isRightMouseEvent(event)) {
+      if (
+        isRightMouseEvent(event) &&
+        target.target.kind !== "screenBackdrop" &&
+        target.target.kind !== "sheetBackdrop"
+      ) {
         return {
           kind: "context-menu-open",
           target: { kind: "station", target: target.target },

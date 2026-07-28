@@ -16,6 +16,20 @@ import type { TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
+type ForkScreen = Extract<TuiState["screen"], { name: "fork" }>;
+
+const forkChooseSlotBehavior = {};
+const forkDetailsBehavior = { clickAway: backFromForkDetails };
+
+export function forkScreenBehavior(screen: ForkScreen) {
+  switch (screen.step) {
+    case "chooseSlot":
+      return forkChooseSlotBehavior;
+    case "details":
+      return forkDetailsBehavior;
+  }
+  return assertNever(screen);
+}
 
 type ForkSnapshot = NonNullable<TuiState["snapshot"]>;
 
@@ -154,15 +168,7 @@ function availableForkBranch(
 
 function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScreen): TuiTransition {
   if (key.escape === true) {
-    return {
-      state: {
-        ...state,
-        screen:
-          screen.returnTo === "dashboard"
-            ? { name: "dashboard" }
-            : { name: "fork", step: "chooseSlot" },
-      },
-    };
+    return { state: backFromForkDetails(state) };
   }
 
   if (isReturnKey(key)) {
@@ -202,6 +208,19 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
   }
 
   return { state };
+}
+
+function backFromForkDetails(state: TuiState): TuiState {
+  if (state.screen.name !== "fork" || state.screen.step !== "details") {
+    return state;
+  }
+  return {
+    ...state,
+    screen:
+      state.screen.returnTo === "dashboard"
+        ? { name: "dashboard" }
+        : { name: "fork", step: "chooseSlot" },
+  };
 }
 
 function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
@@ -256,4 +275,8 @@ function cycleFocus(
   const delta = backwards ? -1 : 1;
   const next = (index + delta + FOCUS_ORDER.length) % FOCUS_ORDER.length;
   return FOCUS_ORDER[next] ?? "name";
+}
+
+function assertNever(_value: never): never {
+  throw new Error("Unhandled Fork screen variant.");
 }

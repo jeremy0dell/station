@@ -86,6 +86,46 @@ describe("buildVisibleRows", () => {
     expect(spans[0]?.width).toBe(3);
   });
 
+  it("carries a labeled OSC 8 URI on its span", async () => {
+    const uri = "https://example.com/issues/247?exact=yes#label";
+    const screen = await screenWith(`\x1b]8;;${uri}\x1b\\#247\x1b]8;;\x1b\\`);
+    const span = buildVisibleRows(screen.unsafeEngine, { cursorVisible: false })[0]?.spans[0];
+    expect(span).toMatchObject({ text: "#247", width: 4, link: uri });
+  });
+
+  it("splits adjacent same-style cells when their URIs differ", async () => {
+    const first = "https://example.com/first";
+    const second = "mailto:second@example.com";
+    const screen = await screenWith(
+      `\x1b]8;;${first}\x1b\\A\x1b]8;;\x1b\\` +
+        `\x1b]8;;${second}\x1b\\B\x1b]8;;\x1b\\`,
+    );
+    const spans = buildVisibleRows(screen.unsafeEngine, { cursorVisible: false })[0]?.spans ?? [];
+    expect(spans.map(({ text, link }) => ({ text, link }))).toEqual([
+      { text: "A", link: first },
+      { text: "B", link: second },
+    ]);
+  });
+
+  it("preserves linked trailing spaces while trimming the unlinked row remainder", async () => {
+    const uri = "file:///tmp/station%20link";
+    const screen = await screenWith(`\x1b]8;;${uri}\x1b\\label  \x1b]8;;\x1b\\   `);
+    const spans = buildVisibleRows(screen.unsafeEngine, { cursorVisible: false })[0]?.spans ?? [];
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toMatchObject({ text: "label  ", width: 7, link: uri });
+  });
+
+  it("keeps one URI across wide cells and soft-wrapped rows", async () => {
+    const uri = "custom+opaque:wide/wrapped";
+    const screen = await screenWith(`\x1b]8;;${uri}\x1b\\漢ABCD\x1b]8;;\x1b\\`, {
+      cols: 4,
+      rows: 3,
+    });
+    const rows = buildVisibleRows(screen.unsafeEngine, { cursorVisible: false });
+    expect(rows[0]?.spans[0]).toMatchObject({ text: "漢AB", width: 4, link: uri });
+    expect(rows[1]?.spans[0]).toMatchObject({ text: "CD", width: 2, link: uri });
+  });
+
   it("trims trailing plain whitespace but keeps styled whitespace", async () => {
     const screen = await screenWith("\x1b[44m  \x1b[0m   ");
     const rows = buildVisibleRows(screen.unsafeEngine, { cursorVisible: false });

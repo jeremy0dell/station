@@ -111,13 +111,18 @@ accepted by config validation but become unavailable providers at runtime.
 | --- | --- | --- |
 | `command` | string | Worktrunk CLI, e.g. `"wt"`. Overrides `STATION_WORKTRUNK_BIN`; fallback is `wt`. |
 | `config_path` | string | Path to worktrunk's own config. `~` expands at load time. |
-| `managed_root` | string | Root for managed worktrees, e.g. `~/.worktrees`; `~` expands at load time. |
+| `managed_root` | string | Authoritative root for Station-created worktrees, e.g. `~/.worktrees`; `~` expands at load time. Station overrides Worktrunk global and project-specific path templates for managed creates without rewriting Worktrunk's config. |
 | `base` | string (optional) | Default base branch for Worktrunk project listings and new worktrees. Project entries inherit this unless `[projects.worktrunk].base` is set; when neither is configured, Station omits `--base`. |
 | `include_main` | bool | Default include-main policy for Worktrunk project listings. Project entries inherit this unless overridden. |
 | `include_external` | bool | Default include-external policy for Worktrunk project listings. Project entries inherit this unless overridden. |
 | `use_lifecycle_hooks` | bool | Worktrunk automation mode. `false` makes automated mutations pass `--no-hooks`; `true` passes `--yes`; unset uses Worktrunk defaults. |
 | `hook_mode` | `required-for-mvp` \| `disabled` | Worktrunk lifecycle hook setup expectation. |
 | `breadcrumb_location` | `external` \| `worktree` \| `provider-native` \| `disabled` | Default recovery breadcrumb location. |
+
+Changing `managed_root` affects future Station creates only. Existing linked
+worktrees stay at their registered paths; do not move or delete a worktree that
+still owns a session. Close its sessions, remove it through Station or
+Worktrunk, and recreate it under the managed root.
 
 ### `[terminal.tmux]` — terminal provider (optional)
 
@@ -255,7 +260,7 @@ Nested project tables:
 | `[projects.display]` | `sort_order` | int | Optional sort order. |
 | `[projects.worktrunk]` | `enabled` | bool | Defaults to `true` when omitted. |
 | `[projects.worktrunk]` | `base` | string | Overrides `[worktree.worktrunk].base` for this project. |
-| `[projects.worktrunk]` | `managed_root` | string | Per-project Worktrunk managed root; relative paths resolve against `project.root`. If omitted and global `managed_root` is set, STATION derives a unique project child directory. |
+| `[projects.worktrunk]` | `managed_root` | string | Per-project authoritative managed root; relative paths resolve against `project.root`. If omitted and global `managed_root` is set, STATION derives a unique project child directory. |
 | `[projects.worktrunk]` | `include_main` | bool | Overrides global `include_main`. |
 | `[projects.worktrunk]` | `include_external` | bool | Overrides global `include_external`. |
 | `[projects.recovery_breadcrumbs]` | `location` | `external` \| `worktree` \| `provider-native` \| `disabled` | Overrides global breadcrumb location. |
@@ -544,8 +549,10 @@ hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the
 renderer requires its lifecycle-control IPC channel; it is not a standalone
 launch mode. Native Station child PTYs also receive standard terminal values
 `TERM=xterm-256color`, `COLORTERM=truecolor`, and `TERM_PROGRAM=Station` after
-inherited and per-launch environment merging. Outer-renderer identity and
-feature hints are removed at that boundary, while ordinary locale,
+inherited and per-launch environment merging. Outer-renderer identity and feature
+hints, including inherited hyperlink overrides, are removed at that boundary.
+Station does not advertise OSC 8 until both a coordinated child detector and an
+outer-terminal capability gate are available, while ordinary locale,
 authentication, provider, project, worktree, and user environment passes
 through. This includes functional values such as Git askpass configuration.
 Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences, while

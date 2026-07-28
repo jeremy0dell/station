@@ -33,6 +33,7 @@ import {
 export type CommonHarnessProviderOptions = {
   command?: string;
   hookBin?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
   now?: () => Date | string;
   timeoutMs?: number;
   runner?: ExternalCommandRunner;
@@ -233,6 +234,7 @@ export async function harnessHealth<TOpts extends CommonHarnessProviderOptions>(
 export type HarnessHookDoctorOptionsInput = {
   installHooks?: boolean;
   hookBin?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
   observerSocketPath?: string;
   stateDir?: string;
   hookSpoolDir?: string;
@@ -276,6 +278,9 @@ export function harnessHookDoctorOptions(
   }
   if (options.hookBin !== undefined) {
     result.hookBin = options.hookBin;
+  }
+  if (options.artifactOwner !== undefined) {
+    result.artifactOwner = options.artifactOwner;
   }
   if (options.stateDir !== undefined) {
     result.stateDir = options.stateDir;
