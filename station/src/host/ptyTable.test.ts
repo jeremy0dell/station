@@ -6,6 +6,7 @@ import type {
 } from "../terminal/types.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createPtyTable } from "./ptyTable.js";
+import type { SemanticTerminalModel } from "./semanticTerminalSnapshot.js";
 
 const baseParams: HostSpawnParams = {
   kind: "agent",
@@ -104,8 +105,8 @@ describe("createPtyTable", () => {
 
     expect(table.snapshot(ptyId)).toMatchObject({
       exited: false,
-      scrollback: ["hello ", "world"],
-      truncated: false,
+      rawChunks: ["hello ", "world"],
+      rawComplete: true,
     });
     expect(table.list()).toMatchObject([{ ptyId, worktreeId: "wt-1", alive: true }]);
   });
@@ -122,7 +123,7 @@ describe("createPtyTable", () => {
       rows: 51,
       outputCompatibility: "top-region-scrollback",
     });
-    const attachment = table.attach(ptyId);
+    const attachment = await table.attach(ptyId);
     const iterator = attachment.frames[Symbol.asyncIterator]();
     const input = "\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J";
     const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
@@ -132,7 +133,7 @@ describe("createPtyTable", () => {
       done: false,
       value: { type: "data", ptyId, data: expected },
     });
-    expect(table.snapshot(ptyId).scrollback).toEqual([expected]);
+    expect(table.snapshot(ptyId).rawChunks).toEqual([expected]);
 
     scripted.helpers.emitData(input);
     expect(await iterator.next()).toMatchObject({ value: { data: expected } });
@@ -152,7 +153,7 @@ describe("createPtyTable", () => {
 
     scripted.helpers.emitData(input);
 
-    expect(table.snapshot(ptyId).scrollback).toEqual([input]);
+    expect(table.snapshot(ptyId).rawChunks).toEqual([input]);
   });
 
   it("flushes an incomplete compatibility prefix before the exit frame", async () => {
@@ -161,7 +162,7 @@ describe("createPtyTable", () => {
       ...baseParams,
       outputCompatibility: "top-region-scrollback",
     });
-    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const iterator = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
     const partial = "before\x1b[1;23r\x1b[";
 
     scripted.helpers.emitData(partial);
@@ -181,7 +182,7 @@ describe("createPtyTable", () => {
       ...baseParams,
       outputCompatibility: "top-region-scrollback",
     });
-    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const iterator = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
     const partial = "before\x1b[1;23r\x1b[";
 
     scripted.helpers.emitData(partial);
@@ -194,7 +195,7 @@ describe("createPtyTable", () => {
     expect(await iterator.next()).toMatchObject({
       value: { type: "resize", cols: 100, rows: 30 },
     });
-    expect(table.attach(ptyId).ack.replay.events).toEqual([
+    expect((await table.attach(ptyId)).ack.replay.events).toEqual([
       { type: "data", data: "before" },
       { type: "data", data: "\x1b[1;23r\x1b[" },
       { type: "resize", cols: 100, rows: 30 },
@@ -212,9 +213,131 @@ describe("createPtyTable", () => {
     }
 
     const snapshot = table.snapshot(ptyId);
-    expect(snapshot.scrollback).toHaveLength(256);
-    expect(snapshot.scrollback.every((entry) => entry === chunk)).toBe(true);
-    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.rawChunks).toHaveLength(256);
+    expect(snapshot.rawChunks.every((entry) => entry === chunk)).toBe(true);
+    expect(snapshot.rawComplete).toBe(false);
+  });
+
+  it("uses semantic recovery after truncation and never returns partial raw bytes", async () => {
+    const { table, scripted } = (() => {
+      const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+      const semantic: SemanticTerminalModel = {
+        write() {},
+        resize() {},
+        capture: async () => ["semantic-state"],
+        dispose() {},
+      };
+      return {
+        scripted,
+        table: createPtyTable({
+          createTerminal: () => scripted.terminal,
+          createSemanticTerminal: () => semantic,
+          maxScrollbackBytes: 5,
+        }),
+      };
+    })();
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("first");
+    scripted.helpers.emitData("second");
+
+    expect((await table.attach(ptyId)).ack.replay).toEqual({
+      kind: "semantic-truncation-recovery",
+      initialCols: 80,
+      initialRows: 24,
+      events: [{ type: "data", data: "semantic-state" }],
+    });
+  });
+
+  it("captures behind a registered sink so boundary output is delivered once as live data", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const capture = Promise.withResolvers<string[]>();
+    const operations: string[] = [];
+    const semantic: SemanticTerminalModel = {
+      write(data) {
+        operations.push(`write:${data}`);
+      },
+      resize(cols, rows) {
+        operations.push(`resize:${cols}x${rows}`);
+      },
+      capture: () => {
+        operations.push("capture");
+        return capture.promise;
+      },
+      dispose() {},
+    };
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      createSemanticTerminal: () => semantic,
+      maxScrollbackBytes: 5,
+    });
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("before");
+    scripted.helpers.emitData("truncate");
+
+    const attaching = table.attach(ptyId);
+    scripted.helpers.emitData("during");
+    table.resize(ptyId, 100, 30);
+    capture.resolve(["snapshot-at-boundary"]);
+    const attached = await attaching;
+    const frames = attached.frames[Symbol.asyncIterator]();
+
+    expect(attached.ack).toMatchObject({
+      cols: 80,
+      rows: 24,
+      replay: {
+        kind: "semantic-truncation-recovery",
+        initialCols: 80,
+        initialRows: 24,
+        events: [{ type: "data", data: "snapshot-at-boundary" }],
+      },
+    });
+    expect(await frames.next()).toMatchObject({ value: { type: "data", data: "during" } });
+    expect(await frames.next()).toMatchObject({
+      value: { type: "resize", cols: 100, rows: 30 },
+    });
+    expect(operations).toEqual([
+      "write:before",
+      "write:truncate",
+      "capture",
+      "write:during",
+      "resize:100x30",
+    ]);
+    await frames.return?.();
+  });
+
+  it("keeps the PTY alive and releases the sink when semantic capture fails", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    let captureCalls = 0;
+    const semantic: SemanticTerminalModel = {
+      write() {},
+      resize() {},
+      capture: async () => {
+        captureCalls += 1;
+        if (captureCalls === 1) {
+          throw new Error("serializer failed");
+        }
+        return ["recovered"];
+      },
+      dispose() {},
+    };
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      createSemanticTerminal: () => semantic,
+      maxScrollbackBytes: 5,
+    });
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("first");
+    scripted.helpers.emitData("second");
+
+    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_SNAPSHOT_FAILED" });
+    expect(table.list()).toMatchObject([{ ptyId, alive: true }]);
+    expect(table.has(ptyId)).toBe(true);
+    expect((await table.attach(ptyId)).ack.replay).toMatchObject({
+      kind: "semantic-truncation-recovery",
+      initialCols: 80,
+      initialRows: 24,
+      events: [{ type: "data", data: "recovered" }],
+    });
   });
 
   it("reuses the live PTY for the same worktree (idempotent spawn)", () => {
@@ -335,15 +458,15 @@ describe("createPtyTable", () => {
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("before-"); // lands in the ring (snapshot)
 
-    const { ack, frames } = table.attach(ptyId);
+    const { ack, frames } = await table.attach(ptyId);
     expect(ack).toMatchObject({
       ptyId,
       exited: false,
       replay: {
+        kind: "raw-complete",
         initialCols: 80,
         initialRows: 24,
         events: [{ type: "data", data: "before-" }],
-        truncated: false,
       },
     });
 
@@ -360,7 +483,7 @@ describe("createPtyTable", () => {
     const scripted = createScriptedTerminal({ cols: 10, rows: 4 });
     const table = createPtyTable({ createTerminal: () => scripted.terminal });
     const { ptyId } = table.spawn({ ...baseParams, cols: 10, rows: 4 });
-    const iterator = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const iterator = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
 
     scripted.helpers.emitData("before-resize");
     table.resize(ptyId, 5, 4);
@@ -372,7 +495,8 @@ describe("createPtyTable", () => {
       { type: "resize", ptyId, cols: 5, rows: 4 },
       { type: "data", ptyId, data: "after-resize" },
     ]);
-    expect(table.attach(ptyId).ack.replay).toEqual({
+    expect((await table.attach(ptyId)).ack.replay).toEqual({
+      kind: "raw-complete",
       initialCols: 10,
       initialRows: 4,
       events: [
@@ -380,24 +504,54 @@ describe("createPtyTable", () => {
         { type: "resize", cols: 5, rows: 4 },
         { type: "data", data: "after-resize" },
       ],
-      truncated: false,
     });
     await iterator.return?.();
   });
 
-  it("replays the same scrollback to a second attachment", () => {
+  it("preserves a resize-only round trip in complete raw replay", async () => {
+    const scripted = createScriptedTerminal({ cols: 10, rows: 4 });
+    const table = createPtyTable({ createTerminal: () => scripted.terminal });
+    const { ptyId } = table.spawn({ ...baseParams, cols: 10, rows: 4 });
+
+    scripted.helpers.emitData("1234567890abcdefghij");
+    table.resize(ptyId, 5, 4);
+    table.resize(ptyId, 10, 4);
+
+    expect((await table.attach(ptyId)).ack.replay).toEqual({
+      kind: "raw-complete",
+      initialCols: 10,
+      initialRows: 4,
+      events: [
+        { type: "data", data: "1234567890abcdefghij" },
+        { type: "resize", cols: 5, rows: 4 },
+        { type: "resize", cols: 10, rows: 4 },
+      ],
+    });
+  });
+
+  it("replays the same complete raw stream to a second attachment", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("xyz");
-    expect(table.attach(ptyId).ack.replay.events).toEqual([{ type: "data", data: "xyz" }]);
-    expect(table.attach(ptyId).ack.replay.events).toEqual([{ type: "data", data: "xyz" }]);
+    expect((await table.attach(ptyId)).ack.replay).toEqual({
+      kind: "raw-complete",
+      initialCols: 80,
+      initialRows: 24,
+      events: [{ type: "data", data: "xyz" }],
+    });
+    expect((await table.attach(ptyId)).ack.replay).toEqual({
+      kind: "raw-complete",
+      initialCols: 80,
+      initialRows: 24,
+      events: [{ type: "data", data: "xyz" }],
+    });
   });
 
   it("broadcasts data and exit to every attachment, then ends each stream", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    const a = table.attach(ptyId).frames[Symbol.asyncIterator]();
-    const b = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const a = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const b = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
 
     scripted.helpers.emitData("hi");
     expect(await a.next()).toMatchObject({ value: { type: "data", data: "hi" } });
@@ -412,7 +566,7 @@ describe("createPtyTable", () => {
   it("detach (frames.return) leaves the PTY alive", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    await table.attach(ptyId).frames[Symbol.asyncIterator]().return?.();
+    await (await table.attach(ptyId)).frames[Symbol.asyncIterator]().return?.();
     expect(table.list()[0]).toMatchObject({ ptyId, alive: true });
     expect(scripted.helpers.isDisposed()).toBe(false);
   });
@@ -420,7 +574,7 @@ describe("createPtyTable", () => {
   it("close kills the PTY, broadcasts exit to attachments, and drops it from the table", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    const frames = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const frames = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
 
     expect(table.close(ptyId)).toBe(true);
     expect(scripted.helpers.isDisposed()).toBe(true);
@@ -433,18 +587,18 @@ describe("createPtyTable", () => {
   it("disposeAll broadcasts exit to attachments so streams end (no hang on shutdown)", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    const frames = table.attach(ptyId).frames[Symbol.asyncIterator]();
+    const frames = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
     table.disposeAll();
     expect(scripted.helpers.isDisposed()).toBe(true);
     expect(await frames.next()).toMatchObject({ value: { type: "exit", ptyId } });
     expect(await frames.next()).toEqual({ done: true, value: undefined });
   });
 
-  it("attaching after a PTY has exited (and been reaped) is HOST_ATTACH_GONE", () => {
+  it("attaching after a PTY has exited (and been reaped) is HOST_ATTACH_GONE", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("done");
     scripted.helpers.emitExit({ exitCode: 3 }); // reaped
-    expect(() => table.attach(ptyId)).toThrow();
+    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_ATTACH_GONE" });
   });
 });

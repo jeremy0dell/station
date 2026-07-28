@@ -21,3 +21,8 @@ export const KittyEvent = {
   /** CSI-u event-type field for a key release (dropped, never forwarded). */
   Release: 3,
 } as const;
+
+/** Bounded keyboard-mode stack; full pushes evict the oldest entry per the protocol. */
+export const KittyKeyboard = {
+  StackLimit: 64,
+} as const;

@@ -119,6 +119,7 @@ type InternalEntry = {
   screen: StationVtScreen | null;
   terminal: StationTerminalProcess | null;
   exited: boolean;
+  unavailable: boolean;
   spawnFailed: boolean;
   status: string;
   cwd: string | undefined;
@@ -172,6 +173,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       screen: null,
       terminal: null,
       exited: false,
+      unavailable: false,
       spawnFailed: false,
       status: "starting shell",
       appliedSize: null,
@@ -290,6 +292,20 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         }),
       );
     }
+    if (terminal.onUnavailable !== undefined) {
+      entry.subscriptions.push(
+        terminal.onUnavailable((event) => {
+          entry.unavailable = true;
+          entry.status = "attachment unavailable";
+          reportTerminalCorruption({
+            kind: "terminal_diagnostic",
+            pane: entry.paneId,
+            detail: { code: event.code, message: event.message },
+          });
+          notify();
+        }),
+      );
+    }
     entry.subscriptions.push(
       // Transport faults (failed host resizes, reconnects) feed the divergence
       // detector; without a subscriber they would be dropped silently.
@@ -330,10 +346,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       if (resizeScreen) {
         entry.screen?.resize(size);
       }
-      entry.terminal?.resize(size);
+      if (!entry.unavailable) {
+        entry.terminal?.resize(size);
+      }
       scheduleGeometryCheck(entry);
     };
 
+    if (entry.unavailable) {
+      apply(true);
+      return;
+    }
     if (entry.terminal?.onGeometry !== undefined) {
       apply(false);
       return;
@@ -370,7 +392,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }
     entry.geometryCheckTimer = setTimeout(() => {
       entry.geometryCheckTimer = undefined;
-      if (entries.get(entry.paneId) !== entry || entry.exited) {
+      if (entries.get(entry.paneId) !== entry || entry.exited || entry.unavailable) {
         return;
       }
       // A pending resize or an in-flight replay intentionally holds the screen
@@ -441,7 +463,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
 
     write: (paneId, bytes) => {
       const entry = entries.get(paneId);
-      if (!entry?.terminal || entry.exited) {
+      if (!entry?.terminal || entry.exited || entry.unavailable) {
         return false;
       }
       entry.terminal.write(bytes);
@@ -450,7 +472,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
 
     paste: (paneId, text) => {
       const entry = entries.get(paneId);
-      if (!entry?.terminal || entry.exited) {
+      if (!entry?.terminal || entry.exited || entry.unavailable) {
         return false;
       }
       const bracketed = entry.screen?.isBracketedPasteEnabled() ?? false;

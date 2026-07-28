@@ -30,10 +30,17 @@ export type StationTerminalReplayEvent =
   | { type: "data"; data: string }
   | { type: "resize"; cols: number; rows: number };
 
-/** Recorded history handed over on (re)attach with its ordered geometry. */
+/** Raw history or semantic restoration handed over with its production geometry. */
 export type StationTerminalReplay = {
   initialSize: StationTerminalSize;
   events: readonly StationTerminalReplayEvent[];
+  kind: "raw-complete" | "semantic-truncation-recovery";
+};
+
+/** Attachment failure that does not prove the backing process exited. */
+export type StationTerminalUnavailable = {
+  code: string;
+  message: string;
 };
 
 export type StationTerminalProcess = {
@@ -51,10 +58,15 @@ export type StationTerminalProcess = {
   onExit(listener: (event: StationTerminalExit) => void): StationTerminalDisposable;
   /** Transport/bridge diagnostics; never terminal output. */
   onDiagnostic(listener: (message: string) => void): StationTerminalDisposable;
+  /** Stops pane I/O without invoking process-exit lifecycle effects. */
+  onUnavailable?(
+    listener: (event: StationTerminalUnavailable) => void,
+  ): StationTerminalDisposable;
   /**
    * Replayed snapshot delivery. When wired, snapshot events bypass onData and
-   * the terminal awaits the listener before streaming live data, so the consumer
-   * can apply every recorded resize before parsing later bytes.
+   * the terminal awaits the listener before streaming live data, so consumers
+   * apply recorded resizes before parsing later bytes. Terminals without
+   * replayable history never emit this.
    */
   onReplay?(
     listener: (replay: StationTerminalReplay) => void | Promise<void>,

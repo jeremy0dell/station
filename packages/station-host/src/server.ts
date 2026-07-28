@@ -17,10 +17,12 @@ import {
   hostSuccess,
 } from "./protocol.js";
 
-/** A single attachment the host opens in response to `host.attach`. */
+/** A single attachment produced after Host's asynchronous replay-capture barrier. */
 export type HostAttachmentSource = {
   ack: HostAttachAck;
   frames: AsyncIterable<HostFrame>;
+  /** Host-local timing metadata; never serialized onto the acknowledgement. */
+  captureDurationMs: number;
 };
 
 /**
@@ -182,10 +184,19 @@ async function runAttach(
   // ack always finds this attachment.
   attachments.set(attachment.ack.ptyId, iterator);
   connection.send(hostSuccess(id, attachment.ack));
+  const replayBytes = attachment.ack.replay.events.reduce(
+    (total, event) =>
+      event.type === "data" ? total + Buffer.byteLength(event.data, "utf8") : total,
+    0,
+  );
   logger.onEvent?.("agent.attach", {
     ptyId: attachment.ack.ptyId,
+    replayKind: attachment.ack.replay.kind,
     replayEntries: attachment.ack.replay.events.length,
-    truncated: attachment.ack.replay.truncated,
+    replayBytes,
+    cols: attachment.ack.cols,
+    rows: attachment.ack.rows,
+    captureDurationMs: attachment.captureDurationMs,
   });
 
   // End this stream when the socket closes — a disconnected client must not leave

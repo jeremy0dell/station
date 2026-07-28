@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   const attach2 = await client2.attach(spawned.ptyId);
   const samePid = attach2.ack.pid === livePid;
   log(`  pid=${attach2.ack.pid} — same agent as before (pid ${livePid})? ${samePid ? "YES ✓" : "NO ✗"}`);
-  log(`  replayed scrollback (ticks emitted while detached):`);
+  log(`  replayed terminal state (${attach2.ack.replay.kind}):`);
   log(
     `    ${attach2.ack.replay.events
       .flatMap((event) => (event.type === "data" ? [event.data] : []))

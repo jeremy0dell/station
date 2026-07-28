@@ -93,6 +93,7 @@ describe("createStationHostClient", () => {
       rows: 4,
       exited: false,
       replay: {
+        kind: "raw-complete",
         initialCols: 10,
         initialRows: 4,
         events: [
@@ -100,7 +101,6 @@ describe("createStationHostClient", () => {
           { type: "resize", cols: 5, rows: 4 },
           { type: "data", data: "after" },
         ],
-        truncated: false,
       },
     };
 

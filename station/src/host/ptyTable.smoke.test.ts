@@ -76,10 +76,10 @@ if (SMOKE) {
         }
 
         await waitUntil(
-          () => table.snapshot(ptyId).scrollback.join("").includes("USER_SETTING=ordinary"),
+          () => table.snapshot(ptyId).rawChunks.join("").includes("USER_SETTING=ordinary"),
           2000,
         );
-        const output = table.snapshot(ptyId).scrollback.join("");
+        const output = table.snapshot(ptyId).rawChunks.join("");
         for (const expected of [
           'CAPABILITIES={"images":null,"trueColor":true,"hyperlinks":false}',
           "TERM=xterm-256color",

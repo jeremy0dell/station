@@ -9,7 +9,7 @@ async function write(terminal: Terminal, data: string): Promise<void> {
 }
 
 describe("ScrollbackRing", () => {
-  it("keeps all entries while under budget and reports not truncated", () => {
+  it("keeps all entries while under budget and reports complete", () => {
     const ring = new ScrollbackRing(1024, SIZE);
     ring.push("alpha");
     ring.push("beta");
@@ -20,24 +20,27 @@ describe("ScrollbackRing", () => {
         { type: "data", data: "alpha" },
         { type: "data", data: "beta" },
       ],
-      truncated: false,
+      complete: true,
     });
   });
 
-  it("drops oldest whole entries past the byte budget and flags truncated", () => {
+  it("drops oldest whole entries past the byte budget and reports incomplete", () => {
     const ring = new ScrollbackRing(10, SIZE);
-    ring.push("aaaaa"); // 5 bytes
-    ring.push("bbbbb"); // 10 bytes total — still within budget
-    ring.push("ccccc"); // 15 bytes — over budget, drops "aaaaa"
-    const snapshot = ring.snapshot();
-    expect(snapshot.truncated).toBe(true);
-    expect(snapshot.events).toEqual([
-      { type: "data", data: "bbbbb" },
-      { type: "data", data: "ccccc" },
-    ]);
+    ring.push("aaaaa");
+    ring.push("bbbbb");
+    ring.push("ccccc");
+    expect(ring.snapshot()).toEqual({
+      initialCols: 80,
+      initialRows: 24,
+      events: [
+        { type: "data", data: "bbbbb" },
+        { type: "data", data: "ccccc" },
+      ],
+      complete: false,
+    });
   });
 
-  it("starts replay at the first retained entry's production geometry", () => {
+  it("starts retained entries at their production geometry", () => {
     const ring = new ScrollbackRing(5, { cols: 10, rows: 4 });
     ring.push("aaaaa");
     ring.resize({ cols: 5, rows: 4 });
@@ -47,16 +50,17 @@ describe("ScrollbackRing", () => {
       initialCols: 5,
       initialRows: 4,
       events: [{ type: "data", data: "bbbbb" }],
-      truncated: true,
+      complete: false,
     });
   });
 
-  it("never drops the only newest entry even when it alone exceeds the budget", () => {
+  it("never drops the only newest entry even when it exceeds the budget", () => {
     const ring = new ScrollbackRing(4, SIZE);
     ring.push("this-one-entry-is-huge");
-    expect(ring.snapshot().events).toEqual([
-      { type: "data", data: "this-one-entry-is-huge" },
-    ]);
+    expect(ring.snapshot()).toMatchObject({
+      events: [{ type: "data", data: "this-one-entry-is-huge" }],
+      complete: true,
+    });
   });
 
   it("ignores empty chunks", () => {
@@ -66,35 +70,23 @@ describe("ScrollbackRing", () => {
       initialCols: 80,
       initialRows: 24,
       events: [],
-      truncated: false,
+      complete: true,
     });
   });
 
-  it("prepends a mode-restore preamble for modes set in dropped chunks", () => {
+  it("never turns incomplete raw bytes into a synthetic replay", () => {
     const ring = new ScrollbackRing(10, SIZE);
-    ring.push("\x1b[?1049h"); // enter alt screen (8 bytes) — will be dropped
-    ring.push("aaaaa"); // over budget -> drops the alt-screen-enter chunk
-    ring.push("bbbbb");
-    const snapshot = ring.snapshot();
-    expect(snapshot.truncated).toBe(true);
-    // The surviving chunks alone would replay into a normal-screen VT; the
-    // preamble re-enters the alt screen first.
-    expect(snapshot.events[0]).toEqual({ type: "data", data: "\x1b[?1049h" });
-    expect(snapshot.events.slice(1)).toEqual([
-      { type: "data", data: "aaaaa" },
-      { type: "data", data: "bbbbb" },
-    ]);
-  });
-
-  it("adds no preamble when the dropped chunks set no sticky modes", () => {
-    const ring = new ScrollbackRing(10, SIZE);
+    ring.push("\x1b[?1049h");
     ring.push("aaaaa");
     ring.push("bbbbb");
-    ring.push("ccccc"); // drops "aaaaa" — plain text, nothing to restore
-    expect(ring.snapshot().events).toEqual([
-      { type: "data", data: "bbbbb" },
-      { type: "data", data: "ccccc" },
-    ]);
+
+    expect(ring.snapshot()).toMatchObject({
+      complete: false,
+      events: [
+        { type: "data", data: "aaaaa" },
+        { type: "data", data: "bbbbb" },
+      ],
+    });
   });
 
   it("replays retained data at the exact geometry that produced it", async () => {
@@ -104,16 +96,11 @@ describe("ScrollbackRing", () => {
     ring.push("\rY");
     const replay = ring.snapshot();
 
-    expect(replay).toEqual({
-      initialCols: 10,
-      initialRows: 4,
-      events: [
-        { type: "data", data: "1234567890\rX" },
-        { type: "resize", cols: 5, rows: 4 },
-        { type: "data", data: "\rY" },
-      ],
-      truncated: false,
-    });
+    expect(replay.events).toEqual([
+      { type: "data", data: "1234567890\rX" },
+      { type: "resize", cols: 5, rows: 4 },
+      { type: "data", data: "\rY" },
+    ]);
 
     const terminal = new Terminal({
       cols: replay.initialCols,
@@ -191,7 +178,7 @@ describe("ScrollbackRing", () => {
     const replay = ring.snapshot();
     expect(replay.events).toHaveLength(4);
     expect(replay.events.at(-1)).toEqual({ type: "resize", cols: 6, rows: 4 });
-    expect(replay.truncated).toBe(true);
+    expect(replay.complete).toBe(false);
     expect(ring.byteLength).toBe(64);
   });
 });

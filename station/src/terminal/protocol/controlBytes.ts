@@ -3,6 +3,8 @@
 // the same prefixes; character-class uses (as in `terminalReplies.ts`) still
 // spell the escape inline where a prefix constant cannot substitute.
 export const ControlByte = {
+  /** BEL (0x07). */
+  Bel: "\x07",
   /** ESC (0x1b). */
   Esc: "\x1b",
   /** CSI prefix (ESC [). */

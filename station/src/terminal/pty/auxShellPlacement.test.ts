@@ -29,10 +29,10 @@ function fakeClient(spawns: unknown[]): StationHostClient {
       rows: 24,
       exited: false,
       replay: {
+        kind: "raw-complete",
         initialCols: 80,
         initialRows: 24,
         events: [],
-        truncated: false,
       },
     },
     frames: pendingFrames,
@@ -64,7 +64,7 @@ describe("resolveAuxShellPlacement", () => {
   });
 
   it("spawns a kind:'aux' PTY with the derived target id and the laid-out cwd/size", async () => {
-      const { dir, path } = tempSocketPath();
+    const { dir, path } = tempSocketPath();
     try {
       const spawns: unknown[] = [];
       const placeShell = resolveAuxShellPlacement(path, () => fakeClient(spawns));
