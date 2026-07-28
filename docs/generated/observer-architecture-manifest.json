@@ -13185,7 +13185,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
