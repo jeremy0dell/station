@@ -2,6 +2,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
+import { resolveXtermCellHyperlink } from "../terminal/vt/xtermHyperlinks.js";
 import { SemanticTerminalSnapshot } from "./semanticTerminalSnapshot.js";
 
 const CSI = "\x1b[";
@@ -295,6 +296,24 @@ describe("SemanticTerminalSnapshot", () => {
     }
   });
 
+  it("restores closed OSC 8 text while dropping unserializable link metadata", async () => {
+    const source = new SemanticTerminalSnapshot(20, 4);
+    const restored = target(20, 4);
+    try {
+      source.write("\x1b]8;;https://example.com\x1b\\linked\x1b]8;;\x1b\\ text");
+      const [snapshot] = await source.capture();
+      await write(restored, snapshot);
+
+      expect(restored.buffer.active.getLine(0)?.translateToString(true)).toBe("linked text");
+      const linkedCell = restored.buffer.active.getLine(0)?.getCell(0);
+      if (linkedCell === undefined) throw new Error("Restored link cell is unavailable.");
+      expect(resolveXtermCellHyperlink(restored, linkedCell)).toBeUndefined();
+    } finally {
+      source.dispose();
+      restored.dispose();
+    }
+  });
+
   it("rejects terminal state the serializer cannot represent exactly", async () => {
     const cases = [
       ["Cannot restore non-default terminal character sets.", "\x1b(0"],
@@ -306,6 +325,10 @@ describe("SemanticTerminalSnapshot", () => {
       [
         "Cannot restore unsupported normal attributes at row 1, column 1.",
         `${CSI}4:3;58:2::255:0:0mX${CSI}0m`,
+      ],
+      [
+        "Cannot restore unsupported current terminal attributes.",
+        "\x1b]8;;https://example.com\x1b\\open",
       ],
       [
         "Cannot restore an alternate buffer entered without DECSET 1049.",

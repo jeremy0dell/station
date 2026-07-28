@@ -32,12 +32,18 @@ export type PinnedXtermCellAttributes = PinnedXtermAttributes &
   Pick<IBufferCell, "getChars" | "getWidth">;
 
 export function isUnsupportedXtermAttribute(attributes: PinnedXtermAttributes): boolean {
+  return isUnsupportedXtermCellAttribute(attributes) || attributes.extended.urlId !== 0;
+}
+
+/** Closed OSC 8 links degrade to plain text because addon-serialize omits link metadata. */
+export function isUnsupportedXtermCellAttribute(
+  attributes: PinnedXtermAttributes,
+): boolean {
   return (
     Boolean(attributes.isProtected()) ||
     attributes.getUnderlineStyle() > 1 ||
     attributes.extended.underlineColor !== 0 ||
-    attributes.getUnderlineVariantOffset() !== 0 ||
-    attributes.extended.urlId !== 0
+    attributes.getUnderlineVariantOffset() !== 0
   );
 }
 

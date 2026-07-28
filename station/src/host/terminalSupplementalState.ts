@@ -4,6 +4,7 @@ import { AnsiMode, DecMode } from "../terminal/protocol/decset.js";
 import { KittyKeyboard } from "../terminal/protocol/kitty.js";
 import {
   isUnsupportedBlankXtermAttribute,
+  isUnsupportedXtermCellAttribute,
   isUnsupportedXtermAttribute,
   type PinnedXtermAttributes,
   type PinnedXtermCellAttributes,
@@ -362,7 +363,7 @@ export class TerminalSupplementalState {
             | undefined;
           if (
             cell !== undefined &&
-            (isUnsupportedXtermAttribute(cell) || isUnsupportedBlankXtermAttribute(cell))
+            (isUnsupportedXtermCellAttribute(cell) || isUnsupportedBlankXtermAttribute(cell))
           ) {
             throw new Error(
               `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
