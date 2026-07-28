@@ -25,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.x
       - name: Validate release tag
@@ -86,7 +86,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.x
       - name: Enable pnpm 11
@@ -123,7 +123,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.x
       - name: Enable pnpm 11
@@ -168,7 +168,7 @@ jobs:
             echo "runner=$RUNNER_LABEL"
             echo "floor=$floor"
           } > "platform-metadata-$TARGET.txt"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-${{ matrix.target }}
           path: |
@@ -335,7 +335,7 @@ jobs:
               releaseId: $releaseId,
               checksumFileSha256: $checksumFileSha256
             }' > candidate/manifest.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: release/candidate
@@ -601,7 +601,7 @@ jobs:
           done
           cmp candidate/SHA256SUMS downloaded/SHA256SUMS
           (cd downloaded && sha256sum -c SHA256SUMS)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: accepted-release-candidate-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: candidate
