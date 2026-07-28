@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Observer Architecture</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/d3.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Station · source-derived graph</p>
+        <h1>Observer Architecture</h1>
+      </div>
+      <div id="summary" class="summary" aria-live="polite">Loading manifest…</div>
+    </header>
+
+    <section class="controls" aria-label="Graph controls">
+      <label>
+        Find module
+        <input id="search" type="search" placeholder="reconcile, commands, sqlite…" />
+      </label>
+      <label>
+        Edge type
+        <select id="edge-kind">
+          <option value="all">All imports</option>
+          <option value="runtime">Runtime</option>
+          <option value="type-only">Type only</option>
+        </select>
+      </label>
+      <label class="checkbox">
+        <input id="external" type="checkbox" />
+        Show external targets
+      </label>
+      <button id="reset" type="button">Reset view</button>
+      <span class="hint">Scroll to zoom · drag nodes · click for details</span>
+    </section>
+
+    <main>
+      <section id="graph-shell" class="graph-shell" aria-label="Observer module dependency graph">
+        <svg id="graph" role="img" aria-label="Force-directed Observer module dependency graph"></svg>
+        <div id="graph-error" class="graph-error" hidden></div>
+      </section>
+
+      <aside aria-label="Selected module details">
+        <div id="details-empty" class="details-empty">
+          <strong>Select a module</strong>
+          <span>Inspect its exports, architecture roles, and direct imports.</span>
+        </div>
+        <div id="details" hidden></div>
+      </aside>
+    </main>
+  </body>
+</html>

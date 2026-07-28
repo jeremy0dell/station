@@ -136,11 +136,12 @@ verification prevents a scoped compile, cache restore, source edit, or failed
 build from silently claiming an older identity. Run `pnpm build` again; do not
 copy or retain this sidecar across a failed or different build.
 
-Observer architecture has two focused commands:
+Observer architecture has three focused commands:
 
 ```bash
 pnpm architecture:observer:generate
 pnpm architecture:observer:check
+pnpm architecture:observer:visualize
 ```
 
 Generation validates the source graph and controlled JSDoc first, then
@@ -148,7 +149,9 @@ atomically refreshes
 `docs/generated/observer-architecture-manifest.json`. Check mode validates the
 same graph and byte-compares the committed artifact. If check mode reports only
 a stale artifact, run the generation command and review the generated diff; fix
-any earlier architecture diagnostics before regenerating.
+any earlier architecture diagnostics before regenerating. Visualization runs
+check mode first, then serves a local D3 module graph at `http://localhost:3000`;
+it does not write another generated artifact.
 
 `pnpm lint` invokes the check once. `pnpm test:all`, the lint-only pre-push hook,
 pull-request static validation, documentation-only validation, and the `main`
@@ -201,6 +204,7 @@ pnpm typecheck
 pnpm lint
 pnpm architecture:observer:generate
 pnpm architecture:observer:check
+pnpm architecture:observer:visualize
 pnpm test:unit
 pnpm test:contracts
 pnpm test:integration

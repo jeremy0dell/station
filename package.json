@@ -40,6 +40,7 @@
     "typecheck": "turbo run typecheck",
     "architecture:observer:generate": "node tools/lint/check-observer-architecture.mjs --write",
     "architecture:observer:check": "node tools/lint/check-observer-architecture.mjs",
+    "architecture:observer:visualize": "pnpm architecture:observer:check && node tools/architecture/serve-observer-architecture.mjs",
     "lint": "biome check . && node tools/lint/check-source-order.mjs && node tools/lint/check-no-raw-hex.mjs && pnpm architecture:observer:check",
     "format": "biome format --write .",
     "deadcode": "knip --no-config-hints",
@@ -85,6 +86,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
     "@types/node": "^24.12.4",
+    "d3": "^7.9.0",
     "knip": "^6.29.0",
     "lefthook": "^1.13.6",
     "turbo": "^2.9.15",
