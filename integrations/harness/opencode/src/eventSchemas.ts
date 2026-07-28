@@ -98,6 +98,7 @@ export const OpenCodeCompactEventSchema = z
     station_project_id: nonEmptyStringSchema.optional(),
     station_worktree_id: nonEmptyStringSchema.optional(),
     station_worktree_path: nonEmptyStringSchema.optional(),
+    station_worktree_managed_root: nonEmptyStringSchema.optional(),
     station_session_id: nonEmptyStringSchema.optional(),
     station_terminal_provider: nonEmptyStringSchema.optional(),
     station_terminal_target_id: nonEmptyStringSchema.optional(),
