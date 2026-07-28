@@ -69,7 +69,11 @@ function restart() {
   log("Rebuilding (pnpm build)…");
   run("pnpm", ["build"], { cwd: repoRoot });
   log("Recycling the isolated observer (the persistent host + agents survive and reconnect)…");
-  run("node", [CLI, "--config", CFG, "observer", "restart"], { cwd: repoRoot });
+  run("node", [CLI, "--config", CFG, "observer", "stop"], { cwd: repoRoot });
+  run("bash", [ISOLATED_SCRIPT, "start"], {
+    cwd: repoRoot,
+    env: { ...process.env, STATION_ISOLATED_NO_LAUNCH: "1" },
+  });
   log(
     "Done. If you changed the station host (hostMain.ts), run `stop` then `start` to recycle it.",
   );
