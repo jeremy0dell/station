@@ -217,6 +217,8 @@ export CODEX_HOME="$DS/codex-home"
 mkdir -p "$CODEX_HOME"
 [ -e "$HOME/.codex/auth.json" ] && ln -sf "$HOME/.codex/auth.json" "$CODEX_HOME/auth.json"
 [ -e "$HOME/.codex/config.toml" ] && [ ! -e "$CODEX_HOME/config.toml" ] && cp "$HOME/.codex/config.toml" "$CODEX_HOME/config.toml"
+# Codex hook execution is enabled only in this worktree-local Station profile.
+node "$ROOT/scripts/enable-devbox-codex-hooks.mjs" "$CODEX_HOME/station.config.toml"
 
 # Claude isolates its config via CLAUDE_CONFIG_DIR instead of CODEX_HOME; keeps the
 # hook install below off your global ~/.claude. Auth lives in the (machine-global)
@@ -254,7 +256,7 @@ fi
 # Install status hooks against THIS observer so the launch guard lets these
 # harnesses spawn; each writes into its own isolated home/state, never globals.
 for harness in codex claude cursor opencode; do
-  node "$CLI" --config "$CFG" hooks install "$harness" --yes >/dev/null 2>&1 || true
+  node "$CLI" --config "$CFG" hooks install "$harness" --yes >/dev/null
 done
 
 echo "Isolated observer up — $STATION_OBSERVER_SOCKET_PATH"

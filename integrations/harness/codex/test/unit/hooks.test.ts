@@ -10,9 +10,30 @@ import {
   planCodexHooks,
   uninstallCodexHooks,
 } from "../../src/hooks";
-import { generatedStationHookEvents, parseTomlDocument } from "../../src/hooks/hookConfigEditor";
+import {
+  enableCodexHooksFeature,
+  generatedStationHookEvents,
+  parseTomlDocument,
+  stringifyTomlDocument,
+} from "../../src/hooks/hookConfigEditor";
 
 describe("Codex hook setup", () => {
+  it.each([
+    ["a profile without the table", ""],
+    ["a commented table", "[features] # retained comment\nhooks = false\n"],
+    ["an indented table", "  [features]\nhooks = false\n"],
+    ["a quoted table", '["features"]\nhooks = false\n'],
+    ["an inline table", "features = { hooks = false, unified_exec = true }\n"],
+  ])("enables hooks in an isolated profile from %s", (_name, source) => {
+    const enabled = enableCodexHooksFeature(parseTomlDocument(source));
+    const reparsed = parseTomlDocument(stringifyTomlDocument(enabled));
+
+    expect(reparsed).toMatchObject({ features: { hooks: true } });
+    if (source.includes("unified_exec")) {
+      expect(reparsed).toMatchObject({ features: { unified_exec: true } });
+    }
+  });
+
   it("plans hook config and generated script without writing files", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
     const codexHome = join(root, "codex-home");
